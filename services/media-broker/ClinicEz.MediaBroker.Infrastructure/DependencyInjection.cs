@@ -1,6 +1,7 @@
 using ClinicEz.MediaBroker.Application.Common.Interfaces;
 using ClinicEz.MediaBroker.Application.Features.Entitlements.Handlers;
 using ClinicEz.MediaBroker.Application.Features.Rooms.Handlers;
+using ClinicEz.MediaBroker.Application.Services;
 using ClinicEz.MediaBroker.Infrastructure.Persistence;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
@@ -33,11 +34,16 @@ public static class DependencyInjection
         services.AddScoped<IMediaBrokerDbContext>(sp => sp.GetRequiredService<MediaBrokerDbContext>());
         services.AddScoped<IInteropDbContext>(sp => sp.GetRequiredService<MediaBrokerDbContext>());
 
+        services.AddHttpClient<ILiveKitRoomClient, LiveKitRoomClient>();
+        services.AddScoped<IAbandonedSessionCleanupService, AbandonedSessionCleanupService>();
+
         services.AddInterop<MediaBrokerDbContext>(configuration, handlers => handlers
             .Respond<MediaRoomRequestedPayload, MediaRoomRespondedPayload, MediaRoomRequestedHandler>(
                 InteropTypes.MediaRoomRequested, InteropTypes.MediaRoomResponded)
             .Handle<MediaEntitlementUpdatedPayload, MediaEntitlementUpdatedHandler>(
-                InteropTypes.MediaEntitlementUpdated));
+                InteropTypes.MediaEntitlementUpdated)
+            .Handle<MediaRoomEndedPayload, MediaRoomEndedHandler>(
+                InteropTypes.MediaRoomEnded));
 
         return services;
     }

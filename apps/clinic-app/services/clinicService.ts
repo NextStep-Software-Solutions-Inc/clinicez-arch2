@@ -3452,6 +3452,8 @@ export interface ClinicSettingsRecord {
   isBranchPhilHealthAccredited?: boolean;
 
   // Teleconsultation Settings (Milestone 1 & Milestone 5)
+  enableTeleconsultation?: boolean;
+  isWorkspaceTeleconsultEntitled?: boolean;
   teleconsultRecordingPolicy?: TeleconsultRecordingPolicy | string;
   teleconsultRecordingRetentionDays?: number;
   teleconsultRecordingConsentRequired?: boolean;

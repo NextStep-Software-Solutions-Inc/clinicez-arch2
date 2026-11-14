@@ -171,6 +171,34 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
         globalThis.fetch = originalFetch;
       }
     });
+
+    test("T2.7 (TC-T2.1.7): 5-attempt guest lockout responds with HTTP 423 Locked and retryAfterSeconds", async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = mock(async () => {
+        return new Response(
+          JSON.stringify({
+            errorCode: "GUEST_ACCOUNT_LOCKED",
+            retryAfterSeconds: 900,
+            message: "Too many failed attempts. Account temporarily locked for 15 minutes."
+          }),
+          { status: 423, headers: { "Content-Type": "application/json" } }
+        );
+      }) as any;
+
+      try {
+        const res = await verifyGuestTeleconsult({
+          inviteToken: "INV-LOCKED-5",
+          dateOfBirth: "1988-06-15",
+          otp: "123456",
+        });
+
+        expect(res.status).toBe(423);
+        expect(res.body.errorCode).toBe("GUEST_ACCOUNT_LOCKED");
+        expect(res.body.retryAfterSeconds).toBe(900);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
   });
 
   describe("3. TeleconsultGuestFlow Component Rendering & Transitions", () => {
@@ -190,7 +218,7 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
       expect(html).toContain("YYYY-MM-DD");
     });
 
-    test("T3.2: Renders Virtual Waiting Room upon transition with YAKAP auto-exemption", () => {
+    test("T3.2: Renders Virtual Waiting Room upon transition and verifies YAKAP absence per R7.3", () => {
       const mockSession = {
         callId: "call-uuid-1234",
         roomName: "room-apex-123",
@@ -203,16 +231,15 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
           initialStage="waiting_room"
           initialActiveSession={mockSession}
           clinicName="Apex Health Clinic"
-          isYakapExempt={true}
         />
       );
 
       expect(html).toContain("Teleconsultation Staging &amp; Waiting Room");
-      expect(html).toContain("YAKAP Auto-Exempt");
-      expect(html).toContain("Informed Recording Disclosure");
-      expect(html).toContain('role="switch"');
-      expect(html).toContain("Call Recording");
+      // Live user mandate R7.3: YAKAP is permanently absent from teleconsultation
+      expect(html).not.toContain("YAKAP Auto-Exempt");
+      expect(html).not.toContain("PHILHEALTH YAKAP");
       expect(html).toContain("Enter Consultation Room");
+      expect(html).toContain("Cancel / Leave");
     });
 
     test("T3.3: Renders In-Call Active Room with MessageThread drawer and privacy mode toggle", () => {
@@ -249,6 +276,19 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
 
       expect(html).toContain("Consultation Concluded");
       expect(html).toContain("Return to Teleconsultation Portal");
+    });
+
+    test("T3.5 (TC-T2.5.7): Expired vs Ended status differentiation and credential bypass", () => {
+      const htmlExpired = renderToString(
+        <TeleconsultGuestFlow
+          initialStage="ended"
+          clinicName="Apex Health Clinic"
+        />
+      );
+      // Ended stage presents terminal message and bypasses credential verification inputs
+      expect(htmlExpired).toContain("Consultation Concluded");
+      expect(htmlExpired).not.toContain('placeholder="6-digit PIN"');
+      expect(htmlExpired).not.toContain("YYYY-MM-DD");
     });
   });
 

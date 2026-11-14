@@ -12,6 +12,7 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Shared.Licensing;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -43,6 +44,8 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
     private readonly IClinicContext _clinicContext;
     private readonly IInteropPublisher _publisher;
     private readonly ILogger<AdmitTeleconsultPatientCommandHandler> _logger;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
+    private readonly IFacilityLicenseValidator? _licenseValidator;
 
     public AdmitTeleconsultPatientCommandHandler(
         IRepository<Appointment> appointmentRepo,
@@ -51,7 +54,9 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IInteropPublisher publisher,
-        ILogger<AdmitTeleconsultPatientCommandHandler> logger)
+        ILogger<AdmitTeleconsultPatientCommandHandler> logger,
+        IRepository<FacilitySettings>? settingsRepo = null,
+        IFacilityLicenseValidator? licenseValidator = null)
     {
         _appointmentRepo = appointmentRepo;
         _patientRepo = patientRepo;
@@ -60,6 +65,8 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
         _clinicContext = clinicContext;
         _publisher = publisher;
         _logger = logger;
+        _settingsRepo = settingsRepo;
+        _licenseValidator = licenseValidator;
     }
 
     public async Task<TeleconsultAdmissionResultDto> Handle(AdmitTeleconsultPatientCommand request, CancellationToken ct)
@@ -71,6 +78,27 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
         if (!appointment.IsTeleconsult)
         {
             throw new BadRequestException("Appointment is not a teleconsultation; teleconsult admission gate does not apply.");
+        }
+
+        if (_settingsRepo != null)
+        {
+            var settings = await _settingsRepo.Query(s => s.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(ct);
+
+            if (settings != null && !string.IsNullOrWhiteSpace(settings.LicenseToken))
+            {
+                var validator = _licenseValidator ?? new FacilityLicenseValidator();
+                var validation = validator.Validate(settings.LicenseToken, _clinicContext.ClinicId, _clinicContext.TenantId);
+                var isWorkspaceEntitled = validation.IsValid &&
+                    validation.Payload?.EnabledFeatures != null &&
+                    validation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+
+                var effectiveEnabled = isWorkspaceEntitled && settings.EnableTeleconsultation;
+                if (!effectiveEnabled)
+                {
+                    throw new ForbiddenException("Teleconsultation is not enabled for this clinic.");
+                }
+            }
         }
 
         // 1. Prepayment Gate Enforcement (Active YAKAP is informational only and does not auto-mutate policy)

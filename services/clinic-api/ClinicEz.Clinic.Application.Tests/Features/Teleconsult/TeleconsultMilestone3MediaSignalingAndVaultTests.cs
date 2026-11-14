@@ -522,6 +522,27 @@ public sealed class TeleconsultMilestone3MediaSignalingAndVaultTests
                 p.Status == "Ended" &&
                 p.StateVersion == 2));
 
+        publisher.Received(1).Enqueue(
+            InteropTypes.GuestTeleconsultInviteRevoked,
+            Arg.Any<Party>(),
+            Party.Portal,
+            apt.Id,
+            Arg.Is<GuestTeleconsultInviteRevokedPayload>(p =>
+                p.AppointmentId == apt.Id &&
+                p.CallId == callId &&
+                p.TenantId == _tenantId &&
+                p.Reason == "Consultation concluded successfully"));
+
+        publisher.Received(1).Enqueue(
+            InteropTypes.MediaRoomEnded,
+            Arg.Any<Party>(),
+            Party.Media,
+            callId,
+            Arg.Is<MediaRoomEndedPayload>(p =>
+                p.CallId == callId &&
+                p.TenantId == _tenantId &&
+                p.RoomName == $"call-{callId:N}"));
+
         // Verify WORM audit
         var audits = await auditRepo.Query().ToListAsync();
         audits.Should().ContainSingle();

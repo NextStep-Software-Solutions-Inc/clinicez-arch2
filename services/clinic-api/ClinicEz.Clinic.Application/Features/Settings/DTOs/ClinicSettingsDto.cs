@@ -85,4 +85,6 @@ public sealed record ClinicSettingsDto(
     int TeleconsultRecordingRetentionDays = 90,
     bool TeleconsultRecordingConsentRequired = true,
     TeleconsultPaymentPolicy TeleconsultPaymentPolicy = TeleconsultPaymentPolicy.Prepaid,
-    decimal? TeleconsultDefaultFee = 400.00m);
+    decimal? TeleconsultDefaultFee = 400.00m,
+    bool EnableTeleconsultation = false,
+    bool IsWorkspaceTeleconsultEntitled = false);

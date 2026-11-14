@@ -184,7 +184,7 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
       harness.unmount();
     });
 
-    it('Native & Web: renders informational PhilHealth YAKAP Enlisted badge without auto-exemption', () => {
+    it('Native & Web (R7.3): PhilHealth YAKAP badge is permanently absent from teleconsultation waiting room', () => {
       // Native
       const nativeHarness = createHookHarness(() =>
         NativeCallWaitingRoom({
@@ -193,8 +193,8 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
         })
       );
       const nativeText = getTextContent(nativeHarness.result.current);
-      expect(nativeText).toContain('PHILHEALTH YAKAP');
-      expect(nativeText).toContain('Active Konsulta Enlistment');
+      expect(nativeText).not.toContain('PHILHEALTH YAKAP');
+      expect(nativeText).not.toContain('Active Konsulta Enlistment');
       nativeHarness.unmount();
 
       // Web
@@ -205,8 +205,8 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
         })
       );
       const webText = getTextContent(webHarness.result.current);
-      expect(webText).toContain('PHILHEALTH YAKAP');
-      expect(webText).toContain('Active Konsulta Enlistment');
+      expect(webText).not.toContain('PHILHEALTH YAKAP');
+      expect(webText).not.toContain('Active Konsulta Enlistment');
       webHarness.unmount();
     });
 
@@ -383,7 +383,7 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
       webHarness.unmount();
     });
 
-    it('Informational Invariant: hasActiveYakapEnlistment=true with Prepaid+Unpaid remains blocked', () => {
+    it('Prepayment Invariant (R7.3): Prepaid+Unpaid remains strictly blocked and omits YAKAP badge', () => {
       const nativeHarness = createHookHarness(() =>
         NativeCallWaitingRoom({
           ...baseNativeProps,
@@ -395,7 +395,7 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
       );
 
       const text = getTextContent(nativeHarness.result.current);
-      expect(text).toContain('PHILHEALTH YAKAP');
+      expect(text).not.toContain('PHILHEALTH YAKAP');
       expect(text).toContain('Prepayment Gate: Settlement Required');
 
       // The admission button should be disabled
@@ -526,6 +526,36 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
       const videoIcon = findElement(tree, (el) => el.props?.['data-icon'] === 'video');
       expect(videoIcon).not.toBeNull();
       harness.unmount();
+    });
+
+    it('Native & Web (R7.3): Patient waiting room omits Call Recording switch (clinicians initiate recording)', () => {
+      const nativeHarness = createHookHarness(() =>
+        NativeCallWaitingRoom({
+          ...baseNativeProps,
+          userRole: 'Patient',
+          recordingConsentStatus: 'Pending',
+        })
+      );
+      const nativeSwitch = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'switch-call-recording'
+      );
+      expect(nativeSwitch).toBeNull();
+      nativeHarness.unmount();
+
+      const webHarness = createHookHarness(() =>
+        WebCallWaitingRoom({
+          ...baseWebProps,
+          userRole: 'Patient',
+          recordingConsentStatus: 'Pending',
+        })
+      );
+      const webSwitch = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'switch-call-recording'
+      );
+      expect(webSwitch).toBeNull();
+      webHarness.unmount();
     });
   });
 

@@ -227,4 +227,69 @@ public class AdversarialGuestVerificationTests : IDisposable
         Assert.True(root.GetProperty("canPublish").GetBoolean());
         Assert.True(root.GetProperty("canSubscribe").GetBoolean());
     }
+
+    [Fact]
+    public async Task VerifyGuest_WithEncryptedGuestContext_DecryptsGuestDisplayName_AndHydratesMetadata_WhilePreservingZeroPhiJwt()
+    {
+        var aptId = Guid.NewGuid();
+        var callId = Guid.NewGuid();
+        var rawToken = "d1e2f3a4b5c6d7e8f90123456789abcd";
+        var rawDob = "1988-07-22";
+        var rawOtp = "654321";
+
+        var tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken))).ToLowerInvariant();
+        var dobHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{aptId:N}:{rawDob}"))).ToLowerInvariant();
+        var otpHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{aptId:N}:{rawOtp}"))).ToLowerInvariant();
+
+        // Encrypt patient display name
+        var aesKey = SHA256.HashData(Encoding.UTF8.GetBytes($"{aptId:N}:{rawDob}:{rawOtp}"));
+        var plainBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { patientDisplayName = "Juan Dela Cruz" }));
+        var nonce = RandomNumberGenerator.GetBytes(12);
+        var tag = new byte[16];
+        var cipher = new byte[plainBytes.Length];
+        using (var aesGcm = new AesGcm(aesKey, 16))
+        {
+            aesGcm.Encrypt(nonce, plainBytes, cipher, tag);
+        }
+        var encryptedBlob = new byte[12 + 16 + cipher.Length];
+        Buffer.BlockCopy(nonce, 0, encryptedBlob, 0, 12);
+        Buffer.BlockCopy(tag, 0, encryptedBlob, 12, 16);
+        Buffer.BlockCopy(cipher, 0, encryptedBlob, 28, cipher.Length);
+        var encryptedGuestContext = Convert.ToBase64String(encryptedBlob);
+
+        var scheduledTime = DateTime.UtcNow.AddMinutes(30);
+
+        _verificationService.RegisterPreHashedInvite(
+            inviteId: aptId,
+            tenantId: "tenant-adv",
+            facilityId: "fac-adv",
+            callId: callId,
+            inviteTokenHash: tokenHash,
+            expectedDobHash: dobHash,
+            otpHash: otpHash,
+            expiresAtUtc: DateTime.UtcNow.AddHours(1),
+            clinicName: "Apex Medical Clinic",
+            clinicSupportPhone: "(02) 8999-0000",
+            clinicianName: "Dr. Maria Santos",
+            scheduledAtUtc: scheduledTime,
+            encryptedGuestContext: encryptedGuestContext);
+
+        var result = await _verificationService.VerifyGuestAsync(rawToken, rawDob, rawOtp);
+
+        Assert.True(result.Success);
+        Assert.Equal("Juan Dela Cruz", result.GuestDisplayName);
+        Assert.Equal("Apex Medical Clinic", result.ClinicName);
+        Assert.Equal("(02) 8999-0000", result.ClinicSupportPhone);
+        Assert.Equal("Dr. Maria Santos", result.ClinicianName);
+        Assert.Equal(scheduledTime, result.ScheduledAtUtc);
+
+        // Assert LiveKit token remains 100% Zero-PHI
+        var handler = new JwtSecurityTokenHandler();
+        var jwt = handler.ReadJwtToken(result.GuestToken);
+        Assert.Equal($"guest:otp-{aptId:N}", jwt.Subject);
+        Assert.DoesNotContain(jwt.Claims, c => c.Type == "name");
+        Assert.DoesNotContain(jwt.Claims, c => c.Type == "dob");
+        Assert.DoesNotContain(jwt.Claims, c => c.Type == "birthdate");
+        Assert.DoesNotContain(jwt.Claims, c => c.Type == "patient_id");
+    }
 }

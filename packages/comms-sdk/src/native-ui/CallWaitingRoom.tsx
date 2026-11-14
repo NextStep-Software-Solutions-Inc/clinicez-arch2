@@ -61,6 +61,8 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
   videoServerBannerMessage,
   onRetryVideoServer,
   recordingToggleHint,
+  patientPin,
+  onCopyPatientPin,
   colors: colorsProp,
   shadows: shadowsProp
 }) => {
@@ -89,12 +91,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
   const isCameraActive = isCameraEnabled ?? localCameraActive;
   const isMicActive = isMicEnabled ?? localMicActive;
 
-  // YAKAP enlistment is informational; it does NOT automatically exempt prepayment unless legacy isYakapExempt is true
-  const isYakapEnlisted = Boolean(hasActiveYakapEnlistment ?? isYakapExempt);
-  const isPrepaidBlocked =
-    paymentPolicy === 'Prepaid' &&
-    paymentStatus === 'Unpaid' &&
-    !isYakapExempt;
+  const isPrepaidBlocked = paymentPolicy === 'Prepaid' && paymentStatus === 'Unpaid';
   const isAdmitBlocked = isPrepaidBlocked || videoServerUnavailable;
   const isRecordingEnabled = recordingConsentStatus === 'Approved';
   const recordingSubtitle =
@@ -218,7 +215,9 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Teleconsultation Waiting Room</Text>
           <Text style={styles.headerSubtitle}>
-            Appointment: {scheduledTime} • ID: {appointmentId || callId}
+            {userRole === 'Patient'
+              ? `Appointment: ${scheduledTime}`
+              : `Appointment: ${scheduledTime} • ID: ${appointmentId || callId}`}
           </Text>
         </View>
       )}
@@ -393,38 +392,64 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
 
             {/* Right / Bottom Column: Details, Policy & Consent Cards */}
             <View style={styles.cardsColumn}>
-              {/* Patient Invite Link Card */}
-              {patientLink && (
+              {/* Patient Invite Link & Access PIN Card */}
+              {(patientLink || patientPin) && (
                 <View style={styles.patientLinkCard}>
-                  <View style={styles.patientLinkHeader}>
-                    <Text style={styles.patientLinkLabel}>Patient Invite Link:</Text>
-                    {onSharePatientLink && (
-                      <OverlayTooltip
-                        label="Copy patient invite link"
-                        placement="bottom"
-                        colors={resolvedColors}
-                        shadows={resolvedShadows}
-                      >
+                  {patientLink && (
+                    <>
+                      <View style={styles.patientLinkHeader}>
+                        <Text style={styles.patientLinkLabel}>Patient Invite Link:</Text>
+                        {onSharePatientLink && (
+                          <OverlayTooltip
+                            label="Copy patient invite link"
+                            placement="bottom"
+                            colors={resolvedColors}
+                            shadows={resolvedShadows}
+                          >
+                            <TouchableOpacity
+                              testID="btn-share-patient-link-card"
+                              style={styles.shareLinkBadge}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              onPress={() => onSharePatientLink()}
+                              accessibilityRole="button"
+                              accessibilityLabel="Copy patient invite link"
+                            >
+                              {renderIcon ? (
+                                renderIcon('share', { size: 14, color: resolvedColors.onPrimary })
+                              ) : (
+                                <Text style={styles.shareLinkBadgeText}>COPY</Text>
+                              )}
+                            </TouchableOpacity>
+                          </OverlayTooltip>
+                        )}
+                      </View>
+                      <Text style={styles.patientLinkValue} numberOfLines={1} ellipsizeMode="middle">
+                        {patientLink}
+                      </Text>
+                    </>
+                  )}
+                  {patientPin && (
+                    <View style={[styles.patientLinkHeader, Boolean(patientLink) && { marginTop: 8 }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={styles.patientLinkLabel}>Access PIN: </Text>
+                        <Text testID="text-waiting-room-pin" style={[styles.patientLinkValue, { fontWeight: '700', letterSpacing: 1 }]}>
+                          {patientPin}
+                        </Text>
+                      </View>
+                      {onCopyPatientPin && (
                         <TouchableOpacity
-                          testID="btn-share-patient-link-card"
+                          testID="btn-copy-patient-pin"
                           style={styles.shareLinkBadge}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          onPress={() => onSharePatientLink()}
+                          onPress={() => void onCopyPatientPin()}
                           accessibilityRole="button"
-                          accessibilityLabel="Copy patient invite link"
+                          accessibilityLabel="Copy access PIN"
                         >
-                          {renderIcon ? (
-                            renderIcon('share', { size: 14, color: resolvedColors.onPrimary })
-                          ) : (
-                            <Text style={styles.shareLinkBadgeText}>COPY</Text>
-                          )}
+                          <Text style={styles.shareLinkBadgeText}>COPY</Text>
                         </TouchableOpacity>
-                      </OverlayTooltip>
-                    )}
-                  </View>
-                  <Text style={styles.patientLinkValue} numberOfLines={1} ellipsizeMode="middle">
-                    {patientLink}
-                  </Text>
+                      )}
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -443,25 +468,6 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                   <Text style={styles.detailsValue}>{scheduledTime}</Text>
                 </View>
               </View>
-
-              {/* Informational YAKAP Badge (Non-Mutating) */}
-              {isYakapEnlisted && (
-                <View style={styles.yakapCard}>
-                  <View style={styles.yakapBadgeHeader}>
-                    <View style={styles.yakapPill}>
-                      <Text style={styles.yakapPillText}>PHILHEALTH YAKAP</Text>
-                    </View>
-                    <Text style={styles.yakapBadgeTitle}>
-                      {isYakapExempt
-                        ? 'YAKAP Auto-Exempt • Active Konsulta Enlistment Verified'
-                        : 'Active Konsulta Enlistment Verified'}
-                    </Text>
-                  </View>
-                  <Text style={styles.yakapBadgeDescription}>
-                    Patient has an active PhilHealth YAKAP enlistment. Staff may adjust the payment policy to Exempt or Postpaid if covered under primary care capitation.
-                  </Text>
-                </View>
-              )}
 
               {/* Staff Payment Policy Selector */}
               {isStaffOrDoctor && onChangePaymentPolicy && (
@@ -532,8 +538,8 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                 </View>
               )}
 
-              {/* Informed Recording Consent (hidden cleanly when disabled at facility/workflow level) */}
-              {recordingConsentStatus !== 'Disabled' && (
+              {/* Informed Recording Consent (hidden cleanly when disabled at facility/workflow level or for patient) */}
+              {recordingConsentStatus !== 'Disabled' && userRole !== 'Patient' && (
                 <View style={styles.consentCard}>
                   <View style={styles.consentCardRow}>
                     <View style={styles.consentTextColumn}>
@@ -957,42 +963,6 @@ function createStyles(
     fontSize: fontSizeScale.xs,
     fontWeight: '600',
     color: c.text
-  },
-  yakapCard: {
-    backgroundColor: c.infoBg,
-    borderColor: c.infoBorder,
-    borderWidth: 1,
-    borderRadius: radiusScale.sm,
-    padding: spaceScale.md,
-    marginBottom: spaceScale.md,
-    ...s.sm
-  },
-  yakapBadgeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spaceScale.xs,
-    marginBottom: spaceScale.xs
-  },
-  yakapPill: {
-    backgroundColor: c.info,
-    paddingHorizontal: spaceScale.xs,
-    paddingVertical: spaceScale.xxs,
-    borderRadius: radiusScale.xs
-  },
-  yakapPillText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '700',
-    color: c.onPrimary
-  },
-  yakapBadgeTitle: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '700',
-    color: c.infoText
-  },
-  yakapBadgeDescription: {
-    fontSize: fontSizeScale.xs,
-    color: c.infoText,
-    lineHeight: 18
   },
   policyCard: {
     backgroundColor: c.surface,

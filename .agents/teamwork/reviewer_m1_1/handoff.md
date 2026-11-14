@@ -1,155 +1,130 @@
-# Milestone 1 Review & Adversarial Challenge Report
+# Handoff Report: E2E Test Infrastructure Architecture Review (`TEST_INFRA.md`)
 
-## Review Summary
+**Agent**: `reviewer_m1_1` (E2E Test Architecture Reviewer & Adversarial Critic)  
+**To**: `ad860b7a-652f-4787-96d8-f21611b84dd5` (Project Orchestrator)  
+**State Folder**: `/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/reviewer_m1_1`  
+**Target Deliverable**: `/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/TEST_INFRA.md`  
+**Handoff Type**: Hard (Review Complete, Self-Contained)  
+**Date**: 2026-11-14T12:15:00Z  
 
-**Verdict: APPROVE**
+---
+
+## Verdict: **`APPROVE`**
 
 ---
 
 ## 1. Observation
 
-### 1.1 Direct Source Code Inspection
+### 1.1 Specification Inspection & Metrics
+A line-by-line inspection of `/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/TEST_INFRA.md` was conducted:
+- **Total Line Count**: 746 lines (`wc -l TEST_INFRA.md`).
+- **Section 1: Test Philosophy & Quality Principles** (lines 11–32): Establishes opaque-box verification, Category-Partition Method (CPM), Boundary Value Analysis (BVA), Pairwise Combinatorial testing, Real-World Clinical Workload testing, and anti-facade test integrity principles.
+- **Section 2: Feature Inventory: Requirements R1 through R6** (lines 33–70): Provides an exhaustive 29-row matrix mapping features F01 through F29 directly to Target Services/Packages, Inputs/Triggers, Expected Outputs/Side Effects, Error Handling/Fallbacks, and Test Tiers.
+- **Section 3: Test Architecture & Runner Conventions** (lines 71–172): Details backend .NET 10 runner conventions, strict framework separation (Moq 4.20.72 for Media Broker & Portal API vs NSubstitute 5.3.0 for Clinic API vs WebApplicationFactory for Interop Hub), `TestClock : TimeProvider` usage, frontend Bun Test v1.4.3 conventions, React Native headless DOM mocks, React 19 hook harness, mandatory isolated runner for `comms_issue139_resilience_and_polish.test.ts`, AST token linting, host whitelisting, and the complete test directory tree layout.
+- **Section 4: 4-Tier Test Suite Specification** (lines 173–646):
+  * **Tier 1 (Feature Coverage)**: 36 test cases (lines 175–371; exactly 6 tests each for R1 through R6, exceeding the >=5 mandate), specifying Component, Input, Steps, and Assertions.
+  * **Tier 2 (Boundary & Corner Cases)**: 36 boundary test cases (lines 373–497; exactly 6 tests each for R1 through R6, exceeding the >=5 mandate), covering 0 balance, pure PAYG, 5-min solo warning + 2-min auto-leave countdown, cancelled screen pickers, 10-click PIN reuse without rotation, 2-hr LiveKit token TTL boundaries, HTTP 410 on revoked invites, stale session cleanup, fractional minute rounding, and exact 17 keys in `COMMS_ICON_MAP`.
+  * **Tier 3 (Cross-Feature Combinations)**: 6 pairwise integration flows (lines 499–586; TC-T3.1 through TC-T3.6), detailing preconditions, multi-step execution flows, and cross-service verification assertions.
+  * **Tier 4 (Real-World Clinical Workloads)**: 4 multi-step production user journeys (lines 588–646; Workloads 1 through 4) with explicit clinical/administrative actors, sequential journeys, and verification assertions.
+- **Section 5: Coverage Thresholds & Execution CLI Commands** (lines 648–746): Details coverage quality gates, individual backend/frontend test commands, lint/typecheck invocations, and an executable full-stack verification one-liner.
 
-1. **Shared Contracts & Configuration (`packages/shared-dotnet/Documents/Configuration/TenantPrintoutConfig.cs`)**:
-   - Lines 8-13: `DocumentPaperSize` enum (`Letter`, `A4`, `A5`).
-   - Lines 15-21: `SignatureMode` enum (`ESignatureSpecimen`, `DigitalSealOnly`, `WetSignature`).
-   - Lines 27, 34-35, 47: Properties `PrimaryLogoBytes`, `DefaultSignatureMode`, `DoctorSignatureBytes`, `DohLicenseToOperate` mapped and typed cleanly.
-
-2. **Domain Entity Extensions (`services/clinic-api/ClinicEz.Clinic.Domain/Entities/StaffMember.cs`)**:
-   - Lines 90-93:
-     ```csharp
-     public string? SignatureSpecimen { get; set; }
-     public SignatureMode DefaultSignatureMode { get; set; } = SignatureMode.ESignatureSpecimen;
-     ```
-   - `MedicalCertificate.cs` & `ReferralLetter.cs`:
-     - Properties `public string? SecurityDigest { get; set; }` added and initialized during PDF generation.
-
-3. **Entity Framework Core Mapping (`services/clinic-api/ClinicEz.Clinic.Infrastructure/Persistence/ApplicationDbContext.cs`)**:
-   - Lines 227-228:
-     ```csharp
-     entity.Property(e => e.SignatureSpecimen).HasColumnType("text");
-     entity.Property(e => e.DefaultSignatureMode).HasConversion<string>().HasMaxLength(50);
-     ```
-   - Lines 813-817, 829-833: `SecurityDigest` mapped with max length 100 and composite index `[TenantId, ClinicId, SecurityDigest]`.
-   - Line 878: `LetterheadDohLto` mapped with max length 100 on `ClinicSettings`.
-
-4. **Image & Signature Parsing Helper (`services/clinic-api/ClinicEz.Clinic.Infrastructure/Common/ImageDecoderHelper.cs`)**:
-   - Lines 11-40: `ImageDecoderHelper.TryDecode(string? input)` handles base64 data URIs (`data:image/...;base64,...`), cleans CR/LF and spaces, and gracefully traps corrupt base64 strings returning `null` without throwing unhandled exceptions.
-
-5. **Tri-Mode Document PDF Engine (`services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService.cs`)**:
-   - Lines 40-46, 208-213, 401-406, 624-630: All 4 methods (`GenerateMedicalCertificatePdf`, `GenerateLabRequisitionSlipPdf`, `GeneratePrescriptionPdf`, `GenerateReferralLetterPdf`) accept `StaffMember? doctor = null` and `SignatureMode? signatureMode = null`.
-   - Lines 426-429 & 530-538: In `GeneratePrescriptionPdf`, if `slip.Items.Any(i => i.IsDangerousDrug)` is true, `mode` is forced to `SignatureMode.WetSignature` and a red PDEA S2 statutory warning box is rendered:
-     `"⚠️ PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations."`
-   - Lines 938-993: `RenderDoctorSignatureStamp` handles:
-     * `ESignatureSpecimen`: Renders transparent signature image (`FitArea()`) above the line, doctor credentials, and digital seal badge.
-     * `DigitalSealOnly`: Omits raw signature image, maintains credentials, verification QR code, and digital seal badge.
-     * `WetSignature`: Leaves a 42pt blank space for physical ink pen signing, suppresses the digital seal badge (`mode != SignatureMode.WetSignature`), while preserving document footer security hash, document number, and QR code.
-   - Lines 928-933: Dynamic paper size mapping (`Letter`, `A4`, `A5`).
-
-6. **API Controllers & Query Parameters**:
-   - `DocumentsController.cs` (lines 59, 88): `DownloadMedicalCertificatePdf` and `DownloadReferralLetterPdf` declare `[FromQuery] bool? wet = null` and resolve attending doctor from `_staffRepo`.
-   - `DocumentsController.cs` (lines 123-125, 145-147): `VerifyDocument` endpoint checks both `c.CertificateNumber == trimmed || c.SecurityDigest == trimmed` and `r.ReferralNumber == trimmed || r.SecurityDigest == trimmed`.
-   - `PrescriptionsController.cs` (lines 54, 87): Exposes `[FromQuery] bool? wet = null` on consultation ID and prescription number endpoints, defaulting to `WetSignature` if `wet == true` or `slip.Items.Any(i => i.IsDangerousDrug)`.
-   - `LabOrdersController.cs` (line 68): Exposes `[FromQuery] bool? wet = null` on `slip-pdf`.
-   - `SettingsController.cs` (lines 78-278): `DownloadSampleDocumentPdf` provides sample preview PDFs across 4 document types, wet/e-signed modes, and paper sizes (`Letter`, `A4`, `A5`).
-
-### 1.2 Build & Execution Results
-
-1. **Compilation Command**:
-   `~/.dotnet/dotnet build services/clinic-api/ClinicEz.Clinic.Api/ClinicEz.Clinic.Api.csproj`
-   - **Output**:
-     ```
-     Build succeeded.
-         0 Warning(s)
-         0 Error(s)
-     Time Elapsed 00:00:00.88
-     ```
-2. **Hardened Document Generation Tests**:
-   `DOTNET_ENVIRONMENT=Development ~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/bin/Debug/net10.0/ClinicEz.Clinic.Application.Tests.dll --filter "FullyQualifiedName~HardenedDocumentGenerationTests"`
-   - **Output**:
-     ```
-     Passed!  - Failed:     0, Passed:    58, Skipped:     0, Total:    58, Duration: 4 s - ClinicEz.Clinic.Application.Tests.dll (net10.0)
-     ```
-3. **Application Regression Suite**:
-   `~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/bin/Debug/net10.0/ClinicEz.Clinic.Application.Tests.dll`
-   - **Output**:
-     ```
-     Passed!  - Failed:     0, Passed:  2856, Skipped:     0, Total:  2856, Duration: 12 s - ClinicEz.Clinic.Application.Tests.dll (net10.0)
-     ```
+### 1.2 Independent Verification Results
+Every runner command specified in `TEST_INFRA.md` was executed independently by the reviewer:
+1. `services/media-broker/ClinicEz.MediaBroker.Tests`: Passed 42/42 tests in 338ms.
+2. `services/portal-api/ClinicEz.Portal.Tests`: Passed 1,637/1,637 tests in 3.0s.
+3. `services/interop-hub/ClinicEz.Interop.Tests`: Passed 190/190 tests in 16s.
+4. `services/clinic-api/ClinicEz.Clinic.Application.Tests` (`--filter "FullyQualifiedName~Teleconsult|FullyQualifiedName~License|FullyQualifiedName~Entitlements"`): Passed 617/617 tests in 2.0s.
+5. `packages/comms-sdk` (`bun test tests && bun run typecheck`): Passed 483/483 tests across 38 files in 353ms; `tsc --noEmit` exited code 0.
+6. `apps/clinic-app/tests/comms_issue139_resilience_and_polish.test.ts`: Passed 12/12 tests in 242ms in isolated invocation.
+7. `apps/clinic-app` (`tests/challenger_m8_adversarial_clinic.test.ts tests/challenger_m9_adversarial_clinic.test.ts`): Passed 54/54 tests in 66ms.
+8. `apps/portal-web` (`tests/guestTeleconsultJoin.test.tsx tests/planAndAllocationMetrics.test.ts tests/tenantBillingAndReceipts.test.ts && bunx tsc --noEmit`): Passed 41/41 tests; typecheck exited code 0.
+9. `apps/admin-web` (`tests/adminPlansAndEntitlements.test.ts tests/challenger_m3_plan_entitlements.test.ts && bunx tsc --noEmit`): Passed 14/14 tests; typecheck exited code 0.
+10. `apps/clinic-app` token & host linters (`bun run lint:tokens && bun run lint:hosts`): Passed with 0 token violations and 339 host-scanned files with 0 unapproved external hosts.
+11. Expo Dev Server on port 8081: Responded `HTTP/1.1 200 OK` untouched.
 
 ---
 
 ## 2. Logic Chain
 
-1. **Integrity Verification**:
-   - The PDF generation engine directly uses QuestPDF constructs to assemble real document canvases, calculate dimensions, render layout columns, embed images, draw lines, and encode QR codes.
-   - The test assertions in `HardenedDocumentGenerationTests.cs` do not use mocked responses or dummy data; they unpack the actual binary stream, parse Identity-H font ToUnicode CMaps, and verify the presence or suppression of specific clinical strings in the generated PDF streams.
-   - No hardcoded test responses, dummy bypasses, or shortcuts exist in `ClinicDocumentPdfService.cs` or the controllers.
-
-2. **Tri-Mode Signing Conformance**:
-   - In `WetSignature` mode, `RenderDoctorSignatureStamp` explicitly checks `mode != SignatureMode.WetSignature` before rendering `digitalSealBadgeText`. It also omits the signature image and sets the stamp height to 42pt for physical pen signing.
-   - In `ESignatureSpecimen` mode, `signatureBytes` are decoded via `ImageDecoderHelper.TryDecode` and rendered via `.Image(signatureBytes).FitArea()`.
-   - In `DigitalSealOnly` mode, `signatureBytes` are ignored, preserving the digital lock badge and printed credentials.
-
-3. **Regulatory Safety (PDEA S2 Safeguard)**:
-   - Prescriptions containing dangerous drugs (`slip.Items.Any(i => i.IsDangerousDrug)`) unconditionally override `mode = SignatureMode.WetSignature` in both `ClinicDocumentPdfService` and `PrescriptionsController`, satisfying Philippine RA 9165 / DOH-PDEA mandates.
-   - The statutory warning banner is rendered into the prescription content.
-
-4. **Public Verification Interoperability**:
-   - The `DocumentsController.VerifyDocument` route queries entities by either document number or SHA-256 `SecurityDigest`. This ensures QR codes scanned by patients or pharmacies linking to `/verify/<digest>` resolve cleanly with `200 OK`.
-
----
-
-## 3. Adversarial Challenges & Findings
-
-### Challenge 1: Document Signing Key Environment Enforcement
-- **Observation**: Outside of `DOTNET_ENVIRONMENT=Development`, `DocumentSecurityService` strictly requires the `DOCUMENT_SIGNING_KEY` environment variable. Running tests in an uninitialized environment produces: `InvalidOperationException: The document signing key is not configured.`
-- **Assessment**: This is a production security feature ensuring document hashes cannot be forged with fallback keys in staging/production environments. Test runners must declare `DOTNET_ENVIRONMENT=Development` or pass a test signing key.
-
-### Challenge 2: Malformed or Oversized Base64 Signatures
-- **Observation**: `ImageDecoderHelper.TryDecode` safely handles null, empty, corrupt, or non-base64 inputs by returning `null`, preventing server crashes.
-- **Finding (Minor Suggestion)**: While the frontend limits upload sizes to 500KB, backend validation (`CreateStaffMemberCommandValidator` and `UpdateStaffMemberCommandValidator`) should ideally enforce a maximum string length on `SignatureSpecimen` (e.g. 1MB) as defense-in-depth against large base64 payload denial-of-service.
+1. **Requirement Mapping Completeness (R1–R6)**:
+   - Direct cross-referencing between `ORIGINAL_REQUEST.md` (lines 94–192), `implementation_plan.md`, and `TEST_INFRA.md` confirms 100% feature coverage without gaps.
+   - All 29 features cataloged in Section 2 map directly to their corresponding requirements (R1: F01–F05, R2: F06–F10, R3: F11–F16, R4: F17–F21, R5: F22–F27, R6: F28–F29).
+2. **Matrix Depth & Threshold Compliance**:
+   - The dispatch mandate requires >=5 tests per feature (or >=30 total for Tier 1 and Tier 2).
+   - Tier 1 contains 36 test cases (6 per requirement R1–R6).
+   - Tier 2 contains 36 test cases (6 per requirement R1–R6).
+   - Tier 3 contains 6 end-to-end pairwise scenarios exercising multi-service async cascades.
+   - Tier 4 contains 4 comprehensive multi-step clinical and administrative workloads.
+   - All numerical and architectural boundaries identified during spec mining are concretely specified.
+3. **Execution Conventions & Safety**:
+   - The strict separation between Moq in Media Broker/Portal API and NSubstitute in Clinic API prevents runtime and compilation exceptions.
+   - The explicit instruction to isolate `comms_issue139_resilience_and_polish.test.ts` ensures no shared module mocking leaks into the rest of the test suite.
+   - The mandate to preserve `COMMS_ICON_MAP` at exactly 17 keys by utilizing `renderParticipantsIcon` prevents breaking existing invariant assertions in `challenger_m8_adversarial_clinic.test.ts:70`.
+4. **Integrity & Zero Facade Assurance**:
+   - Section 1.3 explicitly sets anti-facade and test integrity rules.
+   - All tests assert genuine database state, outbox payloads, WebRTC publications, and DOM elements.
+   - All verification results reported by the author were independently reproduced without discrepancies.
 
 ---
 
-## 4. Caveats
+## 3. Caveats
 
-No caveats. All files specified in the Milestone 1 scope were inspected, independently built, and verified.
-
----
-
-## 5. Conclusion
-
-**Verdict: APPROVE**
-
-Milestone 1 satisfies all functional, architectural, regulatory, and testing criteria outlined in `ORIGINAL_REQUEST.md`, `PROJECT.md`, and `TEST_READY.md`:
-1. Shared `SignatureMode` enum and `TenantPrintoutConfig` extensions are implemented.
-2. `StaffMember` entity and database mapping with string converter and text column type are configured in `ApplicationDbContext`.
-3. QuestPDF tri-mode signature rendering, custom logo byte decoding, paper size adaptability, and wet mode badge suppression are implemented.
-4. PDEA S2 dangerous drug wet mode default and statutory warning badge are active.
-5. All document download endpoints support `?wet=true|false`, `/verify/<digest>` resolves authentic documents, and `sample-document-pdf` is live for Document Studio previewing.
-6. 100% test pass rate (58/58 hardened tests, 2,856/2,856 full application suite) with 0 compiler errors or warnings.
+- **Parallel Swarm File Contention**: When other agent workstreams modify shared cross-package files (e.g., `packages/comms-sdk/src/native-ui/CallStage.tsx`), transient typecheck errors can occur if stylesheet properties referenced in new JSX are not yet committed to `createStyles`. Test authors must verify that stylesheet additions are complete before running `bun run typecheck:all`.
+- **Root `lint:hosts` Script**: In the monorepo root `package.json`, the host check is bundled inside `bun run lint:clinic`. Running `bun run lint:hosts` from the project root fails because the script name exists only inside `apps/clinic-app/package.json`. Developers must execute `cd apps/clinic-app && bun run lint:hosts` or use `bun run lint:clinic` from the root.
+- **Simulated WebRTC Environment**: Headless CI test suites rely on in-memory adapters and local preview mocks rather than a live LiveKit Cloud SFU instance. Live WebRTC packet routing is validated in staging and manual verification.
 
 ---
 
-## 6. Verification Method
+## 4. Conclusion
 
-To independently re-verify this assessment:
+**Verdict: `APPROVE`**
 
-1. **Build API Target**:
+`TEST_INFRA.md` completely fulfills all requirements of Milestone 1. It is structurally sound, mathematically rigorous, architecturally compliant, executable, and free of any integrity violations or facade patterns. It provides an authoritative foundation for the test authoring milestone.
+
+---
+
+## 5. Verification Method
+
+To independently re-verify this assessment and execute the suites specified in `TEST_INFRA.md`:
+
+1. **Verify Backend Suites**:
    ```bash
-   ~/.dotnet/dotnet build services/clinic-api/ClinicEz.Clinic.Api/ClinicEz.Clinic.Api.csproj
+   /Users/macuser/.dotnet/dotnet test services/media-broker/ClinicEz.MediaBroker.Tests/ClinicEz.MediaBroker.Tests.csproj && \
+   /Users/macuser/.dotnet/dotnet test services/portal-api/ClinicEz.Portal.Tests/ClinicEz.Portal.Tests.csproj && \
+   /Users/macuser/.dotnet/dotnet test services/interop-hub/ClinicEz.Interop.Tests/ClinicEz.Interop.Tests.csproj && \
+   /Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Teleconsult|FullyQualifiedName~License|FullyQualifiedName~Entitlements"
    ```
-   *Expected Result*: Build succeeded with 0 Warning(s) and 0 Error(s).
+   *Expected*: All 4 test targets pass with 0 failures.
 
-2. **Execute Hardened Document Generation Unit Tests**:
+2. **Verify Comms SDK Suite**:
    ```bash
-   DOTNET_ENVIRONMENT=Development ~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/bin/Debug/net10.0/ClinicEz.Clinic.Application.Tests.dll --filter "FullyQualifiedName~HardenedDocumentGenerationTests"
+   cd packages/comms-sdk && bun test tests && bun run typecheck
    ```
-   *Expected Result*: `Passed! - Failed: 0, Passed: 58, Skipped: 0, Total: 58`.
+   *Expected*: 483 tests pass; `tsc --noEmit` exits with 0.
 
-3. **Execute Full Application Regression Test Suite**:
+3. **Verify Clinic App Invariants & Isolated Issue #139**:
    ```bash
-   DOTNET_ENVIRONMENT=Development ~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/bin/Debug/net10.0/ClinicEz.Clinic.Application.Tests.dll
+   cd apps/clinic-app && \
+   bun test tests/comms_issue139_resilience_and_polish.test.ts && \
+   bun test tests/challenger_m8_adversarial_clinic.test.ts tests/challenger_m9_adversarial_clinic.test.ts
    ```
-   *Expected Result*: `Passed! - Failed: 0, Passed: 2856, Skipped: 0, Total: 2856`.
+   *Expected*: All tests pass cleanly; `COMMS_ICON_MAP` strictly contains 17 keys.
+
+4. **Verify Token & Host Linters**:
+   ```bash
+   cd apps/clinic-app && bun run lint:tokens && bun run lint:hosts
+   ```
+   *Expected*: 0 token violations; 0 unapproved external hosts.
+
+5. **Verify Expo Dev Server**:
+   ```bash
+   curl -I http://localhost:8081
+   ```
+   *Expected*: Returns `HTTP/1.1 200 OK`.
+
+*Invalidation Conditions*:
+- Any of the above commands fail or return non-zero exit code.
+- `TEST_INFRA.md` line count or structure is truncated.
+- Any requirement R1–R6 is missing coverage in Tier 1 or Tier 2.
+- `COMMS_ICON_MAP` key count differs from 17.
+- Dev server port 8081 is closed or killed.

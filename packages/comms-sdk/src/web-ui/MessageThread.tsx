@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { lightColors } from '@clinicez/design-tokens';
 import { ThreadMessage, WebMessageThreadProps } from './types';
+import { OverlayTooltip } from './OverlayTooltip';
+import { LoaderIcon, CheckIcon, CheckCheckIcon, AlertCircleIcon, LockIcon } from './icons';
 
 export const MessageThread: React.FC<WebMessageThreadProps> = ({
   conversationId,
@@ -14,6 +16,7 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
   onFileToChart,
   privacyBlurEnabled,
   onTogglePrivacyBlur,
+  renderPrivacyIcon,
   showHeader = true,
   canWriteInternalNotes = false,
   isLoading = false,
@@ -44,28 +47,28 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
       case 'Sending':
         return (
           <span className="flex items-center gap-1 text-xs text-white/80" title="Sending to comms hub...">
-            <span>...</span>
+            <LoaderIcon size={12} className="animate-spin" />
             <span>Sending...</span>
           </span>
         );
       case 'Waiting':
         return (
           <span className="flex items-center gap-1 text-xs text-white/80" title="Delivered to hub, awaiting recipient storage confirmation">
-            <span>OK</span>
+            <CheckIcon size={12} />
             <span>Sent, waiting</span>
           </span>
         );
       case 'Received':
         return (
           <span className="flex items-center gap-1 text-xs text-white font-semibold" title="Recipient device confirmed storage">
-            <span>Read Confirmation</span>
+            <CheckCheckIcon size={12} />
             <span>Delivered</span>
           </span>
         );
       case 'NotReceived':
         return (
           <span className="flex items-center gap-1.5 text-xs text-red-200 font-bold" title="Retention deadline expired without receipt confirmation">
-            <span>!</span>
+            <AlertCircleIcon size={12} className="text-red-300" />
             <span>Not delivered</span>
             <button
               type="button"
@@ -83,9 +86,9 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
     <div className={`flex flex-col h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 ${className}`}>
       {/* Header */}
       {showHeader && (
-        <div className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-          <div>
-            <h1 className="text-base font-bold truncate">
+        <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xs font-semibold truncate">
               {!conversationTitle || conversationTitle.toLowerCase() === 'conversation'
                 ? (conversationScope === 'PatientFacility'
                     ? 'Patient Request'
@@ -98,7 +101,7 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
                           : conversationScope || 'Facility Channel')
                 : conversationTitle}
             </h1>
-            <p className="text-xs text-slate-500">
+            <p className="text-[11px] text-slate-500 leading-tight">
               {conversationScope === 'PatientFacility'
                 ? 'Patient Request'
                 : conversationScope === 'StaffContext' || conversationScope === 'PatientContext'
@@ -111,37 +114,76 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={onTogglePrivacyBlur}
-            className={`min-h-[44px] px-3.5 rounded text-xs font-semibold flex items-center gap-1.5 border transition-colors ${
-              privacyBlurEnabled
-                ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border-amber-300'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
-            }`}
-            aria-label={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
+          <OverlayTooltip
+            label={privacyBlurEnabled ? 'Disable privacy blur' : 'Enable privacy blur'}
+            placement="bottom"
           >
-            <span>{privacyBlurEnabled ? 'ON' : 'LOCK'}</span>
-            <span>{privacyBlurEnabled ? 'Peek Mode: ON' : 'Privacy Blur'}</span>
-          </button>
+            <button
+              type="button"
+              data-testid="btn-toggle-privacy-blur"
+              onClick={onTogglePrivacyBlur}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center border transition-colors shrink-0 ${
+                privacyBlurEnabled
+                  ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border-amber-300'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+              }`}
+              aria-label={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
+            >
+              {renderPrivacyIcon ? (
+                renderPrivacyIcon(privacyBlurEnabled)
+              ) : privacyBlurEnabled ? (
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+                  <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+                  <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+                  <path d="m2 2 20 20" />
+                </svg>
+              ) : (
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              )}
+            </button>
+          </OverlayTooltip>
         </div>
       )}
 
       {/* Content States */}
       {isLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400" role="status">
-          <div className="animate-spin text-3xl mb-2">...</div>
+          <LoaderIcon size={32} className="animate-spin mb-2" />
           <p className="text-sm">Loading message thread...</p>
         </div>
       ) : error ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center" role="alert">
-          <div className="text-3xl mb-2">!</div>
+          <AlertCircleIcon size={32} className="mb-2 text-red-600" />
           <p className="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">Error Loading Thread</p>
           <p className="text-xs text-slate-500">{error}</p>
         </div>
       ) : messages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500">
-          <div className="text-3xl mb-2">E2EE</div>
+          <LockIcon size={32} className="mb-2 text-slate-400" />
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
             Secure Communication
           </p>
@@ -152,7 +194,7 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
       ) : (
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((msg) => {
-            const isMe = msg.senderType === 'Staff' && msg.senderId === currentUserId;
+            const isMe = Boolean(msg.senderId && msg.senderId === currentUserId);
             const isInternalNote = msg.visibility === 'Internal';
             const isPeeking = hoveredMessageId === msg.id;
             const isObscured = privacyBlurEnabled && !isPeeking;
@@ -168,7 +210,7 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
                   }`}
                 >
                   <div className="flex items-center gap-1.5 text-xs font-bold mb-1 text-amber-800 dark:text-amber-300">
-                    <span>LOCK</span>
+                    <LockIcon size={12} />
                     <span>Private Staff Note (Care Team Only)</span>
                   </div>
                   <p className={`text-sm leading-relaxed ${isObscured ? 'blur-sm select-none' : ''}`}>

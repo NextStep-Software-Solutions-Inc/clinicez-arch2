@@ -332,16 +332,43 @@ mock.module('../../utils/feedback', () => ({
   },
 }));
 
-mock.module('../utils/alertSounds', () => ({
+const alertSoundsMock = {
   playMessageChime: () => {},
-}));
-mock.module('../../utils/alertSounds', () => ({
-  playMessageChime: () => {},
-}));
+  playStatAudioChime: () => {},
+  playAlertTone: () => {},
+  triggerStatVibration: () => {},
+  getActiveAudioPreferences: () => ({ enabled: true, theme: 'Default', volume: 1 }),
+  setActiveAudioPreferences: () => {},
+  validateAudioFile: () => ({ valid: true }),
+  SOUND_THEME_PRESETS: [],
+  MAX_AUDIO_FILE_BYTES: 512 * 1024,
+  ACCEPTED_AUDIO_EXTENSIONS: [],
+  ACCEPTED_AUDIO_MIME_TYPES: [],
+  ACTIVE_AUDIO_PREFERENCES_KEY: 'clinicez:user_audio_preferences',
+};
+mock.module('../utils/alertSounds', () => alertSoundsMock);
+mock.module('../../utils/alertSounds', () => alertSoundsMock);
 
 let mockCallStatus: 'staging' | 'connected' = 'staging';
+const defaultMockConversations = [
+  {
+    id: 'conv-direct-1',
+    scope: 'Direct',
+    title: 'Dr. Maria Santos',
+    lastMessageSnippet: 'Ready for rounds',
+    lastMessageAtUtc: '2026-11-11T06:00:00Z',
+    unreadCount: 3,
+    priority: 'Normal',
+  },
+];
+let mockConversationsOverride: any[] | null = null;
+let mockCreateConversationImpl: ((req: any) => Promise<any>) | null = null;
+let mockSendMessageImpl: ((req: any) => Promise<any>) | null = null;
+let capturedMessageThreadProps: any = null;
+const TestCommsContext = React.createContext<any>(null);
+
 mock.module('@clinicez/comms-sdk/react', () => ({
-  CommsContext: React.createContext(null),
+  CommsContext: TestCommsContext,
   useCallSession: (_callId: string, opts: any) => ({
     status: mockCallStatus,
     roomName: 'room-teleconsult-1',
@@ -414,7 +441,9 @@ mock.module('@clinicez/comms-sdk/react', () => ({
     acknowledgeMessage: async () => {},
   }),
   useSendMessage: () => ({
-    sendMessage: async () => {},
+    sendMessage: async (req: any) => {
+      if (mockSendMessageImpl) return mockSendMessageImpl(req);
+    },
     resendMessage: async () => {},
   }),
   useComms: () => ({
@@ -423,22 +452,15 @@ mock.module('@clinicez/comms-sdk/react', () => ({
     isReconnecting: false,
   }),
   useConversations: () => ({
-    conversations: [
-      {
-        id: 'conv-direct-1',
-        scope: 'Direct',
-        title: 'Dr. Maria Santos',
-        lastMessageSnippet: 'Ready for rounds',
-        lastMessageAtUtc: '2026-11-11T06:00:00Z',
-        unreadCount: 3,
-        priority: 'Normal',
-      },
-    ],
+    conversations: mockConversationsOverride ?? defaultMockConversations,
     unreadCount: 3,
     isLoading: false,
     error: null,
     refresh: async () => {},
-    createConversation: async (req: any) => ({ id: 'conv-new-123', ...req }),
+    createConversation: async (req: any) => {
+      if (mockCreateConversationImpl) return mockCreateConversationImpl(req);
+      return { id: 'conv-new-123', ...req };
+    },
   }),
   useTriageQueue: () => ({
     items: [],
@@ -462,7 +484,10 @@ const { CallStage } = await import('../../../packages/comms-sdk/src/native-ui/Ca
 
 mock.module('@clinicez/comms-sdk/native-ui', () => ({
   ChatDrawer,
-  MessageThread,
+  MessageThread: (props: any) => {
+    capturedMessageThreadProps = props;
+    return React.createElement(MessageThread, props);
+  },
   TriageQueueView,
   CallWaitingRoom,
   CallStage,
@@ -473,7 +498,7 @@ const { DEFAULT_CLINIC_BRAND_COLOR } = await import('../constants/color');
 const { default: ClinicChatDrawerHost } = await import('../components/comms/ClinicChatDrawerHost');
 const { default: ClinicActiveThread } = await import('../components/comms/ClinicActiveThread');
 const { default: NewConversationModal } = await import('../components/comms/NewConversationModal');
-const { ActiveTeleconsultModal } = await import('../components/teleconsult/TeleconsultWaitingRoomModal');
+const { ActiveTeleconsultModal, TeleconsultInCallChatDrawer } = await import('../components/teleconsult/TeleconsultWaitingRoomModal');
 const { default: ClinicRecordingPlayerModal } = await import('../components/teleconsult/ClinicRecordingPlayerModal');
 
 const renderMarkup = (element: React.ReactElement): string =>
@@ -498,6 +523,11 @@ describe('Messaging Sidebar Chips, Soft Pastel Bubbles & Triage Brand Sync (#104
   });
 
   afterEach(() => {
+    mockConversationsOverride = null;
+    mockCreateConversationImpl = null;
+    mockSendMessageImpl = null;
+    capturedMessageThreadProps = null;
+    mockCallStatus = 'staging';
     syncActiveTheme({
       brandColorHex: DEFAULT_CLINIC_BRAND_COLOR,
       userBrandColorHex: null,
@@ -1020,6 +1050,207 @@ describe('Messaging Sidebar Chips, Soft Pastel Bubbles & Triage Brand Sync (#104
         expect(dockedHtml).not.toContain(rose.primary);
       } finally {
         mockCallStatus = 'staging';
+      }
+    });
+  });
+
+  describe('7. In-Call Chat Sidebar Synchronization', () => {
+    test('auto-creates a Care Team StaffContext thread when patient has no prior conversation and persists + emits conversationUpdated', async () => {
+      mockConversationsOverride = [];
+      const createdReqs: any[] = [];
+      const sentMsgs: any[] = [];
+      const emittedEvents: Array<{ event: string; payload: any }> = [];
+      const dataChannelSent: Array<{ text: string; isInternal: boolean }> = [];
+
+      mockCreateConversationImpl = async (req) => {
+        createdReqs.push(req);
+        return { id: 'conv-created-99', ...req };
+      };
+      mockSendMessageImpl = async (req) => {
+        sentMsgs.push(req);
+      };
+
+      const commsValue = {
+        client: {
+          events: {
+            emit: (event: string, payload: any) => {
+              emittedEvents.push({ event, payload });
+            },
+          },
+        },
+      };
+
+      renderToStaticMarkup(
+        React.createElement(
+          TestCommsContext.Provider,
+          { value: commsValue },
+          React.createElement(TeleconsultInCallChatDrawer, {
+            callId: 'call-sync-1',
+            patientId: 'pat-sync-1',
+            patientName: 'Juan Dela Cruz',
+            currentUserId: 'staff-1',
+            dataChannelMessages: [],
+            onSendDataChannelMessage: async (text: string, isInternal: boolean) => {
+              dataChannelSent.push({ text, isInternal });
+            },
+          }),
+        ),
+      );
+
+      expect(capturedMessageThreadProps).not.toBeNull();
+      expect(typeof capturedMessageThreadProps.renderPrivacyIcon).toBe('function');
+
+      await capturedMessageThreadProps.onSendMessage('Hi Juan, joining now', false);
+
+      expect(dataChannelSent).toEqual([{ text: 'Hi Juan, joining now', isInternal: false }]);
+      expect(createdReqs).toEqual([
+        {
+          scope: 'StaffContext',
+          title: 'Care Team: Juan Dela Cruz',
+          contextType: 'Patient',
+          contextId: 'pat-sync-1',
+          participants: [
+            {
+              participantType: 'Patient',
+              participantId: 'pat-sync-1',
+              displayName: 'Juan Dela Cruz',
+              role: 'Participant',
+            },
+          ],
+        },
+      ]);
+      expect(sentMsgs).toEqual([
+        {
+          conversationId: 'conv-created-99',
+          contentText: 'Hi Juan, joining now',
+          visibility: 'Public',
+        },
+      ]);
+      expect(emittedEvents.some((e) => e.event === 'conversationUpdated' && e.payload.conversationId === 'conv-created-99')).toBe(true);
+    });
+
+    test('reuses an existing PatientFacility or StaffContext conversation without calling createConversation and falls back to REST if SignalR fails', async () => {
+      const createdReqs: any[] = [];
+      const sentMsgs: any[] = [];
+      mockCreateConversationImpl = async (req) => {
+        createdReqs.push(req);
+        return { id: 'should-not-create', ...req };
+      };
+      mockSendMessageImpl = async (req) => {
+        sentMsgs.push(req);
+      };
+
+      // Case A: Existing open PatientFacility thread takes precedence over StaffContext
+      mockConversationsOverride = [
+        {
+          id: 'conv-staff-old',
+          scope: 'StaffContext',
+          status: 'Open',
+          contextId: 'pat-existing-1',
+        },
+        {
+          id: 'conv-pf-1',
+          scope: 'PatientFacility',
+          status: 'Open',
+          patientId: 'pat-existing-1',
+        },
+      ];
+
+      renderToStaticMarkup(
+        React.createElement(
+          TestCommsContext.Provider,
+          { value: { client: { events: { emit: () => {} } } } },
+          React.createElement(TeleconsultInCallChatDrawer, {
+            callId: 'call-pf-1',
+            patientId: 'pat-existing-1',
+            patientName: 'Maria Clara',
+            currentUserId: 'staff-1',
+            dataChannelMessages: [],
+            onSendDataChannelMessage: async () => {},
+          }),
+        ),
+      );
+
+      expect(capturedMessageThreadProps.conversationScope).toBe('PatientFacility');
+      await capturedMessageThreadProps.onSendMessage('Existing inquiry reply', false);
+      expect(createdReqs).toEqual([]);
+      expect(sentMsgs).toEqual([
+        {
+          conversationId: 'conv-pf-1',
+          contentText: 'Existing inquiry reply',
+          visibility: 'Public',
+        },
+      ]);
+
+      // Case B: Existing open StaffContext thread reused when no PatientFacility thread exists + REST fallback when SignalR rejects
+      sentMsgs.length = 0;
+      mockConversationsOverride = [
+        {
+          id: 'conv-staff-existing',
+          scope: 'StaffContext',
+          status: 'Open',
+          contextId: 'pat-staff-1',
+        },
+      ];
+      mockSendMessageImpl = async () => {
+        throw new Error('SignalR disconnected');
+      };
+
+      const fetchCalls: Array<{ url: string; init: any }> = [];
+      const appendedMessages: Array<{ convId: string; dto: any }> = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (url: any, init: any) => {
+        fetchCalls.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({
+            messageId: 'rest-msg-1',
+            seq: 11,
+            conversationId: 'conv-staff-existing',
+            contentText: 'Fallback note',
+            visibility: 'Internal',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }) as any;
+
+      try {
+        renderToStaticMarkup(
+          React.createElement(
+            TestCommsContext.Provider,
+            {
+              value: {
+                baseUrl: 'https://comms.test/',
+                activeTicket: { token: 'ticket-abc' },
+                staffId: 'staff-1',
+                staffDisplayName: 'Dr. Santos',
+                store: {
+                  appendMessage: (convId: string, dto: any) => {
+                    appendedMessages.push({ convId, dto });
+                  },
+                },
+                client: { events: { emit: () => {} } },
+              },
+            },
+            React.createElement(TeleconsultInCallChatDrawer, {
+              callId: 'call-staff-1',
+              patientId: 'pat-staff-1',
+              patientName: 'Jose Rizal',
+              currentUserId: 'staff-1',
+              dataChannelMessages: [],
+              onSendDataChannelMessage: async () => {},
+            }),
+          ),
+        );
+
+        await capturedMessageThreadProps.onSendMessage('Fallback note', true);
+        expect(createdReqs).toEqual([]);
+        expect(fetchCalls.length).toBe(1);
+        expect(fetchCalls[0].url).toBe('https://comms.test/api/v1/comms/conversations/conv-staff-existing/messages');
+        expect(fetchCalls[0].init?.headers?.Authorization).toBe('Bearer ticket-abc');
+        expect(appendedMessages).toHaveLength(1);
+        expect(appendedMessages[0].convId).toBe('conv-staff-existing');
+      } finally {
+        globalThis.fetch = originalFetch;
       }
     });
   });

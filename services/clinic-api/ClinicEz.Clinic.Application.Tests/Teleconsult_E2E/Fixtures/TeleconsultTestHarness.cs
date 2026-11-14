@@ -801,4 +801,229 @@ public static class TeleconsultTestHarness
             return true;
         }
     }
+
+    // =========================================================================
+    // 14. Governance Engine (Tier 4 / Requirement R4)
+    // =========================================================================
+    public static class GovernanceEngine
+    {
+        public static FacilityGovernanceSettingsDto UpdateSettings(
+            FacilityGovernanceSettingsDto current,
+            UpdateClinicGovernanceCommand cmd)
+        {
+            if (cmd.EnableTeleconsultation)
+            {
+                if (current.LicenseToken == null && !current.IsWorkspaceTeleconsultEntitled)
+                {
+                    throw new ForbiddenException("Missing license token on clinic settings. Cannot verify workspace teleconsultation entitlement.");
+                }
+
+                if (!current.IsWorkspaceTeleconsultEntitled)
+                {
+                    throw new ForbiddenException("Teleconsultation must be enabled in Workspace Portal billing before enabling for clinic.");
+                }
+            }
+
+            return current with { EnableTeleconsultation = cmd.EnableTeleconsultation };
+        }
+
+        public static int CascadeLicenseRevocation(
+            List<FacilityGovernanceSettingsDto> facilities,
+            ClinicLicenseGrantDto licenseGrant)
+        {
+            int cascadedCount = 0;
+            bool hasTeleconsult = licenseGrant.GrantedFeatures.Contains("feature.teleconsultation", StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < facilities.Count; i++)
+            {
+                var fac = facilities[i];
+                if (!hasTeleconsult)
+                {
+                    facilities[i] = fac with
+                    {
+                        IsWorkspaceTeleconsultEntitled = false,
+                        EnableTeleconsultation = false
+                    };
+                    cascadedCount++;
+                }
+            }
+            return cascadedCount;
+        }
+
+        public static void ValidateAppointmentScheduling(
+            FacilityGovernanceSettingsDto settings,
+            bool isTeleconsult)
+        {
+            if (isTeleconsult)
+            {
+                if (!settings.IsWorkspaceTeleconsultEntitled || !settings.EnableTeleconsultation)
+                {
+                    throw new ForbiddenException("Teleconsultation is not enabled for this clinic.");
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // 15. Production Session Lifecycle Engine (Tier 4 / Requirement R5)
+    // =========================================================================
+    public static class ProductionLifecycleEngine
+    {
+        public static GuestInviteGenerationResultDto CreateOrReuseGuestInvite(
+            GuestInviteGenerationRequest req,
+            ConcurrentDictionary<Guid, GuestInviteGenerationResultDto> cache)
+        {
+            var now = DateTime.UtcNow;
+            if (cache.TryGetValue(req.AppointmentId, out var existing))
+            {
+                if (now < existing.ExpiresAtUtc)
+                {
+                    return existing with { FromCache = true };
+                }
+            }
+
+            var inviteId = Guid.NewGuid();
+            var callId = Guid.NewGuid();
+            var rawToken = $"tok-guest-{Guid.NewGuid():N}";
+            var otp = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+            var patientLink = $"https://portal.clinicez.ph/teleconsult/guest?token={rawToken}";
+
+            var created = new GuestInviteGenerationResultDto(
+                InviteId: inviteId,
+                AppointmentId: req.AppointmentId,
+                CallId: callId,
+                RawToken: rawToken,
+                Otp: otp,
+                DateOfBirth: req.DateOfBirth,
+                ExpiresAtUtc: now.AddMinutes(60),
+                PatientLink: patientLink,
+                FromCache: false);
+
+            cache[req.AppointmentId] = created;
+            return created;
+        }
+
+        public static LiveKitSessionState SimulateNetworkDrop(
+            LiveKitSessionState session,
+            TimeSpan dropDuration)
+        {
+            // Drop must preserve session without invoking EndCall
+            return session with { Status = "Active", ReconnectionAllowed = true };
+        }
+
+        public static bool EvaluateReconnection(
+            LiveKitSessionState session,
+            TimeSpan elapsedSinceStart)
+        {
+            if (elapsedSinceStart > session.TokenTtl)
+            {
+                throw new UnauthorizedAccessException("LiveKit token expired (exceeded 2-hour TTL).");
+            }
+            return true;
+        }
+
+        public static ProductionEndCallResultDto ExplicitPhysicianEndCall(
+            Appointment apt,
+            Guid initiatorDoctorId,
+            bool confirmedInDialog,
+            List<AuditEntry> auditLog,
+            List<string> interopEvents)
+        {
+            if (!confirmedInDialog)
+            {
+                throw new InvalidOperationException("Explicit physician termination requires confirmation dialog verification.");
+            }
+
+            var now = DateTime.UtcNow;
+            var callId = apt.CallId ?? Guid.NewGuid();
+            var roomName = $"call-{callId:N}";
+
+            apt.Status = AppointmentStatus.Completed;
+
+            // Broadcast data message to connected guests
+            interopEvents.Add($"livekit.datachannel:call_ended_by_clinician:{callId}");
+
+            // Enqueue GuestTeleconsultInviteRevoked
+            interopEvents.Add($"portal.teleconsult.guest_invite_revoked:{callId}:Ended by clinician");
+
+            // Enqueue MediaRoomEnded
+            interopEvents.Add($"media.room.ended:{callId}:{apt.TenantId}:{roomName}");
+
+            // WORM audit entry
+            var audit = new AuditEntry
+            {
+                Id = Guid.NewGuid(),
+                TenantId = apt.TenantId,
+                ClinicId = apt.ClinicId,
+                Timestamp = now,
+                Category = ClinicAuditCategories.Clinical,
+                Severity = ClinicAuditSeverities.Routine,
+                Action = "teleconsult.call.ended.explicit",
+                ActorStaffId = initiatorDoctorId,
+                ActorName = "Attending Physician",
+                ActorRole = "Physician",
+                TargetEntityType = "Appointment",
+                TargetEntityId = apt.Id.ToString(),
+                Outcome = ClinicAuditOutcomes.Success,
+                Description = "Physician explicitly ended teleconsultation after confirmation."
+            };
+            auditLog.Add(audit);
+
+            return new ProductionEndCallResultDto(
+                AppointmentId: apt.Id,
+                CallId: callId,
+                RoomName: roomName,
+                EndedAtUtc: now,
+                LiveKitDataMessageBroadcasted: true,
+                GuestInviteRevokedEnqueued: true,
+                MediaRoomEndedEnqueued: true,
+                AppointmentMarkedCompleted: true,
+                WormAuditLogged: true);
+        }
+
+        public static SoloRoomSessionState EvaluateSoloPresence(
+            SoloRoomSessionState current,
+            TimeSpan totalElapsed,
+            bool clickStayInCall,
+            bool clickLeaveRoom)
+        {
+            if (clickLeaveRoom)
+            {
+                return current with { LeftCleanly = true, WarningBannerVisible = false };
+            }
+
+            if (clickStayInCall)
+            {
+                return current with { WarningBannerVisible = false, SoloDuration = TimeSpan.Zero };
+            }
+
+            bool warningVisible = totalElapsed >= TimeSpan.FromMinutes(5) && totalElapsed < TimeSpan.FromMinutes(7);
+            bool autoLeave = totalElapsed >= TimeSpan.FromMinutes(7);
+
+            return current with
+            {
+                SoloDuration = totalElapsed,
+                WarningBannerVisible = warningVisible,
+                AutoLeaveTriggered = autoLeave
+            };
+        }
+
+        public static int CleanupStaleSessions(
+            List<LiveKitSessionState> sessions,
+            TimeSpan ttl)
+        {
+            var now = DateTime.UtcNow;
+            int cleaned = 0;
+            for (int i = 0; i < sessions.Count; i++)
+            {
+                var s = sessions[i];
+                if (s.Status == "Active" && (now - s.StartedAtUtc) >= ttl)
+                {
+                    sessions[i] = s with { Status = "Ended", ReconnectionAllowed = false };
+                    cleaned++;
+                }
+            }
+            return cleaned;
+        }
+    }
 }

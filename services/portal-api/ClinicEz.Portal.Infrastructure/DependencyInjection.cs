@@ -148,6 +148,8 @@ public static class DependencyInjection
             .Handle<DocumentAttestationPublishedPayload, DocumentAttestationPublishedHandler>(InteropTypes.DocumentAttestationPublished)
             .Handle<QueueBoardUpdatedPayload, QueueBoardUpdatedHandler>(InteropTypes.QueueBoardUpdated)
             .Handle<GuestTeleconsultInviteIssuedPayload, GuestTeleconsultInviteIssuedHandler>(InteropTypes.GuestTeleconsultInviteIssued)
+            .Handle<GuestTeleconsultInviteRevokedPayload, GuestTeleconsultInviteRevokedHandler>(InteropTypes.GuestTeleconsultInviteRevoked)
+            .Handle<MediaUsageRecordedPayload, MediaUsageRecordedHandler>(InteropTypes.MediaUsageRecorded)
             .Respond<PhilHealthConfigRequestedPayload, PhilHealthConfigRespondedPayload, PhilHealthConfigRequestedResponder>(
                 InteropTypes.PhilHealthConfigRequested, InteropTypes.PhilHealthConfigResponded)
             .Respond<PhilHealthConfigPayload, PhilHealthConfigUpsertRespondedPayload, PhilHealthConfigUpsertRequestedResponder>(

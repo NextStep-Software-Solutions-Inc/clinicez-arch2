@@ -19,12 +19,16 @@ const RNMock = {
 mock.module('react-native', () => RNMock);
 
 import { CallStage as WebCallStage } from '../../src/web-ui/CallStage';
+import { CallWaitingRoom as WebCallWaitingRoom } from '../../src/web-ui/CallWaitingRoom';
 import { createHookHarness, act } from '../react/hook-test-harness';
 
 let NativeCallStage: any;
+let NativeCallWaitingRoom: any;
 beforeAll(async () => {
   const mod = await import('../../src/native-ui/CallStage');
   NativeCallStage = mod.CallStage;
+  const wrMod = await import('../../src/native-ui/CallWaitingRoom');
+  NativeCallWaitingRoom = wrMod.CallWaitingRoom;
 });
 
 function getTextContent(element: any): string {
@@ -592,20 +596,18 @@ describe('Feature F18: CallStage Video Surface & In-Call Controls (Native & Web)
       }
     });
 
-    it('Native & Web: renders Copy Invite and Message Patient buttons in waiting placeholder', async () => {
+    it('Native & Web: renders icon-only Copy Invite button at top-left with hover tooltip and omits center Message Patient button', async () => {
       let nativeCopied = 0;
-      let nativeMessaged = 0;
       const nativeHarness = createHookHarness(() =>
         NativeCallStage({
           ...baseNativeProps,
           onSharePatientLink: () => {
             nativeCopied += 1;
           },
-          onMessagePatient: () => {
-            nativeMessaged += 1;
-          },
+          onMessagePatient: () => {},
         })
       );
+      // M15 invariant: btn-stage-copy-invite and btn-stage-message-patient are strictly removed from stage surface
       const nativeCopyBtn = findElement(
         nativeHarness.result.current,
         (el) => el.props?.testID === 'btn-stage-copy-invite'
@@ -614,25 +616,29 @@ describe('Feature F18: CallStage Video Surface & In-Call Controls (Native & Web)
         nativeHarness.result.current,
         (el) => el.props?.testID === 'btn-stage-message-patient'
       );
-      expect(nativeCopyBtn).not.toBeNull();
-      expect(nativeMsgBtn).not.toBeNull();
-      await nativeCopyBtn.props.onPress?.();
-      await nativeMsgBtn.props.onPress?.();
-      expect(nativeCopied).toBe(1);
-      expect(nativeMessaged).toBe(1);
+      expect(nativeCopyBtn).toBeNull();
+      expect(nativeMsgBtn).toBeNull();
       nativeHarness.unmount();
 
-      let webCopied = 0;
-      let webMessaged = 0;
+      // Remains absent when active remote video surface replaces the waiting placeholder
+      const nativeActiveVideoHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseNativeProps,
+          onSharePatientLink: () => {},
+          renderCustomVideoSurface: (trackType: string) =>
+            trackType === 'remote' ? React.createElement('div', { testID: 'remote-video-track' }) : undefined,
+        })
+      );
+      expect(
+        findElement(nativeActiveVideoHarness.result.current, (el) => el.props?.testID === 'btn-stage-copy-invite')
+      ).toBeNull();
+      nativeActiveVideoHarness.unmount();
+
       const webHarness = createHookHarness(() =>
         WebCallStage({
           ...baseWebProps,
-          onSharePatientLink: () => {
-            webCopied += 1;
-          },
-          onMessagePatient: () => {
-            webMessaged += 1;
-          },
+          onSharePatientLink: () => {},
+          onMessagePatient: () => {},
         })
       );
       const webCopyBtn = findElement(
@@ -643,13 +649,22 @@ describe('Feature F18: CallStage Video Surface & In-Call Controls (Native & Web)
         webHarness.result.current,
         (el) => el.props?.['data-testid'] === 'btn-stage-message-patient'
       );
-      expect(webCopyBtn).not.toBeNull();
-      expect(webMsgBtn).not.toBeNull();
-      await webCopyBtn.props.onClick?.();
-      await webMsgBtn.props.onClick?.();
-      expect(webCopied).toBe(1);
-      expect(webMessaged).toBe(1);
+      expect(webCopyBtn).toBeNull();
+      expect(webMsgBtn).toBeNull();
       webHarness.unmount();
+
+      const webActiveVideoHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseWebProps,
+          onSharePatientLink: () => {},
+          renderCustomVideoSurface: (trackType: string) =>
+            trackType === 'remote' ? React.createElement('video', { id: 'remote-video-track' }) : undefined,
+        })
+      );
+      expect(
+        findElement(webActiveVideoHarness.result.current, (el) => el.props?.['data-testid'] === 'btn-stage-copy-invite')
+      ).toBeNull();
+      webActiveVideoHarness.unmount();
     });
 
     it('Native & Web: shows unread chat badge and keeps idle record button neutral & blocked when isRecordDisabled', async () => {
@@ -766,12 +781,7 @@ describe('Feature F18: CallStage Video Surface & In-Call Controls (Native & Web)
         nativeHarness.result.current,
         (el) => el.props?.testID === 'btn-stage-copy-invite'
       );
-      expect(nativeCopyBtn.props.style).toEqual(
-        expect.objectContaining({
-          borderColor: '#FECDD3',
-          shadowColor: 'rgba(225, 29, 72, 0.22)',
-        })
-      );
+      expect(nativeCopyBtn).toBeNull();
       nativeHarness.unmount();
 
       // Web explicit brand theme on active PiP & active Chat & Copy Invite
@@ -812,8 +822,400 @@ describe('Feature F18: CallStage Video Surface & In-Call Controls (Native & Web)
         webHarness.result.current,
         (el) => el.props?.['data-testid'] === 'btn-stage-copy-invite'
       );
-      expect(webCopyBtn.props.style.borderColor).toBe('#FECDD3');
-      expect(String(webCopyBtn.props.style.boxShadow)).toContain('rgba(225, 29, 72, 0.22)');
+      expect(webCopyBtn).toBeNull();
+      webHarness.unmount();
+    });
+  });
+
+  describe('Milestone M15: Participants Roster, 6-Digit PIN, Screen Sharing Banner & Solo Safeguards', () => {
+    const m15Participants = [
+      { identity: 'clinician-1', name: 'Dr. Maria Santos', isLocal: true, status: 'In call' as const, isMicActive: true, isCameraActive: true },
+      { identity: 'patient-1', name: 'Juan Dela Cruz', isLocal: false, status: 'In call' as const, isMicActive: true, isCameraActive: false, isScreenSharing: true }
+    ];
+
+    it('Native & Web: Bottom toolbar renders btn-toggle-participants with live count badge and handles toggle', async () => {
+      let nativeToggled = 0;
+      const nativeHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseNativeProps,
+          participants: m15Participants,
+          isParticipantsOpen: false,
+          onToggleParticipants: () => {
+            nativeToggled += 1;
+          },
+        })
+      );
+      const nativeToggleBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-toggle-participants'
+      );
+      expect(nativeToggleBtn).not.toBeNull();
+      const nativeBadge = findElement(
+        nativeToggleBtn,
+        (el) => el.props?.testID === 'badge-participants-count'
+      );
+      expect(nativeBadge).not.toBeNull();
+      expect(getTextContent(nativeBadge)).toBe('2');
+      await nativeToggleBtn.props.onPress?.();
+      expect(nativeToggled).toBe(1);
+      nativeHarness.unmount();
+
+      let webToggled = 0;
+      const webHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseWebProps,
+          participants: m15Participants,
+          isParticipantsOpen: false,
+          onToggleParticipants: () => {
+            webToggled += 1;
+          },
+        })
+      );
+      const webToggleBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-toggle-participants'
+      );
+      expect(webToggleBtn).not.toBeNull();
+      const webBadge = findElement(
+        webToggleBtn,
+        (el) => el.props?.['data-testid'] === 'badge-participants-count'
+      );
+      expect(webBadge).not.toBeNull();
+      expect(getTextContent(webBadge)).toBe('2');
+      await webToggleBtn.props.onClick?.();
+      expect(webToggled).toBe(1);
+      webHarness.unmount();
+    });
+
+    it('Native & Web: Renders right-hand panel-participants-roster with invite copy, 6-digit PIN, and attendees', async () => {
+      let nativeInviteCopied = 0;
+      let nativePinCopied = 0;
+      const nativeHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseNativeProps,
+          participants: m15Participants,
+          isParticipantsOpen: true,
+          isChatOpen: false,
+          patientLink: 'https://portal.clinicez.com/teleconsult/join?token=tok-123',
+          patientPin: '789012',
+          onSharePatientLink: () => {
+            nativeInviteCopied += 1;
+          },
+          onCopyPatientPin: () => {
+            nativePinCopied += 1;
+          },
+        })
+      );
+
+      const nativeRoster = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'panel-participants-roster'
+      );
+      expect(nativeRoster).not.toBeNull();
+
+      const nativeCopyInviteBtn = findElement(
+        nativeRoster,
+        (el) => el.props?.testID === 'btn-roster-copy-invite'
+      );
+      expect(nativeCopyInviteBtn).not.toBeNull();
+      await nativeCopyInviteBtn.props.onPress?.();
+      expect(nativeInviteCopied).toBe(1);
+
+      const nativePinText = findElement(
+        nativeRoster,
+        (el) => el.props?.testID === 'text-roster-invite-pin'
+      );
+      expect(nativePinText).not.toBeNull();
+      expect(getTextContent(nativePinText)).toBe('789012');
+
+      const nativeCopyPinBtn = findElement(
+        nativeRoster,
+        (el) => el.props?.testID === 'btn-roster-copy-pin'
+      );
+      expect(nativeCopyPinBtn).not.toBeNull();
+      await nativeCopyPinBtn.props.onPress?.();
+      expect(nativePinCopied).toBe(1);
+
+      expect(getTextContent(nativeRoster)).toContain('Juan Dela Cruz');
+      nativeHarness.unmount();
+
+      let webInviteCopied = 0;
+      let webPinCopied = 0;
+      const webHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseWebProps,
+          participants: m15Participants,
+          isParticipantsOpen: true,
+          isChatOpen: false,
+          patientLink: 'https://portal.clinicez.com/teleconsult/join?token=tok-123',
+          patientPin: '789012',
+          onSharePatientLink: () => {
+            webInviteCopied += 1;
+          },
+          onCopyPatientPin: () => {
+            webPinCopied += 1;
+          },
+        })
+      );
+
+      const webRoster = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'panel-participants-roster'
+      );
+      expect(webRoster).not.toBeNull();
+
+      const webCopyInviteBtn = findElement(
+        webRoster,
+        (el) => el.props?.['data-testid'] === 'btn-roster-copy-invite'
+      );
+      expect(webCopyInviteBtn).not.toBeNull();
+      await webCopyInviteBtn.props.onClick?.();
+      expect(webInviteCopied).toBe(1);
+
+      const webPinText = findElement(
+        webRoster,
+        (el) => el.props?.['data-testid'] === 'text-roster-invite-pin'
+      );
+      expect(webPinText).not.toBeNull();
+      expect(getTextContent(webPinText)).toBe('789012');
+
+      const webCopyPinBtn = findElement(
+        webRoster,
+        (el) => el.props?.['data-testid'] === 'btn-roster-copy-pin'
+      );
+      expect(webCopyPinBtn).not.toBeNull();
+      await webCopyPinBtn.props.onClick?.();
+      expect(webPinCopied).toBe(1);
+
+      expect(getTextContent(webRoster)).toContain('Juan Dela Cruz');
+      webHarness.unmount();
+    });
+
+    it('Native & Web: Enforces mutual exclusion between chat drawer and roster', () => {
+      const nativeHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseNativeProps,
+          isParticipantsOpen: true,
+          isChatOpen: true,
+          renderChatDrawer: () => React.createElement('div', { testID: 'chat-drawer-content' }),
+        })
+      );
+      expect(
+        findElement(nativeHarness.result.current, (el) => el.props?.testID === 'panel-participants-roster')
+      ).toBeNull();
+      expect(
+        findElement(nativeHarness.result.current, (el) => el.props?.testID === 'chat-drawer-content')
+      ).not.toBeNull();
+      nativeHarness.unmount();
+
+      const webHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseWebProps,
+          isParticipantsOpen: true,
+          isChatOpen: true,
+          renderChatDrawer: () => React.createElement('div', { 'data-testid': 'chat-drawer-content' }),
+        })
+      );
+      expect(
+        findElement(webHarness.result.current, (el) => el.props?.['data-testid'] === 'panel-participants-roster')
+      ).toBeNull();
+      expect(
+        findElement(webHarness.result.current, (el) => el.props?.['data-testid'] === 'chat-drawer-content')
+      ).not.toBeNull();
+      webHarness.unmount();
+    });
+
+    it('Native & Web: Screen sharing banner renders when isScreenSharing is true and PiP adopts landscape aspect', async () => {
+      let nativeToggledScreen = 0;
+      const nativeHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseNativeProps,
+          isScreenSharing: true,
+          onToggleScreenShare: () => {
+            nativeToggledScreen += 1;
+          },
+        })
+      );
+      const nativeBanner = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'banner-screen-sharing'
+      );
+      expect(nativeBanner).not.toBeNull();
+      expect(getTextContent(nativeBanner)).toContain('You are sharing your screen');
+      const nativeStopBtn = findElement(
+        nativeBanner,
+        (el) => el.props?.accessibilityLabel === 'Stop Sharing'
+      );
+      expect(nativeStopBtn).not.toBeNull();
+      await nativeStopBtn.props.onPress?.();
+      expect(nativeToggledScreen).toBe(1);
+      nativeHarness.unmount();
+
+      let webToggledScreen = 0;
+      const webHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseWebProps,
+          isScreenSharing: true,
+          onToggleScreenShare: () => {
+            webToggledScreen += 1;
+          },
+        })
+      );
+      const webBanner = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'banner-screen-sharing'
+      );
+      expect(webBanner).not.toBeNull();
+      expect(getTextContent(webBanner)).toContain('You are sharing your screen');
+      const webStopBtn = findElement(
+        webBanner,
+        (el) => getTextContent(el) === 'Stop Sharing'
+      );
+      expect(webStopBtn).not.toBeNull();
+      await webStopBtn.props.onClick?.();
+      expect(webToggledScreen).toBe(1);
+      webHarness.unmount();
+    });
+
+    it('Native & Web: CallWaitingRoom displays 6-digit access PIN and copy button', async () => {
+      let nativePinCopied = 0;
+      const baseWaitingRoomProps = {
+        callId: 'call-123',
+        patientName: 'Juan Dela Cruz',
+        clinicianName: 'Dr. Maria Santos',
+        scheduledTime: '10:00 AM',
+        paymentPolicy: 'Prepaid' as const,
+        paymentStatus: 'Paid' as const,
+        isReadyToAdmit: true,
+        recordingConsentStatus: 'Approved' as const,
+        onEnterCall: () => {},
+        onCancelCall: () => {},
+      };
+
+      const nativeHarness = createHookHarness(() =>
+        NativeCallWaitingRoom({
+          ...baseWaitingRoomProps,
+          userRole: 'Clinician',
+          patientPin: '456789',
+          onCopyPatientPin: () => {
+            nativePinCopied += 1;
+          },
+        })
+      );
+      const nativePin = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'text-waiting-room-pin'
+      );
+      expect(nativePin).not.toBeNull();
+      expect(getTextContent(nativePin)).toBe('456789');
+      const nativeCopyBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-copy-patient-pin'
+      );
+      expect(nativeCopyBtn).not.toBeNull();
+      await nativeCopyBtn.props.onPress?.();
+      expect(nativePinCopied).toBe(1);
+      nativeHarness.unmount();
+
+      let webPinCopied = 0;
+      const webHarness = createHookHarness(() =>
+        WebCallWaitingRoom({
+          ...baseWaitingRoomProps,
+          userRole: 'Clinician',
+          patientPin: '456789',
+          onCopyPatientPin: () => {
+            webPinCopied += 1;
+          },
+        })
+      );
+      const webPin = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'text-waiting-room-pin'
+      );
+      expect(webPin).not.toBeNull();
+      expect(getTextContent(webPin)).toBe('456789');
+      const webCopyBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-copy-patient-pin'
+      );
+      expect(webCopyBtn).not.toBeNull();
+      await webCopyBtn.props.onClick?.();
+      expect(webPinCopied).toBe(1);
+      webHarness.unmount();
+    });
+
+    it('Native & Web: Solo participant safeguard triggers warning and supports stay & leave actions', async () => {
+      let nativeLeft = 0;
+      const nativeHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseNativeProps,
+          hasRemoteParticipant: false,
+          soloWarningThresholdMs: 10,
+          soloAutoLeaveGraceMs: 2000,
+          onSoloLeave: () => {
+            nativeLeft += 1;
+          },
+        })
+      );
+
+      // Wait for solo threshold
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 25));
+      });
+
+      const nativeWarning = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'banner-solo-participant-warning'
+      );
+      expect(nativeWarning).not.toBeNull();
+      expect(getTextContent(nativeWarning)).toContain('Are you still waiting?');
+
+      const nativeLeaveBtn = findElement(
+        nativeWarning,
+        (el) => el.props?.testID === 'btn-solo-leave'
+      );
+      expect(nativeLeaveBtn).not.toBeNull();
+      await nativeLeaveBtn.props.onPress?.();
+      expect(nativeLeft).toBe(1);
+      nativeHarness.unmount();
+
+      let webLeft = 0;
+      const webHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseWebProps,
+          hasRemoteParticipant: false,
+          soloWarningThresholdMs: 10,
+          soloAutoLeaveGraceMs: 2000,
+          onSoloLeave: () => {
+            webLeft += 1;
+          },
+        })
+      );
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 25));
+      });
+
+      const webWarning = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'banner-solo-participant-warning'
+      );
+      expect(webWarning).not.toBeNull();
+      expect(getTextContent(webWarning)).toContain('Are you still waiting?');
+
+      const webStayBtn = findElement(
+        webWarning,
+        (el) => el.props?.['data-testid'] === 'btn-solo-stay'
+      );
+      expect(webStayBtn).not.toBeNull();
+      await webStayBtn.props.onClick?.();
+
+      const webLeaveBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-solo-leave'
+      );
+      // Stay in call dismissed the warning
+      expect(webLeaveBtn).toBeNull();
       webHarness.unmount();
     });
   });

@@ -2,6 +2,19 @@ import React, { useMemo, useState } from 'react';
 import { WebCallWaitingRoomProps } from './types';
 import { OverlayTooltip } from './OverlayTooltip';
 import { resolveWebTheme } from './shadows';
+import {
+  VideoIcon,
+  VideoOffIcon,
+  MicIcon,
+  MicOffIcon,
+  RotateCwIcon,
+  ShareIcon,
+  CopyIcon,
+  LockIcon,
+  ShieldCheckIcon,
+  AlertCircleIcon,
+  LoaderIcon
+} from './icons';
 
 export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   callId,
@@ -43,6 +56,8 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   videoServerBannerMessage,
   onRetryVideoServer,
   recordingToggleHint,
+  patientPin,
+  onCopyPatientPin,
   colors,
   shadows
 }) => {
@@ -61,12 +76,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   const isCameraActive = isCameraEnabled ?? localCameraActive;
   const isMicActive = isMicEnabled ?? localMicActive;
 
-  // YAKAP enlistment is informational; it does NOT automatically exempt prepayment unless legacy isYakapExempt is true
-  const isYakapEnlisted = Boolean(hasActiveYakapEnlistment ?? isYakapExempt);
-  const isPrepaidBlocked =
-    paymentPolicy === 'Prepaid' &&
-    paymentStatus === 'Unpaid' &&
-    !isYakapExempt;
+  const isPrepaidBlocked = paymentPolicy === 'Prepaid' && paymentStatus === 'Unpaid';
   const isAdmitBlocked = isPrepaidBlocked || videoServerUnavailable;
   const isStaffOrDoctor = userRole === 'Clinician' || userRole === 'Staff';
   const isDoctor = userRole === 'Clinician';
@@ -196,7 +206,9 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
             <span className="sr-only"> (Teleconsultation Staging &amp; Waiting Room)</span>
           </h1>
           <p className="text-xs text-slate-500">
-            Appointment: {scheduledTime} • ID: {appointmentId || callId}
+            {userRole === 'Patient'
+              ? `Appointment: ${scheduledTime}`
+              : `Appointment: ${scheduledTime} • ID: ${appointmentId || callId}`}
           </p>
         </div>
       )}
@@ -204,7 +216,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
       {/* Content States */}
       {isLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400" role="status">
-          <div className="animate-spin text-3xl mb-2 font-bold">...</div>
+          <LoaderIcon size={32} className="animate-spin mb-2" />
           <p className="text-sm">
             Checking camera and microphone...
             <span className="sr-only"> Staging teleconsultation hardware</span>
@@ -212,7 +224,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
         </div>
       ) : error ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center" role="alert">
-          <div className="text-3xl mb-2 font-bold text-red-600">!</div>
+          <AlertCircleIcon size={32} className="mb-2 text-red-600" />
           <p className="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">
             Hardware or Media Connection Error
           </p>
@@ -234,11 +246,14 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
             ) : (
               <div className="text-center text-slate-400">
                 <div className="text-4xl mb-2 font-bold flex items-center justify-center">
-                  {renderIcon
-                    ? renderIcon(isCameraActive ? 'video' : 'videoOff', { size: 32 })
-                    : isCameraActive
-                      ? 'CAM'
-                      : 'OFF'}
+                  {renderIcon ? (
+                    renderIcon(isCameraActive ? 'video' : 'videoOff', { size: 32 })
+                  ) : (
+                    <>
+                      <span className="sr-only">{isCameraActive ? 'CAM' : 'OFF'}</span>
+                      {isCameraActive ? <VideoIcon size={32} /> : <VideoOffIcon size={32} />}
+                    </>
+                  )}
                 </div>
                 <p className="text-sm font-medium">
                   {isCameraActive ? 'Camera Self-Preview Active' : 'Camera Disabled'}
@@ -284,11 +299,14 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                   aria-label={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
                   title={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
                 >
-                  {renderIcon
-                    ? renderIcon(isMicActive ? 'mic' : 'micOff', { size: 18 })
-                    : isMicActive
-                      ? 'MIC'
-                      : 'MUTE'}
+                  {renderIcon ? (
+                    renderIcon(isMicActive ? 'mic' : 'micOff', { size: 18 })
+                  ) : (
+                    <>
+                      <span className="sr-only">{isMicActive ? 'MIC' : 'MUTE'}</span>
+                      {isMicActive ? <MicIcon size={18} /> : <MicOffIcon size={18} />}
+                    </>
+                  )}
                 </button>
               </OverlayTooltip>
 
@@ -307,11 +325,14 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                   aria-label={isCameraActive ? 'Stop video' : 'Start video'}
                   title={isCameraActive ? 'Turn off camera' : 'Turn on camera'}
                 >
-                  {renderIcon
-                    ? renderIcon(isCameraActive ? 'video' : 'videoOff', { size: 18 })
-                    : isCameraActive
-                      ? 'CAM'
-                      : 'OFF'}
+                  {renderIcon ? (
+                    renderIcon(isCameraActive ? 'video' : 'videoOff', { size: 18 })
+                  ) : (
+                    <>
+                      <span className="sr-only">{isCameraActive ? 'CAM' : 'OFF'}</span>
+                      {isCameraActive ? <VideoIcon size={18} /> : <VideoOffIcon size={18} />}
+                    </>
+                  )}
                 </button>
               </OverlayTooltip>
 
@@ -333,11 +354,14 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                     aria-label="Toggle camera orientation"
                     title="Toggle camera orientation"
                   >
-                    {renderIcon
-                      ? renderIcon('rotate', { size: 18 })
-                      : videoOrientation === 'landscape'
-                        ? 'PORTRAIT'
-                        : 'LANDSCAPE'}
+                    {renderIcon ? (
+                      renderIcon('rotate', { size: 18 })
+                    ) : (
+                      <>
+                        <span className="sr-only">{videoOrientation === 'landscape' ? 'PORTRAIT' : 'LANDSCAPE'}</span>
+                        <RotateCwIcon size={18} />
+                      </>
+                    )}
                   </button>
                 </OverlayTooltip>
               )}
@@ -354,56 +378,113 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                     aria-label="Share patient invite link"
                     title="Copy patient invite link"
                   >
-                    {renderIcon ? renderIcon('share', { size: 18 }) : 'SHARE'}
+                    {renderIcon ? (
+                      renderIcon('share', { size: 18 })
+                    ) : (
+                      <>
+                        <span className="sr-only">SHARE</span>
+                        <ShareIcon size={18} />
+                      </>
+                    )}
                   </button>
                 </OverlayTooltip>
               )}
             </div>
           </div>
 
-          {/* Patient Invite Link Card */}
-          {patientLink && (
+          {/* Patient Invite Link and PIN Card */}
+          {(patientLink || patientPin) && (
             <div
-              className="flex items-center justify-between p-3 rounded-lg bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-xs"
+              className="flex flex-col gap-2 p-3 rounded-lg bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-xs"
               style={{
                 backgroundColor: webColors.primarySubtle,
                 borderColor: webColors.primaryBorder,
                 boxShadow: webShadows.sm,
               }}
             >
-              <div className="flex flex-col min-w-0 pr-2">
-                <span
-                  className="font-semibold text-teal-900 dark:text-teal-200"
-                  style={{ color: webColors.primaryDark }}
-                >
-                  Patient Consultation Link
-                </span>
-                <span
-                  className="text-teal-700 dark:text-teal-400 font-mono text-[11px] truncate"
-                  style={{ color: webColors.primary }}
-                >
-                  {patientLink}
-                </span>
-              </div>
-              {onSharePatientLink && (
-                <OverlayTooltip label="Copy patient invite link" placement="bottom">
-                  <button
-                    type="button"
-                    id="btn-share-patient-link-card"
-                    data-testid="btn-share-patient-link-card"
-                    onClick={() => void onSharePatientLink()}
-                    className="h-7 w-7 p-1.5 rounded-md text-[10px] font-bold bg-teal-700 text-white hover:bg-teal-800 transition-colors flex items-center justify-center shrink-0"
-                    style={{
-                      backgroundColor: webColors.primary,
-                      color: webColors.onPrimary,
-                      boxShadow: webShadows.brandSm,
-                    }}
-                    aria-label="Copy patient consultation link"
-                    title="Copy patient invite link"
-                  >
-                    {renderIcon ? renderIcon('share', { size: 14 }) : 'COPY'}
-                  </button>
-                </OverlayTooltip>
+              {patientLink && (
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col min-w-0 pr-2">
+                    <span
+                      className="font-semibold text-teal-900 dark:text-teal-200"
+                      style={{ color: webColors.primaryDark }}
+                    >
+                      Patient Consultation Link
+                    </span>
+                    <span
+                      className="text-teal-700 dark:text-teal-400 font-mono text-[11px] truncate"
+                      style={{ color: webColors.primary }}
+                    >
+                      {patientLink}
+                    </span>
+                  </div>
+                  {onSharePatientLink && (
+                    <OverlayTooltip label="Copy patient invite link" placement="bottom">
+                      <button
+                        type="button"
+                        id="btn-share-patient-link-card"
+                        data-testid="btn-share-patient-link-card"
+                        onClick={() => void onSharePatientLink()}
+                        className="h-7 w-7 p-1.5 rounded-md text-[10px] font-bold bg-teal-700 text-white hover:bg-teal-800 transition-colors flex items-center justify-center shrink-0"
+                        style={{
+                          backgroundColor: webColors.primary,
+                          color: webColors.onPrimary,
+                          boxShadow: webShadows.brandSm,
+                        }}
+                        aria-label="Copy patient consultation link"
+                        title="Copy patient invite link"
+                      >
+                        {renderIcon ? (
+                          renderIcon('share', { size: 14 })
+                        ) : (
+                          <>
+                            <span className="sr-only">COPY</span>
+                            <CopyIcon size={14} />
+                          </>
+                        )}
+                      </button>
+                    </OverlayTooltip>
+                  )}
+                </div>
+              )}
+              {patientPin && (
+                <div className="flex items-center justify-between pt-1 border-t border-teal-200/60 dark:border-teal-800/60">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="font-semibold text-teal-900 dark:text-teal-200"
+                      style={{ color: webColors.primaryDark }}
+                    >
+                      Access PIN:
+                    </span>
+                    <span
+                      data-testid="text-waiting-room-pin"
+                      className="font-mono font-bold tracking-wider text-teal-800 dark:text-teal-300"
+                      style={{ color: webColors.primaryDark }}
+                    >
+                      {patientPin}
+                    </span>
+                  </div>
+                  {onCopyPatientPin && (
+                    <OverlayTooltip label="Copy access PIN" placement="bottom">
+                      <button
+                        type="button"
+                        id="btn-copy-patient-pin"
+                        data-testid="btn-copy-patient-pin"
+                        onClick={() => void onCopyPatientPin()}
+                        className="px-2 py-1 rounded-md text-[10px] font-bold bg-teal-700 text-white hover:bg-teal-800 transition-colors flex items-center justify-center shrink-0"
+                        style={{
+                          backgroundColor: webColors.primary,
+                          color: webColors.onPrimary,
+                          boxShadow: webShadows.brandSm,
+                        }}
+                        aria-label="Copy access PIN"
+                        title="Copy access PIN"
+                      >
+                        COPY
+                      </button>
+                    </OverlayTooltip>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -422,28 +503,6 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
               <span className="font-semibold text-slate-900 dark:text-slate-100">{clinicianName}</span>
             </div>
           </div>
-
-          {/* Informational YAKAP Badge (Non-Mutating) */}
-          {isYakapEnlisted && (
-            <div
-              className="p-3.5 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 flex flex-col gap-1"
-              style={{ boxShadow: webShadows.sm }}
-            >
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-600 text-white">
-                  PHILHEALTH YAKAP
-                </span>
-                <span className="text-xs font-bold text-blue-800 dark:text-blue-300">
-                  {isYakapExempt
-                    ? 'YAKAP Auto-Exempt • Active Konsulta Enlistment Verified'
-                    : 'Active Konsulta Enlistment Verified'}
-                </span>
-              </div>
-              <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
-                Patient has an active PhilHealth YAKAP enlistment. Staff may adjust the payment policy to Exempt or Postpaid if covered under primary care capitation.
-              </p>
-            </div>
-          )}
 
           {/* Staff Payment Policy Selector */}
           {isStaffOrDoctor && onChangePaymentPolicy && (
@@ -497,7 +556,14 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
               style={{ boxShadow: webShadows.sm }}
             >
               <span className="p-1 text-base font-bold flex items-center justify-center shrink-0">
-                {renderIcon ? renderIcon('lock', { size: 18 }) : 'LOCK'}
+                {renderIcon ? (
+                  renderIcon('lock', { size: 18 })
+                ) : (
+                  <>
+                    <span className="sr-only">LOCK</span>
+                    <LockIcon size={18} />
+                  </>
+                )}
               </span>
               <div className="flex-1">
                 <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
@@ -533,7 +599,14 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 className="p-1 text-base font-bold flex items-center justify-center shrink-0"
                 style={{ color: webColors.primaryDark }}
               >
-                {renderIcon ? renderIcon('shieldCheck', { size: 18 }) : 'OK'}
+                {renderIcon ? (
+                  renderIcon('shieldCheck', { size: 18 })
+                ) : (
+                  <>
+                    <span className="sr-only">OK</span>
+                    <ShieldCheckIcon size={18} />
+                  </>
+                )}
               </span>
               <div>
                 <p className="text-xs font-bold" style={{ color: webColors.primaryDark }}>
@@ -547,7 +620,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
           )}
 
           {/* Informed Recording Consent */}
-          {recordingConsentStatus !== 'Disabled' && (
+          {recordingConsentStatus !== 'Disabled' && userRole !== 'Patient' && (
             <div
               className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4"
               style={{ boxShadow: webShadows.sm }}

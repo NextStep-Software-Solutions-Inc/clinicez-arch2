@@ -367,6 +367,7 @@ export interface CallParticipant {
   isMicEnabled: boolean;
   isScreenSharing: boolean;
   joinedAt: Date;
+  isLocal?: boolean;
 }
 
 export interface EmergencyOverrideInput {
@@ -377,6 +378,7 @@ export interface EmergencyOverrideInput {
 export interface UseCallSessionOptions extends UseCallSessionCallbacks {
   participantIdentity?: string;
   participantName?: string;
+  remoteParticipantDisplayName?: string;
   isDoctor?: boolean;
   e2eeKey?: string;
   autoJoinWaitingRoom?: boolean;

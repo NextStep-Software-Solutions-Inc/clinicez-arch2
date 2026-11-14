@@ -9,6 +9,7 @@ import {
   resolveWebShadows,
   type GuestVerificationResult,
   type ThreadMessage,
+  type CommsCallIconName,
 } from "@clinicez/comms-sdk/web-ui";
 import { useCallSession } from "@clinicez/comms-sdk/react";
 import {
@@ -17,7 +18,29 @@ import {
   isWebRtcSupported,
   type IMediaRoomAdapter,
 } from "@clinicez/comms-sdk/core";
-import { Check, Lock, MessageSquare, PhoneOff } from "lucide-react";
+import {
+  Check,
+  Lock,
+  MessageSquare,
+  PhoneOff,
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  CameraOff,
+  MonitorUp,
+  MonitorOff,
+  SwitchCamera,
+  CircleDot,
+  ShieldCheck,
+  PanelRight,
+  PictureInPicture2,
+  RotateCw,
+  Share2,
+  Users,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { getPortalApiUrl } from "@/utils/domain";
 
 export interface TeleconsultGuestFlowProps {
@@ -139,22 +162,114 @@ export function TeleconsultGuestFlow({
   mockVerificationHandler,
   initialStage = "verify",
   initialActiveSession,
-  isYakapExempt = true,
+  isYakapExempt = false,
   paymentPolicy = "Exempt",
   paymentStatus = "Paid",
   userRole = "Patient",
   className = "",
 }: TeleconsultGuestFlowProps) {
   const [stage, setStage] = useState<"verify" | "waiting_room" | "in_call" | "ended">(initialStage);
+  const [endedReason, setEndedReason] = useState<string | null>(null);
   const [session, setSession] = useState<GuestVerificationResult | null>(initialActiveSession ?? null);
   const [recordingConsent, setRecordingConsent] = useState<"Pending" | "Approved" | "Rejected" | "Disabled">("Pending");
   const [isReadyToAdmit] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [pendingConsentSessionId, setPendingConsentSessionId] = useState<string | null>(null);
   const [privacyBlurEnabled, setPrivacyBlurEnabled] = useState(true);
   const guestShadows = useMemo(() => resolveWebShadows(), []);
   const isChatOpenRef = useRef(isChatOpen);
+  const callSessionRef = useRef<any>(null);
+
+  // Metadata Hydration State
+  const [metaClinicName, setMetaClinicName] = useState<string | null>(null);
+  const [metaClinicSupportPhone, setMetaClinicSupportPhone] = useState<string | null>(null);
+  const [metaClinicianName, setMetaClinicianName] = useState<string | null>(null);
+  const [metaGuestDisplayName, setMetaGuestDisplayName] = useState<string | null>(null);
+  const [metaScheduledAtUtc, setMetaScheduledAtUtc] = useState<string | null>(null);
+
+  // Hardware getUserMedia Preview State in Waiting Room
+  const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
+  const [previewMicLevel, setPreviewMicLevel] = useState<number>(0);
+  const [isCameraEnabled, setIsCameraEnabled] = useState<boolean>(true);
+  const [isMicEnabled, setIsMicEnabled] = useState<boolean>(true);
+  const previewStreamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  useEffect(() => {
+    if (initialActiveSession) {
+      if (initialActiveSession.clinicName) setMetaClinicName(initialActiveSession.clinicName);
+      if (initialActiveSession.clinicSupportPhone) setMetaClinicSupportPhone(initialActiveSession.clinicSupportPhone);
+      if (initialActiveSession.clinicianName) setMetaClinicianName(initialActiveSession.clinicianName);
+      if (initialActiveSession.guestDisplayName) setMetaGuestDisplayName(initialActiveSession.guestDisplayName);
+      if (initialActiveSession.scheduledAtUtc) setMetaScheduledAtUtc(initialActiveSession.scheduledAtUtc);
+    }
+  }, [initialActiveSession]);
+
+  const effectiveClinicName = metaClinicName || clinicName || "ClinicEZ Healthcare";
+  const effectiveSupportPhone = metaClinicSupportPhone || clinicSupportPhone || "(02) 8123-4567";
+  const effectiveClinicianName = metaClinicianName || (clinicName ? `${clinicName} Attending Clinician` : "Attending Clinician");
+  const effectivePatientName = metaGuestDisplayName || (userRole === "Patient" ? "Guest Patient" : "Guest Patient");
+  const effectiveScheduledTime = metaScheduledAtUtc
+    ? new Date(metaScheduledAtUtc).toLocaleString("en-US", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : "Today (Immediate Intake)";
+
+  const handleToggleChat = useCallback(() => {
+    setIsChatOpen((prev) => {
+      const next = !prev;
+      if (next) setIsParticipantsOpen(false);
+      return next;
+    });
+  }, []);
+
+  const handleToggleParticipants = useCallback(() => {
+    setIsParticipantsOpen((prev) => {
+      const next = !prev;
+      if (next) setIsChatOpen(false);
+      return next;
+    });
+  }, []);
+
+  // Preflight check for revoked/ended consultation
+  useEffect(() => {
+    let isMounted = true;
+    if (!inviteToken || mockVerificationHandler) return;
+
+    const checkPreflight = async () => {
+      try {
+        const url = `${getPortalApiUrl()}/portal/guest/teleconsult/status?token=${encodeURIComponent(inviteToken)}&inviteToken=${encodeURIComponent(inviteToken)}`;
+        const res = await fetch(url);
+        if (!isMounted) return;
+        if (res.status === 410) {
+          setEndedReason("This teleconsultation has ended");
+          setStage("ended");
+        } else if (res.ok) {
+          const json = await res.json().catch(() => null);
+          const data = json?.data ?? json;
+          if (data?.isEnded || data?.status === "Ended" || data?.isExpired) {
+            setEndedReason("This teleconsultation has ended");
+            setStage("ended");
+          } else {
+            if (data?.clinicName) setMetaClinicName(data.clinicName);
+            if (data?.clinicSupportPhone) setMetaClinicSupportPhone(data.clinicSupportPhone);
+            if (data?.clinicianName) setMetaClinicianName(data.clinicianName);
+            if (data?.scheduledAtUtc) setMetaScheduledAtUtc(data.scheduledAtUtc);
+          }
+        }
+      } catch {
+        // Preflight network failure fallback
+      }
+    };
+
+    void checkPreflight();
+    return () => {
+      isMounted = false;
+    };
+  }, [inviteToken, mockVerificationHandler]);
 
   useEffect(() => {
     isChatOpenRef.current = isChatOpen;
@@ -241,7 +356,7 @@ export function TeleconsultGuestFlow({
             conversationId: session?.callId || "teleconsult-conv",
             senderType: parsed.senderRole === "Clinician" ? "Staff" : "Patient",
             senderId: parsed.senderRole === "Clinician" ? "clinician-remote" : "patient-remote",
-            senderDisplayName: parsed.senderName || `${clinicName} Attending Clinician`,
+            senderDisplayName: parsed.senderName || effectiveClinicianName,
             contentText: parsed.text,
             clientSentAtUtc: parsed.sentAtUtc || new Date().toISOString(),
             state: "Received",
@@ -257,6 +372,11 @@ export function TeleconsultGuestFlow({
         } else if (parsed.type === "recording_consent_requested") {
           setPendingConsentSessionId(parsed.recordingSessionId || "pending");
           setRecordingConsent("Pending");
+        } else if (parsed.type === "call_ended_by_clinician") {
+          callSessionRef.current?.endCall?.().catch(() => {});
+          mediaAdapter.disconnect().catch(() => {});
+          setEndedReason("The attending clinician has ended this consultation.");
+          setStage("ended");
         }
       } catch {
         // Ignore non-JSON data channel packets
@@ -272,7 +392,7 @@ export function TeleconsultGuestFlow({
       unsubQuality();
       unsubData();
     };
-  }, [mediaAdapter, session?.callId, clinicName]);
+  }, [mediaAdapter, session?.callId, effectiveClinicianName]);
 
   // Picture-in-Picture & Video Element references
   const [isPipSupported, setIsPipSupported] = useState(false);
@@ -327,15 +447,16 @@ export function TeleconsultGuestFlow({
 
   // useCallSession integration
   const callSession = useCallSession(session?.callId || "call-guest", {
-    participantName: userRole === "Clinician" ? "Attending Clinician" : "Guest Patient",
+    participantName: userRole === "Clinician" ? effectiveClinicianName : effectivePatientName,
     participantIdentity: session?.guestToken ? `guest-${session.callId}` : "guest-patient",
+    remoteParticipantDisplayName: userRole === "Clinician" ? effectivePatientName : effectiveClinicianName,
     isDoctor: userRole === "Clinician",
     roomName: session?.roomName,
     mediaAdapter,
     initialPaymentState: {
       policy: paymentPolicy,
       status: paymentStatus,
-      isYakapExempt: isYakapExempt,
+      isYakapExempt: false,
       canAdmit: true,
     },
     onJoinCall: async () => {
@@ -352,6 +473,7 @@ export function TeleconsultGuestFlow({
       setStage("ended");
     },
   });
+  callSessionRef.current = callSession;
 
   // Automatically initiate call media connection upon entering in_call stage
   useEffect(() => {
@@ -382,14 +504,14 @@ export function TeleconsultGuestFlow({
   const handleSendMessage = async (text: string, isInternal: boolean): Promise<void> => {
     const newId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const sentAtUtc = new Date().toISOString();
-    const senderName = userRole === "Clinician" ? "Attending Clinician" : "Guest Patient";
+    const senderName = userRole === "Clinician" ? effectiveClinicianName : effectivePatientName;
     const newMsg: ThreadMessage = {
       id: newId,
       seq: messages.length + 1,
       conversationId: session?.callId || "teleconsult-conv",
       senderType: userRole === "Clinician" ? "Staff" : "Patient",
       senderId: "patient-guest-id",
-      senderDisplayName: userRole === "Clinician" ? "Attending Clinician" : "You (Guest)",
+      senderDisplayName: userRole === "Clinician" ? effectiveClinicianName : "You (Guest)",
       contentText: text,
       clientSentAtUtc: sentAtUtc,
       state: "Sending",
@@ -463,18 +585,230 @@ export function TeleconsultGuestFlow({
     }, 600);
   };
 
+  // Hardware getUserMedia Preview Lifecycle during stage === "waiting_room"
+  useEffect(() => {
+    if (stage !== "waiting_room") {
+      if (previewStreamRef.current) {
+        previewStreamRef.current.getTracks().forEach((t) => t.stop());
+        previewStreamRef.current = null;
+      }
+      if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
+      setPreviewStream(null);
+      setPreviewMicLevel(0);
+      return;
+    }
+
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      return;
+    }
+
+    let isCancelled = false;
+    let localStream: MediaStream | null = null;
+    let audioCtx: AudioContext | null = null;
+    let animId: number | null = null;
+
+    async function initPreview() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+
+        if (isCancelled) {
+          localStream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        previewStreamRef.current = localStream;
+        setPreviewStream(localStream);
+
+        localStream.getVideoTracks().forEach((t) => {
+          t.enabled = isCameraEnabled;
+        });
+        localStream.getAudioTracks().forEach((t) => {
+          t.enabled = isMicEnabled;
+        });
+
+        if (typeof AudioContext !== "undefined" || typeof (window as any).webkitAudioContext !== "undefined") {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          audioCtx = new AudioContextClass();
+          audioCtxRef.current = audioCtx;
+
+          const sourceNode = audioCtx.createMediaStreamSource(localStream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 256;
+          sourceNode.connect(analyser);
+
+          const pcmData = new Uint8Array(analyser.frequencyBinCount);
+          const updateVolume = () => {
+            if (isCancelled) return;
+            analyser.getByteFrequencyData(pcmData);
+            let sum = 0;
+            for (let i = 0; i < pcmData.length; i++) {
+              sum += pcmData[i];
+            }
+            const average = sum / pcmData.length;
+            const normalized = Math.min(1, Math.max(0, average / 128));
+            setPreviewMicLevel(normalized);
+            animId = requestAnimationFrame(updateVolume);
+          };
+          animId = requestAnimationFrame(updateVolume);
+        }
+      } catch (err) {
+        console.warn("Hardware getUserMedia preview unavailable:", err);
+      }
+    }
+
+    void initPreview();
+
+    return () => {
+      isCancelled = true;
+      if (animId) cancelAnimationFrame(animId);
+      if (audioCtx && audioCtx.state !== "closed") {
+        audioCtx.close().catch(() => {});
+      }
+      audioCtxRef.current = null;
+      if (localStream) {
+        localStream.getTracks().forEach((t) => t.stop());
+      }
+      previewStreamRef.current = null;
+      setPreviewStream(null);
+      setPreviewMicLevel(0);
+    };
+  }, [stage]);
+
+  const handleToggleCamera = useCallback(() => {
+    setIsCameraEnabled((prev) => {
+      const next = !prev;
+      if (previewStreamRef.current) {
+        previewStreamRef.current.getVideoTracks().forEach((t) => {
+          t.enabled = next;
+        });
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleMic = useCallback(() => {
+    setIsMicEnabled((prev) => {
+      const next = !prev;
+      if (previewStreamRef.current) {
+        previewStreamRef.current.getAudioTracks().forEach((t) => {
+          t.enabled = next;
+        });
+      }
+      return next;
+    });
+  }, []);
+
+  const handleEnterCall = useCallback(() => {
+    if (previewStreamRef.current) {
+      previewStreamRef.current.getTracks().forEach((t) => t.stop());
+      previewStreamRef.current = null;
+    }
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
+    setPreviewStream(null);
+    setPreviewMicLevel(0);
+    setStage("in_call");
+  }, []);
+
+  const handleCancelCall = useCallback(() => {
+    if (previewStreamRef.current) {
+      previewStreamRef.current.getTracks().forEach((t) => t.stop());
+      previewStreamRef.current = null;
+    }
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
+    setPreviewStream(null);
+    setPreviewMicLevel(0);
+    setStage("ended");
+  }, []);
+
+  const renderCommsIcon = useCallback(
+    (name: CommsCallIconName, props?: { color?: string; size?: number }) => {
+      const iconSize = props?.size ?? 18;
+      const color = props?.color ?? "currentColor";
+      switch (name) {
+        case "mic":
+          return <Mic size={iconSize} color={color} />;
+        case "micOff":
+          return <MicOff size={iconSize} color={color} />;
+        case "video":
+          return <Video size={iconSize} color={color} />;
+        case "videoOff":
+          return <VideoOff size={iconSize} color={color} />;
+        case "cameraOff":
+          return <CameraOff size={iconSize} color={color} />;
+        case "screenShare":
+          return <MonitorUp size={iconSize} color={color} />;
+        case "screenShareOff":
+          return <MonitorOff size={iconSize} color={color} />;
+        case "switchCamera":
+          return <SwitchCamera size={iconSize} color={color} />;
+        case "chat":
+          return <MessageSquare size={iconSize} color={color} />;
+        case "recordDot":
+          return <CircleDot size={iconSize} color={color} />;
+        case "phoneOff":
+          return <PhoneOff size={iconSize} color={color} />;
+        case "shieldCheck":
+          return <ShieldCheck size={iconSize} color={color} />;
+        case "lock":
+          return <Lock size={iconSize} color={color} />;
+        case "dock":
+          return <PanelRight size={iconSize} color={color} />;
+        case "pip":
+          return <PictureInPicture2 size={iconSize} color={color} />;
+        case "rotate":
+          return <RotateCw size={iconSize} color={color} />;
+        case "share":
+          return <Share2 size={iconSize} color={color} />;
+        default:
+          return null;
+      }
+    },
+    []
+  );
+
+  const renderParticipantsIcon = useCallback(
+    (props?: { color?: string; size?: number }) => {
+      return <Users size={props?.size ?? 18} color={props?.color ?? "currentColor"} />;
+    },
+    []
+  );
+
+  const renderPrivacyIcon = useCallback(
+    (enabled: boolean) => {
+      return enabled ? <EyeOff size={16} /> : <Eye size={16} />;
+    },
+    []
+  );
+
   // State 1: Verification Form (GuestJoinPage directly targeting portal-api)
   if (stage === "verify") {
     return (
       <GuestJoinPage
         inviteToken={inviteToken}
         apiBaseUrl={getPortalApiUrl()}
-        clinicName={clinicName}
+        clinicName={effectiveClinicName}
         clinicLogoUrl={clinicLogoUrl}
-        clinicSupportPhone={clinicSupportPhone}
+        clinicSupportPhone={effectiveSupportPhone}
         mockVerificationHandler={mockVerificationHandler ? handleMockVerification : undefined}
         onSessionVerified={(verified) => {
           setSession(verified);
+          if (verified.clinicName) setMetaClinicName(verified.clinicName);
+          if (verified.clinicSupportPhone) setMetaClinicSupportPhone(verified.clinicSupportPhone);
+          if (verified.clinicianName) setMetaClinicianName(verified.clinicianName);
+          if (verified.guestDisplayName) setMetaGuestDisplayName(verified.guestDisplayName);
+          if (verified.scheduledAtUtc) setMetaScheduledAtUtc(verified.scheduledAtUtc);
           setStage("waiting_room");
         }}
         onSessionEnded={() => setStage("ended")}
@@ -491,12 +825,11 @@ export function TeleconsultGuestFlow({
           callId={session?.callId || "call-guest"}
           appointmentId={session?.callId || "apt-guest"}
           userRole={userRole}
-          patientName="Guest Patient"
-          clinicianName={`${clinicName} Attending Clinician`}
-          scheduledTime="Today (Immediate Intake)"
+          patientName={effectivePatientName}
+          clinicianName={effectiveClinicianName}
+          scheduledTime={effectiveScheduledTime}
           paymentPolicy={paymentPolicy}
           paymentStatus={paymentStatus}
-          isYakapExempt={isYakapExempt}
           isReadyToAdmit={isReadyToAdmit}
           recordingConsentStatus={recordingConsent}
           onSubmitConsent={async (approved: boolean) => {
@@ -505,8 +838,23 @@ export function TeleconsultGuestFlow({
           onEmergencyPaymentOverride={async () => {
             // Clinician emergency override
           }}
-          onEnterCall={() => setStage("in_call")}
-          onCancelCall={() => setStage("ended")}
+          onEnterCall={handleEnterCall}
+          onCancelCall={handleCancelCall}
+          isCameraEnabled={isCameraEnabled}
+          isMicEnabled={isMicEnabled}
+          onToggleCamera={handleToggleCamera}
+          onToggleMic={handleToggleMic}
+          micLevel={previewMicLevel}
+          renderVideoPreview={() =>
+            previewStream ? (
+              <WebVideoTrackView
+                track={previewStream}
+                mirror
+                className="w-full h-full object-cover rounded-2xl"
+              />
+            ) : null
+          }
+          renderIcon={renderCommsIcon}
           className="flex-1"
         />
       </div>
@@ -529,7 +877,7 @@ export function TeleconsultGuestFlow({
             <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
             <div>
               <h1 className="text-sm font-bold text-foreground">
-                {clinicName} Teleconsultation
+                {effectiveClinicName} Teleconsultation
               </h1>
               <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 flex-wrap">
                 <span>Room: <span className="font-mono">{session?.roomName || "Consultation Room"}</span></span>
@@ -541,45 +889,11 @@ export function TeleconsultGuestFlow({
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
               <Lock className="w-3.5 h-3.5" />
               <span>Private Video Consultation</span>
               <span className="sr-only">End-to-End Encrypted</span>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setIsChatOpen((prev) => !prev)}
-              className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border transition-all cursor-pointer ${
-                isChatOpen
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-muted text-foreground border-border hover:bg-muted/80"
-              }`}
-              style={{
-                boxShadow: isChatOpen ? guestShadows.brandSm : guestShadows.brandSubtle,
-              }}
-              aria-label="Toggle consultation chat"
-            >
-              <MessageSquare className="w-4 h-4" />
-              <span>In-Call Chat</span>
-              <span className="px-1.5 py-0.5 rounded-full bg-background/20 text-[10px] font-bold">
-                {unreadChatCount > 0 ? unreadChatCount : messages.length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={async () => {
-                await callSession.endCall?.();
-                setStage("ended");
-              }}
-              className="min-h-[44px] px-4 py-2 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
-              style={{ boxShadow: guestShadows.dangerSm }}
-              aria-label="Leave teleconsultation"
-            >
-              <PhoneOff className="w-4 h-4" />
-              <span>Leave</span>
-            </button>
           </div>
         </header>
 
@@ -622,8 +936,8 @@ export function TeleconsultGuestFlow({
               callId={session?.callId || "call-guest"}
               roomName={session?.roomName || "Consultation Room"}
               userRole={userRole === "Clinician" ? "Clinician" : "Guest"}
-              participantName={`${clinicName} Attending Clinician`}
-              selfName="You (Guest)"
+              participantName={effectiveClinicianName}
+              selfName={userRole === "Clinician" ? effectiveClinicianName : effectivePatientName}
               hideHeader={true}
               remoteStatusLabel="Clinician Video Feed Active"
               networkQuality={networkQuality}
@@ -635,7 +949,17 @@ export function TeleconsultGuestFlow({
               onToggleScreenShare={callSession.mediaTracks.toggleScreenShare}
               isChatOpen={isChatOpen}
               unreadChatCount={unreadChatCount}
-              onToggleChat={() => setIsChatOpen((prev) => !prev)}
+              onToggleChat={handleToggleChat}
+              isParticipantsOpen={isParticipantsOpen}
+              onToggleParticipants={handleToggleParticipants}
+              participants={callSession.participants}
+              hasRemoteParticipant={Boolean(remoteVideoTrack || remoteAudioTrack || (callSession.participants?.length ?? 0) > 0)}
+              soloWarningThresholdMs={300_000}
+              soloAutoLeaveGraceMs={120_000}
+              onSoloLeave={async () => {
+                await callSession.endCall?.();
+                setStage("ended");
+              }}
               onEndCall={async () => {
                 await callSession.endCall?.();
                 setStage("ended");
@@ -645,6 +969,8 @@ export function TeleconsultGuestFlow({
               isPipSupported={isPipSupported}
               isPipActive={isPipActive}
               onTogglePip={handleTogglePip}
+              renderIcon={renderCommsIcon}
+              renderParticipantsIcon={renderParticipantsIcon}
               renderCustomVideoSurface={(type) => {
                 if (type === "remote") {
                   const isRemoteScreenShare = Boolean(
@@ -697,6 +1023,7 @@ export function TeleconsultGuestFlow({
                 currentUserId="patient-guest-id"
                 privacyBlurEnabled={privacyBlurEnabled}
                 onTogglePrivacyBlur={() => setPrivacyBlurEnabled((prev) => !prev)}
+                renderPrivacyIcon={renderPrivacyIcon}
                 onSendMessage={handleSendMessage}
                 onResendMessage={handleResendMessage}
                 canWriteInternalNotes={userRole === "Clinician"}
@@ -720,15 +1047,20 @@ export function TeleconsultGuestFlow({
           <Check className="w-8 h-8" />
         </div>
         <h1 className="text-xl font-bold text-foreground">
-          Consultation Concluded
+          {endedReason || "Consultation Concluded"}
         </h1>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Your teleconsultation session with {clinicName} has ended. Any clinical orders, prescriptions, or laboratory referrals will be sent directly to your registered contact.
+          {endedReason
+            ? `${endedReason}. Any clinical orders, prescriptions, or laboratory referrals will be sent directly to your registered contact.`
+            : `Your teleconsultation session with ${effectiveClinicName} has ended. Any clinical orders, prescriptions, or laboratory referrals will be sent directly to your registered contact.`}
         </p>
         <div className="pt-2">
           <button
             type="button"
-            onClick={() => setStage("verify")}
+            onClick={() => {
+              setEndedReason(null);
+              setStage("verify");
+            }}
             className="w-full min-h-[44px] rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:opacity-95 transition-all cursor-pointer"
             style={{ boxShadow: guestShadows.brandSm }}
           >

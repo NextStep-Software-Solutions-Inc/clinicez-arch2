@@ -61,6 +61,15 @@ function findElement(element: any, predicate: (el: any) => boolean): any {
   return null;
 }
 
+function getTextContent(element: any): string {
+  if (!element) return '';
+  if (typeof element === 'string') return element;
+  if (typeof element === 'number') return String(element);
+  if (Array.isArray(element)) return element.map(getTextContent).join(' ');
+  if (element.props?.children) return getTextContent(element.props.children);
+  return '';
+}
+
 const sampleMessages: ThreadMessage[] = [
   {
     id: 'msg-1',
@@ -145,10 +154,16 @@ describe('Adversarial Stress Test: Privacy Mode (PHI Obscure) & Peek Isolation',
     }
 
     // Toggle Privacy Mode ON
+    const toggleTooltip = findElement(harness.result.current, (el) =>
+      typeof el.props?.label === 'string' && el.props.label.toLowerCase().includes('privacy blur')
+    );
+    expect(toggleTooltip).not.toBeNull();
     const toggleButton = findElement(harness.result.current, (el) =>
       el.type === 'button' && el.props?.['aria-label']?.includes('privacy blur')
     );
     expect(toggleButton).toBeDefined();
+    expect(getTextContent(toggleButton)).not.toContain('Privacy Blur');
+    expect(getTextContent(toggleButton)).not.toContain('Peek Mode: ON');
 
     await act(() => {
       toggleButton.props.onClick();
@@ -252,10 +267,16 @@ describe('Adversarial Stress Test: Privacy Mode (PHI Obscure) & Peek Isolation',
     expect(textElements.length).toBe(3);
 
     // Toggle Privacy Mode ON
+    const toggleTooltip = findElement(harness.result.current, (el) =>
+      typeof el.props?.label === 'string' && el.props.label.toLowerCase().includes('privacy blur')
+    );
+    expect(toggleTooltip).not.toBeNull();
     const toggleButton = findElement(harness.result.current, (el) =>
       el.props?.accessibilityLabel?.includes('privacy blur')
     );
     expect(toggleButton).toBeDefined();
+    expect(getTextContent(toggleButton)).not.toContain('Privacy Blur');
+    expect(getTextContent(toggleButton)).not.toContain('Peek Mode: ON');
 
     await act(() => {
       toggleButton.props.onPress();

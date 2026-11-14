@@ -90,6 +90,7 @@ export interface MessageThreadProps {
   onAcknowledgeMessage?: (messageId: string) => Promise<void>;
   privacyBlurEnabled: boolean;
   onTogglePrivacyBlur: () => void;
+  renderPrivacyIcon?: (privacyBlurEnabled: boolean) => React.ReactNode;
   showHeader?: boolean;
   renderEmptyState?: () => React.ReactNode;
   renderSendIcon?: () => React.ReactNode;
@@ -209,6 +210,8 @@ export interface CallWaitingRoomProps {
   videoServerBannerMessage?: string;
   onRetryVideoServer?: () => void | Promise<void>;
   recordingToggleHint?: string;
+  patientPin?: string;
+  onCopyPatientPin?: () => void | Promise<void>;
   colors?: CommsThemeColors;
   shadows?: CommsThemeShadows;
 }
@@ -221,6 +224,8 @@ export interface CallStageParticipant {
   isMicActive?: boolean;
   isSpeaking?: boolean;
   isScreenSharing?: boolean;
+  isLocal?: boolean;
+  status?: 'In call' | 'Waiting to join';
 }
 
 export interface CallStageProps {
@@ -251,6 +256,16 @@ export interface CallStageProps {
   renderWorkstationAction?: () => React.ReactNode;
   renderCustomVideoSurface?: (trackType: 'remote' | 'local') => React.ReactNode;
   renderIcon?: (name: CommsCallIconName, props?: { color?: string; size?: number }) => React.ReactNode;
+  renderParticipantsIcon?: (props?: { color?: string; size?: number }) => React.ReactNode;
+  isParticipantsOpen?: boolean;
+  onToggleParticipants?: () => void;
+  patientPin?: string;
+  onCopyPatientPin?: () => void | Promise<void>;
+  soloWarningThresholdMs?: number;
+  soloAutoLeaveGraceMs?: number;
+  onSoloLeave?: () => void | Promise<void>;
+  participants?: CallStageParticipant[];
+  hasRemoteParticipant?: boolean;
   hideHeader?: boolean;
   remoteStatusLabel?: string;
   onEndCall: () => void | Promise<void>;

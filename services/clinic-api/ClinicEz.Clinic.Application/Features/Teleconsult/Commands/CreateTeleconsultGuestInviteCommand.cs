@@ -12,6 +12,7 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Shared.Licensing;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -38,6 +39,8 @@ public sealed class CreateTeleconsultGuestInviteCommandHandler : IRequestHandler
     private readonly IInteropPublisher _publisher;
     private readonly IConfiguration _configuration;
     private readonly ILogger<CreateTeleconsultGuestInviteCommandHandler> _logger;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
+    private readonly IFacilityLicenseValidator? _licenseValidator;
 
     public CreateTeleconsultGuestInviteCommandHandler(
         IRepository<Appointment> appointmentRepo,
@@ -47,7 +50,9 @@ public sealed class CreateTeleconsultGuestInviteCommandHandler : IRequestHandler
         IClinicContext clinicContext,
         IInteropPublisher publisher,
         IConfiguration configuration,
-        ILogger<CreateTeleconsultGuestInviteCommandHandler> logger)
+        ILogger<CreateTeleconsultGuestInviteCommandHandler> logger,
+        IRepository<FacilitySettings>? settingsRepo = null,
+        IFacilityLicenseValidator? licenseValidator = null)
     {
         _appointmentRepo = appointmentRepo;
         _patientRepo = patientRepo;
@@ -57,6 +62,8 @@ public sealed class CreateTeleconsultGuestInviteCommandHandler : IRequestHandler
         _publisher = publisher;
         _configuration = configuration;
         _logger = logger;
+        _settingsRepo = settingsRepo;
+        _licenseValidator = licenseValidator;
     }
 
     public async Task<TeleconsultGuestInviteDto> Handle(CreateTeleconsultGuestInviteCommand request, CancellationToken ct)
@@ -78,6 +85,28 @@ public sealed class CreateTeleconsultGuestInviteCommandHandler : IRequestHandler
         if (!appointment.IsTeleconsult)
         {
             throw new BadRequestException("Appointment is not a teleconsultation.");
+        }
+
+        FacilitySettings? settings = null;
+        if (_settingsRepo != null)
+        {
+            settings = await _settingsRepo.Query(s => s.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(ct);
+
+            if (settings != null && !string.IsNullOrWhiteSpace(settings.LicenseToken))
+            {
+                var validator = _licenseValidator ?? new FacilityLicenseValidator();
+                var validation = validator.Validate(settings.LicenseToken, _clinicContext.ClinicId, _clinicContext.TenantId);
+                var isWorkspaceEntitled = validation.IsValid &&
+                    validation.Payload?.EnabledFeatures != null &&
+                    validation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+
+                var effectiveEnabled = isWorkspaceEntitled && settings.EnableTeleconsultation;
+                if (!effectiveEnabled)
+                {
+                    throw new ForbiddenException("Teleconsultation is not enabled for this clinic.");
+                }
+            }
         }
 
         if (!appointment.CallId.HasValue)
@@ -105,6 +134,33 @@ public sealed class CreateTeleconsultGuestInviteCommandHandler : IRequestHandler
         var expectedDobHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{appointment.Id:N}:{dobString}"))).ToLowerInvariant();
         var otpHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{appointment.Id:N}:{otp}"))).ToLowerInvariant();
 
+        // 5b. Encrypt patient display name with AES-256-GCM using key SHA256(appointmentId:dob:otp)
+        var patientFullName = !string.IsNullOrWhiteSpace(appointment.PatientName)
+            ? appointment.PatientName
+            : $"{patient.FirstName} {patient.LastName}".Trim();
+
+        var aesKey = SHA256.HashData(Encoding.UTF8.GetBytes($"{appointment.Id:N}:{dobString}:{otp}"));
+        var plainBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { patientDisplayName = patientFullName }, InteropJson.Options));
+        var nonce = RandomNumberGenerator.GetBytes(12);
+        var tag = new byte[16];
+        var cipher = new byte[plainBytes.Length];
+
+        using (var aesGcm = new AesGcm(aesKey, 16))
+        {
+            aesGcm.Encrypt(nonce, plainBytes, cipher, tag);
+        }
+
+        var encryptedBlob = new byte[12 + 16 + cipher.Length];
+        Buffer.BlockCopy(nonce, 0, encryptedBlob, 0, 12);
+        Buffer.BlockCopy(tag, 0, encryptedBlob, 12, 16);
+        Buffer.BlockCopy(cipher, 0, encryptedBlob, 28, cipher.Length);
+        var encryptedGuestContext = Convert.ToBase64String(encryptedBlob);
+
+        var clinicName = settings?.ClinicName ?? "ClinicEZ Healthcare";
+        var clinicSupportPhone = settings?.LetterheadContact ?? settings?.LetterheadSubHeader;
+        var clinicianName = appointment.DoctorName ?? _clinicContext.StaffName;
+        DateTime? scheduledAtUtc = appointment.ScheduledAt;
+
         // 6. Enqueue GuestTeleconsultInviteIssuedPayload to Party.Portal
         var payload = new GuestTeleconsultInviteIssuedPayload(
             AppointmentId: appointment.Id,
@@ -115,7 +171,12 @@ public sealed class CreateTeleconsultGuestInviteCommandHandler : IRequestHandler
             ExpectedDobHash: expectedDobHash,
             OtpHash: otpHash,
             ExpiresAtUtc: expiresAtUtc,
-            IssuedAtUtc: DateTime.UtcNow);
+            IssuedAtUtc: DateTime.UtcNow,
+            ClinicName: clinicName,
+            ClinicSupportPhone: clinicSupportPhone,
+            ClinicianName: clinicianName,
+            ScheduledAtUtc: scheduledAtUtc,
+            EncryptedGuestContext: encryptedGuestContext);
 
         _publisher.Enqueue(
             InteropTypes.GuestTeleconsultInviteIssued,

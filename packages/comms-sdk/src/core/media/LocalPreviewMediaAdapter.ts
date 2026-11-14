@@ -134,6 +134,8 @@ export class LocalPreviewMediaAdapter implements IMediaRoomAdapter {
             this.emit('localTrackChanged', 'screen', false);
           };
         }
+      } else {
+        this.screenStream = this.createMockScreenStream();
       }
 
       this.isScreenSharing = true;
@@ -151,16 +153,40 @@ export class LocalPreviewMediaAdapter implements IMediaRoomAdapter {
     this.emit('localTrackChanged', 'screen', false);
   }
 
+  private createMockScreenStream(): MediaStream | null {
+    if (typeof MediaStream !== 'undefined') {
+      try {
+        const s = new MediaStream();
+        if (s.getVideoTracks().length > 0) return s;
+      } catch {}
+    }
+    const mockScreenTrack = { id: 'mock-screen-track', kind: 'video', enabled: true, stop: () => {} };
+    return {
+      id: 'mock-screen-stream-id',
+      active: true,
+      getTracks: () => [mockScreenTrack],
+      getVideoTracks: () => [mockScreenTrack],
+      getAudioTracks: () => [],
+      addTrack: () => {},
+      removeTrack: () => {}
+    } as unknown as MediaStream;
+  }
+
   async switchCamera(_deviceId?: string): Promise<void> {
     this.emit('localTrackChanged', 'video', this.isVideoEnabled);
   }
 
-  getLocalVideoTrack(): unknown | null {
-    if (this.isScreenSharing) {
-      const screenTrack = this.screenStream?.getVideoTracks()[0];
-      if (screenTrack) return screenTrack;
-    }
+  getLocalCameraTrack(): unknown | null {
     return this.localStream?.getVideoTracks()[0] || null;
+  }
+
+  getLocalScreenShareTrack(): unknown | null {
+    if (!this.isScreenSharing) return null;
+    return this.screenStream?.getVideoTracks()[0] || null;
+  }
+
+  getLocalVideoTrack(): unknown | null {
+    return this.getLocalScreenShareTrack() || this.getLocalCameraTrack();
   }
 
   getLocalAudioTrack(): unknown | null {
@@ -168,10 +194,17 @@ export class LocalPreviewMediaAdapter implements IMediaRoomAdapter {
   }
 
   getRemoteVideoTrack(participantIdentity?: string): unknown | null {
-    const p = participantIdentity
-      ? this.remoteParticipants.get(participantIdentity)
-      : Array.from(this.remoteParticipants.values())[0];
-    return p?.videoTrack || null;
+    if (participantIdentity) {
+      const p = this.remoteParticipants.get(participantIdentity);
+      return p?.screenShareTrack || p?.videoTrack || null;
+    }
+    for (const p of this.remoteParticipants.values()) {
+      if (p.isScreenSharing && (p.screenShareTrack || p.videoTrack)) {
+        return p.screenShareTrack || p.videoTrack;
+      }
+    }
+    const first = Array.from(this.remoteParticipants.values())[0];
+    return first?.screenShareTrack || first?.videoTrack || null;
   }
 
   getRemoteAudioTrack(participantIdentity?: string): unknown | null {
@@ -224,16 +257,14 @@ export class LocalPreviewMediaAdapter implements IMediaRoomAdapter {
     if (typeof MediaStream !== 'undefined') {
       return new MediaStream();
     }
+    const mockVTrack = { id: 'mock-v-track', kind: 'video', enabled: this.isVideoEnabled, stop: () => {} };
+    const mockATrack = { id: 'mock-a-track', kind: 'audio', enabled: this.isAudioEnabled, stop: () => {} };
     return {
       id: 'mock-stream-id',
       active: true,
-      getTracks: () => [],
-      getVideoTracks: () => [
-        { id: 'mock-v-track', kind: 'video', enabled: this.isVideoEnabled, stop: () => {} }
-      ],
-      getAudioTracks: () => [
-        { id: 'mock-a-track', kind: 'audio', enabled: this.isAudioEnabled, stop: () => {} }
-      ],
+      getTracks: () => [mockVTrack, mockATrack],
+      getVideoTracks: () => [mockVTrack],
+      getAudioTracks: () => [mockATrack],
       addTrack: () => {},
       removeTrack: () => {}
     } as unknown as MediaStream;

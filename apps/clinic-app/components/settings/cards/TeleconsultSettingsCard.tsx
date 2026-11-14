@@ -3,6 +3,7 @@ import { View, StyleSheet, Pressable, TextInput } from 'react-native';
 import ThemedText from '../../ui/ThemedText';
 import Button from '../../ui/Button';
 import Icon from '../../ui/Icon';
+import Badge from '../../ui/Badge';
 import SettingsSplitCard from './SettingsSplitCard';
 import { theme } from '../../../constants/theme';
 import {
@@ -26,6 +27,12 @@ export default function TeleconsultSettingsCard({
   showSkeletons = false,
 }: TeleconsultSettingsCardProps) {
   const { refresh: refreshClinic } = useClinic();
+
+  const isWorkspaceTeleconsultEntitled = Boolean(settings?.isWorkspaceTeleconsultEntitled);
+
+  const [enableTeleconsultation, setEnableTeleconsultation] = useState<boolean>(() => {
+    return settings?.enableTeleconsultation ?? false;
+  });
 
   const [recordingPolicy, setRecordingPolicy] = useState<TeleconsultRecordingPolicy>(() => {
     return (settings?.teleconsultRecordingPolicy as TeleconsultRecordingPolicy) || 'WorkspaceVaultOnly';
@@ -51,6 +58,9 @@ export default function TeleconsultSettingsCard({
 
   useEffect(() => {
     if (settings) {
+      if (settings.enableTeleconsultation !== undefined) {
+        setEnableTeleconsultation(Boolean(settings.enableTeleconsultation));
+      }
       if (settings.teleconsultRecordingPolicy) {
         setRecordingPolicy(settings.teleconsultRecordingPolicy as TeleconsultRecordingPolicy);
       }
@@ -82,6 +92,7 @@ export default function TeleconsultSettingsCard({
     setSaving(true);
     try {
       const payload: Partial<ClinicSettingsRecord> = {
+        enableTeleconsultation,
         teleconsultRecordingPolicy: recordingPolicy,
         teleconsultRecordingRetentionDays: retentionDays,
         teleconsultRecordingConsentRequired: consentRequired,
@@ -103,7 +114,7 @@ export default function TeleconsultSettingsCard({
     } finally {
       setSaving(false);
     }
-  }, [recordingPolicy, retentionDays, consentRequired, defaultPolicy, defaultFee, onSettingsUpdated, refreshClinic]);
+  }, [enableTeleconsultation, recordingPolicy, retentionDays, consentRequired, defaultPolicy, defaultFee, onSettingsUpdated, refreshClinic]);
 
   return (
     <SettingsSplitCard
@@ -116,6 +127,86 @@ export default function TeleconsultSettingsCard({
       testID="teleconsult-settings-card"
     >
       <View style={styles.formContainer} testID="teleconsult-settings-form">
+        {/* Workspace Entitlement Lock Banner */}
+        {!isWorkspaceTeleconsultEntitled && (
+          <View style={styles.lockedBanner} testID="teleconsult-locked-banner">
+            <View style={styles.lockedBannerHeader}>
+              <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+              <ThemedText variant="smallBold" color={theme.colors.warningText}>
+                Workspace Entitlement Required
+              </ThemedText>
+              <Badge label="Locked in Portal" variant="warning" size="sm" icon="lock" />
+            </View>
+            <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.lockedBannerText}>
+              Teleconsultation is not entitled for this workspace. The workspace owner must first enable Pay-As-You-Go Teleconsultation in the Portal under Billing &amp; Subscriptions before this clinic can activate it.
+            </ThemedText>
+          </View>
+        )}
+
+        {/* Master Teleconsultation Toggle */}
+        <View style={styles.settingBlock}>
+          <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.fieldLabel}>
+            Clinic Teleconsultation Master Switch
+          </ThemedText>
+          <ThemedText variant="caption" color={theme.colors.textSecondary}>
+            Enable virtual teleconsultation appointments and video call staging for this facility.
+          </ThemedText>
+          <View style={styles.toggleRow}>
+            <Pressable
+              data-testid="toggle-clinic-teleconsult-enabled"
+              testID="toggle-clinic-teleconsult-enabled"
+              accessibilityRole="switch"
+              accessibilityLabel="Enable Teleconsultation for this Clinic"
+              accessibilityState={{
+                checked: enableTeleconsultation,
+                disabled: !isWorkspaceTeleconsultEntitled,
+              }}
+              disabled={!isWorkspaceTeleconsultEntitled}
+              onPress={() => {
+                if (isWorkspaceTeleconsultEntitled) {
+                  setEnableTeleconsultation((prev) => !prev);
+                }
+              }}
+              style={[
+                styles.togglePill,
+                !isWorkspaceTeleconsultEntitled
+                  ? styles.togglePillDisabled
+                  : enableTeleconsultation
+                  ? styles.togglePillActive
+                  : styles.togglePillInactive,
+              ]}
+            >
+              <Icon
+                name={!isWorkspaceTeleconsultEntitled ? 'lock' : enableTeleconsultation ? 'check' : 'close'}
+                size={theme.sizes.iconSm}
+                color={
+                  !isWorkspaceTeleconsultEntitled
+                    ? theme.colors.textMuted
+                    : enableTeleconsultation
+                    ? theme.colors.successText
+                    : theme.colors.textMuted
+                }
+              />
+              <ThemedText
+                variant="smallBold"
+                color={
+                  !isWorkspaceTeleconsultEntitled
+                    ? theme.colors.textMuted
+                    : enableTeleconsultation
+                    ? theme.colors.successText
+                    : theme.colors.textSecondary
+                }
+              >
+                {!isWorkspaceTeleconsultEntitled
+                  ? 'Locked (Workspace Not Entitled)'
+                  : enableTeleconsultation
+                  ? 'Teleconsultation Active'
+                  : 'Teleconsultation Disabled'}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+
         {/* 1. Default Payment Policy */}
         <View style={styles.settingBlock}>
           <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.fieldLabel}>
@@ -386,6 +477,27 @@ const styles = StyleSheet.create({
   togglePillInactive: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
+  },
+  togglePillDisabled: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.borderLight,
+    opacity: 0.6,
+  },
+  lockedBanner: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  lockedBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  lockedBannerText: {
+    marginTop: theme.spacing.xs,
   },
   saveActionRow: {
     paddingTop: theme.spacing.md,

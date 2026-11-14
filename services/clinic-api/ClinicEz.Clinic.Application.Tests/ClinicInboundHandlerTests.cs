@@ -500,6 +500,30 @@ public class ClinicInboundHandlerTests
         (await db.Settings.IgnoreQueryFilters().CountAsync()).Should().Be(0);
     }
 
+    [Fact]
+    public async Task FacilityLicenseUpdated_WhenLicenseLacksTeleconsultationFeature_CascadesEnableTeleconsultationToFalse()
+    {
+        using var db = MessagingTestKit.CreateDbContext();
+        var clinicId = Guid.NewGuid();
+
+        db.Settings.Add(new FacilitySettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            ClinicId = clinicId,
+            ClinicName = "Apex Clinic",
+            EnableTeleconsultation = true
+        });
+        await db.SaveChangesAsync();
+
+        var license = LicenseFor(clinicId);
+        await FacilityHandler(db).HandleAsync(
+            license, License(license, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
+
+        var refreshed = await db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == clinicId);
+        refreshed.EnableTeleconsultation.Should().BeFalse();
+    }
+
     // ----- facility.directory.updated -----
 
     private static FacilityCreatedEvent DirectoryUpdateFor(Guid clinicId, string tenantId = TenantId, bool isWorkspaceEligible = true) => new()

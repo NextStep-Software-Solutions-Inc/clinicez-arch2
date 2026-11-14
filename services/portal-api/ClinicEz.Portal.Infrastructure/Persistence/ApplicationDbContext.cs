@@ -46,6 +46,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<NewsletterSubscriber> NewsletterSubscribers { get; set; }
     public DbSet<DocumentAttestation> DocumentAttestations { get; set; }
     public DbSet<FacilityQueueBoard> FacilityQueueBoards { get; set; }
+    public DbSet<WorkspaceTeleconsultBilling> WorkspaceTeleconsultBillings { get; set; }
+    public DbSet<TeleconsultUsageRecord> TeleconsultUsageRecords { get; set; }
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
     public DbSet<InteropInboxMessage> InteropInbox { get; set; }
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
@@ -644,6 +646,45 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(e => e.Email)
                 .HasFilter("\"IsDeleted\" = false")
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<WorkspaceTeleconsultBilling>(entity =>
+        {
+            entity.ToTable("WorkspaceTeleconsultBillings");
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TenantId)
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            entity.Property(e => e.BillingMode).HasMaxLength(16).IsRequired().HasDefaultValue(WorkspaceTeleconsultBilling.ModePostpaid);
+            entity.Property(e => e.RatePerMinutePhp).HasPrecision(18, 2).HasDefaultValue(WorkspaceTeleconsultBilling.DefaultRatePerMinutePhp);
+            entity.Property(e => e.AllocatedBudgetPhp).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(e => e.PrepaidBalancePhp).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(e => e.AllowOverageBeyondAllocation).HasDefaultValue(true);
+            entity.Property(e => e.CurrentPeriodYearMonth).HasMaxLength(7).IsRequired();
+            entity.Property(e => e.CurrentPeriodBilledPhp).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(e => e.CurrentPeriodOveragePhp).HasPrecision(18, 2).HasDefaultValue(0m);
+        });
+
+        modelBuilder.Entity<TeleconsultUsageRecord>(entity =>
+        {
+            entity.ToTable("TeleconsultUsageRecords");
+
+            entity.HasIndex(e => e.CallId)
+                .IsUnique();
+
+            entity.HasIndex(e => new { e.TenantId, e.CallEndedAtUtc });
+
+            entity.Property(e => e.TenantId).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.RatePerMinutePhp).HasPrecision(18, 2);
+            entity.Property(e => e.TotalCostPhp).HasPrecision(18, 2);
+            entity.Property(e => e.PrepaidDeductedPhp).HasPrecision(18, 2);
+            entity.Property(e => e.PostpaidOveragePhp).HasPrecision(18, 2);
         });
 
         base.OnModelCreating(modelBuilder);

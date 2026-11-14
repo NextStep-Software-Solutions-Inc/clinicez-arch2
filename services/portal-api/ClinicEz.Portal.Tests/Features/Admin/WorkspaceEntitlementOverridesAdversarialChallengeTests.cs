@@ -275,13 +275,15 @@ public class WorkspaceEntitlementOverridesAdversarialChallengeTests : IDisposabl
         var (tenant, _) = await SeedTenantWithPlanAsync("revoke-feature-tenant", "pro");
 
         var baseSnapshot = await _entitlements.ResolveAsync(tenant.Id, CancellationToken.None);
-        Assert.Contains(EntitlementKeys.FeatureTeleconsultation, baseSnapshot.Features);
+        Assert.DoesNotContain(EntitlementKeys.FeatureTeleconsultation, baseSnapshot.Features);
         Assert.Contains(EntitlementKeys.FeatureElectronicPrescriptions, baseSnapshot.Features);
         Assert.Contains(EntitlementKeys.FeaturePhilHealthKonsulta, baseSnapshot.Features);
         Assert.Contains(EntitlementKeys.FeatureLisIntegration, baseSnapshot.Features);
 
-        // Guard check on baseline succeeds
-        await _guard.EnsureFeatureAsync(tenant.Id, EntitlementKeys.FeatureTeleconsultation, CancellationToken.None);
+        // Guard check on baseline teleconsultation fails (opt-in PAYG required)
+        var baseEx = await Assert.ThrowsAsync<EntitlementException>(() =>
+            _guard.EnsureFeatureAsync(tenant.Id, EntitlementKeys.FeatureTeleconsultation, CancellationToken.None));
+        Assert.Equal(EntitlementGuard.FeatureUnavailableCode, baseEx.Code);
         await _guard.EnsureFeatureAsync(tenant.Id, EntitlementKeys.FeaturePhilHealthKonsulta, CancellationToken.None);
 
         // SuperAdmin explicitly disables FeatureTeleconsultation and FeaturePhilHealthKonsulta (Enabled = false)

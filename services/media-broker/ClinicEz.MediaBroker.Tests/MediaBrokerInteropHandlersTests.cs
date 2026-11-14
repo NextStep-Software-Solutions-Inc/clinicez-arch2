@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.MediaBroker.Application.Common.Interfaces;
 using ClinicEz.MediaBroker.Application.Common.Options;
 using ClinicEz.MediaBroker.Application.Features.Entitlements.Handlers;
 using ClinicEz.MediaBroker.Application.Features.Rooms.Handlers;
@@ -382,5 +383,246 @@ public class MediaBrokerInteropHandlersTests
             response2.ParticipantTokens.Should().BeEmpty();
             response2.ErrorMessage.Should().Contain("another tenant");
         }
+    }
+
+    [Fact]
+    public async Task MediaEntitlementUpdatedHandler_PersistsAllowOverdraftFlag()
+    {
+        var db = CreateInMemoryDb();
+        var handler = new MediaEntitlementUpdatedHandler(db, NullLogger<MediaEntitlementUpdatedHandler>.Instance);
+
+        var tenantId = "tenant-payg";
+        var payload1 = new MediaEntitlementUpdatedPayload(
+            TenantId: tenantId,
+            CallMinutesMonthly: 0,
+            IsActive: true,
+            Version: 1,
+            UpdatedAtUtc: DateTime.UtcNow,
+            AllowOverdraft: true,
+            BillingMode: "Postpaid",
+            RatePerMinutePhp: 5.00m
+        );
+
+        var context1 = new InteropMessageContext(InteropEnvelope.Create(
+            InteropTypes.MediaEntitlementUpdated,
+            Party.Portal,
+            Party.Media,
+            Guid.NewGuid(),
+            payload1
+        ));
+
+        await handler.HandleAsync(payload1, context1, CancellationToken.None);
+
+        var entitlement = await db.Entitlements.FirstOrDefaultAsync(e => e.TenantId == tenantId);
+        entitlement.Should().NotBeNull();
+        entitlement!.CallMinutesMonthly.Should().Be(0);
+        entitlement.AllowOverdraft.Should().BeTrue();
+
+        // Update with AllowOverdraft = false
+        var payload2 = new MediaEntitlementUpdatedPayload(
+            TenantId: tenantId,
+            CallMinutesMonthly: 0,
+            IsActive: true,
+            Version: 2,
+            UpdatedAtUtc: DateTime.UtcNow,
+            AllowOverdraft: false,
+            BillingMode: "Prepaid",
+            RatePerMinutePhp: 5.00m
+        );
+        var context2 = new InteropMessageContext(InteropEnvelope.Create(
+            InteropTypes.MediaEntitlementUpdated,
+            Party.Portal,
+            Party.Media,
+            Guid.NewGuid(),
+            payload2
+        ));
+
+        await handler.HandleAsync(payload2, context2, CancellationToken.None);
+
+        var updated = await db.Entitlements.FirstOrDefaultAsync(e => e.TenantId == tenantId);
+        updated!.AllowOverdraft.Should().BeFalse();
+        updated.Version.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task MediaMeteringService_AllowsPurePostpaidPaygCall_WhenMinutesZeroAndAllowOverdraftTrue()
+    {
+        var db = CreateInMemoryDb();
+        var publisher = new Mock<IInteropPublisher>();
+        var metering = new MediaMeteringService(db, publisher.Object, NullLogger<MediaMeteringService>.Instance);
+
+        var tenantId = "tenant-postpaid-payg";
+        db.Entitlements.Add(new TenantMediaEntitlement
+        {
+            TenantId = tenantId,
+            CallMinutesMonthly = 0,
+            IsActive = true,
+            AllowOverdraft = true
+        });
+        await db.SaveChangesAsync();
+
+        var decision = await metering.EvaluateCallAdmissionAsync(tenantId, CancellationToken.None);
+
+        decision.Allowed.Should().BeTrue();
+        decision.IsOverdraft.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task MediaMeteringService_RejectsCall_WhenMinutesZeroAndAllowOverdraftFalse()
+    {
+        var db = CreateInMemoryDb();
+        var publisher = new Mock<IInteropPublisher>();
+        var metering = new MediaMeteringService(db, publisher.Object, NullLogger<MediaMeteringService>.Instance);
+
+        var tenantId = "tenant-prepaid-depleted";
+        db.Entitlements.Add(new TenantMediaEntitlement
+        {
+            TenantId = tenantId,
+            CallMinutesMonthly = 0,
+            IsActive = true,
+            AllowOverdraft = false
+        });
+        await db.SaveChangesAsync();
+
+        var decision = await metering.EvaluateCallAdmissionAsync(tenantId, CancellationToken.None);
+
+        decision.Allowed.Should().BeFalse();
+        decision.Reason.Should().Contain("Teleconsultation minute pool not provisioned");
+    }
+
+    [Fact]
+    public async Task MediaRoomEndedHandler_RecordsCallEndAndDeletesLiveKitRoom()
+    {
+        var db = CreateInMemoryDb();
+        var publisher = new Mock<IInteropPublisher>();
+        var metering = new MediaMeteringService(db, publisher.Object, NullLogger<MediaMeteringService>.Instance);
+        var liveKitMock = new Mock<ILiveKitRoomClient>();
+        liveKitMock.Setup(c => c.DeleteRoomAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var tenantId = "tenant-end-call";
+        var callId = Guid.NewGuid();
+        var roomName = $"call-{callId:N}";
+        var startedAt = DateTime.UtcNow.AddMinutes(-20);
+
+        db.Entitlements.Add(new TenantMediaEntitlement
+        {
+            TenantId = tenantId,
+            CallMinutesMonthly = 500,
+            IsActive = true
+        });
+
+        db.CallSessions.Add(new MediaCallSession
+        {
+            CallId = callId,
+            TenantId = tenantId,
+            RoomName = roomName,
+            Status = "Active",
+            RequestedAtUtc = startedAt,
+            StartedAtUtc = startedAt
+        });
+        await db.SaveChangesAsync();
+
+        var handler = new MediaRoomEndedHandler(
+            db,
+            metering,
+            liveKitMock.Object,
+            NullLogger<MediaRoomEndedHandler>.Instance
+        );
+
+        var payload = new MediaRoomEndedPayload(
+            CallId: callId,
+            TenantId: tenantId,
+            RoomName: roomName,
+            EndedAtUtc: DateTime.UtcNow
+        );
+
+        var context = new InteropMessageContext(InteropEnvelope.Create(
+            InteropTypes.MediaRoomEnded,
+            Party.ForFacility(tenantId, "clinic-01", FacilityType.Clinic),
+            Party.Media,
+            Guid.NewGuid(),
+            payload
+        ));
+
+        await handler.HandleAsync(payload, context, CancellationToken.None);
+
+        var session = await db.CallSessions.FirstOrDefaultAsync(s => s.CallId == callId);
+        session.Should().NotBeNull();
+        session!.Status.Should().Be("Ended");
+        session.DurationMinutes.Should().BeGreaterThanOrEqualTo(20);
+
+        liveKitMock.Verify(c => c.DeleteRoomAsync(roomName, It.IsAny<CancellationToken>()), Times.Once);
+        publisher.Verify(p => p.Enqueue(
+            InteropTypes.MediaUsageRecorded,
+            Party.Media,
+            Party.Portal,
+            callId,
+            It.IsAny<MediaUsageRecordedPayload>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AbandonedSessionCleanupService_CleansUpStaleSessions_OlderThanTtl()
+    {
+        var db = CreateInMemoryDb();
+        var publisher = new Mock<IInteropPublisher>();
+        var metering = new MediaMeteringService(db, publisher.Object, NullLogger<MediaMeteringService>.Instance);
+        var liveKitMock = new Mock<ILiveKitRoomClient>();
+        liveKitMock.Setup(c => c.DeleteRoomAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var tenantId = "tenant-abandoned";
+        var staleCallId = Guid.NewGuid();
+        var freshCallId = Guid.NewGuid();
+
+        db.Entitlements.Add(new TenantMediaEntitlement
+        {
+            TenantId = tenantId,
+            CallMinutesMonthly = 500,
+            IsActive = true
+        });
+
+        // Stale session started 3 hours ago
+        db.CallSessions.Add(new MediaCallSession
+        {
+            CallId = staleCallId,
+            TenantId = tenantId,
+            RoomName = $"call-{staleCallId:N}",
+            Status = "Active",
+            RequestedAtUtc = DateTime.UtcNow.AddHours(-3),
+            StartedAtUtc = DateTime.UtcNow.AddHours(-3)
+        });
+
+        // Fresh session started 30 mins ago
+        db.CallSessions.Add(new MediaCallSession
+        {
+            CallId = freshCallId,
+            TenantId = tenantId,
+            RoomName = $"call-{freshCallId:N}",
+            Status = "Active",
+            RequestedAtUtc = DateTime.UtcNow.AddMinutes(-30),
+            StartedAtUtc = DateTime.UtcNow.AddMinutes(-30)
+        });
+        await db.SaveChangesAsync();
+
+        var cleanupService = new AbandonedSessionCleanupService(
+            db,
+            metering,
+            liveKitMock.Object,
+            NullLogger<AbandonedSessionCleanupService>.Instance
+        );
+
+        var cleanedCount = await cleanupService.CleanupAbandonedSessionsAsync(TimeSpan.FromHours(2), CancellationToken.None);
+
+        cleanedCount.Should().Be(1);
+
+        var staleSession = await db.CallSessions.FirstOrDefaultAsync(s => s.CallId == staleCallId);
+        staleSession!.Status.Should().Be("Ended");
+
+        var freshSession = await db.CallSessions.FirstOrDefaultAsync(s => s.CallId == freshCallId);
+        freshSession!.Status.Should().Be("Active");
+
+        var auditLog = await db.AuditLogs.FirstOrDefaultAsync(a => a.CallId == staleCallId && a.EventType == "SessionAbandoned");
+        auditLog.Should().NotBeNull();
     }
 }

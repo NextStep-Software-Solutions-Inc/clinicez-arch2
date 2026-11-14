@@ -39,6 +39,49 @@ public sealed class EntitlementService(
             {
                 Apply(limits, features, entitlement.Key, entitlement.Kind, entitlement.Limit, entitlement.Enabled);
             }
+
+            // PAYG resolution rule:
+            // Check for explicit SuperAdmin override on EntitlementKeys.FeatureTeleconsultation
+            var teleconsultOverride = overrides.FirstOrDefault(o => o.Key == EntitlementKeys.FeatureTeleconsultation);
+            if (teleconsultOverride != null)
+            {
+                // SuperAdmin explicit override takes precedence
+                if (teleconsultOverride.Enabled == true)
+                    features.Add(EntitlementKeys.FeatureTeleconsultation);
+                else
+                    features.Remove(EntitlementKeys.FeatureTeleconsultation);
+            }
+            else
+            {
+                // Evaluated against workspace teleconsult billing
+                var billing = await context.WorkspaceTeleconsultBillings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(b => b.TenantId == tenantId, cancellationToken);
+
+                if (billing != null && billing.IsEnabled)
+                {
+                    if (string.Equals(billing.BillingMode, WorkspaceTeleconsultBilling.ModePrepaid, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var rate = billing.RatePerMinutePhp > 0m ? billing.RatePerMinutePhp : WorkspaceTeleconsultBilling.DefaultRatePerMinutePhp;
+                        if (billing.PrepaidBalancePhp >= rate)
+                        {
+                            features.Add(EntitlementKeys.FeatureTeleconsultation);
+                        }
+                        else
+                        {
+                            features.Remove(EntitlementKeys.FeatureTeleconsultation);
+                        }
+                    }
+                    else // Postpaid
+                    {
+                        features.Add(EntitlementKeys.FeatureTeleconsultation);
+                    }
+                }
+                else
+                {
+                    features.Remove(EntitlementKeys.FeatureTeleconsultation);
+                }
+            }
         }
 
         return new EntitlementSnapshot(

@@ -41,7 +41,7 @@ public sealed class MediaEntitlementUpdatedHandler : IInteropHandler<MediaEntitl
                 TenantId = payload.TenantId,
                 CallMinutesMonthly = payload.CallMinutesMonthly,
                 IsActive = payload.IsActive,
-                AllowOverdraft = true,
+                AllowOverdraft = payload.AllowOverdraft,
                 AllowTransportOnlyFallback = false,
                 Version = payload.Version,
                 UpdatedAtUtc = payload.UpdatedAtUtc
@@ -55,6 +55,7 @@ public sealed class MediaEntitlementUpdatedHandler : IInteropHandler<MediaEntitl
             {
                 existing.CallMinutesMonthly = payload.CallMinutesMonthly;
                 existing.IsActive = payload.IsActive;
+                existing.AllowOverdraft = payload.AllowOverdraft;
                 existing.Version = payload.Version;
                 existing.UpdatedAtUtc = payload.UpdatedAtUtc;
             }

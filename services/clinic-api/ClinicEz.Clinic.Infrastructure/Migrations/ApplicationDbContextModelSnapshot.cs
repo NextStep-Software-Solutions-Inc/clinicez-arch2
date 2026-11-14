@@ -2194,6 +2194,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("EnableTeleconsultation")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("EnableStatAudioAlert")
                         .HasColumnType("boolean");
 

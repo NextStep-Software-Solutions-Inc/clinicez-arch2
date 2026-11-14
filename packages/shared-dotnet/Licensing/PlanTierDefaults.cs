@@ -44,7 +44,6 @@ public static class PlanTierDefaults
         {
             "standard" => new List<string>
             {
-                FacilityFeatureKeys.Teleconsultation,
                 FacilityFeatureKeys.ElectronicPrescriptions,
                 FacilityFeatureKeys.LisIntegration,
                 FacilityFeatureKeys.InventoryManagement,
@@ -53,7 +52,6 @@ public static class PlanTierDefaults
             },
             "enterprise" => new List<string>
             {
-                FacilityFeatureKeys.Teleconsultation,
                 FacilityFeatureKeys.ElectronicPrescriptions,
                 FacilityFeatureKeys.LisIntegration,
                 FacilityFeatureKeys.InventoryManagement,

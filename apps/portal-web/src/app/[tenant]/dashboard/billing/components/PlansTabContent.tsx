@@ -21,6 +21,7 @@ import CancelPlanDialog from "./CancelPlanDialog"
 import BillingSetupDialog from "./BillingSetupDialog"
 import ConfirmPlanSwitchDialog from "./ConfirmPlanSwitchDialog"
 import { PlansTabSkeleton } from "./BillingSkeletons"
+import { TeleconsultPaygCard } from "./TeleconsultPaygCard"
 
 interface PlansTabContentProps {
   tenantId: string
@@ -310,6 +311,9 @@ export default function PlansTabContent({ tenantId, onSwitchTab }: PlansTabConte
           </div>
         </div>
       )}
+
+      {/* Pay-As-You-Go Teleconsultation Add-On Card */}
+      <TeleconsultPaygCard tenantSlug={tenantId} />
 
       <PricingPlansSection
         tiers={tiers}

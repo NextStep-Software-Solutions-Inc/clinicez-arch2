@@ -21,6 +21,7 @@ import {
   MessageThreadProps,
   ThreadMessage
 } from './types';
+import { OverlayTooltip } from './OverlayTooltip';
 
 export const MessageThread: React.FC<MessageThreadProps> = ({
   conversationId,
@@ -33,6 +34,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   onAcknowledgeMessage,
   privacyBlurEnabled,
   onTogglePrivacyBlur,
+  renderPrivacyIcon,
   showHeader = true,
   renderEmptyState,
   renderSendIcon,
@@ -187,15 +189,76 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             </Text>
           </View>
 
-          <TouchableOpacity
-            style={[styles.privacyButton, privacyBlurEnabled && styles.privacyButtonActive]}
-            onPress={onTogglePrivacyBlur}
-            accessibilityLabel={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
+          <OverlayTooltip
+            label={privacyBlurEnabled ? 'Disable privacy blur' : 'Enable privacy blur'}
+            placement="bottom"
+            colors={c}
+            shadows={s}
           >
-            <Text style={[styles.privacyButtonText, privacyBlurEnabled && styles.privacyButtonTextActive]}>
-              {privacyBlurEnabled ? 'Peek Mode: ON' : 'Privacy Blur'}
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              testID="btn-toggle-privacy-blur"
+              style={[styles.privacyButton, privacyBlurEnabled && styles.privacyButtonActive]}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              onPress={onTogglePrivacyBlur}
+              accessibilityRole="button"
+              accessibilityLabel={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
+            >
+              {renderPrivacyIcon ? (
+                renderPrivacyIcon(privacyBlurEnabled)
+              ) : isLiveWebDom ? (
+                React.createElement(
+                  'svg',
+                  {
+                    width: 16,
+                    height: 16,
+                    viewBox: '0 0 24 24',
+                    fill: 'none',
+                    stroke: privacyBlurEnabled ? c.warningText : c.textSecondary,
+                    strokeWidth: 2,
+                    strokeLinecap: 'round',
+                    strokeLinejoin: 'round',
+                    'aria-hidden': true,
+                  },
+                  privacyBlurEnabled
+                    ? [
+                        React.createElement('path', {
+                          key: 'e1',
+                          d: 'M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49',
+                        }),
+                        React.createElement('path', {
+                          key: 'e2',
+                          d: 'M14.084 14.158a3 3 0 0 1-4.242-4.242',
+                        }),
+                        React.createElement('path', {
+                          key: 'e3',
+                          d: 'M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143',
+                        }),
+                        React.createElement('path', {
+                          key: 'e4',
+                          d: 'm2 2 20 20',
+                        }),
+                      ]
+                    : [
+                        React.createElement('path', {
+                          key: 'e1',
+                          d: 'M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0',
+                        }),
+                        React.createElement('circle', {
+                          key: 'e2',
+                          cx: 12,
+                          cy: 12,
+                          r: 3,
+                        }),
+                      ],
+                )
+              ) : (
+                <View style={[styles.privacyEyeOuter, privacyBlurEnabled && styles.privacyEyeOuterActive]}>
+                  <View style={[styles.privacyEyePupil, privacyBlurEnabled && styles.privacyEyePupilActive]} />
+                  {privacyBlurEnabled ? <View style={styles.privacyEyeSlash} /> : null}
+                </View>
+              )}
+            </TouchableOpacity>
+          </OverlayTooltip>
         </View>
       )}
 
@@ -406,7 +469,9 @@ function createStyles(
       backgroundColor: c.background
     },
     header: {
-      padding: spaceScale.md,
+      paddingHorizontal: spaceScale.md,
+      paddingVertical: spaceScale.sm,
+      gap: spaceScale.sm,
       backgroundColor: c.surface,
       borderBottomWidth: 1,
       borderBottomColor: c.border,
@@ -418,20 +483,22 @@ function createStyles(
       flex: 1
     },
     headerTitle: {
-      fontSize: fontSizeScale.lg,
-      fontWeight: '700',
+      fontSize: fontSizeScale.sm,
+      fontWeight: '600',
       color: c.text
     },
     headerSubtitle: {
       fontSize: fontSizeScale.xs,
       color: c.textMuted,
-      marginTop: 2
+      marginTop: 1
     },
     privacyButton: {
-      minHeight: sizes.touchTarget,
-      paddingHorizontal: spaceScale.md,
+      width: 36,
+      height: 36,
       borderRadius: radiusScale.sm,
       backgroundColor: c.surfaceSubtle,
+      borderColor: c.border,
+      borderWidth: 1,
       justifyContent: 'center',
       alignItems: 'center',
       ...s.brandSubtle
@@ -442,13 +509,33 @@ function createStyles(
       borderWidth: 1,
       ...s.sm
     },
-    privacyButtonText: {
-      fontSize: fontSizeScale.xs,
-      fontWeight: '600',
-      color: c.textSecondary
+    privacyEyeOuter: {
+      width: 16,
+      height: 10,
+      borderRadius: radiusScale.full,
+      borderWidth: 1.5,
+      borderColor: c.textSecondary,
+      alignItems: 'center',
+      justifyContent: 'center'
     },
-    privacyButtonTextActive: {
-      color: c.warningText
+    privacyEyeOuterActive: {
+      borderColor: c.warningText
+    },
+    privacyEyePupil: {
+      width: 4,
+      height: 4,
+      borderRadius: radiusScale.full,
+      backgroundColor: c.textSecondary
+    },
+    privacyEyePupilActive: {
+      backgroundColor: c.warningText
+    },
+    privacyEyeSlash: {
+      position: 'absolute',
+      width: 16,
+      height: 1.5,
+      backgroundColor: c.warningText,
+      transform: [{ rotate: '-45deg' }]
     },
     messageList: {
       flex: 1

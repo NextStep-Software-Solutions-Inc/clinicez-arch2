@@ -32,6 +32,7 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
   private networkQuality: 'excellent' | 'good' | 'poor' | 'reconnecting' = 'good';
   private participantQualities: Map<string, 'excellent' | 'good' | 'poor'> = new Map();
   private listeners: Map<MediaAdapterEventType, Set<MediaEventListener>> = new Map();
+  private endedListenersAttached: WeakSet<object> = new WeakSet();
   private isSupported: boolean;
 
   constructor(options?: LiveKitMediaAdapterOptions) {
@@ -130,9 +131,47 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
   }
 
   async setScreenShareEnabled(enabled: boolean): Promise<void> {
-    if (this.room?.localParticipant) {
-      await this.room.localParticipant.setScreenShareEnabled(enabled);
-      this.emit('localTrackChanged', 'screen', enabled);
+    if (!this.room?.localParticipant) return;
+    if (enabled) {
+      const pub = await this.room.localParticipant.setScreenShareEnabled(true);
+      const pubs = Array.from(this.room.localParticipant.videoTrackPublications.values());
+      const screenPub =
+        pub ||
+        pubs.find(
+          (p) => (p as { source?: string }).source === 'screen_share' && p.track && !p.isMuted
+        );
+
+      if (!screenPub || !screenPub.track) {
+        // Browser picker was cancelled or track was not published
+        return;
+      }
+
+      this.attachTrackEndedListener(screenPub.track);
+      this.emit('localTrackChanged', 'screen', true);
+      return;
+    }
+
+    await this.room.localParticipant.setScreenShareEnabled(false);
+    this.emit('localTrackChanged', 'screen', false);
+  }
+
+  private attachTrackEndedListener(track: unknown): void {
+    const msTrack = ((track as { mediaStreamTrack?: object })?.mediaStreamTrack || track) as {
+      addEventListener?: (type: string, listener: () => void, options?: { once?: boolean }) => void;
+      onended?: (() => void) | null;
+    };
+    if (!msTrack || typeof msTrack !== 'object') return;
+    if (this.endedListenersAttached.has(msTrack)) return;
+    this.endedListenersAttached.add(msTrack);
+
+    const handleEnded = () => {
+      this.emit('localTrackChanged', 'screen', false);
+    };
+
+    if (typeof msTrack.addEventListener === 'function') {
+      msTrack.addEventListener('ended', handleEnded, { once: true });
+    } else if ('onended' in msTrack) {
+      msTrack.onended = handleEnded;
     }
   }
 
@@ -142,13 +181,26 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
     }
   }
 
-  getLocalVideoTrack(): unknown | null {
+  getLocalCameraTrack(): unknown | null {
     if (!this.room?.localParticipant) return null;
     const pubs = Array.from(this.room.localParticipant.videoTrackPublications.values());
-    const screenPub = pubs.find((pub) => (pub as { source?: string }).source === 'screen_share' && pub.track && !pub.isMuted);
-    if (screenPub?.track) return screenPub.track;
-    const camPub = pubs.find((pub) => pub.track && !pub.isMuted);
+    const camPub = pubs.find(
+      (pub) => (pub as { source?: string }).source !== 'screen_share' && pub.track && !pub.isMuted
+    );
     return camPub?.track || null;
+  }
+
+  getLocalScreenShareTrack(): unknown | null {
+    if (!this.room?.localParticipant) return null;
+    const pubs = Array.from(this.room.localParticipant.videoTrackPublications.values());
+    const screenPub = pubs.find(
+      (pub) => (pub as { source?: string }).source === 'screen_share' && pub.track && !pub.isMuted
+    );
+    return screenPub?.track || null;
+  }
+
+  getLocalVideoTrack(): unknown | null {
+    return this.getLocalScreenShareTrack() || this.getLocalCameraTrack();
   }
 
   getLocalAudioTrack(): unknown | null {
@@ -160,15 +212,45 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
   getRemoteVideoTrack(participantIdentity?: string): unknown | null {
     if (!this.room) return null;
     const participants = Array.from(this.room.remoteParticipants.values());
-    const participant = participantIdentity
-      ? participants.find((p) => p.identity === participantIdentity)
-      : participants[0];
-    if (!participant) return null;
-    const pubs = Array.from(participant.videoTrackPublications.values());
-    const screenPub = pubs.find((pub) => (pub as { source?: string }).source === 'screen_share' && pub.track && !pub.isMuted);
-    if (screenPub?.track) return screenPub.track;
-    const camPub = pubs.find((pub) => pub.track && !pub.isMuted);
-    return camPub?.track || null;
+    if (participants.length === 0) return null;
+
+    if (participantIdentity) {
+      const participant = participants.find((p) => p.identity === participantIdentity);
+      if (!participant) return null;
+      const pubs = Array.from(participant.videoTrackPublications.values());
+      const screenPub = pubs.find(
+        (pub) => (pub as { source?: string }).source === 'screen_share' && pub.track && !pub.isMuted
+      );
+      if (screenPub?.track) return screenPub.track;
+      const camPub = pubs.find((pub) => pub.track && !pub.isMuted);
+      return camPub?.track || null;
+    }
+
+    // Prioritize active screen share across all remote participants
+    for (const p of participants) {
+      const pubs = Array.from(p.videoTrackPublications.values());
+      const screenPub = pubs.find(
+        (pub) => (pub as { source?: string }).source === 'screen_share' && pub.track && !pub.isMuted
+      );
+      if (screenPub?.track) {
+        return screenPub.track;
+      }
+    }
+
+    // Fall back to first available unmuted camera track
+    for (const p of participants) {
+      const pubs = Array.from(p.videoTrackPublications.values());
+      const camPub = pubs.find(
+        (pub) => (pub as { source?: string }).source !== 'screen_share' && pub.track && !pub.isMuted
+      );
+      if (camPub?.track) {
+        return camPub.track;
+      }
+    }
+
+    // Fall back to first video track of participant 0
+    const firstPubs = Array.from(participants[0].videoTrackPublications.values());
+    return firstPubs[0]?.track || null;
   }
 
   getRemoteAudioTrack(participantIdentity?: string): unknown | null {
@@ -339,6 +421,17 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
         const key = (p as { identity?: string })?.identity || '__local__';
         this.participantQualities.set(key, mapped);
         this.updateOverallNetworkQuality();
+      });
+    }
+    if (RoomEvent.LocalTrackPublished) {
+      room.on(RoomEvent.LocalTrackPublished, (pub) => {
+        if ((pub as { source?: string })?.source === 'screen_share') {
+          const track = (pub as { track?: unknown })?.track;
+          if (track) {
+            this.attachTrackEndedListener(track);
+          }
+          this.emit('localTrackChanged', 'screen', true);
+        }
       });
     }
     if (RoomEvent.LocalTrackUnpublished) {

@@ -1,5 +1,11 @@
 import { describe, test, expect, mock } from "bun:test";
-import { adminService, BillingPlan, TenantOverridesDto } from "../src/services/admin.service";
+import {
+  adminService,
+  BillingPlan,
+  TenantOverridesDto,
+  AdminTeleconsultBillingDto,
+  AdminUpdateTeleconsultBillingPayload,
+} from "../src/services/admin.service";
 import { QUANTITATIVE_LIMITS, CAPABILITY_FLAGS } from "../src/components/PlanEditorDialog";
 import { apiClient } from "../src/lib/api";
 import * as fs from "fs";
@@ -210,5 +216,87 @@ describe("Milestone 3 SuperAdmin Plans, Entitlement Overrides & Payment Recordin
 
     // Input conditionally sets required
     expect(paymentDialogSrc).toContain('required={paymentMethod !== "Cash" && paymentMethod !== "Promotional"}');
+  });
+
+  test("M3.10: adminService.getTenantTeleconsultBilling and updateTenantTeleconsultBilling conform to backend contracts", async () => {
+    const tenantId = "11111111-2222-3333-4444-555555555555";
+    const mockBilling: AdminTeleconsultBillingDto = {
+      tenantId,
+      tenantSlug: "metro-health",
+      isEnabled: true,
+      billingMode: "Postpaid",
+      ratePerMinutePhp: 5.0,
+      allocatedBudgetPhp: 2000.0,
+      prepaidBalancePhp: 500.0,
+      allowOverageBeyondAllocation: true,
+      currentPeriodYearMonth: "2026-11",
+      currentPeriodMinutesUsed: 25,
+      currentPeriodBilledPhp: 125.0,
+      currentPeriodOveragePhp: 0.0,
+      estimatedAvailableMinutes: 375,
+    };
+
+    const originalGet = apiClient.get;
+    const originalPut = apiClient.put;
+    let capturedGetUrl = "";
+    let capturedPutUrl = "";
+    let capturedPutBody: any = null;
+
+    apiClient.get = mock(async (url: string) => {
+      capturedGetUrl = url;
+      return { data: mockBilling };
+    }) as any;
+
+    apiClient.put = mock(async (url: string, body: any) => {
+      capturedPutUrl = url;
+      capturedPutBody = body;
+      return { data: { ...mockBilling, ...body } };
+    }) as any;
+
+    try {
+      const getRes = await adminService.getTenantTeleconsultBilling(tenantId);
+      expect(capturedGetUrl).toBe(`/admin/tenants/${tenantId}/teleconsult-billing`);
+      expect(getRes.tenantId).toBe(tenantId);
+      expect(getRes.isEnabled).toBe(true);
+      expect(getRes.ratePerMinutePhp).toBe(5.0);
+
+      const updatePayload: AdminUpdateTeleconsultBillingPayload = {
+        ratePerMinutePhp: 4.5,
+        prepaidCreditGrantPhp: 1000.0,
+      };
+
+      const putRes = await adminService.updateTenantTeleconsultBilling(tenantId, updatePayload);
+      expect(capturedPutUrl).toBe(`/admin/tenants/${tenantId}/teleconsult-billing`);
+      expect(capturedPutBody).toEqual(updatePayload);
+      expect(putRes.ratePerMinutePhp).toBe(4.5);
+    } finally {
+      apiClient.get = originalGet;
+      apiClient.put = originalPut;
+    }
+  });
+
+  test("M3.11: TenantEntitlementsCard contains Teleconsult PAYG Billing subtab, additive credit grant controls, and preserves 14 limits", () => {
+    const tenantCardPath = path.resolve(__dirname, "../src/components/TenantEntitlementsCard.tsx");
+    const tenantCardSrc = fs.readFileSync(tenantCardPath, "utf-8");
+
+    // Vocabulary invariants
+    expect(QUANTITATIVE_LIMITS.length).toBe(14);
+    expect(CAPABILITY_FLAGS.length).toBe(10);
+
+    // 3rd Subtab
+    expect(tenantCardSrc).toContain("Teleconsult PAYG Billing");
+    expect(tenantCardSrc).toContain("setActiveSubTab('teleconsult')");
+
+    // Controls
+    expect(tenantCardSrc).toContain("Per-Minute Rate (₱)");
+    expect(tenantCardSrc).toContain("Monthly Budget Cap (₱)");
+    expect(tenantCardSrc).toContain("Prepaid Minute Credit Grant (₱)");
+    expect(tenantCardSrc).toContain("Grant Credit (+=)");
+    expect(tenantCardSrc).toContain("Allow Overage Beyond Allocation");
+    expect(tenantCardSrc).toContain("Save Teleconsultation Settings");
+
+    // Zero hex
+    const rawHexRegex = /#(?:[0-9a-fA-F]{3}){1,2}\b/g;
+    expect(tenantCardSrc.match(rawHexRegex)).toBeNull();
   });
 });

@@ -26,6 +26,8 @@ public static class DependencyInjection
 
         services.AddScoped<ILiveKitTokenService, LiveKitTokenService>();
         services.AddScoped<IMediaMeteringService, MediaMeteringService>();
+        services.AddHttpClient<ILiveKitRoomClient, LiveKitRoomClient>();
+        services.AddScoped<IAbandonedSessionCleanupService, AbandonedSessionCleanupService>();
 
         services.AddMediatR(cfg =>
         {

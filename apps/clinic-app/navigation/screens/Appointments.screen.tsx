@@ -392,6 +392,16 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const [formReason, setFormReason] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
+  const isEffectiveTeleconsultEnabled = Boolean(
+    settings?.isWorkspaceTeleconsultEntitled && settings?.enableTeleconsultation
+  );
+
+  useEffect(() => {
+    if (!isEffectiveTeleconsultEnabled && formModality === 'Teleconsult') {
+      setFormModality('InPerson');
+    }
+  }, [isEffectiveTeleconsultEnabled, formModality]);
+
   const fetchAppointments = useCallback(async () => {
     const options: GetAppointmentsOptions = {};
 
@@ -660,6 +670,10 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     const scheduledAt = manilaDateTimeToUtcIso(formDate, formTime);
     if (!scheduledAt) {
       notify.error('Enter a valid date (YYYY-MM-DD) and time (HH:MM).');
+      return;
+    }
+    if (formModality === 'Teleconsult' && !isEffectiveTeleconsultEnabled) {
+      notify.error('Teleconsultation is not enabled for this clinic.');
       return;
     }
     const doctor = doctors.find((d) => d.id === formDoctorId);
@@ -1060,19 +1074,30 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
                   testID="book-modality-teleconsult"
                   accessibilityRole="button"
                   accessibilityLabel="Virtual Teleconsultation"
-                  onPress={() => setFormModality('Teleconsult')}
+                  accessibilityState={{ disabled: !isEffectiveTeleconsultEnabled }}
+                  disabled={!isEffectiveTeleconsultEnabled}
+                  onPress={() => {
+                    if (isEffectiveTeleconsultEnabled) {
+                      setFormModality('Teleconsult');
+                    } else {
+                      notify.warning('Teleconsultation is disabled for this clinic.');
+                    }
+                  }}
                   style={[
                     styles.modalityOptionBtn,
                     formModality === 'Teleconsult'
                       ? styles.modalityChipSelected
                       : styles.modalityChipUnselected,
+                    !isEffectiveTeleconsultEnabled && styles.modalityChipDisabled,
                   ]}
                 >
                   <Icon
-                    name="consultations"
+                    name={!isEffectiveTeleconsultEnabled ? 'lock' : 'consultations'}
                     size={theme.sizes.iconSm}
                     color={
-                      formModality === 'Teleconsult'
+                      !isEffectiveTeleconsultEnabled
+                        ? theme.colors.textMuted
+                        : formModality === 'Teleconsult'
                         ? theme.colors.routineText
                         : theme.colors.textMuted
                     }
@@ -1080,12 +1105,14 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
                   <ThemedText
                     variant="smallBold"
                     color={
-                      formModality === 'Teleconsult'
+                      !isEffectiveTeleconsultEnabled
+                        ? theme.colors.textMuted
+                        : formModality === 'Teleconsult'
                         ? theme.colors.routineText
                         : theme.colors.text
                     }
                   >
-                    Teleconsultation
+                    {!isEffectiveTeleconsultEnabled ? 'Teleconsult (Disabled)' : 'Teleconsultation'}
                   </ThemedText>
                 </Pressable>
               </View>
@@ -1463,6 +1490,11 @@ const styles = StyleSheet.create({
   modalityChipUnselected: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
+  },
+  modalityChipDisabled: {
+    opacity: 0.5,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.borderLight,
   },
   successContainer: {
     gap: theme.spacing.md,

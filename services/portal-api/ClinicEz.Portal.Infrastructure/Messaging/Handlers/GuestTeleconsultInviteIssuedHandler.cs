@@ -37,7 +37,12 @@ public sealed class GuestTeleconsultInviteIssuedHandler(
             inviteTokenHash: payload.InviteTokenHash,
             expectedDobHash: payload.ExpectedDobHash,
             otpHash: payload.OtpHash,
-            expiresAtUtc: payload.ExpiresAtUtc);
+            expiresAtUtc: payload.ExpiresAtUtc,
+            clinicName: payload.ClinicName,
+            clinicSupportPhone: payload.ClinicSupportPhone,
+            clinicianName: payload.ClinicianName,
+            scheduledAtUtc: payload.ScheduledAtUtc,
+            encryptedGuestContext: payload.EncryptedGuestContext);
 
         return Task.CompletedTask;
     }

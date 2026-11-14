@@ -1,4 +1,5 @@
 import {
+  CallStageParticipant,
   ChatDrawerItem,
   CommsCallIconName,
   CommsThemeColors,
@@ -11,6 +12,7 @@ import {
 } from '../native-ui/types';
 
 export type {
+  CallStageParticipant,
   ChatDrawerItem,
   CommsCallIconName,
   CommsThemeColors,
@@ -51,6 +53,7 @@ export interface WebMessageThreadProps {
   onFileToChart?: (messageId: string, fileKey: string) => Promise<void>;
   privacyBlurEnabled: boolean;
   onTogglePrivacyBlur: () => void;
+  renderPrivacyIcon?: (privacyBlurEnabled: boolean) => React.ReactNode;
   showHeader?: boolean;
   canWriteInternalNotes?: boolean;
   isLoading?: boolean;
@@ -111,6 +114,8 @@ export interface WebCallWaitingRoomProps {
   videoServerBannerMessage?: string;
   onRetryVideoServer?: () => void | Promise<void>;
   recordingToggleHint?: string;
+  patientPin?: string;
+  onCopyPatientPin?: () => void | Promise<void>;
   colors?: CommsThemeColors;
   shadows?: CommsThemeShadows;
 }
@@ -143,6 +148,16 @@ export interface WebCallStageProps {
   renderWorkstationAction?: () => React.ReactNode;
   renderCustomVideoSurface?: (trackType: 'remote' | 'local') => React.ReactNode;
   renderIcon?: (name: CommsCallIconName, props?: { color?: string; size?: number }) => React.ReactNode;
+  renderParticipantsIcon?: (props?: { color?: string; size?: number }) => React.ReactNode;
+  isParticipantsOpen?: boolean;
+  onToggleParticipants?: () => void;
+  patientPin?: string;
+  onCopyPatientPin?: () => void | Promise<void>;
+  soloWarningThresholdMs?: number;
+  soloAutoLeaveGraceMs?: number;
+  onSoloLeave?: () => void | Promise<void>;
+  participants?: CallStageParticipant[];
+  hasRemoteParticipant?: boolean;
   hideHeader?: boolean;
   remoteStatusLabel?: string;
   onEndCall: () => void | Promise<void>;
@@ -171,6 +186,12 @@ export interface GuestVerificationResult {
   roomName: string;
   relayUrl: string;
   guestToken: string;
+  expiresAtUtc?: string;
+  clinicName?: string;
+  clinicSupportPhone?: string;
+  clinicianName?: string;
+  guestDisplayName?: string;
+  scheduledAtUtc?: string;
 }
 
 export interface GuestJoinPageProps {

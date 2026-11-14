@@ -12,6 +12,7 @@ using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
+using ClinicEz.Shared.Licensing;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -40,6 +41,7 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
     private readonly IRepository<FacilitySettings>? _settingsRepo;
     private readonly IRepository<Invoice>? _invoiceRepo;
     private readonly IBillingRequestPublisher? _billingPublisher;
+    private readonly IFacilityLicenseValidator? _licenseValidator;
 
     public CreateAppointmentCommandHandler(
         IRepository<Appointment> appointmentRepo,
@@ -49,7 +51,8 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
         IInteropPublisher? publisher = null,
         IRepository<FacilitySettings>? settingsRepo = null,
         IRepository<Invoice>? invoiceRepo = null,
-        IBillingRequestPublisher? billingPublisher = null)
+        IBillingRequestPublisher? billingPublisher = null,
+        IFacilityLicenseValidator? licenseValidator = null)
     {
         _appointmentRepo = appointmentRepo;
         _unitOfWork = unitOfWork;
@@ -59,6 +62,7 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
         _settingsRepo = settingsRepo;
         _invoiceRepo = invoiceRepo;
         _billingPublisher = billingPublisher;
+        _licenseValidator = licenseValidator;
     }
 
     public async Task<AppointmentDto> Handle(CreateAppointmentCommand request, CancellationToken ct)
@@ -101,6 +105,21 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
         {
             settings = await _settingsRepo.Query(s => s.ClinicId == _clinicContext.ClinicId)
                 .FirstOrDefaultAsync(ct);
+        }
+
+        if (isTeleconsult && settings != null && !string.IsNullOrWhiteSpace(settings.LicenseToken))
+        {
+            var validator = _licenseValidator ?? new FacilityLicenseValidator();
+            var validation = validator.Validate(settings.LicenseToken, _clinicContext.ClinicId, _clinicContext.TenantId);
+            var isWorkspaceEntitled = validation.IsValid &&
+                validation.Payload?.EnabledFeatures != null &&
+                validation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+
+            var effectiveEnabled = isWorkspaceEntitled && settings.EnableTeleconsultation;
+            if (!effectiveEnabled)
+            {
+                throw new ForbiddenException("Teleconsultation is not enabled for this clinic.");
+            }
         }
 
         var defaultPolicyStr = settings?.TeleconsultPaymentPolicy ?? "Prepaid";

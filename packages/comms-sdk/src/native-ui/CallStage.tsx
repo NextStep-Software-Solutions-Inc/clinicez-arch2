@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -14,7 +15,7 @@ import {
   sizes,
   spaceScale
 } from '@clinicez/design-tokens';
-import { CallStageProps } from './types';
+import { CallStageParticipant, CallStageProps } from './types';
 import { OverlayTooltip } from './OverlayTooltip';
 
 function formatDuration(totalSeconds: number = 0): string {
@@ -51,6 +52,16 @@ export const CallStage: React.FC<CallStageProps> = ({
   renderWorkstationAction,
   renderCustomVideoSurface,
   renderIcon,
+  renderParticipantsIcon,
+  isParticipantsOpen = false,
+  onToggleParticipants,
+  patientPin,
+  onCopyPatientPin,
+  soloWarningThresholdMs = 300_000,
+  soloAutoLeaveGraceMs = 120_000,
+  onSoloLeave,
+  participants,
+  hasRemoteParticipant,
   hideHeader = false,
   remoteStatusLabel,
   onEndCall,
@@ -95,6 +106,185 @@ export const CallStage: React.FC<CallStageProps> = ({
 
   const remoteVideoSurface = renderCustomVideoSurface ? renderCustomVideoSurface('remote') : null;
   const localVideoSurface = renderCustomVideoSurface ? renderCustomVideoSurface('local') : null;
+
+  const [copiedInvite, setCopiedInvite] = useState(false);
+  const [copiedPin, setCopiedPin] = useState(false);
+  const [showSoloWarning, setShowSoloWarning] = useState(false);
+  const [soloCountdown, setSoloCountdown] = useState(Math.round(soloAutoLeaveGraceMs / 1000));
+  const [soloDismissedCount, setSoloDismissedCount] = useState(0);
+
+  const hasRemote = useMemo(() => {
+    if (typeof hasRemoteParticipant === 'boolean') {
+      return hasRemoteParticipant;
+    }
+    if (participants && participants.length > 0) {
+      return participants.some((p) => !p.isLocal && p.status === 'In call');
+    }
+    return Boolean(remoteStatusLabel && remoteStatusLabel.toLowerCase().includes('connected'));
+  }, [hasRemoteParticipant, participants, remoteStatusLabel]);
+
+  useEffect(() => {
+    if (hasRemote) {
+      setShowSoloWarning(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setShowSoloWarning(true);
+      setSoloCountdown(Math.round(soloAutoLeaveGraceMs / 1000));
+    }, soloWarningThresholdMs);
+
+    return () => clearTimeout(timer);
+  }, [hasRemote, soloWarningThresholdMs, soloAutoLeaveGraceMs, soloDismissedCount]);
+
+  useEffect(() => {
+    if (!showSoloWarning || hasRemote) return;
+
+    const interval = setInterval(() => {
+      setSoloCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          if (onSoloLeave) {
+            void onSoloLeave();
+          } else {
+            void onEndCall();
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [showSoloWarning, hasRemote, onSoloLeave, onEndCall]);
+
+  const handleStayInCall = useCallback(() => {
+    setShowSoloWarning(false);
+    setSoloDismissedCount((c) => c + 1);
+  }, []);
+
+  const handleLeaveFromSolo = useCallback(() => {
+    setShowSoloWarning(false);
+    if (onSoloLeave) {
+      void onSoloLeave();
+    } else {
+      void onEndCall();
+    }
+  }, [onSoloLeave, onEndCall]);
+
+  const handleCopyInviteFromRoster = useCallback(async () => {
+    if (onSharePatientLink) {
+      await onSharePatientLink();
+      setCopiedInvite(true);
+      setTimeout(() => setCopiedInvite(false), 2000);
+    }
+  }, [onSharePatientLink]);
+
+  const handleCopyPinFromRoster = useCallback(async () => {
+    if (onCopyPatientPin) {
+      await onCopyPatientPin();
+      setCopiedPin(true);
+      setTimeout(() => setCopiedPin(false), 2000);
+    }
+  }, [onCopyPatientPin]);
+
+  const deduplicatedRemotes = useMemo(() => {
+    if (!participants || participants.length === 0) return [];
+    const normalizedSelfName = (selfName || '').trim().toLowerCase();
+    const seenIdentities = new Set<string>();
+    const remotes: CallStageParticipant[] = [];
+
+    for (const p of participants) {
+      if (p.isLocal) continue;
+      if (normalizedSelfName && p.name && p.name.trim().toLowerCase() === normalizedSelfName) continue;
+      if (p.identity && seenIdentities.has(p.identity)) continue;
+      if (p.identity) seenIdentities.add(p.identity);
+
+      const effectiveName = (!p.name || p.name === 'Participant' || p.name.trim() === '')
+        ? (participantName || 'Participant')
+        : p.name;
+
+      remotes.push({
+        ...p,
+        name: effectiveName
+      });
+    }
+
+    return remotes;
+  }, [participants, selfName, participantName]);
+
+  const totalParticipantsCount = useMemo(() => {
+    if (participants && participants.length > 0) {
+      return 1 + deduplicatedRemotes.length;
+    }
+    return hasRemote ? 2 : 1;
+  }, [participants, deduplicatedRemotes.length, hasRemote]);
+
+  const renderRosterMicIcon = (active: boolean) => {
+    if (renderIcon) {
+      return renderIcon(active ? 'mic' : 'micOff', {
+        size: 14,
+        color: active ? resolvedColors.primary : resolvedColors.textMuted
+      });
+    }
+    return (
+      <View
+        accessibilityRole="image"
+        accessibilityLabel={active ? 'Microphone active' : 'Microphone muted'}
+        style={{
+          width: 8,
+          height: 12,
+          borderRadius: 4,
+          backgroundColor: active ? resolvedColors.primary : resolvedColors.textMuted,
+          opacity: active ? 1 : 0.6
+        }}
+      />
+    );
+  };
+
+  const renderRosterCamIcon = (active: boolean) => {
+    if (renderIcon) {
+      return renderIcon(active ? 'video' : 'videoOff', {
+        size: 14,
+        color: active ? resolvedColors.primary : resolvedColors.textMuted
+      });
+    }
+    return (
+      <View
+        accessibilityRole="image"
+        accessibilityLabel={active ? 'Camera active' : 'Camera off'}
+        style={{
+          width: 11,
+          height: 8,
+          borderRadius: 2,
+          backgroundColor: active ? resolvedColors.primary : resolvedColors.textMuted,
+          opacity: active ? 1 : 0.6
+        }}
+      />
+    );
+  };
+
+  const renderRosterScreenIcon = () => {
+    if (renderIcon) {
+      return renderIcon('screenShare', {
+        size: 14,
+        color: resolvedColors.primary
+      });
+    }
+    return (
+      <View
+        accessibilityRole="image"
+        accessibilityLabel="Screen sharing active"
+        style={{
+          width: 12,
+          height: 9,
+          borderWidth: 1.5,
+          borderColor: resolvedColors.primary,
+          borderRadius: 1.5
+        }}
+      />
+    );
+  };
 
   return (
     <View style={[styles.container, style]}>
@@ -210,37 +400,54 @@ export const CallStage: React.FC<CallStageProps> = ({
                     ? 'Connected • Waiting for Patient Video Stream'
                     : 'Connected • Local Camera Paused')}
               </Text>
-              {(onSharePatientLink || onMessagePatient) && (
-                <View style={styles.placeholderActionsRow}>
-                  {onSharePatientLink && (
-                    <TouchableOpacity
-                      testID="btn-stage-copy-invite"
-                      style={styles.placeholderSecondaryButton}
-                      onPress={() => void onSharePatientLink()}
-                      accessibilityRole="button"
-                      accessibilityLabel="Copy invite link"
-                    >
-                      {renderIcon
-                        ? renderIcon('share', { size: 16, color: resolvedColors.textInverted })
-                        : null}
-                      <Text style={styles.placeholderButtonText}>Copy Invite Link</Text>
-                    </TouchableOpacity>
-                  )}
-                  {onMessagePatient && (
-                    <TouchableOpacity
-                      testID="btn-stage-message-patient"
-                      style={styles.placeholderPrimaryButton}
-                      onPress={() => void onMessagePatient()}
-                      accessibilityRole="button"
-                      accessibilityLabel="Message patient"
-                    >
-                      {renderIcon
-                        ? renderIcon('chat', { size: 16, color: resolvedColors.onPrimary })
-                        : null}
-                      <Text style={styles.placeholderButtonText}>Message Patient</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+            </View>
+          )}
+
+          {/* Solo Participant Safeguard Warning */}
+          {showSoloWarning && (
+            <View testID="banner-solo-participant-warning" style={styles.soloWarningBanner}>
+              <View style={{ flex: 1, marginRight: spaceScale.sm }}>
+                <Text style={styles.soloWarningTitle}>Are you still waiting?</Text>
+                <Text style={styles.soloWarningText}>
+                  No other participants are currently in this room. You will auto-leave in {soloCountdown}s.
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spaceScale.xs }}>
+                <TouchableOpacity
+                  testID="btn-solo-stay"
+                  style={styles.soloStayButton}
+                  onPress={handleStayInCall}
+                  accessibilityRole="button"
+                  accessibilityLabel="Stay in Call"
+                >
+                  <Text style={styles.soloStayButtonText}>Stay in Call</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  testID="btn-solo-leave"
+                  style={styles.soloLeaveButton}
+                  onPress={handleLeaveFromSolo}
+                  accessibilityRole="button"
+                  accessibilityLabel="Leave Room"
+                >
+                  <Text style={styles.soloLeaveButtonText}>Leave Room</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Screen Sharing Banner */}
+          {isScreenSharing && (
+            <View testID="banner-screen-sharing" style={styles.screenSharingBanner}>
+              <Text style={styles.screenSharingBannerText}>You are sharing your screen</Text>
+              {onToggleScreenShare && (
+                <TouchableOpacity
+                  style={styles.screenSharingStopButton}
+                  onPress={() => void onToggleScreenShare()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Stop Sharing"
+                >
+                  <Text style={styles.screenSharingStopButtonText}>Stop Sharing</Text>
+                </TouchableOpacity>
               )}
             </View>
           )}
@@ -249,7 +456,9 @@ export const CallStage: React.FC<CallStageProps> = ({
           <View
             style={[
               styles.pipCanvas,
-              videoOrientation === 'landscape' ? styles.pipCanvasLandscape : styles.pipCanvasPortrait
+              (isScreenSharing || videoOrientation === 'landscape')
+                ? styles.pipCanvasLandscape
+                : styles.pipCanvasPortrait
             ]}
           >
             {localVideoSurface ?? (
@@ -489,6 +698,43 @@ export const CallStage: React.FC<CallStageProps> = ({
                 </OverlayTooltip>
               )}
 
+              {onToggleParticipants && (
+                <OverlayTooltip
+                  label={isParticipantsOpen ? 'Hide participants' : 'Open participants'}
+                  colors={resolvedColors}
+                  shadows={resolvedShadows}
+                >
+                  <TouchableOpacity
+                    testID="btn-toggle-participants"
+                    style={[styles.controlButton, isParticipantsOpen && styles.controlButtonActive]}
+                    onPress={onToggleParticipants}
+                    accessibilityRole="button"
+                    accessibilityLabel="Toggle participants roster"
+                  >
+                    {renderParticipantsIcon ? (
+                      renderParticipantsIcon({
+                        size: 18,
+                        color: isParticipantsOpen ? resolvedColors.onPrimary : resolvedColors.text
+                      })
+                    ) : (
+                      <Text
+                        style={[
+                          styles.controlButtonText,
+                          isParticipantsOpen && styles.controlButtonTextInverted
+                        ]}
+                      >
+                        USERS
+                      </Text>
+                    )}
+                    <View testID="badge-participants-count" style={styles.chatUnreadBadge}>
+                      <Text style={styles.chatUnreadBadgeText}>
+                        {totalParticipantsCount}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </OverlayTooltip>
+              )}
+
               {!isRecording &&
                 onStartRecording &&
                 canStartRecording &&
@@ -559,6 +805,167 @@ export const CallStage: React.FC<CallStageProps> = ({
         {isChatOpen && renderChatDrawer && (
           <View style={styles.chatDrawerContainer}>
             {renderChatDrawer()}
+          </View>
+        )}
+
+        {/* Participants Roster Drawer (Mutually exclusive with In-Call Chat) */}
+        {isParticipantsOpen && !isChatOpen && (
+          <View testID="panel-participants-roster" style={styles.rosterContainer}>
+            <View style={styles.rosterHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spaceScale.xs }}>
+                <Text style={styles.rosterTitle}>Participants</Text>
+                <View style={styles.chatUnreadBadgeInline}>
+                  <Text style={styles.chatUnreadBadgeText}>{totalParticipantsCount}</Text>
+                </View>
+              </View>
+              {onToggleParticipants && (
+                <TouchableOpacity
+                  testID="btn-close-participants"
+                  style={styles.rosterCloseButton}
+                  onPress={onToggleParticipants}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close participants roster"
+                >
+                  <View style={{ width: 14, height: 14, justifyContent: 'center', alignItems: 'center' }}>
+                    <View
+                      style={{
+                        position: 'absolute',
+                        width: 14,
+                        height: 2,
+                        backgroundColor: resolvedColors.textMuted,
+                        borderRadius: 1,
+                        transform: [{ rotate: '45deg' }]
+                      }}
+                    />
+                    <View
+                      style={{
+                        position: 'absolute',
+                        width: 14,
+                        height: 2,
+                        backgroundColor: resolvedColors.textMuted,
+                        borderRadius: 1,
+                        transform: [{ rotate: '-45deg' }]
+                      }}
+                    />
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Invite Link & PIN Section */}
+            {(patientLink || onSharePatientLink || patientPin || onCopyPatientPin) && (
+              <View style={styles.rosterSection}>
+                <Text style={styles.rosterSectionTitle}>Invite Link</Text>
+                <View style={styles.rosterInviteRow}>
+                  <Text style={styles.rosterInviteText} numberOfLines={1} ellipsizeMode="middle">
+                    {patientLink || 'Consultation Invite Link'}
+                  </Text>
+                  {onSharePatientLink && (
+                    <TouchableOpacity
+                      testID="btn-roster-copy-invite"
+                      style={styles.rosterCopyButton}
+                      onPress={handleCopyInviteFromRoster}
+                      accessibilityRole="button"
+                      accessibilityLabel="Copy consultation invite link"
+                    >
+                      <Text style={styles.rosterCopyButtonText}>
+                        {copiedInvite ? 'Copied!' : 'Copy Link'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {patientPin && (
+                  <>
+                    <Text style={[styles.rosterSectionTitle, { marginTop: spaceScale.xs }]}>Access PIN</Text>
+                    <View style={styles.rosterPinRow}>
+                      <Text testID="text-roster-invite-pin" style={styles.rosterPinValue}>
+                        {patientPin}
+                      </Text>
+                      {onCopyPatientPin && (
+                        <TouchableOpacity
+                          testID="btn-roster-copy-pin"
+                          style={styles.rosterCopyButton}
+                          onPress={handleCopyPinFromRoster}
+                          accessibilityRole="button"
+                          accessibilityLabel="Copy access PIN"
+                        >
+                          <Text style={styles.rosterCopyButtonText}>
+                            {copiedPin ? 'Copied!' : 'Copy PIN'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </>
+                )}
+              </View>
+            )}
+
+            {/* Participants List */}
+            <ScrollView style={styles.rosterList}>
+              <Text style={styles.rosterSectionTitle}>In Room</Text>
+
+              {/* Local Participant (You) */}
+              <View style={styles.rosterParticipantItem}>
+                <View>
+                  <Text style={styles.rosterParticipantName}>{selfName} (You)</Text>
+                  <Text style={styles.rosterParticipantStatusBadge}>In call</Text>
+                </View>
+                <View style={styles.rosterStatusIcons}>
+                  {renderRosterMicIcon(isMicEnabled)}
+                  {renderRosterCamIcon(isCameraEnabled)}
+                  {isScreenSharing && renderRosterScreenIcon()}
+                </View>
+              </View>
+
+              {/* Remote Participants */}
+              {deduplicatedRemotes.length > 0 ? (
+                deduplicatedRemotes.map((p) => (
+                  <View key={p.identity} style={styles.rosterParticipantItem}>
+                    <View>
+                      <Text style={styles.rosterParticipantName}>{p.name}</Text>
+                      <Text
+                        style={[
+                          styles.rosterParticipantStatusBadge,
+                          p.status === 'Waiting to join' && {
+                            backgroundColor: resolvedColors.warningBg,
+                            color: resolvedColors.warningText
+                          }
+                        ]}
+                      >
+                        {p.status || 'In call'}
+                      </Text>
+                    </View>
+                    <View style={styles.rosterStatusIcons}>
+                      {renderRosterMicIcon(Boolean(p.isMicActive))}
+                      {renderRosterCamIcon(Boolean(p.isCameraActive))}
+                      {p.isScreenSharing && renderRosterScreenIcon()}
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <View style={styles.rosterParticipantItem}>
+                  <View>
+                    <Text style={styles.rosterParticipantName}>{participantName}</Text>
+                    <Text
+                      style={[
+                        styles.rosterParticipantStatusBadge,
+                        !hasRemote && {
+                          backgroundColor: resolvedColors.warningBg,
+                          color: resolvedColors.warningText
+                        }
+                      ]}
+                    >
+                      {hasRemote ? 'In call' : 'Waiting to join'}
+                    </Text>
+                  </View>
+                  <View style={styles.rosterStatusIcons}>
+                    {renderRosterMicIcon(hasRemote)}
+                    {renderRosterCamIcon(hasRemote)}
+                  </View>
+                </View>
+              )}
+            </ScrollView>
           </View>
         )}
       </View>
@@ -954,6 +1361,225 @@ function createStyles(
     borderLeftColor: c.borderDark,
     backgroundColor: c.surface,
     ...s.lg
+  },
+  chatUnreadBadgeInline: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: radiusScale.full,
+    backgroundColor: c.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4
+  },
+  rosterContainer: {
+    width: 320,
+    borderLeftWidth: 1,
+    borderLeftColor: c.borderDark,
+    backgroundColor: c.surface,
+    flexDirection: 'column',
+    ...s.lg
+  },
+  rosterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spaceScale.md,
+    paddingVertical: spaceScale.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: c.borderDark
+  },
+  rosterTitle: {
+    fontSize: fontSizeScale.sm,
+    fontWeight: '700',
+    color: c.text
+  },
+  rosterCloseButton: {
+    padding: spaceScale.xs,
+    borderRadius: radiusScale.sm,
+    backgroundColor: c.surfaceMuted,
+    minWidth: sizes.touchTarget,
+    minHeight: sizes.touchTarget,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  rosterSection: {
+    padding: spaceScale.md,
+    borderBottomWidth: 1,
+    borderBottomColor: c.borderDark
+  },
+  rosterSectionTitle: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '600',
+    color: c.textMuted,
+    marginBottom: spaceScale.xs,
+    textTransform: 'uppercase'
+  },
+  rosterInviteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: c.surfaceMuted,
+    padding: spaceScale.sm,
+    borderRadius: radiusScale.sm,
+    marginBottom: spaceScale.xs
+  },
+  rosterInviteText: {
+    flex: 1,
+    fontSize: fontSizeScale.xs,
+    color: c.text,
+    fontFamily: 'monospace',
+    marginRight: spaceScale.xs
+  },
+  rosterCopyButton: {
+    backgroundColor: c.primary,
+    paddingHorizontal: spaceScale.sm,
+    paddingVertical: spaceScale.xs,
+    borderRadius: radiusScale.sm,
+    minHeight: 36,
+    minWidth: sizes.touchTarget,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  rosterCopyButtonText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: c.onPrimary
+  },
+  rosterPinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: c.surfaceMuted,
+    padding: spaceScale.sm,
+    borderRadius: radiusScale.sm
+  },
+  rosterPinValue: {
+    fontSize: fontSizeScale.md,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+    letterSpacing: 2,
+    color: c.text
+  },
+  rosterList: {
+    flex: 1,
+    padding: spaceScale.md
+  },
+  rosterParticipantItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spaceScale.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: c.borderLight
+  },
+  rosterParticipantName: {
+    fontSize: fontSizeScale.sm,
+    fontWeight: '600',
+    color: c.text
+  },
+  rosterParticipantStatusBadge: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '600',
+    color: c.primary,
+    backgroundColor: c.primarySubtle,
+    paddingHorizontal: spaceScale.xs,
+    paddingVertical: 2,
+    borderRadius: radiusScale.xs,
+    marginTop: 2
+  },
+  rosterStatusIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spaceScale.xs
+  },
+  soloWarningBanner: {
+    position: 'absolute',
+    top: spaceScale.md,
+    left: spaceScale.md,
+    right: spaceScale.md,
+    backgroundColor: c.warningBg,
+    borderColor: c.warningBorder,
+    borderWidth: 1,
+    borderRadius: radiusScale.md,
+    padding: spaceScale.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 30,
+    ...s.md
+  },
+  soloWarningTitle: {
+    fontSize: fontSizeScale.sm,
+    fontWeight: '700',
+    color: c.warningText
+  },
+  soloWarningText: {
+    fontSize: fontSizeScale.xs,
+    color: c.warningText,
+    marginTop: 2
+  },
+  soloStayButton: {
+    backgroundColor: c.primary,
+    paddingHorizontal: spaceScale.sm,
+    paddingVertical: spaceScale.xs,
+    borderRadius: radiusScale.sm,
+    minHeight: sizes.touchTarget,
+    minWidth: sizes.touchTarget,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  soloStayButtonText: {
+    color: c.onPrimary,
+    fontWeight: '700',
+    fontSize: fontSizeScale.xs
+  },
+  soloLeaveButton: {
+    backgroundColor: c.emergency,
+    paddingHorizontal: spaceScale.sm,
+    paddingVertical: spaceScale.xs,
+    borderRadius: radiusScale.sm,
+    minHeight: sizes.touchTarget,
+    minWidth: sizes.touchTarget,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  soloLeaveButtonText: {
+    color: c.onPrimary,
+    fontWeight: '700',
+    fontSize: fontSizeScale.xs
+  },
+  screenSharingBanner: {
+    position: 'absolute',
+    top: spaceScale.md,
+    alignSelf: 'center',
+    backgroundColor: c.primaryDark,
+    borderRadius: radiusScale.full,
+    paddingHorizontal: spaceScale.md,
+    paddingVertical: spaceScale.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spaceScale.sm,
+    zIndex: 25,
+    ...s.md
+  },
+  screenSharingBannerText: {
+    color: c.onPrimary,
+    fontSize: fontSizeScale.xs,
+    fontWeight: '600'
+  },
+  screenSharingStopButton: {
+    backgroundColor: c.emergency,
+    paddingHorizontal: spaceScale.sm,
+    paddingVertical: 4,
+    borderRadius: radiusScale.full,
+    minHeight: 28,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  screenSharingStopButtonText: {
+    color: c.onPrimary,
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700'
   }
   });
 }

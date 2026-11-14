@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { lightColors } from '@clinicez/design-tokens';
 import { GuestJoinPageProps, GuestVerificationResult } from './types';
+import { AlertCircleIcon, UserIcon } from './icons';
 
 export const GuestJoinPage: React.FC<GuestJoinPageProps> = ({
   inviteToken,
@@ -163,7 +164,9 @@ export const GuestJoinPage: React.FC<GuestJoinPageProps> = ({
     return (
       <main className={`min-h-screen flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 ${className}`}>
         <div className="w-full max-w-md p-8 rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 text-center shadow-lg">
-          <div className="text-4xl mb-4">...</div>
+          <div className="flex justify-center mb-4">
+            <AlertCircleIcon size={36} className="text-amber-500" />
+          </div>
           <h1 className="text-xl font-bold text-amber-800 dark:text-amber-300 mb-2">
             Consultation Link Expired
           </h1>
@@ -198,7 +201,9 @@ export const GuestJoinPage: React.FC<GuestJoinPageProps> = ({
         <div className="flex-1 flex items-center justify-center p-4 relative">
           <div className="w-full max-w-4xl aspect-video rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center shadow-2xl overflow-hidden relative">
             <div className="text-center text-slate-400">
-              <div className="text-5xl mb-3">MD</div>
+              <div className="flex justify-center mb-3">
+                <UserIcon size={48} className="text-slate-400" />
+              </div>
               <p className="text-sm font-medium">Clinician Video Feed Active</p>
               <p className="text-xs text-emerald-400 mt-1">● End-to-End Encrypted</p>
             </div>

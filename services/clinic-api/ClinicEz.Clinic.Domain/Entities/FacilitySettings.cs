@@ -233,6 +233,7 @@ public sealed class FacilitySettings : ClinicScopedEntity
     public string? TimeFormat { get; set; }
 
     // ── Teleconsultation Recording & Payment Policies ─────────
+    public bool EnableTeleconsultation { get; set; } = false;
     public string TeleconsultRecordingPolicy { get; set; } = "Disabled";
     public int TeleconsultRecordingRetentionDays { get; set; } = 90;
     public bool TeleconsultRecordingConsentRequired { get; set; } = true;

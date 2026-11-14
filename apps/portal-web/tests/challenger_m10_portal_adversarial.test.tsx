@@ -54,7 +54,7 @@ describe("Milestone 10 Challenger 2: Adversarial Portal Web Live Video Suite", (
           />
         );
         expect(html).toContain("Teleconsultation Staging &amp; Waiting Room");
-        expect(html).toContain("Informed Recording Disclosure");
+        expect(html).not.toContain("Informed Recording Disclosure");
         expect(html).toContain("Enter Consultation Room");
       }).not.toThrow();
     });
@@ -367,8 +367,8 @@ describe("Milestone 10 Challenger 2: Adversarial Portal Web Live Video Suite", (
   // =========================================================================
   // Dimension 3: Plain Copy, Terminology & YAKAP Exemption Invariants
   // =========================================================================
-  describe("Dimension 3: Plain Copy, Terminology & YAKAP Exemption Invariants", () => {
-    it("3.1: Renders 'YAKAP Auto-Exempt' badge when isYakapExempt is true", () => {
+  describe("Dimension 3: Plain Copy, Terminology & PhilHealth YAKAP Exclusions", () => {
+    it("3.1: Strictly never renders 'YAKAP Auto-Exempt' or PhilHealth YAKAP in teleconsultation", () => {
       const html = renderToString(
         <TeleconsultGuestFlow
           initialStage="waiting_room"
@@ -378,8 +378,9 @@ describe("Milestone 10 Challenger 2: Adversarial Portal Web Live Video Suite", (
         />
       );
 
-      expect(html).toContain("YAKAP Auto-Exempt");
-      expect(html).toContain("Active Konsulta Enlistment Verified");
+      expect(html).not.toContain("YAKAP Auto-Exempt");
+      expect(html).not.toContain("Active Konsulta Enlistment Verified");
+      expect(html).not.toContain("PHILHEALTH YAKAP");
     });
 
     it("3.2: Omits 'YAKAP Auto-Exempt' badge when isYakapExempt is false", () => {

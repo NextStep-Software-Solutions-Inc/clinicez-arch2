@@ -76,6 +76,14 @@ public sealed class MediaMeteringService : IMediaMeteringService
 
         if (entitlement.CallMinutesMonthly <= 0)
         {
+            if (entitlement.AllowOverdraft)
+            {
+                return new CallAdmissionDecision(
+                    Allowed: true,
+                    Reason: null,
+                    IsOverdraft: true);
+            }
+
             return new CallAdmissionDecision(
                 Allowed: false,
                 Reason: "Teleconsultation minute pool not provisioned on active plan.",
@@ -118,6 +126,12 @@ public sealed class MediaMeteringService : IMediaMeteringService
         if (session == null)
         {
             _logger.LogWarning("[MediaMeteringService] Call session {CallId} not found to record completion.", callId);
+            return;
+        }
+
+        if (session.Status == "Ended")
+        {
+            _logger.LogInformation("[MediaMeteringService] Call session {CallId} already ended; skipping duplicate completion.", callId);
             return;
         }
 

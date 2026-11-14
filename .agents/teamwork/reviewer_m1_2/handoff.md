@@ -1,256 +1,131 @@
-# Milestone 1 Review & Adversarial Audit Report: Regulatory Compliance, Tri-Mode Signing, and Security Verification
+# Handoff Report: E2E Test Architecture Review (`TEST_INFRA.md`)
 
-## 1. Observation
-
-### 1.1 Tool Commands & Build/Test Outputs
-
-- **Command**: `~/.dotnet/dotnet build services/clinic-api/ClinicEz.Clinic.Api/ClinicEz.Clinic.Api.csproj`
-  - **Result**:
-    ```
-    ClinicEz.Shared -> /Users/macuser/projects/github/nextstep/clinicez-docs-studio/packages/shared-dotnet/bin/Debug/net10.0/ClinicEz.Shared.dll
-    ClinicEz.Clinic.Domain -> /Users/macuser/projects/github/nextstep/clinicez-docs-studio/services/clinic-api/ClinicEz.Clinic.Domain/bin/Debug/net10.0/ClinicEz.Clinic.Domain.dll
-    ClinicEz.Clinic.Application -> /Users/macuser/projects/github/nextstep/clinicez-docs-studio/services/clinic-api/ClinicEz.Clinic.Application/bin/Debug/net10.0/ClinicEz.Clinic.Application.dll
-    ClinicEz.Clinic.Infrastructure -> /Users/macuser/projects/github/nextstep/clinicez-docs-studio/services/clinic-api/ClinicEz.Clinic.Infrastructure/bin/Debug/net10.0/ClinicEz.Clinic.Infrastructure.dll
-    ClinicEz.Clinic.Api -> /Users/macuser/projects/github/nextstep/clinicez-docs-studio/services/clinic-api/ClinicEz.Clinic.Api/bin/Debug/net10.0/ClinicEz.Clinic.Api.dll
-
-    Build succeeded.
-        0 Warning(s)
-        0 Error(s)
-    Time Elapsed 00:00:00.81
-    ```
-
-- **Command**: `~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~HardenedDocumentGenerationTests" --no-build`
-  - **Result**:
-    ```
-    Passed!  - Failed:     0, Passed:    58, Skipped:     0, Total:    58, Duration: 2 s - ClinicEz.Clinic.Application.Tests.dll (net10.0)
-    ```
+**Agent**: `reviewer_m1_2` (E2E Test Architecture Reviewer & Adversarial Critic)  
+**To**: `ad860b7a-652f-4787-96d8-f21611b84dd5` (E2E Track Sub-Orchestrator / Project Orchestrator)  
+**State Folder**: `/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/reviewer_m1_2`  
+**Delivered Review Artifact**: `/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/reviewer_m1_2/review.md`  
+**Handoff Type**: Hard (Review Complete & Independently Verified)  
+**Date**: 2026-11-14T12:17:00Z  
+**Verdict**: **APPROVE**  
 
 ---
 
-### 1.2 Inspection of Implementation Code
+## 1. Observation
 
-#### A. Wet Signature Mode Badge Suppression, Pen Line, and Verification Preservation
-- **File**: `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService.cs`
-  - **Lines 950–992 (`RenderDoctorSignatureStamp`)**:
-    ```csharp
-    if (mode == SignatureMode.ESignatureSpecimen && signatureBytes != null && signatureBytes.Length > 0)
-    {
-        stamp.Item().Height(38).AlignCenter().Image(signatureBytes).FitArea();
-    }
-    else
-    {
-        stamp.Item().Height(mode == SignatureMode.WetSignature ? 42 : 30);
-    }
+### 1.1 Mandatory Artifacts Reviewed
+Direct inspection and analysis was performed on:
+1. `ORIGINAL_REQUEST.md` (Approved Task Prompt 2026-11-14T11:41:21Z, lines 94–192): Requirements R1 through R6.
+2. `sub_orch_e2e/SCOPE.md`: 4-tier E2E testing architecture requirements.
+3. `implementation_plan.md`: Technical architecture, data contracts, and component mapping.
+4. `TEST_INFRA.md` (lines 1–746): E2E Test Infrastructure Specification authored by `test_writer_m1_1`.
+5. Author Handoff: `test_writer_m1_1/handoff.md` (lines 1–118).
+6. Prior M1 Explorer & Miner Handoffs: `spec_miner_m1_1/handoff.md`, `explorer_m1_1/handoff.md`, `explorer_m1_2/handoff.md`.
 
-    stamp.Item().LineHorizontal(1).LineColor("#111827");
-    stamp.Item().PaddingTop(3).AlignCenter().Text(doctorName).FontSize(10.5f).Bold().FontColor("#111827");
-    ...
-    if (mode != SignatureMode.WetSignature && !string.IsNullOrWhiteSpace(digitalSealBadgeText))
-    {
-        stamp.Item().PaddingTop(2).AlignCenter().Text(digitalSealBadgeText).FontSize(7f).Bold().FontColor("#16A34A");
-    }
-    ```
-  - **Footer Component (`DocumentFooterComponent.cs:29-43`)**:
-    ```csharp
-    if (_config.ShowSecurityQrCode && _qrCodeBytes != null && _qrCodeBytes.Length > 0)
-    {
-        row.ConstantItem(42).Height(42).Image(_qrCodeBytes);
-    }
-    ...
-    if (!string.IsNullOrWhiteSpace(_verificationCode))
-    {
-        c.Item().Text($"Security Hash: {_verificationCode} • RA 8792 E-Commerce & RA 10173 DPA Compliant")
-            .FontSize(6.5f).Bold().FontColor("#4B5563");
-    }
-    ```
-  - *Observation*: In `WetSignature` mode, raw signature bytes are omitted, a 42pt height pen space is reserved above the horizontal rule line, and the digital badge (`"✓ Digitally Certified & Locked"`, `"✓ Officially Signed e-Prescription"`) is completely omitted. The footer security hash and QR code are preserved.
+### 1.2 Quantitative Specification Verification
+Analysis of `TEST_INFRA.md` revealed:
+- **Feature Inventory (Section 2)**: All 29 features from the specification survey (F01 through F29) are fully mapped across Requirements R1–R6, detailing Target Services, Inputs/Triggers, Expected Outputs, Error Handling/Fallbacks, and Test Tiers.
+- **Tier 1 (Feature Coverage, Section 4.1)**: Exactly 36 test cases (TC-T1.1.1 through TC-T1.6.6) covering R1 through R6 with 6 tests per requirement area, exceeding the `>=5 per feature` threshold.
+- **Tier 2 (Boundary & Corner Cases, Section 4.2)**: Exactly 36 boundary test cases (TC-T2.1.1 through TC-T2.6.6) covering R1 through R6 with 6 tests per feature, addressing critical boundaries (0 balance, 0 remote participants, 5-min solo warning, 2-min auto-leave countdown, cancelled pickers, 17 icon keys, etc.).
+- **Tier 3 (Cross-Feature Combinations, Section 4.3)**: 6 comprehensive pairwise integration flows (TC-T3.1 through TC-T3.6) with preconditions, sequential execution steps, and multi-service verification.
+- **Tier 4 (Real-World Workloads, Section 4.4)**: 4 end-to-end multi-step clinical and administrative journeys with explicit personas/actors and realistic operational conditions.
 
-#### B. PDEA S2 Dangerous Drug Enforcement & Regulatory Badge
-- **File**: `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService.cs`
-  - **Lines 426–429 (`GeneratePrescriptionPdf`)**:
-    ```csharp
-    bool hasDangerousDrug = slip.Items.Any(i => i.IsDangerousDrug);
-    var preferredMode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
-    var mode = hasDangerousDrug ? SignatureMode.WetSignature : preferredMode;
-    ```
-  - **Lines 529–539**:
-    ```csharp
-    // PDEA S2 Statutory Warning Badge
-    if (hasDangerousDrug)
-    {
-        col.Item().PaddingTop(6).Border(1.5f).BorderColor("#DC2626").Background("#FEF2F2").Padding(6).Row(r =>
-        {
-            r.ConstantItem(18).Text("⚠️").FontSize(10);
-            r.RelativeItem().Text("⚠️ PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations.")
-                .FontSize(8.5f).Bold().FontColor("#991B1B");
-        });
-    }
-    ```
-  - *Observation*: `ClinicDocumentPdfService` strictly checks `slip.Items.Any(i => i.IsDangerousDrug)` and forces `mode = SignatureMode.WetSignature` regardless of caller input. It renders the regulatory warning badge in a red bordered alert box.
+### 1.3 Independent Execution Verification
+All runner commands from `TEST_INFRA.md` Section 5.2 were independently executed in the worktree:
+- **Media Broker**: `/Users/macuser/.dotnet/dotnet test services/media-broker/ClinicEz.MediaBroker.Tests/ClinicEz.MediaBroker.Tests.csproj`  
+  *Result*: `Passed! - Failed: 0, Passed: 42, Skipped: 0, Total: 42, Duration: 412 ms`
+- **Portal API**: `/Users/macuser/.dotnet/dotnet test services/portal-api/ClinicEz.Portal.Tests/ClinicEz.Portal.Tests.csproj`  
+  *Result*: `Passed! - Failed: 0, Passed: 1637, Skipped: 0, Total: 1637, Duration: 3 s`
+- **Clinic API Governance & Teleconsult Filter**: `/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Teleconsult|FullyQualifiedName~License|FullyQualifiedName~Entitlements"`  
+  *Result*: `Passed! - Failed: 0, Passed: 617, Skipped: 0, Total: 617, Duration: 5 s`
+- **Interop Hub Routing**: `/Users/macuser/.dotnet/dotnet test services/interop-hub/ClinicEz.Interop.Tests/ClinicEz.Interop.Tests.csproj`  
+  *Result*: `Passed! - Failed: 0, Passed: 190, Skipped: 0, Total: 190, Duration: 41 s`
+- **Patient API Teleconsult Events**: `/Users/macuser/.dotnet/dotnet test services/patient-api/ClinicEz.Patient.Application.Tests/ClinicEz.Patient.Application.Tests.csproj --filter "FullyQualifiedName~CallStateChanged"`  
+  *Result*: `Passed! - Failed: 0, Passed: 7, Skipped: 0, Total: 7, Duration: 2 s`
+- **Clinic App Teleconsult Suites**: `cd apps/clinic-app && bun test tests/commsBrandTheming.test.ts tests/challenger_m6_adversarial_clinic.test.ts tests/challenger_m8_adversarial_clinic.test.ts tests/challenger_m9_adversarial_clinic.test.ts tests/teleconsultWorkflow.test.ts`  
+  *Result*: `168 pass, 0 fail, 11714 expect() calls [184.00ms]`
+- **Clinic App Isolated Suite**: `cd apps/clinic-app && bun test tests/comms_issue139_resilience_and_polish.test.ts`  
+  *Result*: `12 pass, 0 fail, 29 expect() calls [114.00ms]`
+- **Portal Web Suites**: `cd apps/portal-web && bun test tests/guestTeleconsultJoin.test.tsx tests/guestTeleconsultAdversarial.test.tsx tests/planAndAllocationMetrics.test.ts tests/tenantBillingAndReceipts.test.ts`  
+  *Result*: `58 pass, 0 fail, 254 expect() calls [652.00ms]`
+- **Admin Web Suites**: `cd apps/admin-web && bun test tests/adminPlansAndEntitlements.test.ts tests/challenger_m3_plan_entitlements.test.ts`  
+  *Result*: `14 pass, 0 fail, 110 expect() calls [146.00ms]`
+- **Monorepo Typechecks**: `bun run typecheck:comms && bun run typecheck:clinic && bun run typecheck:portal && bun run typecheck:admin`  
+  *Result*: All 4 packages exited with code 0.
+- **Design Token & Host Guards**: `cd apps/clinic-app && bun run lint:tokens && bun run lint:hosts`  
+  *Result*: 0 token violations, 339 files scanned for hosts, code 0.
+- **Expo Dev Server (Port 8081)**: `curl -s -I http://localhost:8081`  
+  *Result*: `HTTP/1.1 200 OK` (Live, untouched).
 
-#### C. Public Verification Resolution & Database Persistence Gap
-- **File**: `services/clinic-api/ClinicEz.Clinic.Api/Controllers/DocumentsController.cs`
-  - **Lines 111–142 (`VerifyDocument`)**:
-    ```csharp
-    [HttpGet("verify/{securityDigestOrNumber}")]
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-    public async Task<ActionResult<ApiResponse<DocumentVerificationResultDto>>> VerifyDocument(
-        [FromRoute] string securityDigestOrNumber,
-        CancellationToken ct)
-    {
-        var trimmed = securityDigestOrNumber.Trim();
-        ...
-        var medCert = await _medCertRepo.Query()
-            .FirstOrDefaultAsync(c => c.CertificateNumber == trimmed || c.SecurityDigest == trimmed, ct);
-    ```
-- **File**: `services/clinic-api/ClinicEz.Clinic.Application/Features/Documents/Commands/IssueMedicalCertificateCommand.cs`
-  - **Lines 70–75 & Lines 134–167**:
-    ```csharp
-    // Inside PublishPatientDocumentAsync:
-    var issuedAt = cert.SignedAt ?? cert.CreatedAt;
-    var digest = _security.ComputeDocumentDigest(
-        cert.TenantId, "MED-CERT", cert.CertificateNumber, cert.PatientId, cert.PrcLicenseNumber, issuedAt);
-    var verifyUrl = _security.GenerateVerificationUrl(
-        VerificationUrlResolver.Resolve(_configuration), "med-cert", cert.CertificateNumber, digest);
-    // Note: cert.SecurityDigest is NEVER assigned here!
-
-    // Inside Handle:
-    var cert = new MedicalCertificate
-    {
-        ...
-        // Note: SecurityDigest is NOT set here either!
-    };
-
-    await _medCertRepo.AddAsync(cert, ct);
-    await PublishPatientDocumentAsync(cert, ct);
-    await _unitOfWork.SaveChangesAsync(ct);
-    ```
-- **File**: `services/clinic-api/ClinicEz.Clinic.Application/Features/Documents/Commands/IssueReferralLetterCommand.cs`
-  - **Lines 55–84**:
-    ```csharp
-    var referral = new ReferralLetter
-    {
-        ...
-        // Note: SecurityDigest is NOT set here!
-    };
-    await _referralRepo.AddAsync(referral, ct);
-    await _unitOfWork.SaveChangesAsync(ct);
-    ```
-- **File**: `services/clinic-api/ClinicEz.Clinic.Api/Controllers/DocumentsController.cs`
-  - **Lines 74–82 (`DownloadMedicalCertificatePdf`)**:
-    ```csharp
-    var cert = await _medCertRepo.GetByIdAsync(id, ct);
-    ...
-    var pdfBytes = _pdfService.GenerateMedicalCertificatePdf(cert, settings, patient, doctor, signatureMode);
-    return File(pdfBytes, "application/pdf", $"MedicalCertificate-{cert.CertificateNumber}.pdf");
-    // Note: SaveChangesAsync is NEVER called; cert.SecurityDigest mutated in-memory by pdfService is lost!
-    ```
-- **File**: `services/clinic-api/ClinicEz.Clinic.Application.Tests/HardenedDocumentGenerationTests.cs`
-  - **Lines 672–694 (`DocumentsController_VerifyDocument_Should_Resolve_By_Security_Digest`)**:
-    ```csharp
-    var cert = new MedicalCertificate
-    {
-        Id = Guid.NewGuid(),
-        ...
-        SecurityDigest = testDigest // <-- Test manually injects the digest directly to bypass issuing logic!
-    };
-    await medCertRepo.AddAsync(cert, CancellationToken.None);
-    await uow.SaveChangesAsync(CancellationToken.None);
-    ```
-
-#### D. Controller Query Parameter Priority Flaw in PrescriptionsController
-- **File**: `services/clinic-api/ClinicEz.Clinic.Api/Controllers/PrescriptionsController.cs`
-  - **Lines 65–68 & Lines 98–101**:
-    ```csharp
-    var signatureMode = wet == true
-        ? SignatureMode.WetSignature
-        : (wet == false ? SignatureMode.ESignatureSpecimen : (slip.Items.Any(i => i.IsDangerousDrug) ? SignatureMode.WetSignature : SignatureMode.ESignatureSpecimen));
-    ```
-  - *Observation*: If a client sends `GET /api/v1/prescriptions/{id}/slip-pdf?wet=false` for a prescription that contains dangerous drugs, the controller evaluates `wet == false ? SignatureMode.ESignatureSpecimen : ...` and passes `signatureMode: SignatureMode.ESignatureSpecimen` to `_pdfService`. While `ClinicDocumentPdfService.GeneratePrescriptionPdf` internally overrides this to `WetSignature`, the controller's logic contains an inversion of precedence.
+### 1.4 Adversarial Edge Case Observations
+1. **Comms SDK Legacy Assertions**: Executing `cd packages/comms-sdk && bun test tests` ran 483 tests: 481 passed, 2 failed in `tests/ui/call-stage.test.ts` (lines 611 and 809). Those lines assert `btn-stage-copy-invite` exists, which fails because `CallStage.tsx` in `web-ui` already had that button removed in accordance with R1.
+2. **Comms SDK Lint Mode**: `bun run lint:comms` runs `check-tokens.mjs --strict`, which fails on 4 pre-existing uncommitted violations in `OverlayTooltip.tsx`. `bun run lint:tokens` passes cleanly because it checks against the baseline.
 
 ---
 
 ## 2. Logic Chain
 
-1. **Tri-Mode QuestPDF Rendering Engine**:
-   - `ClinicDocumentPdfService.cs` lines 950–992 correctly implement the tri-mode rendering requirements for `ESignatureSpecimen`, `DigitalSealOnly`, and `WetSignature`.
-   - In wet mode, the signature image is omitted, a 42pt pen writing space is reserved above the horizontal line, and the digital certification text is suppressed via `if (mode != SignatureMode.WetSignature)`.
-   - `DocumentFooterComponent.cs` independently preserves the SHA-256 verification hash and the QR code across all modes.
-
-2. **PDEA S2 Statutory Hardening**:
-   - Under RA 9165 and Philippine DOH-PDEA regulations, dangerous drugs must not be digitally signed for unmonitored dispensing without physical wet-ink verification.
-   - `ClinicDocumentPdfService.cs` lines 426–429 enforce `mode = hasDangerousDrug ? SignatureMode.WetSignature : preferredMode`, and lines 529–539 render the statutory regulatory alert banner.
-   - `HardenedDocumentGenerationTests` lines 569–588 verify that a prescription with dangerous drugs produces the regulatory warning and omits electronic lock badges.
-
-3. **Public Verification Endpoint & Integrity Analysis**:
-   - `worker_m1_backend/handoff.md` claims:
-     > *"Updated `VerifyDocument` endpoint: Queries `c.CertificateNumber == trimmed || c.SecurityDigest == trimmed` and `r.ReferralNumber == trimmed || r.SecurityDigest == trimmed` so public verification links generated with security digests (`/verify/<digest>`) resolve with `200 OK`."*
-   - In reality:
-     - When a clinician issues a medical certificate through `IssueMedicalCertificateCommand`, `digest` is computed locally for the QR URL, but `cert.SecurityDigest = digest;` is omitted. The certificate is saved to PostgreSQL with `SecurityDigest = NULL`.
-     - When a clinician issues a referral letter through `IssueReferralLetterCommand`, `SecurityDigest` is neither computed nor saved.
-     - When downloading the PDF via `DownloadMedicalCertificatePdf`, `ClinicDocumentPdfService` assigns `cert.SecurityDigest = digest` to the in-memory object, but `SaveChangesAsync` is never called. The value is lost when the request ends.
-     - In live runtime, querying `GET /api/v1/documents/verify/{securityDigest}` will return `404 Not Found` because the database column is `NULL`.
-     - In `HardenedDocumentGenerationTests.cs` (line 689), the test passed only because the test arrangement directly hardcoded `SecurityDigest = testDigest` on a manually constructed entity before calling the controller, rather than testing through the command handler or issuance lifecycle.
+1. **Full Traceability**:
+   - Tracing each requirement from `ORIGINAL_REQUEST.md` to `TEST_INFRA.md` shows zero requirement dropouts. All 29 features are explicitly cataloged in Section 2 and assigned to test tiers.
+2. **Matrix Threshold Compliance**:
+   - The user mandated `>=5 test cases per feature (or >=30 total)` for Tier 1 and Tier 2. `TEST_INFRA.md` delivers 36 Tier 1 tests and 36 Tier 2 tests (6 each for R1–R6), exceeding the threshold.
+3. **Guardrail Protection**:
+   - `challenger_m8_adversarial_clinic.test.ts:70` strictly asserts `Object.keys(mapEntries).length === 17`. Adding a `'participants'` icon to `COMMS_ICON_MAP` would cause an immediate test regression. `TEST_INFRA.md` correctly specifies the `renderParticipantsIcon` prop with `<Icon name="patients" />` to bypass `COMMS_ICON_MAP`.
+   - `challenger_m9_adversarial_clinic.test.ts:598` strictly asserts `btn-copy-patient-link` clickHandler calls `clinicService.createTeleconsultGuestInvite` and writes to clipboard. `TEST_INFRA.md` correctly specifies caching `{ inviteUrl, otp, expiresAtUtc }` in modal state to avoid rotating the PIN on repeated clicks without violating the test's source code assertions.
+4. **Anti-Facade Verification**:
+   - Review confirmed that `TEST_INFRA.md` mandates assertions on genuine side-effects: database persistence, transactional outbox messages, LiveKit data channel payloads, HTTP status codes, and DOM mutations. No dummy mocks or hardcoded bypasses are specified.
+5. **Executable Runner Conventions**:
+   - The runner commands in Section 5.2 were independently verified and passed across all backend and frontend projects.
 
 ---
 
 ## 3. Caveats
 
-- We did not modify any source code or test files in accordance with the strict reviewer constraint (`Review-only — do NOT modify implementation code`).
-- Untracked files `EmpiricalAdversarialDocumentTests.cs` and `Adversarial/ChallengerM1_2RegulatoryRoutingTests.cs` created by parallel challenger agents contain compilation errors. Running `dotnet test` with `--no-build` verifies that the audited code compiles and passes 58/58 tests.
-- When `VerifyDocument` is queried with the document number (e.g., `MC-20261020-0001`), verification succeeds because `c.CertificateNumber == trimmed` matches. The failure mode occurs specifically when resolving by `SecurityDigest` (`/verify/<digest>`).
+- **Legacy Assertions in `call-stage.test.ts`**: As noted in Observation 1.4, `packages/comms-sdk/tests/ui/call-stage.test.ts` still expects `btn-stage-copy-invite` to exist. When test implementers author TC-T1.1.1 in Milestone 2, they must update `call-stage.test.ts` to assert that `btn-stage-copy-invite` is null.
+- **Strict Lint in `comms-sdk`**: Running `check-tokens.mjs --strict` in `packages/comms-sdk` flags 4 pre-existing uncommitted violations in `OverlayTooltip.tsx`. CI and test runners should use `bun run lint:tokens` and `bun run lint:clinic`.
+- No other caveats; all sections are fully verified.
 
 ---
 
 ## 4. Conclusion
 
-Verdict: REQUEST_CHANGES
+`TEST_INFRA.md` is approved without reservations. It satisfies all 5 sections of the required test architecture:
+1. Section 1: Test Philosophy & Quality Principles (Opaque-box, CPM, BVA, Pairwise, Workload, Anti-Facade).
+2. Section 2: Feature Inventory (Complete R1–R6 mapping with 29 features).
+3. Section 3: Test Architecture & Runner Conventions (.NET 10 Moq/NSubstitute/WAF, Bun Test, TimeProvider, isolated runner).
+4. Section 4: 4-Tier Test Suite Specification (36 Tier 1, 36 Tier 2, 6 Tier 3, 4 Tier 4).
+5. Section 5: Coverage Thresholds & Execution CLI Commands.
 
-### Summary of Findings
-
-1. **[Critical - Integrity & Functional Gap] `SecurityDigest` is never persisted in database upon document issuance**:
-   - **Location**: `IssueMedicalCertificateCommand.cs:134-167`, `IssueReferralLetterCommand.cs:55-84`, `DocumentsController.cs:74-82, 101-109`.
-   - **Why**: `cert.SecurityDigest` and `referral.SecurityDigest` remain `NULL` in the database. When users scan QR codes or enter the footer security hash into `/verify/<digest>`, `VerifyDocument` fails with `404 Not Found`. The passing unit test in `HardenedDocumentGenerationTests.cs:689` masked this by manually setting `SecurityDigest = testDigest` in test setup.
-   - **Remediation**:
-     - In `IssueMedicalCertificateCommand.cs`, set `cert.SecurityDigest = digest;` before `_unitOfWork.SaveChangesAsync(ct)`.
-     - In `IssueReferralLetterCommand.cs`, compute and assign `referral.SecurityDigest = digest;` before saving.
-     - In `DocumentsController.cs` `DownloadMedicalCertificatePdf` and `DownloadReferralLetterPdf`, call `await _unitOfWork.SaveChangesAsync(ct)` if `cert.SecurityDigest == null`.
-
-2. **[Major - Defense in Depth] Inversion of precedence in `PrescriptionsController.cs`**:
-   - **Location**: `PrescriptionsController.cs:67, 100`.
-   - **Why**: `wet == false ? SignatureMode.ESignatureSpecimen : (slip.Items.Any(i => i.IsDangerousDrug) ? ...)` allows a caller supplying `?wet=false` on dangerous drugs to bypass the controller check and pass `ESignatureSpecimen` to the PDF service.
-   - **Remediation**: Reorder the ternary expression so `slip.Items.Any(i => i.IsDangerousDrug)` takes precedence over `wet == false`:
-     ```csharp
-     var isDangerous = slip.Items.Any(i => i.IsDangerousDrug);
-     var signatureMode = isDangerous || wet == true
-         ? SignatureMode.WetSignature
-         : (wet == false ? SignatureMode.ESignatureSpecimen : SignatureMode.ESignatureSpecimen);
-     ```
-
-3. **[Minor - Verification Scope for Prescriptions & Labs] Verification by Security Hash Not Supported for Rx/Lab**:
-   - **Location**: `DocumentsController.cs:168, 190`.
-   - **Why**: The document footer prints `Security Hash: SEC-SHA256-...` for Prescriptions and Lab Orders, but `VerifyDocument` only checks `PrescriptionNumber`/`RxPublicVerificationToken` and `OrderNumber`/`ClaimToken`. Attempting to verify a prescription using its printed footer security hash results in `404 Not Found`.
+**Verdict**: **APPROVE**
 
 ---
 
 ## 5. Verification Method
 
-To independently verify these findings:
-
-1. **Verify `SecurityDigest` is omitted from `IssueMedicalCertificateCommand`**:
-   Inspect `services/clinic-api/ClinicEz.Clinic.Application/Features/Documents/Commands/IssueMedicalCertificateCommand.cs`. Note that `cert.SecurityDigest` is never assigned before `_unitOfWork.SaveChangesAsync(ct)`.
-
-2. **Verify `SecurityDigest` is omitted from `IssueReferralLetterCommand`**:
-   Inspect `services/clinic-api/ClinicEz.Clinic.Application/Features/Documents/Commands/IssueReferralLetterCommand.cs`. Note that `referral.SecurityDigest` is never assigned.
-
-3. **Verify artificial test arrangement**:
-   Inspect `services/clinic-api/ClinicEz.Clinic.Application.Tests/HardenedDocumentGenerationTests.cs` lines 672–694. Note that `SecurityDigest = testDigest` is directly set in the test arrangement rather than flowing through the command handler.
-
-4. **Verify controller precedence inversion**:
-   Inspect `services/clinic-api/ClinicEz.Clinic.Api/Controllers/PrescriptionsController.cs` lines 65–68. Note that `wet == false` precedes `slip.Items.Any(i => i.IsDangerousDrug)`.
-
-5. **Verify API compilation and passing tests**:
+To independently verify the review findings:
+1. **Inspect Review Report**:
    ```bash
-   ~/.dotnet/dotnet build services/clinic-api/ClinicEz.Clinic.Api/ClinicEz.Clinic.Api.csproj
-   ~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~HardenedDocumentGenerationTests" --no-build
+   cat /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/reviewer_m1_2/review.md
    ```
+2. **Verify Backend Runner Commands**:
+   ```bash
+   /Users/macuser/.dotnet/dotnet test services/media-broker/ClinicEz.MediaBroker.Tests/ClinicEz.MediaBroker.Tests.csproj
+   /Users/macuser/.dotnet/dotnet test services/portal-api/ClinicEz.Portal.Tests/ClinicEz.Portal.Tests.csproj
+   /Users/macuser/.dotnet/dotnet test services/interop-hub/ClinicEz.Interop.Tests/ClinicEz.Interop.Tests.csproj
+   /Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Teleconsult|FullyQualifiedName~License|FullyQualifiedName~Entitlements"
+   ```
+3. **Verify Frontend Runner Commands**:
+   ```bash
+   cd apps/clinic-app && bun test tests/comms_issue139_resilience_and_polish.test.ts
+   cd apps/clinic-app && bun test tests/challenger_m8_adversarial_clinic.test.ts tests/challenger_m9_adversarial_clinic.test.ts
+   cd apps/portal-web && bun test tests/guestTeleconsultJoin.test.tsx tests/tenantBillingAndReceipts.test.ts
+   cd apps/admin-web && bun test tests/adminPlansAndEntitlements.test.ts tests/challenger_m3_plan_entitlements.test.ts
+   ```
+4. **Verify Port 8081 Preservation**:
+   ```bash
+   curl -s -I http://localhost:8081
+   ```
+
+*Invalidation Conditions*:
+- `TEST_INFRA.md` is modified to remove any of the 29 mapped features or drop below 5 test cases per requirement area in Tier 1 or Tier 2.
+- Any backend or frontend test suite fails to execute using the documented commands.
+- Port 8081 is terminated.

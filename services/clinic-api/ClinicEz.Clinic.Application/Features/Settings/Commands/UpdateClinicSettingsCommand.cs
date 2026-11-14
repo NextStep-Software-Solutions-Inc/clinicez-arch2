@@ -8,7 +8,9 @@ using ClinicEz.Clinic.Application.Features.ServicesCatalog.Common;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Shared.Licensing;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -75,7 +77,8 @@ public sealed record UpdateClinicSettingsCommand(
     int? TeleconsultRecordingRetentionDays = null,
     bool? TeleconsultRecordingConsentRequired = null,
     TeleconsultPaymentPolicy? TeleconsultPaymentPolicy = null,
-    decimal? TeleconsultDefaultFee = null) : IRequest<ClinicSettingsDto>;
+    decimal? TeleconsultDefaultFee = null,
+    bool? EnableTeleconsultation = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -84,19 +87,22 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
     private readonly IUnitOfWork _unitOfWork;
     private readonly IRepository<ServiceItem>? _serviceRepo;
     private readonly ClinicEz.Clinic.Domain.Interfaces.IKioskAccessInvalidator? _kioskInvalidator;
+    private readonly IFacilityLicenseValidator? _licenseValidator;
 
     public UpdateClinicSettingsCommandHandler(
         IRepository<FacilitySettings> settingsRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork,
         IRepository<ServiceItem>? serviceRepo = null,
-        ClinicEz.Clinic.Domain.Interfaces.IKioskAccessInvalidator? kioskInvalidator = null)
+        ClinicEz.Clinic.Domain.Interfaces.IKioskAccessInvalidator? kioskInvalidator = null,
+        IFacilityLicenseValidator? licenseValidator = null)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
         _serviceRepo = serviceRepo;
         _kioskInvalidator = kioskInvalidator;
+        _licenseValidator = licenseValidator;
     }
 
     public async Task<ClinicSettingsDto> Handle(UpdateClinicSettingsCommand request, CancellationToken ct)
@@ -354,10 +360,45 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.TeleconsultDefaultFee.HasValue && request.TeleconsultDefaultFee.Value >= 0)
             settings.TeleconsultDefaultFee = request.TeleconsultDefaultFee.Value;
 
+        if (request.EnableTeleconsultation.HasValue)
+        {
+            if (request.EnableTeleconsultation.Value)
+            {
+                var isWorkspaceTeleconsultEntitled = false;
+                if (!string.IsNullOrWhiteSpace(settings.LicenseToken))
+                {
+                    var validation = (_licenseValidator ?? new FacilityLicenseValidator()).Validate(settings.LicenseToken, _clinicContext.ClinicId, _clinicContext.TenantId);
+                    isWorkspaceTeleconsultEntitled = validation.IsValid &&
+                        validation.Payload?.EnabledFeatures != null &&
+                        validation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+                }
+
+                if (!isWorkspaceTeleconsultEntitled)
+                {
+                    throw new ForbiddenException("Clinic cannot enable teleconsultation because tenant workspace lacks active teleconsultation entitlement.");
+                }
+
+                settings.EnableTeleconsultation = true;
+            }
+            else
+            {
+                settings.EnableTeleconsultation = false;
+            }
+        }
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        var isWorkspaceEntitled = false;
+        if (!string.IsNullOrWhiteSpace(settings.LicenseToken))
+        {
+            var validation = (_licenseValidator ?? new FacilityLicenseValidator()).Validate(settings.LicenseToken, _clinicContext.ClinicId, _clinicContext.TenantId);
+            isWorkspaceEntitled = validation.IsValid &&
+                validation.Payload?.EnabledFeatures != null &&
+                validation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+        }
 
         return new ClinicSettingsDto(
             settings.Id,
@@ -441,7 +482,9 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             TeleconsultRecordingRetentionDays: settings.TeleconsultRecordingRetentionDays,
             TeleconsultRecordingConsentRequired: settings.TeleconsultRecordingConsentRequired,
             TeleconsultPaymentPolicy: Enum.TryParse<TeleconsultPaymentPolicy>(settings.TeleconsultPaymentPolicy, true, out var pol) ? pol : TeleconsultPaymentPolicy.Prepaid,
-            TeleconsultDefaultFee: settings.TeleconsultDefaultFee);
+            TeleconsultDefaultFee: settings.TeleconsultDefaultFee,
+            EnableTeleconsultation: settings.EnableTeleconsultation,
+            IsWorkspaceTeleconsultEntitled: isWorkspaceEntitled);
     }
 
     private async Task EnsureDentalPresetsSeededAsync(CancellationToken ct)

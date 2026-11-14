@@ -148,12 +148,16 @@ public static class InteropTypes
     public const string GuestCallJoinRequested = "comms.guest.call.join.requested";
     /// <summary>Clinic -> portal. Payload: <c>GuestTeleconsultInviteIssuedPayload</c>.</summary>
     public const string GuestTeleconsultInviteIssued = "portal.teleconsult.guest_invite_issued";
+    /// <summary>Facility -> portal. Payload: <c>GuestTeleconsultInviteRevokedPayload</c>.</summary>
+    public const string GuestTeleconsultInviteRevoked = "portal.teleconsult.guest_invite_revoked";
 
     // Media broker (cloud platform service: room tokens & metering)
     /// <summary>Comms -> Media. Payload: <c>MediaRoomRequestedPayload</c>. Reply type: <see cref="MediaRoomResponded"/>.</summary>
     public const string MediaRoomRequested = "media.room.requested";
     /// <summary>Media -> comms. Payload: <c>MediaRoomRespondedPayload</c>.</summary>
     public const string MediaRoomResponded = "media.room.responded";
+    /// <summary>Facility -> Media. Payload: <c>MediaRoomEndedPayload</c>.</summary>
+    public const string MediaRoomEnded = "media.room.ended";
     /// <summary>Portal -> Media. Payload: <c>MediaEntitlementUpdatedPayload</c>.</summary>
     public const string MediaEntitlementUpdated = "media.entitlement.updated";
     /// <summary>Media -> Portal. Payload: <c>MediaUsageRecordedPayload</c>.</summary>

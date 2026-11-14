@@ -136,6 +136,32 @@ public sealed class EndTeleconsultCallCommandHandler : IRequestHandler<EndTeleco
                 RelayUrl: null
             ));
 
+        _publisher.Enqueue(
+            InteropTypes.GuestTeleconsultInviteRevoked,
+            Party.ForFacility(_clinicContext.TenantId, _clinicContext.ClinicId.ToString(), FacilityType.Clinic),
+            Party.Portal,
+            appointment.Id,
+            new GuestTeleconsultInviteRevokedPayload(
+                AppointmentId: appointment.Id,
+                CallId: callId,
+                TenantId: _clinicContext.TenantId,
+                FacilityId: _clinicContext.ClinicId.ToString(),
+                RevokedAtUtc: now,
+                Reason: request.EndReason ?? "Consultation ended by clinician"
+            ));
+
+        _publisher.Enqueue(
+            InteropTypes.MediaRoomEnded,
+            Party.ForFacility(_clinicContext.TenantId, _clinicContext.ClinicId.ToString(), FacilityType.Clinic),
+            Party.Media,
+            callId,
+            new MediaRoomEndedPayload(
+                CallId: callId,
+                TenantId: _clinicContext.TenantId,
+                RoomName: roomName,
+                EndedAtUtc: now
+            ));
+
         // 6. Immutable WORM Audit Entry
         var audit = new AuditEntry
         {

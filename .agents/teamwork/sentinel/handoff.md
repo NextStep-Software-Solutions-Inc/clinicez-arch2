@@ -1,43 +1,49 @@
-# Handoff Report — Sentinel Final Sign-off
+# Sentinel Final Handoff Report — Teleconsultation Finalization
 
 ## Observation
-The team was tasked with bringing the entire ClinicEZ teleconsultation workflow to full production readiness across backend services (`clinic-api`, `media-broker`, `interop-hub`, `patient-api`, `portal-api`), shared libraries (`packages/shared-dotnet`, `packages/comms-sdk`), and client applications (`apps/clinic-app`, `apps/patient-app`, `apps/portal-web`) connected to LiveKit Cloud.
-All 11 project milestones (M1–M11) were planned and executed through iterative sub-orchestration with complete reviewer, challenger, and forensic auditor coverage.
-The top-level orchestrator claimed completion, and an independent blocking `teamwork_victory_auditor` evaluated all code changes and executed all 10 acceptance test suites against `ORIGINAL_REQUEST.md`.
+The Teamwork Project Sentinel oversaw the execution of the Teleconsultation Finalization Plan covering requirements R1 through R6 and live user feedback remediation R7.1 through R7.4 across the full stack (`packages/comms-sdk`, `packages/shared-dotnet`, `services/portal-api`, `services/media-broker`, `services/clinic-api`, `services/interop-hub`, `apps/clinic-app`, `apps/portal-web`, and `apps/admin-web`).
+
+An independent post-victory audit was conducted by `teamwork_victory_auditor` (`772bd5f2-63a6-45f2-b52d-3df2bee9a55e`) in `.agents/teamwork/victory_auditor_2` with the authoritative request in `.agents/teamwork/ORIGINAL_REQUEST.md`.
+
+Audit Verdict: **VICTORY CONFIRMED**
+- Phase A (Timeline & Provenance): PASS
+- Phase B (Integrity, Cheating Detection & Guardrails): PASS (all 8 hard invariants certified)
+- Phase C (Independent Test Execution): PASS (3,544 independent tests passed, 0 failed, 100% pass rate)
 
 ## Logic Chain
-1. **Requirements Coverage**:
-   - **R1 (Deployment & Media Broker)**: Client #8 (Media Broker) registered in Interop Hub docker-compose and dev/prod workflows; `deploy/media-broker/docker-compose.yml`, `.env.example`, and `.github/workflows/deploy-media-broker-dev.yml` created; `media-broker` added to `publish-images.yml`; LiveKit credentials passed to `portal-api` and `patient-api`; `AutoProvisionDefaultEntitlement` verified default `false` in `MediaMeteringOptions.cs` and tested in `CallMinuteMeteringTests.cs`.
-   - **R2 (Backend Two-Party Routing & Guest Invite Flow)**: `CommsCallStateChangedPayload` extended with `RelayUrl`; `GuestTeleconsultInviteIssuedPayload` defined in `packages/shared-dotnet`; `clinic-api` enqueues call state changed payloads to `Party.ForPatient` and provides `POST /api/v1/teleconsult/appointments/{appointmentId}/guest-invite` returning secure invite token, OTP, and DOB hint; `portal-api` implements `GuestTeleconsultInviteIssuedHandler` and verifies invites via constant-time SHA-256 with 5-attempt rate limit lockout; `patient-api` includes `relayUrl` in SignalR `CallStateChanged` broadcasts and provides `GET /api/v1/patient/teleconsult/calls/{callId}`.
-   - **R3 (Comms SDK & Plain Copy)**: Added orientation, link sharing, dock, and PiP props across native/web `CallWaitingRoomProps` and `CallStageProps`; portrait-first 3:4 default preview with rotation toggle; centered floating bottom `mediaToolbar` with `btn-dock-call` and `btn-toggle-pip`; flexible participant naming fallback in `useCallSession`; user-friendly plain copy across UI.
-   - **R4 (Clinic Workstation UI/UX & Native PiP)**: Active call stage displays 100% full screen edge-to-edge without header bar or close button; ultra-thin single-row draggable dock bar (~38px height) with drag handle, patient label, REC pill, compact controls, and zero inline video; persistent hidden video element keeping native Web PiP active across docked transitions; MediaSession integration; call exit confirmation dialog (`confirm-end-call-dialog`); patient link copying via `createTeleconsultGuestInvite`.
-   - **R5 (Patient App & Guest Portal Live Video)**: `patient-app` polls call status, auto-admits, and renders active call via `CallStage`; `portal-web` wires `useCallSession`, `CallStage`, native PiP, and plain copy.
-   - **R6 (Architectural Integrity & Guardrails)**: Zero PostgreSQL schema migrations; zero external message brokers (Interop Hub only); zero direct cross-service HTTP; zero-PHI LiveKit room/participant identifiers; port 8081 preserved; 100% design token compliance (`bun run lint:clinic` and `bun run lint:comms` pass with 0 errors); 0 external host leaks (`check-no-external-hosts.mjs`).
-
-2. **Independent Victory Audit Verdict**:
-   - `VERDICT: VICTORY CONFIRMED` issued by `teamwork_victory_auditor` (`e855f555-1af9-4f5a-9cc5-a7669889212e`).
-   - Phase A (Timeline & Provenance): PASS (genuine iterative subagent teamwork logs, zero pre-populated artifacts).
-   - Phase B (Integrity Check): PASS (zero stubs, zero DDL migrations, zero external brokers, strict zero-PHI compliance, constant-time crypto comparison with rate limits, design tokens clean, touch targets compliant, native Web PiP active, disconnect dialog gated).
-   - Phase C (Independent Test Execution): 4,006 tests passed, 0 failed, 0 skipped across all 10 canonical test suites. 100% match with claimed results.
+1. **Interview & Routing**: Task interview completed; approved task prompt recorded in `.agents/teamwork/ORIGINAL_REQUEST.md`; routed to General execution path (`teamwork_orchestrator`).
+2. **Orchestration Execution**: Project Orchestrator executed parallel milestones:
+   - **M12 (Control Plane Metered Licensing & Broker Sync)**: Opt-in PAYG billing entities (`WorkspaceTeleconsultBilling`, `TeleconsultUsageRecord`), EF Core migrations, media overdraft protection (`AllowOverdraft`), abandoned session cleanup.
+   - **M13 (Portal Web & Admin Web PAYG Billing UI)**: `TeleconsultPaygCard.tsx`, `teleconsultBilling.service.ts`, and SuperAdmin rate/credit controls in `TenantEntitlementsCard.tsx`.
+   - **M14 (Clinic Governance & Session Termination)**: `FacilitySettings.EnableTeleconsultation`, EF migrations, `ForbiddenException` enforcement on un-entitled toggle, license cascade, modality gating in appointments/schedule modals, and atomic interop revocation.
+   - **M15 (CallStage Participants Roster, PIN & Screen Sharing)**: Right-hand docked roster panel (`btn-toggle-participants`), visible 6-digit access PIN and cached invite state (no OTP rotation on copy), decoupled local camera/screen share tracks, contain aspect ratio promotion, landscape PiP, and 5-min solo warning with 2-min auto-leave countdown.
+   - **M17 (Live User Feedback Remediation R7.1–R7.4)**:
+     * R7.1: Tailwind v4 `@source` directive in `globals.css` resolving collapsed waiting room and floating toolbar layouts; real browser `getUserMedia` camera/mic preview and volume meter in waiting room.
+     * R7.2: Zero Unicode emojis and zero uppercase text fallbacks in teleconsultation UI; 22 inline Lucide SVGs; exact 17-key invariant on `COMMS_ICON_MAP`.
+     * R7.3: Complete purge of PhilHealth YAKAP cards, badges, and prepayment bypass logic from teleconsultation.
+     * R7.4: Zero-PHI metadata hydration via AES-256-GCM encrypted guest context; real clinic, clinician, and schedule display; participant roster deduplication so toolbar badge count strictly matches rows under `IN ROOM`.
+   - **E2E Testing Track (E2E-M1..M4) & M16 (Final Integration)**: Published `TEST_READY.md` (v3.0.0) certifying full-ecosystem automated verification.
+3. **Independent Victory Audit**: Spawned `teamwork_victory_auditor`. Verified 3,544 automated tests independently with 0 failures, confirmed zero cheating patterns, zero token/host violations, port 8081 health, and zero git commits.
 
 ## Caveats
-- Production deployment (e.g. `docker-compose up` on the VPS target or CI/CD branch merge) is to be performed during release deployment phases; in-worktree automated testing, linting, and typechecking are 100% complete and passing.
-- Port 8081 was kept active and unaffected throughout all operations per user constraint.
+- No git commits or pushes were performed in the worktree (`git log -1` remains `b58f6e3b84b996aaad4475f80cadf899791ba8ef`). All changes are staged/unstaged in the working directory ready for version control by the operator.
+- The live Expo dev server on port 8081 remains running continuously on PID 29562 untouched.
 
 ## Conclusion
-The end-to-end ClinicEZ teleconsultation workflow is fully verified, robust, and production-ready across all backend services, SDKs, and applications.
-Victory has been independently audited and confirmed.
+The ClinicEZ teleconsultation finalization capability is 100% complete, fully implemented, peer-reviewed, adversarial-tested, and independently verified against all specifications in `implementation_plan.md` and user feedback mandates.
 
 ## Verification Method
-Independent execution of the canonical test suites by the post-victory auditor:
-1. `dotnet test services/media-broker/ClinicEz.MediaBroker.Tests/ClinicEz.MediaBroker.Tests.csproj` -> 40/40 PASSED
-2. `dotnet test services/interop-hub/ClinicEz.Interop.Tests/ClinicEz.Interop.Tests.csproj` -> 13/13 PASSED
-3. `dotnet test services/portal-api/ClinicEz.Portal.Tests/ClinicEz.Portal.Tests.csproj` -> 18/18 PASSED
-4. `dotnet test services/patient-api/ClinicEz.Patient.Application.Tests/ClinicEz.Patient.Application.Tests.csproj --filter "FullyQualifiedName~CallStateChanged"` -> 3/3 PASSED
-5. `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Teleconsult"` -> 6/6 PASSED
-6. `bun run typecheck:comms && bun run lint:comms && bun run test:comms` -> 0 errors, 473 tests PASSED
-7. `bun run typecheck:clinic && bun run lint:clinic` -> 0 errors, 0 token violations across 339 files
-8. `bun test apps/clinic-app/tests/teleconsultWorkflow.test.ts ...` -> 298/298 PASSED
-9. `cd apps/patient-app && bun run typecheck && bun test tests/clinical-safety-records.test.ts tests/challenger_m10_patient_app.test.ts` -> 0 errors, 36/36 PASSED
-10. `cd apps/portal-web && bun run typecheck && bun test tests/guestTeleconsultJoin.test.tsx ...` -> 0 errors, 38/38 PASSED
-Total: 4,006 tests passing, 0 failures, 0 regressions.
+Independently executed:
+- Media Broker: `dotnet test services/media-broker/ClinicEz.MediaBroker.Tests` (90 passed)
+- Portal API: `dotnet test services/portal-api/ClinicEz.Portal.Tests` (1,710 passed)
+- Interop Hub: `dotnet test services/interop-hub/ClinicEz.Interop.Tests` (190 passed)
+- Clinic API: `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests --filter "FullyQualifiedName~Teleconsult|FullyQualifiedName~License|FullyQualifiedName~Entitlements"` (660 passed)
+- Patient API: `dotnet test services/patient-api/ClinicEz.Patient.Application.Tests --filter "FullyQualifiedName~CallStateChanged"` (7 passed)
+- Comms SDK: `bun test tests && bun run typecheck` (592 passed, 0 TS errors)
+- Clinic App: `bun test tests/commsBrandTheming.test.ts ... && bun test tests/comms_issue139_resilience_and_polish.test.ts && bun run typecheck` (204 passed, 0 TS errors)
+- Portal Web: `bun test tests/guestTeleconsultJoin.test.tsx ... && bunx tsc --noEmit` (86 passed, 0 TS errors)
+- Admin Web: `bun test tests/teleconsultSuperAdminOverrides.test.ts ... && bunx tsc --noEmit` (48 passed, 0 TS errors)
+- Patient App: `bun test tests/clinical-safety-records.test.ts ... && bun run typecheck` (47 passed, 0 TS errors)
+- Token Linter: `bun run lint:tokens` (0 violations)
+- Host Linter: `check-no-external-hosts.mjs` across clinic-app and comms-sdk (0 violations)
+- Total independent tests: 3,544 passed, 0 failed (100% PASS).

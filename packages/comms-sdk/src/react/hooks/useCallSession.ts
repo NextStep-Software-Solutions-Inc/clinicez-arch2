@@ -33,7 +33,7 @@ export function useCallSession(
     policy: options?.initialPaymentState?.policy ?? 'Exempt',
     status: options?.initialPaymentState?.status ?? 'Exempt',
     canAdmit: options?.initialPaymentState?.canAdmit ?? true,
-    isYakapExempt: options?.initialPaymentState?.isYakapExempt ?? true,
+    isYakapExempt: options?.initialPaymentState?.isYakapExempt ?? false,
     hasActiveYakapEnlistment: options?.initialPaymentState?.hasActiveYakapEnlistment ?? false,
     isEmergencyOverride: options?.initialPaymentState?.isEmergencyOverride ?? false,
     overrideReason: options?.initialPaymentState?.overrideReason
@@ -96,7 +96,8 @@ export function useCallSession(
       isCameraEnabled: true,
       isMicEnabled: true,
       isScreenSharing: false,
-      joinedAt: new Date()
+      joinedAt: new Date(),
+      isLocal: true
     }
   ]);
 
@@ -205,24 +206,43 @@ export function useCallSession(
     });
 
     const syncParticipants = () => {
-      const remotes = adapter.getRemoteParticipants().map((rp) => ({
-        identity: rp.identity,
-        name: rp.name || 'Participant',
-        isDoctor: false,
-        isCameraEnabled: rp.isVideoEnabled,
-        isMicEnabled: rp.isAudioEnabled,
-        isScreenSharing: rp.isScreenSharing,
-        joinedAt: rp.joinedAt || new Date()
-      }));
+      const localIdentity = options?.participantIdentity ?? 'staff-current';
+      const remotes = adapter
+        .getRemoteParticipants()
+        .filter((rp) => rp.identity !== localIdentity)
+        .map((rp) => {
+          let displayName = rp.name;
+          if (!displayName || displayName === 'Participant' || displayName.trim() === '') {
+            if (options?.remoteParticipantDisplayName) {
+              displayName = options.remoteParticipantDisplayName;
+            } else if (rp.identity?.startsWith('guest:otp-')) {
+              displayName = options?.remoteParticipantDisplayName || 'Patient';
+            } else {
+              displayName = 'Participant';
+            }
+          }
+          return {
+            identity: rp.identity,
+            name: displayName,
+            isDoctor: false,
+            isCameraEnabled: rp.isVideoEnabled,
+            isMicEnabled: rp.isAudioEnabled,
+            isScreenSharing: rp.isScreenSharing,
+            joinedAt: rp.joinedAt || new Date(),
+            isLocal: false
+          };
+        });
+
       setParticipants((prev) => {
-        const localSelf = prev[0] ?? {
-          identity: options?.participantIdentity ?? 'staff-current',
+        const localSelf: CallParticipant = {
+          identity: localIdentity,
           name: options?.participantName ?? (options?.isDoctor === false ? 'Participant' : 'Dr. Clinician'),
           isDoctor: options?.isDoctor ?? true,
-          isCameraEnabled: true,
-          isMicEnabled: true,
-          isScreenSharing: false,
-          joinedAt: new Date()
+          isCameraEnabled: isCameraEnabledRef.current,
+          isMicEnabled: isMicEnabledRef.current,
+          isScreenSharing: isScreenSharingRef.current,
+          joinedAt: prev[0]?.joinedAt || new Date(),
+          isLocal: true
         };
         return [localSelf, ...remotes];
       });
@@ -439,7 +459,7 @@ export function useCallSession(
           ? emergencyOverride
           : undefined;
 
-      if (!paymentState.canAdmit && !validOverride && !paymentState.isYakapExempt) {
+      if (!paymentState.canAdmit && !validOverride) {
         throw new Error('Cannot admit patient: Prepaid consultation is unpaid.');
       }
 
@@ -468,7 +488,6 @@ export function useCallSession(
     },
     [
       paymentState.canAdmit,
-      paymentState.isYakapExempt,
       options?.onAdmitPatient,
       options?.onJoinCall,
       connectMediaIfConfigured

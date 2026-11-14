@@ -281,4 +281,67 @@ public static class TeleconsultContracts
         string ParticipantRole,
         bool ConsentGranted,
         DateTime ConsentedAtUtc);
+
+    // =========================================================================
+    // Tier 4: Two-Tier Governance & Production Clinical Workflows (R4, R5)
+    // =========================================================================
+    public record FacilityGovernanceSettingsDto(
+        Guid ClinicId,
+        string TenantId,
+        bool EnableTeleconsultation = false,
+        bool IsWorkspaceTeleconsultEntitled = false,
+        string? LicenseToken = null);
+
+    public record UpdateClinicGovernanceCommand(
+        bool EnableTeleconsultation);
+
+    public record ClinicLicenseGrantDto(
+        string TenantId,
+        List<string> GrantedFeatures,
+        DateTime ExpiresAtUtc);
+
+    public record GuestInviteGenerationRequest(
+        Guid AppointmentId,
+        Guid ClinicId,
+        string TenantId,
+        Guid PatientId,
+        DateOnly DateOfBirth);
+
+    public record GuestInviteGenerationResultDto(
+        Guid InviteId,
+        Guid AppointmentId,
+        Guid CallId,
+        string RawToken,
+        string Otp,
+        DateOnly DateOfBirth,
+        DateTime ExpiresAtUtc,
+        string PatientLink,
+        bool FromCache = false);
+
+    public record LiveKitSessionState(
+        Guid CallId,
+        string RoomName,
+        string Status,
+        DateTime StartedAtUtc,
+        TimeSpan TokenTtl,
+        bool ReconnectionAllowed);
+
+    public record SoloRoomSessionState(
+        Guid CallId,
+        int RemoteParticipantCount,
+        TimeSpan SoloDuration,
+        bool WarningBannerVisible,
+        bool AutoLeaveTriggered,
+        bool LeftCleanly);
+
+    public record ProductionEndCallResultDto(
+        Guid AppointmentId,
+        Guid CallId,
+        string RoomName,
+        DateTime EndedAtUtc,
+        bool LiveKitDataMessageBroadcasted,
+        bool GuestInviteRevokedEnqueued,
+        bool MediaRoomEndedEnqueued,
+        bool AppointmentMarkedCompleted,
+        bool WormAuditLogged);
 }

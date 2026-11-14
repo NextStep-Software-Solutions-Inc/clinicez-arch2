@@ -266,6 +266,22 @@ public class PlatformServiceTests
     }
 
     [Fact]
+    public async Task Facility_notifies_media_broker_room_ended_and_portal_is_rejected()
+    {
+        await using var hub = await HubApp.StartCloudAsync();
+        var payload = new MediaRoomEndedPayload(Guid.NewGuid(), W.TenantA, "room-abc", DateTime.UtcNow);
+
+        // Facility can notify media broker room ended
+        var fromClinic = W.Env(InteropTypes.MediaRoomEnded, W.A1Clinic, Party.Media, Guid.NewGuid(), payload);
+        (await hub.SendAsync("clinic", fromClinic)).Status.Should().Be(SendResult.Accepted);
+        (await hub.PullAsync("media", "media")).Should().ContainSingle().Which.Envelope.MessageId.Should().Be(fromClinic.MessageId);
+
+        // Portal cannot send media.room.ended
+        var fromPortal = W.Env(InteropTypes.MediaRoomEnded, Party.Portal, Party.Media, Guid.NewGuid(), payload);
+        (await hub.SendAsync("portal", fromPortal)).Status.Should().Be(SendResult.Rejected);
+    }
+
+    [Fact]
     public async Task Media_broker_sends_only_media_messages()
     {
         await using var hub = await HubApp.StartCloudAsync();

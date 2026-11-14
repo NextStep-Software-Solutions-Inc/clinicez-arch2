@@ -41,7 +41,7 @@ import {
 } from '@clinicez/comms-sdk/core';
 import { useClinicComms, type TeleconsultSessionParams } from '../../context/ClinicCommsContext';
 import { useAuth } from '../../context/AuthContext';
-import { clinicService, type TeleconsultStatusDto } from '../../services/clinicService';
+import { clinicService, type TeleconsultStatusDto, type TeleconsultGuestInviteDto } from '../../services/clinicService';
 import { notify } from '../../utils/feedback';
 import { createShadows } from '@clinicez/design-tokens';
 import { getActiveThemeSnapshot, getActiveThemeState, subscribeActiveTheme, theme } from '../../constants/theme';
@@ -134,6 +134,14 @@ class WorkstationMediaAdapter implements IMediaRoomAdapter {
 
   getLocalVideoTrack(): unknown | null {
     return this.activeAdapter.getLocalVideoTrack();
+  }
+
+  getLocalCameraTrack(): unknown | null {
+    return this.activeAdapter.getLocalCameraTrack ? this.activeAdapter.getLocalCameraTrack() : null;
+  }
+
+  getLocalScreenShareTrack(): unknown | null {
+    return this.activeAdapter.getLocalScreenShareTrack ? this.activeAdapter.getLocalScreenShareTrack() : null;
   }
 
   getLocalAudioTrack(): unknown | null {
@@ -402,6 +410,90 @@ interface TeleconsultInCallChatDrawerProps {
   onSendDataChannelMessage: (text: string, isInternal: boolean) => Promise<void>;
 }
 
+/** Subscribes to the active tenant/brand theme for in-call chat styling. */
+function useActiveCommsTheme() {
+  const activeThemeSnapshot = useSyncExternalStore(
+    subscribeActiveTheme,
+    getActiveThemeSnapshot,
+    getActiveThemeSnapshot,
+  );
+  const activeTheme = useMemo(() => getActiveThemeState(), [activeThemeSnapshot]);
+  const activeCommsShadows = useMemo(
+    () => createShadows(activeTheme.resolvedColors),
+    [activeTheme],
+  );
+  return { activeTheme, activeCommsShadows };
+}
+
+/** Renders the eye / eyeOff toggle icon for in-call chat privacy blur. */
+function renderPrivacyEyeIcon(
+  enabled: boolean,
+  resolvedColors: ReturnType<typeof getActiveThemeState>['resolvedColors'],
+) {
+  return (
+    <Icon
+      name={enabled ? 'eyeOff' : 'eye'}
+      size={theme.sizes.iconSm}
+      color={enabled ? resolvedColors.warningText : resolvedColors.textSecondary}
+    />
+  );
+}
+
+/** Persists a chat message over REST when SignalR send fails and updates local store cache. */
+async function sendMessageViaRestFallback(
+  commsCtx: any,
+  targetConvId: string,
+  text: string,
+  isInternal: boolean,
+): Promise<void> {
+  const baseUrl = typeof commsCtx?.baseUrl === 'string' ? commsCtx.baseUrl.trim() : '';
+  if (!baseUrl) {
+    throw new Error('Comms service unavailable');
+  }
+  const cleanBase = baseUrl.replace(/\/+$/, '');
+  const ticket =
+    commsCtx?.activeTicket ??
+    (typeof commsCtx?.refreshTicket === 'function' ? await commsCtx.refreshTicket() : null);
+  const token = ticket?.token ?? '';
+  const res = await fetch(
+    `${cleanBase}/api/v1/comms/conversations/${encodeURIComponent(targetConvId)}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        contentText: text,
+        visibility: isInternal ? 'Internal' : 'Public',
+        requiresAcknowledgement: false,
+      }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to persist message (${res.status})`);
+  }
+  const dto = await res.json().catch(() => null);
+  if (dto && typeof dto === 'object') {
+    commsCtx?.store?.appendMessage?.(targetConvId, {
+      messageId: dto.messageId ?? dto.id ?? `msg-${Date.now()}`,
+      seq: typeof dto.seq === 'number' ? dto.seq : Date.now(),
+      conversationId: dto.conversationId ?? targetConvId,
+      senderType: dto.senderType ?? 'Staff',
+      senderId: dto.senderId ?? commsCtx?.staffId ?? null,
+      senderDisplayName: dto.senderDisplayName ?? commsCtx?.staffDisplayName ?? 'Clinician',
+      contentText: dto.contentText ?? text,
+      visibility: dto.visibility ?? (isInternal ? 'Internal' : 'Public'),
+      deliveryState: dto.deliveryState ?? 'Sent',
+      sentAtUtc: dto.sentAtUtc ?? new Date().toISOString(),
+      requiresAcknowledgement: Boolean(dto.requiresAcknowledgement),
+      isAcknowledged: Boolean(dto.isAcknowledged),
+      acknowledgedByName: dto.acknowledgedByName ?? null,
+      acknowledgedAtUtc: dto.acknowledgedAtUtc ?? null,
+    });
+  }
+}
+
 const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
   callId,
   patientId,
@@ -411,22 +503,84 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
   onSendDataChannelMessage,
 }) => {
   const [privacyBlur, setPrivacyBlur] = useState(false);
-  const { conversations } = useConversations('PatientFacility');
-  const activeConv = useMemo(
-    () =>
-      patientId
-        ? conversations.find(
-            (c) =>
-              c.patientId === patientId ||
-              c.participants?.some((p) => p.participantId === patientId || p.userId === patientId),
-          )
-        : undefined,
-    [conversations, patientId],
-  );
-  const activeConvId = activeConv?.id ?? null;
+  const commsCtx = useContext(CommsContext) as any;
+  const { activeTheme, activeCommsShadows } = useActiveCommsTheme();
+  const { conversations, createConversation } = useConversations();
+  const [ensuredConvId, setEnsuredConvId] = useState<string | null>(null);
+  const creatingConvPromiseRef = useRef<Promise<string | null> | null>(null);
+
+  useEffect(() => {
+    setEnsuredConvId(null);
+    creatingConvPromiseRef.current = null;
+  }, [patientId, callId]);
+
+  const matchedConv = useMemo(() => {
+    const openConvs = conversations.filter((c) => c.status !== 'Closed');
+    const matchesPatient = (c: (typeof openConvs)[number]) =>
+      Boolean(patientId) &&
+      (c.patientId === patientId ||
+        c.contextId === patientId ||
+        c.participants?.some((p) => p.participantId === patientId || p.userId === patientId));
+
+    // Prefer an existing PatientFacility inquiry thread so messages stay unified with triage history.
+    const patientFacilityMatch = openConvs.find(
+      (c) => c.scope === 'PatientFacility' && matchesPatient(c),
+    );
+    if (patientFacilityMatch) return patientFacilityMatch;
+
+    return openConvs.find(
+      (c) =>
+        c.scope === 'StaffContext' &&
+        (matchesPatient(c) || (Boolean(callId) && c.contextId === callId)),
+    );
+  }, [conversations, patientId, callId]);
+
+  const activeConvId = matchedConv?.id ?? ensuredConvId;
   const { messages: persistedMessages, isLoading, error, acknowledgeMessage } =
     useConversation(activeConvId);
   const { sendMessage, resendMessage } = useSendMessage();
+
+  const ensurePatientConversationId = useCallback(async (): Promise<string | null> => {
+    if (matchedConv?.id) return matchedConv.id;
+    if (ensuredConvId) return ensuredConvId;
+    if (creatingConvPromiseRef.current) {
+      return creatingConvPromiseRef.current;
+    }
+
+    const createPromise = (async () => {
+      try {
+        // Staff cannot create PatientFacility inquiries directly, so materialize a Care Team thread for sidebar visibility.
+        const created = await createConversation({
+          scope: 'StaffContext',
+          title: `Care Team: ${patientName}`,
+          contextType: patientId ? 'Patient' : 'TeleconsultCall',
+          contextId: patientId || callId || undefined,
+          participants: patientId
+            ? [
+                {
+                  participantType: 'Patient',
+                  participantId: patientId,
+                  displayName: patientName,
+                  role: 'Participant',
+                },
+              ]
+            : undefined,
+        });
+        const newId = created?.id ?? null;
+        if (newId) {
+          setEnsuredConvId(newId);
+        }
+        return newId;
+      } catch {
+        return null;
+      } finally {
+        creatingConvPromiseRef.current = null;
+      }
+    })();
+
+    creatingConvPromiseRef.current = createPromise;
+    return createPromise;
+  }, [matchedConv?.id, ensuredConvId, createConversation, patientName, patientId, callId]);
 
   const mergedMessages = useMemo(() => {
     const base = persistedMessages.map(mapDtoToThreadMessage);
@@ -454,15 +608,27 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
   const handleSend = useCallback(
     async (text: string, isInternal: boolean) => {
       await onSendDataChannelMessage(text, isInternal);
-      if (activeConvId) {
+      const targetConvId = await ensurePatientConversationId();
+      if (!targetConvId) return;
+
+      try {
         await sendMessage({
-          conversationId: activeConvId,
+          conversationId: targetConvId,
           contentText: text,
           visibility: isInternal ? 'Internal' : 'Public',
         });
+      } catch {
+        await sendMessageViaRestFallback(commsCtx, targetConvId, text, isInternal);
       }
+
+      commsCtx?.client?.events?.emit?.('conversationUpdated', {
+        conversationId: targetConvId,
+        id: targetConvId,
+        lastMessagePreview: text,
+        lastMessageAtUtc: new Date().toISOString(),
+      });
     },
-    [activeConvId, onSendDataChannelMessage, sendMessage],
+    [onSendDataChannelMessage, ensurePatientConversationId, sendMessage, commsCtx],
   );
 
   const handleResend = useCallback(
@@ -478,7 +644,7 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
     <MessageThread
       conversationId={activeConvId || callId || 'teleconsult-chat'}
       conversationTitle={`Chat • ${patientName}`}
-      conversationScope={activeConvId ? 'PatientFacility' : 'In-Call Session'}
+      conversationScope={matchedConv?.scope === 'PatientFacility' ? 'PatientFacility' : 'In-Call Chat'}
       messages={mergedMessages}
       currentUserId={currentUserId}
       onSendMessage={handleSend}
@@ -492,29 +658,21 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
       }
       privacyBlurEnabled={privacyBlur}
       onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
+      renderPrivacyIcon={(enabled) => renderPrivacyEyeIcon(enabled, activeTheme.resolvedColors)}
       canWriteInternalNotes={true}
       isLoading={Boolean(activeConvId && isLoading)}
       error={error?.message ?? null}
-      colors={getActiveThemeState().resolvedColors}
-      shadows={createShadows(getActiveThemeState().resolvedColors)}
+      colors={activeTheme.resolvedColors}
+      shadows={activeCommsShadows}
       style={staticChatStyles.chatThreadFill}
     />
   );
 };
 
-const TeleconsultInCallChatDrawer: React.FC<TeleconsultInCallChatDrawerProps> = (props) => {
+export const TeleconsultInCallChatDrawer: React.FC<TeleconsultInCallChatDrawerProps> = (props) => {
   const commsCtx = useContext(CommsContext);
   const [privacyBlur, setPrivacyBlur] = useState(false);
-  const activeThemeSnapshot = useSyncExternalStore(
-    subscribeActiveTheme,
-    getActiveThemeSnapshot,
-    getActiveThemeSnapshot,
-  );
-  const activeTheme = React.useMemo(() => getActiveThemeState(), [activeThemeSnapshot]);
-  const activeCommsShadows = React.useMemo(
-    () => createShadows(activeTheme.resolvedColors),
-    [activeTheme],
-  );
+  const { activeTheme, activeCommsShadows } = useActiveCommsTheme();
 
   if (commsCtx) {
     return <SyncedPatientThreadChat {...props} />;
@@ -531,6 +689,7 @@ const TeleconsultInCallChatDrawer: React.FC<TeleconsultInCallChatDrawerProps> = 
       onResendMessage={async () => {}}
       privacyBlurEnabled={privacyBlur}
       onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
+      renderPrivacyIcon={(enabled) => renderPrivacyEyeIcon(enabled, activeTheme.resolvedColors)}
       canWriteInternalNotes={true}
       colors={activeTheme.resolvedColors}
       shadows={activeCommsShadows}
@@ -673,10 +832,12 @@ export function ActiveTeleconsultModal({
   const activeDragCleanupRef = useRef<(() => void) | null>(null);
 
   const [hydratedStatus, setHydratedStatus] = useState<TeleconsultStatusDto | null>(null);
+  const [activeInvite, setActiveInvite] = useState<TeleconsultGuestInviteDto | null>(null);
   const [patientInviteUrl, setPatientInviteUrl] = useState<string | undefined>(undefined);
   const [videoServerError, setVideoServerError] = useState<string | null>(null);
   const [stageRecordIntent, setStageRecordIntent] = useState<boolean>(false);
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+  const [isParticipantsOpen, setIsParticipantsOpen] = useState<boolean>(false);
   const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
   const [dataChannelMessages, setDataChannelMessages] = useState<ThreadMessage[]>([]);
   const [dockedTooltip, setDockedTooltip] = useState<string | null>(null);
@@ -718,6 +879,7 @@ export function ActiveTeleconsultModal({
       .createTeleconsultGuestInvite(appointmentId)
       .then(([invite, inviteErr]) => {
         if (isMounted && !inviteErr && invite?.inviteUrl) {
+          setActiveInvite(invite);
           setPatientInviteUrl(invite.inviteUrl);
         }
       })
@@ -741,28 +903,107 @@ export function ActiveTeleconsultModal({
     return 'Attending Clinician';
   }, [isDoctor, user?.name, teleconsultSession.clinicianName, hydratedStatus?.clinicianName]);
 
+  const resolvedPatientId =
+    teleconsultSession.patientId || hydratedStatus?.patientId;
   const resolvedPatientName =
     teleconsultSession.patientName || hydratedStatus?.patientName || 'Patient';
+
+  // Legacy compatibility: handleSharePatientLink = useCallback(async () => {
+  //   if (!appointmentId) return;
+  //   const [invite, err] = await clinicService.createTeleconsultGuestInvite(appointmentId);
+  //   if (err || !invite?.inviteUrl) {
+  //     notify.error(err?.message || 'Could not generate patient consultation link.');
+  //     return;
+  //   }
+  //   setPatientInviteUrl(invite.inviteUrl);
+  // }, [appointmentId]);
 
   const handleSharePatientLink = useCallback(async () => {
     if (!appointmentId) return;
     try {
-      const [invite, err] = await clinicService.createTeleconsultGuestInvite(appointmentId);
-      if (err || !invite?.inviteUrl) {
-        notify.error(err?.message || 'Could not generate patient consultation link.');
-        return;
+      let invite = activeInvite;
+      const isExpired = !invite || (invite.expiresAtUtc && new Date(invite.expiresAtUtc).getTime() <= Date.now());
+      if (isExpired) {
+        const [freshInvite, err] = await clinicService.createTeleconsultGuestInvite(appointmentId);
+        if (err || !freshInvite?.inviteUrl) {
+          notify.error(err?.message || 'Could not generate patient consultation link.');
+          return;
+        }
+        invite = freshInvite;
+        setActiveInvite(freshInvite);
+        setPatientInviteUrl(freshInvite.inviteUrl);
       }
-      setPatientInviteUrl(invite.inviteUrl);
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(invite.inviteUrl);
-        notify.success('Patient consultation link copied to clipboard.');
-      } else {
-        notify.success('Patient link generated: ' + invite.inviteUrl);
+      if (invite?.inviteUrl) {
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(invite.inviteUrl);
+          notify.success('Patient consultation link copied to clipboard.');
+        } else {
+          notify.success('Patient link generated: ' + invite.inviteUrl);
+        }
       }
     } catch {
       notify.error('Could not generate patient consultation link.');
     }
-  }, [appointmentId]);
+  }, [appointmentId, activeInvite]);
+
+  const handleCopyPatientPin = useCallback(async () => {
+    if (!appointmentId) return;
+    try {
+      let invite = activeInvite;
+      const isExpired = !invite || (invite.expiresAtUtc && new Date(invite.expiresAtUtc).getTime() <= Date.now());
+      if (isExpired) {
+        const [freshInvite, err] = await clinicService.createTeleconsultGuestInvite(appointmentId);
+        if (err || !freshInvite?.inviteUrl) {
+          notify.error(err?.message || 'Could not generate patient consultation link.');
+          return;
+        }
+        invite = freshInvite;
+        setActiveInvite(freshInvite);
+        setPatientInviteUrl(freshInvite.inviteUrl);
+      }
+      if (invite?.otp) {
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(invite.otp);
+          notify.success('Patient PIN copied to clipboard.');
+        } else {
+          notify.success('Patient PIN: ' + invite.otp);
+        }
+      }
+    } catch {
+      notify.error('Could not copy patient PIN.');
+    }
+  }, [appointmentId, activeInvite]);
+
+  const handleToggleParticipants = useCallback(() => {
+    setIsParticipantsOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        setIsChatOpen(false);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleChat = useCallback(() => {
+    setIsChatOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        setIsParticipantsOpen(false);
+      }
+      return next;
+    });
+  }, []);
+
+  const renderParticipantsIcon = useCallback(
+    (props?: { color?: string; size?: number }) => (
+      <Icon
+        name="patients"
+        size={props?.size ?? theme.sizes.iconMd}
+        color={props?.color ?? theme.colors.text}
+      />
+    ),
+    [],
+  );
 
   const stopStagingStream = useCallback(() => {
     const stream = stagingStreamRef.current;
@@ -799,6 +1040,7 @@ export function ActiveTeleconsultModal({
     appointmentId,
     participantIdentity: user?.id ? `staff:${user.id}` : undefined,
     participantName: resolvedClinicianName,
+    remoteParticipantDisplayName: resolvedPatientName,
     isDoctor,
     mediaAdapter,
     initialPaymentState: {
@@ -811,8 +1053,8 @@ export function ActiveTeleconsultModal({
         teleconsultSession.paymentStatus === 'Paid' ||
         teleconsultSession.paymentPolicy === 'Exempt' ||
         teleconsultSession.paymentStatus === 'Overridden',
-      isYakapExempt: teleconsultSession.isYakapExempt ?? (teleconsultSession.paymentPolicy === 'Exempt'),
-      hasActiveYakapEnlistment: teleconsultSession.hasActiveYakapEnlistment ?? false,
+      isYakapExempt: false,
+      hasActiveYakapEnlistment: false,
     },
     onUpdatePaymentPolicy: async (policy) => {
       if (appointmentId) {
@@ -949,6 +1191,22 @@ export function ActiveTeleconsultModal({
     },
   });
 
+  const handleToggleScreenShare = useCallback(async () => {
+    try {
+      await session.mediaTracks.toggleScreenShare();
+    } catch (err: any) {
+      const name = err?.name;
+      const message = String(err?.message || '');
+      const isCancelled =
+        name === 'AbortError' ||
+        message.toLowerCase().includes('cancel') ||
+        (name === 'NotAllowedError' && !message.toLowerCase().includes('permission denied by system'));
+      if (!isCancelled) {
+        notify.error(message || 'Failed to toggle screen sharing.');
+      }
+    }
+  }, [session.mediaTracks]);
+
   const handleCancelCall = useCallback(async () => {
     setIsInCall(false);
     if ((session.status === 'connected' || session.status === 'connecting') && session.endCall) {
@@ -963,6 +1221,16 @@ export function ActiveTeleconsultModal({
 
   const handleEndCall = useCallback(async () => {
     try {
+      try {
+        await mediaAdapter.sendDataMessage(
+          JSON.stringify({
+            type: 'call_ended_by_clinician',
+            endedAtUtc: new Date().toISOString(),
+          }),
+        );
+      } catch {
+        // Non-blocking fallback
+      }
       if (session.endCall) {
         await session.endCall();
       }
@@ -973,7 +1241,7 @@ export function ActiveTeleconsultModal({
       setIsInCall(false);
       closeTeleconsultWaitingRoom();
     }
-  }, [closeTeleconsultWaitingRoom, session]);
+  }, [closeTeleconsultWaitingRoom, mediaAdapter, session]);
 
   const handleEnterCall = useCallback(async () => {
     try {
@@ -1159,6 +1427,7 @@ export function ActiveTeleconsultModal({
   );
 
   const handleMessagePatient = useCallback(async () => {
+    setIsParticipantsOpen(false);
     setIsChatOpen(true);
     setUnreadChatCount(0);
     if (!appointmentId) return;
@@ -1990,12 +2259,13 @@ export function ActiveTeleconsultModal({
                 : 'Waiting for Patient to Connect'
           }
           renderIcon={renderCommsIcon}
+          renderParticipantsIcon={renderParticipantsIcon}
           isMicEnabled={session.mediaTracks.isMicEnabled}
           isCameraEnabled={session.mediaTracks.isCameraEnabled}
           isScreenSharing={session.mediaTracks.isScreenSharing}
           onToggleMic={session.mediaTracks.toggleMic}
           onToggleCamera={session.mediaTracks.toggleCamera}
-          onToggleScreenShare={session.mediaTracks.toggleScreenShare}
+          onToggleScreenShare={handleToggleScreenShare}
           isRecording={session.recordingState.isRecording}
           recordingDurationSeconds={session.recordingState.recordingDurationSeconds}
           onStartRecording={handleStartRecordingInStage}
@@ -2011,9 +2281,15 @@ export function ActiveTeleconsultModal({
           canStopRecording={true}
           isChatOpen={isChatOpen}
           unreadChatCount={unreadChatCount}
-          onToggleChat={() => setIsChatOpen((prev) => !prev)}
+          onToggleChat={handleToggleChat}
+          isParticipantsOpen={isParticipantsOpen}
+          onToggleParticipants={handleToggleParticipants}
           patientLink={patientInviteUrl}
           onSharePatientLink={handleSharePatientLink}
+          patientPin={activeInvite?.otp}
+          onCopyPatientPin={handleCopyPatientPin}
+          participants={session.participants}
+          hasRemoteParticipant={hasRemoteParticipant}
           onMessagePatient={handleMessagePatient}
           onTogglePip={handleTogglePip}
           isPipSupported={isPipSupported}
@@ -2035,9 +2311,12 @@ export function ActiveTeleconsultModal({
             if (!track) return undefined;
             // Keep DOM <video> instance stable across unrelated renders
             void mediaRevision;
+            const isScreenShareActive =
+              trackType === 'local'
+                ? session.mediaTracks.isScreenSharing
+                : (mediaAdapter.getRemoteParticipants?.()?.some((p) => p.isScreenSharing) ?? false);
             const mirrorLocal = trackType === 'local' && !session.mediaTracks.isScreenSharing;
-            const fitMode =
-              trackType === 'local' && session.mediaTracks.isScreenSharing ? 'contain' : 'cover';
+            const fitMode = isScreenShareActive ? 'contain' : 'cover';
             return (
               <WebVideoTrackView
                 track={track}
@@ -2050,7 +2329,7 @@ export function ActiveTeleconsultModal({
           renderChatDrawer={() => (
             <TeleconsultInCallChatDrawer
               callId={callId}
-              patientId={teleconsultSession.patientId}
+              patientId={resolvedPatientId}
               patientName={resolvedPatientName}
               currentUserId={user?.id || 'staff-clinician'}
               dataChannelMessages={dataChannelMessages}
@@ -2118,6 +2397,8 @@ export function ActiveTeleconsultModal({
               renderIcon={renderCommsIcon}
               patientLink={patientInviteUrl}
               onSharePatientLink={handleSharePatientLink}
+              patientPin={activeInvite?.otp}
+              onCopyPatientPin={handleCopyPatientPin}
               renderVideoPreview={() => {
                 if (Platform.OS === 'web' && session.mediaTracks.isCameraEnabled && stagingVideoTrack) {
                   return <WebVideoTrackView track={stagingVideoTrack} muted mirror />;
@@ -2139,10 +2420,8 @@ export function ActiveTeleconsultModal({
               }}
               paymentPolicy={(session.paymentState.policy as any) || (teleconsultSession.paymentPolicy as any) || 'Prepaid'}
               paymentStatus={mappedPaymentStatus}
-              hasActiveYakapEnlistment={
-                session.paymentState.hasActiveYakapEnlistment ?? teleconsultSession.hasActiveYakapEnlistment ?? false
-              }
-              isYakapExempt={teleconsultSession.isYakapExempt ?? false}
+              hasActiveYakapEnlistment={false}
+              isYakapExempt={false}
               isReadyToAdmit={session.paymentState.canAdmit}
               recordingConsentStatus={recordingConsentStatus}
               recordingToggleHint={

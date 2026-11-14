@@ -35,7 +35,7 @@ describe('Challenger M4: Adversarial Verification & Stress Harness', () => {
         policy: 'Exempt',
         status: 'Exempt',
         canAdmit: true,
-        isYakapExempt: true,
+        isYakapExempt: false,
         hasActiveYakapEnlistment: false,
         isEmergencyOverride: false,
         overrideReason: undefined

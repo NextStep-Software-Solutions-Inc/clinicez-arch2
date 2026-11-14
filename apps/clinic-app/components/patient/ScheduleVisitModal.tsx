@@ -27,6 +27,7 @@ import {
   type TeleconsultPaymentPolicy,
 } from '../../services/clinicService';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
+import { useClinic } from '../../context/ClinicContext';
 import { notify } from '../../utils/feedback';
 
 export interface ScheduledVisitDetails {
@@ -51,6 +52,7 @@ export interface ScheduleVisitModalProps {
   initialDoctorId?: string;
   initialVisitPurpose?: string;
   onAppointmentScheduled?: (details: ScheduledVisitDetails) => void;
+  isEffectiveTeleconsultEnabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -128,9 +130,15 @@ export default function ScheduleVisitModal({
   initialDoctorId,
   initialVisitPurpose,
   onAppointmentScheduled,
+  isEffectiveTeleconsultEnabled: isEffectiveTeleconsultEnabledProp,
   style,
 }: ScheduleVisitModalProps) {
   const { staff } = useStaff();
+  const clinic = useClinic();
+
+  const effectiveTeleconsultEnabled = isEffectiveTeleconsultEnabledProp ?? Boolean(
+    clinic.settings?.isWorkspaceTeleconsultEntitled && clinic.settings?.enableTeleconsultation
+  );
 
   // Active clinic doctors pool
   const clinicDoctors = useMemo(() => {
@@ -146,6 +154,12 @@ export default function ScheduleVisitModal({
 
   // Form states
   const [modality, setModality] = useState<'InPerson' | 'Teleconsult'>('InPerson');
+
+  useEffect(() => {
+    if (!effectiveTeleconsultEnabled && modality === 'Teleconsult') {
+      setModality('InPerson');
+    }
+  }, [effectiveTeleconsultEnabled, modality]);
   const [paymentPolicy, setPaymentPolicy] = useState<TeleconsultPaymentPolicy>('Prepaid');
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>(() => initialDoctorId ?? '');
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayIsoDate());
@@ -317,6 +331,11 @@ export default function ScheduleVisitModal({
 
     if (!isDoctorOnDuty) {
       notify.warning('The attending doctor is not on duty on this date.');
+      return;
+    }
+
+    if (modality === 'Teleconsult' && !effectiveTeleconsultEnabled) {
+      notify.error('Teleconsultation is not enabled for this clinic.');
       return;
     }
 
@@ -590,22 +609,43 @@ export default function ScheduleVisitModal({
                     testID="btn-modality-teleconsult"
                     accessibilityRole="button"
                     accessibilityLabel="Virtual Teleconsultation"
-                    onPress={() => setModality('Teleconsult')}
+                    accessibilityState={{ disabled: !effectiveTeleconsultEnabled }}
+                    disabled={!effectiveTeleconsultEnabled}
+                    onPress={() => {
+                      if (effectiveTeleconsultEnabled) {
+                        setModality('Teleconsult');
+                      } else {
+                        notify.warning('Teleconsultation is disabled for this clinic.');
+                      }
+                    }}
                     style={[
                       styles.modalityBtn,
                       modality === 'Teleconsult' ? styles.chipSelected : styles.chipUnselected,
+                      !effectiveTeleconsultEnabled && styles.modalityBtnDisabled,
                     ]}
                   >
                     <Icon
-                      name="consultations"
+                      name={!effectiveTeleconsultEnabled ? 'lock' : 'consultations'}
                       size={theme.sizes.iconSm}
-                      color={modality === 'Teleconsult' ? theme.colors.routineText : theme.colors.textMuted}
+                      color={
+                        !effectiveTeleconsultEnabled
+                          ? theme.colors.textMuted
+                          : modality === 'Teleconsult'
+                          ? theme.colors.routineText
+                          : theme.colors.textMuted
+                      }
                     />
                     <ThemedText
                       variant="smallBold"
-                      color={modality === 'Teleconsult' ? theme.colors.routineText : theme.colors.text}
+                      color={
+                        !effectiveTeleconsultEnabled
+                          ? theme.colors.textMuted
+                          : modality === 'Teleconsult'
+                          ? theme.colors.routineText
+                          : theme.colors.text
+                      }
                     >
-                      Teleconsultation
+                      {!effectiveTeleconsultEnabled ? 'Teleconsult (Disabled)' : 'Teleconsultation'}
                     </ThemedText>
                   </Pressable>
                 </View>
@@ -642,15 +682,6 @@ export default function ScheduleVisitModal({
                       );
                     })}
                   </View>
-
-                  {hasYakap && (
-                    <View style={styles.yakapInfoBanner} testID="teleconsult-yakap-badge">
-                      <Badge variant="info" icon="shield" label="PhilHealth YAKAP Enlisted" />
-                      <ThemedText variant="caption" color={theme.colors.infoText}>
-                        Patient is enlisted in PhilHealth YAKAP. This status is informational. Prepayment exemption may be granted by selecting 'Exempt' above.
-                      </ThemedText>
-                    </View>
-                  )}
                 </View>
               )}
 
@@ -1148,6 +1179,11 @@ const styles = StyleSheet.create({
     borderWidth: theme.sizes.borderWidth,
     minHeight: theme.sizes.touchTarget,
     minWidth: theme.sizes.touchTarget,
+  },
+  modalityBtnDisabled: {
+    opacity: 0.5,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.borderLight,
   },
   policyOptionBtn: {
     alignItems: 'center',

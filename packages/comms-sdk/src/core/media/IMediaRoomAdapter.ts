@@ -14,6 +14,7 @@ export interface RemoteMediaParticipant {
   joinedAt?: Date;
   videoTrack?: unknown;
   audioTrack?: unknown;
+  screenShareTrack?: unknown;
 }
 
 export interface MediaConnectOptions {
@@ -53,6 +54,8 @@ export interface IMediaRoomAdapter {
   switchCamera(deviceId?: string): Promise<void>;
   getLocalVideoTrack(): unknown | null;
   getLocalAudioTrack(): unknown | null;
+  getLocalCameraTrack?(): unknown | null;
+  getLocalScreenShareTrack?(): unknown | null;
   getRemoteVideoTrack(participantIdentity?: string): unknown | null;
   getRemoteAudioTrack(participantIdentity?: string): unknown | null;
   getRemoteParticipants(): RemoteMediaParticipant[];

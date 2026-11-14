@@ -39,6 +39,8 @@ public interface IApplicationDbContext
     DbSet<NewsletterSubscriber> NewsletterSubscribers { get; }
     DbSet<DocumentAttestation> DocumentAttestations { get; }
     DbSet<FacilityQueueBoard> FacilityQueueBoards { get; }
+    DbSet<WorkspaceTeleconsultBilling> WorkspaceTeleconsultBillings { get; }
+    DbSet<TeleconsultUsageRecord> TeleconsultUsageRecords { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

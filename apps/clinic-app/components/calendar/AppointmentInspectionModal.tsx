@@ -6,7 +6,7 @@ import Icon from '../ui/Icon';
 import Button from '../ui/Button';
 import CustomModal from '../ui/Modal';
 import { notify } from '../../utils/feedback';
-import { clinicService, type TeleconsultPaymentPolicy } from '../../services/clinicService';
+import { clinicService, type TeleconsultPaymentPolicy, type TeleconsultGuestInviteDto } from '../../services/clinicService';
 import type { ExtendedAppointmentItem } from './types';
 import {
   resolveAppointmentUrgency,
@@ -71,6 +71,7 @@ export function AppointmentInspectionModal({
   const [isUpdatingPolicy, setIsUpdatingPolicy] = useState<boolean>(false);
   const { openTeleconsultWaitingRoom } = useClinicComms();
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
+  const [activeInvite, setActiveInvite] = useState<TeleconsultGuestInviteDto | null>(null);
 
   const handleUpdatePaymentPolicy = useCallback(async (newPolicy: TeleconsultPaymentPolicy) => {
     if (!currentAppointment) return;
@@ -106,6 +107,23 @@ export function AppointmentInspectionModal({
   useEffect(() => {
     setCurrentAppointment(appointment);
     setShowCancelConfirm(false);
+    setActiveInvite(null);
+
+    const isAptTeleconsult =
+      appointment?.isTeleconsult ||
+      appointment?.appointmentType === 'Teleconsult' ||
+      appointment?.serviceType === 'Teleconsult' ||
+      appointment?.serviceType === 'Teleconsultation';
+
+    if (visible && isAptTeleconsult && appointment && appointment.status !== 'Cancelled') {
+      clinicService.createTeleconsultGuestInvite(appointment.id)
+        .then(([freshInvite, err]) => {
+          if (!err && freshInvite?.inviteUrl) {
+            setActiveInvite(freshInvite);
+          }
+        })
+        .catch(() => {});
+    }
   }, [appointment, visible]);
 
   if (!visible || !currentAppointment) {
@@ -355,7 +373,7 @@ export function AppointmentInspectionModal({
                 </View>
               ) : null}
 
-              {isYakap ? (
+              {!isTeleconsult && isYakap ? (
                 <View style={[styles.badge, styles.yakapBadge]}>
                   <Icon name="yakap" size={13} color={theme.colors.successText} />
                   <ThemedText
@@ -408,6 +426,54 @@ export function AppointmentInspectionModal({
                 </View>
               </View>
             )}
+
+            {/* Guest Access PIN Card (Teleconsult) */}
+            {isTeleconsult && currentAppointment.status !== 'Cancelled' && activeInvite?.otp ? (
+              <View
+                data-testid="teleconsult-invite-pin-container"
+                testID="teleconsult-invite-pin-container"
+                style={styles.invitePinContainer}
+              >
+                <View style={styles.invitePinHeader}>
+                  <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.fieldLabel}>
+                    GUEST 6-DIGIT ACCESS PIN
+                  </ThemedText>
+                </View>
+                <View style={styles.invitePinRow}>
+                  <ThemedText
+                    data-testid="text-inspection-invite-pin"
+                    testID="text-inspection-invite-pin"
+                    variant="h3"
+                    color={theme.colors.primaryDark}
+                    style={styles.pinText}
+                  >
+                    {activeInvite.otp}
+                  </ThemedText>
+                  <Pressable
+                    data-testid="btn-inspection-copy-pin"
+                    testID="btn-inspection-copy-pin"
+                    accessibilityRole="button"
+                    accessibilityLabel="Copy 6-digit guest access PIN"
+                    onPress={async () => {
+                      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                        await navigator.clipboard.writeText(activeInvite.otp);
+                      }
+                      notify.success('Guest 6-digit PIN copied to clipboard.');
+                    }}
+                    style={({ pressed }) => [
+                      styles.pinCopyBtn,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Icon name="copy" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                    <ThemedText variant="captionBold" color={theme.colors.primary}>
+                      Copy PIN
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
 
             {/* Hero Scheduled Date & Time Card */}
             <View style={styles.heroTimeCard}>
@@ -665,13 +731,20 @@ export function AppointmentInspectionModal({
                     accessibilityLabel="Copy patient consultation link"
                     onPress={async () => {
                       try {
-                        const [invite, err] = await clinicService.createTeleconsultGuestInvite(
-                          currentAppointment.id,
-                        );
-                        if (err || !invite?.inviteUrl) {
-                          notify.error(err?.message || 'Could not generate patient consultation link.');
-                          return;
+                        let invite = activeInvite;
+                        const isExpired = !invite || (invite.expiresAtUtc && new Date(invite.expiresAtUtc).getTime() <= Date.now());
+                        if (isExpired) {
+                          const [freshInvite, err] = await clinicService.createTeleconsultGuestInvite(
+                            currentAppointment.id,
+                          );
+                          invite = freshInvite;
+                          if (err || !invite?.inviteUrl) {
+                            notify.error(err?.message || 'Could not generate patient consultation link.');
+                            return;
+                          }
+                          setActiveInvite(invite);
                         }
+                        if (!invite) return;
                         if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
                           await navigator.clipboard.writeText(invite.inviteUrl);
                         }
@@ -712,8 +785,8 @@ export function AppointmentInspectionModal({
                         scheduledTime: formattedScheduledAt || currentAppointment.scheduledAt,
                         paymentPolicy: currentAppointment.paymentPolicy || 'Prepaid',
                         paymentStatus: currentAppointment.paymentStatus || 'Pending',
-                        isYakapExempt: currentAppointment.paymentPolicy === 'Exempt',
-                        hasActiveYakapEnlistment: currentAppointment.hasActiveYakapEnlistment ?? isYakap ?? false,
+                        isYakapExempt: false,
+                        hasActiveYakapEnlistment: false,
                       });
                     }}
                     style={({ pressed }) => [
@@ -1227,6 +1300,44 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.75,
+  },
+  invitePinContainer: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+    marginVertical: theme.spacing.xs,
+  },
+  invitePinHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  invitePinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  pinText: {
+    letterSpacing: 4,
+    fontFamily: theme.fonts.mono['700'],
+  },
+  pinCopyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.sm,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+    justifyContent: 'center',
   },
 });
 

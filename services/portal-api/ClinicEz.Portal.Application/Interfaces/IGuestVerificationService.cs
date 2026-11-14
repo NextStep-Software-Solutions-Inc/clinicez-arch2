@@ -15,7 +15,12 @@ public sealed record GuestVerificationResult(
     bool IsLockedOut,
     bool IsExpired,
     string? ErrorCode,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    string? GuestDisplayName = null,
+    string? ClinicName = null,
+    string? ClinicSupportPhone = null,
+    string? ClinicianName = null,
+    DateTime? ScheduledAtUtc = null);
 
 public interface IGuestVerificationService
 {
@@ -33,5 +38,14 @@ public interface IGuestVerificationService
         string inviteTokenHash,
         string expectedDobHash,
         string otpHash,
-        DateTime expiresAtUtc);
+        DateTime expiresAtUtc,
+        string? clinicName = null,
+        string? clinicSupportPhone = null,
+        string? clinicianName = null,
+        DateTime? scheduledAtUtc = null,
+        string? encryptedGuestContext = null);
+
+    bool RevokeInviteByCall(Guid callId, string? reason = null, DateTime? revokedAtUtc = null);
+
+    StoredGuestInvite? GetInviteByToken(string inviteToken);
 }

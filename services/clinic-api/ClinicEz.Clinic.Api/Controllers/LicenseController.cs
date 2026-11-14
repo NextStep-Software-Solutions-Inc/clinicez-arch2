@@ -391,6 +391,13 @@ public sealed class LicenseController : ControllerBase
             settings.EntitlementVersion = payload?.EntitlementVersion ?? 0;
         }
 
+        var hasTeleconsult = payload?.EnabledFeatures != null &&
+            payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+        if (!hasTeleconsult)
+        {
+            settings.EnableTeleconsultation = false;
+        }
+
         await _unitOfWork.SaveChangesAsync(ct);
 
         var activeStaffCount = await _staffRepo.IgnoreQueryFilters()

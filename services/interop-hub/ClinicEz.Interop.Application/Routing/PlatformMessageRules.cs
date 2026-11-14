@@ -61,6 +61,11 @@ public static class PlatformMessageRules
                     ? null
                     : $"'{t}' must be sent by the '{InteropServices.Media}' service to a facility.";
 
+            case var t when t == InteropTypes.MediaRoomEnded:
+                return from.Kind == PartyKind.Facility && toMedia && (sender.Kind is HubClientKind.CloudService or HubClientKind.EdgeCell)
+                    ? null
+                    : $"'{t}' must be sent by a facility to the '{InteropServices.Media}' service.";
+
             case var t when t == InteropTypes.MediaEntitlementUpdated:
                 return fromPortal && toMedia
                     ? null

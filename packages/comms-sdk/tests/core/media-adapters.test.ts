@@ -403,4 +403,167 @@ describe('Feature F15: Comms Media Adapters (LiveKit & LocalPreview)', () => {
       }
     });
   });
+
+  describe('Tier 4: Milestone M15 Decoupled Tracks, Screen Share Reliability & Priority', () => {
+    it('LocalPreviewMediaAdapter: decouples camera and screen share tracks', async () => {
+      const adapter = new LocalPreviewMediaAdapter({ mockMode: true });
+      await adapter.connect({ url: 'wss://sfu.mock', token: 'tok' });
+
+      expect(adapter.getLocalCameraTrack()).not.toBeNull();
+      expect(adapter.getLocalScreenShareTrack()).toBeNull();
+      expect(adapter.getLocalVideoTrack()).toBe(adapter.getLocalCameraTrack());
+
+      await adapter.setScreenShareEnabled(true);
+      expect(adapter.getLocalCameraTrack()).not.toBeNull();
+      expect(adapter.getLocalScreenShareTrack()).not.toBeNull();
+      expect((adapter.getLocalScreenShareTrack() as any).id).toBe('mock-screen-track');
+      expect(adapter.getLocalVideoTrack()).toBe(adapter.getLocalScreenShareTrack());
+
+      await adapter.setScreenShareEnabled(false);
+      expect(adapter.getLocalScreenShareTrack()).toBeNull();
+      expect(adapter.getLocalVideoTrack()).toBe(adapter.getLocalCameraTrack());
+      await adapter.disconnect();
+    });
+
+    it('LocalPreviewMediaAdapter: prioritizes remote participants who are screen sharing', async () => {
+      const p1: RemoteMediaParticipant = {
+        identity: 'user-camera',
+        name: 'Nurse Joy',
+        isAudioEnabled: true,
+        isVideoEnabled: true,
+        isScreenSharing: false,
+        videoTrack: { id: 'cam-track-1' }
+      };
+      const p2: RemoteMediaParticipant = {
+        identity: 'user-screen',
+        name: 'Dr. Screen',
+        isAudioEnabled: true,
+        isVideoEnabled: true,
+        isScreenSharing: true,
+        videoTrack: { id: 'cam-track-2' },
+        screenShareTrack: { id: 'screen-track-2' }
+      };
+
+      const adapter = new LocalPreviewMediaAdapter({
+        mockMode: true,
+        mockRemoteParticipants: [p1, p2]
+      });
+      await adapter.connect({ url: 'wss://sfu.mock', token: 'tok' });
+
+      // When called without identity, should return p2's screen share track
+      const remoteTrack = adapter.getRemoteVideoTrack();
+      expect(remoteTrack).toEqual({ id: 'screen-track-2' });
+
+      // When called with explicit identity, returns that participant's track
+      expect(adapter.getRemoteVideoTrack('user-camera')).toEqual({ id: 'cam-track-1' });
+      await adapter.disconnect();
+    });
+
+    it('LiveKitMediaAdapter: does not emit screen share active if picker was cancelled', async () => {
+      let emittedScreen: boolean | null = null;
+      const mockRoom: any = {
+        localParticipant: {
+          setScreenShareEnabled: async () => undefined, // cancelled picker resolves undefined
+          videoTrackPublications: new Map() // no track published
+        },
+        on: () => {},
+        off: () => {}
+      };
+
+      const adapter = new LiveKitMediaAdapter({ room: mockRoom, skipEnvironmentCheck: true });
+      adapter.on('localTrackChanged', (kind, enabled) => {
+        if (kind === 'screen') emittedScreen = enabled as boolean;
+      });
+
+      await adapter.setScreenShareEnabled(true);
+      expect(emittedScreen).toBeNull(); // Must NOT emit true!
+    });
+
+    it('LiveKitMediaAdapter: native MediaStreamTrack ended event immediately emits screen false', () => {
+      let endedListener: (() => void) | null = null;
+      const mockMediaStreamTrack: any = {
+        addEventListener: (event: string, handler: () => void) => {
+          if (event === 'ended') endedListener = handler;
+        }
+      };
+
+      const roomEvents = new Map<string, Function>();
+      const mockRoom: any = {
+        localParticipant: {
+          videoTrackPublications: new Map()
+        },
+        remoteParticipants: new Map(),
+        on: (event: string, handler: Function) => {
+          roomEvents.set(event, handler);
+        },
+        off: () => {}
+      };
+
+      const adapter = new LiveKitMediaAdapter({ room: mockRoom, skipEnvironmentCheck: true });
+      // Trigger wireRoomEvents
+      (adapter as any).wireRoomEvents(mockRoom);
+
+      let emittedScreenState: boolean | null = null;
+      adapter.on('localTrackChanged', (kind, enabled) => {
+        if (kind === 'screen') emittedScreenState = enabled as boolean;
+      });
+
+      // Simulate LocalTrackPublished with screen_share track
+      const pubHandler = roomEvents.get('localTrackPublished');
+      expect(pubHandler).toBeDefined();
+
+      pubHandler!({
+        source: 'screen_share',
+        track: {
+          mediaStreamTrack: mockMediaStreamTrack
+        }
+      });
+
+      expect(emittedScreenState).toBe(true);
+      expect(endedListener).not.toBeNull();
+
+      // Trigger native 'ended' event
+      endedListener!();
+      expect(emittedScreenState).toBe(false);
+    });
+
+    it('LiveKitMediaAdapter: prioritizes remote screen share track across all participants', () => {
+      const mockRoom: any = {
+        localParticipant: {
+          videoTrackPublications: new Map()
+        },
+        remoteParticipants: new Map([
+          [
+            'part-1-cam',
+            {
+              identity: 'part-1-cam',
+              videoTrackPublications: new Map([
+                ['cam-pub', { source: 'camera', track: { id: 'p1-camera-track' }, isMuted: false }]
+              ])
+            }
+          ],
+          [
+            'part-2-screen',
+            {
+              identity: 'part-2-screen',
+              videoTrackPublications: new Map([
+                ['cam-pub-2', { source: 'camera', track: { id: 'p2-camera-track' }, isMuted: false }],
+                ['screen-pub-2', { source: 'screen_share', track: { id: 'p2-screen-track' }, isMuted: false }]
+              ])
+            }
+          ]
+        ]),
+        on: () => {},
+        off: () => {}
+      };
+
+      const adapter = new LiveKitMediaAdapter({ room: mockRoom, skipEnvironmentCheck: true });
+      // When called without identity, returns part-2-screen's screen track even though part-1 is first
+      const videoTrack = adapter.getRemoteVideoTrack();
+      expect(videoTrack).toEqual({ id: 'p2-screen-track' });
+
+      // When called with explicit identity, returns targeted participant's track
+      expect(adapter.getRemoteVideoTrack('part-1-cam')).toEqual({ id: 'p1-camera-track' });
+    });
+  });
 });

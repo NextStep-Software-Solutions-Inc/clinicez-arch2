@@ -12,4 +12,18 @@ public sealed record GuestTeleconsultInviteIssuedPayload(
     string ExpectedDobHash,
     string OtpHash,
     DateTime ExpiresAtUtc,
-    DateTime IssuedAtUtc);
+    DateTime IssuedAtUtc,
+    string? ClinicName = null,
+    string? ClinicSupportPhone = null,
+    string? ClinicianName = null,
+    DateTime? ScheduledAtUtc = null,
+    string? EncryptedGuestContext = null);
+
+/// <summary>Payload for <c>portal.teleconsult.guest_invite_revoked</c>.</summary>
+public sealed record GuestTeleconsultInviteRevokedPayload(
+    Guid AppointmentId,
+    Guid CallId,
+    string TenantId,
+    string FacilityId,
+    DateTime RevokedAtUtc,
+    string Reason);

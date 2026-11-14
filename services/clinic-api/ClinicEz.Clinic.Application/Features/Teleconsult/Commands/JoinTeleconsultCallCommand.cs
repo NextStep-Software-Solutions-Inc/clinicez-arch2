@@ -14,6 +14,7 @@ using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Requests;
+using ClinicEz.Shared.Licensing;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -52,6 +53,7 @@ public sealed class JoinTeleconsultCallCommandHandler : IRequestHandler<JoinTele
     private readonly IInteropRequestClient _requestClient;
     private readonly IInteropPublisher _publisher;
     private readonly ILogger<JoinTeleconsultCallCommandHandler> _logger;
+    private readonly IFacilityLicenseValidator? _licenseValidator;
 
     public JoinTeleconsultCallCommandHandler(
         IRepository<Appointment> appointmentRepo,
@@ -61,7 +63,8 @@ public sealed class JoinTeleconsultCallCommandHandler : IRequestHandler<JoinTele
         IClinicContext clinicContext,
         IInteropRequestClient requestClient,
         IInteropPublisher publisher,
-        ILogger<JoinTeleconsultCallCommandHandler> logger)
+        ILogger<JoinTeleconsultCallCommandHandler> logger,
+        IFacilityLicenseValidator? licenseValidator = null)
     {
         _appointmentRepo = appointmentRepo;
         _settingsRepo = settingsRepo;
@@ -71,6 +74,7 @@ public sealed class JoinTeleconsultCallCommandHandler : IRequestHandler<JoinTele
         _requestClient = requestClient;
         _publisher = publisher;
         _logger = logger;
+        _licenseValidator = licenseValidator;
     }
 
     public async Task<TeleconsultCallJoinDto> Handle(JoinTeleconsultCallCommand request, CancellationToken ct)
@@ -135,6 +139,20 @@ public sealed class JoinTeleconsultCallCommandHandler : IRequestHandler<JoinTele
 
         // 5. Query facility recording policy settings
         var settings = await _settingsRepo.Query(s => s.ClinicId == _clinicContext.ClinicId).FirstOrDefaultAsync(ct);
+        if (settings != null && !string.IsNullOrWhiteSpace(settings.LicenseToken))
+        {
+            var validator = _licenseValidator ?? new FacilityLicenseValidator();
+            var validation = validator.Validate(settings.LicenseToken, _clinicContext.ClinicId, _clinicContext.TenantId);
+            var isWorkspaceEntitled = validation.IsValid &&
+                validation.Payload?.EnabledFeatures != null &&
+                validation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+
+            var effectiveEnabled = isWorkspaceEntitled && settings.EnableTeleconsultation;
+            if (!effectiveEnabled)
+            {
+                throw new ForbiddenException("Teleconsultation is not enabled for this clinic.");
+            }
+        }
         var recordingPolicy = settings?.TeleconsultRecordingPolicy ?? "Disabled";
         var recordingConsentRequired = settings?.TeleconsultRecordingConsentRequired ?? true;
 
