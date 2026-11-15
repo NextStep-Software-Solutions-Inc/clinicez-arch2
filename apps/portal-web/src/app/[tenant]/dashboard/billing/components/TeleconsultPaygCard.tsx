@@ -172,7 +172,7 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
           </div>
 
           {/* Master Enablement Switch */}
-          <div className="flex items-center gap-3 bg-muted/50 p-2.5 px-4 rounded-2xl border border-border shrink-0">
+          <div className="flex items-center justify-between gap-3 bg-muted/50 p-2.5 px-4 rounded-2xl border border-border shrink-0">
             <span className="text-xs font-semibold text-card-foreground">
               Enable for Workspace
             </span>

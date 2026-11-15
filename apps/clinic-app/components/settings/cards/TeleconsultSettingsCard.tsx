@@ -243,68 +243,55 @@ export default function TeleconsultSettingsCard({
           </View>
         )}
 
-        {/* Master Teleconsultation Toggle */}
-        <View style={styles.settingBlock}>
-          <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.fieldLabel}>
-            Clinic Teleconsultation Master Switch
-          </ThemedText>
-          <ThemedText variant="caption" color={theme.colors.textSecondary}>
-            Enable virtual teleconsultation appointments and video call staging for this facility.
-          </ThemedText>
-          <View style={styles.toggleRow}>
-            <Pressable
-              data-testid="toggle-clinic-teleconsult-enabled"
-              testID="toggle-clinic-teleconsult-enabled"
-              accessibilityRole="switch"
-              accessibilityLabel="Enable Teleconsultation for this Clinic"
-              accessibilityState={{
-                checked: enableTeleconsultation,
-                disabled: !isWorkspaceTeleconsultEntitled,
-              }}
-              disabled={!isWorkspaceTeleconsultEntitled}
-              onPress={() => {
-                if (isWorkspaceTeleconsultEntitled) {
-                  setEnableTeleconsultation((prev) => !prev);
-                }
-              }}
+        {/* Master Teleconsultation Switch */}
+        <View style={styles.switchSettingRow}>
+          <View style={styles.switchLabelCol}>
+            <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.fieldLabel}>
+              Clinic Teleconsultation Master Switch
+            </ThemedText>
+            <ThemedText variant="caption" color={theme.colors.textSecondary}>
+              {!isWorkspaceTeleconsultEntitled
+                ? 'Locked — enable teleconsultation in the Portal first.'
+                : 'Enable virtual teleconsultation appointments and video call staging for this facility.'}
+            </ThemedText>
+          </View>
+          <Pressable
+            data-testid="toggle-clinic-teleconsult-enabled"
+            testID="toggle-clinic-teleconsult-enabled"
+            accessibilityRole="switch"
+            accessibilityLabel="Enable Teleconsultation for this Clinic"
+            accessibilityState={{
+              checked: enableTeleconsultation,
+              disabled: !isWorkspaceTeleconsultEntitled,
+            }}
+            disabled={!isWorkspaceTeleconsultEntitled}
+            onPress={() => {
+              if (isWorkspaceTeleconsultEntitled) {
+                setEnableTeleconsultation((prev) => !prev);
+              }
+            }}
+            style={styles.switchHitTarget}
+          >
+            <View
               style={[
-                styles.togglePill,
+                styles.switchTrack,
                 !isWorkspaceTeleconsultEntitled
-                  ? styles.togglePillDisabled
+                  ? styles.switchTrackDisabled
                   : enableTeleconsultation
-                  ? styles.togglePillActive
-                  : styles.togglePillInactive,
+                  ? styles.switchTrackOn
+                  : styles.switchTrackOff,
               ]}
             >
-              <Icon
-                name={!isWorkspaceTeleconsultEntitled ? 'lock' : enableTeleconsultation ? 'check' : 'close'}
-                size={theme.sizes.iconSm}
-                color={
-                  !isWorkspaceTeleconsultEntitled
-                    ? theme.colors.textMuted
-                    : enableTeleconsultation
-                    ? theme.colors.successText
-                    : theme.colors.textMuted
-                }
+              <View
+                style={[
+                  styles.switchThumb,
+                  enableTeleconsultation && isWorkspaceTeleconsultEntitled
+                    ? styles.switchThumbOn
+                    : styles.switchThumbOff,
+                ]}
               />
-              <ThemedText
-                variant="smallBold"
-                color={
-                  !isWorkspaceTeleconsultEntitled
-                    ? theme.colors.textMuted
-                    : enableTeleconsultation
-                    ? theme.colors.successText
-                    : theme.colors.textSecondary
-                }
-              >
-                {!isWorkspaceTeleconsultEntitled
-                  ? 'Locked (Workspace Not Entitled)'
-                  : enableTeleconsultation
-                  ? 'Teleconsultation Active'
-                  : 'Teleconsultation Disabled'}
-              </ThemedText>
-            </Pressable>
-          </View>
+            </View>
+          </Pressable>
         </View>
 
         {/* Dependent Settings (disabled when teleconsultation is off or locked) */}
@@ -454,41 +441,44 @@ export default function TeleconsultSettingsCard({
         </View>
 
         {/* 5. Dual Consent Enforcement */}
-        <View style={styles.settingBlock}>
-          <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.fieldLabel}>
-            Dual Informed Consent Requirement
+        <View style={styles.switchSettingRow} testID="setting-consent-required">
+          <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.accessibilityValue}>
+            {String(consentRequired)}
           </ThemedText>
-          <ThemedText variant="caption" color={theme.colors.textSecondary}>
-            Enforces patient acceptance prompt before recording stream initialization
-          </ThemedText>
-          <View style={styles.toggleRow} testID="setting-consent-required">
-            <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.accessibilityValue}>
-              {String(consentRequired)}
+          <View style={styles.switchLabelCol}>
+            <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.fieldLabel}>
+              Dual Informed Consent Requirement
             </ThemedText>
-            <Pressable
-              disabled={settingsDisabled}
-              onPress={() => setConsentRequired((prev) => !prev)}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: consentRequired, disabled: settingsDisabled }}
-              accessibilityLabel="Require Dual-Party Consent"
+            <ThemedText variant="caption" color={theme.colors.textSecondary}>
+              Require patient acceptance before recording starts.
+            </ThemedText>
+          </View>
+          <Pressable
+            disabled={settingsDisabled}
+            onPress={() => setConsentRequired((prev) => !prev)}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: consentRequired, disabled: settingsDisabled }}
+            accessibilityLabel="Require Dual-Party Consent"
+            style={styles.switchHitTarget}
+          >
+            <View
               style={[
-                styles.togglePill,
-                consentRequired ? styles.togglePillActive : styles.togglePillInactive,
+                styles.switchTrack,
+                settingsDisabled
+                  ? styles.switchTrackDisabled
+                  : consentRequired
+                  ? styles.switchTrackOn
+                  : styles.switchTrackOff,
               ]}
             >
-              <Icon
-                name={consentRequired ? 'check' : 'close'}
-                size={theme.sizes.iconSm}
-                color={consentRequired ? theme.colors.successText : theme.colors.textMuted}
+              <View
+                style={[
+                  styles.switchThumb,
+                  consentRequired ? styles.switchThumbOn : styles.switchThumbOff,
+                ]}
               />
-              <ThemedText
-                variant="smallBold"
-                color={consentRequired ? theme.colors.successText : theme.colors.text}
-              >
-                {consentRequired ? 'Dual Consent Enforced' : 'Clinician Discretion'}
-              </ThemedText>
-            </Pressable>
-          </View>
+            </View>
+          </Pressable>
         </View>
         </View>
 
@@ -600,34 +590,50 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     minHeight: theme.sizes.touchTarget,
   },
-  toggleRow: {
+  switchSettingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: theme.spacing.xs,
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
   },
-  togglePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  switchLabelCol: {
+    flex: 1,
     gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.radii.lg,
-    borderWidth: theme.sizes.borderWidth,
+  },
+  switchHitTarget: {
     minHeight: theme.sizes.touchTarget,
     minWidth: theme.sizes.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  togglePillActive: {
-    backgroundColor: theme.colors.successBg,
-    borderColor: theme.colors.successBorder,
+  switchTrack: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    padding: 2,
+    justifyContent: 'center',
   },
-  togglePillInactive: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
+  switchTrackOn: {
+    backgroundColor: theme.colors.primary,
   },
-  togglePillDisabled: {
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderColor: theme.colors.borderLight,
+  switchTrackOff: {
+    backgroundColor: theme.colors.border,
+  },
+  switchTrackDisabled: {
+    backgroundColor: theme.colors.borderLight,
     opacity: 0.6,
+  },
+  switchThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: theme.colors.surface,
+  },
+  switchThumbOn: {
+    alignSelf: 'flex-end',
+  },
+  switchThumbOff: {
+    alignSelf: 'flex-start',
   },
   lockedBanner: {
     backgroundColor: theme.colors.warningBg,
