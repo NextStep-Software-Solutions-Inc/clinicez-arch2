@@ -127,19 +127,23 @@ describe("Milestone 13: Portal Web Teleconsultation PAYG Billing & Cost Allocati
     expect(content).toContain('testID: "btn-save-teleconsult-payg"');
     expect(content).toContain('data-testid="btn-save-teleconsult-payg"');
 
-    // Separate billing and clinic cascade notice
-    expect(content).toContain("Separate Metered Licensing");
-    expect(content).toContain("billed separately outside the base subscription plan");
-    expect(content).toContain("cascades to Clinic Administrators");
+    // Separate billing and clinic access notice
+    expect(content).toContain("How Billing &amp; Clinic Access Work");
+    expect(content).toContain("billed separately from your subscription plan");
+    expect(content).toContain("lets clinic admins enable video calls for their clinics");
 
-    // Mid-call cutoff protection notice
-    expect(content).toContain("Mid-Call Cutoff Protection Notice");
-    expect(content).toContain("Ongoing calls are never severed mid-flight if allocation is reached; overage billed separately");
+    // Patient safety / mid-call cutoff protection notice
+    expect(content).toContain("Patient Safety Notice");
+    expect(content).toContain("Keep active calls running if your balance or monthly limit is reached");
 
-    // Live monthly usage telemetry metrics
+    // Payment-gated top-up button
+    expect(content).toContain('data-testid="btn-topup-teleconsult-payg"');
+    expect(content).toContain("Pay &amp; Top Up");
+
+    // Monthly usage summary metrics
     expect(content).toContain("Minutes Used");
     expect(content).toContain("Amount Billed");
-    expect(content).toContain("Overage Accrued");
+    expect(content).toContain("Extra Charges");
     expect(content).toContain("Available Minutes");
   });
 

@@ -11,6 +11,7 @@ public interface IBillingProvider
 {
     /// <summary>Starts (or schedules) a plan change through the provider and returns the URL the owner must visit to authorise payment.</summary>
     Task<string> CreateCheckoutSessionAsync(string tenantId, string planId, bool isAnnual, CancellationToken cancellationToken = default);
+    Task<string> CreateTeleconsultTopUpCheckoutAsync(string tenantIdOrSlug, decimal amountPhp, CancellationToken cancellationToken = default);
     Task<string> GetCustomerPortalUrlAsync(string tenantId, CancellationToken cancellationToken = default);
     Task<bool> CancelSubscriptionAsync(string tenantId, CancellationToken cancellationToken = default);
 }

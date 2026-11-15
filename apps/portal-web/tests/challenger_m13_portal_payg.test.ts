@@ -151,7 +151,7 @@ describe("Milestone 13 Empirical Challenger: Portal Web PAYG Billing Adversarial
         estimatedAvailableMinutes: 2147483647,
       };
       const html = renderCardWithFallback(uncappedBilling);
-      expect(html).toContain("∞ (Uncapped)");
+      expect(html).toContain("Unlimited");
     });
   });
 
@@ -162,8 +162,8 @@ describe("Milestone 13 Empirical Challenger: Portal Web PAYG Billing Adversarial
     test("2.1 State transitions between Postpaid and Prepaid mode", () => {
       // Postpaid view verification
       const postpaidHtml = renderCardWithFallback({ billingMode: "Postpaid" });
-      expect(postpaidHtml).toContain("Postpaid Metered");
-      expect(postpaidHtml).toContain("Monthly Cost Allocation Budget (₱)");
+      expect(postpaidHtml).toContain("Postpaid (Pay Monthly)");
+      expect(postpaidHtml).toContain("Monthly Spending Limit (₱)");
       expect(postpaidHtml).toContain("input-allocated-budget");
 
       // Prepaid view verification (via source & rendered state)
@@ -174,10 +174,10 @@ describe("Milestone 13 Empirical Challenger: Portal Web PAYG Billing Adversarial
       const content = fs.readFileSync(cardPath, "utf-8");
 
       // Verifies segmented toggle controls
-      expect(content).toContain('onClick={() => setBillingMode("Postpaid")}');
+      expect(content).toContain('if (isPostpaidAllowed) setBillingMode("Postpaid");');
       expect(content).toContain('onClick={() => setBillingMode("Prepaid")}');
-      expect(content).toContain("Prepaid Minute Credits");
-      expect(content).toContain("Current Prepaid Balance:");
+      expect(content).toContain("Prepaid (Pay in Advance)");
+      expect(content).toContain("Current Balance:");
       expect(content).toContain("input-prepaid-topup");
     });
 
@@ -303,9 +303,9 @@ describe("Milestone 13 Empirical Challenger: Portal Web PAYG Billing Adversarial
       );
       const content = fs.readFileSync(cardPath, "utf-8");
 
-      expect(content).toContain("Mid-Call Cutoff Protection Notice:");
+      expect(content).toContain("Patient Safety Notice:");
       expect(content).toContain(
-        "To ensure clinical patient safety, active teleconsultations in progress will never be abruptly disconnected or severed even if your prepaid balance reaches ₱0.00 or your budget allocation is exceeded. Overage minutes will be accrued and billed separately."
+        "Active video calls are never disconnected mid-call, even if your balance reaches ₱0.00 or you hit your monthly limit. Extra minutes are added to your bill."
       );
     });
 
@@ -316,17 +316,17 @@ describe("Milestone 13 Empirical Challenger: Portal Web PAYG Billing Adversarial
       );
       const content = fs.readFileSync(cardPath, "utf-8");
 
-      expect(content).toContain("Allow Overage Beyond Allocation");
+      expect(content).toContain("Don&apos;t cut off ongoing calls");
       expect(content).toContain(
-        "Ongoing calls are never severed mid-flight if allocation is reached; overage billed separately."
+        "Keep active calls running if your balance or monthly limit is reached. Extra minutes are billed separately."
       );
       expect(content).toContain('id="chk-allow-overage"');
     });
 
     test("4.3 SSR rendering verifies cutoff protection banner in rendered HTML", () => {
       const html = renderCardWithFallback(baseMockBilling);
-      expect(html).toContain("Mid-Call Cutoff Protection Notice:");
-      expect(html).toContain("clinical patient safety");
+      expect(html).toContain("Patient Safety Notice:");
+      expect(html).toContain("never disconnected mid-call");
       expect(html).toContain("chk-allow-overage");
     });
   });
@@ -396,8 +396,8 @@ describe("Milestone 13 Empirical Challenger: Portal Web PAYG Billing Adversarial
       );
       const content = fs.readFileSync(cardPath, "utf-8");
 
-      expect(content).toContain("Separate Metered Licensing &amp; Clinic Cascade");
-      expect(content).toContain("billed separately outside the base subscription plan");
+      expect(content).toContain("How Billing &amp; Clinic Access Work");
+      expect(content).toContain("billed separately from your subscription plan");
     });
 
     test("6.2 Banner communicates hierarchical cascade to Clinic Administrators", () => {
@@ -408,15 +408,15 @@ describe("Milestone 13 Empirical Challenger: Portal Web PAYG Billing Adversarial
       const content = fs.readFileSync(cardPath, "utf-8");
 
       expect(content).toContain(
-        "When disabled, teleconsultation is locked across all clinics in this workspace. Enabling here cascades to Clinic Administrators, who can then turn on teleconsultation for their individual clinic facilities."
+        "Turning this on lets clinic admins enable video calls for their clinics; turning it off disables video calls across all clinics."
       );
     });
 
     test("6.3 SSR rendering displays banner with ShieldCheck and rate", () => {
       const html = renderCardWithFallback(baseMockBilling);
 
-      expect(html).toContain("Separate Metered Licensing &amp; Clinic Cascade");
-      expect(html).toContain("cascades to Clinic Administrators");
+      expect(html).toContain("How Billing &amp; Clinic Access Work");
+      expect(html).toContain("lets clinic admins enable video calls for their clinics");
       expect(html).toContain("lucide-shield-check");
     });
   });

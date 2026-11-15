@@ -18,11 +18,16 @@ export function useTeleconsultBilling(tenantSlug: string) {
     return updated;
   };
 
+  const createTopUpCheckout = async (amountPhp: number) => {
+    return teleconsultBillingService.createTopUpCheckout(tenantSlug, amountPhp);
+  };
+
   return {
     billing: data,
     isLoading,
     error,
     mutate,
     updateBilling,
+    createTopUpCheckout,
   };
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, Pressable, TextInput } from 'react-native';
 import ThemedText from '../../ui/ThemedText';
 import Button from '../../ui/Button';
@@ -55,66 +55,166 @@ export default function TeleconsultSettingsCard({
   });
 
   const [saving, setSaving] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+
+  const settingsDisabled = !isWorkspaceTeleconsultEntitled || !enableTeleconsultation;
+
+  const serializeState = useCallback(
+    (s: {
+      enableTeleconsultation: boolean;
+      recordingPolicy: TeleconsultRecordingPolicy;
+      retentionDays: number;
+      consentRequired: boolean;
+      defaultPolicy: TeleconsultPaymentPolicy;
+      defaultFee: number;
+    }) => JSON.stringify(s),
+    []
+  );
+
+  const lastSavedSnapshotRef = useRef<string>(
+    serializeState({
+      enableTeleconsultation: settings?.enableTeleconsultation ?? false,
+      recordingPolicy: (settings?.teleconsultRecordingPolicy as TeleconsultRecordingPolicy) || 'WorkspaceVaultOnly',
+      retentionDays: settings?.teleconsultRecordingRetentionDays ?? 30,
+      consentRequired: settings?.teleconsultRecordingConsentRequired ?? true,
+      defaultPolicy: (settings?.teleconsultPaymentPolicy as TeleconsultPaymentPolicy) || 'Prepaid',
+      defaultFee: settings?.teleconsultDefaultFee ?? 500,
+    })
+  );
+  const isHydratingRef = useRef(false);
 
   useEffect(() => {
     if (settings) {
-      if (settings.enableTeleconsultation !== undefined) {
-        setEnableTeleconsultation(Boolean(settings.enableTeleconsultation));
-      }
-      if (settings.teleconsultRecordingPolicy) {
-        setRecordingPolicy(settings.teleconsultRecordingPolicy as TeleconsultRecordingPolicy);
-      }
-      if (settings.teleconsultRecordingRetentionDays !== undefined) {
-        setRetentionDays(settings.teleconsultRecordingRetentionDays);
-      }
-      if (settings.teleconsultRecordingConsentRequired !== undefined) {
-        setConsentRequired(settings.teleconsultRecordingConsentRequired);
-      }
-      if (settings.teleconsultPaymentPolicy) {
-        setDefaultPolicy(settings.teleconsultPaymentPolicy as TeleconsultPaymentPolicy);
-      }
-      if (settings.teleconsultDefaultFee !== undefined && settings.teleconsultDefaultFee !== null) {
-        setDefaultFee(settings.teleconsultDefaultFee);
-      }
-    }
-  }, [settings]);
+      isHydratingRef.current = true;
+      const nextEnable = settings.enableTeleconsultation !== undefined ? Boolean(settings.enableTeleconsultation) : false;
+      const nextRec = (settings.teleconsultRecordingPolicy as TeleconsultRecordingPolicy) || 'WorkspaceVaultOnly';
+      const nextRet = settings.teleconsultRecordingRetentionDays ?? 30;
+      const nextConsent = settings.teleconsultRecordingConsentRequired ?? true;
+      const nextPol = (settings.teleconsultPaymentPolicy as TeleconsultPaymentPolicy) || 'Prepaid';
+      const nextFee = settings.teleconsultDefaultFee ?? 500;
 
-  const handleSave = useCallback(async () => {
-    if (retentionDays < 0) {
-      notify.warning('Recording retention days cannot be negative.');
-      return;
-    }
-    if (defaultFee < 0) {
-      notify.warning('Default teleconsultation fee cannot be negative.');
-      return;
-    }
+      setEnableTeleconsultation(nextEnable);
+      setRecordingPolicy(nextRec);
+      setRetentionDays(nextRet);
+      setConsentRequired(nextConsent);
+      setDefaultPolicy(nextPol);
+      setDefaultFee(nextFee);
 
-    setSaving(true);
-    try {
-      const payload: Partial<ClinicSettingsRecord> = {
-        enableTeleconsultation,
-        teleconsultRecordingPolicy: recordingPolicy,
-        teleconsultRecordingRetentionDays: retentionDays,
-        teleconsultRecordingConsentRequired: consentRequired,
-        teleconsultPaymentPolicy: defaultPolicy,
-        teleconsultDefaultFee: defaultFee,
-      };
+      lastSavedSnapshotRef.current = serializeState({
+        enableTeleconsultation: nextEnable,
+        recordingPolicy: nextRec,
+        retentionDays: nextRet,
+        consentRequired: nextConsent,
+        defaultPolicy: nextPol,
+        defaultFee: nextFee,
+      });
+      isHydratingRef.current = false;
+    }
+  }, [settings, serializeState]);
 
-      const [updated, err] = await clinicService.updateSettings(payload as any);
-      if (err || !updated) {
-        notify.error(err?.message || 'Failed to save teleconsultation settings.');
+  const performSave = useCallback(
+    async (silent: boolean) => {
+      if (retentionDays < 0) {
+        if (!silent) notify.warning('Recording retention days cannot be negative.');
+        return;
+      }
+      if (defaultFee < 0) {
+        if (!silent) notify.warning('Default teleconsultation fee cannot be negative.');
         return;
       }
 
-      onSettingsUpdated?.(updated);
-      notify.success('Teleconsultation facility settings saved successfully.');
-      await refreshClinic();
-    } catch (ex: any) {
-      notify.error(ex?.message || 'An unexpected error occurred while saving.');
-    } finally {
-      setSaving(false);
+      const currentSnapshot = serializeState({
+        enableTeleconsultation,
+        recordingPolicy,
+        retentionDays,
+        consentRequired,
+        defaultPolicy,
+        defaultFee,
+      });
+
+      setSaving(true);
+      setAutoSaveStatus('saving');
+      try {
+        const payload: Partial<ClinicSettingsRecord> = {
+          enableTeleconsultation,
+          teleconsultRecordingPolicy: recordingPolicy,
+          teleconsultRecordingRetentionDays: retentionDays,
+          teleconsultRecordingConsentRequired: consentRequired,
+          teleconsultPaymentPolicy: defaultPolicy,
+          teleconsultDefaultFee: defaultFee,
+        };
+
+        const [updated, err] = await clinicService.updateSettings(payload as any);
+        if (err || !updated) {
+          setAutoSaveStatus('error');
+          notify.error(err?.message || 'Failed to save teleconsultation settings.');
+          return;
+        }
+
+        lastSavedSnapshotRef.current = currentSnapshot;
+        setLastSavedAt(new Date());
+        setAutoSaveStatus('saved');
+        onSettingsUpdated?.(updated);
+        if (!silent) {
+          notify.success('Teleconsultation facility settings saved successfully.');
+        }
+        await refreshClinic();
+      } catch (ex: any) {
+        setAutoSaveStatus('error');
+        notify.error(ex?.message || 'An unexpected error occurred while saving.');
+      } finally {
+        setSaving(false);
+      }
+    },
+    [
+      enableTeleconsultation,
+      recordingPolicy,
+      retentionDays,
+      consentRequired,
+      defaultPolicy,
+      defaultFee,
+      onSettingsUpdated,
+      refreshClinic,
+      serializeState,
+    ]
+  );
+
+  const handleSave = useCallback(() => performSave(false), [performSave]);
+
+  // Debounced auto-save when any setting changes after initial hydration
+  useEffect(() => {
+    if (isHydratingRef.current || !settings) return;
+
+    const currentSnapshot = serializeState({
+      enableTeleconsultation,
+      recordingPolicy,
+      retentionDays,
+      consentRequired,
+      defaultPolicy,
+      defaultFee,
+    });
+
+    if (currentSnapshot === lastSavedSnapshotRef.current) {
+      return;
     }
-  }, [enableTeleconsultation, recordingPolicy, retentionDays, consentRequired, defaultPolicy, defaultFee, onSettingsUpdated, refreshClinic]);
+
+    const timer = setTimeout(() => {
+      void performSave(true);
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [
+    enableTeleconsultation,
+    recordingPolicy,
+    retentionDays,
+    consentRequired,
+    defaultPolicy,
+    defaultFee,
+    settings,
+    serializeState,
+    performSave,
+  ]);
 
   return (
     <SettingsSplitCard
@@ -207,6 +307,12 @@ export default function TeleconsultSettingsCard({
           </View>
         </View>
 
+        {/* Dependent Settings (disabled when teleconsultation is off or locked) */}
+        <View
+          testID="teleconsult-dependent-settings"
+          pointerEvents={settingsDisabled ? 'none' : 'auto'}
+          style={[styles.dependentSettings, settingsDisabled && styles.dependentSettingsDisabled]}
+        >
         {/* 1. Default Payment Policy */}
         <View style={styles.settingBlock}>
           <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.fieldLabel}>
@@ -224,9 +330,10 @@ export default function TeleconsultSettingsCard({
               return (
                 <Pressable
                   key={pol}
+                  disabled={settingsDisabled}
                   onPress={() => setDefaultPolicy(pol)}
                   accessibilityRole="radio"
-                  accessibilityState={{ selected: isSelected }}
+                  accessibilityState={{ selected: isSelected, disabled: settingsDisabled }}
                   accessibilityLabel={`Default policy ${pol}`}
                   style={[
                     styles.optionPill,
@@ -259,6 +366,7 @@ export default function TeleconsultSettingsCard({
             </ThemedText>
             <TextInput
               style={styles.textInput}
+              editable={!settingsDisabled}
               value={String(defaultFee)}
               onChangeText={(val) => {
                 const parsed = parseInt(val.replace(/[^0-9]/g, ''), 10);
@@ -295,9 +403,10 @@ export default function TeleconsultSettingsCard({
               return (
                 <Pressable
                   key={opt.id}
+                  disabled={settingsDisabled}
                   onPress={() => setRecordingPolicy(opt.id)}
                   accessibilityRole="radio"
-                  accessibilityState={{ selected: isSelected }}
+                  accessibilityState={{ selected: isSelected, disabled: settingsDisabled }}
                   accessibilityLabel={`Recording policy ${opt.label}`}
                   style={[
                     styles.optionPill,
@@ -330,6 +439,7 @@ export default function TeleconsultSettingsCard({
             </ThemedText>
             <TextInput
               style={styles.textInput}
+              editable={!settingsDisabled}
               value={String(retentionDays)}
               onChangeText={(val) => {
                 const parsed = parseInt(val.replace(/[^0-9]/g, ''), 10);
@@ -356,9 +466,10 @@ export default function TeleconsultSettingsCard({
               {String(consentRequired)}
             </ThemedText>
             <Pressable
+              disabled={settingsDisabled}
               onPress={() => setConsentRequired((prev) => !prev)}
               accessibilityRole="switch"
-              accessibilityState={{ checked: consentRequired }}
+              accessibilityState={{ checked: consentRequired, disabled: settingsDisabled }}
               accessibilityLabel="Require Dual-Party Consent"
               style={[
                 styles.togglePill,
@@ -379,9 +490,44 @@ export default function TeleconsultSettingsCard({
             </Pressable>
           </View>
         </View>
+        </View>
 
-        {/* Save Action */}
+        {/* Save Action & Auto-Save Status */}
         <View style={styles.saveActionRow}>
+          <View style={styles.autoSaveIndicator} testID="teleconsult-autosave-status">
+            {autoSaveStatus === 'saving' ? (
+              <>
+                <Icon name="clock" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Saving changes...
+                </ThemedText>
+              </>
+            ) : autoSaveStatus === 'saved' && lastSavedAt ? (
+              <>
+                <Icon name="check" size={theme.sizes.iconSm} color={theme.colors.successText} />
+                <ThemedText variant="caption" color={theme.colors.successText}>
+                  Last saved at{' '}
+                  {lastSavedAt.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })}
+                </ThemedText>
+              </>
+            ) : autoSaveStatus === 'error' ? (
+              <>
+                <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+                <ThemedText variant="caption" color={theme.colors.warningText}>
+                  Auto-save failed. Tap Save to retry.
+                </ThemedText>
+              </>
+            ) : (
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Changes auto-save automatically
+              </ThemedText>
+            )}
+          </View>
+
           <Button
             testID="btn-save-teleconsult-settings"
             variant="primary"
@@ -391,6 +537,7 @@ export default function TeleconsultSettingsCard({
             accessibilityLabel="Save teleconsultation settings"
             onPress={handleSave}
             loading={saving}
+            disabled={!isWorkspaceTeleconsultEntitled}
             style={styles.saveButton}
           />
         </View>
@@ -499,11 +646,26 @@ const styles = StyleSheet.create({
   lockedBannerText: {
     marginTop: theme.spacing.xs,
   },
+  dependentSettings: {
+    gap: theme.spacing.lg,
+  },
+  dependentSettingsDisabled: {
+    opacity: 0.5,
+  },
   saveActionRow: {
     paddingTop: theme.spacing.md,
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  autoSaveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   saveButton: {
     minHeight: theme.sizes.touchTarget,

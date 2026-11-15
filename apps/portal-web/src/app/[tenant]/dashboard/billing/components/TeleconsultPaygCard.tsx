@@ -29,7 +29,7 @@ interface TeleconsultPaygCardProps {
 }
 
 export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCardProps) {
-  const { billing, isLoading, error, updateBilling } = useTeleconsultBilling(tenantSlug);
+  const { billing, isLoading, error, updateBilling, createTopUpCheckout } = useTeleconsultBilling(tenantSlug);
 
   const [isEnabled, setIsEnabled] = useState(false);
   const [billingMode, setBillingMode] = useState<"Prepaid" | "Postpaid">("Postpaid");
@@ -37,12 +37,19 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
   const [prepaidTopUpPhp, setPrepaidTopUpPhp] = useState<number>(0);
   const [allowOverageBeyondAllocation, setAllowOverageBeyondAllocation] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isToppingUp, setIsToppingUp] = useState(false);
+  const [offlineTopUpNotice, setOfflineTopUpNotice] = useState<string | null>(null);
+
+  const isOnlinePaymentSupported = Boolean(billing?.isOnlinePaymentSupported);
+  const hasCardOnFile = Boolean(billing?.hasCardOnFile);
+  const isPostpaidAllowed = isOnlinePaymentSupported && hasCardOnFile;
 
   // Sync state when billing data is received
   useEffect(() => {
     if (billing) {
       setIsEnabled(Boolean(billing.isEnabled));
-      setBillingMode(billing.billingMode === "Prepaid" ? "Prepaid" : "Postpaid");
+      const canUsePostpaid = Boolean(billing.isOnlinePaymentSupported && billing.hasCardOnFile);
+      setBillingMode(billing.billingMode === "Postpaid" && canUsePostpaid ? "Postpaid" : "Prepaid");
       setAllocatedBudgetPhp(billing.allocatedBudgetPhp ?? 0);
       setAllowOverageBeyondAllocation(billing.allowOverageBeyondAllocation ?? true);
       setPrepaidTopUpPhp(0);
@@ -74,18 +81,46 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
         isEnabled,
         billingMode,
         allocatedBudgetPhp: Number(allocatedBudgetPhp) || 0,
-        prepaidTopUpPhp:
-          billingMode === "Prepaid" && prepaidTopUpPhp > 0 ? Number(prepaidTopUpPhp) : undefined,
         allowOverageBeyondAllocation,
       });
-      setPrepaidTopUpPhp(0);
-      toast.success("Teleconsultation billing settings updated successfully.");
+      toast.success("Video call billing settings saved.");
     } catch (err: any) {
       toast.error(
-        err?.response?.data?.message || err?.message || "Failed to save teleconsultation billing settings."
+        err?.response?.data?.message || err?.message || "Failed to save video call billing settings."
       );
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleTopUpCheckout = async () => {
+    const amount = Number(prepaidTopUpPhp) || 0;
+    if (amount < 50) {
+      toast.error("Minimum top-up amount is ₱50.");
+      return;
+    }
+
+    try {
+      setIsToppingUp(true);
+      setOfflineTopUpNotice(null);
+      const { url } = await createTopUpCheckout(amount);
+      if (url && typeof window !== "undefined") {
+        window.location.href = url;
+      }
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Unable to start top-up payment.";
+      if (status === 503) {
+        setOfflineTopUpNotice(msg);
+        toast.info("Online checkout is unavailable. Please pay via Bank Transfer or GCash.");
+      } else {
+        toast.error(msg);
+      }
+    } finally {
+      setIsToppingUp(false);
     }
   };
 
@@ -117,7 +152,7 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
                 <Video className="h-5 w-5" />
               </div>
               <CardTitle className="text-lg font-bold text-card-foreground">
-                Video Teleconsultation (Pay-As-You-Go Add-On)
+                Video Teleconsultation
               </CardTitle>
               <Badge
                 variant="outline"
@@ -131,7 +166,7 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
               </Badge>
             </div>
             <CardDescription className="text-xs text-muted-foreground">
-              Metered encrypted HD video rooms powered by LiveKit Cloud. Billed at{" "}
+              Encrypted HD video consultations billed at{" "}
               <span className="font-semibold text-card-foreground">₱{ratePerMinute.toFixed(2)} / min</span>.
             </CardDescription>
           </div>
@@ -139,7 +174,7 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
           {/* Master Enablement Switch */}
           <div className="flex items-center gap-3 bg-muted/50 p-2.5 px-4 rounded-2xl border border-border shrink-0">
             <span className="text-xs font-semibold text-card-foreground">
-              Workspace Enablement
+              Enable for Workspace
             </span>
             <button
               type="button"
@@ -163,68 +198,87 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
       </CardHeader>
 
       <CardContent className="p-6 space-y-6">
-        {/* Hierarchical Governance & Separate Billing Banner */}
+        {/* Clinic Access & Separate Billing Banner */}
         <div className="flex gap-3.5 items-start rounded-2xl border border-primary/20 bg-primary/5 p-4 text-xs text-card-foreground">
           <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
           <div className="space-y-1">
             <p className="font-semibold text-card-foreground">
-              Separate Metered Licensing &amp; Clinic Cascade
+              How Billing &amp; Clinic Access Work
             </p>
             <p className="text-muted-foreground leading-relaxed">
-              Video teleconsultation is billed separately outside the base subscription plan at{" "}
+              Video calls are billed separately from your subscription plan at{" "}
               <span className="font-semibold text-card-foreground">₱{ratePerMinute.toFixed(2)} / min</span>.
-              When disabled, teleconsultation is locked across all clinics in this workspace. Enabling here cascades to Clinic Administrators, who can then turn on teleconsultation for their individual clinic facilities.
+              Turning this on lets clinic admins enable video calls for their clinics; turning it off disables video calls across all clinics.
             </p>
           </div>
         </div>
 
-        {/* Mode Selector & Configuration */}
+        {/* Mode Selector & Configuration (disabled when teleconsultation is off) */}
+        <div
+          aria-disabled={!isEnabled}
+          className={`space-y-6 transition-opacity ${!isEnabled ? "opacity-50 pointer-events-none select-none" : ""}`}
+        >
         <div className="space-y-4">
           <Label className="text-xs font-bold text-card-foreground">Billing Mode</Label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={() => setBillingMode("Postpaid")}
-              className={`p-4 rounded-2xl border text-left transition-all cursor-pointer space-y-1.5 ${
-                billingMode === "Postpaid"
-                  ? "border-primary bg-primary/5 shadow-xs"
-                  : "border-border bg-card hover:bg-muted/50"
+              disabled={!isEnabled || !isPostpaidAllowed}
+              onClick={() => {
+                if (isPostpaidAllowed) setBillingMode("Postpaid");
+              }}
+              className={`p-4 rounded-2xl border text-left transition-all space-y-1.5 ${
+                !isEnabled || !isPostpaidAllowed
+                  ? "border-border bg-muted/40 opacity-60 cursor-not-allowed"
+                  : billingMode === "Postpaid"
+                    ? "border-primary bg-primary/5 shadow-xs cursor-pointer"
+                    : "border-border bg-card hover:bg-muted/50 cursor-pointer"
               }`}
             >
               <div className="flex items-center justify-between">
                 <span className="font-bold text-xs text-card-foreground flex items-center gap-1.5">
                   <Clock className="h-4 w-4 text-primary" />
-                  Postpaid Metered
+                  Postpaid (Pay Monthly)
                 </span>
-                {billingMode === "Postpaid" && (
+                {billingMode === "Postpaid" && isPostpaidAllowed && (
                   <CheckCircle2 className="h-4 w-4 text-primary" />
                 )}
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Set a monthly cost allocation budget. Minutes are billed post-consumption.
+                Pay at the end of each month for the minutes you use, with an optional monthly spending limit.
               </p>
+              {!isPostpaidAllowed && (
+                <p className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                  {!isOnlinePaymentSupported
+                    ? "Unavailable — online card payments are not enabled yet."
+                    : "Requires a credit card on file."}
+                </p>
+              )}
             </button>
 
             <button
               type="button"
+              disabled={!isEnabled}
               onClick={() => setBillingMode("Prepaid")}
-              className={`p-4 rounded-2xl border text-left transition-all cursor-pointer space-y-1.5 ${
-                billingMode === "Prepaid"
-                  ? "border-primary bg-primary/5 shadow-xs"
-                  : "border-border bg-card hover:bg-muted/50"
+              className={`p-4 rounded-2xl border text-left transition-all space-y-1.5 ${
+                !isEnabled
+                  ? "border-border bg-muted/40 cursor-not-allowed"
+                  : billingMode === "Prepaid"
+                    ? "border-primary bg-primary/5 shadow-xs cursor-pointer"
+                    : "border-border bg-card hover:bg-muted/50 cursor-pointer"
               }`}
             >
               <div className="flex items-center justify-between">
                 <span className="font-bold text-xs text-card-foreground flex items-center gap-1.5">
                   <CreditCard className="h-4 w-4 text-primary" />
-                  Prepaid Minute Credits
+                  Prepaid (Pay in Advance)
                 </span>
                 {billingMode === "Prepaid" && (
                   <CheckCircle2 className="h-4 w-4 text-primary" />
                 )}
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Top up a balance in advance. Call minutes are deducted live from your credit balance.
+                Load credits in advance. Call minutes are deducted from your balance as calls happen.
               </p>
             </button>
           </div>
@@ -235,12 +289,12 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
           <div className="p-4 rounded-2xl border border-border bg-muted/30 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <Label htmlFor="input-allocated-budget" className="text-xs font-semibold text-card-foreground">
-                Monthly Cost Allocation Budget (₱)
+                Monthly Spending Limit (₱)
               </Label>
               <span className="text-xs font-mono text-primary font-semibold">
                 {allocatedBudgetPhp > 0
                   ? `~${postpaidConvertedMinutes.toLocaleString()} minutes at ₱${ratePerMinute.toFixed(2)} / min`
-                  : "Uncapped Postpaid"}
+                  : "No Limit"}
               </span>
             </div>
             <Input
@@ -248,19 +302,20 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
               type="number"
               min="0"
               step="50"
+              disabled={!isEnabled}
               value={allocatedBudgetPhp || ""}
               onChange={(e) => setAllocatedBudgetPhp(Math.max(0, Number(e.target.value)))}
-              placeholder="0 (Uncapped budget)"
+              placeholder="0 (No monthly limit)"
               className="bg-card border-border font-mono text-xs rounded-xl"
             />
             <p className="text-[11px] text-muted-foreground">
-              Enter 0 for an uncapped monthly budget, or enter an amount in Philippine Pesos (₱) to allocate a planned monthly ceiling.
+              Enter 0 for no monthly limit, or set a target monthly spending limit in Philippine Pesos (₱).
             </p>
           </div>
         ) : (
           <div className="p-4 rounded-2xl border border-border bg-muted/30 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-3">
-              <span className="text-xs text-muted-foreground">Current Prepaid Balance:</span>
+              <span className="text-xs text-muted-foreground">Current Balance:</span>
               <div className="flex items-baseline gap-2">
                 <span className="text-base font-bold text-card-foreground font-mono">
                   ₱{(billing?.prepaidBalancePhp ?? 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -274,36 +329,61 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
             <div className="space-y-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <Label htmlFor="input-prepaid-topup" className="text-xs font-semibold text-card-foreground">
-                  Top-Up Credit Balance (₱)
+                  Top Up Credits (₱)
                 </Label>
                 {prepaidTopUpPhp > 0 && (
                   <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                    +{prepaidTopUpConvertedMinutes.toLocaleString()} additional minutes
+                    +{prepaidTopUpConvertedMinutes.toLocaleString()} mins
                   </span>
                 )}
               </div>
-              <Input
-                id="input-prepaid-topup"
-                type="number"
-                min="0"
-                step="50"
-                value={prepaidTopUpPhp || ""}
-                onChange={(e) => setPrepaidTopUpPhp(Math.max(0, Number(e.target.value)))}
-                placeholder="Enter top-up amount in ₱"
-                className="bg-card border-border font-mono text-xs rounded-xl"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Top-up funds are added directly to your prepaid balance at ₱{ratePerMinute.toFixed(2)} per minute.
-              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  id="input-prepaid-topup"
+                  type="number"
+                  min="50"
+                  step="50"
+                  disabled={!isEnabled || !isOnlinePaymentSupported}
+                  value={prepaidTopUpPhp || ""}
+                  onChange={(e) => setPrepaidTopUpPhp(Math.max(0, Number(e.target.value)))}
+                  placeholder="Enter amount in ₱ (min ₱50)"
+                  className="bg-card border-border font-mono text-xs rounded-xl flex-1"
+                />
+                <Button
+                  type="button"
+                  data-testid="btn-topup-teleconsult-payg"
+                  onClick={handleTopUpCheckout}
+                  disabled={!isEnabled || !isOnlinePaymentSupported || isToppingUp || prepaidTopUpPhp < 50}
+                  className="rounded-xl px-4 text-xs font-bold shrink-0"
+                >
+                  {isToppingUp && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                  Pay &amp; Top Up
+                </Button>
+              </div>
+              {!isOnlinePaymentSupported ? (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] text-amber-900 dark:text-amber-200">
+                  Online self-service payments are not enabled yet. To top up credits, pay via Bank Transfer or GCash and send your receipt to billing@clinicez.ph.
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Credits are added to your balance once payment is completed (₱{ratePerMinute.toFixed(2)} / min, minimum ₱50).
+                </p>
+              )}
+              {offlineTopUpNotice && (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] text-amber-900 dark:text-amber-200">
+                  {offlineTopUpNotice}
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Allow Overage & Mid-Call Cutoff Protection */}
+        {/* Overage & Patient Safety Notice */}
         <div className="p-4 rounded-2xl border border-border bg-card space-y-3">
           <div className="flex items-start gap-3">
             <Checkbox
               id="chk-allow-overage"
+              disabled={!isEnabled}
               checked={allowOverageBeyondAllocation}
               onCheckedChange={(checked) => setAllowOverageBeyondAllocation(Boolean(checked))}
               className="mt-0.5"
@@ -313,10 +393,10 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
                 htmlFor="chk-allow-overage"
                 className="text-xs font-semibold text-card-foreground cursor-pointer"
               >
-                Allow Overage Beyond Allocation
+                Don&apos;t cut off ongoing calls
               </Label>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Ongoing calls are never severed mid-flight if allocation is reached; overage billed separately.
+                Keep active calls running if your balance or monthly limit is reached. Extra minutes are billed separately.
               </p>
             </div>
           </div>
@@ -324,17 +404,18 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-2">
             <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <p>
-              <span className="font-bold">Mid-Call Cutoff Protection Notice:</span> To ensure clinical patient safety, active teleconsultations in progress will never be abruptly disconnected or severed even if your prepaid balance reaches ₱0.00 or your budget allocation is exceeded. Overage minutes will be accrued and billed separately.
+              <span className="font-bold">Patient Safety Notice:</span> Active video calls are never disconnected mid-call, even if your balance reaches ₱0.00 or you hit your monthly limit. Extra minutes are added to your bill.
             </p>
           </div>
         </div>
+        </div>
 
-        {/* Live Monthly Usage Telemetry Panel */}
+        {/* Monthly Usage Summary */}
         <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-3">
           <div className="flex items-center justify-between border-b border-border pb-2">
             <span className="text-xs font-bold text-card-foreground flex items-center gap-1.5">
               <Zap className="h-3.5 w-3.5 text-primary" />
-              Live Monthly Telemetry ({billing?.currentPeriodYearMonth || "Current Period"})
+              This Month&apos;s Usage ({billing?.currentPeriodYearMonth || "Current Month"})
             </span>
             <span className="text-[11px] text-muted-foreground font-mono">
               Rate: ₱{ratePerMinute.toFixed(2)}/min
@@ -357,7 +438,7 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
             </div>
 
             <div className="p-2.5 rounded-xl bg-card border border-border space-y-0.5">
-              <span className="text-[10px] text-muted-foreground uppercase font-semibold">Overage Accrued</span>
+              <span className="text-[10px] text-muted-foreground uppercase font-semibold">Extra Charges</span>
               <p className="text-sm font-bold text-card-foreground font-mono text-amber-600 dark:text-amber-400">
                 ₱{(billing?.currentPeriodOveragePhp ?? 0).toFixed(2)}
               </p>
@@ -367,7 +448,7 @@ export function TeleconsultPaygCard({ tenantSlug, className }: TeleconsultPaygCa
               <span className="text-[10px] text-muted-foreground uppercase font-semibold">Available Minutes</span>
               <p className="text-sm font-bold text-card-foreground font-mono text-emerald-600 dark:text-emerald-400">
                 {billing?.estimatedAvailableMinutes === 2147483647
-                  ? "∞ (Uncapped)"
+                  ? "Unlimited"
                   : (billing?.estimatedAvailableMinutes ?? 0).toLocaleString()}
               </p>
             </div>

@@ -14,6 +14,8 @@ export interface TeleconsultBillingDto {
   currentPeriodBilledPhp: number;
   currentPeriodOveragePhp: number;
   estimatedAvailableMinutes: number;
+  hasCardOnFile?: boolean;
+  isOnlinePaymentSupported?: boolean;
 }
 
 export interface UpdateTeleconsultBillingRequest {
@@ -39,6 +41,17 @@ export const teleconsultBillingService = {
     const res = await apiClient.put<TeleconsultBillingDto>(
       `/tenants/${encodeURIComponent(tenantSlug)}/teleconsult-billing`,
       request
+    );
+    return res.data;
+  },
+
+  createTopUpCheckout: async (
+    tenantSlug: string,
+    amountPhp: number
+  ): Promise<{ url: string }> => {
+    const res = await apiClient.post<{ url: string }>(
+      `/tenants/${encodeURIComponent(tenantSlug)}/teleconsult-billing/topup-checkout`,
+      { amountPhp }
     );
     return res.data;
   },

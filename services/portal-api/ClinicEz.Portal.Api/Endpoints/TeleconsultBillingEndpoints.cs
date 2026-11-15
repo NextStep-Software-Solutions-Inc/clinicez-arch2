@@ -32,7 +32,9 @@ public record TeleconsultBillingDto(
     int CurrentPeriodMinutesUsed,
     decimal CurrentPeriodBilledPhp,
     decimal CurrentPeriodOveragePhp,
-    int EstimatedAvailableMinutes);
+    int EstimatedAvailableMinutes,
+    bool HasCardOnFile,
+    bool IsOnlinePaymentSupported);
 
 public record UpdateTeleconsultBillingRequest(
     bool IsEnabled,
@@ -40,6 +42,8 @@ public record UpdateTeleconsultBillingRequest(
     decimal AllocatedBudgetPhp,
     decimal? PrepaidTopUpPhp,
     bool? AllowOverageBeyondAllocation);
+
+public record CreateTeleconsultTopUpCheckoutRequest(decimal AmountPhp);
 
 public record AdminUpdateTeleconsultBillingRequest(
     bool? IsEnabled,
@@ -65,6 +69,7 @@ public sealed class TeleconsultBillingEndpoints : IEndpoint
             HttpContext httpContext,
             IWorkspaceAccessService access,
             IApplicationDbContext dbContext,
+            ISystemSettingsService settingsService,
             CancellationToken ct) =>
         {
             var auth = await AuthorizeTenant(access, httpContext, tenantSlug, WorkspaceRole.Staff, ct);
@@ -72,8 +77,9 @@ public sealed class TeleconsultBillingEndpoints : IEndpoint
 
             var tenant = auth.Access!.Tenant;
             var billing = await GetOrCreateBillingAsync(dbContext, tenant.Id, ct);
+            var (hasCardOnFile, isOnlinePaymentSupported) = await GetPaymentCapabilitiesAsync(dbContext, settingsService, tenant.Id, ct);
 
-            return Results.Ok(ToDto(billing, tenant.TenantSlug));
+            return Results.Ok(ToDto(billing, tenant.TenantSlug, hasCardOnFile, isOnlinePaymentSupported));
         })
         .WithName("GetWorkspaceTeleconsultBilling")
         .WithDescription("Retrieves the workspace's pay-as-you-go teleconsultation billing and usage state.");
@@ -85,6 +91,7 @@ public sealed class TeleconsultBillingEndpoints : IEndpoint
             IWorkspaceAccessService access,
             IApplicationDbContext dbContext,
             IEntitlementsPublisher entitlementsPublisher,
+            ISystemSettingsService settingsService,
             CancellationToken ct) =>
         {
             var auth = await AuthorizeTenant(access, httpContext, tenantSlug, WorkspaceRole.Admin, ct);
@@ -106,6 +113,26 @@ public sealed class TeleconsultBillingEndpoints : IEndpoint
                 return Results.BadRequest(new { Message = "AllocatedBudgetPhp cannot be negative." });
             }
 
+            if (request.PrepaidTopUpPhp.HasValue && request.PrepaidTopUpPhp.Value > 0m)
+            {
+                return Results.BadRequest(new { Message = "Prepaid top-ups must be paid via checkout before credits are added." });
+            }
+
+            var (hasCardOnFile, isOnlinePaymentSupported) = await GetPaymentCapabilitiesAsync(dbContext, settingsService, tenant.Id, ct);
+            var isPostpaid = string.Equals(mode, WorkspaceTeleconsultBilling.ModePostpaid, StringComparison.OrdinalIgnoreCase);
+
+            if (request.IsEnabled && isPostpaid)
+            {
+                if (!isOnlinePaymentSupported)
+                {
+                    return Results.BadRequest(new { Message = "Postpaid billing is not available yet because online card payments are not enabled. Please use Prepaid mode." });
+                }
+                if (!hasCardOnFile)
+                {
+                    return Results.BadRequest(new { Message = "Postpaid billing requires a credit card on file. Please link a credit card first or use Prepaid mode." });
+                }
+            }
+
             billing.IsEnabled = request.IsEnabled;
             billing.BillingMode = string.Equals(mode, WorkspaceTeleconsultBilling.ModePrepaid, StringComparison.OrdinalIgnoreCase)
                 ? WorkspaceTeleconsultBilling.ModePrepaid
@@ -117,21 +144,65 @@ public sealed class TeleconsultBillingEndpoints : IEndpoint
                 billing.AllowOverageBeyondAllocation = request.AllowOverageBeyondAllocation.Value;
             }
 
-            if (request.PrepaidTopUpPhp.HasValue && request.PrepaidTopUpPhp.Value > 0m)
-            {
-                billing.PrepaidBalancePhp += request.PrepaidTopUpPhp.Value;
-            }
-
             await dbContext.SaveChangesAsync(ct);
 
             // Re-stage licenses and trigger MediaBroker sync
             await entitlementsPublisher.StageForWorkspaceAsync(tenant.Id, ct);
             await dbContext.SaveChangesAsync(ct);
 
-            return Results.Ok(ToDto(billing, tenant.TenantSlug));
+            return Results.Ok(ToDto(billing, tenant.TenantSlug, hasCardOnFile, isOnlinePaymentSupported));
         })
         .WithName("UpdateWorkspaceTeleconsultBilling")
-        .WithDescription("Updates workspace teleconsultation activation, billing mode, cost allocation, and credit balance.");
+        .WithDescription("Updates workspace teleconsultation activation, billing mode, and monthly spending limit.");
+
+        tenantGroup.MapPost("/topup-checkout", async (
+            string tenantSlug,
+            CreateTeleconsultTopUpCheckoutRequest request,
+            HttpContext httpContext,
+            IWorkspaceAccessService access,
+            IBillingProvider billingProvider,
+            ISystemSettingsService settingsService,
+            CancellationToken ct) =>
+        {
+            var auth = await AuthorizeTenant(access, httpContext, tenantSlug, WorkspaceRole.Admin, ct);
+            if (auth.Result != null) return auth.Result;
+
+            var isOnlinePaymentSupported = await settingsService.GetSettingBoolAsync("Billing:IsOnlinePaymentReady", false, ct);
+            if (!isOnlinePaymentSupported)
+            {
+                return Results.Json(
+                    new
+                    {
+                        Message = "Online self-service payments are not enabled yet. Please pay via Bank Transfer or GCash and send your receipt to billing@clinicez.ph so we can credit your balance."
+                    },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
+            if (request.AmountPhp < 50m)
+            {
+                return Results.BadRequest(new { Message = "Minimum top-up amount is ₱50." });
+            }
+
+            try
+            {
+                var url = await billingProvider.CreateTeleconsultTopUpCheckoutAsync(
+                    auth.Access!.Tenant.TenantSlug,
+                    request.AmountPhp,
+                    ct);
+                return Results.Ok(new { Url = url });
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is System.Net.Http.HttpRequestException)
+            {
+                return Results.Json(
+                    new
+                    {
+                        Message = "Online card and e-wallet checkout is currently undergoing partner verification. Please pay via Bank Transfer or GCash and send your receipt to billing@clinicez.ph so we can credit your balance."
+                    },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+        })
+        .WithName("CreateWorkspaceTeleconsultTopUpCheckout")
+        .WithDescription("Creates a payment checkout session to top up prepaid teleconsultation credits.");
 
         // -------------------------------------------------------------
         // 2. Admin SuperAdmin Endpoints: /admin/tenants/{tenantId}/teleconsult-billing
@@ -145,6 +216,7 @@ public sealed class TeleconsultBillingEndpoints : IEndpoint
             HttpContext httpContext,
             ISender sender,
             IApplicationDbContext dbContext,
+            ISystemSettingsService settingsService,
             CancellationToken ct) =>
         {
             var admin = await CheckAdminPermissionAsync(httpContext, sender);
@@ -154,7 +226,8 @@ public sealed class TeleconsultBillingEndpoints : IEndpoint
             if (tenant == null) return Results.NotFound(new { Message = "Tenant not found." });
 
             var billing = await GetOrCreateBillingAsync(dbContext, tenant.Id, ct);
-            return Results.Ok(ToDto(billing, tenant.TenantSlug));
+            var (hasCardOnFile, isOnlinePaymentSupported) = await GetPaymentCapabilitiesAsync(dbContext, settingsService, tenant.Id, ct);
+            return Results.Ok(ToDto(billing, tenant.TenantSlug, hasCardOnFile, isOnlinePaymentSupported));
         })
         .WithName("GetAdminTenantTeleconsultBilling")
         .WithDescription("Gets a tenant workspace's teleconsultation billing profile for SuperAdmins.");
@@ -166,6 +239,7 @@ public sealed class TeleconsultBillingEndpoints : IEndpoint
             ISender sender,
             IApplicationDbContext dbContext,
             IEntitlementsPublisher entitlementsPublisher,
+            ISystemSettingsService settingsService,
             CancellationToken ct) =>
         {
             var admin = await CheckAdminPermissionAsync(httpContext, sender);
@@ -212,7 +286,8 @@ public sealed class TeleconsultBillingEndpoints : IEndpoint
             await entitlementsPublisher.StageForWorkspaceAsync(tenant.Id, ct);
             await dbContext.SaveChangesAsync(ct);
 
-            return Results.Ok(ToDto(billing, tenant.TenantSlug));
+            var (hasCardOnFile, isOnlinePaymentSupported) = await GetPaymentCapabilitiesAsync(dbContext, settingsService, tenant.Id, ct);
+            return Results.Ok(ToDto(billing, tenant.TenantSlug, hasCardOnFile, isOnlinePaymentSupported));
         })
         .WithName("UpdateAdminTenantTeleconsultBilling")
         .WithDescription("Allows SuperAdmins to configure custom per-minute rates, grant prepaid credits, and toggle teleconsultation.");
@@ -243,7 +318,28 @@ public sealed class TeleconsultBillingEndpoints : IEndpoint
         return created;
     }
 
-    private static TeleconsultBillingDto ToDto(WorkspaceTeleconsultBilling billing, string tenantSlug) =>
+    private static async Task<(bool HasCardOnFile, bool IsOnlinePaymentSupported)> GetPaymentCapabilitiesAsync(
+        IApplicationDbContext dbContext,
+        ISystemSettingsService settingsService,
+        Guid tenantId,
+        CancellationToken ct)
+    {
+        var isOnlinePaymentSupported = await settingsService.GetSettingBoolAsync("Billing:IsOnlinePaymentReady", false, ct);
+        var hasCardOnFile = await dbContext.Subscriptions.AnyAsync(
+            s => s.TenantId == tenantId &&
+                 s.Status == SubscriptionStatus.Active &&
+                 s.ProviderName == "xendit" &&
+                 !string.IsNullOrEmpty(s.ProviderSubscriptionId),
+            ct);
+
+        return (hasCardOnFile, isOnlinePaymentSupported);
+    }
+
+    private static TeleconsultBillingDto ToDto(
+        WorkspaceTeleconsultBilling billing,
+        string tenantSlug,
+        bool hasCardOnFile = false,
+        bool isOnlinePaymentSupported = false) =>
         new(
             billing.TenantId,
             tenantSlug,
@@ -257,7 +353,9 @@ public sealed class TeleconsultBillingEndpoints : IEndpoint
             billing.CurrentPeriodMinutesUsed,
             billing.CurrentPeriodBilledPhp,
             billing.CurrentPeriodOveragePhp,
-            billing.ComputeAvailableMinutes());
+            billing.ComputeAvailableMinutes(),
+            hasCardOnFile,
+            isOnlinePaymentSupported);
 
     private static async Task<Tenant?> ResolveTenantAsync(IApplicationDbContext dbContext, string tenantIdOrSlug, CancellationToken ct)
     {

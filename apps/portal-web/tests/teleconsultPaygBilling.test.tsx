@@ -116,12 +116,13 @@ describe("Requirement R3: Portal Web Teleconsultation PAYG Billing & Cost Alloca
     expect(content).toContain("teleconsult-payg-card");
     expect(content).toContain("toggle-teleconsult-payg");
     expect(content).toContain("btn-save-teleconsult-payg");
-    expect(content).toContain("Postpaid Metered");
-    expect(content).toContain("Prepaid Minute Credits");
+    expect(content).toContain("btn-topup-teleconsult-payg");
+    expect(content).toContain("Postpaid (Pay Monthly)");
+    expect(content).toContain("Prepaid (Pay in Advance)");
 
-    // Mid-call cutoff protection guarantee copy
-    expect(content).toContain("Mid-Call Cutoff Protection Notice");
-    expect(content).toContain("never be abruptly disconnected or severed");
+    // Patient safety notice copy
+    expect(content).toContain("Patient Safety Notice");
+    expect(content).toContain("never disconnected mid-call");
 
     // Rate display
     expect(content).toContain("ratePerMinute.toFixed(2)}/min");
