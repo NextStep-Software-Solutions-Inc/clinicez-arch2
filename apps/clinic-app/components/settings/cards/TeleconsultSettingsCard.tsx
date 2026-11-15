@@ -492,7 +492,7 @@ export default function TeleconsultSettingsCard({
         </View>
         </View>
 
-        {/* Save Action & Auto-Save Status */}
+        {/* Auto-Save Status */}
         <View style={styles.saveActionRow}>
           <View style={styles.autoSaveIndicator} testID="teleconsult-autosave-status">
             {autoSaveStatus === 'saving' ? (
@@ -518,7 +518,7 @@ export default function TeleconsultSettingsCard({
               <>
                 <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
                 <ThemedText variant="caption" color={theme.colors.warningText}>
-                  Auto-save failed. Tap Save to retry.
+                  Auto-save failed.
                 </ThemedText>
               </>
             ) : (
@@ -528,18 +528,17 @@ export default function TeleconsultSettingsCard({
             )}
           </View>
 
-          <Button
-            testID="btn-save-teleconsult-settings"
-            variant="primary"
-            size="md"
-            icon="save"
-            title="Save Teleconsult Settings"
-            accessibilityLabel="Save teleconsultation settings"
-            onPress={handleSave}
-            loading={saving}
-            disabled={!isWorkspaceTeleconsultEntitled}
-            style={styles.saveButton}
-          />
+          {autoSaveStatus === 'error' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              icon="save"
+              title="Retry"
+              accessibilityLabel="Retry saving teleconsultation settings"
+              onPress={handleSave}
+              loading={saving}
+            />
+          ) : null}
         </View>
       </View>
     </SettingsSplitCard>
