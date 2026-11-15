@@ -3,9 +3,11 @@ import React from "react";
 import * as fs from "fs";
 import * as path from "path";
 
+let commsSdkReactInstance: any = null;
 try {
   const commsSdkReact = require.resolve("../../../packages/comms-sdk/node_modules/react");
-  mock.module(commsSdkReact, () => React);
+  commsSdkReactInstance = require(commsSdkReact);
+  mock.module(commsSdkReact, () => ({ ...React, default: React }));
 } catch {
   // If no separate comms-sdk react, ignore
 }
@@ -16,8 +18,139 @@ import { verifyGuestTeleconsult } from "../src/services/guestTeleconsult.service
 import { TeleconsultGuestFlow } from "../src/components/teleconsult/TeleconsultGuestFlow";
 import { preflightInvite } from "../src/components/teleconsult/preflightInvite";
 import { renderToString } from "react-dom/server";
-import { createHookHarness, act } from "../../../packages/comms-sdk/tests/react/hook-test-harness";
 import { CallStage as WebCallStage, MessageThread as WebMessageThread } from "@clinicez/comms-sdk/web-ui";
+
+function createPortalHookHarness<Result>(hookFn: () => Result) {
+  let stateSlots: any[] = [];
+  let slotIndex = 0;
+  let effectSlots: Array<{ fn: () => any; cleanup?: any; deps: any[]; hasChanged: boolean }> = [];
+  let effectIndex = 0;
+  let refSlots: Array<{ current: any }> = [];
+  let refIndex = 0;
+  let memoSlots: Array<{ value: any; deps: any[] }> = [];
+  let memoIndex = 0;
+  let hookResult!: Result;
+
+  const mockHooks: any = {
+    useState: (initial: any) => {
+      const idx = slotIndex++;
+      if (stateSlots.length <= idx) {
+        stateSlots.push(typeof initial === "function" ? initial() : initial);
+      }
+      const setState = (newVal: any) => {
+        const nextVal = typeof newVal === "function" ? newVal(stateSlots[idx]) : newVal;
+        if (stateSlots[idx] !== nextVal) {
+          stateSlots[idx] = nextVal;
+          scheduleRender();
+        }
+      };
+      return [stateSlots[idx], setState];
+    },
+    useRef: (initial: any) => {
+      const idx = refIndex++;
+      if (refSlots.length <= idx) {
+        refSlots.push({ current: initial });
+      }
+      return refSlots[idx];
+    },
+    useCallback: (fn: any, deps: any[]) => {
+      return mockHooks.useMemo(() => fn, deps);
+    },
+    useMemo: (fn: any, deps: any[]) => {
+      const idx = memoIndex++;
+      const prev = memoSlots[idx];
+      const hasChanged = !prev || !deps || deps.some((d, i) => d !== prev.deps[i]);
+      if (hasChanged) {
+        const value = fn();
+        memoSlots[idx] = { value, deps };
+        return value;
+      }
+      return prev.value;
+    },
+    useEffect: (fn: any, deps: any[]) => {
+      const idx = effectIndex++;
+      const prev = effectSlots[idx];
+      const hasChanged = !prev || !deps || deps.some((d, i) => d !== prev?.deps[i]);
+      effectSlots[idx] = { fn, deps, hasChanged, cleanup: prev?.cleanup };
+    },
+    useContext: (context: React.Context<any>) => {
+      return (context as any)._currentValue;
+    },
+  };
+
+  let isRendering = false;
+  let hasPendingRender = false;
+
+  function scheduleRender() {
+    if (isRendering) {
+      hasPendingRender = true;
+      return;
+    }
+    render();
+  }
+
+  function render() {
+    if (isRendering) return;
+    isRendering = true;
+    try {
+      do {
+        hasPendingRender = false;
+        slotIndex = 0;
+        effectIndex = 0;
+        refIndex = 0;
+        memoIndex = 0;
+
+        const internals = (React as any).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+        const commsInternals =
+          commsSdkReactInstance && commsSdkReactInstance !== React
+            ? commsSdkReactInstance.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE
+            : null;
+        const prevDispatcher = internals ? internals.H : null;
+        const prevCommsDispatcher = commsInternals ? commsInternals.H : null;
+        if (internals) internals.H = mockHooks;
+        if (commsInternals) commsInternals.H = mockHooks;
+
+        try {
+          hookResult = hookFn();
+        } finally {
+          if (internals) internals.H = prevDispatcher;
+          if (commsInternals) commsInternals.H = prevCommsDispatcher;
+        }
+
+        for (const eff of effectSlots) {
+          if (eff.hasChanged) {
+            eff.hasChanged = false;
+            if (typeof eff.cleanup === "function") {
+              eff.cleanup();
+            }
+            eff.cleanup = eff.fn();
+          }
+        }
+      } while (hasPendingRender);
+    } finally {
+      isRendering = false;
+    }
+  }
+
+  render();
+
+  return {
+    get result() {
+      return { current: hookResult };
+    },
+    unmount: () => {
+      for (const eff of effectSlots) {
+        if (typeof eff.cleanup === "function") {
+          eff.cleanup();
+        }
+      }
+    },
+  };
+}
+
+async function act(callback: () => Promise<void> | void): Promise<void> {
+  await callback();
+}
 
 function findTreeElement(element: any, predicate: (el: any) => boolean): any {
   if (!element || typeof element !== "object") return null;
@@ -306,7 +439,7 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
         clinicianName: "Dr. Maria Santos",
       };
 
-      const harness = createHookHarness(() =>
+      const harness = createPortalHookHarness(() =>
         TeleconsultGuestFlow({
           initialStage: "in_call",
           initialActiveSession: mockSession,
