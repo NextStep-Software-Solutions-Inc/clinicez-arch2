@@ -159,6 +159,8 @@ export interface WebCallStageProps {
   participants?: CallStageParticipant[];
   hasRemoteParticipant?: boolean;
   hideHeader?: boolean;
+  /** Optional custom header rendered as a top overlay inside the video canvas; offsets PiP and stage banners below it. */
+  headerOverlay?: React.ReactNode;
   remoteStatusLabel?: string;
   onEndCall: () => void | Promise<void>;
   isE2eeActive?: boolean;

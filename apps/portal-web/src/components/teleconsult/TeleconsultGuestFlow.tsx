@@ -946,70 +946,9 @@ export function TeleconsultGuestFlow({
   // State 3: Active Consultation Room with Video & MessageThread
   if (stage === "in_call") {
     return (
-      <main className={`h-dvh min-h-0 flex flex-col overflow-hidden bg-background text-foreground ${className}`}>
+      <main className={`h-dvh min-h-0 flex flex-col overflow-hidden bg-slate-950 text-foreground ${className}`}>
         {/* Invisible remote audio track player */}
         <WebAudioTrackView track={remoteAudioTrack} />
-
-        {/* Navigation & Status Header with Plain Copy */}
-        <header
-          className="flex items-center justify-between gap-3 px-4 py-3 bg-card border-b border-border shadow-sm shrink-0"
-          style={{ boxShadow: guestShadows.sm }}
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse shrink-0" />
-            <div className="min-w-0">
-              <h1 className="text-sm sm:text-base font-bold text-foreground truncate">
-                {effectiveClinicName}
-              </h1>
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                <span>Private video visit</span>
-                <span className="sr-only">
-                  Room: {session?.roomName || "Consultation Room"} Private Consultation Room End-to-End Encrypted
-                </span>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-              <Lock className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline">Private Visit</span>
-              <span className="sm:hidden">Private</span>
-              <span className="sr-only">Private Video Consultation End-to-End Encrypted</span>
-            </div>
-          </div>
-        </header>
-
-        {pendingConsentSessionId && (
-          <div
-            data-testid="banner-patient-recording-consent"
-            role="alert"
-            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 px-4 py-3 bg-muted border-b border-border text-xs sm:text-sm shrink-0"
-            style={{ boxShadow: guestShadows.sm }}
-          >
-            <span className="font-semibold text-foreground">
-              Your doctor would like to record this visit. Is that okay?
-            </span>
-            <div className="flex items-center gap-2 justify-end shrink-0">
-              <button
-                type="button"
-                onClick={() => void handleRespondRecordingConsent(false)}
-                className="min-h-[44px] px-4 py-2 rounded-xl bg-card border border-border text-foreground font-semibold hover:bg-muted/80 transition-all cursor-pointer"
-                style={{ boxShadow: guestShadows.brandSubtle }}
-              >
-                No Thanks
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleRespondRecordingConsent(true)}
-                className="min-h-[44px] px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:opacity-95 transition-all cursor-pointer"
-                style={{ boxShadow: guestShadows.brandSm }}
-              >
-                Allow
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Call Workspace Grid */}
         <div className="flex-1 min-h-0 flex overflow-hidden">
@@ -1022,6 +961,69 @@ export function TeleconsultGuestFlow({
               participantName={effectiveClinicianName}
               selfName={userRole === "Clinician" ? effectiveClinicianName : effectivePatientName}
               hideHeader={true}
+              headerOverlay={
+                <div className="pointer-events-none flex flex-col gap-2 pt-[max(0.625rem,env(safe-area-inset-top))] pb-6 px-3 sm:px-5 bg-gradient-to-b from-slate-950/75 via-slate-950/35 to-transparent">
+                  <header
+                    data-testid="teleconsult-call-header"
+                    className="pointer-events-auto flex items-center justify-between gap-3 px-3.5 py-2 rounded-2xl bg-slate-950/55 backdrop-blur-md border border-white/10 text-white"
+                    style={{ boxShadow: guestShadows.md }}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-pulse shrink-0" />
+                      <div className="min-w-0">
+                        <h1 className="text-sm sm:text-base font-bold text-white truncate">
+                          {effectiveClinicName}
+                        </h1>
+                        <p className="text-xs text-slate-300 flex items-center gap-1.5 flex-wrap">
+                          <span>Private video visit</span>
+                          <span className="sr-only">
+                            Room: {session?.roomName || "Consultation Room"} Private Consultation Room End-to-End Encrypted
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-teal-200 text-xs font-semibold">
+                        <Lock className="w-3.5 h-3.5 shrink-0" />
+                        <span className="hidden sm:inline">Private Visit</span>
+                        <span className="sm:hidden">Private</span>
+                        <span className="sr-only">Private Video Consultation End-to-End Encrypted</span>
+                      </div>
+                    </div>
+                  </header>
+
+                  {pendingConsentSessionId && (
+                    <div
+                      data-testid="banner-patient-recording-consent"
+                      role="alert"
+                      className="pointer-events-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 px-4 py-3 rounded-2xl bg-slate-950/85 backdrop-blur-md border border-white/15 text-white text-xs sm:text-sm"
+                      style={{ boxShadow: guestShadows.md }}
+                    >
+                      <span className="font-semibold text-white">
+                        Your doctor would like to record this visit. Is that okay?
+                      </span>
+                      <div className="flex items-center gap-2 justify-end shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => void handleRespondRecordingConsent(false)}
+                          className="min-h-[44px] px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white font-semibold hover:bg-white/20 transition-all cursor-pointer"
+                        >
+                          No Thanks
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleRespondRecordingConsent(true)}
+                          className="min-h-[44px] px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:opacity-95 transition-all cursor-pointer"
+                          style={{ boxShadow: guestShadows.brandSm }}
+                        >
+                          Allow
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              }
               remoteStatusLabel={`Waiting for ${effectiveClinicianName} to join...`}
               networkQuality={networkQuality}
               isMicEnabled={callSession.mediaTracks.isMicEnabled}

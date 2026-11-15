@@ -422,5 +422,54 @@ describe('Teleconsultation UX Polish & 5Fixes Regression Suite', () => {
       expect(dockSpy).toHaveBeenCalledTimes(1);
       harness.unmount();
     });
+
+    it('CallStage (Web): renders headerOverlay inside stage and offsets PiP & screen-share banner below it', () => {
+      const overlayNode = React.createElement('header', { 'data-testid': 'custom-overlay-header' }, 'Clinic Header');
+
+      const defaultHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseStageProps,
+          hideHeader: true,
+          headerOverlay: overlayNode,
+          isCameraEnabled: true,
+          isScreenSharing: false,
+        })
+      );
+      const overlayContainer = findElement(
+        defaultHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'call-stage-header-overlay'
+      );
+      expect(overlayContainer).not.toBeNull();
+      expect(overlayContainer.props.className).toContain('absolute');
+      expect(overlayContainer.props.className).toContain('top-0');
+
+      const pipDefault = findElement(
+        defaultHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'call-stage-local-pip'
+      );
+      expect(pipDefault.props.className).toContain('top-20');
+      defaultHarness.unmount();
+
+      const sharingHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseStageProps,
+          hideHeader: true,
+          headerOverlay: overlayNode,
+          isCameraEnabled: true,
+          isScreenSharing: true,
+        })
+      );
+      const sharingBanner = findElement(
+        sharingHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'banner-screen-sharing'
+      );
+      expect(sharingBanner.props.className).toContain('top-20');
+      const pipSharing = findElement(
+        sharingHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'call-stage-local-pip'
+      );
+      expect(pipSharing.props.className).toContain('top-36');
+      sharingHarness.unmount();
+    });
   });
 });

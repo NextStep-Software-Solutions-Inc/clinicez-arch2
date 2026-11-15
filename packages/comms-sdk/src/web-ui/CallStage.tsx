@@ -28,6 +28,34 @@ function formatDuration(totalSeconds: number = 0): string {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
+/** Resolves top clearance classes for stage banners and the self-preview PiP so overlaid headers never collide with them. */
+function resolveTopStageOffsets(
+  hasHeaderOverlay: boolean,
+  showSoloWarning: boolean,
+  isScreenSharing: boolean
+): { bannerTopClass: string; pipTopClass: string } {
+  if (hasHeaderOverlay) {
+    const pipTop = showSoloWarning
+      ? 'top-52 sm:top-40'
+      : isScreenSharing
+        ? 'top-36 sm:top-32'
+        : 'top-20 sm:top-20';
+    return {
+      bannerTopClass: 'top-20 mt-[env(safe-area-inset-top)] sm:top-20',
+      pipTopClass: `mt-[env(safe-area-inset-top)] ${pipTop}`,
+    };
+  }
+  const pipTop = showSoloWarning
+    ? 'top-36 sm:top-24'
+    : isScreenSharing
+      ? 'top-16 sm:top-16'
+      : 'top-3 sm:top-4';
+  return {
+    bannerTopClass: 'top-3 sm:top-4',
+    pipTopClass: pipTop,
+  };
+}
+
 export const CallStage: React.FC<WebCallStageProps> = ({
   callId,
   roomName,
@@ -66,6 +94,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
   participants,
   hasRemoteParticipant,
   hideHeader = false,
+  headerOverlay,
   remoteStatusLabel,
   onEndCall,
   isE2eeActive = true,
@@ -243,6 +272,12 @@ export const CallStage: React.FC<WebCallStageProps> = ({
     return <span className="text-teal-400"><ScreenShareIcon size={14} /></span>;
   };
 
+  const { bannerTopClass, pipTopClass } = resolveTopStageOffsets(
+    Boolean(headerOverlay),
+    showSoloWarning,
+    isScreenSharing
+  );
+
   return (
     <div className={`flex flex-col min-h-0 h-full bg-slate-950 text-slate-100 ${className}`}>
       {/* Top Header Bar */}
@@ -384,11 +419,21 @@ export const CallStage: React.FC<WebCallStageProps> = ({
             </div>
           )}
 
+          {/* Optional Overlaid Clinic / Session Header Banner */}
+          {headerOverlay && (
+            <div
+              data-testid="call-stage-header-overlay"
+              className="pointer-events-none absolute inset-x-0 top-0 z-25"
+            >
+              {headerOverlay}
+            </div>
+          )}
+
           {/* Solo Participant Safeguard Warning */}
           {showSoloWarning && (
             <div
               data-testid="banner-solo-participant-warning"
-              className="absolute top-3 left-3 right-3 sm:top-4 sm:left-4 sm:right-4 z-30 p-3.5 sm:p-4 rounded-xl border border-amber-500/40 bg-amber-950/95 text-amber-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 shadow-xl"
+              className={`absolute left-3 right-3 sm:left-4 sm:right-4 z-30 p-3.5 sm:p-4 rounded-xl border border-amber-500/40 bg-amber-950/95 text-amber-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 shadow-xl ${bannerTopClass}`}
             >
               <div>
                 <p className="font-bold text-sm">Are you still waiting?</p>
@@ -425,7 +470,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
           {isScreenSharing && (
             <div
               data-testid="banner-screen-sharing"
-              className="absolute top-3 sm:top-4 left-1/2 -translate-x-1/2 z-25 max-w-[calc(100vw-1.5rem)] px-3 sm:px-4 py-1.5 rounded-full flex items-center gap-2 sm:gap-3"
+              className={`absolute left-1/2 -translate-x-1/2 z-25 max-w-[calc(100vw-1.5rem)] px-3 sm:px-4 py-1.5 rounded-full flex items-center gap-2 sm:gap-3 ${bannerTopClass}`}
               style={{
                 backgroundColor: webColors.primaryDark,
                 color: webColors.onPrimary,
@@ -445,17 +490,11 @@ export const CallStage: React.FC<WebCallStageProps> = ({
             </div>
           )}
 
-          {/* Picture-in-Picture Local Self-Preview Canvas (top-right, clear of bottom controls) */}
+          {/* Picture-in-Picture Local Self-Preview Canvas (top-right, clear of overlaid header & bottom controls) */}
           {(isCameraEnabled || isScreenSharing) && (
             <div
               data-testid="call-stage-local-pip"
-              className={`absolute right-3 sm:right-5 lg:right-6 z-20 ${
-                showSoloWarning
-                  ? 'top-36 sm:top-24'
-                  : isScreenSharing
-                    ? 'top-16 sm:top-16'
-                    : 'top-3 sm:top-4'
-              } ${
+              className={`absolute right-3 sm:right-5 lg:right-6 z-20 ${pipTopClass} ${
                 isScreenSharing || videoOrientation === 'landscape'
                   ? 'w-28 sm:w-36 lg:w-44 aspect-video'
                   : 'w-20 sm:w-28 lg:w-32 aspect-[3/4]'

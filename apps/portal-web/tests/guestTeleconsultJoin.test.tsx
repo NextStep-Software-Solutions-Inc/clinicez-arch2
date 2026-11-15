@@ -272,6 +272,10 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
       expect(html).toContain("In-Call Chat");
       expect(html).toContain("Leave");
       expect(html).toContain("h-dvh");
+      // Header banner overlays the video canvas instead of sitting in a solid card strip above it
+      expect(html).toContain('data-testid="call-stage-header-overlay"');
+      expect(html).toContain('data-testid="teleconsult-call-header"');
+      expect(html).toContain("backdrop-blur-md");
     });
 
     test("T3.4: Renders Visit Ended state when ended", () => {
