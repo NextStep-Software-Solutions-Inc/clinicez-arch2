@@ -2151,7 +2151,7 @@ export function ActiveTeleconsultModal({
                         : networkQuality === 'poor'
                           ? 'Weak Network • Audio Active'
                           : hasRemoteParticipant
-                            ? 'Patient Connected • Audio Only'
+                            ? 'Camera is turned off'
                             : session.mediaTracks.isCameraEnabled ? 'Waiting for Patient Video' : 'Camera Off'}
                     </ThemedText>
                   </View>
@@ -2348,7 +2348,7 @@ export function ActiveTeleconsultModal({
             networkQuality === 'reconnecting'
               ? 'Connection Interrupted • Reconnecting Patient...'
               : hasRemoteParticipant
-                ? 'Patient Connected • Camera Off or Audio Only'
+                ? 'Camera is turned off'
                 : 'Waiting for Patient to Connect'
           }
           renderIcon={renderCommsIcon}

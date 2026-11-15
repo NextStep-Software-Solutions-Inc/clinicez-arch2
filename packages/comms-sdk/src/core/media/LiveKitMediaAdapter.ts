@@ -181,11 +181,28 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
     }
   }
 
+  private isPublicationRenderableVideo(pub: {
+    track?: unknown;
+    isMuted?: boolean;
+    isEnabled?: boolean;
+  }): boolean {
+    if (!pub?.track) return false;
+    if (pub.isMuted === true) return false;
+    if (pub.isEnabled === false) return false;
+    const trackObj = pub.track as {
+      isMuted?: boolean;
+      mediaStreamTrack?: { readyState?: string };
+    };
+    if (trackObj.isMuted === true) return false;
+    if (trackObj.mediaStreamTrack?.readyState === 'ended') return false;
+    return true;
+  }
+
   getLocalCameraTrack(): unknown | null {
     if (!this.room?.localParticipant) return null;
     const pubs = Array.from(this.room.localParticipant.videoTrackPublications.values());
     const camPub = pubs.find(
-      (pub) => (pub as { source?: string }).source !== 'screen_share' && pub.track && !pub.isMuted
+      (pub) => (pub as { source?: string }).source !== 'screen_share' && this.isPublicationRenderableVideo(pub)
     );
     return camPub?.track || null;
   }
@@ -194,7 +211,7 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
     if (!this.room?.localParticipant) return null;
     const pubs = Array.from(this.room.localParticipant.videoTrackPublications.values());
     const screenPub = pubs.find(
-      (pub) => (pub as { source?: string }).source === 'screen_share' && pub.track && !pub.isMuted
+      (pub) => (pub as { source?: string }).source === 'screen_share' && this.isPublicationRenderableVideo(pub)
     );
     return screenPub?.track || null;
   }
@@ -219,10 +236,15 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
       if (!participant) return null;
       const pubs = Array.from(participant.videoTrackPublications.values());
       const screenPub = pubs.find(
-        (pub) => (pub as { source?: string }).source === 'screen_share' && pub.track && !pub.isMuted
+        (pub) => (pub as { source?: string }).source === 'screen_share' && this.isPublicationRenderableVideo(pub)
       );
       if (screenPub?.track) return screenPub.track;
-      const camPub = pubs.find((pub) => pub.track && !pub.isMuted);
+      if ((participant as { isCameraEnabled?: boolean }).isCameraEnabled === false) {
+        return null;
+      }
+      const camPub = pubs.find(
+        (pub) => (pub as { source?: string }).source !== 'screen_share' && this.isPublicationRenderableVideo(pub)
+      );
       return camPub?.track || null;
     }
 
@@ -230,7 +252,7 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
     for (const p of participants) {
       const pubs = Array.from(p.videoTrackPublications.values());
       const screenPub = pubs.find(
-        (pub) => (pub as { source?: string }).source === 'screen_share' && pub.track && !pub.isMuted
+        (pub) => (pub as { source?: string }).source === 'screen_share' && this.isPublicationRenderableVideo(pub)
       );
       if (screenPub?.track) {
         return screenPub.track;
@@ -239,18 +261,19 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
 
     // Fall back to first available unmuted camera track
     for (const p of participants) {
+      if ((p as { isCameraEnabled?: boolean }).isCameraEnabled === false) {
+        continue;
+      }
       const pubs = Array.from(p.videoTrackPublications.values());
       const camPub = pubs.find(
-        (pub) => (pub as { source?: string }).source !== 'screen_share' && pub.track && !pub.isMuted
+        (pub) => (pub as { source?: string }).source !== 'screen_share' && this.isPublicationRenderableVideo(pub)
       );
       if (camPub?.track) {
         return camPub.track;
       }
     }
 
-    // Fall back to first video track of participant 0
-    const firstPubs = Array.from(participants[0].videoTrackPublications.values());
-    return firstPubs[0]?.track || null;
+    return null;
   }
 
   getRemoteAudioTrack(participantIdentity?: string): unknown | null {
@@ -384,11 +407,25 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
         isScreenSharing: p.isScreenShareEnabled
       });
     });
+    if (RoomEvent.TrackUnpublished) {
+      room.on(RoomEvent.TrackUnpublished, (pub, p) => {
+        this.emit('trackUnsubscribed', (pub as { track?: unknown })?.track, pub, {
+          identity: (p as { identity?: string })?.identity || '',
+          name: (p as { name?: string })?.name,
+          isAudioEnabled: (p as { isMicrophoneEnabled?: boolean })?.isMicrophoneEnabled,
+          isVideoEnabled: (p as { isCameraEnabled?: boolean })?.isCameraEnabled,
+          isScreenSharing: (p as { isScreenShareEnabled?: boolean })?.isScreenShareEnabled
+        });
+      });
+    }
     if (RoomEvent.TrackMuted) {
       room.on(RoomEvent.TrackMuted, (pub, p) => {
         this.emit('trackUnsubscribed', (pub as { track?: unknown })?.track, pub, {
           identity: (p as { identity?: string })?.identity || '',
-          name: (p as { name?: string })?.name
+          name: (p as { name?: string })?.name,
+          isAudioEnabled: (p as { isMicrophoneEnabled?: boolean })?.isMicrophoneEnabled,
+          isVideoEnabled: (p as { isCameraEnabled?: boolean })?.isCameraEnabled,
+          isScreenSharing: (p as { isScreenShareEnabled?: boolean })?.isScreenShareEnabled
         });
       });
     }
@@ -396,7 +433,10 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
       room.on(RoomEvent.TrackUnmuted, (pub, p) => {
         this.emit('trackSubscribed', (pub as { track?: unknown })?.track, pub, {
           identity: (p as { identity?: string })?.identity || '',
-          name: (p as { name?: string })?.name
+          name: (p as { name?: string })?.name,
+          isAudioEnabled: (p as { isMicrophoneEnabled?: boolean })?.isMicrophoneEnabled,
+          isVideoEnabled: (p as { isCameraEnabled?: boolean })?.isCameraEnabled,
+          isScreenSharing: (p as { isScreenShareEnabled?: boolean })?.isScreenShareEnabled
         });
       });
     }
@@ -405,7 +445,10 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
         const paused = String(streamState ?? '').toLowerCase() === 'paused';
         this.emit(paused ? 'trackUnsubscribed' : 'trackSubscribed', (pub as { track?: unknown })?.track, pub, {
           identity: (p as { identity?: string })?.identity || '',
-          name: (p as { name?: string })?.name
+          name: (p as { name?: string })?.name,
+          isAudioEnabled: (p as { isMicrophoneEnabled?: boolean })?.isMicrophoneEnabled,
+          isVideoEnabled: (p as { isCameraEnabled?: boolean })?.isCameraEnabled,
+          isScreenSharing: (p as { isScreenShareEnabled?: boolean })?.isScreenShareEnabled
         });
       });
     }

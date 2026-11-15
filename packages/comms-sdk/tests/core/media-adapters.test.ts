@@ -565,5 +565,81 @@ describe('Feature F15: Comms Media Adapters (LiveKit & LocalPreview)', () => {
       // When called with explicit identity, returns targeted participant's track
       expect(adapter.getRemoteVideoTrack('part-1-cam')).toEqual({ id: 'p1-camera-track' });
     });
+
+    it('LiveKitMediaAdapter: returns null instead of muted remote video track when camera is turned off and updates on mute/unmute/unpublish', () => {
+      const roomEvents = new Map<string, Function>();
+      const camPub: any = { source: 'camera', track: { id: 'p1-cam-track', isMuted: false }, isMuted: false };
+      const remoteParticipant: any = {
+        identity: 'staff:doc-1',
+        name: 'Dr. Rivera',
+        isMicrophoneEnabled: true,
+        isCameraEnabled: true,
+        isScreenShareEnabled: false,
+        videoTrackPublications: new Map([['cam-pub', camPub]])
+      };
+      const mockRoom: any = {
+        localParticipant: { videoTrackPublications: new Map() },
+        remoteParticipants: new Map([['staff:doc-1', remoteParticipant]]),
+        on: (event: string, handler: Function) => {
+          roomEvents.set(event, handler);
+        },
+        off: () => {}
+      };
+
+      const adapter = new LiveKitMediaAdapter({ room: mockRoom, skipEnvironmentCheck: true });
+      (adapter as any).wireRoomEvents(mockRoom);
+
+      const unsubEvents: any[] = [];
+      adapter.on('trackUnsubscribed', (_track, _pub, participant) => {
+        unsubEvents.push(participant);
+      });
+
+      expect(adapter.getRemoteVideoTrack()).toEqual(camPub.track);
+
+      // Remote party turns off camera: publication stays present with isMuted: true
+      camPub.isMuted = true;
+      remoteParticipant.isCameraEnabled = false;
+      expect(adapter.getRemoteVideoTrack()).toBeNull();
+      expect(adapter.getRemoteVideoTrack('staff:doc-1')).toBeNull();
+
+      // TrackMuted event emits participant state with isVideoEnabled: false
+      const trackMutedHandler = roomEvents.get('trackMuted');
+      expect(trackMutedHandler).toBeDefined();
+      trackMutedHandler!(camPub, remoteParticipant);
+      expect(unsubEvents.length).toBe(1);
+      expect(unsubEvents[0].isVideoEnabled).toBe(false);
+
+      // TrackUnpublished also emits trackUnsubscribed
+      const trackUnpubHandler = roomEvents.get('trackUnpublished');
+      expect(trackUnpubHandler).toBeDefined();
+      trackUnpubHandler!(camPub, remoteParticipant);
+      expect(unsubEvents.length).toBe(2);
+
+      // Remote party turns camera back on
+      camPub.isMuted = false;
+      remoteParticipant.isCameraEnabled = true;
+      expect(adapter.getRemoteVideoTrack()).toEqual(camPub.track);
+    });
+
+    it('LocalPreviewMediaAdapter: returns null from getRemoteVideoTrack when remote camera and screen share are disabled', async () => {
+      const adapter = new LocalPreviewMediaAdapter({
+        mockMode: true,
+        mockRemoteParticipants: [
+          {
+            identity: 'clinician:doc-1',
+            name: 'Dr. Rivera',
+            isAudioEnabled: true,
+            isVideoEnabled: false,
+            isScreenSharing: false,
+            videoTrack: { id: 'muted-local-preview-track' }
+          }
+        ]
+      });
+      await adapter.connect({ url: 'wss://sfu.mock', token: 'tok' });
+
+      expect(adapter.getRemoteVideoTrack()).toBeNull();
+      expect(adapter.getRemoteVideoTrack('clinician:doc-1')).toBeNull();
+      await adapter.disconnect();
+    });
   });
 });

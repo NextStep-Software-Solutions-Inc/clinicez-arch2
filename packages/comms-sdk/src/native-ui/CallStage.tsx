@@ -512,17 +512,26 @@ export const CallStage: React.FC<CallStageProps> = ({
       <View style={styles.stageBody}>
         <View style={styles.primaryVideoSurface}>
           {remoteVideoSurface ?? (
-            <View style={styles.remotePlaceholder}>
+            <View testID="call-stage-remote-placeholder" style={styles.remotePlaceholder}>
               <View style={styles.avatarCircle}>
                 <Text style={styles.avatarText}>{participantInitials}</Text>
               </View>
               <Text style={styles.remotePlaceholderText}>{participantName}</Text>
-              <Text style={styles.remoteStatusText}>
-                {remoteStatusLabel ??
-                  (isCameraEnabled
-                    ? 'Connected • Waiting for Patient Video Stream'
-                    : 'Connected • Local Camera Paused')}
-              </Text>
+              <View style={styles.remoteStatusRow}>
+                {hasRemote &&
+                  networkQuality !== 'reconnecting' &&
+                  (renderIcon
+                    ? renderIcon('videoOff', { size: 15, color: resolvedColors.textLight })
+                    : renderFallbackVideoOffGlyph(resolvedColors.textLight))}
+                <Text style={styles.remoteStatusText}>
+                  {remoteStatusLabel ??
+                    (hasRemote
+                      ? 'Camera is turned off'
+                      : isCameraEnabled
+                        ? 'Connected • Waiting for Patient Video Stream'
+                        : 'Connected • Local Camera Paused')}
+                </Text>
+              </View>
             </View>
           )}
 
@@ -1465,6 +1474,12 @@ function createStyles(
     fontWeight: '700',
     color: c.textInverted,
     marginBottom: spaceScale.xxs
+  },
+  remoteStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spaceScale.xs
   },
   remoteStatusText: {
     fontSize: fontSizeScale.xs,

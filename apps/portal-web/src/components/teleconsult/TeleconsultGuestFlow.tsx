@@ -17,6 +17,7 @@ import {
   LocalPreviewMediaAdapter,
   isWebRtcSupported,
   type IMediaRoomAdapter,
+  type RemoteMediaParticipant,
 } from "@clinicez/comms-sdk/core";
 import {
   Check,
@@ -360,6 +361,7 @@ export function TeleconsultGuestFlow({
   const [localVideoTrack, setLocalVideoTrack] = useState<unknown | null>(null);
   const [remoteVideoTrack, setRemoteVideoTrack] = useState<unknown | null>(null);
   const [remoteAudioTrack, setRemoteAudioTrack] = useState<unknown | null>(null);
+  const [remoteParticipants, setRemoteParticipants] = useState<RemoteMediaParticipant[]>([]);
   const [networkQuality, setNetworkQuality] = useState<"excellent" | "good" | "poor" | "reconnecting">("good");
 
   useEffect(() => {
@@ -368,6 +370,7 @@ export function TeleconsultGuestFlow({
       setLocalVideoTrack(mediaAdapter.getLocalVideoTrack());
       setRemoteVideoTrack(mediaAdapter.getRemoteVideoTrack());
       setRemoteAudioTrack(mediaAdapter.getRemoteAudioTrack());
+      setRemoteParticipants(mediaAdapter.getRemoteParticipants ? mediaAdapter.getRemoteParticipants() : []);
       if (mediaAdapter.getNetworkQuality) {
         setNetworkQuality(mediaAdapter.getNetworkQuality());
       }
@@ -376,6 +379,8 @@ export function TeleconsultGuestFlow({
     updateTracks();
     const unsubSub = mediaAdapter.on("trackSubscribed", updateTracks);
     const unsubUnsub = mediaAdapter.on("trackUnsubscribed", updateTracks);
+    const unsubPartJoin = mediaAdapter.on("participantJoined", updateTracks);
+    const unsubPartLeft = mediaAdapter.on("participantLeft", updateTracks);
     const unsubLocal = mediaAdapter.on("localTrackChanged", updateTracks);
     const unsubConn = mediaAdapter.on("connected", updateTracks);
     const unsubDisc = mediaAdapter.on("disconnected", updateTracks);
@@ -438,6 +443,8 @@ export function TeleconsultGuestFlow({
     return () => {
       unsubSub();
       unsubUnsub();
+      unsubPartJoin();
+      unsubPartLeft();
       unsubLocal();
       unsubConn();
       unsubDisc();
@@ -945,6 +952,23 @@ export function TeleconsultGuestFlow({
 
   // State 3: Active Consultation Room with Video & MessageThread
   if (stage === "in_call") {
+    const liveRemoteName =
+      remoteParticipants.find((p) => p.name && p.name !== "Participant" && p.name.trim() !== "")?.name ||
+      callSession.participants?.find((p) => !p.isLocal && p.name && p.name !== "Participant" && p.name.trim() !== "")?.name ||
+      null;
+    const activeRemoteDisplayName =
+      metaClinicianName ||
+      session?.clinicianName ||
+      preflightMeta?.clinicianName ||
+      liveRemoteName ||
+      "Your Doctor";
+    const hasRemoteParticipant = Boolean(
+      remoteParticipants.length > 0 ||
+      remoteVideoTrack ||
+      remoteAudioTrack ||
+      callSession.participants?.some((p) => !p.isLocal)
+    );
+
     return (
       <main className={`h-dvh min-h-0 flex flex-col overflow-hidden bg-slate-950 text-foreground ${className}`}>
         {/* Invisible remote audio track player */}
@@ -958,7 +982,7 @@ export function TeleconsultGuestFlow({
               callId={session?.callId || "call-guest"}
               roomName={session?.roomName || "Consultation Room"}
               userRole={userRole === "Clinician" ? "Clinician" : "Guest"}
-              participantName={effectiveClinicianName}
+              participantName={activeRemoteDisplayName}
               selfName={userRole === "Clinician" ? effectiveClinicianName : effectivePatientName}
               hideHeader={true}
               headerOverlay={
@@ -974,20 +998,16 @@ export function TeleconsultGuestFlow({
                         <h1 className="text-sm sm:text-base font-bold text-white truncate">
                           {effectiveClinicName}
                         </h1>
-                        <p className="text-xs text-slate-300 flex items-center gap-1.5 flex-wrap">
-                          <span>Private video visit</span>
-                          <span className="sr-only">
-                            Room: {session?.roomName || "Consultation Room"} Private Consultation Room End-to-End Encrypted
-                          </span>
-                        </p>
+                        <span className="sr-only">
+                          Room: {session?.roomName || "Consultation Room"} Private Consultation Room End-to-End Encrypted
+                        </span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
                       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-teal-200 text-xs font-semibold">
                         <Lock className="w-3.5 h-3.5 shrink-0" />
-                        <span className="hidden sm:inline">Private Visit</span>
-                        <span className="sm:hidden">Private</span>
+                        <span>Private Visit</span>
                         <span className="sr-only">Private Video Consultation End-to-End Encrypted</span>
                       </div>
                     </div>
@@ -1024,7 +1044,13 @@ export function TeleconsultGuestFlow({
                   )}
                 </div>
               }
-              remoteStatusLabel={`Waiting for ${effectiveClinicianName} to join...`}
+              remoteStatusLabel={
+                networkQuality === "reconnecting"
+                  ? "Connection interrupted — reconnecting video..."
+                  : hasRemoteParticipant
+                    ? "Camera is turned off"
+                    : `Waiting for ${activeRemoteDisplayName} to join...`
+              }
               networkQuality={networkQuality}
               isMicEnabled={callSession.mediaTracks.isMicEnabled}
               isCameraEnabled={callSession.mediaTracks.isCameraEnabled}
@@ -1038,7 +1064,7 @@ export function TeleconsultGuestFlow({
               isParticipantsOpen={isParticipantsOpen}
               onToggleParticipants={handleToggleParticipants}
               participants={callSession.participants}
-              hasRemoteParticipant={Boolean(remoteVideoTrack || remoteAudioTrack || (callSession.participants?.length ?? 0) > 0)}
+              hasRemoteParticipant={hasRemoteParticipant}
               soloWarningThresholdMs={300_000}
               soloAutoLeaveGraceMs={120_000}
               onSoloLeave={async () => {
@@ -1102,14 +1128,32 @@ export function TeleconsultGuestFlow({
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
                 <h2 className="text-sm sm:text-base font-bold text-foreground">Messages</h2>
-                <button
-                  type="button"
-                  onClick={handleToggleChat}
-                  aria-label="Close messages"
-                  className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    data-testid="btn-toggle-privacy-blur"
+                    onClick={() => setPrivacyBlurEnabled((prev) => !prev)}
+                    aria-pressed={privacyBlurEnabled}
+                    aria-label={privacyBlurEnabled ? "Turn off privacy blur" : "Turn on privacy blur"}
+                    title={privacyBlurEnabled ? "Turn off privacy blur" : "Turn on privacy blur"}
+                    className={`min-h-[44px] px-3 rounded-xl inline-flex items-center justify-center gap-1.5 text-xs font-semibold border transition-colors cursor-pointer ${
+                      privacyBlurEnabled
+                        ? "bg-primary/10 text-primary border-primary/25 hover:bg-primary/15"
+                        : "bg-muted/60 text-muted-foreground border-border hover:text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {renderPrivacyIcon(privacyBlurEnabled)}
+                    <span>{privacyBlurEnabled ? "Show" : "Blur"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleChat}
+                    aria-label="Close messages"
+                    className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
               <MessageThread
                 conversationId={session?.callId || "teleconsult-chat"}

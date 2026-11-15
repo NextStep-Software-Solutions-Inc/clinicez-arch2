@@ -471,5 +471,43 @@ describe('Teleconsultation UX Polish & 5Fixes Regression Suite', () => {
       expect(pipSharing.props.className).toContain('top-36');
       sharingHarness.unmount();
     });
+
+    it('CallStage (Web & Native): renders participant name and Camera is turned off label when hasRemoteParticipant is true and no remote video surface is active', () => {
+      const webHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseStageProps,
+          participantName: 'Dr. Maria Santos',
+          hasRemoteParticipant: true,
+        })
+      );
+      const webPlaceholder = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'call-stage-remote-placeholder'
+      );
+      expect(webPlaceholder).not.toBeNull();
+      const webText = getTextContent(webPlaceholder);
+      expect(webText).toContain('Dr. Maria Santos');
+      expect(webText).toContain('Camera is turned off');
+      webHarness.unmount();
+
+      const nativeHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseStageProps,
+          colors: lightColors,
+          shadows: createShadows(lightColors),
+          participantName: 'Juan Dela Cruz',
+          hasRemoteParticipant: true,
+        })
+      );
+      const nativePlaceholder = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'call-stage-remote-placeholder'
+      );
+      expect(nativePlaceholder).not.toBeNull();
+      const nativeText = getTextContent(nativePlaceholder);
+      expect(nativeText).toContain('Juan Dela Cruz');
+      expect(nativeText).toContain('Camera is turned off');
+      nativeHarness.unmount();
+    });
   });
 });

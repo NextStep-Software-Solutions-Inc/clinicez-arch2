@@ -72,7 +72,8 @@ describe("Milestone 10 Challenger 2: Adversarial Portal Web Live Video Suite", (
           />
         );
         expect(html).toContain("St. Jude General Hospital");
-        expect(html).toContain("Private video visit");
+        expect(html).not.toContain("Private video visit");
+        expect(html).toContain("Private Visit");
         expect(html).toContain("teleconsult-room-adv-001");
         expect(html).toContain("In-Call Chat");
         expect(html).toContain("Leave");
@@ -128,7 +129,8 @@ describe("Milestone 10 Challenger 2: Adversarial Portal Web Live Video Suite", (
           />
         );
         expect(html).toContain("Apex &amp; Co. &lt;Hospital&gt; &#x27;&quot;");
-        expect(html).toContain("Private video visit");
+        expect(html).not.toContain("Private video visit");
+        expect(html).toContain("Private Visit");
         expect(html).not.toContain("<script>");
       }).not.toThrow();
     });

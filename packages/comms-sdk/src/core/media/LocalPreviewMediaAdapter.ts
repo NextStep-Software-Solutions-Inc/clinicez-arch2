@@ -196,15 +196,26 @@ export class LocalPreviewMediaAdapter implements IMediaRoomAdapter {
   getRemoteVideoTrack(participantIdentity?: string): unknown | null {
     if (participantIdentity) {
       const p = this.remoteParticipants.get(participantIdentity);
-      return p?.screenShareTrack || p?.videoTrack || null;
+      if (!p) return null;
+      if (p.isScreenSharing !== false && p.screenShareTrack) {
+        return p.screenShareTrack;
+      }
+      if (p.isVideoEnabled !== false && p.videoTrack) {
+        return p.videoTrack;
+      }
+      return null;
     }
     for (const p of this.remoteParticipants.values()) {
-      if (p.isScreenSharing && (p.screenShareTrack || p.videoTrack)) {
-        return p.screenShareTrack || p.videoTrack;
+      if (p.isScreenSharing && (p.screenShareTrack || (p.isVideoEnabled !== false && p.videoTrack))) {
+        return p.screenShareTrack || p.videoTrack || null;
       }
     }
-    const first = Array.from(this.remoteParticipants.values())[0];
-    return first?.screenShareTrack || first?.videoTrack || null;
+    for (const p of this.remoteParticipants.values()) {
+      if (p.isVideoEnabled !== false && p.videoTrack) {
+        return p.videoTrack;
+      }
+    }
+    return null;
   }
 
   getRemoteAudioTrack(participantIdentity?: string): unknown | null {

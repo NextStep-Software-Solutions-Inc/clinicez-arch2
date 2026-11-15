@@ -16,6 +16,24 @@ import { verifyGuestTeleconsult } from "../src/services/guestTeleconsult.service
 import { TeleconsultGuestFlow } from "../src/components/teleconsult/TeleconsultGuestFlow";
 import { preflightInvite } from "../src/components/teleconsult/preflightInvite";
 import { renderToString } from "react-dom/server";
+import { createHookHarness, act } from "../../../packages/comms-sdk/tests/react/hook-test-harness";
+import { CallStage as WebCallStage, MessageThread as WebMessageThread } from "@clinicez/comms-sdk/web-ui";
+
+function findTreeElement(element: any, predicate: (el: any) => boolean): any {
+  if (!element || typeof element !== "object") return null;
+  if (Array.isArray(element)) {
+    for (const child of element) {
+      const hit = findTreeElement(child, predicate);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (predicate(element)) return element;
+  if (element.props?.children !== undefined) {
+    return findTreeElement(element.props.children, predicate);
+  }
+  return null;
+}
 
 describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => {
   describe("1. Routing & Proxy Whitelisting (Zero Next.js BFF)", () => {
@@ -266,7 +284,8 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
       );
 
       expect(html).toContain("Apex Health Clinic");
-      expect(html).toContain("Private video visit");
+      expect(html).not.toContain("Private video visit");
+      expect(html).toContain("Private Visit");
       expect(html).toContain("End-to-End Encrypted");
       expect(html).toContain("Clinician Video Feed Active");
       expect(html).toContain("In-Call Chat");
@@ -276,6 +295,94 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
       expect(html).toContain('data-testid="call-stage-header-overlay"');
       expect(html).toContain('data-testid="teleconsult-call-header"');
       expect(html).toContain("backdrop-blur-md");
+    });
+
+    test("T3.3b: Opening guest Messages drawer renders privacy blur toggle button in header and unblurs/reblurs messages", async () => {
+      const mockSession = {
+        callId: "call-uuid-privacy-1",
+        roomName: "room-apex-privacy",
+        relayUrl: "wss://media.clinicez.com",
+        guestToken: "jwt-token",
+        clinicianName: "Dr. Maria Santos",
+      };
+
+      const harness = createHookHarness(() =>
+        TeleconsultGuestFlow({
+          initialStage: "in_call",
+          initialActiveSession: mockSession,
+          clinicName: "Apex Health Clinic",
+        })
+      );
+
+      // Drawer is closed initially; click CallStage's onToggleChat callback to open it
+      const callStageEl = findTreeElement(
+        harness.result.current,
+        (el) => el.type === WebCallStage || typeof el.props?.onToggleChat === "function"
+      );
+      expect(callStageEl).not.toBeNull();
+
+      await act(async () => {
+        callStageEl.props.onToggleChat();
+      });
+
+      const toggleBtnBlurred = findTreeElement(
+        harness.result.current,
+        (el) => el.props?.["data-testid"] === "btn-toggle-privacy-blur"
+      );
+      expect(toggleBtnBlurred).not.toBeNull();
+      expect(toggleBtnBlurred.props["aria-label"]).toBe("Turn off privacy blur");
+      expect(toggleBtnBlurred.props["aria-pressed"]).toBe(true);
+
+      const threadElBlurred = findTreeElement(
+        harness.result.current,
+        (el) => el.type === WebMessageThread || typeof el.props?.privacyBlurEnabled === "boolean"
+      );
+      expect(threadElBlurred).not.toBeNull();
+      expect(threadElBlurred.props.privacyBlurEnabled).toBe(true);
+      const htmlBlurred = renderToString(React.createElement(WebMessageThread, threadElBlurred.props));
+      expect(htmlBlurred).toContain("blur-sm");
+
+      // Click toggle button -> unblurs messages for mobile and desktop users
+      await act(async () => {
+        toggleBtnBlurred.props.onClick();
+      });
+
+      const toggleBtnClear = findTreeElement(
+        harness.result.current,
+        (el) => el.props?.["data-testid"] === "btn-toggle-privacy-blur"
+      );
+      expect(toggleBtnClear.props["aria-label"]).toBe("Turn on privacy blur");
+      expect(toggleBtnClear.props["aria-pressed"]).toBe(false);
+
+      const threadElClear = findTreeElement(
+        harness.result.current,
+        (el) => el.type === WebMessageThread || typeof el.props?.privacyBlurEnabled === "boolean"
+      );
+      expect(threadElClear.props.privacyBlurEnabled).toBe(false);
+      const htmlClear = renderToString(React.createElement(WebMessageThread, threadElClear.props));
+      expect(htmlClear).not.toContain("blur-sm");
+      expect(htmlClear).toContain("You can send messages to your doctor here during your visit.");
+
+      harness.unmount();
+    });
+
+    test("T3.3c: Shows Waiting label when alone in room vs Camera is turned off with clinician name only when clinician joins without video", () => {
+      const htmlAlone = renderToString(
+        <TeleconsultGuestFlow
+          initialStage="in_call"
+          initialActiveSession={{
+            callId: "call-alone-1",
+            roomName: "room-alone-1",
+            relayUrl: "wss://media.clinicez.com",
+            guestToken: "jwt-token",
+            clinicianName: "Dr. Maria Santos",
+          }}
+          clinicName="Apex Health Clinic"
+        />
+      );
+      expect(htmlAlone).toContain("Dr. Maria Santos");
+      expect(htmlAlone).toContain("Waiting for Dr. Maria Santos to join...");
+      expect(htmlAlone).not.toContain("Camera is turned off");
     });
 
     test("T3.4: Renders Visit Ended state when ended", () => {

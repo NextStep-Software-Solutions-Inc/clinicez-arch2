@@ -394,7 +394,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
         {/* Video Canvas Stage */}
         <main className="flex-1 relative flex items-center justify-center bg-slate-900 overflow-hidden">
           {remoteVideoSurface ?? (
-            <div className="text-center p-8 space-y-3">
+            <div data-testid="call-stage-remote-placeholder" className="text-center p-8 space-y-3">
               <div
                 className="w-20 h-20 rounded-full bg-teal-700 text-white mx-auto flex items-center justify-center text-2xl font-bold"
                 style={{
@@ -406,11 +406,22 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                 {participantInitials}
               </div>
               <h2 className="text-lg font-bold text-slate-100">{participantName}</h2>
-              <p className="text-xs sm:text-sm text-slate-300 mt-1">
-                {remoteStatusLabel ??
-                  (isCameraEnabled
-                    ? `Waiting for ${participantName} to join...`
-                    : 'Camera is off')}
+              <p className="text-xs sm:text-sm text-slate-300 mt-1 flex items-center justify-center gap-1.5">
+                {hasRemote &&
+                  networkQuality !== 'reconnecting' &&
+                  (renderIcon ? (
+                    renderIcon('videoOff', { size: 15, color: lightColors.textLight })
+                  ) : (
+                    <VideoOffIcon size={15} className="text-slate-400 shrink-0" />
+                  ))}
+                <span>
+                  {remoteStatusLabel ??
+                    (hasRemote
+                      ? 'Camera is turned off'
+                      : isCameraEnabled
+                        ? `Waiting for ${participantName} to join...`
+                        : 'Camera is off')}
+                </span>
                 <span className="sr-only">
                   {' '}
                   {isCameraEnabled ? 'Clinician Video Feed Active' : 'Local Camera Paused'}
