@@ -23,6 +23,7 @@ import {
 } from '@clinicez/comms-sdk/native-ui';
 import {
   CommsContext,
+  useAutoVideoOrientation,
   useCallSession,
   useConversations,
   useConversation,
@@ -386,11 +387,14 @@ interface WebVideoTrackViewProps {
   muted?: boolean;
   mirror?: boolean;
   objectFit?: 'cover' | 'contain';
+  onIntrinsicDimensions?: (width: number, height: number) => void;
 }
 
 const WebVideoTrackView: React.FC<WebVideoTrackViewProps> = React.memo(
-  ({ track, muted = false, mirror = false, objectFit = 'cover' }) => {
+  ({ track, muted = false, mirror = false, objectFit = 'cover', onIntrinsicDimensions }) => {
     const videoElRef = useRef<HTMLVideoElement | null>(null);
+    const onDimsRef = useRef(onIntrinsicDimensions);
+    onDimsRef.current = onIntrinsicDimensions;
 
     useEffect(() => {
       const el = videoElRef.current;
@@ -399,21 +403,39 @@ const WebVideoTrackView: React.FC<WebVideoTrackViewProps> = React.memo(
         attach?: (element: HTMLMediaElement) => void;
         detach?: (element?: HTMLMediaElement) => void;
       };
+      const reportIntrinsicDims = () => {
+        if (el.videoWidth > 0 && el.videoHeight > 0) {
+          onDimsRef.current?.(el.videoWidth, el.videoHeight);
+        }
+      };
+      const detachListeners = () => {
+        el.removeEventListener('loadedmetadata', reportIntrinsicDims);
+        el.removeEventListener('loadeddata', reportIntrinsicDims);
+        el.removeEventListener('resize', reportIntrinsicDims);
+      };
+      el.addEventListener('loadedmetadata', reportIntrinsicDims);
+      el.addEventListener('loadeddata', reportIntrinsicDims);
+      el.addEventListener('resize', reportIntrinsicDims);
+
       if (typeof attachable.attach === 'function') {
         attachable.attach(el);
+        reportIntrinsicDims();
         return () => {
+          detachListeners();
           attachable.detach?.(el);
         };
       }
       if (typeof MediaStream !== 'undefined' && track instanceof MediaStreamTrack) {
         el.srcObject = new MediaStream([track]);
+        reportIntrinsicDims();
         return () => {
+          detachListeners();
           if (el.srcObject) {
             el.srcObject = null;
           }
         };
       }
-      return undefined;
+      return detachListeners;
     }, [track]);
 
     if (Platform.OS !== 'web' || !track) return null;
@@ -918,7 +940,15 @@ export function ActiveTeleconsultModal({
   const [dataChannelMessages, setDataChannelMessages] = useState<ThreadMessage[]>([]);
   const [dockedTooltip, setDockedTooltip] = useState<string | null>(null);
   const [isPipActive, setIsPipActive] = useState<boolean>(false);
-  const [videoOrientation, setVideoOrientation] = useState<'portrait' | 'landscape'>('landscape');
+  const {
+    videoOrientation,
+    toggleOrientation: handleToggleOrientation,
+    reportVideoDimensions,
+  } = useAutoVideoOrientation({
+    defaultOrientation: 'landscape',
+    localVideoTrack: stagingVideoTrack,
+  });
+  const [webStageViewportHeight, setWebStageViewportHeight] = useState<number | null>(null);
   const [isDraggingDock, setIsDraggingDock] = useState<boolean>(false);
   const [isConfirmEndCallOpen, setIsConfirmEndCallOpen] = useState<boolean>(false);
   const isPipActiveRef = useRef<boolean>(isPipActive);
@@ -1724,10 +1754,6 @@ export function ActiveTeleconsultModal({
     maximizeCallStage();
   }, [maximizeCallStage]);
 
-  const handleToggleOrientation = useCallback(() => {
-    setVideoOrientation((prev) => (prev === 'landscape' ? 'portrait' : 'landscape'));
-  }, []);
-
   const stopDragPropagation = useCallback((e: any) => {
     e?.stopPropagation?.();
   }, []);
@@ -2005,6 +2031,55 @@ export function ActiveTeleconsultModal({
     [clampDockCoordinates, pan],
   );
 
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (!isActuallyInCall || isCallStageDocked) {
+      setWebStageViewportHeight(null);
+      return;
+    }
+
+    const syncViewportHeight = () => {
+      const vv = window.visualViewport;
+      const layoutHeight = Math.round(window.innerHeight || document.documentElement?.clientHeight || 0);
+      if (vv && (!vv.scale || vv.scale <= 1.01)) {
+        const visualHeight = Math.round(vv.height);
+        const clamped = layoutHeight > 0 ? Math.min(layoutHeight, visualHeight) : visualHeight;
+        if (clamped > 0) {
+          setWebStageViewportHeight(clamped);
+          return;
+        }
+      }
+      if (layoutHeight > 0) {
+        setWebStageViewportHeight(layoutHeight);
+      }
+    };
+
+    syncViewportHeight();
+    window.addEventListener('resize', syncViewportHeight);
+    window.addEventListener('orientationchange', syncViewportHeight);
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', syncViewportHeight);
+
+    return () => {
+      window.removeEventListener('resize', syncViewportHeight);
+      window.removeEventListener('orientationchange', syncViewportHeight);
+      vv?.removeEventListener('resize', syncViewportHeight);
+    };
+  }, [isActuallyInCall, isCallStageDocked]);
+
+  const callStageColors = useMemo(
+    () =>
+      isDarkTheme
+        ? {
+            ...activeTheme.resolvedColors,
+            surfaceInverse: activeTheme.resolvedColors.background,
+            textInverted: activeTheme.resolvedColors.text,
+            onPrimary: activeTheme.resolvedColors.text,
+          }
+        : activeTheme.resolvedColors,
+    [activeTheme.resolvedColors, isDarkTheme],
+  );
+
   const remoteAudioElement =
     Platform.OS === 'web' && isActuallyInCall ? (
       <View
@@ -2158,12 +2233,24 @@ export function ActiveTeleconsultModal({
                 )}
 
                 {localVideoTrack && (
-                  <View style={[styles.dockedPipSelfInset, { backgroundColor: pipStageBg }]} pointerEvents="none">
+                  <View
+                    style={[
+                      styles.dockedPipSelfInset,
+                      !session.mediaTracks.isScreenSharing &&
+                        videoOrientation === 'portrait' &&
+                        styles.dockedPipSelfInsetPortrait,
+                      { backgroundColor: pipStageBg },
+                    ]}
+                    pointerEvents="none"
+                  >
                     <WebVideoTrackView
                       track={localVideoTrack}
                       muted={true}
                       mirror={!session.mediaTracks.isScreenSharing}
                       objectFit={session.mediaTracks.isScreenSharing ? 'contain' : 'cover'}
+                      onIntrinsicDimensions={
+                        !session.mediaTracks.isScreenSharing ? reportVideoDimensions : undefined
+                      }
                     />
                   </View>
                 )}
@@ -2330,12 +2417,18 @@ export function ActiveTeleconsultModal({
   // 100% Full Screen Edge-to-Edge Call Stage without header bar or close button
   if (isActuallyInCall && !isCallStageDocked) {
     return (
-      <View style={styles.fullScreenStage} testID="teleconsult-active-stage-container">
+      <View
+        style={[
+          styles.fullScreenStage,
+          Platform.OS === 'web' && webStageViewportHeight ? { height: webStageViewportHeight } : null,
+        ]}
+        testID="teleconsult-active-stage-container"
+      >
         {remoteAudioElement}
         <CallStage
           callId={callId}
           roomName={session.roomName || callId}
-          colors={activeTheme.resolvedColors}
+          colors={callStageColors}
           shadows={activeCommsShadows}
           userRole={isDoctor ? 'Clinician' : 'Staff'}
           participantName={resolvedPatientName}
@@ -2416,6 +2509,7 @@ export function ActiveTeleconsultModal({
                 muted={true}
                 mirror={mirrorLocal}
                 objectFit={fitMode}
+                onIntrinsicDimensions={!session.mediaTracks.isScreenSharing ? reportVideoDimensions : undefined}
               />
             );
           }}
@@ -2481,6 +2575,8 @@ export function ActiveTeleconsultModal({
               clinicianName={resolvedClinicianName}
               scheduledTime={teleconsultSession.scheduledTime}
               hideHeader
+              videoOrientation={videoOrientation}
+              onToggleOrientation={handleToggleOrientation}
               mediaModeLabel={stagingHardwareNote}
               isCameraEnabled={session.mediaTracks.isCameraEnabled}
               isMicEnabled={session.mediaTracks.isMicEnabled}
@@ -2494,7 +2590,14 @@ export function ActiveTeleconsultModal({
               onCopyPatientPin={handleCopyPatientPin}
               renderVideoPreview={() => {
                 if (Platform.OS === 'web' && session.mediaTracks.isCameraEnabled && stagingVideoTrack) {
-                  return <WebVideoTrackView track={stagingVideoTrack} muted mirror />;
+                  return (
+                    <WebVideoTrackView
+                      track={stagingVideoTrack}
+                      muted
+                      mirror
+                      onIntrinsicDimensions={reportVideoDimensions}
+                    />
+                  );
                 }
                 return (
                   <View style={styles.stagingPlaceholder}>
@@ -2719,6 +2822,10 @@ const createStyles = () => StyleSheet.create({
     backgroundColor: theme.colors.surfaceInverse,
     ...theme.shadows.md,
   },
+  dockedPipSelfInsetPortrait: {
+    width: 54,
+    height: 72,
+  },
   dockedPipBadgeBottomLeft: {
     position: 'absolute',
     left: theme.spacing.sm,
@@ -2843,7 +2950,10 @@ const createStyles = () => StyleSheet.create({
     right: 0,
     bottom: 0,
     width: '100vw' as any,
+    maxWidth: '100dvw' as any,
     height: '100vh' as any,
+    maxHeight: '100dvh' as any,
+    overflow: 'hidden',
     zIndex: 2000000,
     backgroundColor: theme.colors.surface,
   },

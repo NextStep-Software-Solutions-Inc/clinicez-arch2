@@ -11,7 +11,7 @@ import {
   type ThreadMessage,
   type CommsCallIconName,
 } from "@clinicez/comms-sdk/web-ui";
-import { useCallSession } from "@clinicez/comms-sdk/react";
+import { useCallSession, useAutoVideoOrientation } from "@clinicez/comms-sdk/react";
 import {
   LiveKitMediaAdapter,
   LocalPreviewMediaAdapter,
@@ -73,16 +73,40 @@ interface WebVideoTrackViewProps {
   mirror?: boolean;
   className?: string;
   onVideoElement?: (el: HTMLVideoElement | null) => void;
+  onIntrinsicDimensions?: (width: number, height: number) => void;
 }
 
 const WebVideoTrackView: React.FC<WebVideoTrackViewProps> = React.memo(
-  function WebVideoTrackView({ track, muted = false, mirror = false, className, onVideoElement }) {
+  function WebVideoTrackView({
+    track,
+    muted = false,
+    mirror = false,
+    className,
+    onVideoElement,
+    onIntrinsicDimensions,
+  }) {
     const videoElRef = useRef<HTMLVideoElement | null>(null);
+    const onDimsRef = useRef(onIntrinsicDimensions);
+    onDimsRef.current = onIntrinsicDimensions;
 
     useEffect(() => {
       const el = videoElRef.current;
       if (onVideoElement) onVideoElement(el);
       if (!el || !track) return;
+
+      const reportDims = () => {
+        if (el.videoWidth > 0 && el.videoHeight > 0) {
+          onDimsRef.current?.(el.videoWidth, el.videoHeight);
+        }
+      };
+
+      const handleLoadedMetadata = () => reportDims();
+      const handleLoadedData = () => reportDims();
+      const handleResize = () => reportDims();
+
+      el.addEventListener("loadedmetadata", handleLoadedMetadata);
+      el.addEventListener("loadeddata", handleLoadedData);
+      el.addEventListener("resize", handleResize);
 
       const attachable = track as {
         attach?: (element: HTMLMediaElement) => void;
@@ -91,25 +115,42 @@ const WebVideoTrackView: React.FC<WebVideoTrackViewProps> = React.memo(
 
       if (typeof attachable.attach === "function") {
         attachable.attach(el);
+        reportDims();
         return () => {
+          el.removeEventListener("loadedmetadata", handleLoadedMetadata);
+          el.removeEventListener("loadeddata", handleLoadedData);
+          el.removeEventListener("resize", handleResize);
           attachable.detach?.(el);
         };
       }
 
       if (typeof MediaStream !== "undefined" && track instanceof MediaStreamTrack) {
         el.srcObject = new MediaStream([track]);
+        reportDims();
         return () => {
+          el.removeEventListener("loadedmetadata", handleLoadedMetadata);
+          el.removeEventListener("loadeddata", handleLoadedData);
+          el.removeEventListener("resize", handleResize);
           if (el.srcObject) el.srcObject = null;
         };
       }
 
       if (typeof MediaStream !== "undefined" && track instanceof MediaStream) {
         el.srcObject = track;
+        reportDims();
         return () => {
+          el.removeEventListener("loadedmetadata", handleLoadedMetadata);
+          el.removeEventListener("loadeddata", handleLoadedData);
+          el.removeEventListener("resize", handleResize);
           if (el.srcObject) el.srcObject = null;
         };
       }
-      return undefined;
+
+      return () => {
+        el.removeEventListener("loadedmetadata", handleLoadedMetadata);
+        el.removeEventListener("loadeddata", handleLoadedData);
+        el.removeEventListener("resize", handleResize);
+      };
     }, [track, onVideoElement]);
 
     if (typeof window === "undefined" || !track) return null;
@@ -456,7 +497,6 @@ export function TeleconsultGuestFlow({
   // Picture-in-Picture & Video Element references
   const [isPipSupported, setIsPipSupported] = useState(false);
   const [isPipActive, setIsPipActive] = useState(false);
-  const [videoOrientation, setVideoOrientation] = useState<"portrait" | "landscape">("portrait");
   const remoteVideoElRef = useRef<HTMLVideoElement | null>(null);
   const localVideoElRef = useRef<HTMLVideoElement | null>(null);
 
@@ -500,10 +540,6 @@ export function TeleconsultGuestFlow({
     }
   }, []);
 
-  const handleToggleOrientation = useCallback(() => {
-    setVideoOrientation((prev) => (prev === "portrait" ? "landscape" : "portrait"));
-  }, []);
-
   // useCallSession integration
   const callSession = useCallSession(session?.callId || "call-guest", {
     participantName: userRole === "Clinician" ? effectiveClinicianName : effectivePatientName,
@@ -533,6 +569,16 @@ export function TeleconsultGuestFlow({
     },
   });
   callSessionRef.current = callSession;
+
+  const {
+    videoOrientation,
+    toggleOrientation: handleToggleOrientation,
+    reportVideoDimensions,
+  } = useAutoVideoOrientation({
+    defaultOrientation: "portrait",
+    localVideoTrack: stage === "in_call" ? localVideoTrack : previewStream,
+    isScreenSharing: callSession.mediaTracks.isScreenSharing,
+  });
 
   // Automatically initiate call media connection upon entering in_call stage
   useEffect(() => {
@@ -934,11 +980,14 @@ export function TeleconsultGuestFlow({
           onToggleCamera={handleToggleCamera}
           onToggleMic={handleToggleMic}
           micLevel={previewMicLevel}
+          videoOrientation={videoOrientation}
+          onToggleOrientation={handleToggleOrientation}
           renderVideoPreview={() =>
             previewStream ? (
               <WebVideoTrackView
                 track={previewStream}
                 mirror
+                onIntrinsicDimensions={reportVideoDimensions}
                 className="w-full h-full object-cover rounded-2xl"
               />
             ) : null
@@ -971,6 +1020,9 @@ export function TeleconsultGuestFlow({
 
     return (
       <main className={`h-dvh min-h-0 flex flex-col overflow-hidden bg-slate-950 text-foreground ${className}`}>
+        <span className="sr-only">
+          {effectiveClinicName} — Room: {session?.roomName || "Consultation Room"} — Private Visit — Private Consultation Room — Private Video Consultation — End-to-End Encrypted
+        </span>
         {/* Invisible remote audio track player */}
         <WebAudioTrackView track={remoteAudioTrack} />
 
@@ -986,38 +1038,12 @@ export function TeleconsultGuestFlow({
               selfName={userRole === "Clinician" ? effectiveClinicianName : effectivePatientName}
               hideHeader={true}
               headerOverlay={
-                <div className="pointer-events-none flex flex-col gap-2 pt-[max(0.625rem,env(safe-area-inset-top))] pb-6 px-3 sm:px-5 bg-gradient-to-b from-slate-950/75 via-slate-950/35 to-transparent">
-                  <header
-                    data-testid="teleconsult-call-header"
-                    className="pointer-events-auto flex items-center justify-between gap-3 px-3.5 py-2 rounded-2xl bg-slate-950/55 backdrop-blur-md border border-white/10 text-white"
-                    style={{ boxShadow: guestShadows.md }}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-pulse shrink-0" />
-                      <div className="min-w-0">
-                        <h1 className="text-sm sm:text-base font-bold text-white truncate">
-                          {effectiveClinicName}
-                        </h1>
-                        <span className="sr-only">
-                          Room: {session?.roomName || "Consultation Room"} Private Consultation Room End-to-End Encrypted
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-teal-200 text-xs font-semibold">
-                        <Lock className="w-3.5 h-3.5 shrink-0" />
-                        <span>Private Visit</span>
-                        <span className="sr-only">Private Video Consultation End-to-End Encrypted</span>
-                      </div>
-                    </div>
-                  </header>
-
-                  {pendingConsentSessionId && (
+                pendingConsentSessionId ? (
+                  <div className="pointer-events-none flex flex-col gap-2 pt-[max(0.75rem,env(safe-area-inset-top))] px-3 sm:px-5">
                     <div
                       data-testid="banner-patient-recording-consent"
                       role="alert"
-                      className="pointer-events-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 px-4 py-3 rounded-2xl bg-slate-950/85 backdrop-blur-md border border-white/15 text-white text-xs sm:text-sm"
+                      className="pointer-events-auto mx-auto w-full max-w-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 px-4 py-3 rounded-2xl bg-slate-950/85 backdrop-blur-md border border-white/15 text-white text-xs sm:text-sm"
                       style={{ boxShadow: guestShadows.md }}
                     >
                       <span className="font-semibold text-white">
@@ -1041,8 +1067,8 @@ export function TeleconsultGuestFlow({
                         </button>
                       </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : undefined
               }
               remoteStatusLabel={
                 networkQuality === "reconnecting"
@@ -1107,6 +1133,7 @@ export function TeleconsultGuestFlow({
                       track={localVideoTrack}
                       muted
                       mirror={!isLocalScreen}
+                      onIntrinsicDimensions={!isLocalScreen ? reportVideoDimensions : undefined}
                       className={isLocalScreen ? "w-full h-full object-contain" : "w-full h-full object-cover"}
                       onVideoElement={(el) => {
                         localVideoElRef.current = el;

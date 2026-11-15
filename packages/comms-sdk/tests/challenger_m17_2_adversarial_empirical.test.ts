@@ -250,22 +250,24 @@ describe('Milestone M17 Challenger 2: Adversarial & Empirical Verification (R7.3
       expect(content).not.toContain('ID: {session');
     });
 
-    it('2.5: TeleconsultGuestFlow.tsx eliminates duplicate top header controls (In-Call Chat & Leave) during in_call', () => {
+    it('2.5: TeleconsultGuestFlow.tsx eliminates top header and duplicate controls (In-Call Chat & Leave) during in_call', () => {
       const flowPath = path.join(
         rootDir,
         'apps/portal-web/src/components/teleconsult/TeleconsultGuestFlow.tsx'
       );
       const content = fs.readFileSync(flowPath, 'utf-8');
 
-      const inCallBlockMatch = content.match(/if \(stage === "in_call"\) \{([\s\S]*?)return \([\s\S]*?<main[^>]*>([\s\S]*?)<\/header>/);
+      const inCallBlockMatch = content.match(/if \(stage === "in_call"\) \{[\s\S]*?return \([\s\S]*?<main[^>]*>([\s\S]*?)<CallStage/);
       expect(inCallBlockMatch).not.toBeNull();
-      const inCallHeader = inCallBlockMatch![2];
+      const preCallStageRegion = inCallBlockMatch![1];
 
-      // Top header during in_call must not contain redundant Chat or Leave/End buttons
-      expect(inCallHeader).not.toContain('In-Call Chat');
-      expect(inCallHeader).not.toContain('handleToggleChat');
-      expect(inCallHeader).not.toContain('Leave');
-      expect(inCallHeader).not.toContain('handleEndCall');
+      // Active call renders edge-to-edge without top header bar or duplicate Chat/Leave controls
+      expect(preCallStageRegion).not.toContain('<header');
+      expect(preCallStageRegion).not.toContain('teleconsult-call-header');
+      expect(preCallStageRegion).not.toContain('In-Call Chat');
+      expect(preCallStageRegion).not.toContain('handleToggleChat');
+      expect(preCallStageRegion).not.toContain('Leave');
+      expect(preCallStageRegion).not.toContain('handleEndCall');
     });
   });
 

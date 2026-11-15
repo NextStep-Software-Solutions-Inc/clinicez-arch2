@@ -3,12 +3,14 @@ import {
   Platform,
   StyleSheet,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { CallStage } from '@clinicez/comms-sdk/native-ui';
 import type { CommsCallIconName } from '@clinicez/comms-sdk/native-ui';
 import { useCallSession } from '@clinicez/comms-sdk';
+import { useAutoVideoOrientation } from '@clinicez/comms-sdk/react';
 import Badge from '../../../components/ui/Badge';
 import ThemedText from '../../../components/ui/ThemedText';
 import { useAppTheme } from '../../../contexts/ThemeContext';
@@ -44,11 +46,35 @@ interface WebVideoTrackViewProps {
   track: unknown;
   muted?: boolean;
   mirror?: boolean;
+  onIntrinsicDimensions?: (width: number, height: number) => void;
 }
 
 const WebVideoTrackView: React.FC<WebVideoTrackViewProps> = React.memo(
-  ({ track, muted = false, mirror = false }) => {
+  ({ track, muted = false, mirror = false, onIntrinsicDimensions }) => {
     const videoElRef = useRef<HTMLVideoElement | null>(null);
+    const onDimsRef = useRef(onIntrinsicDimensions);
+    onDimsRef.current = onIntrinsicDimensions;
+
+    useEffect(() => {
+      const el = videoElRef.current;
+      if (!el || !track) return;
+      const reportIntrinsicDims = () => {
+        if (el.videoWidth > 0 && el.videoHeight > 0) {
+          onDimsRef.current?.(el.videoWidth, el.videoHeight);
+        }
+      };
+      if (el.videoWidth > 0 && el.videoHeight > 0) {
+        reportIntrinsicDims();
+      }
+      el.addEventListener('loadedmetadata', reportIntrinsicDims);
+      el.addEventListener('loadeddata', reportIntrinsicDims);
+      el.addEventListener('resize', reportIntrinsicDims);
+      return () => {
+        el.removeEventListener('loadedmetadata', reportIntrinsicDims);
+        el.removeEventListener('loadeddata', reportIntrinsicDims);
+        el.removeEventListener('resize', reportIntrinsicDims);
+      };
+    }, [track]);
 
     useEffect(() => {
       const el = videoElRef.current;
@@ -105,13 +131,23 @@ export default function TeleconsultCallScreen({ route }: Props) {
     process.env.EXPO_PUBLIC_ENABLE_DEMO_TELECONSULT === 'true' ||
     process.env.EXPO_PUBLIC_DEMO_TELECONSULT === 'true';
 
-  const [videoOrientation, setVideoOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [, setIsFrontCamera] = useState(true);
 
   const session = useCallSession(callId, {
     isDoctor: false,
     participantName: clinicianName,
     roomName,
+  });
+
+  const windowDimensions = useWindowDimensions();
+  const {
+    videoOrientation,
+    setVideoOrientation,
+    reportVideoDimensions,
+  } = useAutoVideoOrientation({
+    defaultOrientation: 'portrait',
+    externalDimensions: windowDimensions,
+    isScreenSharing: session.mediaTracks.isScreenSharing,
   });
 
   const handleEndCall = useCallback(async () => {
@@ -184,10 +220,18 @@ export default function TeleconsultCallScreen({ route }: Props) {
           track={track}
           muted={trackType === 'local'}
           mirror={trackType === 'local'}
+          onIntrinsicDimensions={
+            trackType === 'local' && !session.mediaTracks.isScreenSharing ? reportVideoDimensions : undefined
+          }
         />
       );
     },
-    [session.mediaAdapter, session.mediaTracks.isCameraEnabled]
+    [
+      session.mediaAdapter,
+      session.mediaTracks.isCameraEnabled,
+      session.mediaTracks.isScreenSharing,
+      reportVideoDimensions,
+    ]
   );
 
   return (

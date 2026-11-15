@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { CallWaitingRoom } from '@clinicez/comms-sdk/native-ui';
+import { useAutoVideoOrientation } from '@clinicez/comms-sdk/react';
 import Screen from '../../../components/layout/Screen';
 import IconButton from '../../../components/ui/IconButton';
 import ThemedText from '../../../components/ui/ThemedText';
@@ -138,6 +139,12 @@ export default function TeleconsultWaitingRoomScreen({ route }: Props) {
     }
   }, [navigation]);
 
+  const windowDimensions = useWindowDimensions();
+  const { videoOrientation, toggleOrientation } = useAutoVideoOrientation({
+    defaultOrientation: 'portrait',
+    externalDimensions: windowDimensions,
+  });
+
   return (
     <Screen width="form" contentContainerStyle={styles.screenContainer}>
       <View
@@ -197,6 +204,8 @@ export default function TeleconsultWaitingRoomScreen({ route }: Props) {
         onSubmitConsent={handleSubmitConsent}
         onEnterCall={handleEnterCall}
         onCancelCall={handleCancelCall}
+        videoOrientation={videoOrientation}
+        onToggleOrientation={toggleOrientation}
         isLoading={isLoading}
         style={styles.waitingRoomContent}
       />

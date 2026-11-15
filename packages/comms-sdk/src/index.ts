@@ -11,6 +11,7 @@ export {
   useSendMessage,
   useTriageQueue,
   useCallSession,
+  useAutoVideoOrientation,
   OptimisticStore,
   SubscriptionTracker,
   useEventSubscription
@@ -48,7 +49,9 @@ export type {
   EmergencyOverrideInput,
   UseCallSessionCallbacks,
   UseCallSessionOptions,
-  UseCallSessionResult
+  UseCallSessionResult,
+  UseAutoVideoOrientationOptions,
+  UseAutoVideoOrientationResult
 } from './react';
 
 export * as NativeUi from './native-ui';

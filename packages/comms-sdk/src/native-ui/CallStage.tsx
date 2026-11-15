@@ -401,6 +401,12 @@ export const CallStage: React.FC<CallStageProps> = ({
     </View>
   );
 
+  const hasStageTopAlerts =
+    isRecording ||
+    (!isRecording && recordingConsentStatus === 'requested') ||
+    networkQuality === 'poor' ||
+    networkQuality === 'reconnecting';
+
   return (
     <View
       style={[styles.container, style]}
@@ -445,66 +451,6 @@ export const CallStage: React.FC<CallStageProps> = ({
               <Text style={styles.endCallHeaderText}>End Call</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      )}
-
-      {/* Persistent Red REC Banner with Single-Party Stop */}
-      {isRecording && (
-        <View style={styles.recBanner}>
-          <View style={styles.recDotContainer}>
-            <View style={styles.recDot} />
-            <Text style={styles.recText}>REC</Text>
-          </View>
-          <Text style={styles.recTimer}>{formatDuration(recordingDurationSeconds)}</Text>
-          <Text style={styles.recLabel}>Recording in progress</Text>
-          {onStopRecording && canStopRecording && (
-            <TouchableOpacity
-              style={styles.stopRecButton}
-              onPress={onStopRecording}
-              accessibilityRole="button"
-              accessibilityLabel="Stop recording consultation"
-            >
-              <Text style={styles.stopRecButtonText}>Stop Recording</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
-      {!isRecording && recordingConsentStatus === 'requested' && (
-        <View style={styles.consentBanner}>
-          <Text style={styles.consentBannerText}>Awaiting patient recording consent</Text>
-          {onApproveConsentPreview && (
-            <TouchableOpacity
-              style={styles.approvePreviewButton}
-              onPress={onApproveConsentPreview}
-              accessibilityRole="button"
-              accessibilityLabel="Approve recording consent in local preview"
-            >
-              <Text style={styles.approvePreviewButtonText}>Approve Preview</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
-      {(networkQuality === 'poor' || networkQuality === 'reconnecting') && (
-        <View
-          testID="banner-network-quality"
-          style={[
-            styles.networkBanner,
-            networkQuality === 'reconnecting' && styles.networkBannerCritical
-          ]}
-          accessibilityRole="alert"
-        >
-          <Text
-            style={[
-              styles.networkBannerText,
-              networkQuality === 'reconnecting' && styles.networkBannerTextCritical
-            ]}
-          >
-            {networkQuality === 'reconnecting'
-              ? 'Connection Interrupted — Reconnecting video stream (audio prioritized)...'
-              : 'Weak Network Connection — Video quality reduced to preserve audio.'}
-          </Text>
         </View>
       )}
 
@@ -1079,6 +1025,74 @@ export const CallStage: React.FC<CallStageProps> = ({
               </OverlayTooltip>
             </View>
           </View>
+
+          {/* Overlaid Recording / Consent / Network Quality Alerts (zero frame shifting) */}
+          {hasStageTopAlerts && (
+            <View
+              testID="call-stage-alerts-overlay"
+              pointerEvents="box-none"
+              style={styles.stageAlertsOverlay}
+            >
+              {isRecording && (
+                <View style={styles.recBanner}>
+                  <View style={styles.recDotContainer}>
+                    <View style={styles.recDot} />
+                    <Text style={styles.recText}>REC</Text>
+                  </View>
+                  <Text style={styles.recTimer}>{formatDuration(recordingDurationSeconds)}</Text>
+                  <Text style={styles.recLabel}>Recording in progress</Text>
+                  {onStopRecording && canStopRecording && (
+                    <TouchableOpacity
+                      style={styles.stopRecButton}
+                      onPress={onStopRecording}
+                      accessibilityRole="button"
+                      accessibilityLabel="Stop recording consultation"
+                    >
+                      <Text style={styles.stopRecButtonText}>Stop Recording</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {!isRecording && recordingConsentStatus === 'requested' && (
+                <View style={styles.consentBanner}>
+                  <Text style={styles.consentBannerText}>Awaiting patient recording consent</Text>
+                  {onApproveConsentPreview && (
+                    <TouchableOpacity
+                      style={styles.approvePreviewButton}
+                      onPress={onApproveConsentPreview}
+                      accessibilityRole="button"
+                      accessibilityLabel="Approve recording consent in local preview"
+                    >
+                      <Text style={styles.approvePreviewButtonText}>Approve Preview</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {(networkQuality === 'poor' || networkQuality === 'reconnecting') && (
+                <View
+                  testID="banner-network-quality"
+                  style={[
+                    styles.networkBanner,
+                    networkQuality === 'reconnecting' && styles.networkBannerCritical
+                  ]}
+                  accessibilityRole="alert"
+                >
+                  <Text
+                    style={[
+                      styles.networkBannerText,
+                      networkQuality === 'reconnecting' && styles.networkBannerTextCritical
+                    ]}
+                  >
+                    {networkQuality === 'reconnecting'
+                      ? 'Connection Interrupted — Reconnecting video stream (audio prioritized)...'
+                      : 'Weak Network Connection — Video quality reduced to preserve audio.'}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         {/* In-Call Chat Drawer (Rendered conditionally) */}
@@ -1333,17 +1347,34 @@ function createStyles(
     fontWeight: '700',
     color: c.onPrimary
   },
+  stageAlertsOverlay: {
+    position: 'absolute',
+    top: spaceScale.md,
+    left: spaceScale.md,
+    right: spaceScale.md,
+    zIndex: 30,
+    gap: spaceScale.xs,
+    ...(isLiveWebDom
+      ? {
+          paddingTop: 'env(safe-area-inset-top)' as any
+        }
+      : {})
+  },
   recBanner: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
+    maxWidth: 520,
     gap: spaceScale.sm,
     backgroundColor: c.emergencyBg,
     borderColor: c.emergencyBorder,
-    borderBottomWidth: 1,
+    borderWidth: sizes.borderWidth,
+    borderRadius: radiusScale.lg,
     paddingHorizontal: spaceScale.md,
     paddingVertical: spaceScale.xs,
-    ...s.sm
+    ...s.md
   },
   recDotContainer: {
     flexDirection: 'row',
@@ -1387,15 +1418,19 @@ function createStyles(
   },
   consentBanner: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
+    maxWidth: 520,
     gap: spaceScale.sm,
     backgroundColor: c.warningBg,
     borderColor: c.warningBorder,
-    borderBottomWidth: 1,
+    borderWidth: sizes.borderWidth,
+    borderRadius: radiusScale.lg,
     paddingHorizontal: spaceScale.md,
     paddingVertical: spaceScale.xs,
-    ...s.sm
+    ...s.md
   },
   consentBannerText: {
     fontSize: fontSizeScale.xs,
@@ -1403,14 +1438,17 @@ function createStyles(
     color: c.warningText
   },
   networkBanner: {
+    alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
+    maxWidth: 520,
     backgroundColor: c.warningBg,
     borderColor: c.warningBorder,
-    borderBottomWidth: 1,
+    borderWidth: sizes.borderWidth,
+    borderRadius: radiusScale.lg,
     paddingHorizontal: spaceScale.md,
     paddingVertical: spaceScale.xs,
-    ...s.sm
+    ...s.md
   },
   networkBannerCritical: {
     backgroundColor: c.emergencyBg,
@@ -1570,7 +1608,13 @@ function createStyles(
     left: 0,
     right: 0,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    ...(isLiveWebDom
+      ? {
+          zIndex: 30,
+          paddingBottom: 'env(safe-area-inset-bottom)' as any
+        }
+      : {})
   },
   mediaToolbar: {
     flexDirection: 'row',
@@ -1580,9 +1624,17 @@ function createStyles(
     maxWidth: '95%',
     gap: spaceScale.xs,
     backgroundColor: c.overlay,
+    borderWidth: sizes.borderWidth,
+    borderColor: c.borderDark,
     paddingHorizontal: spaceScale.sm,
     paddingVertical: spaceScale.xs,
     borderRadius: radiusScale.full,
+    ...(isLiveWebDom
+      ? {
+          backdropFilter: 'blur(12px)' as any,
+          WebkitBackdropFilter: 'blur(12px)' as any
+        }
+      : {}),
     ...s.lg
   },
   moreControlsPopover: {
@@ -1616,6 +1668,8 @@ function createStyles(
     minHeight: sizes.touchTarget,
     borderRadius: radiusScale.full,
     backgroundColor: c.overlay,
+    borderWidth: sizes.borderWidth,
+    borderColor: c.borderDark,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 0,
@@ -1623,10 +1677,12 @@ function createStyles(
   },
   controlButtonActive: {
     backgroundColor: c.primary,
+    borderColor: c.transparent,
     ...s.brandSm
   },
   controlButtonEmergency: {
     backgroundColor: c.emergency,
+    borderColor: c.transparent,
     ...s.dangerSm
   },
   controlButtonText: {
@@ -1661,6 +1717,8 @@ function createStyles(
     minHeight: sizes.touchTarget,
     borderRadius: radiusScale.full,
     backgroundColor: c.overlay,
+    borderWidth: sizes.borderWidth,
+    borderColor: c.borderDark,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 0,

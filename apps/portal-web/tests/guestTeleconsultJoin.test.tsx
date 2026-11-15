@@ -424,10 +424,9 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
       expect(html).toContain("In-Call Chat");
       expect(html).toContain("Leave");
       expect(html).toContain("h-dvh");
-      // Header banner overlays the video canvas instead of sitting in a solid card strip above it
-      expect(html).toContain('data-testid="call-stage-header-overlay"');
-      expect(html).toContain('data-testid="teleconsult-call-header"');
-      expect(html).toContain("backdrop-blur-md");
+      // Active call renders edge-to-edge without an overlaid clinic/Private Visit banner bar
+      expect(html).not.toContain('data-testid="call-stage-header-overlay"');
+      expect(html).not.toContain('data-testid="teleconsult-call-header"');
     });
 
     test("T3.3b: Opening guest Messages drawer renders privacy blur toggle button in header and unblurs/reblurs messages", async () => {

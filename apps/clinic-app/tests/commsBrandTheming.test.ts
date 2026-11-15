@@ -14,6 +14,10 @@ mock.module('react', () => ({ ...ReactNamespace, default: React }));
 mock.module('react/jsx-runtime', () => ReactJsxRuntime);
 mock.module('react/jsx-dev-runtime', () => ReactJsxDevRuntime);
 
+const { useAutoVideoOrientation } = await import(
+  '../../../packages/comms-sdk/src/react/hooks/useAutoVideoOrientation'
+);
+
 const createMockComponent = (name: string) => {
   const Comp = ({
     children,
@@ -474,6 +478,7 @@ mock.module('@clinicez/comms-sdk/react', () => ({
     declineRequest: async () => {},
     routeToStaff: async () => {},
   }),
+  useAutoVideoOrientation,
 }));
 
 const { ChatDrawer } = await import('../../../packages/comms-sdk/src/native-ui/ChatDrawer');
