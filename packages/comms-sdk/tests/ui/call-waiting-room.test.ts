@@ -602,7 +602,7 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
       webHarness.unmount();
     });
 
-    it('Native & Web: renders patient link card and share button', async () => {
+    it('Native & Web: renders patient link card and suppresses duplicate camera-overlay share button when patientLink is set', async () => {
       let nativeShareTriggered = false;
       const inviteUrl = 'https://portal.clinicez.com/teleconsult/join?token=test-123';
       const nativeHarness = createHookHarness(() =>
@@ -615,12 +615,17 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
         })
       );
 
+      expect(
+        findElement(nativeHarness.result.current, (el) => el.props?.testID === 'btn-share-patient-link')
+      ).toBeNull();
       const nativeShareBtn = findElement(
         nativeHarness.result.current,
-        (el) => el.props?.testID === 'btn-share-patient-link'
+        (el) => el.props?.testID === 'btn-share-patient-link-card'
       );
       expect(nativeShareBtn).not.toBeNull();
-      await nativeShareBtn.props.onPress?.();
+      await act(async () => {
+        await nativeShareBtn.props.onPress?.();
+      });
       expect(nativeShareTriggered).toBe(true);
 
       const nativeText = getTextContent(nativeHarness.result.current);
@@ -638,17 +643,38 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
         })
       );
 
+      expect(
+        findElement(
+          webHarness.result.current,
+          (el) => el.props?.['data-testid'] === 'btn-share-patient-link' || el.props?.id === 'btn-share-patient-link'
+        )
+      ).toBeNull();
       const webShareBtn = findElement(
         webHarness.result.current,
-        (el) => el.props?.['data-testid'] === 'btn-share-patient-link' || el.props?.id === 'btn-share-patient-link'
+        (el) => el.props?.['data-testid'] === 'btn-share-patient-link-card' || el.props?.id === 'btn-share-patient-link-card'
       );
       expect(webShareBtn).not.toBeNull();
-      await webShareBtn.props.onClick?.();
+      await act(async () => {
+        await webShareBtn.props.onClick?.();
+      });
       expect(webShareTriggered).toBe(true);
 
       const webText = getTextContent(webHarness.result.current);
       expect(webText).toContain(inviteUrl);
       webHarness.unmount();
+
+      // Fallback overlay button still renders when patientLink is absent
+      const nativeFallbackHarness = createHookHarness(() =>
+        NativeCallWaitingRoom({
+          ...baseNativeProps,
+          patientLink: undefined,
+          onSharePatientLink: () => {}
+        })
+      );
+      expect(
+        findElement(nativeFallbackHarness.result.current, (el) => el.props?.testID === 'btn-share-patient-link')
+      ).not.toBeNull();
+      nativeFallbackHarness.unmount();
     });
 
     it('adapts cleared banner labels per facility payment policy and simplifies Call Recording notice', () => {
@@ -875,7 +901,7 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
       webPatientHarness.unmount();
     });
 
-    it('Native & Web: btn-share-patient-link-card uses compact 28x28 sizing, 14px icon, and reveals tooltip label on hover', async () => {
+    it('Native & Web: btn-share-patient-link-card uses borderless icon-only 36x36 sizing, 16px icon, and reveals tooltip label on hover', async () => {
       const inviteUrl = 'https://portal.clinicez.com/teleconsult/join?token=icon-tip-1';
       for (const [isWeb, Component, TooltipComp] of [
         [false, NativeCallWaitingRoom, NativeOverlayTooltip],
@@ -901,12 +927,19 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
         expect(shareBtn).not.toBeNull();
         expect(getTextContent(shareBtn)).not.toContain('Share / Copy');
         if (isWeb) {
-          expect(String(shareBtn.props.className)).toContain('h-7 w-7');
+          expect(String(shareBtn.props.className)).toContain('min-h-[36px]');
+          expect(String(shareBtn.props.className)).toContain('bg-transparent');
+          expect(String(shareBtn.props.className)).toContain('border-0');
         } else {
-          expect(shareBtn.props.style).toMatchObject({ width: 28, height: 28 });
+          expect(shareBtn.props.style).toMatchObject({
+            minWidth: 36,
+            minHeight: 36,
+            backgroundColor: 'transparent',
+            borderWidth: 0,
+          });
           expect(shareBtn.props.hitSlop).toEqual({ top: 8, bottom: 8, left: 8, right: 8 });
         }
-        expect(iconCalls).toContainEqual({ name: 'share', size: 14 });
+        expect(iconCalls).toContainEqual({ name: 'share', size: 16 });
 
         const tooltipEl = findElement(
           harness.result.current,

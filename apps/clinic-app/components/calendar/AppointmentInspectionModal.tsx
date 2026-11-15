@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, Modal, Pressable, ScrollView, Platform } from 'react-native';
 import { theme } from '../../constants/theme';
 import ThemedText from '../ui/ThemedText';
@@ -7,6 +7,7 @@ import Button from '../ui/Button';
 import CustomModal from '../ui/Modal';
 import { notify } from '../../utils/feedback';
 import { clinicService, type TeleconsultPaymentPolicy, type TeleconsultGuestInviteDto } from '../../services/clinicService';
+import { getCachedAppointmentInvite, setCachedAppointmentInvite } from '../teleconsult/TeleconsultWaitingRoomModal';
 import type { ExtendedAppointmentItem } from './types';
 import {
   resolveAppointmentUrgency,
@@ -72,6 +73,22 @@ export function AppointmentInspectionModal({
   const { openTeleconsultWaitingRoom } = useClinicComms();
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
   const [activeInvite, setActiveInvite] = useState<TeleconsultGuestInviteDto | null>(null);
+  const [pinCopied, setPinCopied] = useState<boolean>(false);
+  const pinCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const markPinCopied = useCallback(() => {
+    setPinCopied(true);
+    if (pinCopiedTimerRef.current) clearTimeout(pinCopiedTimerRef.current);
+    pinCopiedTimerRef.current = setTimeout(() => {
+      setPinCopied(false);
+    }, 2000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pinCopiedTimerRef.current) clearTimeout(pinCopiedTimerRef.current);
+    };
+  }, []);
 
   const handleUpdatePaymentPolicy = useCallback(async (newPolicy: TeleconsultPaymentPolicy) => {
     if (!currentAppointment) return;
@@ -107,7 +124,7 @@ export function AppointmentInspectionModal({
   useEffect(() => {
     setCurrentAppointment(appointment);
     setShowCancelConfirm(false);
-    setActiveInvite(null);
+    setPinCopied(false);
 
     const isAptTeleconsult =
       appointment?.isTeleconsult ||
@@ -116,13 +133,22 @@ export function AppointmentInspectionModal({
       appointment?.serviceType === 'Teleconsultation';
 
     if (visible && isAptTeleconsult && appointment && appointment.status !== 'Cancelled') {
+      const cached = getCachedAppointmentInvite(appointment.id);
+      if (cached) {
+        setActiveInvite(cached);
+        return;
+      }
+      setActiveInvite(null);
       clinicService.createTeleconsultGuestInvite(appointment.id)
         .then(([freshInvite, err]) => {
           if (!err && freshInvite?.inviteUrl) {
+            setCachedAppointmentInvite(appointment.id, freshInvite);
             setActiveInvite(freshInvite);
           }
         })
         .catch(() => {});
+    } else {
+      setActiveInvite(null);
     }
   }, [appointment, visible]);
 
@@ -326,52 +352,45 @@ export function AppointmentInspectionModal({
                 </ThemedText>
               </View>
 
-              {/* Payment Policy Badge (for teleconsult) */}
-              {isTeleconsult ? (
-                <View
-                  data-testid="badge-payment-policy"
-                  testID="badge-payment-policy"
-                  style={[styles.badge, styles.policyBadge]}
-                >
-                  <ThemedText variant="caption" color={theme.colors.text} style={styles.badgeText}>
-                    {currentAppointment.paymentPolicy || 'Prepaid'}
-                  </ThemedText>
-                </View>
-              ) : null}
-
-              {/* Payment Status Badge (for teleconsult) */}
-              {isTeleconsult ? (
-                <View
-                  data-testid="badge-payment-status"
-                  testID="badge-payment-status"
-                  style={[
-                    styles.badge,
-                    currentAppointment.paymentStatus === 'Paid'
-                      ? styles.paidBadge
-                      : currentAppointment.paymentStatus === 'Exempt'
-                        ? styles.exemptBadge
-                        : currentAppointment.paymentStatus === 'Overridden'
+              {/* Actionable Payment Status Badge (for teleconsult: shown when Paid, Overridden, or Prepaid+Pending; hidden when Exempt or Postpaid+Pending) */}
+              {(() => {
+                const effectivePolicy = currentAppointment.paymentPolicy || 'Prepaid';
+                const effectivePaymentStatus = currentAppointment.paymentStatus || 'Pending';
+                const showPaymentStatusBadge =
+                  isTeleconsult &&
+                  effectivePolicy !== 'Exempt' &&
+                  effectivePaymentStatus !== 'Exempt' &&
+                  !(effectivePolicy === 'Postpaid' && effectivePaymentStatus === 'Pending');
+                if (!showPaymentStatusBadge) return null;
+                return (
+                  <View
+                    data-testid="badge-payment-status"
+                    testID="badge-payment-status"
+                    style={[
+                      styles.badge,
+                      effectivePaymentStatus === 'Paid'
+                        ? styles.paidBadge
+                        : effectivePaymentStatus === 'Overridden'
                           ? styles.overriddenBadge
                           : styles.pendingBadge,
-                  ]}
-                >
-                  <ThemedText
-                    variant="caption"
-                    color={
-                      currentAppointment.paymentStatus === 'Paid'
-                        ? theme.colors.successText
-                        : currentAppointment.paymentStatus === 'Exempt'
-                          ? theme.colors.infoText
-                          : currentAppointment.paymentStatus === 'Overridden'
+                    ]}
+                  >
+                    <ThemedText
+                      variant="caption"
+                      color={
+                        effectivePaymentStatus === 'Paid'
+                          ? theme.colors.successText
+                          : effectivePaymentStatus === 'Overridden'
                             ? theme.colors.warningText
                             : theme.colors.emergencyText
-                    }
-                    style={styles.badgeText}
-                  >
-                    {currentAppointment.paymentStatus || 'Pending'}
-                  </ThemedText>
-                </View>
-              ) : null}
+                      }
+                      style={styles.badgeText}
+                    >
+                      {effectivePaymentStatus}
+                    </ThemedText>
+                  </View>
+                );
+              })()}
 
               {!isTeleconsult && isYakap ? (
                 <View style={[styles.badge, styles.yakapBadge]}>
@@ -454,22 +473,24 @@ export function AppointmentInspectionModal({
                     data-testid="btn-inspection-copy-pin"
                     testID="btn-inspection-copy-pin"
                     accessibilityRole="button"
-                    accessibilityLabel="Copy 6-digit guest access PIN"
+                    accessibilityLabel={pinCopied ? 'Copied!' : 'Copy 6-digit guest access PIN'}
                     onPress={async () => {
                       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
                         await navigator.clipboard.writeText(activeInvite.otp);
                       }
                       notify.success('Guest 6-digit PIN copied to clipboard.');
+                      markPinCopied();
                     }}
                     style={({ pressed }) => [
                       styles.pinCopyBtn,
                       pressed && styles.pressed,
                     ]}
                   >
-                    <Icon name="copy" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                    <ThemedText variant="captionBold" color={theme.colors.primary}>
-                      Copy PIN
-                    </ThemedText>
+                    <Icon
+                      name={pinCopied ? 'check' : 'copy'}
+                      size={theme.sizes.iconSm}
+                      color={pinCopied ? theme.colors.successText : theme.colors.primary}
+                    />
                   </Pressable>
                 </View>
               </View>
@@ -742,6 +763,7 @@ export function AppointmentInspectionModal({
                             notify.error(err?.message || 'Could not generate patient consultation link.');
                             return;
                           }
+                          setCachedAppointmentInvite(currentAppointment.id, invite);
                           setActiveInvite(invite);
                         }
                         if (!invite) return;
@@ -787,6 +809,7 @@ export function AppointmentInspectionModal({
                         paymentStatus: currentAppointment.paymentStatus || 'Pending',
                         isYakapExempt: false,
                         hasActiveYakapEnlistment: false,
+                        initialInvite: activeInvite,
                       });
                     }}
                     style={({ pressed }) => [
@@ -1326,18 +1349,11 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.mono['700'],
   },
   pinCopyBtn: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
+    justifyContent: 'center',
     borderRadius: theme.radii.sm,
     minHeight: theme.sizes.touchTarget,
     minWidth: theme.sizes.touchTarget,
-    justifyContent: 'center',
   },
 });
 

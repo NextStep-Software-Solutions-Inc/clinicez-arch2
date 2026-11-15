@@ -616,20 +616,20 @@ describe('Challenger M11.2: Empirical Stress, Concurrency & Resilience Suite', (
       it('3.B.1: HTTP 423 (permanent lockout) triggers locked out screen and disables submit', () => {
         expect(guestJoinPageSource).toContain('if (res.status === 423)');
         expect(guestJoinPageSource).toContain('setIsLockedOut(true)');
-        expect(guestJoinPageSource).toContain('Teleconsultation Link Locked');
-        expect(guestJoinPageSource).toContain('5 failed verification attempts');
+        expect(guestJoinPageSource).toContain('Link Locked for Your Privacy');
+        expect(guestJoinPageSource).toContain('we locked this link to protect your privacy');
       });
 
       it('3.B.2: HTTP 410 (expired link) triggers expired screen and disables submit', () => {
         expect(guestJoinPageSource).toContain('if (res.status === 410)');
         expect(guestJoinPageSource).toContain('setIsExpired(true)');
-        expect(guestJoinPageSource).toContain('Consultation Link Expired');
+        expect(guestJoinPageSource).toContain('Visit Link Expired');
       });
 
       it('3.B.3: HTTP 404 / 401 increments failed attempts and displays remaining attempts countdown', () => {
         expect(guestJoinPageSource).toContain('const nextAttempts = attemptCount + 1');
         expect(guestJoinPageSource).toContain('setAttemptCount(nextAttempts)');
-        expect(guestJoinPageSource).toContain('Verification failed. ${5 - nextAttempts} attempts remaining');
+        expect(guestJoinPageSource).toContain('Those details did not match.');
       });
 
       it('3.B.4: 5 consecutive failed attempts transition to lockout', () => {

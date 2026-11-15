@@ -97,7 +97,7 @@ describe('Challenger M15: Clinic Workstation Roster, 6-Digit PIN & Safeguards St
   // =========================================================================
   describe('Focus 2: 6-Digit PIN Display, Stability & Clipboard Writing', () => {
     it('2.1: TeleconsultWaitingRoomModal stores activeInvite state and reuses unexpired invites across clicks', () => {
-      expect(modalSource).toContain('const [activeInvite, setActiveInvite] = useState<TeleconsultGuestInviteDto | null>(null);');
+      expect(modalSource).toContain('const [activeInvite, setActiveInvite] = useState<TeleconsultGuestInviteDto | null>(seededInvite);');
 
       // Check handleSharePatientLink reuses unexpired invite
       const shareLinkMatch = modalSource.match(

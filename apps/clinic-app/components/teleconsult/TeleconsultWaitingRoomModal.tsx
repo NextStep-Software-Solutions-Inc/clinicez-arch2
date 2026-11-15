@@ -237,6 +237,75 @@ class WorkstationMediaAdapter implements IMediaRoomAdapter {
   }
 }
 
+const appointmentInviteCache = new Map<string, TeleconsultGuestInviteDto>();
+const getInviteStorageKey = (appointmentId: string) => `clinicez.teleconsult.invite.${appointmentId}`;
+
+export function isGuestInviteReusable(invite?: TeleconsultGuestInviteDto | null): invite is TeleconsultGuestInviteDto {
+  if (!invite?.inviteUrl || !invite?.otp) return false;
+  if (!invite.expiresAtUtc) return true;
+  const expMs = new Date(invite.expiresAtUtc).getTime();
+  return Number.isFinite(expMs) && expMs > Date.now() + 60_000;
+}
+
+export function getCachedAppointmentInvite(appointmentId?: string | null): TeleconsultGuestInviteDto | null {
+  if (!appointmentId) return null;
+  let cached = appointmentInviteCache.get(appointmentId) ?? null;
+  if (!cached && typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      const raw = window.sessionStorage.getItem(getInviteStorageKey(appointmentId));
+      if (raw) {
+        cached = JSON.parse(raw) as TeleconsultGuestInviteDto;
+      }
+    } catch {
+      cached = null;
+    }
+  }
+  if (!isGuestInviteReusable(cached)) {
+    if (cached) {
+      appointmentInviteCache.delete(appointmentId);
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try {
+          window.sessionStorage.removeItem(getInviteStorageKey(appointmentId));
+        } catch {
+          // Ignore storage error
+        }
+      }
+    }
+    return null;
+  }
+  appointmentInviteCache.set(appointmentId, cached);
+  return cached;
+}
+
+export function setCachedAppointmentInvite(appointmentId: string, invite: TeleconsultGuestInviteDto): void {
+  if (!appointmentId || !invite?.inviteUrl) return;
+  appointmentInviteCache.set(appointmentId, invite);
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      window.sessionStorage.setItem(getInviteStorageKey(appointmentId), JSON.stringify(invite));
+    } catch {
+      // Ignore storage error
+    }
+  }
+}
+
+export function clearCachedAppointmentInvite(appointmentId?: string | null): void {
+  if (!appointmentId) return;
+  appointmentInviteCache.delete(appointmentId);
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      window.sessionStorage.removeItem(getInviteStorageKey(appointmentId));
+    } catch {
+      // Ignore storage error
+    }
+  }
+}
+
+/** Test-only helper to clear the in-memory invite map while leaving sessionStorage intact. */
+export function resetInMemoryAppointmentInviteCacheForTests(): void {
+  appointmentInviteCache.clear();
+}
+
 /**
  * Maps statutory backend/DTO payment status ('Pending', 'Paid', 'Exempt', 'Overridden')
  * to @clinicez/comms-sdk TeleconsultPaymentStatus ('Unpaid', 'Paid', 'Exempt', 'Overridden').
@@ -831,9 +900,16 @@ export function ActiveTeleconsultModal({
   const dockWrapperRef = useRef<any>(null);
   const activeDragCleanupRef = useRef<(() => void) | null>(null);
 
+  const seededInvite = useMemo(() => {
+    if (isGuestInviteReusable(teleconsultSession.initialInvite)) {
+      return teleconsultSession.initialInvite;
+    }
+    return getCachedAppointmentInvite(appointmentId);
+  }, [teleconsultSession.initialInvite, appointmentId]);
+
   const [hydratedStatus, setHydratedStatus] = useState<TeleconsultStatusDto | null>(null);
-  const [activeInvite, setActiveInvite] = useState<TeleconsultGuestInviteDto | null>(null);
-  const [patientInviteUrl, setPatientInviteUrl] = useState<string | undefined>(undefined);
+  const [activeInvite, setActiveInvite] = useState<TeleconsultGuestInviteDto | null>(seededInvite);
+  const [patientInviteUrl, setPatientInviteUrl] = useState<string | undefined>(seededInvite?.inviteUrl);
   const [videoServerError, setVideoServerError] = useState<string | null>(null);
   const [stageRecordIntent, setStageRecordIntent] = useState<boolean>(false);
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
@@ -875,20 +951,31 @@ export function ActiveTeleconsultModal({
       }
     })();
 
-    void clinicService
-      .createTeleconsultGuestInvite(appointmentId)
-      .then(([invite, inviteErr]) => {
-        if (isMounted && !inviteErr && invite?.inviteUrl) {
-          setActiveInvite(invite);
-          setPatientInviteUrl(invite.inviteUrl);
-        }
-      })
-      .catch(() => {});
+    const reusableInvite = isGuestInviteReusable(teleconsultSession.initialInvite)
+      ? teleconsultSession.initialInvite
+      : getCachedAppointmentInvite(appointmentId);
+
+    if (reusableInvite) {
+      setCachedAppointmentInvite(appointmentId, reusableInvite);
+      setActiveInvite(reusableInvite);
+      setPatientInviteUrl(reusableInvite.inviteUrl);
+    } else {
+      void clinicService
+        .createTeleconsultGuestInvite(appointmentId)
+        .then(([invite, inviteErr]) => {
+          if (isMounted && !inviteErr && invite?.inviteUrl) {
+            setCachedAppointmentInvite(appointmentId, invite);
+            setActiveInvite(invite);
+            setPatientInviteUrl(invite.inviteUrl);
+          }
+        })
+        .catch(() => {});
+    }
 
     return () => {
       isMounted = false;
     };
-  }, [appointmentId]);
+  }, [appointmentId, teleconsultSession.initialInvite]);
 
   const resolvedClinicianName = useMemo(() => {
     if (isDoctor && user?.name) {
@@ -930,6 +1017,7 @@ export function ActiveTeleconsultModal({
           return;
         }
         invite = freshInvite;
+        setCachedAppointmentInvite(appointmentId, freshInvite);
         setActiveInvite(freshInvite);
         setPatientInviteUrl(freshInvite.inviteUrl);
       }
@@ -958,6 +1046,7 @@ export function ActiveTeleconsultModal({
           return;
         }
         invite = freshInvite;
+        setCachedAppointmentInvite(appointmentId, freshInvite);
         setActiveInvite(freshInvite);
         setPatientInviteUrl(freshInvite.inviteUrl);
       }
@@ -1124,6 +1213,7 @@ export function ActiveTeleconsultModal({
     onEndCall: async () => {
       stopStagingStream();
       if (appointmentId) {
+        clearCachedAppointmentInvite(appointmentId);
         const [, err] = await clinicService.endTeleconsultCall(appointmentId);
         if (err && err.status !== 404) {
           throw err;
@@ -1209,15 +1299,14 @@ export function ActiveTeleconsultModal({
 
   const handleCancelCall = useCallback(async () => {
     setIsInCall(false);
-    if ((session.status === 'connected' || session.status === 'connecting') && session.endCall) {
-      try {
-        await session.endCall();
-      } catch {
-        // Ignore endCall error on cancel
-      }
+    stopStagingStream();
+    try {
+      await mediaAdapter.disconnect();
+    } catch {
+      // Ignore disconnect error on cancel
     }
     closeTeleconsultWaitingRoom();
-  }, [closeTeleconsultWaitingRoom, session]);
+  }, [closeTeleconsultWaitingRoom, mediaAdapter, stopStagingStream]);
 
   const handleEndCall = useCallback(async () => {
     try {
@@ -1263,6 +1352,10 @@ export function ActiveTeleconsultModal({
 
   const handleAdmitFromWaitingRoom = useCallback(
     async (override?: { reasonCode: string; reasonNote: string }) => {
+      if (!override && (hasAdmittedOnServerRef.current || Boolean(hydratedStatus?.admittedAtUtc))) {
+        await handleEnterCall();
+        return;
+      }
       try {
         await session.admitPatient(override);
         setVideoServerError(null);
@@ -1274,7 +1367,7 @@ export function ActiveTeleconsultModal({
         setIsInCall(false);
       }
     },
-    [session],
+    [handleEnterCall, hydratedStatus?.admittedAtUtc, session],
   );
 
   const handleRetryVideoServer = useCallback(async () => {

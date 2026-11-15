@@ -136,6 +136,8 @@ public sealed class EndTeleconsultCallCommandHandler : IRequestHandler<EndTeleco
                 RelayUrl: null
             ));
 
+        CreateTeleconsultGuestInviteCommandHandler.InvalidateInvite(appointment.Id);
+
         _publisher.Enqueue(
             InteropTypes.GuestTeleconsultInviteRevoked,
             Party.ForFacility(_clinicContext.TenantId, _clinicContext.ClinicId.ToString(), FacilityType.Clinic),

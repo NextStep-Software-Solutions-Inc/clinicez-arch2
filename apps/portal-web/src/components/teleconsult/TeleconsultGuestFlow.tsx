@@ -40,8 +40,15 @@ import {
   Users,
   Eye,
   EyeOff,
+  ShieldAlert,
+  X,
 } from "lucide-react";
 import { getPortalApiUrl } from "@/utils/domain";
+import {
+  MISSING_INVITE_RESULT,
+  parsePreflightStatusResponse,
+  type PreflightInviteResult,
+} from "./preflightInvite";
 
 export interface TeleconsultGuestFlowProps {
   inviteToken?: string;
@@ -51,6 +58,7 @@ export interface TeleconsultGuestFlowProps {
   mockVerificationHandler?: (dob: string, otp: string) => Promise<GuestVerificationResult>;
   initialStage?: "verify" | "waiting_room" | "in_call" | "ended";
   initialActiveSession?: GuestVerificationResult;
+  initialPreflight?: PreflightInviteResult;
   isYakapExempt?: boolean;
   paymentPolicy?: "Prepaid" | "Postpaid" | "Exempt";
   paymentStatus?: "Unpaid" | "Paid" | "Exempt" | "Overridden";
@@ -162,14 +170,47 @@ export function TeleconsultGuestFlow({
   mockVerificationHandler,
   initialStage = "verify",
   initialActiveSession,
+  initialPreflight,
   isYakapExempt = false,
   paymentPolicy = "Exempt",
   paymentStatus = "Paid",
   userRole = "Patient",
   className = "",
 }: TeleconsultGuestFlowProps) {
-  const [stage, setStage] = useState<"verify" | "waiting_room" | "in_call" | "ended">(initialStage);
-  const [endedReason, setEndedReason] = useState<string | null>(null);
+  const missingInviteOnInit =
+    initialStage === "verify" &&
+    !mockVerificationHandler &&
+    !inviteToken.trim();
+
+  const resolvedInitialStage: "verify" | "invalid_link" | "waiting_room" | "in_call" | "ended" =
+    initialStage !== "verify"
+      ? initialStage
+      : missingInviteOnInit || initialPreflight?.outcome === "invalid_link"
+        ? "invalid_link"
+        : initialPreflight?.outcome === "ended"
+          ? "ended"
+          : "verify";
+
+  const [stage, setStage] = useState<"verify" | "invalid_link" | "waiting_room" | "in_call" | "ended">(
+    resolvedInitialStage
+  );
+  const [endedReason, setEndedReason] = useState<string | null>(
+    initialPreflight?.outcome === "ended" ? initialPreflight.reason : null
+  );
+  const [invalidLinkTitle, setInvalidLinkTitle] = useState<string>(
+    missingInviteOnInit && MISSING_INVITE_RESULT.outcome === "invalid_link"
+      ? MISSING_INVITE_RESULT.title
+      : initialPreflight?.outcome === "invalid_link"
+        ? initialPreflight.title
+        : "Invalid Visit Link"
+  );
+  const [invalidLinkReason, setInvalidLinkReason] = useState<string>(
+    missingInviteOnInit && MISSING_INVITE_RESULT.outcome === "invalid_link"
+      ? MISSING_INVITE_RESULT.reason
+      : initialPreflight?.outcome === "invalid_link"
+        ? initialPreflight.reason
+        : "This video visit link is not valid. Please check the link from your clinic."
+  );
   const [session, setSession] = useState<GuestVerificationResult | null>(initialActiveSession ?? null);
   const [recordingConsent, setRecordingConsent] = useState<"Pending" | "Approved" | "Rejected" | "Disabled">("Pending");
   const [isReadyToAdmit] = useState(true);
@@ -207,16 +248,18 @@ export function TeleconsultGuestFlow({
     }
   }, [initialActiveSession]);
 
-  const effectiveClinicName = metaClinicName || clinicName || "ClinicEZ Healthcare";
-  const effectiveSupportPhone = metaClinicSupportPhone || clinicSupportPhone || "(02) 8123-4567";
-  const effectiveClinicianName = metaClinicianName || (clinicName ? `${clinicName} Attending Clinician` : "Attending Clinician");
-  const effectivePatientName = metaGuestDisplayName || (userRole === "Patient" ? "Guest Patient" : "Guest Patient");
-  const effectiveScheduledTime = metaScheduledAtUtc
-    ? new Date(metaScheduledAtUtc).toLocaleString("en-US", {
+  const preflightMeta = initialPreflight?.outcome === "valid" ? initialPreflight : null;
+  const effectiveClinicName = metaClinicName || preflightMeta?.clinicName || clinicName || "ClinicEZ Healthcare";
+  const effectiveSupportPhone = metaClinicSupportPhone || preflightMeta?.clinicSupportPhone || clinicSupportPhone || "(02) 8123-4567";
+  const effectiveClinicianName = metaClinicianName || preflightMeta?.clinicianName || "Your Doctor";
+  const effectivePatientName = metaGuestDisplayName || "You";
+  const resolvedScheduledAtUtc = metaScheduledAtUtc || preflightMeta?.scheduledAtUtc || null;
+  const effectiveScheduledTime = resolvedScheduledAtUtc
+    ? new Date(resolvedScheduledAtUtc).toLocaleString("en-US", {
         dateStyle: "medium",
         timeStyle: "short",
       })
-    : "Today (Immediate Intake)";
+    : "Today";
 
   const handleToggleChat = useCallback(() => {
     setIsChatOpen((prev) => {
@@ -234,31 +277,40 @@ export function TeleconsultGuestFlow({
     });
   }, []);
 
-  // Preflight check for revoked/ended consultation
+  // Preflight check for invalid, expired, locked, or ended consultation links
   useEffect(() => {
     let isMounted = true;
-    if (!inviteToken || mockVerificationHandler) return;
+    if (mockVerificationHandler) return;
+
+    if (!inviteToken.trim()) {
+      if (stage === "verify" && MISSING_INVITE_RESULT.outcome === "invalid_link") {
+        setInvalidLinkTitle(MISSING_INVITE_RESULT.title);
+        setInvalidLinkReason(MISSING_INVITE_RESULT.reason);
+        setStage("invalid_link");
+      }
+      return;
+    }
 
     const checkPreflight = async () => {
       try {
         const url = `${getPortalApiUrl()}/portal/guest/teleconsult/status?token=${encodeURIComponent(inviteToken)}&inviteToken=${encodeURIComponent(inviteToken)}`;
         const res = await fetch(url);
         if (!isMounted) return;
-        if (res.status === 410) {
+        const parsed = await parsePreflightStatusResponse(res);
+        if (!isMounted) return;
+
+        if (parsed.outcome === "ended") {
           setEndedReason("This teleconsultation has ended");
           setStage("ended");
-        } else if (res.ok) {
-          const json = await res.json().catch(() => null);
-          const data = json?.data ?? json;
-          if (data?.isEnded || data?.status === "Ended" || data?.isExpired) {
-            setEndedReason("This teleconsultation has ended");
-            setStage("ended");
-          } else {
-            if (data?.clinicName) setMetaClinicName(data.clinicName);
-            if (data?.clinicSupportPhone) setMetaClinicSupportPhone(data.clinicSupportPhone);
-            if (data?.clinicianName) setMetaClinicianName(data.clinicianName);
-            if (data?.scheduledAtUtc) setMetaScheduledAtUtc(data.scheduledAtUtc);
-          }
+        } else if (parsed.outcome === "invalid_link") {
+          setInvalidLinkTitle(parsed.title);
+          setInvalidLinkReason(parsed.reason);
+          setStage("invalid_link");
+        } else if (parsed.outcome === "valid") {
+          if (parsed.clinicName) setMetaClinicName(parsed.clinicName);
+          if (parsed.clinicSupportPhone) setMetaClinicSupportPhone(parsed.clinicSupportPhone);
+          if (parsed.clinicianName) setMetaClinicianName(parsed.clinicianName);
+          if (parsed.scheduledAtUtc) setMetaScheduledAtUtc(parsed.scheduledAtUtc);
         }
       } catch {
         // Preflight network failure fallback
@@ -269,7 +321,7 @@ export function TeleconsultGuestFlow({
     return () => {
       isMounted = false;
     };
-  }, [inviteToken, mockVerificationHandler]);
+  }, [inviteToken, mockVerificationHandler, stage]);
 
   useEffect(() => {
     isChatOpenRef.current = isChatOpen;
@@ -286,8 +338,8 @@ export function TeleconsultGuestFlow({
       conversationId: session?.callId || "teleconsult-conv",
       senderType: "Staff",
       senderId: "system-care-team",
-      senderDisplayName: "ClinicEZ Care Team",
-      contentText: "Welcome to your private consultation room. Your conversation is secure and confidential.",
+      senderDisplayName: effectiveClinicName,
+      contentText: "You can send messages to your doctor here during your visit.",
       clientSentAtUtc: new Date().toISOString(),
       state: "Received",
       visibility: "Public",
@@ -375,7 +427,7 @@ export function TeleconsultGuestFlow({
         } else if (parsed.type === "call_ended_by_clinician") {
           callSessionRef.current?.endCall?.().catch(() => {});
           mediaAdapter.disconnect().catch(() => {});
-          setEndedReason("The attending clinician has ended this consultation.");
+          setEndedReason("Your doctor ended the video visit.");
           setStage("ended");
         }
       } catch {
@@ -511,7 +563,7 @@ export function TeleconsultGuestFlow({
       conversationId: session?.callId || "teleconsult-conv",
       senderType: userRole === "Clinician" ? "Staff" : "Patient",
       senderId: "patient-guest-id",
-      senderDisplayName: userRole === "Clinician" ? effectiveClinicianName : "You (Guest)",
+      senderDisplayName: userRole === "Clinician" ? effectiveClinicianName : "You",
       contentText: text,
       clientSentAtUtc: sentAtUtc,
       state: "Sending",
@@ -792,6 +844,36 @@ export function TeleconsultGuestFlow({
     []
   );
 
+  // State 0: Missing, Expired, Locked, or Invalid Invite Link
+  if (stage === "invalid_link") {
+    return (
+      <main className={`min-h-dvh flex items-center justify-center px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] bg-background text-foreground ${className}`}>
+        <div
+          role="alert"
+          aria-live="polite"
+          data-testid="teleconsult-invalid-link-card"
+          className="w-full max-w-md p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-card border border-border text-center shadow-sm space-y-5"
+          style={{ boxShadow: guestShadows.lg }}
+        >
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-destructive/10 text-destructive border border-destructive/20 flex items-center justify-center">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+              {invalidLinkTitle}
+            </h1>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {invalidLinkReason}
+            </p>
+          </div>
+          <p className="text-xs sm:text-sm text-muted-foreground pt-2 border-t border-border">
+            Need help? Contact {effectiveClinicName} at {effectiveSupportPhone}.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   // State 1: Verification Form (GuestJoinPage directly targeting portal-api)
   if (stage === "verify") {
     return (
@@ -820,7 +902,7 @@ export function TeleconsultGuestFlow({
   // State 2: Virtual Waiting Room (CallWaitingRoom)
   if (stage === "waiting_room") {
     return (
-      <div className={`min-h-screen bg-background text-foreground flex flex-col ${className}`}>
+      <div className={`min-h-dvh bg-background text-foreground flex flex-col ${className}`}>
         <CallWaitingRoom
           callId={session?.callId || "call-guest"}
           appointmentId={session?.callId || "apt-guest"}
@@ -864,35 +946,36 @@ export function TeleconsultGuestFlow({
   // State 3: Active Consultation Room with Video & MessageThread
   if (stage === "in_call") {
     return (
-      <main className={`min-h-screen flex flex-col bg-background text-foreground ${className}`}>
+      <main className={`h-dvh min-h-0 flex flex-col overflow-hidden bg-background text-foreground ${className}`}>
         {/* Invisible remote audio track player */}
         <WebAudioTrackView track={remoteAudioTrack} />
 
         {/* Navigation & Status Header with Plain Copy */}
         <header
-          className="flex items-center justify-between px-4 py-3 bg-card border-b border-border shadow-sm"
+          className="flex items-center justify-between gap-3 px-4 py-3 bg-card border-b border-border shadow-sm shrink-0"
           style={{ boxShadow: guestShadows.sm }}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
-            <div>
-              <h1 className="text-sm font-bold text-foreground">
-                {effectiveClinicName} Teleconsultation
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base font-bold text-foreground truncate">
+                {effectiveClinicName}
               </h1>
-              <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                <span>Room: <span className="font-mono">{session?.roomName || "Consultation Room"}</span></span>
-                <span>•</span>
-                <span>Private Consultation Room</span>
-                <span className="sr-only">End-to-End Encrypted</span>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                <span>Private video visit</span>
+                <span className="sr-only">
+                  Room: {session?.roomName || "Consultation Room"} Private Consultation Room End-to-End Encrypted
+                </span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-              <Lock className="w-3.5 h-3.5" />
-              <span>Private Video Consultation</span>
-              <span className="sr-only">End-to-End Encrypted</span>
+              <Lock className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Private Visit</span>
+              <span className="sm:hidden">Private</span>
+              <span className="sr-only">Private Video Consultation End-to-End Encrypted</span>
             </div>
           </div>
         </header>
@@ -901,37 +984,37 @@ export function TeleconsultGuestFlow({
           <div
             data-testid="banner-patient-recording-consent"
             role="alert"
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-muted border-b border-border text-xs"
+            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 px-4 py-3 bg-muted border-b border-border text-xs sm:text-sm shrink-0"
             style={{ boxShadow: guestShadows.sm }}
           >
             <span className="font-semibold text-foreground">
-              The clinician has requested to record this consultation. Do you consent?
+              Your doctor would like to record this visit. Is that okay?
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 justify-end shrink-0">
               <button
                 type="button"
                 onClick={() => void handleRespondRecordingConsent(false)}
-                className="min-h-[36px] px-3 py-1.5 rounded-lg bg-card border border-border text-foreground font-semibold hover:bg-muted/80 transition-all cursor-pointer"
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-card border border-border text-foreground font-semibold hover:bg-muted/80 transition-all cursor-pointer"
                 style={{ boxShadow: guestShadows.brandSubtle }}
               >
-                Decline
+                No Thanks
               </button>
               <button
                 type="button"
                 onClick={() => void handleRespondRecordingConsent(true)}
-                className="min-h-[36px] px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-bold hover:opacity-95 transition-all cursor-pointer"
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:opacity-95 transition-all cursor-pointer"
                 style={{ boxShadow: guestShadows.brandSm }}
               >
-                Approve Recording
+                Allow
               </button>
             </div>
           </div>
         )}
 
         {/* Call Workspace Grid */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 min-h-0 flex overflow-hidden">
           {/* Main Video View Area Rendering Comms SDK CallStage */}
-          <div className="flex-1 relative flex flex-col">
+          <div className="flex-1 min-h-0 relative flex flex-col">
             <CallStage
               callId={session?.callId || "call-guest"}
               roomName={session?.roomName || "Consultation Room"}
@@ -939,7 +1022,7 @@ export function TeleconsultGuestFlow({
               participantName={effectiveClinicianName}
               selfName={userRole === "Clinician" ? effectiveClinicianName : effectivePatientName}
               hideHeader={true}
-              remoteStatusLabel="Clinician Video Feed Active"
+              remoteStatusLabel={`Waiting for ${effectiveClinicianName} to join...`}
               networkQuality={networkQuality}
               isMicEnabled={callSession.mediaTracks.isMicEnabled}
               isCameraEnabled={callSession.mediaTracks.isCameraEnabled}
@@ -1012,13 +1095,25 @@ export function TeleconsultGuestFlow({
           {/* In-Call Chat Drawer (MessageThread) */}
           {isChatOpen && (
             <aside
-              className="w-80 sm:w-96 border-l border-border bg-card flex flex-col h-full shadow-xl"
+              className="fixed inset-0 z-40 sm:static sm:z-auto w-full sm:w-80 lg:w-96 sm:border-l border-border bg-card flex flex-col h-full shadow-xl pb-[env(safe-area-inset-bottom)] sm:pb-0"
               style={{ boxShadow: guestShadows.lg }}
             >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+                <h2 className="text-sm sm:text-base font-bold text-foreground">Messages</h2>
+                <button
+                  type="button"
+                  onClick={handleToggleChat}
+                  aria-label="Close messages"
+                  className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
               <MessageThread
                 conversationId={session?.callId || "teleconsult-chat"}
-                conversationTitle="Clinical Encounter Chat"
+                conversationTitle="Messages"
                 conversationScope="Teleconsultation"
+                showHeader={false}
                 messages={messages}
                 currentUserId="patient-guest-id"
                 privacyBlurEnabled={privacyBlurEnabled}
@@ -1027,7 +1122,7 @@ export function TeleconsultGuestFlow({
                 onSendMessage={handleSendMessage}
                 onResendMessage={handleResendMessage}
                 canWriteInternalNotes={userRole === "Clinician"}
-                className="flex-1"
+                className="flex-1 min-h-0"
               />
             </aside>
           )}
@@ -1038,21 +1133,21 @@ export function TeleconsultGuestFlow({
 
   // State 4: Session Ended
   return (
-    <main className={`min-h-screen flex items-center justify-center p-4 bg-background text-foreground ${className}`}>
+    <main className={`min-h-dvh flex items-center justify-center px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] bg-background text-foreground ${className}`}>
       <div
-        className="w-full max-w-md p-8 rounded-3xl bg-card border border-border text-center shadow-lg space-y-4"
+        className="w-full max-w-md p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-card border border-border text-center shadow-lg space-y-4"
         style={{ boxShadow: guestShadows.lg }}
       >
         <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 text-primary flex items-center justify-center">
           <Check className="w-8 h-8" />
         </div>
-        <h1 className="text-xl font-bold text-foreground">
-          {endedReason || "Consultation Concluded"}
+        <h1 className="text-xl sm:text-2xl font-bold text-foreground">
+          {endedReason || "Visit Ended"}
         </h1>
-        <p className="text-xs text-muted-foreground leading-relaxed">
+        <p className="text-sm text-muted-foreground leading-relaxed">
           {endedReason
-            ? `${endedReason}. Any clinical orders, prescriptions, or laboratory referrals will be sent directly to your registered contact.`
-            : `Your teleconsultation session with ${effectiveClinicName} has ended. Any clinical orders, prescriptions, or laboratory referrals will be sent directly to your registered contact.`}
+            ? `${endedReason} Any prescriptions, lab requests, or notes from your doctor will be sent to you directly.`
+            : `Your video visit with ${effectiveClinicName} has ended. Any prescriptions, lab requests, or notes from your doctor will be sent to you directly.`}
         </p>
         <div className="pt-2">
           <button
@@ -1061,10 +1156,10 @@ export function TeleconsultGuestFlow({
               setEndedReason(null);
               setStage("verify");
             }}
-            className="w-full min-h-[44px] rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:opacity-95 transition-all cursor-pointer"
+            className="w-full min-h-[48px] rounded-xl bg-primary text-primary-foreground font-bold text-sm sm:text-base hover:opacity-95 transition-all cursor-pointer"
             style={{ boxShadow: guestShadows.brandSm }}
           >
-            Return to Teleconsultation Portal
+            Back to Check-In
           </button>
         </div>
       </div>

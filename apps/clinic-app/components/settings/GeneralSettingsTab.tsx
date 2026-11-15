@@ -34,7 +34,6 @@ import ChartLayoutDefaultCard, {
   buildChartLayoutSavePayload,
   type PlainChartViewOption,
 } from './cards/ChartLayoutDefaultCard';
-import TeleconsultSettingsCard from './cards/TeleconsultSettingsCard';
 import BillingLiveShortcutCard, {
   isBillingShortcutEnabled,
   type BillingShortcutEligibilityInput,
@@ -163,7 +162,6 @@ export default function GeneralSettingsTab(props: GeneralSettingsTabProps) {
         <View style={styles.sectionStack} testID="settings-section-clinical">
           <ClinicalSpecialtyCard {...props} />
           <ChartLayoutDefaultCard {...props} preferredChartLayout={props.preferredChartLayout} />
-          <TeleconsultSettingsCard {...props} />
           {showSkeletons ? renderSkeletonCard('patient-search-skeleton') : <PatientSearchConfigSection settings={settings} onSettingsUpdated={onSettingsUpdated} />}
         </View>
       ) : null}

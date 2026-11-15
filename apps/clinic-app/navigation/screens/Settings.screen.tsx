@@ -30,6 +30,7 @@ import {
 import SettingsTabBar from '../../components/settings/SettingsTabBar';
 import SettingsVerticalRail from '../../components/settings/SettingsVerticalRail';
 import GeneralSettingsTab from '../../components/settings/GeneralSettingsTab';
+import TeleconsultationSettingsTab from '../../components/settings/TeleconsultationSettingsTab';
 import DocumentTemplatesSettingsTab from '../../components/settings/DocumentTemplatesSettingsTab';
 import FacilityReadinessTab from '../../components/settings/FacilityReadinessTab';
 import StaffManagementTab from '../../components/settings/StaffManagementTab';
@@ -525,7 +526,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
 
   const showSkeletons = loading && !refreshing;
 
-  // Build all 14 categorized sections respecting RBAC authority (omitting 0/fallback badges while loading)
+  // Build all 15 categorized sections respecting RBAC authority (omitting 0/fallback badges while loading)
   const tabs = useMemo<SettingsTabItem[]>(() => {
     const isPhilHealthConfigured = Boolean(settings?.isPhilHealthConfigured);
     const hasAccreditation = Boolean(accreditationNumber?.trim());
@@ -705,6 +706,15 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
               const [fresh] = await clinicService.getSettings();
               if (fresh) setSettings(fresh);
             }}
+          />
+        );
+
+      case 'teleconsultation':
+        return (
+          <TeleconsultationSettingsTab
+            settings={settings}
+            onSettingsUpdated={handleSettingsUpdated}
+            showSkeletons={showSkeletons}
           />
         );
 

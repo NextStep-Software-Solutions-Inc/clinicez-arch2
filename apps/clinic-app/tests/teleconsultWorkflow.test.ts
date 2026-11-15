@@ -1141,11 +1141,6 @@ export function AppointmentInspectionModalHarness({
       { 'data-testid': 'appointment-modality-badge' },
       appointment.isTeleconsult ? 'Teleconsult' : 'InPerson'
     ),
-    React.createElement(
-      'div',
-      { 'data-testid': 'badge-payment-policy' },
-      appointment.paymentPolicy || 'Prepaid'
-    ),
     appointment.isTeleconsult &&
       React.createElement(
         'div',
@@ -1747,7 +1742,7 @@ describe('Clinic Workstation App Teleconsultation E2E Test Suite', () => {
         expect(markup).toContain('data-testid="btn-policy-option-exempt"');
       });
 
-      test('T1.23: AppointmentInspectionModal renders teleconsult badge and payment policy indicator', () => {
+      test('T1.23: AppointmentInspectionModal renders teleconsult badge without redundant payment policy badge', () => {
         const appt = service.appointments.get('appt-00000000-0000-0000-0000-000000000001')!;
         const markup = renderToStaticMarkup(
           React.createElement(AppointmentInspectionModalHarness, {
@@ -1758,7 +1753,8 @@ describe('Clinic Workstation App Teleconsultation E2E Test Suite', () => {
         );
         expect(markup).toContain('data-testid="appointment-modality-badge"');
         expect(markup).toContain('Teleconsult');
-        expect(markup).toContain('data-testid="badge-payment-policy"');
+        expect(markup).not.toContain('data-testid="badge-payment-policy"');
+        expect(markup).toContain('data-testid="inline-policy-switcher"');
         expect(markup).toContain('Prepaid');
       });
 

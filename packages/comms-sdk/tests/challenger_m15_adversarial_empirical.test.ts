@@ -307,7 +307,7 @@ describe('Challenger M15: Empirical Verification & Adversarial Stress Harness', 
       webBothOpen.unmount();
     });
 
-    it('1.6 Invite link copy confirmation feedback in roster displays "Copied!" for 2 seconds', async () => {
+    it('1.6 Invite link copy confirmation feedback in roster is icon-only and toggles accessibilityLabel "Copied!" for 2 seconds', async () => {
       let shareCalled = 0;
       const harness = createHookHarness(() =>
         NativeCallStage({
@@ -325,7 +325,8 @@ describe('Challenger M15: Empirical Verification & Adversarial Stress Harness', 
         (el) => el.props?.testID === 'btn-roster-copy-invite'
       );
       expect(copyBtn).not.toBeNull();
-      expect(getTextContent(copyBtn)).toBe('Copy Link');
+      expect(getTextContent(copyBtn).trim()).toBe('');
+      expect(copyBtn.props?.accessibilityLabel).toBe('Copy consultation invite link');
 
       // Click copy button
       await act(async () => {
@@ -334,12 +335,13 @@ describe('Challenger M15: Empirical Verification & Adversarial Stress Harness', 
 
       expect(shareCalled).toBe(1);
 
-      // Now button text should show "Copied!"
+      // Now accessibilityLabel should show "Copied!" with icon-only child
       const copiedBtn = findElement(
         harness.result.current,
         (el) => el.props?.testID === 'btn-roster-copy-invite'
       );
-      expect(getTextContent(copiedBtn)).toBe('Copied!');
+      expect(getTextContent(copiedBtn).trim()).toBe('');
+      expect(copiedBtn.props?.accessibilityLabel).toBe('Copied!');
 
       // Wait 2050ms for timeout to revert
       await act(async () => {
@@ -350,11 +352,12 @@ describe('Challenger M15: Empirical Verification & Adversarial Stress Harness', 
         harness.result.current,
         (el) => el.props?.testID === 'btn-roster-copy-invite'
       );
-      expect(getTextContent(revertedBtn)).toBe('Copy Link');
+      expect(getTextContent(revertedBtn).trim()).toBe('');
+      expect(revertedBtn.props?.accessibilityLabel).toBe('Copy consultation invite link');
       harness.unmount();
     });
 
-    it('1.7 Web roster invite link copy confirmation feedback works identically', async () => {
+    it('1.7 Web roster invite link copy confirmation feedback is icon-only and toggles aria-label', async () => {
       let shareCalled = 0;
       const harness = createHookHarness(() =>
         WebCallStage({
@@ -372,7 +375,8 @@ describe('Challenger M15: Empirical Verification & Adversarial Stress Harness', 
         (el) => el.props?.['data-testid'] === 'btn-roster-copy-invite'
       );
       expect(copyBtn).not.toBeNull();
-      expect(getTextContent(copyBtn)).toBe('Copy Link');
+      expect(getTextContent(copyBtn).trim()).toBe('');
+      expect(copyBtn.props?.['aria-label']).toBe('Copy consultation invite link');
 
       await act(async () => {
         await copyBtn.props.onClick?.();
@@ -383,7 +387,8 @@ describe('Challenger M15: Empirical Verification & Adversarial Stress Harness', 
         harness.result.current,
         (el) => el.props?.['data-testid'] === 'btn-roster-copy-invite'
       );
-      expect(getTextContent(copiedBtn)).toBe('Copied!');
+      expect(getTextContent(copiedBtn).trim()).toBe('');
+      expect(copiedBtn.props?.['aria-label']).toBe('Copied!');
 
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 2050));
@@ -393,7 +398,8 @@ describe('Challenger M15: Empirical Verification & Adversarial Stress Harness', 
         harness.result.current,
         (el) => el.props?.['data-testid'] === 'btn-roster-copy-invite'
       );
-      expect(getTextContent(revertedBtn)).toBe('Copy Link');
+      expect(getTextContent(revertedBtn).trim()).toBe('');
+      expect(revertedBtn.props?.['aria-label']).toBe('Copy consultation invite link');
       harness.unmount();
     });
   });
@@ -402,7 +408,7 @@ describe('Challenger M15: Empirical Verification & Adversarial Stress Harness', 
   // Section 2: 6-Digit PIN
   // =========================================================================
   describe('Focus 2: 6-Digit PIN Display, Clipboard Writing & Stability', () => {
-    it('2.1 Native & Web CallStage roster: renders text-roster-invite-pin and btn-roster-copy-pin', async () => {
+    it('2.1 Native & Web CallStage roster: renders text-roster-invite-pin and icon-only btn-roster-copy-pin', async () => {
       let nativePinCopyCount = 0;
       const nativeHarness = createHookHarness(() =>
         NativeCallStage({
@@ -427,7 +433,8 @@ describe('Challenger M15: Empirical Verification & Adversarial Stress Harness', 
         (el) => el.props?.testID === 'btn-roster-copy-pin'
       );
       expect(nativeCopyPinBtn).not.toBeNull();
-      expect(getTextContent(nativeCopyPinBtn)).toBe('Copy PIN');
+      expect(getTextContent(nativeCopyPinBtn).trim()).toBe('');
+      expect(nativeCopyPinBtn.props?.accessibilityLabel).toBe('Copy access PIN');
 
       await act(async () => {
         await nativeCopyPinBtn.props.onPress?.();
@@ -438,7 +445,8 @@ describe('Challenger M15: Empirical Verification & Adversarial Stress Harness', 
         nativeHarness.result.current,
         (el) => el.props?.testID === 'btn-roster-copy-pin'
       );
-      expect(getTextContent(nativeCopiedBtn)).toBe('Copied!');
+      expect(getTextContent(nativeCopiedBtn).trim()).toBe('');
+      expect(nativeCopiedBtn.props?.accessibilityLabel).toBe('Copied!');
 
       await act(async () => {
         await new Promise((r) => setTimeout(r, 2050));
@@ -447,7 +455,8 @@ describe('Challenger M15: Empirical Verification & Adversarial Stress Harness', 
         nativeHarness.result.current,
         (el) => el.props?.testID === 'btn-roster-copy-pin'
       );
-      expect(getTextContent(nativeRevertedBtn)).toBe('Copy PIN');
+      expect(getTextContent(nativeRevertedBtn).trim()).toBe('');
+      expect(nativeRevertedBtn.props?.accessibilityLabel).toBe('Copy access PIN');
       nativeHarness.unmount();
 
       // Web

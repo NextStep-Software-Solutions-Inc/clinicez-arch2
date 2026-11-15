@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { lightColors } from '@clinicez/design-tokens';
 import { WebCallStageProps } from './types';
 import { OverlayTooltip } from './OverlayTooltip';
 import { resolveWebTheme } from './shadows';
@@ -15,7 +16,10 @@ import {
   DockIcon,
   PipIcon,
   RotateCwIcon,
-  CloseIcon
+  CopyIcon,
+  CheckIcon,
+  CloseIcon,
+  MoreHorizontalIcon
 } from './icons';
 
 function formatDuration(totalSeconds: number = 0): string {
@@ -98,6 +102,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
 
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedPin, setCopiedPin] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [showSoloWarning, setShowSoloWarning] = useState(false);
   const [soloCountdown, setSoloCountdown] = useState(Math.round(soloAutoLeaveGraceMs / 1000));
   const [soloDismissedCount, setSoloDismissedCount] = useState(0);
@@ -239,7 +244,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
   };
 
   return (
-    <div className={`flex flex-col h-full bg-slate-950 text-slate-100 ${className}`}>
+    <div className={`flex flex-col min-h-0 h-full bg-slate-950 text-slate-100 ${className}`}>
       {/* Top Header Bar */}
       {!hideHeader && (
         <header
@@ -366,11 +371,15 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                 {participantInitials}
               </div>
               <h2 className="text-lg font-bold text-slate-100">{participantName}</h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs sm:text-sm text-slate-300 mt-1">
                 {remoteStatusLabel ??
                   (isCameraEnabled
-                    ? 'Connected • Waiting for Patient Video Stream'
-                    : 'Connected • Local Camera Paused')}
+                    ? `Waiting for ${participantName} to join...`
+                    : 'Camera is off')}
+                <span className="sr-only">
+                  {' '}
+                  {isCameraEnabled ? 'Clinician Video Feed Active' : 'Local Camera Paused'}
+                </span>
               </p>
             </div>
           )}
@@ -379,7 +388,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
           {showSoloWarning && (
             <div
               data-testid="banner-solo-participant-warning"
-              className="absolute top-4 left-4 right-4 z-30 p-4 rounded-xl border border-amber-500/40 bg-amber-950/90 text-amber-200 flex items-center justify-between gap-4 shadow-xl"
+              className="absolute top-3 left-3 right-3 sm:top-4 sm:left-4 sm:right-4 z-30 p-3.5 sm:p-4 rounded-xl border border-amber-500/40 bg-amber-950/95 text-amber-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 shadow-xl"
             >
               <div>
                 <p className="font-bold text-sm">Are you still waiting?</p>
@@ -387,7 +396,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                   No other participants are currently in this room. You will auto-leave in {soloCountdown}s.
                 </p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 justify-end">
                 <button
                   type="button"
                   data-testid="btn-solo-stay"
@@ -416,19 +425,19 @@ export const CallStage: React.FC<WebCallStageProps> = ({
           {isScreenSharing && (
             <div
               data-testid="banner-screen-sharing"
-              className="absolute top-4 left-1/2 -translate-x-1/2 z-25 px-4 py-1.5 rounded-full flex items-center gap-3"
+              className="absolute top-3 sm:top-4 left-1/2 -translate-x-1/2 z-25 max-w-[calc(100vw-1.5rem)] px-3 sm:px-4 py-1.5 rounded-full flex items-center gap-2 sm:gap-3"
               style={{
                 backgroundColor: webColors.primaryDark,
                 color: webColors.onPrimary,
                 boxShadow: webShadows.md
               }}
             >
-              <span className="text-xs font-semibold">You are sharing your screen</span>
+              <span className="text-xs font-semibold truncate">You are sharing your screen</span>
               {onToggleScreenShare && (
                 <button
                   type="button"
                   onClick={() => void onToggleScreenShare()}
-                  className="min-h-[28px] px-2.5 py-0.5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors"
+                  className="min-h-[44px] px-3.5 py-1.5 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors shrink-0"
                 >
                   Stop Sharing
                 </button>
@@ -436,34 +445,45 @@ export const CallStage: React.FC<WebCallStageProps> = ({
             </div>
           )}
 
-          {/* Picture-in-Picture Local Self-Preview Canvas */}
-          <div
-            className={`absolute bottom-4 right-4 ${
-              isScreenSharing || videoOrientation === 'landscape'
-                ? 'w-44 sm:w-56 aspect-video'
-                : 'w-28 sm:w-36 aspect-[3/4]'
-            } rounded-xl bg-slate-800 border border-slate-700 shadow-xl overflow-hidden flex items-center justify-center`}
-            style={{ boxShadow: webShadows.lg }}
-          >
-            {localVideoSurface ?? (
-              <span className="text-xs font-semibold text-slate-300">
-                {isCameraEnabled ? selfName : `${selfName} (Cam Off)`}
-              </span>
-            )}
-          </div>
+          {/* Picture-in-Picture Local Self-Preview Canvas (top-right, clear of bottom controls) */}
+          {(isCameraEnabled || isScreenSharing) && (
+            <div
+              data-testid="call-stage-local-pip"
+              className={`absolute right-3 sm:right-5 lg:right-6 z-20 ${
+                showSoloWarning
+                  ? 'top-36 sm:top-24'
+                  : isScreenSharing
+                    ? 'top-16 sm:top-16'
+                    : 'top-3 sm:top-4'
+              } ${
+                isScreenSharing || videoOrientation === 'landscape'
+                  ? 'w-28 sm:w-36 lg:w-44 aspect-video'
+                  : 'w-20 sm:w-28 lg:w-32 aspect-[3/4]'
+              } rounded-xl bg-slate-900 border border-white/15 shadow-xl overflow-hidden flex items-center justify-center`}
+              style={{ boxShadow: webShadows.lg }}
+            >
+              {localVideoSurface ?? (
+                renderIcon ? (
+                  renderIcon('videoOff', { size: 20, color: lightColors.textMuted })
+                ) : (
+                  <VideoOffIcon size={20} className="text-slate-400" />
+                )
+              )}
+            </div>
+          )}
 
           {/* Floating Media Controls Toolbar */}
           <div
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-slate-900/90 backdrop-blur-md px-5 py-2.5 rounded-full border border-slate-700 shadow-2xl"
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 mb-[env(safe-area-inset-bottom)] z-30 flex items-center justify-center gap-1.5 sm:gap-2 bg-slate-950/65 backdrop-blur-md px-2.5 py-1.5 rounded-full border border-white/10 shadow-2xl max-w-[calc(100vw-1rem)]"
             style={{ boxShadow: webShadows.lg }}
           >
             <OverlayTooltip label={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}>
               <button
                 type="button"
                 onClick={onToggleMic}
-                className={`min-h-[44px] min-w-[44px] rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                className={`h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
                   isMicEnabled
-                    ? 'bg-slate-800 text-slate-100 hover:bg-slate-700'
+                    ? 'bg-white/10 text-white hover:bg-white/20'
                     : 'bg-red-600 text-white hover:bg-red-700'
                 }`}
                 style={{ boxShadow: isMicEnabled ? webShadows.brandSubtle : webShadows.dangerSm }}
@@ -485,9 +505,9 @@ export const CallStage: React.FC<WebCallStageProps> = ({
               <button
                 type="button"
                 onClick={onToggleCamera}
-                className={`min-h-[44px] min-w-[44px] rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                className={`h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
                   isCameraEnabled
-                    ? 'bg-slate-800 text-slate-100 hover:bg-slate-700'
+                    ? 'bg-white/10 text-white hover:bg-white/20'
                     : 'bg-red-600 text-white hover:bg-red-700'
                 }`}
                 style={{ boxShadow: isCameraEnabled ? webShadows.brandSubtle : webShadows.dangerSm }}
@@ -506,135 +526,143 @@ export const CallStage: React.FC<WebCallStageProps> = ({
             </OverlayTooltip>
 
             {onToggleScreenShare && (
-              <OverlayTooltip label={isScreenSharing ? 'Stop screen share' : 'Share screen'}>
-                <button
-                  type="button"
-                  onClick={onToggleScreenShare}
-                  className={`min-h-[44px] min-w-[44px] px-3.5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                    isScreenSharing
-                      ? 'bg-teal-700 text-white'
-                      : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
-                  }`}
-                  style={
-                    isScreenSharing
-                      ? {
-                          backgroundColor: webColors.primary,
-                          color: webColors.onPrimary,
-                          boxShadow: webShadows.brandSm,
-                        }
-                      : { boxShadow: webShadows.brandSubtle }
-                  }
-                  aria-label={isScreenSharing ? 'Stop screen sharing' : 'Start screen sharing'}
-                  title={isScreenSharing ? 'Stop screen share' : 'Share screen'}
-                >
-                  {renderIcon ? (
-                    renderIcon(isScreenSharing ? 'screenShareOff' : 'screenShare', { size: 18 })
-                  ) : (
-                    <>
-                      <span className="sr-only">{isScreenSharing ? 'SHARING' : 'SHARE'}</span>
-                      <ScreenShareIcon size={18} />
-                    </>
-                  )}
-                </button>
-              </OverlayTooltip>
+              <div className={!isScreenSharing ? 'hidden sm:inline-flex' : 'inline-flex'}>
+                <OverlayTooltip label={isScreenSharing ? 'Stop screen share' : 'Share screen'}>
+                  <button
+                    type="button"
+                    onClick={onToggleScreenShare}
+                    className={`h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
+                      isScreenSharing
+                        ? 'bg-teal-700 text-white'
+                        : 'bg-white/10 text-white hover:bg-white/20'
+                    }`}
+                    style={
+                      isScreenSharing
+                        ? {
+                            backgroundColor: webColors.primary,
+                            color: webColors.onPrimary,
+                            boxShadow: webShadows.brandSm,
+                          }
+                        : { boxShadow: webShadows.brandSubtle }
+                    }
+                    aria-label={isScreenSharing ? 'Stop screen sharing' : 'Start screen sharing'}
+                    title={isScreenSharing ? 'Stop screen share' : 'Share screen'}
+                  >
+                    {renderIcon ? (
+                      renderIcon(isScreenSharing ? 'screenShareOff' : 'screenShare', { size: 18 })
+                    ) : (
+                      <>
+                        <span className="sr-only">{isScreenSharing ? 'SHARING' : 'SHARE'}</span>
+                        <ScreenShareIcon size={18} />
+                      </>
+                    )}
+                  </button>
+                </OverlayTooltip>
+              </div>
             )}
 
             {onDockCall && (
-              <OverlayTooltip label="Dock call and open chart">
-                <button
-                  type="button"
-                  id="btn-dock-call"
-                  data-testid="btn-dock-call"
-                  onClick={() => void onDockCall()}
-                  className="min-h-[44px] min-w-[44px] px-3.5 rounded-full bg-slate-800 text-slate-100 hover:bg-slate-700 flex items-center justify-center text-xs font-bold transition-colors"
-                  style={{ boxShadow: webShadows.brandSubtle }}
-                  aria-label="Dock call and open chart"
-                  title="Dock call and open chart"
-                >
-                  {renderIcon ? (
-                    renderIcon('dock', { size: 18 })
-                  ) : (
-                    <>
-                      <span className="sr-only">DOCK</span>
-                      <DockIcon size={18} />
-                    </>
-                  )}
-                </button>
-              </OverlayTooltip>
+              <div className="hidden sm:inline-flex">
+                <OverlayTooltip label="Dock call and open chart">
+                  <button
+                    type="button"
+                    id="btn-dock-call"
+                    data-testid="btn-dock-call"
+                    onClick={() => void onDockCall()}
+                    className="h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full bg-white/10 text-white hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-colors shrink-0"
+                    style={{ boxShadow: webShadows.brandSubtle }}
+                    aria-label="Dock call and open chart"
+                    title="Dock call and open chart"
+                  >
+                    {renderIcon ? (
+                      renderIcon('dock', { size: 18 })
+                    ) : (
+                      <>
+                        <span className="sr-only">DOCK</span>
+                        <DockIcon size={18} />
+                      </>
+                    )}
+                  </button>
+                </OverlayTooltip>
+              </div>
             )}
 
             {onTogglePip && isPipSupported !== false && (
-              <OverlayTooltip
-                label={
-                  isPipActive
-                    ? 'Exit picture-in-picture & return'
-                    : 'Minimize to picture-in-picture'
-                }
-              >
-                <button
-                  type="button"
-                  id="btn-toggle-pip"
-                  data-testid="btn-toggle-pip"
-                  onClick={() => void onTogglePip()}
-                  className={`min-h-[44px] min-w-[44px] px-3.5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                    isPipActive ? 'bg-teal-700 text-white' : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
-                  }`}
-                  style={
+              <div className="hidden sm:inline-flex">
+                <OverlayTooltip
+                  label={
                     isPipActive
-                      ? {
-                          backgroundColor: webColors.primary,
-                          color: webColors.onPrimary,
-                          boxShadow: webShadows.brandSm,
-                        }
-                      : { boxShadow: webShadows.brandSubtle }
-                  }
-                  aria-label={isPipActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture'}
-                  title={
-                    isPipActive
-                      ? 'Exit Picture-in-Picture'
-                      : 'Picture-in-Picture'
+                      ? 'Exit picture-in-picture & return'
+                      : 'Minimize to picture-in-picture'
                   }
                 >
-                  {renderIcon ? (
-                    renderIcon('pip', { size: 18 })
-                  ) : (
-                    <>
-                      <span className="sr-only">PIP</span>
-                      <PipIcon size={18} />
-                    </>
-                  )}
-                </button>
-              </OverlayTooltip>
+                  <button
+                    type="button"
+                    id="btn-toggle-pip"
+                    data-testid="btn-toggle-pip"
+                    onClick={() => void onTogglePip()}
+                    className={`h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
+                      isPipActive ? 'bg-teal-700 text-white' : 'bg-white/10 text-white hover:bg-white/20'
+                    }`}
+                    style={
+                      isPipActive
+                        ? {
+                            backgroundColor: webColors.primary,
+                            color: webColors.onPrimary,
+                            boxShadow: webShadows.brandSm,
+                          }
+                        : { boxShadow: webShadows.brandSubtle }
+                    }
+                    aria-label={isPipActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture'}
+                    title={
+                      isPipActive
+                        ? 'Exit Picture-in-Picture'
+                        : 'Picture-in-Picture'
+                    }
+                  >
+                    {renderIcon ? (
+                      renderIcon('pip', { size: 18 })
+                    ) : (
+                      <>
+                        <span className="sr-only">PIP</span>
+                        <PipIcon size={18} />
+                      </>
+                    )}
+                  </button>
+                </OverlayTooltip>
+              </div>
             )}
 
             {onToggleOrientation && (
-              <OverlayTooltip
-                label={
-                  videoOrientation === 'landscape'
-                    ? 'Switch to portrait view'
-                    : 'Switch to landscape view'
-                }
-              >
-                <button
-                  type="button"
-                  id="btn-toggle-orientation"
-                  data-testid="btn-toggle-orientation"
-                  onClick={() => void onToggleOrientation()}
-                  className="min-h-[44px] min-w-[44px] px-3.5 rounded-full bg-slate-800 text-slate-100 hover:bg-slate-700 flex items-center justify-center text-xs font-bold transition-colors"
-                  style={{ boxShadow: webShadows.brandSubtle }}
-                  aria-label="Toggle camera orientation"
-                  title="Toggle camera orientation"
+              <div className="hidden sm:inline-flex">
+                <OverlayTooltip
+                  label={
+                    videoOrientation === 'landscape'
+                      ? 'Switch to portrait view'
+                      : 'Switch to landscape view'
+                  }
                 >
-                  {renderIcon ? (
-                    renderIcon('rotate', { size: 18 })
-                  ) : (
-                    <>
-                      <span className="sr-only">ROTATE</span>
-                      <RotateCwIcon size={18} />
-                    </>
-                  )}
-                </button>
-              </OverlayTooltip>
+                  <button
+                    type="button"
+                    id="btn-toggle-orientation"
+                    data-testid="btn-toggle-orientation"
+                    onClick={() => void onToggleOrientation()}
+                    className="h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full bg-white/10 text-white hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-colors shrink-0"
+                    style={{ boxShadow: webShadows.brandSubtle }}
+                    aria-label="Toggle camera orientation"
+                    title="Toggle camera orientation"
+                  >
+                    {renderIcon ? (
+                      renderIcon('rotate', { size: 18 })
+                    ) : (
+                      <>
+                        <span className="sr-only">ROTATE</span>
+                        <RotateCwIcon size={18} />
+                      </>
+                    )}
+                  </button>
+                </OverlayTooltip>
+              </div>
             )}
 
             {onToggleChat && (
@@ -643,10 +671,10 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                   type="button"
                   data-testid="btn-toggle-chat"
                   onClick={onToggleChat}
-                  className={`relative min-h-[44px] min-w-[44px] px-3.5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                  className={`relative h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
                     isChatOpen
                       ? 'bg-teal-700 text-white'
-                      : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
+                      : 'bg-white/10 text-white hover:bg-white/20'
                   }`}
                   style={
                     isChatOpen
@@ -689,10 +717,10 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                   type="button"
                   data-testid="btn-toggle-participants"
                   onClick={onToggleParticipants}
-                  className={`relative min-h-[44px] min-w-[44px] px-3.5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                  className={`relative h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
                     isParticipantsOpen
                       ? 'bg-teal-700 text-white'
-                      : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
+                      : 'bg-white/10 text-white hover:bg-white/20'
                   }`}
                   style={
                     isParticipantsOpen
@@ -735,56 +763,175 @@ export const CallStage: React.FC<WebCallStageProps> = ({
               onStartRecording &&
               canStartRecording &&
               recordingConsentStatus !== 'requested' && (
-                <OverlayTooltip
-                  label={
-                    recordButtonTooltip ||
-                    (isRecordDisabled
-                      ? 'Waiting for patient to join before recording'
-                      : 'Start call recording')
-                  }
-                >
-                  <button
-                    type="button"
-                    data-testid="btn-start-recording"
-                    onClick={() => {
-                      if (!isRecordDisabled) {
-                        void onStartRecording();
-                      }
-                    }}
-                    disabled={isRecordDisabled}
-                    className={`min-h-[44px] min-w-[44px] px-3.5 rounded-full text-xs font-bold flex items-center justify-center transition-colors ${
-                      isRecordDisabled
-                        ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed opacity-50'
-                        : 'bg-slate-800 hover:bg-slate-700 text-slate-100'
-                    }`}
-                    style={{
-                      boxShadow: isRecordDisabled ? webShadows.none : webShadows.brandSubtle,
-                    }}
-                    aria-label="Start Recording"
-                    title={
+                <div className="hidden sm:inline-flex">
+                  <OverlayTooltip
+                    label={
                       recordButtonTooltip ||
                       (isRecordDisabled
                         ? 'Waiting for patient to join before recording'
                         : 'Start call recording')
                     }
                   >
-                    {renderIcon ? (
-                      renderIcon('recordDot', { size: 18 })
-                    ) : (
-                      <>
-                        <span className="sr-only">REC</span>
-                        <CircleDotIcon size={18} />
-                      </>
-                    )}
-                  </button>
-                </OverlayTooltip>
+                    <button
+                      type="button"
+                      data-testid="btn-start-recording"
+                      onClick={() => {
+                        if (!isRecordDisabled) {
+                          void onStartRecording();
+                        }
+                      }}
+                      disabled={isRecordDisabled}
+                      className={`h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full text-xs font-bold flex items-center justify-center transition-colors shrink-0 ${
+                        isRecordDisabled
+                          ? 'bg-white/5 text-slate-400 cursor-not-allowed opacity-50'
+                          : 'bg-white/10 hover:bg-white/20 text-white'
+                      }`}
+                      style={{
+                        boxShadow: isRecordDisabled ? webShadows.none : webShadows.brandSubtle,
+                      }}
+                      aria-label="Start Recording"
+                      title={
+                        recordButtonTooltip ||
+                        (isRecordDisabled
+                          ? 'Waiting for patient to join before recording'
+                          : 'Start call recording')
+                      }
+                    >
+                      {renderIcon ? (
+                        renderIcon('recordDot', { size: 18 })
+                      ) : (
+                        <>
+                          <span className="sr-only">REC</span>
+                          <CircleDotIcon size={18} />
+                        </>
+                      )}
+                    </button>
+                  </OverlayTooltip>
+                </div>
               )}
+
+            {((!isScreenSharing && Boolean(onToggleScreenShare)) ||
+              Boolean(onDockCall) ||
+              Boolean(onTogglePip && isPipSupported !== false) ||
+              Boolean(onToggleOrientation) ||
+              Boolean(
+                !isRecording &&
+                  onStartRecording &&
+                  canStartRecording &&
+                  recordingConsentStatus !== 'requested'
+              )) && (
+              <div className="relative sm:hidden">
+                <button
+                  type="button"
+                  data-testid="btn-toggle-more-controls"
+                  onClick={() => setIsMoreOpen((prev) => !prev)}
+                  className={`h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
+                    isMoreOpen
+                      ? 'bg-white/20 text-white'
+                      : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
+                  aria-label="More call controls"
+                  aria-expanded={isMoreOpen}
+                  title="More call controls"
+                >
+                  <MoreHorizontalIcon size={18} />
+                </button>
+                {isMoreOpen && (
+                  <div
+                    data-testid="popover-more-controls"
+                    className="absolute bottom-14 right-0 min-w-[192px] rounded-xl bg-slate-950/90 backdrop-blur-md border border-white/15 p-1.5 shadow-2xl flex flex-col gap-1 z-40"
+                    style={{ boxShadow: webShadows.lg }}
+                  >
+                    {onToggleScreenShare && !isScreenSharing && (
+                      <button
+                        type="button"
+                        data-testid="more-menu-screen-share"
+                        onClick={() => {
+                          setIsMoreOpen(false);
+                          void onToggleScreenShare();
+                        }}
+                        className="min-h-[44px] w-full px-3 rounded-lg text-xs font-semibold text-white hover:bg-white/10 flex items-center gap-2.5 text-left"
+                      >
+                        {renderIcon ? renderIcon('screenShare', { size: 16 }) : <ScreenShareIcon size={16} />}
+                        <span>Share screen</span>
+                      </button>
+                    )}
+                    {onToggleOrientation && (
+                      <button
+                        type="button"
+                        data-testid="more-menu-toggle-orientation"
+                        onClick={() => {
+                          setIsMoreOpen(false);
+                          void onToggleOrientation();
+                        }}
+                        className="min-h-[44px] w-full px-3 rounded-lg text-xs font-semibold text-white hover:bg-white/10 flex items-center gap-2.5 text-left"
+                      >
+                        {renderIcon ? renderIcon('rotate', { size: 16 }) : <RotateCwIcon size={16} />}
+                        <span>{videoOrientation === 'landscape' ? 'Portrait view' : 'Landscape view'}</span>
+                      </button>
+                    )}
+                    {onTogglePip && isPipSupported !== false && (
+                      <button
+                        type="button"
+                        data-testid="more-menu-toggle-pip"
+                        onClick={() => {
+                          setIsMoreOpen(false);
+                          void onTogglePip();
+                        }}
+                        className="min-h-[44px] w-full px-3 rounded-lg text-xs font-semibold text-white hover:bg-white/10 flex items-center gap-2.5 text-left"
+                      >
+                        {renderIcon ? renderIcon('pip', { size: 16 }) : <PipIcon size={16} />}
+                        <span>{isPipActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture'}</span>
+                      </button>
+                    )}
+                    {onDockCall && (
+                      <button
+                        type="button"
+                        data-testid="more-menu-dock-call"
+                        onClick={() => {
+                          setIsMoreOpen(false);
+                          void onDockCall();
+                        }}
+                        className="min-h-[44px] w-full px-3 rounded-lg text-xs font-semibold text-white hover:bg-white/10 flex items-center gap-2.5 text-left"
+                      >
+                        {renderIcon ? renderIcon('dock', { size: 16 }) : <DockIcon size={16} />}
+                        <span>Dock call</span>
+                      </button>
+                    )}
+                    {!isRecording &&
+                      onStartRecording &&
+                      canStartRecording &&
+                      recordingConsentStatus !== 'requested' && (
+                        <button
+                          type="button"
+                          data-testid="more-menu-start-recording"
+                          disabled={isRecordDisabled}
+                          onClick={() => {
+                            if (!isRecordDisabled) {
+                              setIsMoreOpen(false);
+                              void onStartRecording();
+                            }
+                          }}
+                          className={`min-h-[44px] w-full px-3 rounded-lg text-xs font-semibold flex items-center gap-2.5 text-left ${
+                            isRecordDisabled
+                              ? 'text-slate-400 opacity-50 cursor-not-allowed'
+                              : 'text-white hover:bg-white/10'
+                          }`}
+                        >
+                          {renderIcon ? renderIcon('recordDot', { size: 16 }) : <CircleDotIcon size={16} />}
+                          <span>Start recording</span>
+                        </button>
+                      )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <OverlayTooltip label="End consultation call">
               <button
                 type="button"
                 onClick={onEndCall}
-                className="min-h-[44px] min-w-[44px] px-4 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center justify-center transition-colors"
+                className="h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center justify-center transition-colors shrink-0"
                 style={{ boxShadow: webShadows.dangerSm }}
                 aria-label="Leave or terminate call"
                 title="End consultation call"
@@ -808,7 +955,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
         {/* In-Call Chat Drawer (Rendered conditionally) */}
         {isChatOpen && renderChatDrawer && (
           <aside
-            className="w-80 lg:w-96 border-l border-slate-800 bg-slate-900 flex flex-col h-full shadow-2xl"
+            className="fixed inset-0 z-40 sm:static sm:z-auto w-full sm:w-80 lg:w-96 sm:border-l border-slate-800 bg-slate-900 flex flex-col h-full shadow-2xl pb-[env(safe-area-inset-bottom)] sm:pb-0"
             style={{ boxShadow: webShadows.lg }}
           >
             {renderChatDrawer()}
@@ -819,14 +966,14 @@ export const CallStage: React.FC<WebCallStageProps> = ({
         {isParticipantsOpen && !isChatOpen && (
           <aside
             data-testid="panel-participants-roster"
-            className="w-80 lg:w-96 border-l border-slate-800 bg-slate-900 flex flex-col h-full shadow-2xl"
+            className="fixed inset-0 z-40 sm:static sm:z-auto w-full sm:w-80 lg:w-96 sm:border-l border-slate-800 bg-slate-900 flex flex-col h-full shadow-2xl pb-[env(safe-area-inset-bottom)] sm:pb-0"
             style={{ boxShadow: webShadows.lg }}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-bold text-slate-100">Participants</h2>
                 <span
-                  className="min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
+                  className="min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold flex items-center justify-center"
                   style={{
                     backgroundColor: webColors.primary,
                     color: webColors.onPrimary
@@ -852,7 +999,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
             {(patientLink || onSharePatientLink || patientPin || onCopyPatientPin) && (
               <div className="p-4 border-b border-slate-800 space-y-3">
                 <div className="space-y-1">
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                     Invite Link
                   </span>
                   <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-800/80 border border-slate-700">
@@ -864,13 +1011,20 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                         type="button"
                         data-testid="btn-roster-copy-invite"
                         onClick={handleCopyInviteFromRoster}
-                        className="min-h-[36px] min-w-[44px] px-2.5 py-1 rounded-md text-xs font-bold transition-colors shrink-0"
+                        className="min-h-[44px] min-w-[44px] p-2 rounded-md bg-transparent hover:bg-slate-700/40 transition-colors flex items-center justify-center shrink-0 border-0"
                         style={{
-                          backgroundColor: webColors.primary,
-                          color: webColors.onPrimary
+                          color: copiedInvite ? lightColors.successText : webColors.primary
                         }}
+                        aria-label={copiedInvite ? 'Copied!' : 'Copy consultation invite link'}
+                        title={copiedInvite ? 'Copied!' : 'Copy consultation invite link'}
                       >
-                        {copiedInvite ? 'Copied!' : 'Copy Link'}
+                        {copiedInvite ? (
+                          <CheckIcon size={16} />
+                        ) : renderIcon ? (
+                          renderIcon('share', { size: 16, color: webColors.primary })
+                        ) : (
+                          <CopyIcon size={16} />
+                        )}
                       </button>
                     )}
                   </div>
@@ -878,7 +1032,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
 
                 {patientPin && (
                   <div className="space-y-1">
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                       Access PIN
                     </span>
                     <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-800/80 border border-slate-700">
@@ -893,13 +1047,20 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                           type="button"
                           data-testid="btn-roster-copy-pin"
                           onClick={handleCopyPinFromRoster}
-                          className="min-h-[36px] min-w-[44px] px-2.5 py-1 rounded-md text-xs font-bold transition-colors shrink-0"
+                          className="min-h-[44px] min-w-[44px] p-2 rounded-md bg-transparent hover:bg-slate-700/40 transition-colors flex items-center justify-center shrink-0 border-0"
                           style={{
-                            backgroundColor: webColors.primary,
-                            color: webColors.onPrimary
+                            color: copiedPin ? lightColors.successText : webColors.primary
                           }}
+                          aria-label={copiedPin ? 'Copied!' : 'Copy access PIN'}
+                          title={copiedPin ? 'Copied!' : 'Copy access PIN'}
                         >
-                          {copiedPin ? 'Copied!' : 'Copy PIN'}
+                          {copiedPin ? (
+                            <CheckIcon size={16} />
+                          ) : renderIcon ? (
+                            renderIcon('share', { size: 16, color: webColors.primary })
+                          ) : (
+                            <CopyIcon size={16} />
+                          )}
                         </button>
                       )}
                     </div>
@@ -910,7 +1071,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
 
             {/* Participants List */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                 In Room
               </span>
 
@@ -919,7 +1080,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                 <div>
                   <p className="text-sm font-medium text-slate-200">{selfName} (You)</p>
                   <span
-                    className="inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold"
+                    className="inline-block mt-0.5 px-2 py-0.5 rounded text-xs font-bold"
                     style={{
                       backgroundColor: webColors.primarySubtle,
                       color: webColors.primaryDark
@@ -942,7 +1103,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                     <div>
                       <p className="text-sm font-medium text-slate-200">{p.name}</p>
                       <span
-                        className={`inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold ${
+                        className={`inline-block mt-0.5 px-2 py-0.5 rounded text-xs font-bold ${
                           p.status === 'Waiting to join'
                             ? 'bg-amber-900/60 text-amber-200'
                             : 'bg-teal-900/60 text-teal-200'
@@ -963,7 +1124,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                   <div>
                     <p className="text-sm font-medium text-slate-200">{participantName}</p>
                     <span
-                      className={`inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold ${
+                      className={`inline-block mt-0.5 px-2 py-0.5 rounded text-xs font-bold ${
                         !hasRemote
                           ? 'bg-amber-900/60 text-amber-200'
                           : 'bg-teal-900/60 text-teal-200'

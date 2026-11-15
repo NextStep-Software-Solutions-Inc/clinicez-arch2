@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -87,6 +87,83 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
   const [isUpdatingPolicy, setIsUpdatingPolicy] = useState(false);
   const [isAdmitting, setIsAdmitting] = useState(false);
   const [isRetryingVideoServer, setIsRetryingVideoServer] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedPin, setCopiedPin] = useState(false);
+  const copiedLinkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copiedPinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copiedLinkTimerRef.current) clearTimeout(copiedLinkTimerRef.current);
+      if (copiedPinTimerRef.current) clearTimeout(copiedPinTimerRef.current);
+    };
+  }, []);
+
+  const handleCopyLinkCardPress = async () => {
+    if (!onSharePatientLink) return;
+    await onSharePatientLink();
+    setCopiedLink(true);
+    if (copiedLinkTimerRef.current) clearTimeout(copiedLinkTimerRef.current);
+    copiedLinkTimerRef.current = setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleCopyPinCardPress = async () => {
+    if (!onCopyPatientPin) return;
+    await onCopyPatientPin();
+    setCopiedPin(true);
+    if (copiedPinTimerRef.current) clearTimeout(copiedPinTimerRef.current);
+    copiedPinTimerRef.current = setTimeout(() => setCopiedPin(false), 2000);
+  };
+
+  const renderFallbackCopyGlyph = (copied: boolean, color: string) => {
+    if (copied) {
+      return (
+        <View style={{ width: 14, height: 14, justifyContent: 'center', alignItems: 'center' }}>
+          <View
+            style={{
+              width: 10,
+              height: 6,
+              borderLeftWidth: 2,
+              borderBottomWidth: 2,
+              borderColor: color,
+              backgroundColor: resolvedColors.transparent,
+              transform: [{ rotate: '-45deg' }, { translateY: -1 }]
+            }}
+          />
+        </View>
+      );
+    }
+    return (
+      <View style={{ width: 16, height: 16, position: 'relative' }}>
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: 10,
+            height: 10,
+            borderRadius: radiusScale.xs,
+            borderWidth: 1.5,
+            borderColor: color,
+            backgroundColor: resolvedColors.transparent
+          }}
+        />
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            right: 0,
+            width: 10,
+            height: 10,
+            borderRadius: radiusScale.xs,
+            borderWidth: 1.5,
+            borderColor: color,
+            backgroundColor: resolvedColors.surface
+          }}
+        />
+      </View>
+    );
+  };
 
   const isCameraActive = isCameraEnabled ?? localCameraActive;
   const isMicActive = isMicEnabled ?? localMicActive;
@@ -365,7 +442,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                     </OverlayTooltip>
                   )}
 
-                  {(onSharePatientLink || patientLink) && (
+                  {(!patientLink && onSharePatientLink) && (
                     <OverlayTooltip
                       label="Copy patient invite link"
                       colors={resolvedColors}
@@ -381,7 +458,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                         {renderIcon ? (
                           renderIcon('share', { size: 18, color: resolvedColors.text })
                         ) : (
-                          <Text style={styles.mediaButtonText}>SHARE</Text>
+                          renderFallbackCopyGlyph(false, resolvedColors.text)
                         )}
                       </TouchableOpacity>
                     </OverlayTooltip>
@@ -401,7 +478,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                         <Text style={styles.patientLinkLabel}>Patient Invite Link:</Text>
                         {onSharePatientLink && (
                           <OverlayTooltip
-                            label="Copy patient invite link"
+                            label={copiedLink ? 'Copied!' : 'Copy patient invite link'}
                             placement="bottom"
                             colors={resolvedColors}
                             shadows={resolvedShadows}
@@ -410,14 +487,16 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                               testID="btn-share-patient-link-card"
                               style={styles.shareLinkBadge}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                              onPress={() => onSharePatientLink()}
+                              onPress={() => void handleCopyLinkCardPress()}
                               accessibilityRole="button"
-                              accessibilityLabel="Copy patient invite link"
+                              accessibilityLabel={copiedLink ? 'Copied!' : 'Copy patient invite link'}
                             >
-                              {renderIcon ? (
-                                renderIcon('share', { size: 14, color: resolvedColors.onPrimary })
+                              {copiedLink ? (
+                                renderFallbackCopyGlyph(true, resolvedColors.successText)
+                              ) : renderIcon ? (
+                                renderIcon('share', { size: 16, color: resolvedColors.primary })
                               ) : (
-                                <Text style={styles.shareLinkBadgeText}>COPY</Text>
+                                renderFallbackCopyGlyph(false, resolvedColors.primary)
                               )}
                             </TouchableOpacity>
                           </OverlayTooltip>
@@ -437,16 +516,29 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                         </Text>
                       </View>
                       {onCopyPatientPin && (
-                        <TouchableOpacity
-                          testID="btn-copy-patient-pin"
-                          style={styles.shareLinkBadge}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          onPress={() => void onCopyPatientPin()}
-                          accessibilityRole="button"
-                          accessibilityLabel="Copy access PIN"
+                        <OverlayTooltip
+                          label={copiedPin ? 'Copied!' : 'Copy access PIN'}
+                          placement="bottom"
+                          colors={resolvedColors}
+                          shadows={resolvedShadows}
                         >
-                          <Text style={styles.shareLinkBadgeText}>COPY</Text>
-                        </TouchableOpacity>
+                          <TouchableOpacity
+                            testID="btn-copy-patient-pin"
+                            style={styles.shareLinkBadge}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            onPress={() => void handleCopyPinCardPress()}
+                            accessibilityRole="button"
+                            accessibilityLabel={copiedPin ? 'Copied!' : 'Copy access PIN'}
+                          >
+                            {copiedPin ? (
+                              renderFallbackCopyGlyph(true, resolvedColors.successText)
+                            ) : renderIcon ? (
+                              renderIcon('share', { size: 16, color: resolvedColors.primary })
+                            ) : (
+                              renderFallbackCopyGlyph(false, resolvedColors.primary)
+                            )}
+                          </TouchableOpacity>
+                        </OverlayTooltip>
                       )}
                     </View>
                   )}
@@ -920,13 +1012,14 @@ function createStyles(
     color: c.primaryDark
   },
   shareLinkBadge: {
-    width: 28,
-    height: 28,
-    backgroundColor: c.primary,
+    minWidth: 36,
+    minHeight: 36,
+    padding: spaceScale.xs,
+    backgroundColor: c.transparent,
+    borderWidth: 0,
     borderRadius: radiusScale.xs,
     justifyContent: 'center',
-    alignItems: 'center',
-    ...s.brandSm
+    alignItems: 'center'
   },
   shareLinkBadgeText: {
     fontSize: fontSizeScale.xs,

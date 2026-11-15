@@ -573,7 +573,7 @@ describe('Challenger 2 Empirical Adversarial Stress Test Suite', () => {
       expect(markup).toContain('data-testid="appointment-modality-badge"');
       expect(markup).toContain('Teleconsult');
       expect(markup).toContain('data-testid="btn-drawer-teleconsult"');
-      expect(markup).toContain('data-testid="badge-payment-policy"');
+      expect(markup).not.toContain('data-testid="badge-payment-policy"');
       expect(markup).toContain('Prepaid');
       expect(markup).toContain('data-testid="badge-payment-status"');
       expect(markup).toContain('Pending');
@@ -599,7 +599,8 @@ describe('Challenger 2 Empirical Adversarial Stress Test Suite', () => {
       );
 
       expect(markup).toContain('data-testid="btn-drawer-teleconsult"');
-      expect(markup).toContain('data-testid="badge-payment-policy"');
+      expect(markup).not.toContain('data-testid="badge-payment-policy"');
+      expect(markup).not.toContain('data-testid="badge-payment-status"');
       expect(markup).toContain('Postpaid');
     });
 

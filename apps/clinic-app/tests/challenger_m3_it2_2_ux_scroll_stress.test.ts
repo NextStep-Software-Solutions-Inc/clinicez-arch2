@@ -1106,8 +1106,8 @@ describe('Challenger 2 Empirical Stress Test: UX States, Navigation & Scrolling'
       }
     });
 
-    test('Category 7: SETTINGS_NAV_ITEMS maps 1:1 to all 8 settings tabs', () => {
-      expect(SETTINGS_NAV_ITEMS.length).toBe(8);
+    test('Category 7: SETTINGS_NAV_ITEMS maps 1:1 to all 9 settings tabs', () => {
+      expect(SETTINGS_NAV_ITEMS.length).toBe(9);
       const tabKeys = SETTINGS_NAV_ITEMS.map((item) => {
         const res = resolveSearchNavigation(item);
         return res.destinationParams.tab;
@@ -1122,6 +1122,7 @@ describe('Challenger 2 Empirical Stress Test: UX States, Navigation & Scrolling'
         'fields',
         'philhealth',
         'license',
+        'teleconsultation',
       ]);
     });
 

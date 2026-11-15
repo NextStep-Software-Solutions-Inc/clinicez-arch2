@@ -122,6 +122,12 @@ public sealed partial class GuestVerificationService : IGuestVerificationService
             scheduledAtUtc,
             encryptedGuestContext);
 
+        if (InvitesById.TryGetValue(inviteId, out var previous) &&
+            !string.Equals(previous.InviteTokenHash, stored.InviteTokenHash, StringComparison.OrdinalIgnoreCase))
+        {
+            InvitesByTokenHash.TryRemove(previous.InviteTokenHash, out _);
+        }
+
         InvitesByTokenHash[stored.InviteTokenHash] = stored;
         InvitesById[inviteId] = stored;
         return stored;

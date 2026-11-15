@@ -100,10 +100,10 @@ describe("Milestone M15 Challenger 2: Session Termination Signaling & Preflight 
         />
       );
 
-      expect(html).toContain("Consultation Concluded");
+      expect(html).toContain("Visit Ended");
       expect(html).not.toContain("Enter 6-digit PIN");
       expect(html).not.toContain("YYYY-MM-DD");
-      expect(html).toContain("Return to Teleconsultation Portal");
+      expect(html).toContain("Back to Check-In");
     });
   });
 
@@ -115,7 +115,7 @@ describe("Milestone M15 Challenger 2: Session Termination Signaling & Preflight 
       );
 
       expect(src).toContain('parsed.type === "call_ended_by_clinician"');
-      expect(src).toContain('setEndedReason("The attending clinician has ended this consultation.")');
+      expect(src).toContain('setEndedReason("Your doctor ended the video visit.")');
       expect(src).toContain('setStage("ended")');
     });
 
@@ -142,7 +142,7 @@ describe("Milestone M15 Challenger 2: Session Termination Signaling & Preflight 
           if (parsed.type === "call_ended_by_clinician") {
             callSessionEnded = true;
             mediaAdapterDisconnected = true;
-            endedReason = "The attending clinician has ended this consultation.";
+            endedReason = "Your doctor ended the video visit.";
             stage = "ended";
           }
         } catch {}
@@ -157,7 +157,7 @@ describe("Milestone M15 Challenger 2: Session Termination Signaling & Preflight 
 
       expect(callSessionEnded).toBe(true);
       expect(mediaAdapterDisconnected).toBe(true);
-      expect(endedReason).toBe("The attending clinician has ended this consultation.");
+      expect(endedReason).toBe("Your doctor ended the video visit.");
       expect(stage).toBe("ended");
     });
   });

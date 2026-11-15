@@ -14,6 +14,7 @@ import { isProxyPublicRoute } from "../src/lib/join";
 import { PUBLIC_ROUTE_PATTERNS } from "../src/proxy";
 import { verifyGuestTeleconsult } from "../src/services/guestTeleconsult.service";
 import { TeleconsultGuestFlow } from "../src/components/teleconsult/TeleconsultGuestFlow";
+import { preflightInvite } from "../src/components/teleconsult/preflightInvite";
 import { renderToString } from "react-dom/server";
 
 describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => {
@@ -202,7 +203,7 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
   });
 
   describe("3. TeleconsultGuestFlow Component Rendering & Transitions", () => {
-    test("T3.1: Renders initial verification form with 5-attempt security warning", () => {
+    test("T3.1: Renders mobile-first verification form with plain patient copy", () => {
       const html = renderToString(
         <TeleconsultGuestFlow
           inviteToken="INV-TEST"
@@ -212,13 +213,15 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
       );
 
       expect(html).toContain("Apex Health Clinic");
-      expect(html).toContain("Security Verification");
-      expect(html).toContain("5 attempts allowed");
-      expect(html).toContain("Verify &amp; Enter Waiting Room");
+      expect(html).toContain("Join Your Video Visit");
+      expect(html).not.toContain("Security Verification");
+      expect(html).not.toContain("5 attempts allowed");
+      expect(html).toContain("Continue");
       expect(html).toContain("YYYY-MM-DD");
+      expect(html).toContain("min-h-dvh");
     });
 
-    test("T3.2: Renders Virtual Waiting Room upon transition and verifies YAKAP absence per R7.3", () => {
+    test("T3.2: Renders Virtual Waiting Room upon transition and verifies YAKAP & jargon absence per R7.3", () => {
       const mockSession = {
         callId: "call-uuid-1234",
         roomName: "room-apex-123",
@@ -234,12 +237,16 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
         />
       );
 
+      expect(html).toContain("Waiting Room");
       expect(html).toContain("Teleconsultation Staging &amp; Waiting Room");
       // Live user mandate R7.3: YAKAP is permanently absent from teleconsultation
       expect(html).not.toContain("YAKAP Auto-Exempt");
       expect(html).not.toContain("PHILHEALTH YAKAP");
-      expect(html).toContain("Enter Consultation Room");
-      expect(html).toContain("Cancel / Leave");
+      expect(html).not.toContain("Admission Cleared");
+      expect(html).toContain("Your Doctor");
+      expect(html).toContain("Join Video Call");
+      expect(html).toContain("Leave");
+      expect(html).toContain("min-h-dvh");
     });
 
     test("T3.3: Renders In-Call Active Room with MessageThread drawer and privacy mode toggle", () => {
@@ -259,14 +266,15 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
       );
 
       expect(html).toContain("Apex Health Clinic");
-      expect(html).toContain("Teleconsultation");
+      expect(html).toContain("Private video visit");
       expect(html).toContain("End-to-End Encrypted");
       expect(html).toContain("Clinician Video Feed Active");
       expect(html).toContain("In-Call Chat");
       expect(html).toContain("Leave");
+      expect(html).toContain("h-dvh");
     });
 
-    test("T3.4: Renders Consultation Concluded state when ended", () => {
+    test("T3.4: Renders Visit Ended state when ended", () => {
       const html = renderToString(
         <TeleconsultGuestFlow
           initialStage="ended"
@@ -274,8 +282,10 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
         />
       );
 
-      expect(html).toContain("Consultation Concluded");
-      expect(html).toContain("Return to Teleconsultation Portal");
+      expect(html).toContain("Visit Ended");
+      expect(html).not.toContain("Consultation Concluded");
+      expect(html).toContain("Back to Check-In");
+      expect(html).toContain("min-h-dvh");
     });
 
     test("T3.5 (TC-T2.5.7): Expired vs Ended status differentiation and credential bypass", () => {
@@ -286,9 +296,85 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
         />
       );
       // Ended stage presents terminal message and bypasses credential verification inputs
-      expect(htmlExpired).toContain("Consultation Concluded");
+      expect(htmlExpired).toContain("Visit Ended");
       expect(htmlExpired).not.toContain('placeholder="6-digit PIN"');
       expect(htmlExpired).not.toContain("YYYY-MM-DD");
+    });
+
+    test("T3.6: Missing or invalid invite link prompts user immediately instead of rendering generic DOB+PIN form", async () => {
+      const htmlMissing = renderToString(
+        <TeleconsultGuestFlow
+          inviteToken=""
+          clinicName="Apex Health Clinic"
+          clinicSupportPhone="(02) 8999-0000"
+        />
+      );
+      expect(htmlMissing).toContain("Visit Link Needed");
+      expect(htmlMissing).not.toContain("YYYY-MM-DD");
+      expect(htmlMissing).not.toContain("Date of Birth");
+
+      const htmlBadPreflight = renderToString(
+        <TeleconsultGuestFlow
+          inviteToken="BAD-TOKEN"
+          clinicName="Apex Health Clinic"
+          initialPreflight={{
+            outcome: "invalid_link",
+            code: "not_found",
+            title: "Invalid Visit Link",
+            reason: "We could not find a video visit for this link.",
+          }}
+        />
+      );
+      expect(htmlBadPreflight).toContain("Invalid Visit Link");
+      expect(htmlBadPreflight).toContain("We could not find a video visit for this link.");
+      expect(htmlBadPreflight).not.toContain("Date of Birth");
+
+      const originalFetch = globalThis.fetch;
+      try {
+        // 404 Not Found
+        globalThis.fetch = mock(async () =>
+          new Response(JSON.stringify({ errorCode: "GUEST_INVITE_NOT_FOUND" }), { status: 404 })
+        ) as any;
+        const r404 = await preflightInvite("UNKNOWN-TOKEN", "http://localhost:5000/api/v1");
+        expect(r404.outcome).toBe("invalid_link");
+        if (r404.outcome === "invalid_link") expect(r404.code).toBe("not_found");
+
+        // 423 Locked
+        globalThis.fetch = mock(async () =>
+          new Response(JSON.stringify({ errorCode: "GUEST_INVITE_LOCKED_OUT" }), { status: 423 })
+        ) as any;
+        const r423 = await preflightInvite("LOCKED-TOKEN", "http://localhost:5000/api/v1");
+        expect(r423.outcome).toBe("invalid_link");
+        if (r423.outcome === "invalid_link") expect(r423.code).toBe("locked");
+
+        // 400 Bad Request (DOCUMENT_KIND_MISMATCH vs generic empty)
+        globalThis.fetch = mock(async () =>
+          new Response(JSON.stringify({ errorCode: "DOCUMENT_KIND_MISMATCH" }), { status: 400 })
+        ) as any;
+        const r400Mismatch = await preflightInvite("rx-123", "http://localhost:5000/api/v1");
+        expect(r400Mismatch.outcome).toBe("invalid_link");
+        if (r400Mismatch.outcome === "invalid_link") expect(r400Mismatch.code).toBe("mismatch");
+
+        const rMissing = await preflightInvite("   ", "http://localhost:5000/api/v1");
+        expect(rMissing.outcome).toBe("invalid_link");
+        if (rMissing.outcome === "invalid_link") expect(rMissing.code).toBe("missing");
+
+        // 410 Gone (expired link vs clinician ended consultation)
+        globalThis.fetch = mock(async () =>
+          new Response(JSON.stringify({ errorCode: "GUEST_INVITE_EXPIRED" }), { status: 410 })
+        ) as any;
+        const r410Exp = await preflightInvite("EXP-TOKEN", "http://localhost:5000/api/v1");
+        expect(r410Exp.outcome).toBe("invalid_link");
+        if (r410Exp.outcome === "invalid_link") expect(r410Exp.code).toBe("expired");
+
+        globalThis.fetch = mock(async () =>
+          new Response(JSON.stringify({ errorCode: "GUEST_CONSULTATION_ENDED" }), { status: 410 })
+        ) as any;
+        const r410End = await preflightInvite("ENDED-TOKEN", "http://localhost:5000/api/v1");
+        expect(r410End.outcome).toBe("ended");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
   });
 

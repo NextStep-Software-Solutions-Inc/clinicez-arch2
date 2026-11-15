@@ -81,7 +81,7 @@ describe('Adversarial Stress Test: Guest Verification Edge Cases & 5-Attempt Loc
 
       expect(networkCalled).toBe(false);
       const text = extractText(harness.result.current);
-      expect(text).toContain('Please enter a valid Date of Birth (YYYY-MM-DD) and 6-digit OTP code.');
+      expect(text).toContain('Please enter your birth date (YYYY-MM-DD) and all 6 digits of your access code.');
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -124,7 +124,7 @@ describe('Adversarial Stress Test: Guest Verification Edge Cases & 5-Attempt Loc
 
       expect(networkCalled).toBe(false);
       const text = extractText(harness.result.current);
-      expect(text).toContain('Please enter a valid Date of Birth (YYYY-MM-DD) and 6-digit OTP code.');
+      expect(text).toContain('Please enter your birth date (YYYY-MM-DD) and all 6 digits of your access code.');
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -166,7 +166,7 @@ describe('Adversarial Stress Test: Guest Verification Edge Cases & 5-Attempt Loc
       // Verified: malformed DOB (month 13, day 45) is intercepted client-side
       expect(networkCalled).toBe(false);
       const text = extractText(harness.result.current);
-      expect(text).toContain('Please enter a valid Date of Birth (YYYY-MM-DD) and 6-digit OTP code.');
+      expect(text).toContain('Please enter your birth date (YYYY-MM-DD) and all 6 digits of your access code.');
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -207,7 +207,7 @@ describe('Adversarial Stress Test: Guest Verification Edge Cases & 5-Attempt Loc
       // Verified: non-ISO DOB (26-10-1990) is intercepted client-side
       expect(networkCalled).toBe(false);
       const text = extractText(harness.result.current);
-      expect(text).toContain('Please enter a valid Date of Birth (YYYY-MM-DD) and 6-digit OTP code.');
+      expect(text).toContain('Please enter your birth date (YYYY-MM-DD) and all 6 digits of your access code.');
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -232,8 +232,10 @@ describe('Adversarial Stress Test: Guest Verification Edge Cases & 5-Attempt Loc
         })
       );
 
-      // Initial state: 5 attempts remaining
-      expect(extractText(harness.result.current)).toContain('5  attempts remaining before permanent lockout.');
+      // Initial state: upfront warning box removed for calmer UX
+      const initialText = extractText(harness.result.current);
+      expect(initialText).toContain('Join Your Video Visit');
+      expect(initialText).not.toContain('permanent lockout');
 
       // Setup valid form fields
       const dobInput = findElement(harness.result.current, (el) => el.props?.id === 'dob-input');
@@ -243,33 +245,33 @@ describe('Adversarial Stress Test: Guest Verification Edge Cases & 5-Attempt Loc
 
       await enterOtp(harness, '111111');
 
-      // Attempt 1 Failure -> 4 remaining
+      // Attempt 1 Failure -> 4 tries left
       let form = findElement(harness.result.current, (el) => el.type === 'form');
       await act(async () => {
         await form.props.onSubmit({ preventDefault: () => {} });
       });
-      expect(extractText(harness.result.current)).toContain('4 attempts remaining');
+      expect(extractText(harness.result.current)).toContain('4 tries left.');
 
-      // Attempt 2 Failure -> 3 remaining
+      // Attempt 2 Failure -> 3 tries left
       form = findElement(harness.result.current, (el) => el.type === 'form');
       await act(async () => {
         await form.props.onSubmit({ preventDefault: () => {} });
       });
-      expect(extractText(harness.result.current)).toContain('3 attempts remaining');
+      expect(extractText(harness.result.current)).toContain('3 tries left.');
 
-      // Attempt 3 Failure -> 2 remaining
+      // Attempt 3 Failure -> 2 tries left
       form = findElement(harness.result.current, (el) => el.type === 'form');
       await act(async () => {
         await form.props.onSubmit({ preventDefault: () => {} });
       });
-      expect(extractText(harness.result.current)).toContain('2 attempts remaining');
+      expect(extractText(harness.result.current)).toContain('2 tries left.');
 
-      // Attempt 4 Failure -> 1 remaining
+      // Attempt 4 Failure -> 1 try left
       form = findElement(harness.result.current, (el) => el.type === 'form');
       await act(async () => {
         await form.props.onSubmit({ preventDefault: () => {} });
       });
-      expect(extractText(harness.result.current)).toContain('1 attempts remaining');
+      expect(extractText(harness.result.current)).toContain('1 try left.');
 
       // Attempt 5 Failure -> Permanent Lockout (State 1)
       form = findElement(harness.result.current, (el) => el.type === 'form');
@@ -278,8 +280,8 @@ describe('Adversarial Stress Test: Guest Verification Edge Cases & 5-Attempt Loc
       });
 
       const lockedOutText = extractText(harness.result.current);
-      expect(lockedOutText).toContain('Teleconsultation Link Locked');
-      expect(lockedOutText).toContain('permanently locked after 5 failed verification attempts');
+      expect(lockedOutText).toContain('Link Locked for Your Privacy');
+      expect(lockedOutText).toContain('we locked this link to protect your privacy');
       expect(lockedOutText).toContain('Metro General Clinic');
       expect(lockedOutText).toContain('(02) 8123-4567');
 
@@ -320,7 +322,7 @@ describe('Adversarial Stress Test: Guest Verification Edge Cases & 5-Attempt Loc
       });
 
       const text = extractText(harness.result.current);
-      expect(text).toContain('Teleconsultation Link Locked');
+      expect(text).toContain('Link Locked for Your Privacy');
       expect(text).toContain('St. Luke Healthcare');
       expect(text).toContain('0917-123-4567');
       expect(findElement(harness.result.current, (el) => el.type === 'form')).toBeNull();

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { isLiveWebDom } from '@clinicez/design-tokens';
+import { isLiveWebDom, lightColors } from '@clinicez/design-tokens';
 import { resolveWebShadows } from './shadows';
 
 export interface WebOverlayTooltipProps {
@@ -59,9 +59,9 @@ export const OverlayTooltip: React.FC<WebOverlayTooltipProps> = ({
       pointerEvents: 'none',
       whiteSpace: 'nowrap',
       visibility: 'hidden',
-      backgroundColor: '#0F172A',
-      color: '#FFFFFF',
-      border: '1px solid #334155',
+      backgroundColor: lightColors.surfaceInverse,
+      color: lightColors.textInverted,
+      border: `1px solid ${lightColors.borderDark}`,
       borderRadius: '6px',
       padding: '4px 10px',
       fontSize: '11px',

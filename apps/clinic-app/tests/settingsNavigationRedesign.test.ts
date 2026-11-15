@@ -270,10 +270,10 @@ describe('Settings Dual-Mode Navigation Redesign & Issue #163 Regression Suite',
     expect(ICONS.layoutSplit).toBeDefined();
   });
 
-  test('2. SETTINGS_SECTION_CATALOG maps all 14 sections across 5 logical groups', () => {
-    expect(SETTINGS_TAB_KEYS.length).toBe(14);
+  test('2. SETTINGS_SECTION_CATALOG maps all 15 sections across 5 logical groups', () => {
+    expect(SETTINGS_TAB_KEYS.length).toBe(15);
     expect(SETTINGS_SECTION_CATALOG.length).toBe(5);
-    expect(SETTINGS_SECTIONS_FLAT.length).toBe(14);
+    expect(SETTINGS_SECTIONS_FLAT.length).toBe(15);
 
     const groupLabels = SETTINGS_SECTION_CATALOG.map((g) => g.label);
     expect(groupLabels).toEqual([
@@ -287,7 +287,7 @@ describe('Settings Dual-Mode Navigation Redesign & Issue #163 Regression Suite',
     const expectedByGroup: Record<string, string[]> = {
       overview: ['readiness'],
       identity: ['general', 'branding', 'documents'],
-      clinical: ['clinical', 'fields', 'queue-tv', 'notifications'],
+      clinical: ['clinical', 'teleconsultation', 'fields', 'queue-tv', 'notifications'],
       billing: ['services', 'billing-policy', 'philhealth'],
       team: ['staff', 'rbac', 'license'],
     };
@@ -305,6 +305,12 @@ describe('Settings Dual-Mode Navigation Redesign & Issue #163 Regression Suite',
       ['timezone', 'general'],
       ['dental', 'clinical'],
       ['odontogram', 'clinical'],
+      ['teleconsult', 'teleconsultation'],
+      ['teleconsultation', 'teleconsultation'],
+      ['media vault', 'teleconsultation'],
+      ['dual consent', 'teleconsultation'],
+      ['livekit', 'teleconsultation'],
+      ['waiting room', 'teleconsultation'],
       ['yakap', 'philhealth'],
       ['cashier', 'billing-policy'],
       ['eod', 'billing-policy'],
@@ -318,6 +324,10 @@ describe('Settings Dual-Mode Navigation Redesign & Issue #163 Regression Suite',
       const matched = filterSettingsTabs(allTabs, kw);
       expect(matched.some((t) => t.key === expectedKey)).toBe(true);
     }
+
+    const teleconsultFiltered = filterSettingsTabs(allTabs, 'teleconsult');
+    expect(teleconsultFiltered.map((t) => t.key)).toEqual(['teleconsultation']);
+    expect(teleconsultFiltered.some((t) => t.key === 'clinical')).toBe(false);
 
     expect(matchesSettingsFilter(allTabs[0], '')).toBe(true);
     expect(filterSettingsTabs(allTabs, 'zzzz-nonexistent-keyword')).toEqual([]);
@@ -348,6 +358,14 @@ describe('Settings Dual-Mode Navigation Redesign & Issue #163 Regression Suite',
       targetTab: 'billing-policy',
       shouldOpenAddStaff: false,
     });
+    expect(resolveSettingsRouteIntent({ tab: 'teleconsultation' })).toEqual({
+      targetTab: 'teleconsultation',
+      shouldOpenAddStaff: false,
+    });
+    expect(resolveSettingsRouteIntent({ tab: 'teleconsult' })).toEqual({
+      targetTab: 'teleconsultation',
+      shouldOpenAddStaff: false,
+    });
     expect(resolveSettingsRouteIntent({ tab: 'unknown-tab' })).toEqual({
       targetTab: null,
       shouldOpenAddStaff: false,
@@ -360,6 +378,8 @@ describe('Settings Dual-Mode Navigation Redesign & Issue #163 Regression Suite',
 
   test('5. GitHub Issue #163: URL query param ?tab=<key> persists across reloads and never resets to undefined', () => {
     expect(readInitialSettingsTabFromSearch('?tab=philhealth')).toBe('philhealth');
+    expect(readInitialSettingsTabFromSearch('?tab=teleconsultation')).toBe('teleconsultation');
+    expect(readInitialSettingsTabFromUrl('?tab=teleconsult')).toBe('teleconsultation');
     expect(readInitialSettingsTabFromUrl('?tab=queue-tv')).toBe('queue-tv');
     expect(readInitialSettingsTabFromUrl('?tab=invalid')).toBeNull();
     expect(readInitialSettingsTabFromUrl('')).toBeNull();
@@ -555,6 +575,17 @@ describe('Settings Dual-Mode Navigation Redesign & Issue #163 Regression Suite',
     );
     expect(tabletHtml).toContain('data-testid="settings-horizontal-tab-bar"');
     expect(tabletHtml).toContain('data-testid="clinical-specialty-card"');
+    expect(tabletHtml).not.toContain('data-testid="teleconsult-settings-card"');
+
+    const teleconsultHtml = renderToStaticMarkup(
+      React.createElement(SettingsScreen, {
+        route: { key: 'Settings', name: 'Settings', params: { tab: 'teleconsultation' } } as any,
+      })
+    );
+    expect(teleconsultHtml).toContain('data-testid="settings-horizontal-tab-bar"');
+    expect(teleconsultHtml).toContain('data-testid="settings-section-teleconsultation"');
+    expect(teleconsultHtml).toContain('data-testid="teleconsult-settings-card"');
+    expect(teleconsultHtml).toContain('role="progressbar"');
 
     // Stored 'horizontal' preference on desktop renders Horizontal Top Bar with mode switcher
     mockWindowWidth = 1440;
@@ -571,9 +602,13 @@ describe('Settings Dual-Mode Navigation Redesign & Issue #163 Regression Suite',
     setDeviceItem(SETTINGS_NAV_MODE_STORAGE_KEY, null);
     delete (globalThis as any).__mockAuthContext;
 
-    // Fluid full-width canvas: zero maxWidth: 960 caps in Settings shell or GeneralSettingsTab
+    // Fluid full-width canvas: zero maxWidth: 960 caps in Settings shell, GeneralSettingsTab, or TeleconsultationSettingsTab
     const generalTabSource = readFileSync(
       resolve(import.meta.dir, '../components/settings/GeneralSettingsTab.tsx'),
+      'utf8'
+    );
+    const teleconsultTabSource = readFileSync(
+      resolve(import.meta.dir, '../components/settings/TeleconsultationSettingsTab.tsx'),
       'utf8'
     );
     const settingsScreenSource = readFileSync(
@@ -582,6 +617,7 @@ describe('Settings Dual-Mode Navigation Redesign & Issue #163 Regression Suite',
     );
     expect(generalTabSource).not.toContain('960');
     expect(generalTabSource).not.toContain('SETTINGS_FORM_MAX_WIDTH');
+    expect(teleconsultTabSource).not.toContain('960');
     expect(settingsScreenSource).not.toContain('960');
   });
 

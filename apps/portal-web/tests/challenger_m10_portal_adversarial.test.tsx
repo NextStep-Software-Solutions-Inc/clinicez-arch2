@@ -37,9 +37,10 @@ describe("Milestone 10 Challenger 2: Adversarial Portal Web Live Video Suite", (
           />
         );
         expect(html).toContain("Metro Health Clinic");
-        expect(html).toContain("Security Verification");
-        expect(html).toContain("5 attempts allowed");
-        expect(html).toContain("Verify &amp; Enter Waiting Room");
+        expect(html).toContain("Join Your Video Visit");
+        expect(html).not.toContain("Security Verification");
+        expect(html).toContain("Continue");
+        expect(html).toContain("min-h-dvh");
       }).not.toThrow();
     });
 
@@ -55,7 +56,8 @@ describe("Milestone 10 Challenger 2: Adversarial Portal Web Live Video Suite", (
         );
         expect(html).toContain("Teleconsultation Staging &amp; Waiting Room");
         expect(html).not.toContain("Informed Recording Disclosure");
-        expect(html).toContain("Enter Consultation Room");
+        expect(html).toContain("Join Video Call");
+        expect(html).toContain("min-h-dvh");
       }).not.toThrow();
     });
 
@@ -70,11 +72,12 @@ describe("Milestone 10 Challenger 2: Adversarial Portal Web Live Video Suite", (
           />
         );
         expect(html).toContain("St. Jude General Hospital");
-        expect(html).toContain("Teleconsultation");
+        expect(html).toContain("Private video visit");
         expect(html).toContain("teleconsult-room-adv-001");
         expect(html).toContain("In-Call Chat");
         expect(html).toContain("Leave");
         expect(html).toContain("Clinician Video Feed Active");
+        expect(html).toContain("h-dvh");
       }).not.toThrow();
     });
 
@@ -86,8 +89,9 @@ describe("Milestone 10 Challenger 2: Adversarial Portal Web Live Video Suite", (
             clinicName="Metro Health Clinic"
           />
         );
-        expect(html).toContain("Consultation Concluded");
-        expect(html).toContain("Return to Teleconsultation Portal");
+        expect(html).toContain("Visit Ended");
+        expect(html).toContain("Back to Check-In");
+        expect(html).toContain("min-h-dvh");
       }).not.toThrow();
     });
 
@@ -124,7 +128,7 @@ describe("Milestone 10 Challenger 2: Adversarial Portal Web Live Video Suite", (
           />
         );
         expect(html).toContain("Apex &amp; Co. &lt;Hospital&gt; &#x27;&quot;");
-        expect(html).toContain("Teleconsultation");
+        expect(html).toContain("Private video visit");
         expect(html).not.toContain("<script>");
       }).not.toThrow();
     });
@@ -194,7 +198,7 @@ describe("Milestone 10 Challenger 2: Adversarial Portal Web Live Video Suite", (
       expect(html).toContain('id="btn-toggle-pip"');
       expect(html).toContain('title="Picture-in-Picture"');
       expect(html).toContain('aria-label="Picture-in-Picture"');
-      expect(html).toContain("bg-slate-800 text-slate-100");
+      expect(html).toContain("bg-white/10 text-white");
     });
 
     it("2.2: CallStage highlights active PiP button and updates aria-label when isPipActive is true", () => {

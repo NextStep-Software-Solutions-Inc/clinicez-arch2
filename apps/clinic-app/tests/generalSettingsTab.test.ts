@@ -326,6 +326,7 @@ describe('GeneralSettingsTab — Modular Decomposition & Card Restyling', () => 
     );
     expect(clinicalOnly).toContain('data-testid="clinical-specialty-card"');
     expect(clinicalOnly).toContain('data-testid="chart-layout-default-card"');
+    expect(clinicalOnly).not.toContain('data-testid="teleconsult-settings-card"');
     expect(clinicalOnly).not.toContain('data-testid="facility-identity-card"');
   });
 

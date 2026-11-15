@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { lightColors } from '@clinicez/design-tokens';
 import { WebCallWaitingRoomProps } from './types';
 import { OverlayTooltip } from './OverlayTooltip';
 import { resolveWebTheme } from './shadows';
@@ -10,6 +11,7 @@ import {
   RotateCwIcon,
   ShareIcon,
   CopyIcon,
+  CheckIcon,
   LockIcon,
   ShieldCheckIcon,
   AlertCircleIcon,
@@ -72,6 +74,33 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   const [isUpdatingPolicy, setIsUpdatingPolicy] = useState(false);
   const [isAdmitting, setIsAdmitting] = useState(false);
   const [isRetryingVideoServer, setIsRetryingVideoServer] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedPin, setCopiedPin] = useState(false);
+  const copiedLinkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copiedPinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copiedLinkTimerRef.current) clearTimeout(copiedLinkTimerRef.current);
+      if (copiedPinTimerRef.current) clearTimeout(copiedPinTimerRef.current);
+    };
+  }, []);
+
+  const handleCopyLinkCardClick = async () => {
+    if (!onSharePatientLink) return;
+    await onSharePatientLink();
+    setCopiedLink(true);
+    if (copiedLinkTimerRef.current) clearTimeout(copiedLinkTimerRef.current);
+    copiedLinkTimerRef.current = setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleCopyPinCardClick = async () => {
+    if (!onCopyPatientPin) return;
+    await onCopyPatientPin();
+    setCopiedPin(true);
+    if (copiedPinTimerRef.current) clearTimeout(copiedPinTimerRef.current);
+    copiedPinTimerRef.current = setTimeout(() => setCopiedPin(false), 2000);
+  };
 
   const isCameraActive = isCameraEnabled ?? localCameraActive;
   const isMicActive = isMicEnabled ?? localMicActive;
@@ -80,6 +109,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   const isAdmitBlocked = isPrepaidBlocked || videoServerUnavailable;
   const isStaffOrDoctor = userRole === 'Clinician' || userRole === 'Staff';
   const isDoctor = userRole === 'Clinician';
+  const isPatientView = userRole === 'Patient';
 
   const isRecordingEnabled = recordingConsentStatus === 'Approved';
   const recordingSubtitle =
@@ -98,25 +128,46 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
 
   const clearedBannerCopy =
     paymentPolicy === 'Exempt'
-      ? {
-          title: 'Exempt — Admission Cleared',
-          subtitle: 'This consultation is exempt from payment and ready to start.',
-        }
-      : paymentPolicy === 'Postpaid'
+      ? isPatientView
         ? {
-            title: 'Postpaid — Admission Cleared',
-            subtitle: 'Charges will be settled after the visit. Ready to start.',
+            title: isReadyToAdmit ? 'Ready to Join' : 'No Payment Needed',
+            subtitle: isReadyToAdmit
+              ? 'Your video room is ready. Tap Join Video Call below.'
+              : 'Everything is set. Please wait while your doctor opens the room.',
           }
         : {
-            title:
-              paymentStatus === 'Overridden'
-                ? 'Prepaid — Override Approved'
-                : 'Prepaid — Payment Cleared',
-            subtitle:
-              paymentStatus === 'Overridden'
-                ? 'Staff admission override approved. Ready to start.'
-                : 'Prepayment confirmed and ready to start.',
-          };
+            title: 'Exempt — Admission Cleared',
+            subtitle: 'This consultation is exempt from payment and ready to start.',
+          }
+      : paymentPolicy === 'Postpaid'
+        ? isPatientView
+          ? {
+              title: isReadyToAdmit ? 'Ready to Join' : 'Pay After Your Visit',
+              subtitle: isReadyToAdmit
+                ? 'Your video room is ready. Tap Join Video Call below.'
+                : 'No payment is needed now. Please wait while your doctor opens the room.',
+            }
+          : {
+              title: 'Postpaid — Admission Cleared',
+              subtitle: 'Charges will be settled after the visit. Ready to start.',
+            }
+        : isPatientView
+          ? {
+              title: 'Ready to Join',
+              subtitle: isReadyToAdmit
+                ? 'Payment confirmed. Tap Join Video Call below.'
+                : 'Payment confirmed. Please wait while your doctor opens the room.',
+            }
+          : {
+              title:
+                paymentStatus === 'Overridden'
+                  ? 'Prepaid — Override Approved'
+                  : 'Prepaid — Payment Cleared',
+              subtitle:
+                paymentStatus === 'Overridden'
+                  ? 'Staff admission override approved. Ready to start.'
+                  : 'Prepayment confirmed and ready to start.',
+            };
 
   const handlePolicyChange = async (newPolicy: 'Prepaid' | 'Postpaid' | 'Exempt') => {
     if (!onChangePaymentPolicy || isUpdatingPolicy || newPolicy === paymentPolicy) return;
@@ -194,20 +245,20 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
       : 65;
 
   return (
-    <div className={`flex flex-col h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 ${className}`}>
+    <div className={`flex flex-col min-h-dvh sm:h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 ${className}`}>
       {/* Header */}
       {!hideHeader && (
         <div
           className="p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800"
           style={{ boxShadow: webShadows.sm }}
         >
-          <h1 className="text-lg font-bold">
-            Teleconsultation Waiting Room
+          <h1 className="text-lg sm:text-xl font-bold tracking-tight">
+            {isPatientView ? 'Waiting Room' : 'Teleconsultation Waiting Room'}
             <span className="sr-only"> (Teleconsultation Staging &amp; Waiting Room)</span>
           </h1>
-          <p className="text-xs text-slate-500">
-            {userRole === 'Patient'
-              ? `Appointment: ${scheduledTime}`
+          <p className="text-xs sm:text-sm text-slate-500">
+            {isPatientView
+              ? scheduledTime
               : `Appointment: ${scheduledTime} • ID: ${appointmentId || callId}`}
           </p>
         </div>
@@ -231,59 +282,67 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
           <p className="text-xs text-slate-500">{error}</p>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full space-y-4">
-          {/* Dynamic Video Preview */}
-          <div
-            className={`relative ${
-              videoOrientation === 'landscape'
-                ? 'aspect-video w-full'
-                : 'aspect-[3/4] max-w-sm mx-auto w-full'
-            } rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden shadow-md`}
-            style={{ boxShadow: webShadows.md }}
-          >
-            {renderVideoPreview ? (
-              renderVideoPreview()
-            ) : (
-              <div className="text-center text-slate-400">
-                <div className="text-4xl mb-2 font-bold flex items-center justify-center">
-                  {renderIcon ? (
-                    renderIcon(isCameraActive ? 'video' : 'videoOff', { size: 32 })
-                  ) : (
-                    <>
-                      <span className="sr-only">{isCameraActive ? 'CAM' : 'OFF'}</span>
-                      {isCameraActive ? <VideoIcon size={32} /> : <VideoOffIcon size={32} />}
-                    </>
+        <div className="flex-1 overflow-y-auto px-4 py-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] max-w-2xl lg:max-w-5xl mx-auto w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-start">
+            <div className="lg:col-span-6 space-y-3">
+              {/* Dynamic Video Preview */}
+              <div
+                className={`relative ${
+                  videoOrientation === 'landscape'
+                    ? 'aspect-video w-full'
+                    : 'aspect-[3/4] max-w-[220px] sm:max-w-xs lg:max-w-sm mx-auto w-full'
+                } rounded-2xl bg-slate-900 flex items-center justify-center overflow-hidden shadow-md`}
+                style={{ boxShadow: webShadows.md }}
+              >
+                {renderVideoPreview ? (
+                  renderVideoPreview()
+                ) : (
+                  <div className="text-center text-slate-400 px-3">
+                    <div className="text-4xl mb-2 font-bold flex items-center justify-center">
+                      {renderIcon ? (
+                        renderIcon(isCameraActive ? 'video' : 'videoOff', { size: 32 })
+                      ) : (
+                        <>
+                          <span className="sr-only">{isCameraActive ? 'CAM' : 'OFF'}</span>
+                          {isCameraActive ? <VideoIcon size={32} /> : <VideoOffIcon size={32} />}
+                        </>
+                      )}
+                    </div>
+                    <p className="text-xs sm:text-sm font-medium">
+                      {isCameraActive
+                        ? isPatientView
+                          ? 'Camera is on'
+                          : 'Camera Self-Preview Active'
+                        : isPatientView
+                          ? 'Camera is off'
+                          : 'Camera Disabled'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Mic Meter + Media Mode Pill */}
+                <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 pointer-events-none">
+                  <div className="flex items-center gap-2 bg-black/60 px-2.5 py-1 rounded-full text-xs text-white">
+                    <span>{isPatientView ? (isMicActive ? 'Mic' : 'Muted') : 'Mic:'}</span>
+                    <div className="w-14 sm:w-16 h-2 rounded-full bg-white/30 overflow-hidden">
+                      <div
+                        className={`h-full transition-all ${isMicActive ? 'bg-teal-500' : ''}`}
+                        style={{
+                          width: `${computedMicPercent}%`,
+                          backgroundColor: isMicActive ? webColors.primary : undefined,
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {mediaModeLabel && (
+                    <span className="bg-black/60 px-2.5 py-1 rounded-full text-xs font-semibold text-white">
+                      {mediaModeLabel}
+                    </span>
                   )}
                 </div>
-                <p className="text-sm font-medium">
-                  {isCameraActive ? 'Camera Self-Preview Active' : 'Camera Disabled'}
-                </p>
-              </div>
-            )}
 
-            {/* Mic Meter + Media Mode Pill */}
-            <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 pointer-events-none">
-              <div className="flex items-center gap-2 bg-black/60 px-2.5 py-1 rounded text-xs text-white">
-                <span>Mic:</span>
-                <div className="w-16 h-2 rounded-full bg-white/30 overflow-hidden">
-                  <div
-                    className={`h-full transition-all ${isMicActive ? 'bg-teal-500' : ''}`}
-                    style={{
-                      width: `${computedMicPercent}%`,
-                      backgroundColor: isMicActive ? webColors.primary : undefined,
-                    }}
-                  />
-                </div>
-              </div>
-              {mediaModeLabel && (
-                <span className="bg-black/60 px-2.5 py-1 rounded text-[11px] font-semibold text-white">
-                  {mediaModeLabel}
-                </span>
-              )}
-            </div>
-
-            {/* Media Bar */}
-            <div className="absolute bottom-3 flex items-center gap-3">
+                {/* Media Bar */}
+                <div className="absolute bottom-3 flex items-center gap-3">
               <OverlayTooltip label={isMicActive ? 'Mute microphone' : 'Unmute microphone'}>
                 <button
                   type="button"
@@ -366,7 +425,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 </OverlayTooltip>
               )}
 
-              {(patientLink || onSharePatientLink) && (
+              {(!patientLink && onSharePatientLink) && (
                 <OverlayTooltip label="Copy patient invite link">
                   <button
                     type="button"
@@ -391,7 +450,9 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
               )}
             </div>
           </div>
+          </div>
 
+          <div className="lg:col-span-6 space-y-4">
           {/* Patient Invite Link and PIN Card */}
           {(patientLink || patientPin) && (
             <div
@@ -419,28 +480,25 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                     </span>
                   </div>
                   {onSharePatientLink && (
-                    <OverlayTooltip label="Copy patient invite link" placement="bottom">
+                    <OverlayTooltip label={copiedLink ? 'Copied!' : 'Copy patient invite link'} placement="bottom">
                       <button
                         type="button"
                         id="btn-share-patient-link-card"
                         data-testid="btn-share-patient-link-card"
-                        onClick={() => void onSharePatientLink()}
-                        className="h-7 w-7 p-1.5 rounded-md text-[10px] font-bold bg-teal-700 text-white hover:bg-teal-800 transition-colors flex items-center justify-center shrink-0"
+                        onClick={() => void handleCopyLinkCardClick()}
+                        className="min-h-[36px] min-w-[36px] p-1.5 rounded-md bg-transparent hover:opacity-75 transition-opacity flex items-center justify-center shrink-0 border-0"
                         style={{
-                          backgroundColor: webColors.primary,
-                          color: webColors.onPrimary,
-                          boxShadow: webShadows.brandSm,
+                          color: copiedLink ? lightColors.successText : webColors.primary,
                         }}
-                        aria-label="Copy patient consultation link"
-                        title="Copy patient invite link"
+                        aria-label={copiedLink ? 'Copied!' : 'Copy patient consultation link'}
+                        title={copiedLink ? 'Copied!' : 'Copy patient invite link'}
                       >
-                        {renderIcon ? (
-                          renderIcon('share', { size: 14 })
+                        {copiedLink ? (
+                          <CheckIcon size={16} />
+                        ) : renderIcon ? (
+                          renderIcon('share', { size: 16, color: webColors.primary })
                         ) : (
-                          <>
-                            <span className="sr-only">COPY</span>
-                            <CopyIcon size={14} />
-                          </>
+                          <CopyIcon size={16} />
                         )}
                       </button>
                     </OverlayTooltip>
@@ -465,22 +523,26 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                     </span>
                   </div>
                   {onCopyPatientPin && (
-                    <OverlayTooltip label="Copy access PIN" placement="bottom">
+                    <OverlayTooltip label={copiedPin ? 'Copied!' : 'Copy access PIN'} placement="bottom">
                       <button
                         type="button"
                         id="btn-copy-patient-pin"
                         data-testid="btn-copy-patient-pin"
-                        onClick={() => void onCopyPatientPin()}
-                        className="px-2 py-1 rounded-md text-[10px] font-bold bg-teal-700 text-white hover:bg-teal-800 transition-colors flex items-center justify-center shrink-0"
+                        onClick={() => void handleCopyPinCardClick()}
+                        className="min-h-[36px] min-w-[36px] p-1.5 rounded-md bg-transparent hover:opacity-75 transition-opacity flex items-center justify-center shrink-0 border-0"
                         style={{
-                          backgroundColor: webColors.primary,
-                          color: webColors.onPrimary,
-                          boxShadow: webShadows.brandSm,
+                          color: copiedPin ? lightColors.successText : webColors.primary,
                         }}
-                        aria-label="Copy access PIN"
-                        title="Copy access PIN"
+                        aria-label={copiedPin ? 'Copied!' : 'Copy access PIN'}
+                        title={copiedPin ? 'Copied!' : 'Copy access PIN'}
                       >
-                        COPY
+                        {copiedPin ? (
+                          <CheckIcon size={16} />
+                        ) : renderIcon ? (
+                          renderIcon('share', { size: 16, color: webColors.primary })
+                        ) : (
+                          <CopyIcon size={16} />
+                        )}
                       </button>
                     </OverlayTooltip>
                   )}
@@ -491,17 +553,23 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
 
           {/* Details Card */}
           <div
-            className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 text-xs"
+            className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5 text-xs sm:text-sm"
             style={{ boxShadow: webShadows.sm }}
           >
-            <div className="flex justify-between">
-              <span className="text-slate-500">Patient:</span>
-              <span className="font-semibold text-slate-900 dark:text-slate-100">{patientName}</span>
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-500">{isPatientView ? 'Your Name' : 'Patient:'}</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100 text-right">{patientName}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Doctor / Clinician:</span>
-              <span className="font-semibold text-slate-900 dark:text-slate-100">{clinicianName}</span>
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-500">{isPatientView ? 'Your Doctor' : 'Doctor / Clinician:'}</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100 text-right">{clinicianName}</span>
             </div>
+            {isPatientView && scheduledTime && (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Scheduled</span>
+                <span className="font-semibold text-slate-900 dark:text-slate-100 text-right">{scheduledTime}</span>
+              </div>
+            )}
           </div>
 
           {/* Staff Payment Policy Selector */}
@@ -566,12 +634,16 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 )}
               </span>
               <div className="flex-1">
-                <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
-                  Prepaid — Payment Required Before Consultation
+                <p className="text-xs sm:text-sm font-bold text-amber-800 dark:text-amber-300">
+                  {isPatientView
+                    ? 'Payment Needed Before Joining'
+                    : 'Prepaid — Payment Required Before Consultation'}
                   <span className="sr-only"> (Prepayment Gate: Settlement Required)</span>
                 </p>
                 <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                  This visit requires prepayment. Admission unlocks immediately after payment.
+                  {isPatientView
+                    ? 'Please complete payment with the clinic so your visit can begin.'
+                    : 'This visit requires prepayment. Admission unlocks immediately after payment.'}
                 </p>
                 {isStaffOrDoctor && (onStaffPaymentOverride || onEmergencyPaymentOverride) && (
                   <button
@@ -673,11 +745,11 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
           )}
 
           {/* Action Bar */}
-          <div className="flex gap-3 pt-4">
+          <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
             <button
               type="button"
               onClick={onCancelCall}
-              className="flex-1 min-h-[44px] px-4 rounded text-xs font-semibold border transition-all"
+              className="w-full sm:flex-1 min-h-[48px] px-4 rounded-xl text-xs sm:text-sm font-semibold border transition-all"
               style={{
                 backgroundColor: webColors.primarySubtle,
                 borderColor: webColors.primaryBorder,
@@ -685,7 +757,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 boxShadow: webShadows.brandSubtle,
               }}
             >
-              Cancel / Leave
+              {isPatientView ? 'Leave' : 'Cancel / Leave'}
             </button>
 
             {videoServerUnavailable ? (
@@ -695,22 +767,26 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                   'Live video server could not be reached. Click to retry.'
                 }
                 placement="top"
-                className="flex-[2] min-w-0"
+                className="w-full sm:flex-[2] min-w-0"
               >
                 <button
                   type="button"
                   data-testid="btn-retry-video-server"
                   onClick={() => void handleRetryPress()}
                   disabled={isRetryingVideoServer}
-                  className="w-full min-h-[44px] px-4 rounded text-xs font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 transition-all truncate"
+                  className="w-full min-h-[48px] px-4 rounded-xl text-xs sm:text-sm font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 transition-all truncate"
                   style={{
                     boxShadow: isRetryingVideoServer ? webShadows.none : webShadows.dangerSm,
                   }}
                   aria-label="Video Server Unavailable — Retry"
                 >
                   {isRetryingVideoServer
-                    ? 'Retrying Video Server...'
-                    : 'Video Server Unavailable • Retry'}
+                    ? isPatientView
+                      ? 'Reconnecting...'
+                      : 'Retrying Video Server...'
+                    : isPatientView
+                      ? 'Connection Issue — Tap to Retry'
+                      : 'Video Server Unavailable • Retry'}
                 </button>
               </OverlayTooltip>
             ) : (
@@ -720,7 +796,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                     type="button"
                     onClick={handleAdmitPress}
                     disabled={isAdmitBlocked || isAdmitting}
-                    className="flex-[2] min-h-[44px] px-4 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50 transition-all"
+                    className="w-full sm:flex-[2] min-h-[48px] px-4 rounded-xl text-xs sm:text-sm font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50 transition-all"
                     style={{
                       backgroundColor: webColors.primary,
                       color: webColors.onPrimary,
@@ -736,18 +812,26 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                     type="button"
                     onClick={onEnterCall}
                     disabled={!isReadyToAdmit}
-                    className="flex-[2] min-h-[44px] px-4 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50 transition-all"
+                    className="w-full sm:flex-[2] min-h-[48px] px-4 rounded-xl text-sm sm:text-base font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50 transition-all"
                     style={{
                       backgroundColor: webColors.primary,
                       color: webColors.onPrimary,
                       boxShadow: !isReadyToAdmit ? webShadows.none : webShadows.brandSm,
                     }}
                   >
-                    {isReadyToAdmit ? 'Enter Consultation Room' : 'Waiting for Clinician...'}
+                    {isReadyToAdmit
+                      ? isPatientView
+                        ? 'Join Video Call'
+                        : 'Enter Consultation Room'
+                      : isPatientView
+                        ? 'Waiting for Your Doctor...'
+                        : 'Waiting for Clinician...'}
                   </button>
                 )}
               </>
             )}
+          </div>
+            </div>
           </div>
         </div>
       )}

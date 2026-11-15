@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { CommsProvider } from '@clinicez/comms-sdk/react';
 import type { CommsTicketResponse } from '@clinicez/comms-sdk/react';
 import { clinicApiClient } from '../services/apiClient';
@@ -6,6 +6,7 @@ import { getSetting, isCommsEnabled as isCommsConfigEnabled } from '../services/
 import { useAuth } from './AuthContext';
 import { useClinic } from './ClinicContext';
 import { useStaff, formatStaffName } from './StaffContext';
+import type { TeleconsultGuestInviteDto } from '../services/clinicService';
 
 export interface TeleconsultSessionParams {
   callId: string;
@@ -21,6 +22,7 @@ export interface TeleconsultSessionParams {
   recordingPolicy?: 'Disabled' | 'WorkspaceVaultOnly' | 'Both' | string;
   recordingConsentRequired?: boolean;
   activeRecordingSessionId?: string | null;
+  initialInvite?: TeleconsultGuestInviteDto | null;
 }
 
 export interface ClinicCommsContextValue {
@@ -66,10 +68,58 @@ export const useClinicComms = () => useContext(ClinicCommsContext);
 import { getCommsApiBaseUrl } from '../services/commsUrl';
 export { getCommsApiBaseUrl };
 
+const ACTIVE_TELECONSULT_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+const getActiveSessionStorageKey = (userId: string) =>
+  `clinicez.teleconsult.activeSession.${userId}`;
+
+function readPersistedTeleconsultSession(userId?: string): TeleconsultSessionParams | null {
+  if (!userId || typeof window === 'undefined' || !window.sessionStorage) return null;
+  try {
+    const raw = window.sessionStorage.getItem(getActiveSessionStorageKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as {
+      params?: TeleconsultSessionParams;
+      savedAtMs?: number;
+    };
+    if (
+      !parsed?.params ||
+      typeof parsed.savedAtMs !== 'number' ||
+      Date.now() - parsed.savedAtMs >= ACTIVE_TELECONSULT_SESSION_TTL_MS
+    ) {
+      window.sessionStorage.removeItem(getActiveSessionStorageKey(userId));
+      return null;
+    }
+    return parsed.params;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedTeleconsultSession(
+  userId: string | undefined,
+  params: TeleconsultSessionParams | null,
+): void {
+  if (!userId || typeof window === 'undefined' || !window.sessionStorage) return;
+  try {
+    if (params) {
+      window.sessionStorage.setItem(
+        getActiveSessionStorageKey(userId),
+        JSON.stringify({ params, savedAtMs: Date.now() }),
+      );
+    } else {
+      window.sessionStorage.removeItem(getActiveSessionStorageKey(userId));
+    }
+  } catch {
+    // Ignore storage error
+  }
+}
+
 export function ClinicCommsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { license } = useClinic();
   const { current, currentName } = useStaff();
+  const userIdRef = useRef<string | undefined>(user?.id);
+  userIdRef.current = user?.id;
 
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState<string | undefined>(undefined);
@@ -78,6 +128,15 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
   const [onOpenConsultationChart, setOnOpenConsultationChart] = useState<
     ((appointmentId?: string, patientId?: string) => void) | null
   >(null);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setIsCallStageDocked(false);
+      setTeleconsultSession(null);
+      return;
+    }
+    setTeleconsultSession((prev) => prev ?? readPersistedTeleconsultSession(user.id));
+  }, [user?.id]);
 
   const toggleChatDrawer = useCallback(() => {
     setIsChatDrawerOpen((prev) => !prev);
@@ -102,11 +161,13 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
   const openTeleconsultWaitingRoom = useCallback((params: TeleconsultSessionParams) => {
     setIsCallStageDocked(false);
     setTeleconsultSession(params);
+    writePersistedTeleconsultSession(userIdRef.current, params);
   }, []);
 
   const closeTeleconsultWaitingRoom = useCallback(() => {
     setIsCallStageDocked(false);
     setTeleconsultSession(null);
+    writePersistedTeleconsultSession(userIdRef.current, null);
   }, []);
 
   const isAuthenticated = Boolean(user?.id && (license?.clinicId || user?.clinicId));

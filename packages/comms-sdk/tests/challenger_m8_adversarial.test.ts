@@ -331,9 +331,15 @@ describe('Challenger M8.2: Comms SDK Adversarial Verification Suite', () => {
       rotateBtn.props.onPress();
       expect(toggled).toBe(true);
 
-      const shareBtn = findElement(harness.result.current, (el) => el.props?.testID === 'btn-share-patient-link');
-      expect(shareBtn).toBeDefined();
-      shareBtn.props.onPress();
+      expect(
+        findElement(harness.result.current, (el) => el.props?.testID === 'btn-share-patient-link')
+      ).toBeNull();
+
+      const shareBtn = findElement(harness.result.current, (el) => el.props?.testID === 'btn-share-patient-link-card');
+      expect(shareBtn).not.toBeNull();
+      await act(async () => {
+        await shareBtn.props.onPress();
+      });
       expect(shared).toBe(true);
       harness.unmount();
     });

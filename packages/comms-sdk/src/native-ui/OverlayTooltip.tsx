@@ -78,7 +78,7 @@ export const OverlayTooltip: React.FC<OverlayTooltipProps> = ({
 
     const webBoxShadow =
       (resolvedShadows.lg as unknown as { boxShadow?: string })?.boxShadow ||
-      '0 10px 25px -5px rgba(15, 23, 42, 0.38)';
+      `0 10px 25px -5px ${resolvedColors.shadowLgColor}`;
 
     Object.assign(tipEl.style, {
       position: 'fixed',

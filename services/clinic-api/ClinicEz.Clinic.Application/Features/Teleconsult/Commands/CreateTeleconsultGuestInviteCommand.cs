@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Concurrent;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -20,7 +22,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Clinic.Application.Features.Teleconsult.Commands;
 
-public sealed record CreateTeleconsultGuestInviteCommand(Guid AppointmentId) : IRequest<TeleconsultGuestInviteDto>;
+public sealed record CreateTeleconsultGuestInviteCommand(Guid AppointmentId, bool ForceRegenerate = false) : IRequest<TeleconsultGuestInviteDto>;
 
 public sealed record TeleconsultGuestInviteDto(
     string InviteToken,
@@ -31,6 +33,23 @@ public sealed record TeleconsultGuestInviteDto(
 
 public sealed class CreateTeleconsultGuestInviteCommandHandler : IRequestHandler<CreateTeleconsultGuestInviteCommand, TeleconsultGuestInviteDto>
 {
+    private sealed record CachedGuestInvite(
+        string InviteToken,
+        string Otp,
+        DateTime ExpiresAtUtc,
+        string DobHint);
+
+    private static readonly ConcurrentDictionary<(Guid ClinicId, Guid AppointmentId, Guid CallId), CachedGuestInvite> ActiveInvites = new();
+
+    public static void InvalidateInvite(Guid appointmentId)
+    {
+        foreach (var key in ActiveInvites.Keys.Where(k => k.AppointmentId == appointmentId).ToArray())
+        {
+            ActiveInvites.TryRemove(key, out _);
+        }
+    }
+
+    public static void ClearCacheForTesting() => ActiveInvites.Clear();
     private readonly IRepository<Appointment> _appointmentRepo;
     private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<AuditEntry> _auditRepo;
@@ -123,6 +142,22 @@ public sealed class CreateTeleconsultGuestInviteCommandHandler : IRequestHandler
             ?? throw new NotFoundException($"Patient record {appointment.PatientId} not found.");
 
         var dobString = patient.DateOfBirth.ToString("yyyy-MM-dd");
+        var dobHint = $"{patient.DateOfBirth.Year}-**-**";
+        var cacheKey = (_clinicContext.ClinicId, appointment.Id, callId);
+
+        if (!request.ForceRegenerate &&
+            ActiveInvites.TryGetValue(cacheKey, out var cached) &&
+            cached.ExpiresAtUtc > DateTime.UtcNow.AddMinutes(5))
+        {
+            var cachedPortalBaseUrl = ResolvePortalBaseUrl();
+            var cachedInviteUrl = $"{cachedPortalBaseUrl.TrimEnd('/')}/teleconsult/join?token={Uri.EscapeDataString(cached.InviteToken)}";
+            return new TeleconsultGuestInviteDto(
+                InviteToken: cached.InviteToken,
+                InviteUrl: cachedInviteUrl,
+                Otp: cached.Otp,
+                ExpiresAtUtc: cached.ExpiresAtUtc,
+                DobHint: dobHint);
+        }
 
         // 4. Generate random 32-hex lowercase token and 6-digit OTP
         var inviteToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
@@ -218,7 +253,8 @@ public sealed class CreateTeleconsultGuestInviteCommandHandler : IRequestHandler
 
         var portalBaseUrl = ResolvePortalBaseUrl();
         var inviteUrl = $"{portalBaseUrl.TrimEnd('/')}/teleconsult/join?token={Uri.EscapeDataString(inviteToken)}";
-        var dobHint = $"{patient.DateOfBirth.Year}-**-**";
+
+        ActiveInvites[cacheKey] = new CachedGuestInvite(inviteToken, otp, expiresAtUtc, dobHint);
 
         return new TeleconsultGuestInviteDto(
             InviteToken: inviteToken,

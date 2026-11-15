@@ -280,4 +280,71 @@ public sealed class CreateTeleconsultGuestInviteCommandTests
         var baseDomainResult = await baseDomainHandler.Handle(new CreateTeleconsultGuestInviteCommand(aptId), CancellationToken.None);
         baseDomainResult.InviteUrl.Should().Be($"https://dev.clinicez.net/teleconsult/join?token={baseDomainResult.InviteToken}");
     }
+
+    [Fact]
+    public async Task CreateGuestInvite_ReusesActiveInviteAndOtp_AcrossRepeatedCalls_AndRotatesAfterForceOrInvalidation()
+    {
+        CreateTeleconsultGuestInviteCommandHandler.ClearCacheForTesting();
+        var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var aptRepo = TestDbHelper.CreateRepository<Appointment>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(db, sieve);
+        var publisher = Substitute.For<IInteropPublisher>();
+
+        var patientId = Guid.NewGuid();
+        db.Patients.Add(new Patient
+        {
+            Id = patientId,
+            ClinicId = _clinicId,
+            PatientCode = "P-1004",
+            FirstName = "Mark Kenneth",
+            LastName = "Clemente",
+            ContactNumber = "09123456701",
+            DateOfBirth = new DateOnly(2001, 5, 3)
+        });
+
+        var aptId = Guid.NewGuid();
+        db.Appointments.Add(new Appointment
+        {
+            Id = aptId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            PatientName = "Clemente, Mark Kenneth",
+            ScheduledAt = DateTime.UtcNow,
+            AppointmentType = AppointmentType.Teleconsult,
+            CallId = Guid.NewGuid()
+        });
+        await db.SaveChangesAsync();
+
+        var handler = new CreateTeleconsultGuestInviteCommandHandler(
+            aptRepo, patientRepo, auditRepo, uow, _clinicContext, publisher, _configuration,
+            NullLogger<CreateTeleconsultGuestInviteCommandHandler>.Instance);
+
+        var first = await handler.Handle(new CreateTeleconsultGuestInviteCommand(aptId), CancellationToken.None);
+        var second = await handler.Handle(new CreateTeleconsultGuestInviteCommand(aptId), CancellationToken.None);
+
+        second.InviteToken.Should().Be(first.InviteToken);
+        second.Otp.Should().Be(first.Otp);
+        second.InviteUrl.Should().Be(first.InviteUrl);
+
+        // Repeated calls reuse the active invite without emitting redundant interop outbox events
+        publisher.Received(1).Enqueue(
+            InteropTypes.GuestTeleconsultInviteIssued,
+            Arg.Any<Party>(),
+            Party.Portal,
+            aptId,
+            Arg.Any<GuestTeleconsultInviteIssuedPayload>());
+
+        // ForceRegenerate issues a fresh token & OTP
+        var forced = await handler.Handle(new CreateTeleconsultGuestInviteCommand(aptId, ForceRegenerate: true), CancellationToken.None);
+        forced.InviteToken.Should().NotBe(first.InviteToken);
+
+        // InvalidateInvite (called by EndTeleconsultCallCommand) evicts the cached entry
+        CreateTeleconsultGuestInviteCommandHandler.InvalidateInvite(aptId);
+        var afterInvalidation = await handler.Handle(new CreateTeleconsultGuestInviteCommand(aptId), CancellationToken.None);
+        afterInvalidation.InviteToken.Should().NotBe(forced.InviteToken);
+
+        CreateTeleconsultGuestInviteCommandHandler.ClearCacheForTesting();
+    }
 }

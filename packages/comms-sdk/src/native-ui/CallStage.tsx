@@ -109,9 +109,42 @@ export const CallStage: React.FC<CallStageProps> = ({
 
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedPin, setCopiedPin] = useState(false);
+  const [stageWidth, setStageWidth] = useState<number>(() =>
+    isLiveWebDom && typeof window !== 'undefined' && typeof window.innerWidth === 'number'
+      ? window.innerWidth
+      : 1024
+  );
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [showSoloWarning, setShowSoloWarning] = useState(false);
   const [soloCountdown, setSoloCountdown] = useState(Math.round(soloAutoLeaveGraceMs / 1000));
   const [soloDismissedCount, setSoloDismissedCount] = useState(0);
+
+  useEffect(() => {
+    if (!isLiveWebDom || typeof window === 'undefined') return;
+    const handleResize = () => {
+      if (typeof window.innerWidth === 'number') {
+        setStageWidth(window.innerWidth);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isCompactStage = stageWidth < 640;
+  const canOfferRecordControl = Boolean(
+    !isRecording &&
+      onStartRecording &&
+      canStartRecording &&
+      recordingConsentStatus !== 'requested'
+  );
+  const hasMoreOptions = Boolean(
+    onSwitchCamera ||
+      onToggleOrientation ||
+      (!isScreenSharing && onToggleScreenShare) ||
+      onDockCall ||
+      (onTogglePip && isPipSupported !== false) ||
+      canOfferRecordControl
+  );
 
   const hasRemote = useMemo(() => {
     if (typeof hasRemoteParticipant === 'boolean') {
@@ -188,6 +221,80 @@ export const CallStage: React.FC<CallStageProps> = ({
     }
   }, [onCopyPatientPin]);
 
+  const renderFallbackCopyGlyph = (copied: boolean, color: string) => {
+    if (copied) {
+      return (
+        <View style={{ width: 14, height: 14, justifyContent: 'center', alignItems: 'center' }}>
+          <View
+            style={{
+              width: 10,
+              height: 6,
+              borderLeftWidth: 2,
+              borderBottomWidth: 2,
+              borderColor: color,
+              backgroundColor: resolvedColors.transparent,
+              transform: [{ rotate: '-45deg' }, { translateY: -1 }]
+            }}
+          />
+        </View>
+      );
+    }
+    return (
+      <View style={{ width: 16, height: 16, position: 'relative' }}>
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: 10,
+            height: 10,
+            borderRadius: radiusScale.xs,
+            borderWidth: 1.5,
+            borderColor: color,
+            backgroundColor: resolvedColors.transparent
+          }}
+        />
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            right: 0,
+            width: 10,
+            height: 10,
+            borderRadius: radiusScale.xs,
+            borderWidth: 1.5,
+            borderColor: color,
+            backgroundColor: resolvedColors.surfaceMuted
+          }}
+        />
+      </View>
+    );
+  };
+
+  const renderFallbackVideoOffGlyph = (color: string) => (
+    <View style={{ width: 20, height: 16, justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+      <View
+        style={{
+          width: 16,
+          height: 12,
+          borderRadius: radiusScale.xs,
+          borderWidth: 1.5,
+          borderColor: color,
+          backgroundColor: resolvedColors.transparent
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          width: 20,
+          height: 1.5,
+          backgroundColor: color,
+          transform: [{ rotate: '-35deg' }]
+        }}
+      />
+    </View>
+  );
+
   const deduplicatedRemotes = useMemo(() => {
     if (!participants || participants.length === 0) return [];
     const normalizedSelfName = (selfName || '').trim().toLowerCase();
@@ -234,7 +341,7 @@ export const CallStage: React.FC<CallStageProps> = ({
         style={{
           width: 8,
           height: 12,
-          borderRadius: 4,
+          borderRadius: radiusScale.xs,
           backgroundColor: active ? resolvedColors.primary : resolvedColors.textMuted,
           opacity: active ? 1 : 0.6
         }}
@@ -256,7 +363,7 @@ export const CallStage: React.FC<CallStageProps> = ({
         style={{
           width: 11,
           height: 8,
-          borderRadius: 2,
+          borderRadius: radiusScale.xs,
           backgroundColor: active ? resolvedColors.primary : resolvedColors.textMuted,
           opacity: active ? 1 : 0.6
         }}
@@ -280,14 +387,30 @@ export const CallStage: React.FC<CallStageProps> = ({
           height: 9,
           borderWidth: 1.5,
           borderColor: resolvedColors.primary,
-          borderRadius: 1.5
+          borderRadius: radiusScale.xs
         }}
       />
     );
   };
 
+  const renderFallbackMoreGlyph = (color: string) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spaceScale.xxs }}>
+      <View style={{ width: 4, height: 4, borderRadius: radiusScale.full, backgroundColor: color }} />
+      <View style={{ width: 4, height: 4, borderRadius: radiusScale.full, backgroundColor: color }} />
+      <View style={{ width: 4, height: 4, borderRadius: radiusScale.full, backgroundColor: color }} />
+    </View>
+  );
+
   return (
-    <View style={[styles.container, style]}>
+    <View
+      style={[styles.container, style]}
+      onLayout={(event) => {
+        const nextWidth = event?.nativeEvent?.layout?.width;
+        if (typeof nextWidth === 'number' && nextWidth > 0) {
+          setStageWidth(nextWidth);
+        }
+      }}
+    >
       {/* Top Header Bar */}
       {!hideHeader && (
         <View style={styles.header}>
@@ -452,26 +575,165 @@ export const CallStage: React.FC<CallStageProps> = ({
             </View>
           )}
 
-          {/* Picture-in-Picture Local Self-Preview Canvas */}
-          <View
-            style={[
-              styles.pipCanvas,
-              (isScreenSharing || videoOrientation === 'landscape')
-                ? styles.pipCanvasLandscape
-                : styles.pipCanvasPortrait
-            ]}
-          >
-            {localVideoSurface ?? (
-              <View style={styles.pipPlaceholder}>
-                <Text style={styles.pipLabel}>
-                  {isCameraEnabled ? selfName : `${selfName} (Cam Off)`}
-                </Text>
-              </View>
-            )}
-          </View>
+          {/* Picture-in-Picture Local Self-Preview Canvas (top-right, clear of bottom controls) */}
+          {(isCameraEnabled || isScreenSharing) && (
+            <View
+              testID="call-stage-local-pip"
+              accessibilityLabel={`${selfName} self preview`}
+              style={[
+                styles.pipCanvas,
+                (isScreenSharing || videoOrientation === 'landscape')
+                  ? styles.pipCanvasLandscape
+                  : styles.pipCanvasPortrait,
+                isCompactStage &&
+                  ((isScreenSharing || videoOrientation === 'landscape')
+                    ? styles.pipCanvasLandscapeCompact
+                    : styles.pipCanvasPortraitCompact),
+                showSoloWarning
+                  ? styles.pipCanvasSoloOffset
+                  : isScreenSharing
+                    ? styles.pipCanvasShareOffset
+                    : null
+              ]}
+            >
+              {localVideoSurface ?? (
+                <View style={styles.pipPlaceholder}>
+                  {renderIcon
+                    ? renderIcon('videoOff', { size: 20, color: resolvedColors.textMuted })
+                    : renderFallbackVideoOffGlyph(resolvedColors.textMuted)}
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Bottom Floating Media Controls Toolbar */}
           <View style={styles.mediaToolbarWrapper} pointerEvents="box-none">
+            {isCompactStage && isMoreOpen && hasMoreOptions && (
+              <View testID="popover-more-controls" style={styles.moreControlsPopover}>
+                {onToggleScreenShare && !isScreenSharing && (
+                  <TouchableOpacity
+                    testID="more-menu-screen-share"
+                    style={styles.moreControlRow}
+                    onPress={() => {
+                      setIsMoreOpen(false);
+                      void onToggleScreenShare();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Share screen"
+                  >
+                    {renderIcon
+                      ? renderIcon('screenShare', { size: 16, color: resolvedColors.onPrimary })
+                      : null}
+                    <Text style={styles.moreControlRowText}>Share screen</Text>
+                  </TouchableOpacity>
+                )}
+                {onSwitchCamera && (
+                  <TouchableOpacity
+                    testID="more-menu-switch-camera"
+                    style={styles.moreControlRow}
+                    onPress={() => {
+                      setIsMoreOpen(false);
+                      void onSwitchCamera();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Switch camera"
+                  >
+                    {renderIcon
+                      ? renderIcon('switchCamera', { size: 16, color: resolvedColors.onPrimary })
+                      : null}
+                    <Text style={styles.moreControlRowText}>Switch camera</Text>
+                  </TouchableOpacity>
+                )}
+                {onToggleOrientation && (
+                  <TouchableOpacity
+                    testID="more-menu-toggle-orientation"
+                    style={styles.moreControlRow}
+                    onPress={() => {
+                      setIsMoreOpen(false);
+                      void onToggleOrientation();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Toggle video orientation"
+                  >
+                    {renderIcon
+                      ? renderIcon('rotate', { size: 16, color: resolvedColors.onPrimary })
+                      : null}
+                    <Text style={styles.moreControlRowText}>
+                      {videoOrientation === 'landscape' ? 'Portrait view' : 'Landscape view'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {onTogglePip && isPipSupported !== false && (
+                  <TouchableOpacity
+                    testID="more-menu-toggle-pip"
+                    style={styles.moreControlRow}
+                    onPress={() => {
+                      setIsMoreOpen(false);
+                      void onTogglePip();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={isPipActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture'}
+                  >
+                    {renderIcon
+                      ? renderIcon('pip', { size: 16, color: resolvedColors.onPrimary })
+                      : null}
+                    <Text style={styles.moreControlRowText}>
+                      {isPipActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {onDockCall && (
+                  <TouchableOpacity
+                    testID="more-menu-dock-call"
+                    style={styles.moreControlRow}
+                    onPress={() => {
+                      setIsMoreOpen(false);
+                      void onDockCall();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Dock call and open chart"
+                  >
+                    {renderIcon
+                      ? renderIcon('dock', { size: 16, color: resolvedColors.onPrimary })
+                      : null}
+                    <Text style={styles.moreControlRowText}>Dock call</Text>
+                  </TouchableOpacity>
+                )}
+                {canOfferRecordControl && onStartRecording && (
+                  <TouchableOpacity
+                    testID="more-menu-start-recording"
+                    disabled={isRecordDisabled}
+                    style={[
+                      styles.moreControlRow,
+                      isRecordDisabled && styles.recStartButtonDisabled
+                    ]}
+                    onPress={() => {
+                      if (!isRecordDisabled) {
+                        setIsMoreOpen(false);
+                        void onStartRecording();
+                      }
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Start Recording"
+                  >
+                    {renderIcon
+                      ? renderIcon('recordDot', {
+                          size: 16,
+                          color: isRecordDisabled ? resolvedColors.textMuted : resolvedColors.onPrimary
+                        })
+                      : null}
+                    <Text
+                      style={[
+                        styles.moreControlRowText,
+                        isRecordDisabled && styles.recStartButtonTextDisabled
+                      ]}
+                    >
+                      Start recording
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
             <View style={styles.mediaToolbar}>
               <OverlayTooltip
                 label={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
@@ -487,7 +749,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                   {renderIcon ? (
                     renderIcon(isMicEnabled ? 'mic' : 'micOff', {
                       size: 18,
-                      color: isMicEnabled ? resolvedColors.text : resolvedColors.onPrimary
+                      color: resolvedColors.onPrimary
                     })
                   ) : (
                     <Text
@@ -516,7 +778,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                   {renderIcon ? (
                     renderIcon(isCameraEnabled ? 'video' : 'videoOff', {
                       size: 18,
-                      color: isCameraEnabled ? resolvedColors.text : resolvedColors.onPrimary
+                      color: resolvedColors.onPrimary
                     })
                   ) : (
                     <Text
@@ -531,7 +793,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                 </TouchableOpacity>
               </OverlayTooltip>
 
-              {onSwitchCamera && (
+              {!isCompactStage && onSwitchCamera && (
                 <OverlayTooltip label="Switch camera" colors={resolvedColors} shadows={resolvedShadows}>
                   <TouchableOpacity
                     style={styles.controlButton}
@@ -540,7 +802,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     accessibilityLabel="Switch camera"
                   >
                     {renderIcon ? (
-                      renderIcon('switchCamera', { size: 18, color: resolvedColors.text })
+                      renderIcon('switchCamera', { size: 18, color: resolvedColors.onPrimary })
                     ) : (
                       <Text style={styles.controlButtonText}>FLIP</Text>
                     )}
@@ -548,7 +810,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                 </OverlayTooltip>
               )}
 
-              {onToggleOrientation && (
+              {!isCompactStage && onToggleOrientation && (
                 <OverlayTooltip
                   label={
                     videoOrientation === 'landscape'
@@ -566,7 +828,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     accessibilityLabel="Toggle video orientation"
                   >
                     {renderIcon ? (
-                      renderIcon('rotate', { size: 18, color: resolvedColors.text })
+                      renderIcon('rotate', { size: 18, color: resolvedColors.onPrimary })
                     ) : (
                       <Text style={styles.controlButtonText}>ROTATE</Text>
                     )}
@@ -574,7 +836,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                 </OverlayTooltip>
               )}
 
-              {onToggleScreenShare && (
+              {onToggleScreenShare && (!isCompactStage || isScreenSharing) && (
                 <OverlayTooltip
                   label={isScreenSharing ? 'Stop screen share' : 'Share screen'}
                   colors={resolvedColors}
@@ -589,7 +851,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     {renderIcon ? (
                       renderIcon(isScreenSharing ? 'screenShareOff' : 'screenShare', {
                         size: 18,
-                        color: isScreenSharing ? resolvedColors.onPrimary : resolvedColors.text
+                        color: resolvedColors.onPrimary
                       })
                     ) : (
                       <Text
@@ -605,7 +867,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                 </OverlayTooltip>
               )}
 
-              {onDockCall && (
+              {!isCompactStage && onDockCall && (
                 <OverlayTooltip label="Dock call and open chart" colors={resolvedColors} shadows={resolvedShadows}>
                   <TouchableOpacity
                     testID="btn-dock-call"
@@ -615,7 +877,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     accessibilityLabel="Dock call and open chart"
                   >
                     {renderIcon ? (
-                      renderIcon('dock', { size: 18, color: resolvedColors.text })
+                      renderIcon('dock', { size: 18, color: resolvedColors.onPrimary })
                     ) : (
                       <Text style={styles.controlButtonText}>DOCK</Text>
                     )}
@@ -623,7 +885,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                 </OverlayTooltip>
               )}
 
-              {onTogglePip && isPipSupported !== false && (
+              {!isCompactStage && onTogglePip && isPipSupported !== false && (
                 <OverlayTooltip
                   label={
                     isPipActive
@@ -643,7 +905,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     {renderIcon ? (
                       renderIcon('pip', {
                         size: 18,
-                        color: isPipActive ? resolvedColors.onPrimary : resolvedColors.text
+                        color: resolvedColors.onPrimary
                       })
                     ) : (
                       <Text
@@ -675,7 +937,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     {renderIcon ? (
                       renderIcon('chat', {
                         size: 18,
-                        color: isChatOpen ? resolvedColors.onPrimary : resolvedColors.text
+                        color: resolvedColors.onPrimary
                       })
                     ) : (
                       <Text
@@ -714,7 +976,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     {renderParticipantsIcon ? (
                       renderParticipantsIcon({
                         size: 18,
-                        color: isParticipantsOpen ? resolvedColors.onPrimary : resolvedColors.text
+                        color: resolvedColors.onPrimary
                       })
                     ) : (
                       <Text
@@ -735,53 +997,62 @@ export const CallStage: React.FC<CallStageProps> = ({
                 </OverlayTooltip>
               )}
 
-              {!isRecording &&
-                onStartRecording &&
-                canStartRecording &&
-                recordingConsentStatus !== 'requested' && (
-                  <OverlayTooltip
-                    label={
-                      recordButtonTooltip ||
-                      (isRecordDisabled
-                        ? 'Waiting for patient to join before recording'
-                        : 'Start call recording')
-                    }
-                    colors={resolvedColors}
-                    shadows={resolvedShadows}
+              {!isCompactStage && canOfferRecordControl && onStartRecording && (
+                <OverlayTooltip
+                  label={
+                    recordButtonTooltip ||
+                    (isRecordDisabled
+                      ? 'Waiting for patient to join before recording'
+                      : 'Start call recording')
+                  }
+                  colors={resolvedColors}
+                  shadows={resolvedShadows}
+                >
+                  <TouchableOpacity
+                    testID="btn-start-recording"
+                    style={[
+                      styles.recStartButton,
+                      isRecordDisabled && styles.recStartButtonDisabled
+                    ]}
+                    onPress={() => {
+                      if (!isRecordDisabled) {
+                        void onStartRecording();
+                      }
+                    }}
+                    disabled={isRecordDisabled}
+                    accessibilityRole="button"
+                    accessibilityLabel="Start Recording"
                   >
-                    <TouchableOpacity
-                      testID="btn-start-recording"
-                      style={[
-                        styles.recStartButton,
-                        isRecordDisabled && styles.recStartButtonDisabled
-                      ]}
-                      onPress={() => {
-                        if (!isRecordDisabled) {
-                          void onStartRecording();
-                        }
-                      }}
-                      disabled={isRecordDisabled}
-                      accessibilityRole="button"
-                      accessibilityLabel="Start Recording"
-                    >
-                      {renderIcon ? (
-                        renderIcon('recordDot', {
-                          size: 18,
-                          color: isRecordDisabled ? resolvedColors.textMuted : resolvedColors.text
-                        })
-                      ) : (
-                        <Text
-                          style={[
-                            styles.recStartButtonText,
-                            isRecordDisabled && styles.recStartButtonTextDisabled
-                          ]}
-                        >
-                          REC
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  </OverlayTooltip>
-                )}
+                    {renderIcon ? (
+                      renderIcon('recordDot', {
+                        size: 18,
+                        color: isRecordDisabled ? resolvedColors.textMuted : resolvedColors.onPrimary
+                      })
+                    ) : (
+                      <Text
+                        style={[
+                          styles.recStartButtonText,
+                          isRecordDisabled && styles.recStartButtonTextDisabled
+                        ]}
+                      >
+                        REC
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </OverlayTooltip>
+              )}
+
+              {isCompactStage && hasMoreOptions && (
+                <TouchableOpacity
+                  testID="btn-toggle-more-controls"
+                  style={[styles.controlButton, isMoreOpen && styles.controlButtonActive]}
+                  onPress={() => setIsMoreOpen((prev) => !prev)}
+                  accessibilityRole="button"
+                  accessibilityLabel="More call controls"
+                >
+                  {renderFallbackMoreGlyph(resolvedColors.onPrimary)}
+                </TouchableOpacity>
+              )}
 
               <OverlayTooltip label="End consultation call" colors={resolvedColors} shadows={resolvedShadows}>
                 <TouchableOpacity
@@ -833,7 +1104,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                         width: 14,
                         height: 2,
                         backgroundColor: resolvedColors.textMuted,
-                        borderRadius: 1,
+                        borderRadius: radiusScale.xs,
                         transform: [{ rotate: '45deg' }]
                       }}
                     />
@@ -843,7 +1114,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                         width: 14,
                         height: 2,
                         backgroundColor: resolvedColors.textMuted,
-                        borderRadius: 1,
+                        borderRadius: radiusScale.xs,
                         transform: [{ rotate: '-45deg' }]
                       }}
                     />
@@ -866,11 +1137,15 @@ export const CallStage: React.FC<CallStageProps> = ({
                       style={styles.rosterCopyButton}
                       onPress={handleCopyInviteFromRoster}
                       accessibilityRole="button"
-                      accessibilityLabel="Copy consultation invite link"
+                      accessibilityLabel={copiedInvite ? 'Copied!' : 'Copy consultation invite link'}
                     >
-                      <Text style={styles.rosterCopyButtonText}>
-                        {copiedInvite ? 'Copied!' : 'Copy Link'}
-                      </Text>
+                      {copiedInvite ? (
+                        renderFallbackCopyGlyph(true, resolvedColors.successText)
+                      ) : renderIcon ? (
+                        renderIcon('share', { size: 16, color: resolvedColors.primary })
+                      ) : (
+                        renderFallbackCopyGlyph(false, resolvedColors.primary)
+                      )}
                     </TouchableOpacity>
                   )}
                 </View>
@@ -888,11 +1163,15 @@ export const CallStage: React.FC<CallStageProps> = ({
                           style={styles.rosterCopyButton}
                           onPress={handleCopyPinFromRoster}
                           accessibilityRole="button"
-                          accessibilityLabel="Copy access PIN"
+                          accessibilityLabel={copiedPin ? 'Copied!' : 'Copy access PIN'}
                         >
-                          <Text style={styles.rosterCopyButtonText}>
-                            {copiedPin ? 'Copied!' : 'Copy PIN'}
-                          </Text>
+                          {copiedPin ? (
+                            renderFallbackCopyGlyph(true, resolvedColors.successText)
+                          ) : renderIcon ? (
+                            renderIcon('share', { size: 16, color: resolvedColors.primary })
+                          ) : (
+                            renderFallbackCopyGlyph(false, resolvedColors.primary)
+                          )}
                         </TouchableOpacity>
                       )}
                     </View>
@@ -1229,8 +1508,9 @@ function createStyles(
   },
   pipCanvas: {
     position: 'absolute',
-    bottom: spaceScale.lg,
-    right: spaceScale.lg,
+    top: spaceScale.md,
+    right: spaceScale.md,
+    zIndex: 20,
     borderRadius: radiusScale.md,
     backgroundColor: c.surfaceHighlight,
     borderWidth: sizes.borderWidth,
@@ -1240,13 +1520,25 @@ function createStyles(
     alignItems: 'center',
     ...s.lg
   },
+  pipCanvasSoloOffset: {
+    top: 120
+  },
+  pipCanvasShareOffset: {
+    top: 56
+  },
   pipCanvasPortrait: {
     width: 105,
     aspectRatio: 3 / 4
   },
+  pipCanvasPortraitCompact: {
+    width: 84
+  },
   pipCanvasLandscape: {
     width: 140,
     aspectRatio: 16 / 9
+  },
+  pipCanvasLandscapeCompact: {
+    width: 112
   },
   pipPlaceholder: {
     padding: spaceScale.xs,
@@ -1267,22 +1559,51 @@ function createStyles(
   },
   mediaToolbar: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: spaceScale.sm,
+    justifyContent: 'center',
+    maxWidth: '95%',
+    gap: spaceScale.xs,
     backgroundColor: c.overlay,
-    paddingHorizontal: spaceScale.md,
+    paddingHorizontal: spaceScale.sm,
     paddingVertical: spaceScale.xs,
     borderRadius: radiusScale.full,
     ...s.lg
   },
+  moreControlsPopover: {
+    marginBottom: spaceScale.sm,
+    minWidth: 196,
+    borderRadius: radiusScale.md,
+    backgroundColor: c.surfaceInverse,
+    borderWidth: sizes.borderWidth,
+    borderColor: c.borderDark,
+    padding: spaceScale.xs,
+    gap: spaceScale.xs,
+    ...s.lg
+  },
+  moreControlRow: {
+    minHeight: sizes.touchTarget,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spaceScale.sm,
+    paddingHorizontal: spaceScale.md,
+    borderRadius: radiusScale.sm
+  },
+  moreControlRowText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '600',
+    color: c.onPrimary
+  },
   controlButton: {
+    width: sizes.touchTarget,
+    height: sizes.touchTarget,
     minWidth: sizes.touchTarget,
     minHeight: sizes.touchTarget,
     borderRadius: radiusScale.full,
-    backgroundColor: c.surface,
+    backgroundColor: c.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spaceScale.xs,
+    paddingHorizontal: 0,
     ...s.brandSubtle
   },
   controlButtonActive: {
@@ -1296,19 +1617,21 @@ function createStyles(
   controlButtonText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '700',
-    color: c.text
+    color: c.onPrimary
   },
   controlButtonTextInverted: {
     color: c.onPrimary
   },
   endCallButton: {
+    width: sizes.touchTarget,
+    height: sizes.touchTarget,
     minWidth: sizes.touchTarget,
     minHeight: sizes.touchTarget,
     borderRadius: radiusScale.full,
     backgroundColor: c.emergency,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spaceScale.xs,
+    paddingHorizontal: 0,
     ...s.dangerSm
   },
   endCallButtonText: {
@@ -1317,13 +1640,15 @@ function createStyles(
     color: c.onPrimary
   },
   recStartButton: {
+    width: sizes.touchTarget,
+    height: sizes.touchTarget,
     minWidth: sizes.touchTarget,
     minHeight: sizes.touchTarget,
     borderRadius: radiusScale.full,
-    backgroundColor: c.surface,
+    backgroundColor: c.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spaceScale.xs,
+    paddingHorizontal: 0,
     ...s.brandSubtle
   },
   recStartButtonDisabled: {
@@ -1333,7 +1658,7 @@ function createStyles(
   recStartButtonText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '700',
-    color: c.text
+    color: c.onPrimary
   },
   recStartButtonTextDisabled: {
     color: c.textMuted
@@ -1431,11 +1756,11 @@ function createStyles(
     marginRight: spaceScale.xs
   },
   rosterCopyButton: {
-    backgroundColor: c.primary,
-    paddingHorizontal: spaceScale.sm,
-    paddingVertical: spaceScale.xs,
+    backgroundColor: c.transparent,
+    borderWidth: 0,
+    padding: spaceScale.xs,
     borderRadius: radiusScale.sm,
-    minHeight: 36,
+    minHeight: sizes.touchTarget,
     minWidth: sizes.touchTarget,
     justifyContent: 'center',
     alignItems: 'center'

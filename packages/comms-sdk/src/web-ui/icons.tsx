@@ -435,3 +435,23 @@ export const UserIcon: React.FC<IconProps> = ({ size = 18, className, style }) =
     <circle cx="12" cy="7" r="4" />
   </svg>
 );
+
+export const MoreHorizontalIcon: React.FC<IconProps> = ({ size = 18, className, style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    style={style}
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="19" cy="12" r="1" />
+    <circle cx="5" cy="12" r="1" />
+  </svg>
+);

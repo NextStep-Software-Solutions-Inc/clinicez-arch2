@@ -272,30 +272,33 @@ describe("Public Route Token & Kind Strict Validation", () => {
   });
 
   describe("TeleconsultTokenPage (/teleconsult/join/[token]) Strict Token Validation", () => {
-    test("rejects clinical document tokens (Rx, Med-Cert, Lab) with Invalid Teleconsultation Link alert", async () => {
+    test("rejects clinical document tokens (Rx, Med-Cert, Lab) with Wrong Link Type alert", async () => {
       const rxToken = "01938561726374829102938475610293.01938561726374829102938475610294";
       const jsxRx = await TeleconsultTokenPage({
         params: Promise.resolve({ token: rxToken }),
       });
       const htmlRx = renderToString(jsxRx);
-      expect(htmlRx).toContain("Invalid Teleconsultation Link");
-      expect(htmlRx).toContain("contains a token for a clinical document");
+      expect(htmlRx).toContain("Wrong Link Type");
+      expect(htmlRx).toContain("This link is for a medical document");
+      expect(htmlRx).toContain("Go to Video Check-In");
+      expect(htmlRx).toContain("min-h-dvh");
+      expect(htmlRx).not.toContain("Secured by Interop Hub");
       expect(htmlRx).not.toContain("Date of Birth");
 
       const jsxMc = await TeleconsultTokenPage({
         params: Promise.resolve({ token: "mc-2026-0001" }),
       });
       const htmlMc = renderToString(jsxMc);
-      expect(htmlMc).toContain("Invalid Teleconsultation Link");
-      expect(htmlMc).toContain("contains a token for a clinical document");
+      expect(htmlMc).toContain("Wrong Link Type");
+      expect(htmlMc).toContain("This link is for a medical document");
 
       const labToken = "01938561726374829102938475610293.uL7jZ_3xR_yT9aBcDeFgHi";
       const jsxLab = await TeleconsultTokenPage({
         params: Promise.resolve({ token: labToken }),
       });
       const htmlLab = renderToString(jsxLab);
-      expect(htmlLab).toContain("Invalid Teleconsultation Link");
-      expect(htmlLab).toContain("contains a token for a clinical document");
+      expect(htmlLab).toContain("Wrong Link Type");
+      expect(htmlLab).toContain("This link is for a medical document");
     });
 
     test("renders TeleconsultGuestFlow when token is a valid invite token", async () => {
@@ -304,7 +307,7 @@ describe("Public Route Token & Kind Strict Validation", () => {
       });
       const html = renderToString(jsx);
       expect(html).toContain("Date of Birth");
-      expect(html).not.toContain("Invalid Teleconsultation Link");
+      expect(html).not.toContain("Wrong Link Type");
     });
   });
 

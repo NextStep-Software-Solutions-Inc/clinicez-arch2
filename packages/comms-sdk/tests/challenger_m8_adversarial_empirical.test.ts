@@ -350,14 +350,17 @@ describe('Challenger M8: Empirical Verification & Adversarial Stress Harness', (
       const text = getTextContent(nativeHarness.result.current);
       expect(text).toContain(testLink);
 
-      // Media bar share button is present because patientLink is defined
+      // Duplicate media bar share button is suppressed when patientLink card is displayed, and card copy button is omitted when onSharePatientLink is undefined
       const shareBtn = findElement(
         nativeHarness.result.current,
         (el) => el.props?.testID === 'btn-share-patient-link'
       );
-      expect(shareBtn).not.toBeNull();
-      // Pressing it when onSharePatientLink is undefined must not throw
-      expect(() => shareBtn.props.onPress?.()).not.toThrow();
+      expect(shareBtn).toBeNull();
+      const cardCopyBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-share-patient-link-card'
+      );
+      expect(cardCopyBtn).toBeNull();
 
       nativeHarness.unmount();
     });
@@ -485,7 +488,7 @@ describe('Challenger M8: Empirical Verification & Adversarial Stress Harness', (
       );
       expect(nativeInactiveBtn).not.toBeNull();
       const inactiveStyles = Object.assign({}, ...nativeInactiveBtn.props.style.filter(Boolean));
-      expect(inactiveStyles.backgroundColor).toBe(lightColors.surface);
+      expect(inactiveStyles.backgroundColor).toBe(lightColors.overlay);
       nativeInactiveHarness.unmount();
 
       // Active
@@ -766,8 +769,12 @@ describe('Challenger M8: Empirical Verification & Adversarial Stress Harness', (
       const wrRotateBtn = findElement(wrTree, (el) => el.props?.testID === 'btn-toggle-orientation');
       expect(wrRotateBtn.props?.accessibilityLabel).toBe('Toggle video orientation');
 
-      const wrShareBtn = findElement(wrTree, (el) => el.props?.testID === 'btn-share-patient-link');
-      expect(wrShareBtn.props?.accessibilityLabel).toBe('Share patient invite link');
+      expect(
+        findElement(wrTree, (el) => el.props?.testID === 'btn-share-patient-link')
+      ).toBeNull();
+
+      const wrShareBtn = findElement(wrTree, (el) => el.props?.testID === 'btn-share-patient-link-card');
+      expect(wrShareBtn.props?.accessibilityLabel).toBe('Copy patient invite link');
 
       wrHarness.unmount();
     });

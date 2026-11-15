@@ -4,6 +4,7 @@ export const SETTINGS_TAB_KEYS = [
   'branding',
   'documents',
   'clinical',
+  'teleconsultation',
   'fields',
   'queue-tv',
   'notifications',
@@ -214,6 +215,40 @@ export const SETTINGS_SECTION_CATALOG: SettingsGroupDefinition[] = [
           'split',
           'drawer',
           'patient search',
+        ],
+      },
+      {
+        key: 'teleconsultation',
+        groupKey: 'clinical',
+        groupLabel: 'Clinical & Front Desk',
+        label: 'Teleconsultation',
+        description:
+          'Virtual video consultations, default payment policy, consultation fee, media vault recording, retention, and dual-party consent.',
+        icon: 'video',
+        keywords: [
+          'teleconsultation',
+          'teleconsult',
+          'telehealth',
+          'virtual',
+          'video',
+          'video call',
+          'livekit',
+          'waiting room',
+          'guest',
+          'invite',
+          'pin',
+          'otp',
+          'recording',
+          'media vault',
+          'vault',
+          'retention',
+          'consent',
+          'dual consent',
+          'prepaid',
+          'postpaid',
+          'exempt',
+          'payg',
+          'teleconsult fee',
         ],
       },
       {
@@ -434,6 +469,19 @@ export const SETTINGS_SECTIONS_FLAT: SettingsSectionDefinition[] =
 
 const VALID_SETTINGS_TAB_SET = new Set<string>(SETTINGS_TAB_KEYS);
 const GENERAL_SECTION_SET = new Set<string>(GENERAL_SETTINGS_SECTION_KEYS);
+const SETTINGS_TAB_ALIASES: Record<string, SettingsTabKey> = {
+  teleconsult: 'teleconsultation',
+};
+
+export function normalizeSettingsTabKey(value: unknown): SettingsTabKey | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (VALID_SETTINGS_TAB_SET.has(trimmed)) {
+    return trimmed as SettingsTabKey;
+  }
+  return SETTINGS_TAB_ALIASES[trimmed.toLowerCase()] ?? null;
+}
 
 export function isValidSettingsTabKey(value: unknown): value is SettingsTabKey {
   return typeof value === 'string' && VALID_SETTINGS_TAB_SET.has(value.trim());
@@ -485,10 +533,7 @@ export function resolveSettingsRouteIntent(params?: SettingsRouteParams | null):
   if (shouldOpenAddStaff) {
     return { targetTab: 'staff', shouldOpenAddStaff: true };
   }
-  const candidate = typeof params.tab === 'string' ? params.tab.trim() : '';
-  const targetTab: SettingsTabKey | null = isValidSettingsTabKey(candidate)
-    ? candidate
-    : null;
+  const targetTab: SettingsTabKey | null = normalizeSettingsTabKey(params.tab);
   return { targetTab, shouldOpenAddStaff: false };
 }
 
@@ -509,8 +554,7 @@ export function readInitialSettingsTabFromSearch(search?: string | null): Settin
   if (!search) return null;
   try {
     const params = new URLSearchParams(search);
-    const candidate = params.get('tab');
-    return isValidSettingsTabKey(candidate) ? candidate : null;
+    return normalizeSettingsTabKey(params.get('tab'));
   } catch {
     return null;
   }

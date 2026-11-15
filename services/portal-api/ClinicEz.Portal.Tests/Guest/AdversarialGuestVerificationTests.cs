@@ -292,4 +292,50 @@ public class AdversarialGuestVerificationTests : IDisposable
         Assert.DoesNotContain(jwt.Claims, c => c.Type == "birthdate");
         Assert.DoesNotContain(jwt.Claims, c => c.Type == "patient_id");
     }
+
+    [Fact]
+    public async Task RegisterPreHashedInvite_WhenRotatingTokenForSameAppointment_EvictsSupersededTokenHash()
+    {
+        var aptId = Guid.NewGuid();
+        var callId = Guid.NewGuid();
+        var rawDob = "2001-05-03";
+        var dobHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{aptId:N}:{rawDob}"))).ToLowerInvariant();
+
+        var oldToken = "aaaa1111bbbb2222cccc3333dddd4444";
+        var oldOtp = "111222";
+        var oldTokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(oldToken))).ToLowerInvariant();
+        var oldOtpHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{aptId:N}:{oldOtp}"))).ToLowerInvariant();
+
+        GuestVerificationService.RegisterPreHashedInvite(
+            inviteId: aptId,
+            tenantId: "tenant-adv",
+            facilityId: "fac-adv",
+            callId: callId,
+            inviteTokenHash: oldTokenHash,
+            expectedDobHash: dobHash,
+            otpHash: oldOtpHash,
+            expiresAtUtc: DateTime.UtcNow.AddHours(1));
+
+        var newToken = "eeee5555ffff6666aaaa7777bbbb8888";
+        var newOtp = "654321";
+        var newTokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(newToken))).ToLowerInvariant();
+        var newOtpHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{aptId:N}:{newOtp}"))).ToLowerInvariant();
+
+        GuestVerificationService.RegisterPreHashedInvite(
+            inviteId: aptId,
+            tenantId: "tenant-adv",
+            facilityId: "fac-adv",
+            callId: callId,
+            inviteTokenHash: newTokenHash,
+            expectedDobHash: dobHash,
+            otpHash: newOtpHash,
+            expiresAtUtc: DateTime.UtcNow.AddHours(1));
+
+        var oldResult = await _verificationService.VerifyGuestAsync(oldToken, rawDob, oldOtp);
+        Assert.False(oldResult.Success);
+        Assert.Equal("GUEST_INVITE_NOT_FOUND", oldResult.ErrorCode);
+
+        var newResult = await _verificationService.VerifyGuestAsync(newToken, rawDob, newOtp);
+        Assert.True(newResult.Success);
+    }
 }
