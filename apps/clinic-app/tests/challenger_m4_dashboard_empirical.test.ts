@@ -602,5 +602,16 @@ describe('Milestone 4 Challenger Empirical Suite — Dashboard.screen.tsx', () =
         expect(regex.test(dashboardContent)).toBe(false);
       }
     });
+
+    test('5.6 Queue card header, badges, and action groups wrap and constrain width for mobile viewports', () => {
+      expect(dashboardContent).toContain('styles.queueIdentityRow');
+      expect(dashboardContent).toMatch(/queueHeader:\s*\{[^}]*flexWrap:\s*'wrap'/s);
+      expect(dashboardContent).toMatch(/queueIdentityRow:\s*\{[^}]*minWidth:\s*200/s);
+      expect(dashboardContent).toMatch(/queueTitle:\s*\{[^}]*minWidth:\s*0/s);
+      expect(dashboardContent).toMatch(/badgeRow:\s*\{[^}]*flexWrap:\s*'wrap'[^}]*maxWidth:\s*'100%'/s);
+      expect(dashboardContent).toMatch(/primaryActionGroup:\s*\{[^}]*maxWidth:\s*'100%'[^}]*flexShrink:\s*1/s);
+      expect(dashboardContent).toMatch(/trailingActionGroup:\s*\{[^}]*maxWidth:\s*'100%'[^}]*flexShrink:\s*1/s);
+      expect(dashboardContent).toMatch(/actionCluster:\s*\{[^}]*maxWidth:\s*'100%'[^}]*flexShrink:\s*1/s);
+    });
   });
 });

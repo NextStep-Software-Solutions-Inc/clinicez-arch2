@@ -884,8 +884,10 @@ const styles = StyleSheet.create({
   },
   badgeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: theme.spacing.xs,
+    maxWidth: '100%',
   },
   ticketBody: {
     gap: theme.spacing.sm,

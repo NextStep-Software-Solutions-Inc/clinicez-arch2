@@ -1674,17 +1674,19 @@ export default function DashboardScreen({
               <Card key={item.id}>
                 <CardContent style={styles.queueItem}>
                   <View style={styles.queueHeader}>
-                    <Badge label={item.queueNumber} variant={priorityVariant(item.priority)} />
-                    <View style={styles.queueTitle}>
-                      <ThemedText variant="bodyBold">{item.patientName}</ThemedText>
-                      <ThemedText
-                        variant="small"
-                        color={isOverdueWait ? theme.colors.emergencyText : theme.colors.textSecondary}
-                      >
-                        {item.doctorName ? item.doctorName : 'Unassigned'}
-                        {item.priority !== 'Routine' ? ` • ${item.priority}` : ''}
-                        {waited !== null ? ` • waiting ${waited} min` : ''}
-                      </ThemedText>
+                    <View style={styles.queueIdentityRow}>
+                      <Badge label={item.queueNumber} variant={priorityVariant(item.priority)} />
+                      <View style={styles.queueTitle}>
+                        <ThemedText variant="bodyBold">{item.patientName}</ThemedText>
+                        <ThemedText
+                          variant="small"
+                          color={isOverdueWait ? theme.colors.emergencyText : theme.colors.textSecondary}
+                        >
+                          {item.doctorName ? item.doctorName : 'Unassigned'}
+                          {item.priority !== 'Routine' ? ` • ${item.priority}` : ''}
+                          {waited !== null ? ` • waiting ${waited} min` : ''}
+                        </ThemedText>
+                      </View>
                     </View>
                     <View style={styles.badgeRow}>
                       {serviceBadge.label ? (
@@ -5028,17 +5030,29 @@ const styles = StyleSheet.create({
   },
   queueHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  queueIdentityRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
+    flex: 1,
+    minWidth: 200,
   },
   queueTitle: {
     flex: 1,
+    minWidth: 0,
     gap: theme.spacing.xs,
   },
   badgeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: theme.spacing.xs,
+    maxWidth: '100%',
   },
   vitalsStrip: {
     backgroundColor: theme.colors.primaryLight,
@@ -5073,6 +5087,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: theme.spacing.sm,
+    maxWidth: '100%',
+    flexShrink: 1,
+    minWidth: 0,
   },
   trailingActionGroup: {
     flexDirection: 'row',
@@ -5080,12 +5097,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     marginLeft: 'auto',
+    maxWidth: '100%',
+    flexShrink: 1,
+    minWidth: 0,
   },
   actionCluster: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: theme.spacing.xs,
+    maxWidth: '100%',
+    flexShrink: 1,
+    minWidth: 0,
   },
   emergencyCluster: {
     alignItems: 'center',
