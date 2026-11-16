@@ -206,9 +206,9 @@ describe("Milestone M3 Challenger 2: Portal Web PAYG Billing Math & Adversarial 
       expect(cardSrc).toContain("Math.max(0, Number(e.target.value))");
     });
 
-    test("EMPIRICAL: Uncapped Postpaid integer formatting displays ∞ (Uncapped)", () => {
+    test("EMPIRICAL: Uncapped Postpaid integer formatting displays Unlimited", () => {
       expect(cardSrc).toContain("billing?.estimatedAvailableMinutes === 2147483647");
-      expect(cardSrc).toContain('"∞ (Uncapped)"');
+      expect(cardSrc).toContain('"Unlimited"');
     });
 
     test("EMPIRICAL: Zero raw hex color literals in TeleconsultPaygCard.tsx", () => {

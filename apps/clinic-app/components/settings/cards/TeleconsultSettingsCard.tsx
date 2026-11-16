@@ -609,7 +609,7 @@ const styles = StyleSheet.create({
   switchTrack: {
     width: 44,
     height: 24,
-    borderRadius: 12,
+    borderRadius: theme.radii.full,
     padding: 2,
     justifyContent: 'center',
   },
@@ -626,7 +626,7 @@ const styles = StyleSheet.create({
   switchThumb: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surface,
   },
   switchThumbOn: {
