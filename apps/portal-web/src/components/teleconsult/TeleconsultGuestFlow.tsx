@@ -15,6 +15,8 @@ import { useCallSession, useAutoVideoOrientation } from "@clinicez/comms-sdk/rea
 import {
   LiveKitMediaAdapter,
   LocalPreviewMediaAdapter,
+  isBrowserPipSupported,
+  isScreenShareSupported,
   isWebRtcSupported,
   type IMediaRoomAdapter,
   type RemoteMediaParticipant,
@@ -494,15 +496,17 @@ export function TeleconsultGuestFlow({
     };
   }, [mediaAdapter, session?.callId, effectiveClinicianName]);
 
-  // Picture-in-Picture & Video Element references
+  // Picture-in-Picture, Browser Capabilities & Video Element references
+  const [isScreenShareAvailable, setIsScreenShareAvailable] = useState(false);
   const [isPipSupported, setIsPipSupported] = useState(false);
   const [isPipActive, setIsPipActive] = useState(false);
   const remoteVideoElRef = useRef<HTMLVideoElement | null>(null);
   const localVideoElRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
-    if (typeof document !== "undefined") {
-      setIsPipSupported(Boolean(document.pictureInPictureEnabled));
+    if (typeof window !== "undefined") {
+      setIsPipSupported(isBrowserPipSupported());
+      setIsScreenShareAvailable(isScreenShareSupported());
     }
   }, []);
 
@@ -529,8 +533,13 @@ export function TeleconsultGuestFlow({
         await document.exitPictureInPicture();
         setIsPipActive(false);
       } else {
-        const targetVideo = remoteVideoElRef.current || localVideoElRef.current;
-        if (targetVideo && typeof targetVideo.requestPictureInPicture === "function") {
+        const targetVideo = remoteVideoElRef.current;
+        if (
+          targetVideo &&
+          !targetVideo.disablePictureInPicture &&
+          targetVideo.readyState >= 1 &&
+          typeof targetVideo.requestPictureInPicture === "function"
+        ) {
           await targetVideo.requestPictureInPicture();
           setIsPipActive(true);
         }
@@ -548,6 +557,8 @@ export function TeleconsultGuestFlow({
     isDoctor: userRole === "Clinician",
     roomName: session?.roomName,
     mediaAdapter,
+    initialMicEnabled: isMicEnabled,
+    initialCameraEnabled: isCameraEnabled,
     initialPaymentState: {
       policy: paymentPolicy,
       status: paymentStatus,
@@ -580,9 +591,21 @@ export function TeleconsultGuestFlow({
     isScreenSharing: callSession.mediaTracks.isScreenSharing,
   });
 
+  const handleToggleScreenShare = useCallback(async () => {
+    try {
+      await callSession.mediaTracks.toggleScreenShare();
+    } catch {
+      // Cancelled screen picker or permission denial should not crash UI
+    }
+  }, [callSession.mediaTracks]);
+
   // Automatically initiate call media connection upon entering in_call stage
   useEffect(() => {
     if (stage === "in_call" && session?.guestToken) {
+      if (previewStreamRef.current) {
+        previewStreamRef.current.getTracks().forEach((t) => t.stop());
+        previewStreamRef.current = null;
+      }
       callSession.joinCall?.();
     }
   }, [stage, session?.guestToken]);
@@ -1081,9 +1104,10 @@ export function TeleconsultGuestFlow({
               isMicEnabled={callSession.mediaTracks.isMicEnabled}
               isCameraEnabled={callSession.mediaTracks.isCameraEnabled}
               isScreenSharing={callSession.mediaTracks.isScreenSharing}
+              isScreenShareSupported={isScreenShareAvailable}
               onToggleMic={callSession.mediaTracks.toggleMic}
               onToggleCamera={callSession.mediaTracks.toggleCamera}
-              onToggleScreenShare={callSession.mediaTracks.toggleScreenShare}
+              onToggleScreenShare={isScreenShareAvailable ? handleToggleScreenShare : undefined}
               isChatOpen={isChatOpen}
               unreadChatCount={unreadChatCount}
               onToggleChat={handleToggleChat}
@@ -1103,15 +1127,16 @@ export function TeleconsultGuestFlow({
               }}
               videoOrientation={videoOrientation}
               onToggleOrientation={handleToggleOrientation}
-              isPipSupported={isPipSupported}
+              isPipSupported={isPipSupported && (Boolean(remoteVideoTrack) || isPipActive)}
               isPipActive={isPipActive}
-              onTogglePip={handleTogglePip}
+              onTogglePip={isPipSupported && (Boolean(remoteVideoTrack) || isPipActive) ? handleTogglePip : undefined}
               renderIcon={renderCommsIcon}
               renderParticipantsIcon={renderParticipantsIcon}
               renderCustomVideoSurface={(type) => {
                 if (type === "remote") {
                   const isRemoteScreenShare = Boolean(
-                    (remoteVideoTrack as { source?: string } | null)?.source === "screen_share"
+                    (remoteVideoTrack as { source?: string } | null)?.source === "screen_share" ||
+                      remoteParticipants.some((participant) => participant.isScreenSharing)
                   );
                   return remoteVideoTrack ? (
                     <div className="w-full h-full relative">

@@ -36,7 +36,9 @@ export const CallStage: React.FC<CallStageProps> = ({
   onToggleMic,
   onToggleCamera,
   onToggleScreenShare,
+  isScreenShareSupported = true,
   onSwitchCamera,
+  isSwitchCameraSupported = true,
   isRecording = false,
   recordingDurationSeconds = 0,
   onStartRecording,
@@ -131,6 +133,10 @@ export const CallStage: React.FC<CallStageProps> = ({
   }, []);
 
   const isCompactStage = stageWidth < 640;
+  const canToggleScreenShare = Boolean(
+    onToggleScreenShare && (isScreenShareSupported !== false || isScreenSharing)
+  );
+  const canSwitchCamera = Boolean(onSwitchCamera && isSwitchCameraSupported !== false);
   const canOfferRecordControl = Boolean(
     !isRecording &&
       onStartRecording &&
@@ -138,9 +144,9 @@ export const CallStage: React.FC<CallStageProps> = ({
       recordingConsentStatus !== 'requested'
   );
   const hasMoreOptions = Boolean(
-    onSwitchCamera ||
+    canSwitchCamera ||
       onToggleOrientation ||
-      (!isScreenSharing && onToggleScreenShare) ||
+      (!isScreenSharing && canToggleScreenShare) ||
       onDockCall ||
       (onTogglePip && isPipSupported !== false) ||
       canOfferRecordControl
@@ -531,7 +537,8 @@ export const CallStage: React.FC<CallStageProps> = ({
           )}
 
           {/* Picture-in-Picture Local Self-Preview Canvas (top-right, clear of bottom controls) */}
-          {(isCameraEnabled || isScreenSharing) && (
+          {(isCameraEnabled || isScreenSharing) &&
+            !(isLiveWebDom && renderCustomVideoSurface && !localVideoSurface) && (
             <View
               testID="call-stage-local-pip"
               accessibilityLabel={`${selfName} self preview`}
@@ -554,8 +561,8 @@ export const CallStage: React.FC<CallStageProps> = ({
               {localVideoSurface ?? (
                 <View style={styles.pipPlaceholder}>
                   {renderIcon
-                    ? renderIcon('videoOff', { size: 20, color: resolvedColors.textMuted })
-                    : renderFallbackVideoOffGlyph(resolvedColors.textMuted)}
+                    ? renderIcon('videoOff', { size: 20, color: resolvedColors.textLight })
+                    : renderFallbackVideoOffGlyph(resolvedColors.textLight)}
                 </View>
               )}
             </View>
@@ -565,13 +572,13 @@ export const CallStage: React.FC<CallStageProps> = ({
           <View style={styles.mediaToolbarWrapper} pointerEvents="box-none">
             {isCompactStage && isMoreOpen && hasMoreOptions && (
               <View testID="popover-more-controls" style={styles.moreControlsPopover}>
-                {onToggleScreenShare && !isScreenSharing && (
+                {canToggleScreenShare && !isScreenSharing && (
                   <TouchableOpacity
                     testID="more-menu-screen-share"
                     style={styles.moreControlRow}
                     onPress={() => {
                       setIsMoreOpen(false);
-                      void onToggleScreenShare();
+                      void onToggleScreenShare?.();
                     }}
                     accessibilityRole="button"
                     accessibilityLabel="Share screen"
@@ -582,13 +589,13 @@ export const CallStage: React.FC<CallStageProps> = ({
                     <Text style={styles.moreControlRowText}>Share screen</Text>
                   </TouchableOpacity>
                 )}
-                {onSwitchCamera && (
+                {canSwitchCamera && (
                   <TouchableOpacity
                     testID="more-menu-switch-camera"
                     style={styles.moreControlRow}
                     onPress={() => {
                       setIsMoreOpen(false);
-                      void onSwitchCamera();
+                      void onSwitchCamera?.();
                     }}
                     accessibilityRole="button"
                     accessibilityLabel="Switch camera"
@@ -689,7 +696,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                 )}
               </View>
             )}
-            <View style={styles.mediaToolbar}>
+            <View style={[styles.mediaToolbar, isCompactStage && styles.mediaToolbarCompact]}>
               <OverlayTooltip
                 label={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
                 colors={resolvedColors}
@@ -748,11 +755,13 @@ export const CallStage: React.FC<CallStageProps> = ({
                 </TouchableOpacity>
               </OverlayTooltip>
 
-              {!isCompactStage && onSwitchCamera && (
+              {!isCompactStage && canSwitchCamera && (
                 <OverlayTooltip label="Switch camera" colors={resolvedColors} shadows={resolvedShadows}>
                   <TouchableOpacity
                     style={styles.controlButton}
-                    onPress={onSwitchCamera}
+                    onPress={() => {
+                      void onSwitchCamera?.();
+                    }}
                     accessibilityRole="button"
                     accessibilityLabel="Switch camera"
                   >
@@ -791,7 +800,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                 </OverlayTooltip>
               )}
 
-              {onToggleScreenShare && (!isCompactStage || isScreenSharing) && (
+              {canToggleScreenShare && (!isCompactStage || isScreenSharing) && (
                 <OverlayTooltip
                   label={isScreenSharing ? 'Stop screen share' : 'Share screen'}
                   colors={resolvedColors}
@@ -1097,14 +1106,26 @@ export const CallStage: React.FC<CallStageProps> = ({
 
         {/* In-Call Chat Drawer (Rendered conditionally) */}
         {isChatOpen && renderChatDrawer && (
-          <View style={styles.chatDrawerContainer}>
+          <View
+            testID="panel-in-call-chat"
+            style={[
+              styles.chatDrawerContainer,
+              isCompactStage && styles.drawerOverlayCompact
+            ]}
+          >
             {renderChatDrawer()}
           </View>
         )}
 
         {/* Participants Roster Drawer (Mutually exclusive with In-Call Chat) */}
         {isParticipantsOpen && !isChatOpen && (
-          <View testID="panel-participants-roster" style={styles.rosterContainer}>
+          <View
+            testID="panel-participants-roster"
+            style={[
+              styles.rosterContainer,
+              isCompactStage && styles.drawerOverlayCompact
+            ]}
+          >
             <View style={styles.rosterHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spaceScale.xs }}>
                 <Text style={styles.rosterTitle}>Participants</Text>
@@ -1618,24 +1639,14 @@ function createStyles(
   },
   mediaToolbar: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     alignItems: 'center',
     justifyContent: 'center',
-    maxWidth: '95%',
-    gap: spaceScale.xs,
-    backgroundColor: c.overlay,
-    borderWidth: sizes.borderWidth,
-    borderColor: c.borderDark,
-    paddingHorizontal: spaceScale.sm,
-    paddingVertical: spaceScale.xs,
-    borderRadius: radiusScale.full,
-    ...(isLiveWebDom
-      ? {
-          backdropFilter: 'blur(12px)' as any,
-          WebkitBackdropFilter: 'blur(12px)' as any
-        }
-      : {}),
-    ...s.lg
+    maxWidth: '100%',
+    gap: spaceScale.sm
+  },
+  mediaToolbarCompact: {
+    gap: spaceScale.xs
   },
   moreControlsPopover: {
     marginBottom: spaceScale.sm,
@@ -1673,6 +1684,12 @@ function createStyles(
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 0,
+    ...(isLiveWebDom
+      ? {
+          backdropFilter: 'blur(10px)' as any,
+          WebkitBackdropFilter: 'blur(10px)' as any
+        }
+      : {}),
     ...s.brandSubtle
   },
   controlButtonActive: {
@@ -1722,6 +1739,12 @@ function createStyles(
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 0,
+    ...(isLiveWebDom
+      ? {
+          backdropFilter: 'blur(10px)' as any,
+          WebkitBackdropFilter: 'blur(10px)' as any
+        }
+      : {}),
     ...s.brandSubtle
   },
   recStartButtonDisabled: {
@@ -1759,6 +1782,21 @@ function createStyles(
     borderLeftColor: c.borderDark,
     backgroundColor: c.surface,
     ...s.lg
+  },
+  drawerOverlayCompact: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    borderLeftWidth: 0,
+    zIndex: 40,
+    ...(isLiveWebDom
+      ? {
+          paddingBottom: 'env(safe-area-inset-bottom)' as any
+        }
+      : {})
   },
   chatUnreadBadgeInline: {
     minWidth: 18,

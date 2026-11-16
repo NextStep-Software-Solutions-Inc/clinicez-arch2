@@ -91,6 +91,24 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
   const [copiedPin, setCopiedPin] = useState(false);
   const copiedLinkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copiedPinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [roomWidth, setRoomWidth] = useState<number | null>(() =>
+    isLiveWebDom && typeof window !== 'undefined' && typeof window.innerWidth === 'number'
+      ? window.innerWidth
+      : null
+  );
+
+  useEffect(() => {
+    if (!isLiveWebDom || typeof window === 'undefined') return;
+    const handleResize = () => {
+      if (typeof window.innerWidth === 'number') {
+        setRoomWidth(window.innerWidth);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isCompactWaitingRoom = roomWidth !== null && roomWidth < 640;
 
   useEffect(() => {
     return () => {
@@ -286,10 +304,18 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
       : 65;
 
   return (
-    <View style={[styles.container, style]}>
+    <View
+      style={[styles.container, style]}
+      onLayout={(event) => {
+        const nextWidth = event?.nativeEvent?.layout?.width;
+        if (typeof nextWidth === 'number' && nextWidth > 0) {
+          setRoomWidth(nextWidth);
+        }
+      }}
+    >
       {/* Header (can be suppressed when hosted inside a workstation modal header) */}
       {!hideHeader && (
-        <View style={styles.header}>
+        <View style={[styles.header, isCompactWaitingRoom && styles.headerCompact]}>
           <Text style={styles.headerTitle}>Teleconsultation Waiting Room</Text>
           <Text style={styles.headerSubtitle}>
             {userRole === 'Patient'
@@ -315,14 +341,27 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
         <View style={styles.bodyWrapper}>
           <ScrollView
             style={styles.scrollArea}
-            contentContainerStyle={styles.bodyContent}
+            contentContainerStyle={[
+              styles.bodyContent,
+              isCompactWaitingRoom && styles.bodyContentCompact
+            ]}
           >
             {/* Left / Top Column: Live Video Staging Box */}
-            <View style={styles.previewColumn}>
+            <View
+              style={[
+                styles.previewColumn,
+                isCompactWaitingRoom && styles.previewColumnCompact
+              ]}
+            >
               <View
                 style={[
                   styles.previewBox,
-                  videoOrientation === 'landscape' ? styles.previewBoxLandscape : styles.previewBoxPortrait
+                  videoOrientation === 'landscape'
+                    ? styles.previewBoxLandscape
+                    : styles.previewBoxPortrait,
+                  isCompactWaitingRoom &&
+                    videoOrientation !== 'landscape' &&
+                    styles.previewBoxPortraitCompact
                 ]}
               >
                 {renderVideoPreview ? (
@@ -468,7 +507,12 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
             </View>
 
             {/* Right / Bottom Column: Details, Policy & Consent Cards */}
-            <View style={styles.cardsColumn}>
+            <View
+              style={[
+                styles.cardsColumn,
+                isCompactWaitingRoom && styles.cardsColumnCompact
+              ]}
+            >
               {/* Patient Invite Link & Access PIN Card */}
               {(patientLink || patientPin) && (
                 <View style={styles.patientLinkCard}>
@@ -673,7 +717,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
           </ScrollView>
 
           {/* Pinned Main Action Buttons */}
-          <View style={styles.bottomBar}>
+          <View style={[styles.bottomBar, isCompactWaitingRoom && styles.bottomBarCompact]}>
             <TouchableOpacity style={styles.cancelButton} onPress={onCancelCall} accessibilityRole="button">
               <Text style={styles.cancelButtonText}>Cancel / Leave</Text>
             </TouchableOpacity>
@@ -816,6 +860,10 @@ function createStyles(
     borderBottomColor: c.border,
     ...s.sm
   },
+  headerCompact: {
+    paddingHorizontal: spaceScale.md,
+    paddingVertical: spaceScale.sm
+  },
   headerTitle: {
     fontSize: fontSizeScale.xl,
     fontWeight: '700',
@@ -868,15 +916,28 @@ function createStyles(
     paddingBottom: spaceScale.lg,
     gap: spaceScale.lg
   },
+  bodyContentCompact: {
+    padding: spaceScale.sm,
+    paddingBottom: spaceScale.md,
+    gap: spaceScale.sm
+  },
   previewColumn: {
     flexGrow: 1,
     flexBasis: 340,
     minWidth: 280
   },
+  previewColumnCompact: {
+    minWidth: 0,
+    flexBasis: '100%'
+  },
   cardsColumn: {
     flexGrow: 1,
     flexBasis: 300,
     minWidth: 280
+  },
+  cardsColumnCompact: {
+    minWidth: 0,
+    flexBasis: '100%'
   },
   previewBox: {
     width: '100%',
@@ -891,6 +952,9 @@ function createStyles(
   },
   previewBoxPortrait: {
     aspectRatio: 3 / 4
+  },
+  previewBoxPortraitCompact: {
+    maxHeight: 280
   },
   previewBoxLandscape: {
     aspectRatio: 16 / 9
@@ -1250,6 +1314,11 @@ function createStyles(
     borderTopWidth: 1,
     borderTopColor: c.border,
     backgroundColor: c.surface
+  },
+  bottomBarCompact: {
+    gap: spaceScale.xs,
+    paddingHorizontal: spaceScale.sm,
+    paddingVertical: spaceScale.sm
   },
   cancelButton: {
     flex: 1,

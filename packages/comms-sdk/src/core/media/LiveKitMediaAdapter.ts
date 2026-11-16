@@ -33,6 +33,7 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
   private participantQualities: Map<string, 'excellent' | 'good' | 'poor'> = new Map();
   private listeners: Map<MediaAdapterEventType, Set<MediaEventListener>> = new Map();
   private endedListenersAttached: WeakSet<object> = new WeakSet();
+  private activeVideoDeviceId?: string;
   private isSupported: boolean;
 
   constructor(options?: LiveKitMediaAdapterOptions) {
@@ -94,10 +95,25 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
       this.state = 'connected';
 
       if (options.audioEnabled ?? true) {
-        await this.room.localParticipant.setMicrophoneEnabled(true);
+        try {
+          await this.room.localParticipant.setMicrophoneEnabled(true);
+        } catch (micErr) {
+          this.emit('localTrackChanged', 'audio', false);
+          this.emit('error', micErr);
+        }
+      } else {
+        this.emit('localTrackChanged', 'audio', false);
       }
+
       if (options.videoEnabled ?? true) {
-        await this.room.localParticipant.setCameraEnabled(true);
+        try {
+          await this.room.localParticipant.setCameraEnabled(true);
+        } catch (camErr) {
+          this.emit('localTrackChanged', 'video', false);
+          this.emit('error', camErr);
+        }
+      } else {
+        this.emit('localTrackChanged', 'video', false);
       }
 
       this.emit('connected', options.roomName || this.room.name);
@@ -165,6 +181,10 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
     this.endedListenersAttached.add(msTrack);
 
     const handleEnded = () => {
+      const stopPromise = this.room?.localParticipant?.setScreenShareEnabled?.(false);
+      if (stopPromise && typeof (stopPromise as Promise<unknown>).catch === 'function') {
+        void (stopPromise as Promise<unknown>).catch(() => {});
+      }
       this.emit('localTrackChanged', 'screen', false);
     };
 
@@ -176,8 +196,25 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
   }
 
   async switchCamera(deviceId?: string): Promise<void> {
-    if (this.room && deviceId) {
-      await this.room.switchActiveDevice('videoinput', deviceId);
+    if (!this.room) return;
+    let targetDeviceId = deviceId;
+    if (!targetDeviceId && typeof Room.getLocalDevices === 'function') {
+      try {
+        const devices = await Room.getLocalDevices('videoinput');
+        if (devices.length > 1) {
+          const currentIdx = this.activeVideoDeviceId
+            ? devices.findIndex((d) => d.deviceId === this.activeVideoDeviceId)
+            : 0;
+          const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % devices.length : 1;
+          targetDeviceId = devices[nextIdx]?.deviceId;
+        }
+      } catch {
+        // Video input enumeration unavailable or denied
+      }
+    }
+    if (targetDeviceId) {
+      await this.room.switchActiveDevice('videoinput', targetDeviceId);
+      this.activeVideoDeviceId = targetDeviceId;
     }
   }
 
@@ -209,7 +246,26 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
 
   getLocalScreenShareTrack(): unknown | null {
     if (!this.room?.localParticipant) return null;
-    const pubs = Array.from(this.room.localParticipant.videoTrackPublications.values());
+    const videoPubs = this.room.localParticipant.videoTrackPublications
+      ? Array.from(this.room.localParticipant.videoTrackPublications.values())
+      : [];
+    const fallbackPubs = (
+      this.room.localParticipant as unknown as {
+        trackPublications?: Map<string, { source?: string; track?: unknown; isMuted?: boolean; isEnabled?: boolean }>;
+      }
+    ).trackPublications
+      ? Array.from(
+          (
+            this.room.localParticipant as unknown as {
+              trackPublications: Map<
+                string,
+                { source?: string; track?: unknown; isMuted?: boolean; isEnabled?: boolean }
+              >;
+            }
+          ).trackPublications.values()
+        )
+      : [];
+    const pubs = [...videoPubs, ...fallbackPubs];
     const screenPub = pubs.find(
       (pub) => (pub as { source?: string }).source === 'screen_share' && this.isPublicationRenderableVideo(pub)
     );

@@ -382,6 +382,8 @@ export interface UseCallSessionOptions extends UseCallSessionCallbacks {
   isDoctor?: boolean;
   e2eeKey?: string;
   autoJoinWaitingRoom?: boolean;
+  initialMicEnabled?: boolean;
+  initialCameraEnabled?: boolean;
   initialPaymentState?: Partial<TeleconsultPaymentState>;
   mediaAdapter?: import('../core/media/IMediaRoomAdapter').IMediaRoomAdapter;
   appointmentId?: string;

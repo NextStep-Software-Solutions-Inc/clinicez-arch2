@@ -68,4 +68,24 @@ describe('Clinic Teleconsult Mobile Stage & Auto Orientation', () => {
     expect(modalSource).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(modalSource).not.toMatch(/\brgba?\s*\(/i);
   });
+
+  it('5. gates web screen sharing, closes in-call chat drawer cleanly, and wires compact (<640px) responsive styles', () => {
+    expect(modalSource).toContain('isScreenShareSupported,');
+    expect(modalSource).toContain("Platform.OS === 'web' && isScreenShareSupported()");
+    expect(modalSource).toContain('isScreenShareSupported={canShareScreen}');
+    expect(modalSource).toContain('onToggleScreenShare={canShareScreen ? handleToggleScreenShare : undefined}');
+
+    expect(modalSource).toContain('onClose={handleToggleChat}');
+    expect(modalSource).toContain('onClose={onClose}');
+    expect(modalSource).toContain('onClose={props.onClose}');
+    expect(modalSource).toContain('renderCloseIcon={() => (');
+
+    expect(modalSource).toContain('const isCompactScreen = viewportWidth > 0 && viewportWidth < 640;');
+    expect(modalSource).toContain('isCompactScreen && styles.overlayCompact');
+    expect(modalSource).toContain('isCompactScreen && styles.modalCardCompact');
+    expect(modalSource).toContain('isCompactScreen && styles.dockedBarContainerCompact');
+    expect(modalSource).toContain('isCompactScreen && styles.dockedPipFramePortraitCompact');
+    expect(modalSource).toContain('isCompactScreen && styles.dockedPipFrameLandscapeCompact');
+    expect(modalSource).toContain('const isCompactViewport = windowWidth > 0 && windowWidth < 640;');
+  });
 });

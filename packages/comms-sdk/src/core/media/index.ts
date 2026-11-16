@@ -3,3 +3,4 @@ export * from './LiveKitMediaAdapter';
 export * from './LocalPreviewMediaAdapter';
 export * from './SegmentRecorder';
 export * from './videoOrientation';
+export * from './browserCapabilities';

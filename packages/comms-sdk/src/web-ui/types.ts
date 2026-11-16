@@ -132,7 +132,9 @@ export interface WebCallStageProps {
   onToggleMic: () => void | Promise<void>;
   onToggleCamera: () => void | Promise<void>;
   onToggleScreenShare?: () => void | Promise<void>;
+  isScreenShareSupported?: boolean;
   onSwitchCamera?: () => void | Promise<void>;
+  isSwitchCameraSupported?: boolean;
   isRecording?: boolean;
   recordingDurationSeconds?: number;
   onStartRecording?: () => void | Promise<void>;

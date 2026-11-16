@@ -10,6 +10,7 @@ import type { StaticScreenProps } from '@react-navigation/native';
 import { CallStage } from '@clinicez/comms-sdk/native-ui';
 import type { CommsCallIconName } from '@clinicez/comms-sdk/native-ui';
 import { useCallSession } from '@clinicez/comms-sdk';
+import { hasMultipleVideoInputs } from '@clinicez/comms-sdk/core';
 import { useAutoVideoOrientation } from '@clinicez/comms-sdk/react';
 import Badge from '../../../components/ui/Badge';
 import ThemedText from '../../../components/ui/ThemedText';
@@ -132,6 +133,23 @@ export default function TeleconsultCallScreen({ route }: Props) {
     process.env.EXPO_PUBLIC_DEMO_TELECONSULT === 'true';
 
   const [, setIsFrontCamera] = useState(true);
+  const [canSwitchCamera, setCanSwitchCamera] = useState<boolean>(Platform.OS !== 'web');
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      setCanSwitchCamera(true);
+      return;
+    }
+    let mounted = true;
+    void hasMultipleVideoInputs().then((multi) => {
+      if (mounted) {
+        setCanSwitchCamera(multi);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const session = useCallSession(callId, {
     isDoctor: false,
@@ -280,6 +298,7 @@ export default function TeleconsultCallScreen({ route }: Props) {
           isScreenSharing={session.mediaTracks.isScreenSharing}
           onToggleMic={session.mediaTracks.toggleMic}
           onToggleCamera={session.mediaTracks.toggleCamera}
+          isSwitchCameraSupported={canSwitchCamera}
           onSwitchCamera={() => {
             session.mediaTracks.switchCamera().catch(() => {});
             setIsFrontCamera((prev) => !prev);

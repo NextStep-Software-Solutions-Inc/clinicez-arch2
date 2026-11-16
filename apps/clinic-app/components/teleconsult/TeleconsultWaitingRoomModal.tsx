@@ -32,6 +32,7 @@ import {
 import {
   LiveKitMediaAdapter,
   LocalPreviewMediaAdapter,
+  isScreenShareSupported,
   isWebRtcSupported,
   type IMediaRoomAdapter,
   type MediaAdapterEventType,
@@ -499,6 +500,7 @@ interface TeleconsultInCallChatDrawerProps {
   currentUserId: string;
   dataChannelMessages: ThreadMessage[];
   onSendDataChannelMessage: (text: string, isInternal: boolean) => Promise<void>;
+  onClose?: () => void;
 }
 
 /** Subscribes to the active tenant/brand theme for in-call chat styling. */
@@ -592,6 +594,7 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
   currentUserId,
   dataChannelMessages,
   onSendDataChannelMessage,
+  onClose,
 }) => {
   const [privacyBlur, setPrivacyBlur] = useState(false);
   const commsCtx = useContext(CommsContext) as any;
@@ -750,6 +753,10 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
       privacyBlurEnabled={privacyBlur}
       onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
       renderPrivacyIcon={(enabled) => renderPrivacyEyeIcon(enabled, activeTheme.resolvedColors)}
+      onClose={onClose}
+      renderCloseIcon={() => (
+        <Icon name="close" size={theme.sizes.iconSm} color={activeTheme.resolvedColors.textSecondary} />
+      )}
       canWriteInternalNotes={true}
       isLoading={Boolean(activeConvId && isLoading)}
       error={error?.message ?? null}
@@ -781,6 +788,10 @@ export const TeleconsultInCallChatDrawer: React.FC<TeleconsultInCallChatDrawerPr
       privacyBlurEnabled={privacyBlur}
       onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
       renderPrivacyIcon={(enabled) => renderPrivacyEyeIcon(enabled, activeTheme.resolvedColors)}
+      onClose={props.onClose}
+      renderCloseIcon={() => (
+        <Icon name="close" size={theme.sizes.iconSm} color={activeTheme.resolvedColors.textSecondary} />
+      )}
       canWriteInternalNotes={true}
       colors={activeTheme.resolvedColors}
       shadows={activeCommsShadows}
@@ -949,9 +960,36 @@ export function ActiveTeleconsultModal({
     localVideoTrack: stagingVideoTrack,
   });
   const [webStageViewportHeight, setWebStageViewportHeight] = useState<number | null>(null);
+  const [viewportWidth, setViewportWidth] = useState<number>(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.innerWidth === 'number') {
+      return window.innerWidth;
+    }
+    return (ReactNative as any).Dimensions?.get?.('window')?.width ?? 1024;
+  });
+  const isCompactScreen = viewportWidth > 0 && viewportWidth < 640;
+  const [canShareScreen, setCanShareScreen] = useState<boolean>(
+    () => Platform.OS === 'web' && isScreenShareSupported(),
+  );
   const [isDraggingDock, setIsDraggingDock] = useState<boolean>(false);
   const [isConfirmEndCallOpen, setIsConfirmEndCallOpen] = useState<boolean>(false);
   const isPipActiveRef = useRef<boolean>(isPipActive);
+
+  useEffect(() => {
+    setCanShareScreen(Platform.OS === 'web' && isScreenShareSupported());
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const syncViewportWidth = () => {
+      if (typeof window.innerWidth === 'number' && window.innerWidth > 0) {
+        setViewportWidth(window.innerWidth);
+      }
+    };
+    syncViewportWidth();
+    window.addEventListener('resize', syncViewportWidth);
+    window.addEventListener('orientationchange', syncViewportWidth);
+    return () => {
+      window.removeEventListener('resize', syncViewportWidth);
+      window.removeEventListener('orientationchange', syncViewportWidth);
+    };
+  }, []);
   const videoOrientationRef = useRef<'portrait' | 'landscape'>(videoOrientation);
   const isChatOpenRef = useRef<boolean>(isChatOpen);
   isPipActiveRef.current = isPipActive;
@@ -1856,25 +1894,37 @@ export function ActiveTeleconsultModal({
         ? (dockWrapperRef.current as HTMLElement).getBoundingClientRect()
         : null;
 
+    const isCompactViewport = windowWidth > 0 && windowWidth < 640;
+    const maxCompactDockWidth = Math.max(240, windowWidth - 24);
+    const fallbackWidth = isCompactViewport
+      ? Math.min(isPipActiveRef.current ? 280 : 300, maxCompactDockWidth)
+      : isPipActiveRef.current
+        ? 348
+        : 340;
+    const fallbackHeight = isPipActiveRef.current
+      ? videoOrientationRef.current === 'portrait'
+        ? isCompactViewport
+          ? 238
+          : 286
+        : isCompactViewport
+          ? 198
+          : 234
+      : 38;
+
     const width =
       measuredRect && measuredRect.width > 0
         ? measuredRect.width
-        : isPipActiveRef.current
-          ? 348
-          : 340;
+        : fallbackWidth;
     const height =
       measuredRect && measuredRect.height > 0
         ? measuredRect.height
-        : isPipActiveRef.current
-          ? videoOrientationRef.current === 'portrait'
-            ? 286
-            : 234
-          : 38;
+        : fallbackHeight;
 
-    const maxX = 16;
-    const maxY = 16;
-    const minX = Math.min(maxX, -(windowWidth - width - 32));
-    const minY = Math.min(maxY, -(windowHeight - height - 32));
+    const edgeMargin = isCompactViewport ? 12 : 16;
+    const maxX = edgeMargin;
+    const maxY = edgeMargin;
+    const minX = Math.min(maxX, -(windowWidth - width - edgeMargin * 2));
+    const minY = Math.min(maxY, -(windowHeight - height - edgeMargin * 2));
 
     return {
       clampedX: Math.min(maxX, Math.max(minX, rawX)),
@@ -2157,7 +2207,10 @@ export function ActiveTeleconsultModal({
         {remoteAudioElement}
         <Animated.View
           ref={dockWrapperRef}
-          style={[styles.dockedBarContainer, { transform: pan.getTranslateTransform() }]}
+          style={[
+            styles.dockedBarContainer, { transform: pan.getTranslateTransform() },
+            isCompactScreen && styles.dockedBarContainerCompact,
+          ]}
           pointerEvents="box-none"
           testID="docked-call-mini-bar-wrapper"
         >
@@ -2188,8 +2241,8 @@ export function ActiveTeleconsultModal({
                   styles.dockedPipFrame,
                   { backgroundColor: pipStageBg },
                   videoOrientation === 'portrait'
-                    ? styles.dockedPipFramePortrait
-                    : styles.dockedPipFrameLandscape,
+                    ? [styles.dockedPipFramePortrait, isCompactScreen && styles.dockedPipFramePortraitCompact]
+                    : [styles.dockedPipFrameLandscape, isCompactScreen && styles.dockedPipFrameLandscapeCompact],
                   isDraggingDock && styles.dockedGrabbing,
                   Platform.OS === 'web' && ({ touchAction: 'none', WebkitUserSelect: 'none' } as any),
                 ]}
@@ -2288,7 +2341,10 @@ export function ActiveTeleconsultModal({
             )}
 
             <View
-              style={[styles.dockedBar, isPipActive && styles.dockedBarWithPip]}
+              style={[
+                styles.dockedBar,
+                isPipActive && [styles.dockedBarWithPip, isCompactScreen && styles.dockedBarWithPipCompact],
+              ]}
               testID="docked-call-mini-bar"
               role="toolbar"
               accessibilityLabel="Docked Consultation Call Bar"
@@ -2314,7 +2370,7 @@ export function ActiveTeleconsultModal({
                   variant="captionBold"
                   color={theme.colors.text}
                   numberOfLines={1}
-                  style={styles.dockedPatientName}
+                  style={[styles.dockedPatientName, isCompactScreen && styles.dockedPatientNameCompact]}
                   testID="docked-patient-label"
                   data-testid="docked-patient-label"
                 >
@@ -2449,9 +2505,10 @@ export function ActiveTeleconsultModal({
           isMicEnabled={session.mediaTracks.isMicEnabled}
           isCameraEnabled={session.mediaTracks.isCameraEnabled}
           isScreenSharing={session.mediaTracks.isScreenSharing}
+          isScreenShareSupported={canShareScreen}
           onToggleMic={session.mediaTracks.toggleMic}
           onToggleCamera={session.mediaTracks.toggleCamera}
-          onToggleScreenShare={handleToggleScreenShare}
+          onToggleScreenShare={canShareScreen ? handleToggleScreenShare : undefined}
           isRecording={session.recordingState.isRecording}
           recordingDurationSeconds={session.recordingState.recordingDurationSeconds}
           onStartRecording={handleStartRecordingInStage}
@@ -2521,6 +2578,7 @@ export function ActiveTeleconsultModal({
               currentUserId={user?.id || 'staff-clinician'}
               dataChannelMessages={dataChannelMessages}
               onSendDataChannelMessage={handleSendDataChannelMessage}
+              onClose={handleToggleChat}
             />
           )}
         />
@@ -2540,9 +2598,13 @@ export function ActiveTeleconsultModal({
       onClose={handleCancelCall}
       testID="teleconsult-waiting-room-portal"
     >
-      <View style={styles.overlay}>
-        <View style={styles.modalCard} testID="teleconsult-waiting-room-modal" role="dialog">
-          <View style={styles.headerBar}>
+      <View style={[styles.overlay, isCompactScreen && styles.overlayCompact]}>
+        <View
+          style={[styles.modalCard, isCompactScreen && styles.modalCardCompact]}
+          testID="teleconsult-waiting-room-modal"
+          role="dialog"
+        >
+          <View style={[styles.headerBar, isCompactScreen && styles.headerBarCompact]}>
             <View style={styles.headerTitleGroup}>
               <Icon name="video" size={theme.sizes.iconMd} color={theme.colors.primary} />
               <ThemedText variant="title" color={theme.colors.text} style={styles.headerTitleText}>
@@ -2564,7 +2626,7 @@ export function ActiveTeleconsultModal({
             </View>
           </View>
 
-          <View style={styles.body}>
+          <View style={[styles.body, isCompactScreen && styles.bodyCompact]}>
             <CallWaitingRoom
               callId={callId}
               appointmentId={appointmentId}
@@ -3001,5 +3063,41 @@ const createStyles = () => StyleSheet.create({
     justifyContent: 'flex-end',
     gap: theme.spacing.sm,
     marginTop: theme.spacing.sm,
+  },
+  overlayCompact: {
+    padding: theme.spacing.xs,
+  },
+  modalCardCompact: {
+    maxWidth: '100%',
+    height: '98%',
+    maxHeight: '98%',
+    borderRadius: theme.radii.md,
+  },
+  headerBarCompact: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  bodyCompact: {
+    minHeight: 0,
+  },
+  dockedBarContainerCompact: {
+    bottom: theme.spacing.sm,
+    right: theme.spacing.sm,
+    maxWidth: '94%',
+  },
+  dockedPipFrameLandscapeCompact: {
+    minWidth: 260,
+    height: 156,
+  },
+  dockedPipFramePortraitCompact: {
+    minWidth: 240,
+    height: 196,
+  },
+  dockedBarWithPipCompact: {
+    minWidth: 240,
+    maxWidth: '100%',
+  },
+  dockedPatientNameCompact: {
+    maxWidth: 120,
   },
 });

@@ -35,6 +35,8 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   privacyBlurEnabled,
   onTogglePrivacyBlur,
   renderPrivacyIcon,
+  onClose,
+  renderCloseIcon,
   showHeader = true,
   renderEmptyState,
   renderSendIcon,
@@ -157,6 +159,46 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     }
   };
 
+  const renderInternalLockGlyph = () => {
+    if (isLiveWebDom) {
+      return React.createElement(
+        'svg',
+        {
+          width: 13,
+          height: 13,
+          viewBox: '0 0 24 24',
+          fill: 'none',
+          stroke: c.warningText,
+          strokeWidth: 2.2,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          'aria-hidden': true
+        },
+        [
+          React.createElement('rect', {
+            key: 'r',
+            width: 18,
+            height: 11,
+            x: 3,
+            y: 11,
+            rx: 2,
+            ry: 2
+          }),
+          React.createElement('path', {
+            key: 'p',
+            d: 'M7 11V7a5 5 0 0 1 10 0v4'
+          })
+        ]
+      );
+    }
+    return (
+      <View style={styles.internalLockBox}>
+        <View style={styles.internalLockShackle} />
+        <View style={styles.internalLockBody} />
+      </View>
+    );
+  };
+
   return (
     <View style={[styles.container, style]}>
       {/* Thread Header */}
@@ -189,76 +231,97 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             </Text>
           </View>
 
-          <OverlayTooltip
-            label={privacyBlurEnabled ? 'Disable privacy blur' : 'Enable privacy blur'}
-            placement="bottom"
-            colors={c}
-            shadows={s}
-          >
-            <TouchableOpacity
-              testID="btn-toggle-privacy-blur"
-              style={[styles.privacyButton, privacyBlurEnabled && styles.privacyButtonActive]}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              onPress={onTogglePrivacyBlur}
-              accessibilityRole="button"
-              accessibilityLabel={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
+          <View style={styles.headerActions}>
+            <OverlayTooltip
+              label={privacyBlurEnabled ? 'Disable privacy blur' : 'Enable privacy blur'}
+              placement="bottom"
+              colors={c}
+              shadows={s}
             >
-              {renderPrivacyIcon ? (
-                renderPrivacyIcon(privacyBlurEnabled)
-              ) : isLiveWebDom ? (
-                React.createElement(
-                  'svg',
-                  {
-                    width: 16,
-                    height: 16,
-                    viewBox: '0 0 24 24',
-                    fill: 'none',
-                    stroke: privacyBlurEnabled ? c.warningText : c.textSecondary,
-                    strokeWidth: 2,
-                    strokeLinecap: 'round',
-                    strokeLinejoin: 'round',
-                    'aria-hidden': true,
-                  },
-                  privacyBlurEnabled
-                    ? [
-                        React.createElement('path', {
-                          key: 'e1',
-                          d: 'M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49',
-                        }),
-                        React.createElement('path', {
-                          key: 'e2',
-                          d: 'M14.084 14.158a3 3 0 0 1-4.242-4.242',
-                        }),
-                        React.createElement('path', {
-                          key: 'e3',
-                          d: 'M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143',
-                        }),
-                        React.createElement('path', {
-                          key: 'e4',
-                          d: 'm2 2 20 20',
-                        }),
-                      ]
-                    : [
-                        React.createElement('path', {
-                          key: 'e1',
-                          d: 'M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0',
-                        }),
-                        React.createElement('circle', {
-                          key: 'e2',
-                          cx: 12,
-                          cy: 12,
-                          r: 3,
-                        }),
-                      ],
-                )
-              ) : (
-                <View style={[styles.privacyEyeOuter, privacyBlurEnabled && styles.privacyEyeOuterActive]}>
-                  <View style={[styles.privacyEyePupil, privacyBlurEnabled && styles.privacyEyePupilActive]} />
-                  {privacyBlurEnabled ? <View style={styles.privacyEyeSlash} /> : null}
-                </View>
-              )}
-            </TouchableOpacity>
-          </OverlayTooltip>
+              <TouchableOpacity
+                testID="btn-toggle-privacy-blur"
+                style={[styles.privacyButton, privacyBlurEnabled && styles.privacyButtonActive]}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                onPress={onTogglePrivacyBlur}
+                accessibilityRole="button"
+                accessibilityLabel={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
+              >
+                {renderPrivacyIcon ? (
+                  renderPrivacyIcon(privacyBlurEnabled)
+                ) : isLiveWebDom ? (
+                  React.createElement(
+                    'svg',
+                    {
+                      width: 16,
+                      height: 16,
+                      viewBox: '0 0 24 24',
+                      fill: 'none',
+                      stroke: privacyBlurEnabled ? c.warningText : c.textSecondary,
+                      strokeWidth: 2,
+                      strokeLinecap: 'round',
+                      strokeLinejoin: 'round',
+                      'aria-hidden': true,
+                    },
+                    privacyBlurEnabled
+                      ? [
+                          React.createElement('path', {
+                            key: 'e1',
+                            d: 'M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49',
+                          }),
+                          React.createElement('path', {
+                            key: 'e2',
+                            d: 'M14.084 14.158a3 3 0 0 1-4.242-4.242',
+                          }),
+                          React.createElement('path', {
+                            key: 'e3',
+                            d: 'M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143',
+                          }),
+                          React.createElement('path', {
+                            key: 'e4',
+                            d: 'm2 2 20 20',
+                          }),
+                        ]
+                      : [
+                          React.createElement('path', {
+                            key: 'e1',
+                            d: 'M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0',
+                          }),
+                          React.createElement('circle', {
+                            key: 'e2',
+                            cx: 12,
+                            cy: 12,
+                            r: 3,
+                          }),
+                        ],
+                  )
+                ) : (
+                  <View style={[styles.privacyEyeOuter, privacyBlurEnabled && styles.privacyEyeOuterActive]}>
+                    <View style={[styles.privacyEyePupil, privacyBlurEnabled && styles.privacyEyePupilActive]} />
+                    {privacyBlurEnabled ? <View style={styles.privacyEyeSlash} /> : null}
+                  </View>
+                )}
+              </TouchableOpacity>
+            </OverlayTooltip>
+
+            {onClose && (
+              <TouchableOpacity
+                testID="btn-close-chat-drawer"
+                style={styles.closeButton}
+                onPress={onClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close chat"
+              >
+                {renderCloseIcon ? (
+                  renderCloseIcon()
+                ) : (
+                  <View style={styles.closeGlyphBox}>
+                    <View style={[styles.closeGlyphBar, { transform: [{ rotate: '45deg' }] }]} />
+                    <View style={[styles.closeGlyphBar, { transform: [{ rotate: '-45deg' }] }]} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       )}
 
@@ -328,7 +391,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                   onTouchEnd={() => setPeekingMessageId(null)}
                 >
                   <View style={styles.internalHeader}>
-                    <Text style={styles.internalHeaderIcon}>LOCK</Text>
+                    {renderInternalLockGlyph()}
                     <Text style={styles.internalHeaderText}>
                       Private Staff Note (Care Team Only)
                     </Text>
@@ -492,9 +555,16 @@ function createStyles(
       color: c.textMuted,
       marginTop: 1
     },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spaceScale.xs
+    },
     privacyButton: {
-      width: 36,
-      height: 36,
+      width: sizes.touchTarget,
+      height: sizes.touchTarget,
+      minWidth: sizes.touchTarget,
+      minHeight: sizes.touchTarget,
       borderRadius: radiusScale.sm,
       backgroundColor: c.surfaceSubtle,
       borderColor: c.border,
@@ -502,6 +572,55 @@ function createStyles(
       justifyContent: 'center',
       alignItems: 'center',
       ...s.brandSubtle
+    },
+    closeButton: {
+      width: sizes.touchTarget,
+      height: sizes.touchTarget,
+      minWidth: sizes.touchTarget,
+      minHeight: sizes.touchTarget,
+      borderRadius: radiusScale.sm,
+      backgroundColor: c.surfaceSubtle,
+      borderColor: c.border,
+      borderWidth: 1,
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    closeGlyphBox: {
+      width: 14,
+      height: 14,
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    closeGlyphBar: {
+      position: 'absolute',
+      width: 14,
+      height: 2,
+      backgroundColor: c.textSecondary,
+      borderRadius: radiusScale.xs
+    },
+    internalLockBox: {
+      width: 12,
+      height: 13,
+      alignItems: 'center',
+      justifyContent: 'flex-end'
+    },
+    internalLockShackle: {
+      width: 7,
+      height: 5,
+      borderTopLeftRadius: radiusScale.full,
+      borderTopRightRadius: radiusScale.full,
+      borderWidth: 1.5,
+      borderBottomWidth: 0,
+      borderColor: c.warningText,
+      marginBottom: -1
+    },
+    internalLockBody: {
+      width: 10,
+      height: 7,
+      borderRadius: radiusScale.xs,
+      borderWidth: 1.5,
+      borderColor: c.warningText,
+      backgroundColor: c.transparent
     },
     privacyButtonActive: {
       backgroundColor: c.warningBg,

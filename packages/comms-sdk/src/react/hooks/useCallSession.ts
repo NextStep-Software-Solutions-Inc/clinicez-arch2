@@ -47,8 +47,12 @@ export function useCallSession(
     decidedAt: null
   });
 
-  const [isCameraEnabled, setIsCameraEnabled] = useState<boolean>(true);
-  const [isMicEnabled, setIsMicEnabled] = useState<boolean>(true);
+  const [isCameraEnabled, setIsCameraEnabled] = useState<boolean>(
+    options?.initialCameraEnabled ?? true
+  );
+  const [isMicEnabled, setIsMicEnabled] = useState<boolean>(
+    options?.initialMicEnabled ?? true
+  );
   const [isScreenSharing, setIsScreenSharing] = useState<boolean>(false);
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingDurationSeconds, setRecordingDurationSeconds] = useState<number>(0);
@@ -73,6 +77,22 @@ export function useCallSession(
   }, [isScreenSharing]);
 
   useEffect(() => {
+    if (status !== 'in_waiting_room') return;
+    if (options?.initialCameraEnabled !== undefined) {
+      isCameraEnabledRef.current = options.initialCameraEnabled;
+      setIsCameraEnabled(options.initialCameraEnabled);
+    }
+  }, [status, options?.initialCameraEnabled]);
+
+  useEffect(() => {
+    if (status !== 'in_waiting_room') return;
+    if (options?.initialMicEnabled !== undefined) {
+      isMicEnabledRef.current = options.initialMicEnabled;
+      setIsMicEnabled(options.initialMicEnabled);
+    }
+  }, [status, options?.initialMicEnabled]);
+
+  useEffect(() => {
     if (prevSessionIdRef.current === sessionId) return;
     prevSessionIdRef.current = sessionId;
     setStatus('in_waiting_room');
@@ -80,11 +100,11 @@ export function useCallSession(
     setError(null);
     setIsRecording(false);
     setRecordingDurationSeconds(0);
-    isCameraEnabledRef.current = true;
-    isMicEnabledRef.current = true;
+    isCameraEnabledRef.current = options?.initialCameraEnabled ?? true;
+    isMicEnabledRef.current = options?.initialMicEnabled ?? true;
     isScreenSharingRef.current = false;
-    setIsCameraEnabled(true);
-    setIsMicEnabled(true);
+    setIsCameraEnabled(options?.initialCameraEnabled ?? true);
+    setIsMicEnabled(options?.initialMicEnabled ?? true);
     setIsScreenSharing(false);
   }, [sessionId]);
 
@@ -93,8 +113,8 @@ export function useCallSession(
       identity: options?.participantIdentity ?? 'staff-current',
       name: options?.participantName ?? (options?.isDoctor === false ? 'Participant' : 'Dr. Clinician'),
       isDoctor: options?.isDoctor ?? true,
-      isCameraEnabled: true,
-      isMicEnabled: true,
+      isCameraEnabled: options?.initialCameraEnabled ?? true,
+      isMicEnabled: options?.initialMicEnabled ?? true,
       isScreenSharing: false,
       joinedAt: new Date(),
       isLocal: true
@@ -361,11 +381,16 @@ export function useCallSession(
     if (options?.mediaAdapter) {
       try {
         await options.mediaAdapter.setScreenShareEnabled(next);
-        isScreenSharingRef.current = next;
-        setIsScreenSharing(next);
-      } catch {
+        const active =
+          next && typeof options.mediaAdapter.getLocalScreenShareTrack === 'function'
+            ? Boolean(options.mediaAdapter.getLocalScreenShareTrack())
+            : next;
+        isScreenSharingRef.current = active;
+        setIsScreenSharing(active);
+      } catch (err) {
         isScreenSharingRef.current = false;
         setIsScreenSharing(false);
+        throw err;
       }
       return;
     }
@@ -432,17 +457,15 @@ export function useCallSession(
         token: joinRes && typeof joinRes === 'object' ? joinRes.liveKitToken ?? '' : '',
         roomName: resolvedRoomName,
         participantIdentity: resolvedIdentity,
-        audioEnabled: isMicEnabled,
-        videoEnabled: isCameraEnabled
+        audioEnabled: isMicEnabledRef.current,
+        videoEnabled: isCameraEnabledRef.current
       });
     },
     [
       options?.mediaAdapter,
       options?.roomName,
       options?.participantIdentity,
-      sessionId,
-      isMicEnabled,
-      isCameraEnabled
+      sessionId
     ]
   );
 

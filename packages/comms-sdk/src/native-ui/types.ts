@@ -91,6 +91,8 @@ export interface MessageThreadProps {
   privacyBlurEnabled: boolean;
   onTogglePrivacyBlur: () => void;
   renderPrivacyIcon?: (privacyBlurEnabled: boolean) => React.ReactNode;
+  onClose?: () => void;
+  renderCloseIcon?: () => React.ReactNode;
   showHeader?: boolean;
   renderEmptyState?: () => React.ReactNode;
   renderSendIcon?: () => React.ReactNode;
@@ -240,7 +242,9 @@ export interface CallStageProps {
   onToggleMic: () => void | Promise<void>;
   onToggleCamera: () => void | Promise<void>;
   onToggleScreenShare?: () => void | Promise<void>;
+  isScreenShareSupported?: boolean;
   onSwitchCamera?: () => void | Promise<void>;
+  isSwitchCameraSupported?: boolean;
   isRecording?: boolean;
   recordingDurationSeconds?: number;
   onStartRecording?: () => void | Promise<void>;

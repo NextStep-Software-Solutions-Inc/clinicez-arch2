@@ -68,6 +68,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
   onToggleMic,
   onToggleCamera,
   onToggleScreenShare,
+  isScreenShareSupported = true,
   isRecording = false,
   recordingDurationSeconds = 0,
   onStartRecording,
@@ -128,6 +129,12 @@ export const CallStage: React.FC<WebCallStageProps> = ({
 
   const remoteVideoSurface = renderCustomVideoSurface ? renderCustomVideoSurface('remote') : null;
   const localVideoSurface = renderCustomVideoSurface ? renderCustomVideoSurface('local') : null;
+  const canToggleScreenShare = Boolean(
+    onToggleScreenShare && (isScreenShareSupported !== false || isScreenSharing)
+  );
+  const showLocalPip =
+    (isCameraEnabled || isScreenSharing) &&
+    (!renderCustomVideoSurface || localVideoSurface !== null);
 
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedPin, setCopiedPin] = useState(false);
@@ -523,7 +530,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
           )}
 
           {/* Picture-in-Picture Local Self-Preview Canvas (top-right, clear of overlaid header & bottom controls) */}
-          {(isCameraEnabled || isScreenSharing) && (
+          {showLocalPip && (
             <div
               data-testid="call-stage-local-pip"
               className={`absolute right-3 sm:right-5 lg:right-6 z-20 ${pipTopClass} ${
@@ -545,8 +552,8 @@ export const CallStage: React.FC<WebCallStageProps> = ({
 
           {/* Floating Media Controls Toolbar */}
           <div
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 mb-[env(safe-area-inset-bottom)] z-30 flex items-center justify-center gap-1.5 sm:gap-2 bg-slate-950/65 backdrop-blur-md px-2.5 py-1.5 rounded-full border border-white/10 shadow-2xl max-w-[calc(100vw-1rem)]"
-            style={{ boxShadow: webShadows.lg }}
+            data-testid="call-stage-media-toolbar"
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 mb-[env(safe-area-inset-bottom)] z-30 flex items-center justify-center gap-2 sm:gap-2.5 max-w-[calc(100vw-1rem)]"
           >
             <OverlayTooltip label={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}>
               <button
@@ -554,7 +561,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                 onClick={onToggleMic}
                 className={`h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
                   isMicEnabled
-                    ? 'bg-white/10 text-white hover:bg-white/20'
+                    ? 'bg-white/10 text-white backdrop-blur-md border border-white/15 hover:bg-white/20'
                     : 'bg-red-600 text-white hover:bg-red-700'
                 }`}
                 style={{ boxShadow: isMicEnabled ? webShadows.brandSubtle : webShadows.dangerSm }}
@@ -578,7 +585,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                 onClick={onToggleCamera}
                 className={`h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
                   isCameraEnabled
-                    ? 'bg-white/10 text-white hover:bg-white/20'
+                    ? 'bg-white/10 text-white backdrop-blur-md border border-white/15 hover:bg-white/20'
                     : 'bg-red-600 text-white hover:bg-red-700'
                 }`}
                 style={{ boxShadow: isCameraEnabled ? webShadows.brandSubtle : webShadows.dangerSm }}
@@ -596,7 +603,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
               </button>
             </OverlayTooltip>
 
-            {onToggleScreenShare && (
+            {canToggleScreenShare && (
               <div className={!isScreenSharing ? 'hidden sm:inline-flex' : 'inline-flex'}>
                 <OverlayTooltip label={isScreenSharing ? 'Stop screen share' : 'Share screen'}>
                   <button
@@ -605,7 +612,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                     className={`h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
                       isScreenSharing
                         ? 'bg-teal-700 text-white'
-                        : 'bg-white/10 text-white hover:bg-white/20'
+                        : 'bg-white/10 text-white backdrop-blur-md border border-white/15 hover:bg-white/20'
                     }`}
                     style={
                       isScreenSharing
@@ -640,7 +647,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                     id="btn-dock-call"
                     data-testid="btn-dock-call"
                     onClick={() => void onDockCall()}
-                    className="h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full bg-white/10 text-white hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-colors shrink-0"
+                    className="h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full bg-white/10 text-white backdrop-blur-md border border-white/15 hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-colors shrink-0"
                     style={{ boxShadow: webShadows.brandSubtle }}
                     aria-label="Dock call and open chart"
                     title="Dock call and open chart"
@@ -673,7 +680,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                     data-testid="btn-toggle-pip"
                     onClick={() => void onTogglePip()}
                     className={`h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
-                      isPipActive ? 'bg-teal-700 text-white' : 'bg-white/10 text-white hover:bg-white/20'
+                      isPipActive ? 'bg-teal-700 text-white' : 'bg-white/10 text-white backdrop-blur-md border border-white/15 hover:bg-white/20'
                     }`}
                     style={
                       isPipActive
@@ -718,7 +725,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                     id="btn-toggle-orientation"
                     data-testid="btn-toggle-orientation"
                     onClick={() => void onToggleOrientation()}
-                    className="h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full bg-white/10 text-white hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-colors shrink-0"
+                    className="h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full bg-white/10 text-white backdrop-blur-md border border-white/15 hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-colors shrink-0"
                     style={{ boxShadow: webShadows.brandSubtle }}
                     aria-label="Toggle camera orientation"
                     title="Toggle camera orientation"
@@ -745,7 +752,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                   className={`relative h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
                     isChatOpen
                       ? 'bg-teal-700 text-white'
-                      : 'bg-white/10 text-white hover:bg-white/20'
+                      : 'bg-white/10 text-white backdrop-blur-md border border-white/15 hover:bg-white/20'
                   }`}
                   style={
                     isChatOpen
@@ -791,7 +798,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                   className={`relative h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
                     isParticipantsOpen
                       ? 'bg-teal-700 text-white'
-                      : 'bg-white/10 text-white hover:bg-white/20'
+                      : 'bg-white/10 text-white backdrop-blur-md border border-white/15 hover:bg-white/20'
                   }`}
                   style={
                     isParticipantsOpen
@@ -855,7 +862,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                       className={`h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full text-xs font-bold flex items-center justify-center transition-colors shrink-0 ${
                         isRecordDisabled
                           ? 'bg-white/5 text-slate-400 cursor-not-allowed opacity-50'
-                          : 'bg-white/10 hover:bg-white/20 text-white'
+                          : 'bg-white/10 text-white backdrop-blur-md border border-white/15 hover:bg-white/20'
                       }`}
                       style={{
                         boxShadow: isRecordDisabled ? webShadows.none : webShadows.brandSubtle,
@@ -881,7 +888,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                 </div>
               )}
 
-            {((!isScreenSharing && Boolean(onToggleScreenShare)) ||
+            {((!isScreenSharing && canToggleScreenShare) ||
               Boolean(onDockCall) ||
               Boolean(onTogglePip && isPipSupported !== false) ||
               Boolean(onToggleOrientation) ||
@@ -898,8 +905,8 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                   onClick={() => setIsMoreOpen((prev) => !prev)}
                   className={`h-11 w-11 min-h-[44px] min-w-[44px] p-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
                     isMoreOpen
-                      ? 'bg-white/20 text-white'
-                      : 'bg-white/10 text-white hover:bg-white/20'
+                      ? 'bg-white/20 text-white backdrop-blur-md border border-white/25'
+                      : 'bg-white/10 text-white backdrop-blur-md border border-white/15 hover:bg-white/20'
                   }`}
                   aria-label="More call controls"
                   aria-expanded={isMoreOpen}
@@ -913,13 +920,13 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                     className="absolute bottom-14 right-0 min-w-[192px] rounded-xl bg-slate-950/90 backdrop-blur-md border border-white/15 p-1.5 shadow-2xl flex flex-col gap-1 z-40"
                     style={{ boxShadow: webShadows.lg }}
                   >
-                    {onToggleScreenShare && !isScreenSharing && (
+                    {canToggleScreenShare && !isScreenSharing && (
                       <button
                         type="button"
                         data-testid="more-menu-screen-share"
                         onClick={() => {
                           setIsMoreOpen(false);
-                          void onToggleScreenShare();
+                          void onToggleScreenShare?.();
                         }}
                         className="min-h-[44px] w-full px-3 rounded-lg text-xs font-semibold text-white hover:bg-white/10 flex items-center gap-2.5 text-left"
                       >
