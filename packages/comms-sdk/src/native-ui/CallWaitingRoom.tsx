@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import {
   createShadows,
+  darkColors,
   fontSizeScale,
   isLiveWebDom,
   lightColors,
@@ -20,6 +21,10 @@ import {
 } from '@clinicez/design-tokens';
 import { CallWaitingRoomProps } from './types';
 import { OverlayTooltip } from './OverlayTooltip';
+
+function resolveOnDarkSurface(c: Record<keyof typeof lightColors, string>): string {
+  return c.textInverted === darkColors.textInverted ? lightColors.textInverted : c.textInverted;
+}
 
 export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
   callId,
@@ -70,6 +75,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
     () => ({ ...lightColors, ...(colorsProp ?? {}) }),
     [colorsProp]
   );
+  const onDarkSurface = resolveOnDarkSurface(resolvedColors);
   const resolvedShadows = useMemo(
     () => ({ ...createShadows(resolvedColors, isLiveWebDom), ...(shadowsProp ?? {}) }),
     [resolvedColors, shadowsProp]
@@ -421,7 +427,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                       {renderIcon ? (
                         renderIcon(isMicActive ? 'mic' : 'micOff', {
                           size: 18,
-                          color: isMicActive ? resolvedColors.text : resolvedColors.onPrimary
+                          color: isMicActive ? resolvedColors.text : onDarkSurface
                         })
                       ) : (
                         <Text style={[styles.mediaButtonText, !isMicActive && styles.mediaButtonTextOff]}>
@@ -445,7 +451,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                       {renderIcon ? (
                         renderIcon(isCameraActive ? 'video' : 'videoOff', {
                           size: 18,
-                          color: isCameraActive ? resolvedColors.text : resolvedColors.onPrimary
+                          color: isCameraActive ? resolvedColors.text : onDarkSurface
                         })
                       ) : (
                         <Text style={[styles.mediaButtonText, !isCameraActive && styles.mediaButtonTextOff]}>
@@ -848,6 +854,7 @@ function createStyles(
   c: Record<keyof typeof lightColors, string>,
   s: ReturnType<typeof createShadows>
 ) {
+  const onDark = resolveOnDarkSurface(c);
   return StyleSheet.create({
   container: {
     flex: 1,
@@ -1000,11 +1007,11 @@ function createStyles(
   mediaModeBadgeText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '600',
-    color: c.onPrimary
+    color: onDark
   },
   audioMeterLabel: {
     fontSize: fontSizeScale.xs,
-    color: c.onPrimary,
+    color: onDark,
     marginRight: spaceScale.xs
   },
   audioMeterBar: {
@@ -1049,7 +1056,7 @@ function createStyles(
     color: c.text
   },
   mediaButtonTextOff: {
-    color: c.onPrimary
+    color: onDark
   },
   patientLinkCard: {
     backgroundColor: c.primarySubtle,
@@ -1299,7 +1306,7 @@ function createStyles(
     width: 24,
     height: 24,
     borderRadius: radiusScale.full,
-    backgroundColor: c.onPrimary,
+    backgroundColor: onDark,
     alignSelf: 'flex-start',
     ...s.sm
   },
@@ -1361,7 +1368,7 @@ function createStyles(
   retryErrorButtonText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '700',
-    color: c.onPrimary
+    color: onDark
   },
   admitButtonDisabled: {
     opacity: 0.5,
@@ -1457,7 +1464,7 @@ function createStyles(
   },
   modalSubmitText: {
     fontSize: fontSizeScale.xs,
-    color: c.onPrimary,
+    color: onDark,
     fontWeight: '700'
   }
   });

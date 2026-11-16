@@ -30,11 +30,14 @@ import type { ThreadMessage } from '../../src/native-ui/types';
 import { createHookHarness, act } from '../react/hook-test-harness';
 
 let NativeCallStage: any;
+let NativeCallWaitingRoom: any;
 let NativeMessageThread: any;
 
 beforeAll(async () => {
   const stageMod = await import('../../src/native-ui/CallStage');
   NativeCallStage = stageMod.CallStage;
+  const waitingMod = await import('../../src/native-ui/CallWaitingRoom');
+  NativeCallWaitingRoom = waitingMod.CallWaitingRoom;
   const threadMod = await import('../../src/native-ui/MessageThread');
   NativeMessageThread = threadMod.MessageThread;
 });
@@ -524,6 +527,195 @@ describe('Responsive CallStage, Screen-Share Reliability & Browser Capability Ga
       const textOut = getTextContent(harness.result.current);
       expect(textOut).toContain('Private Staff Note');
       expect(textOut).not.toContain('LOCK');
+
+      harness.unmount();
+    });
+  });
+
+  describe('High-contrast icon & text colors when bright brand palette sets dark onPrimary (#111827)', () => {
+    const skyBlueColors = {
+      ...lightColors,
+      primary: '#0284C8',
+      primaryDark: '#065A86',
+      primaryLight: '#DCF0FA',
+      primarySubtle: '#EEF7FC',
+      primaryBorder: '#B3DAEF',
+      onPrimary: '#111827',
+      surfaceInverse: '#0F172A',
+      textInverted: '#FFFFFF',
+    };
+
+    const collectIcons = (el: any, out: Array<{ name: string; color?: string }> = []) => {
+      if (!el) return out;
+      if (Array.isArray(el)) {
+        el.forEach((child) => collectIcons(child, out));
+        return out;
+      }
+      if (el.props?.['data-icon']) {
+        out.push({ name: el.props['data-icon'], color: el.props['data-color'] });
+      }
+      if (el.props?.children) collectIcons(el.props.children, out);
+      return out;
+    };
+
+    const collectMoreDotColors = (el: any): string[] => {
+      const moreBtn = findElement(el, (n) => n.props?.testID === 'btn-toggle-more-controls');
+      if (!moreBtn) return [];
+      const colors: string[] = [];
+      const walk = (node: any) => {
+        if (!node) return;
+        if (Array.isArray(node)) {
+          node.forEach(walk);
+          return;
+        }
+        const st = flattenStyle(node.props?.style);
+        if (st.width === 4 && st.height === 4 && st.backgroundColor) {
+          colors.push(st.backgroundColor);
+        }
+        if (node.props?.children) walk(node.props.children);
+      };
+      walk(moreBtn.props?.children);
+      return colors;
+    };
+
+    it('Native CallStage renders white icons/text on dark & emergency controls when inactive, and onPrimary (#111827) when active', async () => {
+      const renderIconSpy = (name: string, props?: { color?: string; size?: number }) =>
+        React.createElement('span', { 'data-icon': name, 'data-color': props?.color });
+      const renderParticipantsIconSpy = (props?: { color?: string; size?: number }) =>
+        React.createElement('span', { 'data-icon': 'participants', 'data-color': props?.color });
+
+      const harness = createHookHarness((props: any) =>
+        NativeCallStage({
+          ...baseStageProps,
+          colors: skyBlueColors,
+          shadows: createShadows(skyBlueColors, false),
+          isMicEnabled: true,
+          isCameraEnabled: true,
+          isScreenSharing: false,
+          isChatOpen: false,
+          isParticipantsOpen: false,
+          isPipActive: false,
+          onToggleScreenShare: () => {},
+          onToggleChat: () => {},
+          onToggleParticipants: () => {},
+          onTogglePip: () => {},
+          onToggleOrientation: () => {},
+          onDockCall: () => {},
+          renderIcon: renderIconSpy,
+          renderParticipantsIcon: renderParticipantsIconSpy,
+          ...props,
+        }),
+      );
+
+      // Compact (<640px) viewport with More menu open
+      await act(async () => {
+        harness.result.current.props.onLayout({ nativeEvent: { layout: { width: 375, height: 700 } } });
+      });
+      const moreBtn = findElement(
+        harness.result.current,
+        (el) => el.props?.testID === 'btn-toggle-more-controls',
+      );
+      expect(moreBtn).not.toBeNull();
+      expect(collectMoreDotColors(harness.result.current)).toEqual(['#FFFFFF', '#FFFFFF', '#FFFFFF']);
+
+      await act(async () => {
+        moreBtn.props.onPress();
+      });
+
+      const compactIcons = collectIcons(harness.result.current);
+      expect(compactIcons.find((i) => i.name === 'mic')?.color).toBe('#FFFFFF');
+      expect(compactIcons.find((i) => i.name === 'video')?.color).toBe('#FFFFFF');
+      expect(compactIcons.find((i) => i.name === 'chat')?.color).toBe('#FFFFFF');
+      expect(compactIcons.find((i) => i.name === 'participants')?.color).toBe('#FFFFFF');
+      expect(compactIcons.find((i) => i.name === 'phoneOff')?.color).toBe('#FFFFFF');
+
+      const badge = findElement(
+        harness.result.current,
+        (el) => el.props?.testID === 'badge-participants-count',
+      );
+      expect(badge).not.toBeNull();
+      const badgeText = findElement(badge, (el) => el.type === 'span');
+      expect(flattenStyle(badgeText.props.style).color).toBe('#FFFFFF');
+
+      const popover = findElement(
+        harness.result.current,
+        (el) => el.props?.testID === 'popover-more-controls',
+      );
+      expect(popover).not.toBeNull();
+      const popoverIcons = collectIcons(popover);
+      expect(popoverIcons.length).toBeGreaterThan(0);
+      popoverIcons.forEach((ic) => expect(ic.color).toBe('#FFFFFF'));
+      const moreShareRow = findElement(
+        popover,
+        (el) => el.props?.testID === 'more-menu-screen-share',
+      );
+      const moreShareLabel = findElement(moreShareRow, (el) => el.type === 'span' && getTextContent(el).includes('Share screen'));
+      expect(flattenStyle(moreShareLabel.props.style).color).toBe('#FFFFFF');
+
+      // Active state on desktop toolbar: active toggle buttons use #111827 on #0284C8
+      await act(async () => {
+        harness.result.current.props.onLayout({ nativeEvent: { layout: { width: 1024, height: 768 } } });
+      });
+      harness.rerender({
+        isChatOpen: true,
+        isParticipantsOpen: true,
+        isPipActive: true,
+        isScreenSharing: true,
+      });
+
+      const activeIcons = collectIcons(harness.result.current);
+      expect(activeIcons.find((i) => i.name === 'mic')?.color).toBe('#FFFFFF');
+      expect(activeIcons.find((i) => i.name === 'video')?.color).toBe('#FFFFFF');
+      expect(activeIcons.find((i) => i.name === 'rotate')?.color).toBe('#FFFFFF');
+      expect(activeIcons.find((i) => i.name === 'dock')?.color).toBe('#FFFFFF');
+      expect(activeIcons.find((i) => i.name === 'phoneOff')?.color).toBe('#FFFFFF');
+
+      expect(activeIcons.find((i) => i.name === 'screenShareOff')?.color).toBe('#111827');
+      expect(activeIcons.find((i) => i.name === 'pip')?.color).toBe('#111827');
+      expect(activeIcons.find((i) => i.name === 'chat')?.color).toBe('#111827');
+      expect(activeIcons.find((i) => i.name === 'participants')?.color).toBe('#111827');
+
+      harness.unmount();
+    });
+
+    it('Native CallWaitingRoom keeps muted media preview icons and overlay labels white (#FFFFFF)', () => {
+      const renderIconSpy = (name: string, props?: { color?: string; size?: number }) =>
+        React.createElement('span', { 'data-icon': name, 'data-color': props?.color });
+
+      const harness = createHookHarness(() =>
+        NativeCallWaitingRoom({
+          callId: 'call-wr-sky-1',
+          appointmentId: 'apt-wr-sky-1',
+          userRole: 'Clinician',
+          patientName: 'Clemente, Mark Kenneth C.',
+          clinicianName: 'Wave Ambray',
+          scheduledTime: '2026-11-16 at 12:00 PM',
+          paymentPolicy: 'Exempt',
+          paymentStatus: 'Exempt',
+          isReadyToAdmit: true,
+          recordingConsentStatus: 'None',
+          isMicEnabled: false,
+          isCameraEnabled: false,
+          onToggleMic: () => {},
+          onToggleCamera: () => {},
+          onAdmitPatient: async () => {},
+          onCancelCall: () => {},
+          renderIcon: renderIconSpy,
+          colors: skyBlueColors,
+          shadows: createShadows(skyBlueColors, false),
+        }),
+      );
+
+      const icons = collectIcons(harness.result.current);
+      expect(icons.find((i) => i.name === 'micOff')?.color).toBe('#FFFFFF');
+      expect(icons.filter((i) => i.name === 'videoOff').some((i) => i.color === '#FFFFFF')).toBe(true);
+
+      const micLabelEl = findElement(
+        harness.result.current,
+        (el) => el.type === 'span' && getTextContent(el).includes('Mic Level:'),
+      );
+      expect(micLabelEl).not.toBeNull();
+      expect(flattenStyle(micLabelEl.props.style).color).toBe('#FFFFFF');
 
       harness.unmount();
     });

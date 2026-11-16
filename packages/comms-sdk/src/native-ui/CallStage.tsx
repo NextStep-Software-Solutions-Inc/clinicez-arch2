@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import {
   createShadows,
+  darkColors,
   fontSizeScale,
   isLiveWebDom,
   lightColors,
@@ -17,6 +18,10 @@ import {
 } from '@clinicez/design-tokens';
 import { CallStageParticipant, CallStageProps } from './types';
 import { OverlayTooltip } from './OverlayTooltip';
+
+function resolveOnDarkSurface(c: Record<keyof typeof lightColors, string>): string {
+  return c.textInverted === darkColors.textInverted ? lightColors.textInverted : c.textInverted;
+}
 
 function formatDuration(totalSeconds: number = 0): string {
   const mins = Math.floor(totalSeconds / 60);
@@ -90,6 +95,7 @@ export const CallStage: React.FC<CallStageProps> = ({
     () => ({ ...lightColors, ...(colorsProp ?? {}) }),
     [colorsProp]
   );
+  const onDarkSurface = resolveOnDarkSurface(resolvedColors);
   const resolvedShadows = useMemo(
     () => ({ ...createShadows(resolvedColors, isLiveWebDom), ...(shadowsProp ?? {}) }),
     [resolvedColors, shadowsProp]
@@ -584,7 +590,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     accessibilityLabel="Share screen"
                   >
                     {renderIcon
-                      ? renderIcon('screenShare', { size: 16, color: resolvedColors.onPrimary })
+                      ? renderIcon('screenShare', { size: 16, color: onDarkSurface })
                       : null}
                     <Text style={styles.moreControlRowText}>Share screen</Text>
                   </TouchableOpacity>
@@ -601,7 +607,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     accessibilityLabel="Switch camera"
                   >
                     {renderIcon
-                      ? renderIcon('switchCamera', { size: 16, color: resolvedColors.onPrimary })
+                      ? renderIcon('switchCamera', { size: 16, color: onDarkSurface })
                       : null}
                     <Text style={styles.moreControlRowText}>Switch camera</Text>
                   </TouchableOpacity>
@@ -618,7 +624,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     accessibilityLabel="Toggle video orientation"
                   >
                     {renderIcon
-                      ? renderIcon('rotate', { size: 16, color: resolvedColors.onPrimary })
+                      ? renderIcon('rotate', { size: 16, color: onDarkSurface })
                       : null}
                     <Text style={styles.moreControlRowText}>
                       {videoOrientation === 'landscape' ? 'Portrait view' : 'Landscape view'}
@@ -637,7 +643,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     accessibilityLabel={isPipActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture'}
                   >
                     {renderIcon
-                      ? renderIcon('pip', { size: 16, color: resolvedColors.onPrimary })
+                      ? renderIcon('pip', { size: 16, color: onDarkSurface })
                       : null}
                     <Text style={styles.moreControlRowText}>
                       {isPipActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture'}
@@ -656,7 +662,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     accessibilityLabel="Dock call and open chart"
                   >
                     {renderIcon
-                      ? renderIcon('dock', { size: 16, color: resolvedColors.onPrimary })
+                      ? renderIcon('dock', { size: 16, color: onDarkSurface })
                       : null}
                     <Text style={styles.moreControlRowText}>Dock call</Text>
                   </TouchableOpacity>
@@ -681,7 +687,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     {renderIcon
                       ? renderIcon('recordDot', {
                           size: 16,
-                          color: isRecordDisabled ? resolvedColors.textMuted : resolvedColors.onPrimary
+                          color: isRecordDisabled ? resolvedColors.textMuted : onDarkSurface
                         })
                       : null}
                     <Text
@@ -711,7 +717,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                   {renderIcon ? (
                     renderIcon(isMicEnabled ? 'mic' : 'micOff', {
                       size: 18,
-                      color: resolvedColors.onPrimary
+                      color: onDarkSurface
                     })
                   ) : (
                     <Text
@@ -740,7 +746,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                   {renderIcon ? (
                     renderIcon(isCameraEnabled ? 'video' : 'videoOff', {
                       size: 18,
-                      color: resolvedColors.onPrimary
+                      color: onDarkSurface
                     })
                   ) : (
                     <Text
@@ -766,7 +772,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     accessibilityLabel="Switch camera"
                   >
                     {renderIcon ? (
-                      renderIcon('switchCamera', { size: 18, color: resolvedColors.onPrimary })
+                      renderIcon('switchCamera', { size: 18, color: onDarkSurface })
                     ) : (
                       <Text style={styles.controlButtonText}>FLIP</Text>
                     )}
@@ -792,7 +798,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     accessibilityLabel="Toggle video orientation"
                   >
                     {renderIcon ? (
-                      renderIcon('rotate', { size: 18, color: resolvedColors.onPrimary })
+                      renderIcon('rotate', { size: 18, color: onDarkSurface })
                     ) : (
                       <Text style={styles.controlButtonText}>ROTATE</Text>
                     )}
@@ -815,13 +821,13 @@ export const CallStage: React.FC<CallStageProps> = ({
                     {renderIcon ? (
                       renderIcon(isScreenSharing ? 'screenShareOff' : 'screenShare', {
                         size: 18,
-                        color: resolvedColors.onPrimary
+                        color: isScreenSharing ? resolvedColors.onPrimary : onDarkSurface
                       })
                     ) : (
                       <Text
                         style={[
                           styles.controlButtonText,
-                          isScreenSharing && styles.controlButtonTextInverted
+                          isScreenSharing && styles.controlButtonTextActive
                         ]}
                       >
                         {isScreenSharing ? 'SHARING' : 'SHARE'}
@@ -841,7 +847,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     accessibilityLabel="Dock call and open chart"
                   >
                     {renderIcon ? (
-                      renderIcon('dock', { size: 18, color: resolvedColors.onPrimary })
+                      renderIcon('dock', { size: 18, color: onDarkSurface })
                     ) : (
                       <Text style={styles.controlButtonText}>DOCK</Text>
                     )}
@@ -869,13 +875,13 @@ export const CallStage: React.FC<CallStageProps> = ({
                     {renderIcon ? (
                       renderIcon('pip', {
                         size: 18,
-                        color: resolvedColors.onPrimary
+                        color: isPipActive ? resolvedColors.onPrimary : onDarkSurface
                       })
                     ) : (
                       <Text
                         style={[
                           styles.controlButtonText,
-                          isPipActive && styles.controlButtonTextInverted
+                          isPipActive && styles.controlButtonTextActive
                         ]}
                       >
                         PIP
@@ -901,13 +907,13 @@ export const CallStage: React.FC<CallStageProps> = ({
                     {renderIcon ? (
                       renderIcon('chat', {
                         size: 18,
-                        color: resolvedColors.onPrimary
+                        color: isChatOpen ? resolvedColors.onPrimary : onDarkSurface
                       })
                     ) : (
                       <Text
                         style={[
                           styles.controlButtonText,
-                          isChatOpen && styles.controlButtonTextInverted
+                          isChatOpen && styles.controlButtonTextActive
                         ]}
                       >
                         {unreadChatCount > 0 ? `CHAT (${unreadChatCount})` : 'CHAT'}
@@ -940,13 +946,13 @@ export const CallStage: React.FC<CallStageProps> = ({
                     {renderParticipantsIcon ? (
                       renderParticipantsIcon({
                         size: 18,
-                        color: resolvedColors.onPrimary
+                        color: isParticipantsOpen ? resolvedColors.onPrimary : onDarkSurface
                       })
                     ) : (
                       <Text
                         style={[
                           styles.controlButtonText,
-                          isParticipantsOpen && styles.controlButtonTextInverted
+                          isParticipantsOpen && styles.controlButtonTextActive
                         ]}
                       >
                         USERS
@@ -990,7 +996,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                     {renderIcon ? (
                       renderIcon('recordDot', {
                         size: 18,
-                        color: isRecordDisabled ? resolvedColors.textMuted : resolvedColors.onPrimary
+                        color: isRecordDisabled ? resolvedColors.textMuted : onDarkSurface
                       })
                     ) : (
                       <Text
@@ -1014,7 +1020,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                   accessibilityRole="button"
                   accessibilityLabel="More call controls"
                 >
-                  {renderFallbackMoreGlyph(resolvedColors.onPrimary)}
+                  {renderFallbackMoreGlyph(isMoreOpen ? resolvedColors.onPrimary : onDarkSurface)}
                 </TouchableOpacity>
               )}
 
@@ -1026,7 +1032,7 @@ export const CallStage: React.FC<CallStageProps> = ({
                   accessibilityLabel="Leave or terminate call"
                 >
                   {renderIcon ? (
-                    renderIcon('phoneOff', { size: 18, color: resolvedColors.onPrimary })
+                    renderIcon('phoneOff', { size: 18, color: onDarkSurface })
                   ) : (
                     <Text style={styles.endCallButtonText}>END</Text>
                   )}
@@ -1130,7 +1136,7 @@ export const CallStage: React.FC<CallStageProps> = ({
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spaceScale.xs }}>
                 <Text style={styles.rosterTitle}>Participants</Text>
                 <View style={styles.chatUnreadBadgeInline}>
-                  <Text style={styles.chatUnreadBadgeText}>{totalParticipantsCount}</Text>
+                  <Text style={styles.chatUnreadBadgeInlineText}>{totalParticipantsCount}</Text>
                 </View>
               </View>
               {onToggleParticipants && (
@@ -1300,6 +1306,7 @@ function createStyles(
   c: Record<keyof typeof lightColors, string>,
   s: ReturnType<typeof createShadows>
 ) {
+  const onDark = resolveOnDarkSurface(c);
   return StyleSheet.create({
   container: {
     flex: 1,
@@ -1366,7 +1373,7 @@ function createStyles(
   endCallHeaderText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '700',
-    color: c.onPrimary
+    color: onDark
   },
   stageAlertsOverlay: {
     position: 'absolute',
@@ -1435,7 +1442,7 @@ function createStyles(
   stopRecButtonText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '700',
-    color: c.onPrimary
+    color: onDark
   },
   consentBanner: {
     flexDirection: 'row',
@@ -1670,7 +1677,7 @@ function createStyles(
   moreControlRowText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '600',
-    color: c.onPrimary
+    color: onDark
   },
   controlButton: {
     width: sizes.touchTarget,
@@ -1705,9 +1712,12 @@ function createStyles(
   controlButtonText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '700',
-    color: c.onPrimary
+    color: onDark
   },
   controlButtonTextInverted: {
+    color: onDark
+  },
+  controlButtonTextActive: {
     color: c.onPrimary
   },
   endCallButton: {
@@ -1725,7 +1735,7 @@ function createStyles(
   endCallButtonText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '700',
-    color: c.onPrimary
+    color: onDark
   },
   recStartButton: {
     width: sizes.touchTarget,
@@ -1754,7 +1764,7 @@ function createStyles(
   recStartButtonText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '700',
-    color: c.onPrimary
+    color: onDark
   },
   recStartButtonTextDisabled: {
     color: c.textMuted
@@ -1772,6 +1782,11 @@ function createStyles(
     paddingHorizontal: 4
   },
   chatUnreadBadgeText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: onDark
+  },
+  chatUnreadBadgeInlineText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '700',
     color: c.onPrimary
@@ -1980,7 +1995,7 @@ function createStyles(
     alignItems: 'center'
   },
   soloLeaveButtonText: {
-    color: c.onPrimary,
+    color: onDark,
     fontWeight: '700',
     fontSize: fontSizeScale.xs
   },
@@ -1988,7 +2003,7 @@ function createStyles(
     position: 'absolute',
     top: spaceScale.md,
     alignSelf: 'center',
-    backgroundColor: c.primaryDark,
+    backgroundColor: c.primary,
     borderRadius: radiusScale.full,
     paddingHorizontal: spaceScale.md,
     paddingVertical: spaceScale.xs,
@@ -2013,7 +2028,7 @@ function createStyles(
     alignItems: 'center'
   },
   screenSharingStopButtonText: {
-    color: c.onPrimary,
+    color: onDark,
     fontSize: fontSizeScale.xs,
     fontWeight: '700'
   }
