@@ -95,6 +95,9 @@ export interface ParticipantDto {
   role: string;
   joinedAtUtc: string;
   leftAtUtc?: string | null;
+  lastReadMessageId?: string | null;
+  lastReadAtUtc?: string | null;
+  isMuted?: boolean;
 }
 
 export interface ConversationDto {
@@ -122,6 +125,7 @@ export interface ConversationDto {
   lastMessageSnippet?: string | null;
   messageCount: number;
   unreadCount?: number;
+  isMuted?: boolean;
   lastSeq: number;
   createdAtUtc: string;
   createdBy: string;

@@ -52,7 +52,8 @@ public record PrescriptionSlipDto(
     DateTime? DispensedAt,
     string? DispenseNotes,
     RxPharmacyStatusDto? PharmacyStatus = null,
-    DateOnly? PatientDateOfBirth = null
+    DateOnly? PatientDateOfBirth = null,
+    Guid? DoctorId = null
 );
 
 public record PublicRxVerificationInfoDto(

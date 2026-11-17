@@ -35,6 +35,8 @@ export interface ClinicCommsContextValue {
   teleconsultSession: TeleconsultSessionParams | null;
   openTeleconsultWaitingRoom: (params: TeleconsultSessionParams) => void;
   closeTeleconsultWaitingRoom: () => void;
+  lastTeleconsultEndedAt: number;
+  notifyTeleconsultEnded: () => void;
   isCommsEnabled: boolean;
 
   // Workstation Consultation Chart Docking (Milestone 5)
@@ -55,6 +57,8 @@ const ClinicCommsContext = createContext<ClinicCommsContextValue>({
   teleconsultSession: null,
   openTeleconsultWaitingRoom: () => {},
   closeTeleconsultWaitingRoom: () => {},
+  lastTeleconsultEndedAt: 0,
+  notifyTeleconsultEnded: () => {},
   isCommsEnabled: true,
   isCallStageDocked: false,
   dockCallStage: () => {},
@@ -124,6 +128,7 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState<string | undefined>(undefined);
   const [teleconsultSession, setTeleconsultSession] = useState<TeleconsultSessionParams | null>(null);
+  const [lastTeleconsultEndedAt, setLastTeleconsultEndedAt] = useState<number>(0);
   const [isCallStageDocked, setIsCallStageDocked] = useState(false);
   const [onOpenConsultationChart, setOnOpenConsultationChart] = useState<
     ((appointmentId?: string, patientId?: string) => void) | null
@@ -164,11 +169,16 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
     writePersistedTeleconsultSession(userIdRef.current, params);
   }, []);
 
+  const notifyTeleconsultEnded = useCallback(() => {
+    setLastTeleconsultEndedAt((prev) => Math.max(Date.now(), prev + 1));
+  }, []);
+
   const closeTeleconsultWaitingRoom = useCallback(() => {
     setIsCallStageDocked(false);
     setTeleconsultSession(null);
     writePersistedTeleconsultSession(userIdRef.current, null);
-  }, []);
+    notifyTeleconsultEnded();
+  }, [notifyTeleconsultEnded]);
 
   const isAuthenticated = Boolean(user?.id && (license?.clinicId || user?.clinicId));
 
@@ -238,6 +248,8 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
       teleconsultSession,
       openTeleconsultWaitingRoom,
       closeTeleconsultWaitingRoom,
+      lastTeleconsultEndedAt,
+      notifyTeleconsultEnded,
       isCommsEnabled: commsEnabled,
       isCallStageDocked,
       dockCallStage,
@@ -254,6 +266,8 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
       teleconsultSession,
       openTeleconsultWaitingRoom,
       closeTeleconsultWaitingRoom,
+      lastTeleconsultEndedAt,
+      notifyTeleconsultEnded,
       commsEnabled,
       isCallStageDocked,
       dockCallStage,

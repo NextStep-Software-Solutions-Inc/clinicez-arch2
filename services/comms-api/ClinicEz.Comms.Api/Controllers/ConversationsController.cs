@@ -13,6 +13,7 @@ using ClinicEz.Shared.Interop.Contracts;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace ClinicEz.Comms.Api.Controllers;
 
@@ -246,7 +247,53 @@ public class ConversationsController : ControllerBase
         var result = await _mediator.Send(command, ct);
         return Ok(result);
     }
+
+    [HttpPost("{id:guid}/read")]
+    public async Task<ActionResult<MarkConversationReadResult>> MarkRead(
+        Guid id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] MarkConversationReadApiRequest? request,
+        CancellationToken ct)
+    {
+        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? string.Empty;
+        var staffName = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue("name") ?? "Staff Member";
+
+        var command = new MarkConversationReadCommand(
+            id,
+            tenantId,
+            staffId,
+            staffName,
+            request?.LastReadMessageId);
+
+        var result = await _mediator.Send(command, ct);
+        return Ok(result);
+    }
+
+    [HttpPatch("{id:guid}/mute")]
+    public async Task<ActionResult<ParticipantDto>> SetMuted(
+        Guid id,
+        [FromBody] SetConversationMuteApiRequest request,
+        CancellationToken ct)
+    {
+        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? string.Empty;
+        var staffName = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue("name") ?? "Staff Member";
+
+        var command = new SetConversationMuteCommand(
+            id,
+            tenantId,
+            staffId,
+            staffName,
+            request.IsMuted);
+
+        var result = await _mediator.Send(command, ct);
+        return Ok(result);
+    }
 }
+
+public sealed record MarkConversationReadApiRequest(Guid? LastReadMessageId = null);
+
+public sealed record SetConversationMuteApiRequest(bool IsMuted);
 
 public sealed record UpdateConversationTitleApiRequest(string? Title);
 

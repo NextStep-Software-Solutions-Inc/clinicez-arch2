@@ -459,8 +459,20 @@ const WebVideoTrackView: React.FC<WebVideoTrackViewProps> = React.memo(
   },
 );
 
+function generateClientMessageUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 function mapDtoToThreadMessage(m: {
   messageId: string;
+  clientMessageId?: string | null;
   seq: number;
   conversationId: string;
   senderType: string;
@@ -477,6 +489,7 @@ function mapDtoToThreadMessage(m: {
 }): ThreadMessage {
   return {
     id: m.messageId,
+    clientMessageId: m.clientMessageId ?? undefined,
     seq: m.seq,
     conversationId: m.conversationId,
     senderType: (m.senderType as ThreadMessage['senderType']) || 'Staff',
@@ -498,8 +511,13 @@ interface TeleconsultInCallChatDrawerProps {
   patientId?: string;
   patientName: string;
   currentUserId: string;
+  hasRemoteParticipant?: boolean;
   dataChannelMessages: ThreadMessage[];
-  onSendDataChannelMessage: (text: string, isInternal: boolean) => Promise<void>;
+  onSendDataChannelMessage: (
+    text: string,
+    isInternal: boolean,
+    clientMessageId?: string,
+  ) => Promise<void>;
   onClose?: () => void;
 }
 
@@ -538,6 +556,7 @@ async function sendMessageViaRestFallback(
   targetConvId: string,
   text: string,
   isInternal: boolean,
+  clientMessageId: string,
 ): Promise<void> {
   const baseUrl = typeof commsCtx?.baseUrl === 'string' ? commsCtx.baseUrl.trim() : '';
   if (!baseUrl) {
@@ -547,7 +566,7 @@ async function sendMessageViaRestFallback(
   const ticket =
     commsCtx?.activeTicket ??
     (typeof commsCtx?.refreshTicket === 'function' ? await commsCtx.refreshTicket() : null);
-  const token = ticket?.token ?? '';
+  const token = ticket?.ticket ?? ticket?.token ?? '';
   const res = await fetch(
     `${cleanBase}/api/v1/comms/conversations/${encodeURIComponent(targetConvId)}/messages`,
     {
@@ -557,6 +576,7 @@ async function sendMessageViaRestFallback(
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
+        clientMessageId,
         contentText: text,
         visibility: isInternal ? 'Internal' : 'Public',
         requiresAcknowledgement: false,
@@ -568,22 +588,26 @@ async function sendMessageViaRestFallback(
   }
   const dto = await res.json().catch(() => null);
   if (dto && typeof dto === 'object') {
-    commsCtx?.store?.appendMessage?.(targetConvId, {
+    const messageDto = {
       messageId: dto.messageId ?? dto.id ?? `msg-${Date.now()}`,
       seq: typeof dto.seq === 'number' ? dto.seq : Date.now(),
       conversationId: dto.conversationId ?? targetConvId,
+      clientMessageId: dto.clientMessageId ?? clientMessageId ?? null,
       senderType: dto.senderType ?? 'Staff',
       senderId: dto.senderId ?? commsCtx?.staffId ?? null,
       senderDisplayName: dto.senderDisplayName ?? commsCtx?.staffDisplayName ?? 'Clinician',
       contentText: dto.contentText ?? text,
       visibility: dto.visibility ?? (isInternal ? 'Internal' : 'Public'),
-      deliveryState: dto.deliveryState ?? 'Sent',
-      sentAtUtc: dto.sentAtUtc ?? new Date().toISOString(),
       requiresAcknowledgement: Boolean(dto.requiresAcknowledgement),
       isAcknowledged: Boolean(dto.isAcknowledged),
+      acknowledgedByAccountId: dto.acknowledgedByAccountId ?? null,
       acknowledgedByName: dto.acknowledgedByName ?? null,
       acknowledgedAtUtc: dto.acknowledgedAtUtc ?? null,
-    });
+      attachments: Array.isArray(dto.attachments) ? dto.attachments : [],
+      deliveryState: dto.deliveryState ?? 'Waiting',
+      sentAtUtc: dto.sentAtUtc ?? new Date().toISOString(),
+    };
+    commsCtx?.store?.appendMessage?.(messageDto);
   }
 }
 
@@ -592,6 +616,7 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
   patientId,
   patientName,
   currentUserId,
+  hasRemoteParticipant = false,
   dataChannelMessages,
   onSendDataChannelMessage,
   onClose,
@@ -622,10 +647,12 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
     );
     if (patientFacilityMatch) return patientFacilityMatch;
 
+    if (!callId) return undefined;
     return openConvs.find(
       (c) =>
         c.scope === 'StaffContext' &&
-        (matchesPatient(c) || (Boolean(callId) && c.contextId === callId)),
+        c.contextType === 'TeleconsultCall' &&
+        c.contextId === callId,
     );
   }, [conversations, patientId, callId]);
 
@@ -643,12 +670,12 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
 
     const createPromise = (async () => {
       try {
-        // Staff cannot create PatientFacility inquiries directly, so materialize a Care Team thread for sidebar visibility.
+        // Scope teleconsult in-call threads to the call ID so general Care Team threads stay isolated.
         const created = await createConversation({
           scope: 'StaffContext',
-          title: `Care Team: ${patientName}`,
-          contextType: patientId ? 'Patient' : 'TeleconsultCall',
-          contextId: patientId || callId || undefined,
+          title: `Teleconsult Chat: ${patientName}`,
+          contextType: 'TeleconsultCall',
+          contextId: callId || patientId || undefined,
           participants: patientId
             ? [
                 {
@@ -680,13 +707,15 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
     const base = persistedMessages.map(mapDtoToThreadMessage);
     const merged = [...base];
     for (const liveMsg of dataChannelMessages) {
-      const liveTs = new Date(liveMsg.clientSentAtUtc).getTime();
       const duplicate = base.some(
         (m) =>
           m.id === liveMsg.id ||
-          (m.senderType === liveMsg.senderType &&
-            m.contentText === liveMsg.contentText &&
-            Math.abs(new Date(m.clientSentAtUtc).getTime() - liveTs) < 5000),
+          (Boolean(m.clientMessageId) && m.clientMessageId === liveMsg.id) ||
+          (Boolean(liveMsg.clientMessageId) && m.id === liveMsg.clientMessageId) ||
+          (Boolean(m.clientMessageId) &&
+            Boolean(liveMsg.clientMessageId) &&
+            m.clientMessageId === liveMsg.clientMessageId) ||
+          m.id === `opt-${liveMsg.id}`,
       );
       if (!duplicate) {
         merged.push(liveMsg);
@@ -701,7 +730,8 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
 
   const handleSend = useCallback(
     async (text: string, isInternal: boolean) => {
-      await onSendDataChannelMessage(text, isInternal);
+      const clientMessageId = generateClientMessageUuid();
+      await onSendDataChannelMessage(text, isInternal, clientMessageId);
       const targetConvId = await ensurePatientConversationId();
       if (!targetConvId) return;
 
@@ -710,9 +740,10 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
           conversationId: targetConvId,
           contentText: text,
           visibility: isInternal ? 'Internal' : 'Public',
+          clientMessageId,
         });
       } catch {
-        await sendMessageViaRestFallback(commsCtx, targetConvId, text, isInternal);
+        await sendMessageViaRestFallback(commsCtx, targetConvId, text, isInternal, clientMessageId);
       }
 
       commsCtx?.client?.events?.emit?.('conversationUpdated', {
@@ -734,6 +765,10 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
     [activeConvId, resendMessage],
   );
 
+  const preJoinNoticeText = !hasRemoteParticipant
+    ? 'Patient has not joined the video room yet — public messages will be delivered automatically when they join.'
+    : undefined;
+
   return (
     <MessageThread
       conversationId={activeConvId || callId || 'teleconsult-chat'}
@@ -750,6 +785,7 @@ const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
             }
           : undefined
       }
+      noticeBannerText={preJoinNoticeText}
       privacyBlurEnabled={privacyBlur}
       onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
       renderPrivacyIcon={(enabled) => renderPrivacyEyeIcon(enabled, activeTheme.resolvedColors)}
@@ -783,8 +819,13 @@ export const TeleconsultInCallChatDrawer: React.FC<TeleconsultInCallChatDrawerPr
       conversationScope="In-Call Session"
       messages={props.dataChannelMessages}
       currentUserId={props.currentUserId}
-      onSendMessage={props.onSendDataChannelMessage}
+      onSendMessage={(text, isInternal) => props.onSendDataChannelMessage(text, isInternal)}
       onResendMessage={async () => {}}
+      noticeBannerText={
+        !props.hasRemoteParticipant
+          ? 'Patient has not joined the video room yet — public messages will be delivered automatically when they join.'
+          : undefined
+      }
       privacyBlurEnabled={privacyBlur}
       onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
       renderPrivacyIcon={(enabled) => renderPrivacyEyeIcon(enabled, activeTheme.resolvedColors)}
@@ -835,6 +876,7 @@ export default function TeleconsultWaitingRoomModal({
   const {
     teleconsultSession,
     closeTeleconsultWaitingRoom,
+    notifyTeleconsultEnded,
     isCallStageDocked,
     dockCallStage,
     maximizeCallStage,
@@ -850,6 +892,7 @@ export default function TeleconsultWaitingRoomModal({
       key={teleconsultSession.callId || teleconsultSession.appointmentId}
       teleconsultSession={teleconsultSession}
       closeTeleconsultWaitingRoom={closeTeleconsultWaitingRoom}
+      notifyTeleconsultEnded={notifyTeleconsultEnded}
       isCallStageDocked={isCallStageDocked}
       dockCallStage={dockCallStage}
       maximizeCallStage={maximizeCallStage}
@@ -882,6 +925,7 @@ export default function TeleconsultWaitingRoomModal({
 interface ActiveTeleconsultModalProps {
   teleconsultSession: TeleconsultSessionParams;
   closeTeleconsultWaitingRoom: () => void;
+  notifyTeleconsultEnded?: () => void;
   isCallStageDocked: boolean;
   dockCallStage: () => void;
   maximizeCallStage: () => void;
@@ -892,6 +936,7 @@ interface ActiveTeleconsultModalProps {
 export function ActiveTeleconsultModal({
   teleconsultSession,
   closeTeleconsultWaitingRoom,
+  notifyTeleconsultEnded,
   isCallStageDocked,
   dockCallStage,
   maximizeCallStage,
@@ -899,6 +944,7 @@ export function ActiveTeleconsultModal({
   onNavigateToChart,
 }: ActiveTeleconsultModalProps) {
   const { user } = useAuth();
+  const commsCtx = useContext(CommsContext);
   const activeThemeSnapshot = useSyncExternalStore(
     subscribeActiveTheme,
     getActiveThemeSnapshot,
@@ -932,6 +978,8 @@ export function ActiveTeleconsultModal({
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const dockWrapperRef = useRef<any>(null);
   const activeDragCleanupRef = useRef<(() => void) | null>(null);
+  const pendingPreJoinDataMessagesRef = useRef<string[]>([]);
+  const hasRemoteParticipantRef = useRef<boolean>(false);
 
   const seededInvite = useMemo(() => {
     if (isGuestInviteReusable(teleconsultSession.initialInvite)) {
@@ -1185,6 +1233,7 @@ export function ActiveTeleconsultModal({
     recordingSessionIdRef.current = teleconsultSession.activeRecordingSessionId ?? null;
     preferLiveKitRef.current = false;
     hasAdmittedOnServerRef.current = false;
+    pendingPreJoinDataMessagesRef.current = [];
     setVideoServerError(null);
     setIsLocalPreviewMode(false);
     return () => {
@@ -1286,6 +1335,7 @@ export function ActiveTeleconsultModal({
         if (err && err.status !== 404) {
           throw err;
         }
+        notifyTeleconsultEnded?.();
       }
     },
     onRequestRecordingConsent: async () => {
@@ -1465,7 +1515,25 @@ export function ActiveTeleconsultModal({
     remoteParticipants.length > 0 ||
     Boolean(mediaAdapter.getRemoteVideoTrack()) ||
     Boolean(mediaAdapter.getRemoteAudioTrack());
+  hasRemoteParticipantRef.current = hasRemoteParticipant;
   const networkQuality = mediaAdapter.getNetworkQuality();
+
+  useEffect(() => {
+    const unsub = mediaAdapter.on('participantJoined', () => {
+      const queued = pendingPreJoinDataMessagesRef.current.splice(0);
+      if (queued.length === 0) return;
+      void (async () => {
+        for (const payload of queued) {
+          try {
+            await mediaAdapter.sendDataMessage(payload);
+          } catch {
+            // Best-effort DataChannel replay; persisted CommsHub history remains fallback
+          }
+        }
+      })();
+    });
+    return unsub;
+  }, [mediaAdapter]);
 
   useEffect(() => {
     if (isChatOpen) {
@@ -1490,6 +1558,7 @@ export function ActiveTeleconsultModal({
         if (parsed.type === 'chat' && parsed.text) {
           const incoming: ThreadMessage = {
             id: parsed.id || `dc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            clientMessageId: parsed.id || undefined,
             seq: Date.now(),
             conversationId: callId || 'teleconsult-chat',
             senderType: parsed.senderRole === 'Clinician' ? 'Staff' : 'Patient',
@@ -1551,40 +1620,46 @@ export function ActiveTeleconsultModal({
   }, [hasRemoteParticipant, session.recordingState]);
 
   const handleSendDataChannelMessage = useCallback(
-    async (text: string, isInternal: boolean) => {
-      const id = `dc-staff-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    async (text: string, isInternal: boolean, clientMessageId?: string) => {
+      const id = clientMessageId || `dc-staff-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const sentAtUtc = new Date().toISOString();
-      const outgoing: ThreadMessage = {
-        id,
-        seq: Date.now(),
-        conversationId: callId || 'teleconsult-chat',
-        senderType: 'Staff',
-        senderId: user?.id,
-        senderDisplayName: resolvedClinicianName,
-        contentText: text,
-        visibility: isInternal ? 'Internal' : 'Public',
-        state: 'Received',
-        clientSentAtUtc: sentAtUtc,
-      };
-      setDataChannelMessages((prev) => [...prev, outgoing]);
+      if (!(isInternal && commsCtx)) {
+        const outgoing: ThreadMessage = {
+          id,
+          clientMessageId: clientMessageId ?? undefined,
+          seq: Date.now(),
+          conversationId: callId || 'teleconsult-chat',
+          senderType: 'Staff',
+          senderId: user?.id,
+          senderDisplayName: resolvedClinicianName,
+          contentText: text,
+          visibility: isInternal ? 'Internal' : 'Public',
+          state: 'Received',
+          clientSentAtUtc: sentAtUtc,
+        };
+        setDataChannelMessages((prev) => [...prev, outgoing]);
+      }
       if (!isInternal) {
-        try {
-          await mediaAdapter.sendDataMessage(
-            JSON.stringify({
-              type: 'chat',
-              id,
-              senderName: resolvedClinicianName,
-              senderRole: 'Clinician',
-              text,
-              sentAtUtc,
-            }),
-          );
-        } catch {
-          // Persisted CommsHub message remains primary fallback if DataChannel is inactive
+        const payload = JSON.stringify({
+          type: 'chat',
+          id,
+          senderName: resolvedClinicianName,
+          senderRole: 'Clinician',
+          text,
+          sentAtUtc,
+        });
+        if (!hasRemoteParticipantRef.current) {
+          pendingPreJoinDataMessagesRef.current.push(payload);
+        } else {
+          try {
+            await mediaAdapter.sendDataMessage(payload);
+          } catch {
+            // Persisted CommsHub message remains primary fallback if DataChannel is inactive
+          }
         }
       }
     },
-    [callId, mediaAdapter, resolvedClinicianName, user?.id],
+    [callId, commsCtx, mediaAdapter, resolvedClinicianName, user?.id],
   );
 
   const handleMessagePatient = useCallback(async () => {
@@ -2576,6 +2651,7 @@ export function ActiveTeleconsultModal({
               patientId={resolvedPatientId}
               patientName={resolvedPatientName}
               currentUserId={user?.id || 'staff-clinician'}
+              hasRemoteParticipant={hasRemoteParticipant}
               dataChannelMessages={dataChannelMessages}
               onSendDataChannelMessage={handleSendDataChannelMessage}
               onClose={handleToggleChat}

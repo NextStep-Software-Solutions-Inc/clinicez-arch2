@@ -46,4 +46,5 @@ public sealed record ConversationDto(
     string? TriagedByStaffName = null,
     DateTime? IdleDeadlineUtc = null,
     bool SlaBreached = false,
-    DateTime? SupervisorAlertedAtUtc = null);
+    DateTime? SupervisorAlertedAtUtc = null,
+    int UnreadCount = 0);

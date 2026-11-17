@@ -48,7 +48,7 @@ export type QueueView =
   | 'Triage'
   | 'PendingProcedure'
   | 'Completed';
-export type AppointmentStatus = 'Pending' | 'Confirmed' | 'CheckedIn' | 'InConsultation' | 'Completed' | 'Cancelled';
+export type AppointmentStatus = 'Pending' | 'Confirmed' | 'CheckedIn' | 'InConsultation' | 'Completed' | 'Cancelled' | 'NoShow';
 export type StaffRole = 'Doctor' | 'Nurse' | 'Receptionist' | 'Cashier' | 'Admin';
 export type InvoiceStatus = 'Draft' | 'Paid' | 'PartiallyPaid' | 'Voided' | 'Refunded';
 export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'CreditCard' | 'DebitCard' | 'PhilHealthKonsulta' | 'HmoInsurance';
@@ -3965,6 +3965,10 @@ export const clinicService = {
     }
     const qs = params.toString();
     return clinicApiClient.get<AppointmentItem[]>(`/appointments${qs ? `?${qs}` : ''}`);
+  },
+
+  async getAppointment(id: string) {
+    return clinicApiClient.get<AppointmentItem>(`/appointments/${id}`);
   },
 
   // Doctor EMR (SOAP Consultations)

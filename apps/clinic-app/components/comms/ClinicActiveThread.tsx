@@ -25,6 +25,7 @@ interface ThreadParticipantLike {
   role?: string | null;
   leftAtUtc?: string | null;
   leftAt?: string | null;
+  isMuted?: boolean;
 }
 
 export interface PinnedAlertItem {
@@ -44,6 +45,8 @@ export interface ClinicActiveThreadProps {
   pinnedAlerts?: PinnedAlertItem[] | null;
   onDeleteConversation?: (conversationId: string) => void;
   onCloseAndArchive?: (conversationId: string) => void;
+  isMuted?: boolean;
+  onToggleMute?: (nextMuted: boolean) => Promise<void> | void;
 }
 
 const SPEED_RESPONSE_PILLS = [
@@ -100,6 +103,8 @@ export default function ClinicActiveThread({
   pinnedAlerts,
   onDeleteConversation,
   onCloseAndArchive,
+  isMuted: isMutedProp,
+  onToggleMute,
 }: ClinicActiveThreadProps) {
   const themeSnapshot = useSyncExternalStore(
     subscribeActiveTheme,
@@ -186,7 +191,27 @@ export default function ClinicActiveThread({
       : rawTitle.trim()
   );
   const [privacyBlur, setPrivacyBlur] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const isArchived = conversation?.status === 'Closed';
+  const resolvedParticipantMuted = useMemo(() => {
+    const participants = conversation?.participants as ThreadParticipantLike[] | undefined;
+    const self = participants?.find(
+      (p) => (p.participantId || p.userId || p.id) === effectiveUserId,
+    );
+    if (typeof self?.isMuted === 'boolean') return self.isMuted;
+    const convMuted = (conversation as { isMuted?: boolean } | null)?.isMuted;
+    return typeof convMuted === 'boolean' ? convMuted : undefined;
+  }, [conversation, effectiveUserId]);
+  const [isMuted, setIsMuted] = useState<boolean>(
+    () => isMutedProp ?? resolvedParticipantMuted ?? false,
+  );
+
+  useEffect(() => {
+    if (typeof isMutedProp === 'boolean') {
+      setIsMuted(isMutedProp);
+    } else if (typeof resolvedParticipantMuted === 'boolean') {
+      setIsMuted(resolvedParticipantMuted);
+    }
+  }, [isMutedProp, resolvedParticipantMuted]);
 
   // Search State
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -407,7 +432,14 @@ export default function ClinicActiveThread({
   // Action Menu: View Patient Chart
   const handleViewPatientChart = () => {
     setIsActionMenuOpen(false);
-    const patientId = conversation?.contextId || (conversation?.scope === 'PatientFacility' ? conversation.id : undefined);
+    const isPatientScoped =
+      conversation?.scope === 'PatientFacility' ||
+      (conversation?.scope === 'StaffContext' && conversation?.contextType !== 'Department');
+    const patientId = isPatientScoped
+      ? conversation?.patientId ||
+        (conversation?.contextType !== 'TeleconsultCall' ? conversation?.contextId : undefined) ||
+        (conversation?.scope === 'PatientFacility' ? conversation.id : undefined)
+      : undefined;
     if (patientId) {
       if (onOpenPatientChart) {
         onOpenPatientChart(patientId);
@@ -415,7 +447,7 @@ export default function ClinicActiveThread({
         notify.info(`Viewing patient chart: ${patientId}`);
       }
     } else {
-      notify.info('This care team conversation is not linked to an individual patient record.');
+      notify.info('This conversation is not linked to an individual patient record.');
     }
   };
 
@@ -625,24 +657,26 @@ export default function ClinicActiveThread({
       )}
 
       {/* Quick 1-Tap Clinical Response Speed Pills */}
-      <View style={styles.speedPillsContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.speedPillsScroll}>
-          {SPEED_RESPONSE_PILLS.map((pill) => (
-            <Pressable
-              key={pill}
-              onPress={() => handleSendSpeedReply(pill)}
-              style={styles.speedPill}
-              accessibilityRole="button"
-              accessibilityLabel={`Quick clinical response ${pill}`}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                {pill}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
+      {!isArchived && (
+        <View style={styles.speedPillsContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.speedPillsScroll}>
+            {SPEED_RESPONSE_PILLS.map((pill) => (
+              <Pressable
+                key={pill}
+                onPress={() => handleSendSpeedReply(pill)}
+                style={styles.speedPill}
+                accessibilityRole="button"
+                accessibilityLabel={`Quick clinical response ${pill}`}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              >
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                  {pill}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Core Message Thread */}
       <View style={styles.threadBody}>
@@ -657,6 +691,7 @@ export default function ClinicActiveThread({
           onAcknowledgeMessage={async (msgId: string) => {
             await acknowledgeMessage(msgId);
           }}
+          isArchived={isArchived}
           privacyBlurEnabled={privacyBlur}
           onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
           showHeader={false}
@@ -786,10 +821,17 @@ export default function ClinicActiveThread({
 
           {/* Action 5: Mute Channel */}
           <Pressable
-            onPress={() => {
-              setIsMuted((prev) => !prev);
-              notify.info(!isMuted ? 'Channel muted.' : 'Channel alerts unmuted.');
+            onPress={async () => {
+              const nextMuted = !isMuted;
+              setIsMuted(nextMuted);
               setIsActionMenuOpen(false);
+              try {
+                await onToggleMute?.(nextMuted);
+                notify.info(nextMuted ? 'Channel muted.' : 'Channel alerts unmuted.');
+              } catch (err) {
+                setIsMuted(!nextMuted);
+                notify.error(err instanceof Error ? err.message : 'Failed to update mute setting.');
+              }
             }}
             style={styles.actionMenuItem}
             accessibilityRole="button"
@@ -802,17 +844,19 @@ export default function ClinicActiveThread({
           </Pressable>
 
           {/* Action 6: Close & Archive */}
-          <Pressable
-            onPress={handleCloseAndArchive}
-            style={styles.actionMenuItem}
-            accessibilityRole="button"
-            accessibilityLabel="Close and archive conversation"
-          >
-            <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.warningText} />
-            <ThemedText variant="body" color={theme.colors.warningText}>
-              Close & Archive
-            </ThemedText>
-          </Pressable>
+          {!isArchived && (
+            <Pressable
+              onPress={handleCloseAndArchive}
+              style={styles.actionMenuItem}
+              accessibilityRole="button"
+              accessibilityLabel="Close and archive conversation"
+            >
+              <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+              <ThemedText variant="body" color={theme.colors.warningText}>
+                Close & Archive
+              </ThemedText>
+            </Pressable>
+          )}
 
           {/* Action 7: Delete Conversation */}
           <Pressable

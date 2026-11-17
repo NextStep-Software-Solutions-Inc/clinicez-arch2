@@ -1,0 +1,804 @@
+// token-guard:ignore-file
+import { describe, expect, test, mock, beforeEach, afterEach } from 'bun:test';
+import * as ReactNamespace from 'react';
+import React from 'react';
+import * as ReactJsxRuntime from 'react/jsx-runtime';
+import * as ReactJsxDevRuntime from 'react/jsx-dev-runtime';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+(globalThis as any).__DEV__ = true;
+
+mock.module('react', () => ({ ...ReactNamespace, default: React }));
+mock.module('react/jsx-runtime', () => ReactJsxRuntime);
+mock.module('react/jsx-dev-runtime', () => ReactJsxDevRuntime);
+
+const { CommsEventEmitter } = await import('../../../packages/comms-sdk/src/core/events/CommsEventEmitter');
+
+function createClinicHookHarness<Result>(hookFn: () => Result) {
+  const stateSlots: any[] = [];
+  const effectSlots: Array<{ fn: () => any; cleanup?: any; deps: any[]; hasChanged: boolean }> = [];
+  const refSlots: Array<{ current: any }> = [];
+  const memoSlots: Array<{ value: any; deps: any[] }> = [];
+  let slotIndex = 0;
+  let effectIndex = 0;
+  let refIndex = 0;
+  let memoIndex = 0;
+  let result!: Result;
+  let isRendering = false;
+  let hasPendingRender = false;
+
+  const mockHooks: any = {
+    useState: (initial: any) => {
+      const idx = slotIndex++;
+      if (stateSlots.length <= idx) {
+        stateSlots.push(typeof initial === 'function' ? initial() : initial);
+      }
+      const setState = (newVal: any) => {
+        const nextVal = typeof newVal === 'function' ? newVal(stateSlots[idx]) : newVal;
+        if (stateSlots[idx] !== nextVal) {
+          stateSlots[idx] = nextVal;
+          scheduleRender();
+        }
+      };
+      return [stateSlots[idx], setState];
+    },
+    useRef: (initial: any) => {
+      const idx = refIndex++;
+      if (refSlots.length <= idx) refSlots.push({ current: initial });
+      return refSlots[idx];
+    },
+    useCallback: (fn: any, deps: any[]) => mockHooks.useMemo(() => fn, deps),
+    useMemo: (fn: any, deps: any[]) => {
+      const idx = memoIndex++;
+      const prev = memoSlots[idx];
+      const changed = !prev || !deps || deps.some((d, i) => d !== prev.deps[i]);
+      if (changed) {
+        const value = fn();
+        memoSlots[idx] = { value, deps };
+        return value;
+      }
+      return prev.value;
+    },
+    useEffect: (fn: any, deps: any[]) => {
+      const idx = effectIndex++;
+      const prev = effectSlots[idx];
+      const hasChanged = !prev || !deps || deps.some((d, i) => d !== prev?.deps[i]);
+      effectSlots[idx] = { fn, deps, hasChanged, cleanup: prev?.cleanup };
+    },
+    useContext: (context: React.Context<any>) => (context as any)._currentValue,
+    useSyncExternalStore: (_subscribe: any, getSnapshot: () => any) => getSnapshot(),
+  };
+
+  function scheduleRender() {
+    if (isRendering) {
+      hasPendingRender = true;
+      return;
+    }
+    render();
+  }
+
+  function render() {
+    if (isRendering) return;
+    isRendering = true;
+    try {
+      do {
+        hasPendingRender = false;
+        slotIndex = 0;
+        effectIndex = 0;
+        refIndex = 0;
+        memoIndex = 0;
+        const internals = (React as any).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+        const prevDispatcher = internals ? internals.H : null;
+        if (internals) internals.H = mockHooks;
+        try {
+          result = hookFn();
+        } finally {
+          if (internals) internals.H = prevDispatcher;
+        }
+        for (const eff of effectSlots) {
+          if (eff.hasChanged) {
+            eff.hasChanged = false;
+            if (typeof eff.cleanup === 'function') eff.cleanup();
+            eff.cleanup = eff.fn();
+          }
+        }
+      } while (hasPendingRender);
+    } finally {
+      isRendering = false;
+    }
+  }
+
+  render();
+
+  return {
+    get result() {
+      return { current: result };
+    },
+    rerender: () => render(),
+    unmount: () => {
+      for (const eff of effectSlots) {
+        if (typeof eff.cleanup === 'function') eff.cleanup();
+      }
+    },
+  };
+}
+
+async function act(callback: () => Promise<void> | void): Promise<void> {
+  await callback();
+}
+
+const createMockComponent = (name: string) => {
+  const Comp = ({
+    children,
+    accessibilityLabel,
+    accessibilityRole,
+    accessibilityState,
+    testID,
+    visible,
+    style,
+    onPress,
+    title,
+    label,
+    ...rest
+  }: any) => {
+    if (name === 'Modal' && visible === false) return null;
+    const resolvedStyle =
+      typeof style === 'function' ? style({ pressed: false, hovered: false }) : style;
+    return React.createElement(
+      'div',
+      {
+        'data-component': name,
+        ...(testID ? { 'data-testid': testID } : {}),
+        ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}),
+        ...(accessibilityRole ? { role: accessibilityRole } : {}),
+        ...(accessibilityState ? { 'data-accessibility-state': JSON.stringify(accessibilityState) } : {}),
+        ...(title ? { 'data-title': title } : {}),
+        ...(label ? { 'data-label': label } : {}),
+        ...(onPress ? { 'data-pressable': 'true', onClick: onPress } : {}),
+        'data-style': resolvedStyle ? JSON.stringify(resolvedStyle) : undefined,
+        ...rest,
+      },
+      title || label,
+      children,
+    );
+  };
+  Comp.displayName = name;
+  return Comp;
+};
+
+mock.module('react-native', () => ({
+  StyleSheet: {
+    create: (s: any) => s,
+    flatten: (s: any) => (Array.isArray(s) ? Object.assign({}, ...s.flat(Infinity).filter(Boolean)) : s || {}),
+    absoluteFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+  },
+  View: createMockComponent('View'),
+  Pressable: createMockComponent('Pressable'),
+  ScrollView: createMockComponent('ScrollView'),
+  TextInput: createMockComponent('TextInput'),
+  Text: createMockComponent('Text'),
+  ActivityIndicator: createMockComponent('ActivityIndicator'),
+  Modal: createMockComponent('Modal'),
+  KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
+  FlatList: createMockComponent('FlatList'),
+  SectionList: createMockComponent('SectionList'),
+  Switch: createMockComponent('Switch'),
+  TouchableOpacity: createMockComponent('TouchableOpacity'),
+  TouchableHighlight: createMockComponent('TouchableHighlight'),
+  Image: createMockComponent('Image'),
+  RefreshControl: createMockComponent('RefreshControl'),
+  Dimensions: { get: () => ({ width: 1280, height: 800 }), addEventListener: () => ({ remove: () => {} }) },
+  useWindowDimensions: () => ({ width: 1280, height: 800 }),
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
+  Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
+  Touchable: { Mixin: {} },
+  TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
+  NativeModules: {},
+  Animated: {
+    Value: class {
+      constructor(public val: any) {}
+      setValue(val: any) { this.val = val; }
+      interpolate() { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb?.() }),
+    parallel: (anims: any[]) => ({
+      start: (cb?: any) => {
+        anims.forEach((a) => a?.start?.());
+        cb?.();
+      },
+    }),
+    View: createMockComponent('Animated.View'),
+    Text: createMockComponent('Animated.Text'),
+  },
+  Alert: { alert: () => {} },
+  PanResponder: { create: () => ({ panHandlers: {} }) },
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
+}));
+
+mock.module('react-native-svg', () => ({
+  Svg: createMockComponent('Svg'),
+  Path: createMockComponent('Path'),
+  Circle: createMockComponent('Circle'),
+  Rect: createMockComponent('Rect'),
+  Line: createMockComponent('Line'),
+  default: createMockComponent('Svg'),
+}));
+
+mock.module('@expo-google-fonts/geist', () => ({ useFonts: () => [true] }));
+mock.module('@expo-google-fonts/geist-mono', () => ({ useFonts: () => [true] }));
+mock.module('../constants/fonts', () => ({ applyFontFamily: (s: any) => s, fontAssets: {} }));
+mock.module('../../constants/fonts', () => ({ applyFontFamily: (s: any) => s, fontAssets: {} }));
+mock.module('../context/UiDensityContext', () => ({
+  useUiDensity: () => ({ multiplier: 1, headerHeight: 64, sidebarWidth: 240 }),
+}));
+mock.module('../../context/UiDensityContext', () => ({
+  useUiDensity: () => ({ multiplier: 1, headerHeight: 64, sidebarWidth: 240 }),
+}));
+mock.module('@react-navigation/native', () => ({
+  useNavigation: () => ({ navigate: () => {}, goBack: () => {} }),
+  useRoute: () => ({ params: {} }),
+}));
+mock.module('../utils/useBreakpoint', () => ({
+  useBreakpoint: () => ({ isWorkstation: true, isMobile: false, width: 1280 }),
+}));
+mock.module('../../utils/useBreakpoint', () => ({
+  useBreakpoint: () => ({ isWorkstation: true, isMobile: false, width: 1280 }),
+}));
+
+const staffList = [
+  { id: 'staff-curr', firstName: 'Juan', lastName: 'Luna', title: 'Dr.', role: 'Doctor' },
+  { id: 'staff-2', firstName: 'Maria', lastName: 'Santos', title: 'Nurse', role: 'Nurse' },
+];
+mock.module('../context/StaffContext', () => ({
+  useStaff: () => ({ current: staffList[0], staff: staffList }),
+  formatStaffName: (s: any) => s?.name || [s?.title, s?.firstName, s?.lastName].filter(Boolean).join(' ').trim(),
+  staffInitials: (s: any) => `${s?.firstName?.[0] ?? ''}${s?.lastName?.[0] ?? ''}`.toUpperCase() || '?',
+}));
+mock.module('../../context/StaffContext', () => ({
+  useStaff: () => ({ current: staffList[0], staff: staffList }),
+  formatStaffName: (s: any) => s?.name || [s?.title, s?.firstName, s?.lastName].filter(Boolean).join(' ').trim(),
+  staffInitials: (s: any) => `${s?.firstName?.[0] ?? ''}${s?.lastName?.[0] ?? ''}`.toUpperCase() || '?',
+}));
+mock.module('../context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'staff-curr', name: 'Dr. Juan Luna', role: 'Admin', clinicId: 'c1' }, can: () => true }),
+}));
+mock.module('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'staff-curr', name: 'Dr. Juan Luna', role: 'Admin', clinicId: 'c1' }, can: () => true }),
+}));
+mock.module('../context/ClinicContext', () => ({
+  useClinic: () => ({ facilityName: 'St. Luke Clinic', license: { clinicId: 'c1' }, rooms: [{ id: 'r1', name: 'Pharmacy', isActive: true }] }),
+}));
+mock.module('../../context/ClinicContext', () => ({
+  useClinic: () => ({ facilityName: 'St. Luke Clinic', license: { clinicId: 'c1' }, rooms: [{ id: 'r1', name: 'Pharmacy', isActive: true }] }),
+}));
+
+let mockActiveConversationId: string | undefined = undefined;
+mock.module('../context/ClinicCommsContext', () => ({
+  useClinicComms: () => ({
+    isChatDrawerOpen: true,
+    closeChatDrawer: () => {},
+    activeConversationId: mockActiveConversationId,
+    setActiveConversationId: (id?: string) => { mockActiveConversationId = id; },
+  }),
+}));
+mock.module('../../context/ClinicCommsContext', () => ({
+  useClinicComms: () => ({
+    isChatDrawerOpen: true,
+    closeChatDrawer: () => {},
+    activeConversationId: mockActiveConversationId,
+    setActiveConversationId: (id?: string) => { mockActiveConversationId = id; },
+  }),
+}));
+
+const notifyHistory: Array<{ level: string; msg: string }> = [];
+const realFeedback = await import('../utils/feedback');
+mock.module('../utils/feedback', () => ({
+  ...realFeedback,
+  notify: {
+    ...realFeedback.notify,
+    success: (msg: string) => notifyHistory.push({ level: 'success', msg }),
+    error: (msg: string) => notifyHistory.push({ level: 'error', msg }),
+    info: (msg: string) => notifyHistory.push({ level: 'info', msg }),
+  },
+}));
+mock.module('../../utils/feedback', () => ({
+  ...realFeedback,
+  notify: {
+    ...realFeedback.notify,
+    success: (msg: string) => notifyHistory.push({ level: 'success', msg }),
+    error: (msg: string) => notifyHistory.push({ level: 'error', msg }),
+    info: (msg: string) => notifyHistory.push({ level: 'info', msg }),
+  },
+}));
+
+let chimeCount = 0;
+mock.module('../utils/alertSounds', () => ({
+  playMessageChime: () => { chimeCount += 1; },
+}));
+mock.module('../../utils/alertSounds', () => ({
+  playMessageChime: () => { chimeCount += 1; },
+}));
+
+let events = new CommsEventEmitter();
+let mockConversations: any[] = [];
+let mockActiveHookConv: any = null;
+const markReadCalls: string[] = [];
+const muteCalls: Array<{ id: string; isMuted: boolean }> = [];
+const createConversationCalls: any[] = [];
+let capturedChatDrawerProps: any = null;
+let capturedMessageThreadProps: any = null;
+let capturedNewConvModalProps: any = null;
+
+mock.module('@clinicez/comms-sdk/react', () => ({
+  CommsContext: React.createContext<any>(null),
+  useComms: () => ({
+    status: 'connected',
+    reconnect: async () => {},
+    isReconnecting: false,
+    activeTicket: { ticket: 'ticket-test' },
+    client: { events },
+  }),
+  useConversations: () => ({
+    conversations: mockConversations,
+    unreadCount: mockConversations.reduce((s, c) => s + (c.unreadCount || 0), 0),
+    isLoading: false,
+    error: null,
+    refresh: async () => {},
+    createConversation: async (req: any) => {
+      createConversationCalls.push(req);
+      return { id: 'conv-created-1', ...req };
+    },
+    markConversationRead: async (id: string) => {
+      markReadCalls.push(id);
+    },
+    setConversationMuted: async (id: string, isMuted: boolean) => {
+      muteCalls.push({ id, isMuted });
+    },
+  }),
+  useConversation: (id: string) => ({
+    conversation: mockActiveHookConv ?? mockConversations.find((c) => c.id === id) ?? {
+      id,
+      scope: 'Facility',
+      status: 'Open',
+      title: 'Test Thread',
+      participants: [],
+    },
+    messages: [],
+    isLoading: false,
+    error: null,
+    acknowledgeMessage: async () => {},
+  }),
+  useSendMessage: () => ({
+    sendMessage: async () => {},
+    resendMessage: async () => {},
+  }),
+  useTriageQueue: () => ({
+    items: [],
+    pendingCount: 0,
+    urgentCount: 0,
+    isLoading: false,
+    error: null,
+    refresh: async () => {},
+    answerRequest: async () => {},
+    requestVisit: async () => {},
+    declineRequest: async () => {},
+    routeToStaff: async () => {},
+  }),
+}));
+
+const { ChatDrawer: RealChatDrawer } = await import('../../../packages/comms-sdk/src/native-ui/ChatDrawer');
+const { MessageThread: RealMessageThread } = await import('../../../packages/comms-sdk/src/native-ui/MessageThread');
+const { TriageQueueView: RealTriageQueueView } = await import('../../../packages/comms-sdk/src/native-ui/TriageQueueView');
+const { CallWaitingRoom: RealCallWaitingRoom } = await import('../../../packages/comms-sdk/src/native-ui/CallWaitingRoom');
+const { CallStage: RealCallStage } = await import('../../../packages/comms-sdk/src/native-ui/CallStage');
+
+mock.module('@clinicez/comms-sdk/native-ui', () => ({
+  ChatDrawer: (props: any) => {
+    capturedChatDrawerProps = props;
+    return React.createElement(RealChatDrawer, props);
+  },
+  MessageThread: (props: any) => {
+    capturedMessageThreadProps = props;
+    return React.createElement(RealMessageThread, props);
+  },
+  TriageQueueView: RealTriageQueueView,
+  CallWaitingRoom: RealCallWaitingRoom,
+  CallStage: RealCallStage,
+}));
+
+mock.module('../components/comms/NewConversationModal', () => ({
+  default: (props: any) => {
+    capturedNewConvModalProps = props;
+    return null;
+  },
+}));
+
+const { default: ClinicChatDrawerHost } = await import('../components/comms/ClinicChatDrawerHost');
+const { default: ClinicActiveThread } = await import('../components/comms/ClinicActiveThread');
+
+function collectElementsByType(node: any, results: any[] = []): any[] {
+  if (!node || typeof node !== 'object') return results;
+  if (Array.isArray(node)) {
+    for (const child of node) collectElementsByType(child, results);
+    return results;
+  }
+  results.push(node);
+  if (node.props?.children) {
+    collectElementsByType(node.props.children, results);
+  }
+  return results;
+}
+
+describe('Comms Drawer Archive, Unread Reset, Mute Suppression & Department Guard (#212, #158, #182)', () => {
+  beforeEach(() => {
+    events = new CommsEventEmitter();
+    mockActiveConversationId = undefined;
+    mockActiveHookConv = null;
+    markReadCalls.length = 0;
+    muteCalls.length = 0;
+    createConversationCalls.length = 0;
+    notifyHistory.length = 0;
+    chimeCount = 0;
+    capturedChatDrawerProps = null;
+    capturedMessageThreadProps = null;
+    capturedNewConvModalProps = null;
+    mockConversations = [
+      {
+        id: 'conv-direct-open',
+        scope: 'Direct',
+        status: 'Submitted',
+        title: 'Dr. Maria Santos',
+        unreadCount: 2,
+        participants: [
+          { id: 'staff-curr', userId: 'staff-curr', participantId: 'staff-curr', isMuted: false },
+        ],
+      },
+      {
+        id: 'conv-care-team',
+        scope: 'StaffContext',
+        contextType: 'Patient',
+        contextId: 'pat-42',
+        status: 'Submitted',
+        title: 'Care Team: Juan Dela Cruz',
+        unreadCount: 1,
+        participants: [
+          { id: 'staff-curr', userId: 'staff-curr', participantId: 'staff-curr', isMuted: true },
+        ],
+      },
+      {
+        id: 'conv-teleconsult-call',
+        scope: 'StaffContext',
+        contextType: 'TeleconsultCall',
+        contextId: 'call-999',
+        status: 'Submitted',
+        title: 'Teleconsult Chat: Juan Dela Cruz',
+        unreadCount: 4,
+        participants: [],
+      },
+      {
+        id: 'conv-archived-1',
+        scope: 'Facility',
+        contextType: 'Department',
+        contextId: 'Pharmacy',
+        status: 'Closed',
+        title: 'Pharmacy Channel (Old)',
+        unreadCount: 0,
+        participants: [],
+      },
+    ];
+  });
+
+  afterEach(() => {
+    mockActiveConversationId = undefined;
+    mockActiveHookConv = null;
+  });
+
+  test('#212 + #213: excludes TeleconsultCall and Closed from All/StaffContext, and shows only Closed under Archived', async () => {
+    const harness = createClinicHookHarness(() => ClinicChatDrawerHost());
+
+    // Render with default 'All' scope
+    renderToStaticMarkup(harness.result.current);
+    expect(capturedChatDrawerProps).not.toBeNull();
+    const allIds = capturedChatDrawerProps.items.map((i: any) => i.id);
+    expect(allIds).toEqual(['conv-direct-open', 'conv-care-team']);
+    expect(allIds).not.toContain('conv-teleconsult-call');
+    expect(allIds).not.toContain('conv-archived-1');
+
+    // Switch to 'StaffContext' -> Care Team visible, TeleconsultCall excluded
+    await act(async () => {
+      capturedChatDrawerProps.onSelectScope('StaffContext');
+    });
+    renderToStaticMarkup(harness.result.current);
+    expect(capturedChatDrawerProps.items.map((i: any) => i.id)).toEqual(['conv-care-team']);
+
+    // Switch to 'Archived' -> only Closed thread shown with isArchived: true
+    await act(async () => {
+      capturedChatDrawerProps.onSelectScope('Archived');
+    });
+    renderToStaticMarkup(harness.result.current);
+    expect(capturedChatDrawerProps.items.map((i: any) => i.id)).toEqual(['conv-archived-1']);
+    expect(capturedChatDrawerProps.items[0].isArchived).toBe(true);
+
+    harness.unmount();
+  });
+
+  test('#212: ClinicActiveThread hides speed pills and renders read-only archived banner when status is Closed', () => {
+    const closedConv = {
+      id: 'conv-archived-1',
+      tenantId: 't1',
+      facilityId: 'c1',
+      scope: 'Facility' as const,
+      kind: 'General' as const,
+      title: 'Pharmacy Channel (Old)',
+      status: 'Closed' as const,
+      isEmergencyConfirmed: false,
+      isLocalOnly: false,
+      reopenCount: 0,
+      messageCount: 1,
+      lastSeq: 1,
+      createdAtUtc: '2026-11-10T00:00:00Z',
+      createdBy: 'staff-curr',
+      participants: [],
+    };
+    mockActiveHookConv = closedConv;
+
+    const html = renderToStaticMarkup(
+      React.createElement(ClinicActiveThread, {
+        conversationId: 'conv-archived-1',
+        initialConversation: closedConv,
+        onBack: () => {},
+        currentUserId: 'staff-curr',
+      }),
+    );
+
+    expect(html).not.toContain('+ Vitals Charted');
+    expect(capturedMessageThreadProps.isArchived).toBe(true);
+    expect(html).toContain('This conversation is closed and archived. Message history is read-only.');
+  });
+
+  test('#158: calls markConversationRead on open and suppresses messageReceived chime for muted threads and own messages', async () => {
+    mockActiveConversationId = 'conv-direct-open';
+    const harness = createClinicHookHarness(() => ClinicChatDrawerHost());
+
+    // Opening drawer with activeConversationId calls markConversationRead
+    expect(markReadCalls).toEqual(['conv-direct-open']);
+
+    // Incoming message from ANOTHER staff in an UNMUTED conversation -> plays chime
+    events.emit('messageReceived', {
+      messageId: 'm1',
+      conversationId: 'conv-direct-open',
+      seq: 1,
+      clientMessageId: null,
+      senderType: 'Staff',
+      senderId: 'staff-2',
+      senderDisplayName: 'Nurse Maria Santos',
+      contentText: 'Hello doc',
+      visibility: 'Public',
+      requiresAcknowledgement: false,
+      isAcknowledged: false,
+      acknowledgedAtUtc: null,
+      acknowledgedByAccountId: null,
+      acknowledgedByName: null,
+      attachments: [],
+      deliveryState: 'Received',
+      sentAtUtc: new Date().toISOString(),
+    });
+    expect(chimeCount).toBe(1);
+
+    // Own message -> skipped
+    events.emit('messageReceived', {
+      messageId: 'm2',
+      conversationId: 'conv-direct-open',
+      seq: 2,
+      clientMessageId: null,
+      senderType: 'Staff',
+      senderId: 'staff-curr',
+      senderDisplayName: 'Dr. Juan Luna',
+      contentText: 'My own reply',
+      visibility: 'Public',
+      requiresAcknowledgement: false,
+      isAcknowledged: false,
+      acknowledgedAtUtc: null,
+      acknowledgedByAccountId: null,
+      acknowledgedByName: null,
+      attachments: [],
+      deliveryState: 'Received',
+      sentAtUtc: new Date().toISOString(),
+    });
+    expect(chimeCount).toBe(1);
+
+    // Incoming message from another staff in a MUTED conversation ('conv-care-team') -> skipped
+    events.emit('messageReceived', {
+      messageId: 'm3',
+      conversationId: 'conv-care-team',
+      seq: 3,
+      clientMessageId: null,
+      senderType: 'Staff',
+      senderId: 'staff-2',
+      senderDisplayName: 'Nurse Maria Santos',
+      contentText: 'Muted thread ping',
+      visibility: 'Public',
+      requiresAcknowledgement: false,
+      isAcknowledged: false,
+      acknowledgedAtUtc: null,
+      acknowledgedByAccountId: null,
+      acknowledgedByName: null,
+      attachments: [],
+      deliveryState: 'Received',
+      sentAtUtc: new Date().toISOString(),
+    });
+    expect(chimeCount).toBe(1);
+
+    harness.unmount();
+  });
+
+  test('#158: ClinicActiveThread syncs muted state from participant and persists toggle via onToggleMute', async () => {
+    const mutedConv = {
+      id: 'conv-care-team',
+      tenantId: 't1',
+      facilityId: 'c1',
+      scope: 'StaffContext' as const,
+      kind: 'General' as const,
+      title: 'Care Team: Juan Dela Cruz',
+      status: 'Submitted' as const,
+      isEmergencyConfirmed: false,
+      isLocalOnly: false,
+      reopenCount: 0,
+      messageCount: 0,
+      lastSeq: 0,
+      createdAtUtc: '2026-11-10T00:00:00Z',
+      createdBy: 'staff-curr',
+      participants: [
+        {
+          id: 'p1',
+          userId: 'staff-curr',
+          participantId: 'staff-curr',
+          displayName: 'Dr. Juan Luna',
+          role: 'Owner',
+          joinedAtUtc: '2026-11-10T00:00:00Z',
+          isMuted: true,
+        },
+      ],
+    };
+    mockActiveHookConv = mutedConv;
+    const toggleCalls: boolean[] = [];
+
+    const harness = createClinicHookHarness(() =>
+      ClinicActiveThread({
+        conversationId: 'conv-care-team',
+        initialConversation: mutedConv,
+        initialActionMenuOpen: true,
+        onBack: () => {},
+        currentUserId: 'staff-curr',
+        onToggleMute: async (nextMuted: boolean) => {
+          toggleCalls.push(nextMuted);
+        },
+      }),
+    );
+
+    const nodes = collectElementsByType(harness.result.current);
+    const unmuteBtn = nodes.find((n) => n.props?.accessibilityLabel === 'Unmute channel');
+    expect(unmuteBtn).toBeDefined();
+
+    await act(async () => {
+      await unmuteBtn.props.onPress();
+    });
+
+    expect(toggleCalls).toEqual([false]);
+    harness.unmount();
+  });
+
+  test('#182: ClinicChatDrawerHost maps Facility department & StaffContext patientId on createConversation, and guards View Patient Chart', async () => {
+    const harness = createClinicHookHarness(() => ClinicChatDrawerHost());
+    renderToStaticMarkup(harness.result.current);
+
+    expect(capturedNewConvModalProps).not.toBeNull();
+    await act(async () => {
+      await capturedNewConvModalProps.onCreateConversation({
+        scope: 'Facility',
+        title: 'Pharmacy Channel',
+        department: 'Pharmacy',
+      });
+    });
+
+    expect(createConversationCalls[0]).toEqual({
+      scope: 'Facility',
+      title: 'Pharmacy Channel',
+      contextType: 'Department',
+      contextId: 'Pharmacy',
+      department: 'Pharmacy',
+      participantStaffIds: undefined,
+      participants: undefined,
+    });
+
+    await act(async () => {
+      await capturedNewConvModalProps.onCreateConversation({
+        scope: 'StaffContext',
+        title: 'Care Team: Juan',
+        patientId: 'pat-42',
+      });
+    });
+
+    expect(createConversationCalls[1]).toEqual({
+      scope: 'StaffContext',
+      title: 'Care Team: Juan',
+      contextType: 'Patient',
+      contextId: 'pat-42',
+      department: undefined,
+      participantStaffIds: undefined,
+      participants: undefined,
+    });
+    harness.unmount();
+
+    // Chart guard: Facility Department channel MUST NOT invoke onOpenPatientChart('Pharmacy')
+    const facilityConv = {
+      id: 'conv-fac-pharm',
+      tenantId: 't1',
+      facilityId: 'c1',
+      scope: 'Facility' as const,
+      kind: 'General' as const,
+      title: 'Pharmacy Channel',
+      contextType: 'Department',
+      contextId: 'Pharmacy',
+      status: 'Submitted' as const,
+      isEmergencyConfirmed: false,
+      isLocalOnly: false,
+      reopenCount: 0,
+      messageCount: 0,
+      lastSeq: 0,
+      createdAtUtc: '2026-11-10T00:00:00Z',
+      createdBy: 'staff-curr',
+      participants: [],
+    };
+    mockActiveHookConv = facilityConv;
+    const openedCharts: string[] = [];
+
+    const facHarness = createClinicHookHarness(() =>
+      ClinicActiveThread({
+        conversationId: 'conv-fac-pharm',
+        initialConversation: facilityConv,
+        initialActionMenuOpen: true,
+        onBack: () => {},
+        currentUserId: 'staff-curr',
+        onOpenPatientChart: (pid) => openedCharts.push(pid),
+      }),
+    );
+    const facNodes = collectElementsByType(facHarness.result.current);
+    const chartBtn = facNodes.find((n) => n.props?.accessibilityLabel === 'View patient chart');
+    expect(chartBtn).toBeDefined();
+    await act(async () => {
+      chartBtn.props.onPress();
+    });
+    expect(openedCharts).toEqual([]);
+    expect(notifyHistory.some((n) => n.msg.includes('not linked to an individual patient record'))).toBe(true);
+    facHarness.unmount();
+
+    // StaffContext Care Team channel SHOULD invoke onOpenPatientChart('pat-42')
+    const careConv = {
+      ...facilityConv,
+      id: 'conv-care-42',
+      scope: 'StaffContext' as const,
+      contextType: 'Patient',
+      contextId: 'pat-42',
+    };
+    mockActiveHookConv = careConv;
+    const careHarness = createClinicHookHarness(() =>
+      ClinicActiveThread({
+        conversationId: 'conv-care-42',
+        initialConversation: careConv,
+        initialActionMenuOpen: true,
+        onBack: () => {},
+        currentUserId: 'staff-curr',
+        onOpenPatientChart: (pid) => openedCharts.push(pid),
+      }),
+    );
+    const careNodes = collectElementsByType(careHarness.result.current);
+    const careChartBtn = careNodes.find((n) => n.props?.accessibilityLabel === 'View patient chart');
+    await act(async () => {
+      careChartBtn.props.onPress();
+    });
+    expect(openedCharts).toEqual(['pat-42']);
+    careHarness.unmount();
+  });
+});

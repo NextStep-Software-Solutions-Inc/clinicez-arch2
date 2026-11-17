@@ -28,15 +28,18 @@ public sealed class LabOrdersController : ControllerBase
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService _pdfService;
     private readonly IRepository<FacilitySettings> _settingsRepo;
+    private readonly IRepository<StaffMember>? _staffRepo;
 
     public LabOrdersController(
         ISender sender,
         IClinicDocumentPdfService pdfService,
-        IRepository<FacilitySettings> settingsRepo)
+        IRepository<FacilitySettings> settingsRepo,
+        IRepository<StaffMember>? staffRepo = null)
     {
         _sender = sender;
         _pdfService = pdfService;
         _settingsRepo = settingsRepo;
+        _staffRepo = staffRepo;
     }
 
     [HttpGet]
@@ -77,8 +80,15 @@ public sealed class LabOrdersController : ControllerBase
             ClinicName = slip.ClinicName
         };
 
-        var signatureMode = wet == true ? SignatureMode.WetSignature : SignatureMode.ESignatureSpecimen;
-        var pdfBytes = _pdfService.GenerateLabRequisitionSlipPdf(slip, settings, doctor: null, signatureMode: signatureMode);
+        var doctor = (_staffRepo != null && slip.DoctorId.HasValue)
+            ? await _staffRepo.GetByIdAsync(slip.DoctorId.Value, ct)
+            : null;
+
+        SignatureMode? signatureMode = wet == true
+            ? SignatureMode.WetSignature
+            : (wet == false ? SignatureMode.ESignatureSpecimen : null);
+
+        var pdfBytes = _pdfService.GenerateLabRequisitionSlipPdf(slip, settings, doctor: doctor, signatureMode: signatureMode);
         return File(pdfBytes, "application/pdf", $"LabRequisition-{slip.OrderNumber}.pdf");
     }
 

@@ -152,6 +152,8 @@ export interface UseConversationsResult {
   refresh: () => Promise<void>;
   setFilter: (newFilter: Partial<ConversationsFilterOptions>) => void;
   createConversation: (request: CreateConversationRequest) => Promise<ConversationDto>;
+  markConversationRead: (conversationId: string, lastReadMessageId?: string) => Promise<void>;
+  setConversationMuted: (conversationId: string, isMuted: boolean) => Promise<void>;
 }
 
 // 3. useConversation

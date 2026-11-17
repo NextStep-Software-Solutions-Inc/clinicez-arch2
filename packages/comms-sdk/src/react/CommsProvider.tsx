@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SignalRConnectionManager } from '../core/connection/SignalRConnectionManager';
+import { ClientMessageQueue } from '../core/queue/ClientMessageQueue';
 import { ICommsClient } from '../core/types';
 import { CommsContext, InternalCommsContextValue } from './CommsContext';
 import { OptimisticStore } from './internal/OptimisticStore';
@@ -65,6 +66,40 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
       ticketProvider
     });
   }, [baseUrl, externalClient, ticketProvider]);
+
+  const messageQueue = useMemo<ClientMessageQueue>(() => {
+    return new ClientMessageQueue(client);
+  }, [client]);
+
+  useEffect(() => {
+    messageQueue.attach();
+    const unsubQueue = messageQueue.subscribe({
+      onMessageSent: (queued, serverMsg) => {
+        const normalized = serverMsg.clientMessageId
+          ? serverMsg
+          : { ...serverMsg, clientMessageId: queued.clientMessageId };
+        storeRef.current.appendMessage(normalized);
+        if (normalized.clientMessageId) {
+          storeRef.current.updatePendingState(
+            normalized.clientMessageId,
+            normalized.deliveryState ?? 'Waiting'
+          );
+        }
+      },
+      onMessageFailed: (queued, err) => {
+        storeRef.current.updatePendingState(queued.clientMessageId, 'NotReceived', err.message);
+        storeRef.current.updateMessageState(
+          `opt-${queued.clientMessageId}`,
+          queued.conversationId,
+          'NotReceived'
+        );
+      }
+    });
+    return () => {
+      unsubQueue();
+      messageQueue.dispose();
+    };
+  }, [messageQueue]);
 
   const connect = useCallback(async (): Promise<void> => {
     try {
@@ -261,10 +296,12 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
       reconnect,
       refreshTicket,
       store: storeRef.current,
-      subscriptionTracker: trackerRef.current
+      subscriptionTracker: trackerRef.current,
+      messageQueue
     }),
     [
       client,
+      messageQueue,
       connectionState,
       activeTicket,
       tenantId,
