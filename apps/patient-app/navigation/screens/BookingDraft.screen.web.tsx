@@ -64,6 +64,9 @@ export default function BookingDraftScreenWeb(props: Props) {
   const route = useRoute<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+  const hasLoadedCatalogRef = useRef(false);
   const { user } = useUser();
   const { isDesktop, width } = useBreakpoint();
   const { isOnline } = useNetworkOnline();
@@ -101,18 +104,21 @@ export default function BookingDraftScreenWeb(props: Props) {
   const [sendReminders, setSendReminders] = useState<boolean>(true);
   const [bookingReference, setBookingReference] = useState<string>('');
 
-  // Load care catalog on mount
+  // Load care catalog on mount using stable getTokenRef so auth ticks never trigger skeleton flicker
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        setIsLoading(true);
-        const catalog = await queryPatientSearchCatalog(getToken, patientId, {
+        if (!hasLoadedCatalogRef.current) {
+          setIsLoading(true);
+        }
+        const catalog = await queryPatientSearchCatalog(getTokenRef.current, patientId, {
           q: '',
           category: 'all',
         });
         if (!active) return;
 
+        hasLoadedCatalogRef.current = true;
         const catalogDoctors = catalog.data.doctors;
         setDoctors(catalogDoctors);
         setClinics(catalog.data.clinics);
@@ -130,11 +136,14 @@ export default function BookingDraftScreenWeb(props: Props) {
                 : undefined) ?? catalogDoctors[0];
             if (fallbackDoc) setSelectedDoctorId(fallbackDoc.id);
           }
-        } else if (!selectedDoctorId && catalogDoctors.length > 0) {
-          const matchedByClinic = initialClinicId
-            ? catalogDoctors.find((d) => d.clinicId === initialClinicId)
-            : undefined;
-          setSelectedDoctorId((matchedByClinic ?? catalogDoctors[0])?.id);
+        } else if (catalogDoctors.length > 0) {
+          setSelectedDoctorId((prev) => {
+            if (prev && catalogDoctors.some((d) => d.id === prev)) return prev;
+            const matchedByClinic = initialClinicId
+              ? catalogDoctors.find((d) => d.clinicId === initialClinicId)
+              : undefined;
+            return (matchedByClinic ?? catalogDoctors[0])?.id;
+          });
         }
       } catch {
         // Handled cleanly with empty catalog state
@@ -145,7 +154,7 @@ export default function BookingDraftScreenWeb(props: Props) {
     return () => {
       active = false;
     };
-  }, [getToken, initialClinicId, initialProviderId, patientId]);
+  }, [initialClinicId, initialProviderId, patientId]);
 
   const selectedDoctor = useMemo(
     () => doctors.find((d) => d.id === selectedDoctorId) ?? doctors[0] ?? null,
@@ -182,20 +191,24 @@ export default function BookingDraftScreenWeb(props: Props) {
     scrollRef.current?.scrollTo?.({ y: 0, animated: false });
   }, [currentStep, scrollY]);
 
-  // Fetch available slots whenever doctor or date changes
+  const selectedDateKey = useMemo(() => format(selectedDate, 'yyyy-MM-dd'), [selectedDate]);
+  const slotDoctorId = selectedDoctor?.id ?? '';
+  const slotClinicId = selectedDoctor?.clinicId ?? '';
+  const isReviewOrEarlier = currentStep <= 3;
+
+  // Fetch available slots whenever doctor id or date string changes
   useEffect(() => {
-    if (!selectedDoctor || currentStep > 3) return;
+    if (!slotDoctorId || !slotClinicId || !isReviewOrEarlier) return;
 
     let active = true;
     (async () => {
       try {
         setIsLoadingSlots(true);
-        const dateStr = format(selectedDate, 'yyyy-MM-dd');
         const res = await fetchAvailableSlots(
-          selectedDoctor.clinicId,
-          selectedDoctor.id,
-          dateStr,
-          getToken,
+          slotClinicId,
+          slotDoctorId,
+          selectedDateKey,
+          getTokenRef.current,
           patientId,
         );
         if (!active) return;
@@ -222,7 +235,7 @@ export default function BookingDraftScreenWeb(props: Props) {
     return () => {
       active = false;
     };
-  }, [currentStep, getToken, patientId, selectedDate, selectedDoctor]);
+  }, [isReviewOrEarlier, patientId, selectedDateKey, slotClinicId, slotDoctorId]);
 
   const navigateBackToTabs = useCallback(
     (tabScreen: 'AppointmentsScreen' | 'HomeScreen') => {
@@ -292,7 +305,7 @@ export default function BookingDraftScreenWeb(props: Props) {
 
     try {
       const [serverDraftId, onlineErr] = await safeAwait(
-        createBookingDraftOnline(getToken, patientId, {
+        createBookingDraftOnline(getTokenRef.current, patientId, {
           clinicId: selectedDoctor.clinicId,
           preferredDate: dateStr,
           preferredTime: timeStr,
@@ -311,7 +324,7 @@ export default function BookingDraftScreenWeb(props: Props) {
       }
 
       const [refResult, submitErr] = await safeAwait(
-        submitBookingDraftOnline(getToken, patientId, serverDraftId),
+        submitBookingDraftOnline(getTokenRef.current, patientId, serverDraftId),
       );
 
       if (submitErr) {
@@ -350,7 +363,6 @@ export default function BookingDraftScreenWeb(props: Props) {
     }
   }, [
     consultationMode,
-    getToken,
     isOnline,
     patientId,
     reasonForVisit,

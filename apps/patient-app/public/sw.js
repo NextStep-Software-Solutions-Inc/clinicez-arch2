@@ -7,7 +7,7 @@
  * All API routes, SSE/stream connections, and auth requests bypass this worker.
  */
 
-const CACHE_NAME = 'clinicez-patient-v1';
+const CACHE_NAME = 'clinicez-patient-v2';
 
 // Static assets to pre-cache on install
 const PRECACHE_ASSETS = [
@@ -54,8 +54,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Only handle HTTP/HTTPS schemes
+  // 2. Only handle HTTP/HTTPS schemes and bypass localhost/dev Metro bundles
   if (!url.protocol.startsWith('http')) {
+    return;
+  }
+
+  if (
+    url.hostname === 'localhost' ||
+    url.hostname === '127.0.0.1' ||
+    url.pathname.endsWith('.bundle') ||
+    url.searchParams.has('platform')
+  ) {
     return;
   }
 

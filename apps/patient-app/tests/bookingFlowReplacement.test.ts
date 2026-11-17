@@ -103,6 +103,11 @@ describe('Patient Appointment Booking Flow Replacement Suite', () => {
   });
 
   test('7. Dedicated Screen Integration, Strict No-Ops & Zero Mock Data: configures full-screen presentation, wires backend, and purges fake clinical placeholders', () => {
+    const webFrameSrc = readAppFile('components/layout/WebAppFrame.web.tsx');
+    expect(webFrameSrc.includes('DEDICATED_FULLSCREEN_SCREENS')).toBe(true);
+    expect(webFrameSrc.includes("isDedicatedFullscreen")).toBe(true);
+    expect(webFrameSrc.includes("isWorkstation && !isDedicatedFullscreen")).toBe(true);
+
     const mainStackSrc = readAppFile('navigation/navigators/MainStack.tsx');
     const bookingRouteSection = mainStackSrc.slice(
       mainStackSrc.indexOf('BookingDraftScreen:'),
@@ -119,6 +124,8 @@ describe('Patient Appointment Booking Flow Replacement Suite', () => {
       expect(src.includes('<BookingStickyFooter')).toBe(true);
       expect(src.includes('<HomeOfflinePillBanner')).toBe(true);
       expect(src.includes('Animated.ScrollView')).toBe(true);
+      expect(src.includes('getTokenRef')).toBe(true);
+      expect(src.includes('hasLoadedCatalogRef')).toBe(true);
       expect(src.includes('queryPatientSearchCatalog')).toBe(true);
       expect(src.includes('createBookingDraftOnline')).toBe(true);
       expect(src.includes('submitBookingDraftOnline')).toBe(true);

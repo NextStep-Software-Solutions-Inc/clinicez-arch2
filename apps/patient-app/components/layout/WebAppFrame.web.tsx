@@ -26,6 +26,10 @@ const SELF_HEADER_PUSHED_SCREENS = new Set([
   'BookingDraftScreen',
 ]);
 
+const DEDICATED_FULLSCREEN_SCREENS = new Set([
+  'BookingDraftScreen',
+]);
+
 function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFrameProps) {
   const { colors, sizes } = useAppTheme();
   const { isWorkstation, isDesktop, isCompact } = useBreakpoint();
@@ -34,6 +38,9 @@ function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFr
   const headerInfo = resolveWebHeaderState(state, descriptors);
   const focusedScreenName = resolveFocusedScreenName(state);
   const headerOverride = useWebHeaderOverride(!headerInfo.isRootTab ? focusedScreenName : undefined);
+  const isDedicatedFullscreen = Boolean(
+    focusedScreenName && DEDICATED_FULLSCREEN_SCREENS.has(focusedScreenName),
+  );
   const showBackHeader = !headerInfo.isRootTab && !(focusedScreenName && SELF_HEADER_PUSHED_SCREENS.has(focusedScreenName));
   const showCompactTabHeader =
     headerInfo.isRootTab &&
@@ -77,14 +84,23 @@ function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFr
         />
       ) : null}
       <View style={styles.contentOuter}>
-        <View style={[styles.contentInner, { maxWidth: sizes.contentMaxWidth }]}>{children}</View>
+        <View
+          style={[
+            styles.contentInner,
+            { maxWidth: isDedicatedFullscreen ? undefined : sizes.contentMaxWidth },
+          ]}
+        >
+          {children}
+        </View>
       </View>
     </View>
   );
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {isWorkstation ? <WebSidebar state={state} navigation={navigation} collapsed={!isDesktop} /> : null}
+      {isWorkstation && !isDedicatedFullscreen ? (
+        <WebSidebar state={state} navigation={navigation} collapsed={!isDesktop} />
+      ) : null}
       {content}
     </View>
   );
