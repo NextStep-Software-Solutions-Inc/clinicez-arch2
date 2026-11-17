@@ -40,7 +40,8 @@ public record LabOrderSlipDto(
     string PublicUploadUrl,
     string QrPayload,
     string? ClaimToken = null,
-    DateOnly? PatientDateOfBirth = null
+    DateOnly? PatientDateOfBirth = null,
+    Guid? DoctorId = null
 );
 
 /// <summary>
@@ -125,7 +126,8 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
             upload.Url,
             qrPayload,
             order.ClaimToken,
-            patient?.DateOfBirth
+            patient?.DateOfBirth,
+            order.OrderedByDoctorId
         );
     }
 }

@@ -1060,12 +1060,12 @@ describe('Messaging Sidebar Chips, Soft Pastel Bubbles & Triage Brand Sync (#104
   });
 
   describe('7. In-Call Chat Sidebar Synchronization', () => {
-    test('auto-creates a Care Team StaffContext thread when patient has no prior conversation and persists + emits conversationUpdated', async () => {
+    test('auto-creates a TeleconsultCall StaffContext thread when patient has no prior conversation and persists + emits conversationUpdated', async () => {
       mockConversationsOverride = [];
       const createdReqs: any[] = [];
       const sentMsgs: any[] = [];
       const emittedEvents: Array<{ event: string; payload: any }> = [];
-      const dataChannelSent: Array<{ text: string; isInternal: boolean }> = [];
+      const dataChannelSent: Array<{ text: string; isInternal: boolean; clientMessageId?: string }> = [];
 
       mockCreateConversationImpl = async (req) => {
         createdReqs.push(req);
@@ -1095,8 +1095,8 @@ describe('Messaging Sidebar Chips, Soft Pastel Bubbles & Triage Brand Sync (#104
             patientName: 'Juan Dela Cruz',
             currentUserId: 'staff-1',
             dataChannelMessages: [],
-            onSendDataChannelMessage: async (text: string, isInternal: boolean) => {
-              dataChannelSent.push({ text, isInternal });
+            onSendDataChannelMessage: async (text: string, isInternal: boolean, clientMessageId?: string) => {
+              dataChannelSent.push({ text, isInternal, clientMessageId });
             },
           }),
         ),
@@ -1107,13 +1107,18 @@ describe('Messaging Sidebar Chips, Soft Pastel Bubbles & Triage Brand Sync (#104
 
       await capturedMessageThreadProps.onSendMessage('Hi Juan, joining now', false);
 
-      expect(dataChannelSent).toEqual([{ text: 'Hi Juan, joining now', isInternal: false }]);
+      expect(dataChannelSent).toHaveLength(1);
+      expect(dataChannelSent[0].text).toBe('Hi Juan, joining now');
+      expect(dataChannelSent[0].isInternal).toBe(false);
+      expect(typeof dataChannelSent[0].clientMessageId).toBe('string');
+      expect(dataChannelSent[0].clientMessageId!.length).toBeGreaterThan(0);
+
       expect(createdReqs).toEqual([
         {
           scope: 'StaffContext',
-          title: 'Care Team: Juan Dela Cruz',
-          contextType: 'Patient',
-          contextId: 'pat-sync-1',
+          title: 'Teleconsult Chat: Juan Dela Cruz',
+          contextType: 'TeleconsultCall',
+          contextId: 'call-sync-1',
           participants: [
             {
               participantType: 'Patient',
@@ -1129,12 +1134,13 @@ describe('Messaging Sidebar Chips, Soft Pastel Bubbles & Triage Brand Sync (#104
           conversationId: 'conv-created-99',
           contentText: 'Hi Juan, joining now',
           visibility: 'Public',
+          clientMessageId: dataChannelSent[0].clientMessageId,
         },
       ]);
       expect(emittedEvents.some((e) => e.event === 'conversationUpdated' && e.payload.conversationId === 'conv-created-99')).toBe(true);
     });
 
-    test('reuses an existing PatientFacility or StaffContext conversation without calling createConversation and falls back to REST if SignalR fails', async () => {
+    test('reuses an existing PatientFacility or TeleconsultCall StaffContext conversation without calling createConversation and falls back to REST if SignalR fails', async () => {
       const createdReqs: any[] = [];
       const sentMsgs: any[] = [];
       mockCreateConversationImpl = async (req) => {
@@ -1151,6 +1157,7 @@ describe('Messaging Sidebar Chips, Soft Pastel Bubbles & Triage Brand Sync (#104
           id: 'conv-staff-old',
           scope: 'StaffContext',
           status: 'Open',
+          contextType: 'Patient',
           contextId: 'pat-existing-1',
         },
         {
@@ -1179,22 +1186,21 @@ describe('Messaging Sidebar Chips, Soft Pastel Bubbles & Triage Brand Sync (#104
       expect(capturedMessageThreadProps.conversationScope).toBe('PatientFacility');
       await capturedMessageThreadProps.onSendMessage('Existing inquiry reply', false);
       expect(createdReqs).toEqual([]);
-      expect(sentMsgs).toEqual([
-        {
-          conversationId: 'conv-pf-1',
-          contentText: 'Existing inquiry reply',
-          visibility: 'Public',
-        },
-      ]);
+      expect(sentMsgs).toHaveLength(1);
+      expect(sentMsgs[0].conversationId).toBe('conv-pf-1');
+      expect(sentMsgs[0].contentText).toBe('Existing inquiry reply');
+      expect(sentMsgs[0].visibility).toBe('Public');
+      expect(typeof sentMsgs[0].clientMessageId).toBe('string');
 
-      // Case B: Existing open StaffContext thread reused when no PatientFacility thread exists + REST fallback when SignalR rejects
+      // Case B: Existing open TeleconsultCall StaffContext thread reused when no PatientFacility thread exists + REST fallback when SignalR rejects
       sentMsgs.length = 0;
       mockConversationsOverride = [
         {
           id: 'conv-staff-existing',
           scope: 'StaffContext',
           status: 'Open',
-          contextId: 'pat-staff-1',
+          contextType: 'TeleconsultCall',
+          contextId: 'call-staff-1',
         },
       ];
       mockSendMessageImpl = async () => {
@@ -1202,7 +1208,7 @@ describe('Messaging Sidebar Chips, Soft Pastel Bubbles & Triage Brand Sync (#104
       };
 
       const fetchCalls: Array<{ url: string; init: any }> = [];
-      const appendedMessages: Array<{ convId: string; dto: any }> = [];
+      const appendedMessages: any[] = [];
       const originalFetch = globalThis.fetch;
       globalThis.fetch = (async (url: any, init: any) => {
         fetchCalls.push({ url: String(url), init });
@@ -1225,12 +1231,12 @@ describe('Messaging Sidebar Chips, Soft Pastel Bubbles & Triage Brand Sync (#104
             {
               value: {
                 baseUrl: 'https://comms.test/',
-                activeTicket: { token: 'ticket-abc' },
+                activeTicket: { ticket: 'ticket-abc' },
                 staffId: 'staff-1',
                 staffDisplayName: 'Dr. Santos',
                 store: {
-                  appendMessage: (convId: string, dto: any) => {
-                    appendedMessages.push({ convId, dto });
+                  appendMessage: (dto: any) => {
+                    appendedMessages.push(dto);
                   },
                 },
                 client: { events: { emit: () => {} } },
@@ -1252,8 +1258,12 @@ describe('Messaging Sidebar Chips, Soft Pastel Bubbles & Triage Brand Sync (#104
         expect(fetchCalls.length).toBe(1);
         expect(fetchCalls[0].url).toBe('https://comms.test/api/v1/comms/conversations/conv-staff-existing/messages');
         expect(fetchCalls[0].init?.headers?.Authorization).toBe('Bearer ticket-abc');
+        const sentBody = JSON.parse(fetchCalls[0].init.body);
+        expect(typeof sentBody.clientMessageId).toBe('string');
         expect(appendedMessages).toHaveLength(1);
-        expect(appendedMessages[0].convId).toBe('conv-staff-existing');
+        expect(appendedMessages[0].conversationId).toBe('conv-staff-existing');
+        expect(appendedMessages[0].clientMessageId).toBe(sentBody.clientMessageId);
+        expect(appendedMessages[0].deliveryState).toBe('Waiting');
       } finally {
         globalThis.fetch = originalFetch;
       }

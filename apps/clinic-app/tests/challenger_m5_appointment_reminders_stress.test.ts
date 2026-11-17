@@ -235,7 +235,7 @@ const baseAppointment: ExtendedAppointmentItem = {
   patientName: 'Elena Rostova',
   doctorId: 'doc-10',
   doctorName: 'Dr. Gregory House',
-  scheduledAt: '2026-10-25T10:30:00Z',
+  scheduledAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
   durationMinutes: 45,
   status: 'Confirmed',
   createdAt: '2026-10-20T08:00:00Z',

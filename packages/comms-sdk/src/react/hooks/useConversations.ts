@@ -1,12 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ConversationDto, ConversationScope } from '../../core/types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ConversationDto, ConversationScope, ParticipantDto } from '../../core/types';
 import { useCommsContext } from '../CommsContext';
+import { resolveCommsAuthHeaders } from '../internal/authHeaders';
 import {
   ConversationsFilterOptions,
   ConversationScopeFilter,
   CreateConversationRequest,
   UseConversationsResult
 } from '../types';
+
+const VALID_MESSAGE_CATEGORIES = new Set<string>([
+  'Scheduling',
+  'PrescriptionRefill',
+  'LabResultQuestion',
+  'PostVisitFollowUp',
+  'Billing',
+  'OrderStatus',
+  'MedicineQuestion',
+  'CollectionAndAppointment',
+  'ReportCopy',
+  'Other'
+]);
 
 export function useConversations(
   scope?: ConversationScopeFilter | ConversationScope[],
@@ -25,11 +39,22 @@ export function useConversations(
 
   const [filter, setFilterState] = useState<ConversationsFilterOptions>(initialFilter ?? {});
   const [conversations, setConversations] = useState<ConversationDto[]>([]);
+  const conversationsRef = useRef<ConversationDto[]>(conversations);
+  conversationsRef.current = conversations;
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(false);
+
+  const isCurrentStaffParticipant = useCallback(
+    (p: ParticipantDto): boolean => {
+      if (!staffId) return false;
+      return p.participantId === staffId || p.userId === staffId || p.id === staffId;
+    },
+    [staffId]
+  );
 
   const setFilter = useCallback((newFilter: Partial<ConversationsFilterOptions>) => {
     setFilterState((prev) => ({ ...prev, ...newFilter }));
@@ -41,15 +66,7 @@ export function useConversations(
     try {
       if (baseUrl) {
         const cleanBase = baseUrl.replace(/\/$/, '');
-        let ticket = activeTicket?.ticket;
-        if (!ticket && refreshTicket) {
-          try {
-            const refreshed = await refreshTicket();
-            ticket = refreshed?.ticket;
-          } catch {
-            // ignore ticket refresh error
-          }
-        }
+        const headers = await resolveCommsAuthHeaders(activeTicket, refreshTicket);
         const params = new URLSearchParams();
         if (facilityId) params.append('facilityId', facilityId);
         if (scope && scope !== 'All' && !Array.isArray(scope)) {
@@ -57,10 +74,6 @@ export function useConversations(
         }
         const queryString = params.toString();
         const url = `${cleanBase}/api/v1/comms/conversations${queryString ? `?${queryString}` : ''}`;
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          ...(ticket ? { Authorization: `Bearer ${ticket}` } : {})
-        };
         const res = await fetch(url, {
           method: 'GET',
           headers
@@ -80,7 +93,7 @@ export function useConversations(
       setIsRefreshing(false);
       setIsLoading(false);
     }
-  }, [activeTicket?.ticket, baseUrl, facilityId, refreshTicket, scope]);
+  }, [activeTicket, baseUrl, facilityId, refreshTicket, scope]);
 
   useEffect(() => {
     refresh().catch(() => {});
@@ -134,6 +147,16 @@ export function useConversations(
         });
       }
 
+      const trimmedDepartment = request.department?.trim() || undefined;
+      const effectiveContextType =
+        request.contextType || (trimmedDepartment ? 'Department' : undefined);
+      const effectiveContextId =
+        request.contextId || trimmedDepartment || undefined;
+      const effectiveCategory =
+        request.category && VALID_MESSAGE_CATEGORIES.has(request.category)
+          ? request.category
+          : undefined;
+
       const newConv: ConversationDto = {
         id: optimisticId,
         tenantId: tenantId || '',
@@ -141,9 +164,9 @@ export function useConversations(
         scope: request.scope,
         kind: 'General',
         title: request.title ?? null,
-        contextType: request.contextType,
-        contextId: request.contextId,
-        category: request.category,
+        contextType: effectiveContextType,
+        contextId: effectiveContextId,
+        category: effectiveCategory,
         status: 'Submitted',
         isEmergencyConfirmed: false,
         isLocalOnly: request.isLocalOnly ?? false,
@@ -165,29 +188,17 @@ export function useConversations(
 
       if (baseUrl) {
         const cleanBase = baseUrl.replace(/\/$/, '');
-        let ticket = activeTicket?.ticket;
-        if (!ticket && refreshTicket) {
-          try {
-            const refreshed = await refreshTicket();
-            ticket = refreshed?.ticket;
-          } catch {
-            // ignore ticket refresh error
-          }
-        }
+        const headers = await resolveCommsAuthHeaders(activeTicket, refreshTicket);
         const url = `${cleanBase}/api/v1/comms/conversations`;
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          ...(ticket ? { Authorization: `Bearer ${ticket}` } : {})
-        };
         const payload = {
           tenantId: tenantId || '',
           facilityId,
           scope: request.scope,
           kind: 'General',
           title: request.title ? request.title.trim() : null,
-          contextType: request.contextType || null,
-          contextId: request.contextId || null,
-          category: request.category || null,
+          contextType: effectiveContextType || null,
+          contextId: effectiveContextId || null,
+          category: effectiveCategory || null,
           isEmergencyConfirmed: false,
           isLocalOnly: request.isLocalOnly ?? false,
           participants: participantsList.length > 0 ? participantsList : null
@@ -213,7 +224,161 @@ export function useConversations(
       client.events.emit('conversationCreated', newConv);
       return newConv;
     },
-    [activeTicket?.ticket, baseUrl, client, facilityId, refreshTicket, staffDisplayName, staffId, tenantId]
+    [activeTicket, baseUrl, client, facilityId, refreshTicket, staffDisplayName, staffId, tenantId]
+  );
+
+  const markConversationRead = useCallback(
+    async (conversationId: string, lastReadMessageId?: string): Promise<void> => {
+      if (!conversationId) return;
+      const prevConv = conversationsRef.current.find((c) => c.id === conversationId);
+
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conversationId ? { ...c, unreadCount: 0 } : c))
+      );
+      client.events.emit('conversationUpdated', {
+        id: conversationId,
+        unreadCount: 0
+      } as ConversationDto);
+
+      if (!baseUrl) return;
+
+      try {
+        const cleanBase = baseUrl.replace(/\/$/, '');
+        const headers = await resolveCommsAuthHeaders(activeTicket, refreshTicket);
+        const res = await fetch(
+          `${cleanBase}/api/v1/comms/conversations/${conversationId}/read`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ lastReadMessageId: lastReadMessageId ?? null })
+          }
+        );
+
+        if (!res.ok) {
+          throw new Error(
+            `Failed to mark conversation read: ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`
+          );
+        }
+      } catch (err: any) {
+        const failure = err instanceof Error ? err : new Error(String(err));
+        if (prevConv) {
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === conversationId ? { ...c, unreadCount: prevConv.unreadCount } : c
+            )
+          );
+          client.events.emit('conversationUpdated', {
+            id: conversationId,
+            unreadCount: prevConv.unreadCount
+          } as ConversationDto);
+        }
+        setError(failure);
+      }
+    },
+    [activeTicket, baseUrl, client, refreshTicket]
+  );
+
+  const setConversationMuted = useCallback(
+    async (conversationId: string, isMuted: boolean): Promise<void> => {
+      if (!conversationId) return;
+      const prevConv = conversationsRef.current.find((c) => c.id === conversationId);
+
+      const applyMuted = (c: ConversationDto, muted: boolean): ConversationDto => ({
+        ...c,
+        isMuted: muted,
+        participants: (c.participants ?? []).map((p) =>
+          isCurrentStaffParticipant(p) ? { ...p, isMuted: muted } : p
+        )
+      });
+
+      const optimisticConv = prevConv ? applyMuted(prevConv, isMuted) : undefined;
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conversationId ? applyMuted(c, isMuted) : c))
+      );
+      client.events.emit(
+        'conversationUpdated',
+        optimisticConv ?? ({ id: conversationId, isMuted } as ConversationDto)
+      );
+
+      if (!baseUrl) return;
+
+      try {
+        const cleanBase = baseUrl.replace(/\/$/, '');
+        const headers = await resolveCommsAuthHeaders(activeTicket, refreshTicket);
+        const res = await fetch(
+          `${cleanBase}/api/v1/comms/conversations/${conversationId}/mute`,
+          {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ isMuted })
+          }
+        );
+
+        if (!res.ok) {
+          throw new Error(
+            `Failed to update conversation mute state: ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`
+          );
+        }
+
+        const data = await res.json().catch(() => null);
+        if (data && typeof data === 'object') {
+          const resolvedMuted = typeof data.isMuted === 'boolean' ? data.isMuted : isMuted;
+          let updatedForEvent: ConversationDto | undefined;
+          setConversations((prev) =>
+            prev.map((c) => {
+              if (c.id !== conversationId) return c;
+              const existingList = c.participants ?? [];
+              let nextParticipants = existingList;
+              if (data.participantId) {
+                const normalizedParticipant: ParticipantDto = {
+                  id: data.id ?? data.participantId,
+                  userId: data.userId ?? data.participantId,
+                  participantId: data.participantId,
+                  displayName: data.displayName ?? staffDisplayName ?? 'Staff Member',
+                  role: data.role ?? 'Member',
+                  joinedAtUtc: data.joinedAtUtc ?? new Date().toISOString(),
+                  leftAtUtc: data.leftAtUtc ?? null,
+                  lastReadMessageId: data.lastReadMessageId ?? null,
+                  lastReadAtUtc: data.lastReadAtUtc ?? null,
+                  isMuted: resolvedMuted
+                };
+                const idx = existingList.findIndex(
+                  (p) =>
+                    p.participantId === data.participantId ||
+                    p.userId === data.participantId ||
+                    p.id === data.id ||
+                    isCurrentStaffParticipant(p)
+                );
+                nextParticipants =
+                  idx >= 0
+                    ? existingList.map((p, i) =>
+                        i === idx ? { ...p, ...normalizedParticipant } : p
+                      )
+                    : [...existingList, normalizedParticipant];
+              }
+              updatedForEvent = {
+                ...c,
+                isMuted: resolvedMuted,
+                participants: nextParticipants
+              };
+              return updatedForEvent;
+            })
+          );
+          if (updatedForEvent) {
+            client.events.emit('conversationUpdated', updatedForEvent);
+          }
+        }
+      } catch (err: any) {
+        if (prevConv) {
+          setConversations((prev) =>
+            prev.map((c) => (c.id === conversationId ? prevConv : c))
+          );
+          client.events.emit('conversationUpdated', prevConv);
+        }
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+    },
+    [activeTicket, baseUrl, client, isCurrentStaffParticipant, refreshTicket, staffDisplayName]
   );
 
   // Real-time synchronization
@@ -226,8 +391,10 @@ export function useConversations(
     });
 
     const unsubUpdated = client.events.on('conversationUpdated', (conv) => {
+      const targetId = conv.id || (conv as { conversationId?: string }).conversationId;
+      if (!targetId) return;
       setConversations((prev) =>
-        prev.map((c) => (c.id === conv.id ? { ...c, ...conv } : c))
+        prev.map((c) => (c.id === targetId ? { ...c, ...conv, id: c.id } : c))
       );
     });
 
@@ -235,15 +402,17 @@ export function useConversations(
       setConversations((prev) =>
         prev.map((c) => {
           if (c.id === msg.conversationId) {
+            const isDuplicateSeq = c.lastSeq > 0 && msg.seq > 0 && msg.seq <= c.lastSeq;
             const isOwn = Boolean(msg.senderId && staffId && msg.senderId === staffId);
-            const currentUnread = (c as any).unreadCount || 0;
+            const currentUnread = c.unreadCount ?? 0;
+            const shouldIncrementUnread = !isDuplicateSeq && !isOwn && c.status !== 'Closed';
             return {
               ...c,
               lastMessageAtUtc: msg.sentAtUtc,
               lastMessageSnippet: msg.contentText,
-              messageCount: c.messageCount + 1,
+              messageCount: isDuplicateSeq ? c.messageCount : c.messageCount + 1,
               lastSeq: Math.max(c.lastSeq, msg.seq),
-              unreadCount: isOwn ? currentUnread : currentUnread + 1,
+              unreadCount: shouldIncrementUnread ? currentUnread + 1 : currentUnread,
             };
           }
           return c;
@@ -265,7 +434,7 @@ export function useConversations(
       unsubMsg();
       unsubState();
     };
-  }, [client, refresh]);
+  }, [client, refresh, staffId]);
 
   // Filtering conversations
   const filteredConversations = useMemo(() => {
@@ -308,7 +477,7 @@ export function useConversations(
       PatientFacility: 0
     };
     for (const c of filteredConversations) {
-      const u = (c as any).unreadCount || 0;
+      const u = c.unreadCount ?? 0;
       if (u > 0 && counts[c.scope] !== undefined) {
         counts[c.scope] += u;
       }
@@ -317,7 +486,7 @@ export function useConversations(
   }, [filteredConversations]);
 
   const totalUnreadCount = useMemo(() => {
-    return filteredConversations.reduce((sum, c) => sum + ((c as any).unreadCount || 0), 0);
+    return filteredConversations.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
   }, [filteredConversations]);
 
   return {
@@ -333,6 +502,8 @@ export function useConversations(
     loadMore,
     refresh,
     setFilter,
-    createConversation
+    createConversation,
+    markConversationRead,
+    setConversationMuted
   };
 }

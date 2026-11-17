@@ -28,7 +28,8 @@ const SCOPES: ConversationScopeFilter[] = [
   'PatientFacility',
   'StaffContext',
   'Facility',
-  'Direct'
+  'Direct',
+  'Archived'
 ];
 
 export function getInitials(name: string): string {
@@ -274,8 +275,18 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                       </Text>
                     )}
 
-                    {(item.isEmergency || (item.urgentCount !== undefined && item.urgentCount > 0) || item.unreadCount > 0) && (
+                    {(item.isArchived || item.isMuted || item.isEmergency || (item.urgentCount !== undefined && item.urgentCount > 0) || item.unreadCount > 0) && (
                       <View style={styles.cardMeta}>
+                        {item.isArchived && (
+                          <View style={styles.archivedBadge} testID={`badge-archived-${item.id}`}>
+                            <Text style={styles.archivedBadgeText}>Archived</Text>
+                          </View>
+                        )}
+                        {item.isMuted && (
+                          <View style={styles.archivedBadge} testID={`badge-muted-${item.id}`}>
+                            <Text style={styles.archivedBadgeText}>Muted</Text>
+                          </View>
+                        )}
                         {item.isEmergency && (
                           <View style={styles.statBadge}>
                             <Text style={styles.statBadgeText}>Emergency</Text>
@@ -618,6 +629,19 @@ function createStyles(
       paddingHorizontal: spaceScale.xs,
       paddingVertical: 2,
       borderRadius: radiusScale.xs
+    },
+    archivedBadge: {
+      backgroundColor: c.surfaceSubtle,
+      borderColor: c.border,
+      borderWidth: 1,
+      paddingHorizontal: spaceScale.xs,
+      paddingVertical: 2,
+      borderRadius: radiusScale.xs
+    },
+    archivedBadgeText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '600',
+      color: c.textMuted
     },
     statBadgeText: {
       fontSize: fontSizeScale.xs,

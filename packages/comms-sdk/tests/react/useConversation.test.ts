@@ -197,4 +197,131 @@ describe('useConversation Hook', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('auto-marks conversation read on mount and on incoming messageReceived while open, emitting conversationUpdated (#158)', async () => {
+    const originalFetch = globalThis.fetch;
+    const readCalls: Array<{ url: string; body: any }> = [];
+
+    globalThis.fetch = (async (url: string, options: any) => {
+      if (url.endsWith('/read') && options?.method === 'POST') {
+        readCalls.push({ url, body: options?.body ? JSON.parse(options.body) : null });
+        return new Response(JSON.stringify({ conversationId: 'conv-open-1', unreadCount: 0 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      return new Response(JSON.stringify({
+        id: 'conv-open-1',
+        tenantId: 't1',
+        facilityId: 'f1',
+        scope: 'Direct',
+        kind: 'Direct',
+        title: 'Dr. Santos',
+        status: 'Submitted',
+        isEmergencyConfirmed: false,
+        isLocalOnly: false,
+        reopenCount: 0,
+        messageCount: 1,
+        unreadCount: 2,
+        lastSeq: 1,
+        createdAtUtc: new Date().toISOString(),
+        createdBy: 'staff-42',
+        participants: []
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }) as any;
+
+    try {
+      const client = new MockCommsClient();
+      const tracker = new SubscriptionTracker();
+      const store = new OptimisticStore();
+      const mockContext = createMockContext(client, store, tracker, 'https://comms.test');
+
+      const updatedEvents: any[] = [];
+      client.events.on('conversationUpdated', (conv) => {
+        updatedEvents.push(conv);
+      });
+
+      const contextMap = new Map();
+      contextMap.set(CommsContext, mockContext);
+
+      const harness = createHookHarness(() => useConversation('conv-open-1'), {
+        contextValues: contextMap
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      // Mount auto-marked read
+      expect(readCalls.some((c) => c.url.endsWith('/api/v1/comms/conversations/conv-open-1/read'))).toBe(true);
+      expect(updatedEvents.some((e) => e.id === 'conv-open-1' && e.unreadCount === 0)).toBe(true);
+
+      const mountReadCount = readCalls.length;
+
+      // Incoming message from other sender while open triggers another POST /read with that messageId
+      client.events.emit('messageReceived', {
+        messageId: 'msg-incoming-77',
+        conversationId: 'conv-open-1',
+        seq: 2,
+        clientMessageId: 'c77',
+        senderType: 'Staff',
+        senderId: 'staff-other-9',
+        senderDisplayName: 'Dr. Santos',
+        contentText: 'Lab result attached',
+        visibility: 'Public',
+        requiresAcknowledgement: false,
+        isAcknowledged: false,
+        acknowledgedAtUtc: null,
+        acknowledgedByAccountId: null,
+        acknowledgedByName: null,
+        attachments: [],
+        deliveryState: 'Waiting',
+        sentAtUtc: new Date().toISOString()
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(readCalls.length).toBeGreaterThan(mountReadCount);
+      expect(readCalls[readCalls.length - 1].body).toEqual({ lastReadMessageId: 'msg-incoming-77' });
+
+      harness.unmount();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('skips automatic POST /read when markAsReadOnMount is false', async () => {
+    const originalFetch = globalThis.fetch;
+    const readCalls: string[] = [];
+
+    globalThis.fetch = (async (url: string, options: any) => {
+      if (url.endsWith('/read') && options?.method === 'POST') {
+        readCalls.push(url);
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as any;
+
+    try {
+      const client = new MockCommsClient();
+      const tracker = new SubscriptionTracker();
+      const store = new OptimisticStore();
+      const mockContext = createMockContext(client, store, tracker, 'https://comms.test');
+
+      const contextMap = new Map();
+      contextMap.set(CommsContext, mockContext);
+
+      const harness = createHookHarness(
+        () => useConversation('conv-no-auto-read', { markAsReadOnMount: false }),
+        { contextValues: contextMap }
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(readCalls.length).toBe(0);
+
+      harness.unmount();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

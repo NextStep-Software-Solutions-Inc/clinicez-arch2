@@ -433,6 +433,14 @@ export function resolveStatusTokens(status: AppointmentStatus) {
         label: 'Cancelled',
         isStrikethrough: true,
       };
+    case 'NoShow':
+      return {
+        badgeBg: theme.colors.surfaceMuted,
+        badgeText: theme.colors.textMuted,
+        borderColor: theme.colors.border,
+        label: 'No Show',
+        isStrikethrough: true,
+      };
     case 'Confirmed':
     default:
       return {

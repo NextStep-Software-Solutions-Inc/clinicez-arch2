@@ -16,6 +16,7 @@ import {
   getAppointmentLocalDateTime,
 } from './calendarUtils';
 import { useClinicComms } from '../../context/ClinicCommsContext';
+import { useClinic } from '../../context/ClinicContext';
 
 export interface AppointmentInspectionModalProps {
   visible: boolean;
@@ -25,6 +26,7 @@ export interface AppointmentInspectionModalProps {
   onReschedule?: (appointment: ExtendedAppointmentItem) => void;
   onCancel?: (appointment: ExtendedAppointmentItem) => void;
   onReminderSent?: (appointment: ExtendedAppointmentItem) => void;
+  onAppointmentSynced?: (appointment: ExtendedAppointmentItem) => void;
 }
 
 function formatDateTimeDisplay(dateStr?: string | null): string {
@@ -66,15 +68,22 @@ export function AppointmentInspectionModal({
   onReschedule,
   onCancel,
   onReminderSent,
+  onAppointmentSynced,
 }: AppointmentInspectionModalProps) {
   const [currentAppointment, setCurrentAppointment] = useState<ExtendedAppointmentItem | null>(appointment);
   const [sendingReminder, setSendingReminder] = useState<boolean>(false);
   const [isUpdatingPolicy, setIsUpdatingPolicy] = useState<boolean>(false);
   const { openTeleconsultWaitingRoom } = useClinicComms();
+  const clinicCtx = useClinic();
+  const clinicTimeZoneId = clinicCtx?.settings?.timeZoneId ?? clinicCtx?.timeZoneId ?? 'Asia/Manila';
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
   const [activeInvite, setActiveInvite] = useState<TeleconsultGuestInviteDto | null>(null);
   const [pinCopied, setPinCopied] = useState<boolean>(false);
   const pinCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onAppointmentSyncedRef = useRef(onAppointmentSynced);
+  onAppointmentSyncedRef.current = onAppointmentSynced;
+  const latestAppointmentRef = useRef(appointment);
+  latestAppointmentRef.current = appointment;
 
   const markPinCopied = useCallback(() => {
     setPinCopied(true);
@@ -123,43 +132,102 @@ export function AppointmentInspectionModal({
 
   useEffect(() => {
     setCurrentAppointment(appointment);
+  }, [appointment]);
+
+  useEffect(() => {
+    let cancelled = false;
     setShowCancelConfirm(false);
     setPinCopied(false);
 
-    const isAptTeleconsult =
-      appointment?.isTeleconsult ||
-      appointment?.appointmentType === 'Teleconsult' ||
-      appointment?.serviceType === 'Teleconsult' ||
-      appointment?.serviceType === 'Teleconsultation';
-
-    if (visible && isAptTeleconsult && appointment && appointment.status !== 'Cancelled') {
-      const cached = getCachedAppointmentInvite(appointment.id);
-      if (cached) {
-        setActiveInvite(cached);
-        return;
-      }
-      setActiveInvite(null);
-      clinicService.createTeleconsultGuestInvite(appointment.id)
-        .then(([freshInvite, err]) => {
-          if (!err && freshInvite?.inviteUrl) {
-            setCachedAppointmentInvite(appointment.id, freshInvite);
-            setActiveInvite(freshInvite);
-          }
+    const targetAppointment = latestAppointmentRef.current;
+    if (visible && targetAppointment?.id && typeof clinicService?.getAppointment === 'function') {
+      clinicService
+        .getAppointment(targetAppointment.id)
+        .then(([fresh, err]) => {
+          if (cancelled || err || !fresh) return;
+          const synced: ExtendedAppointmentItem = {
+            ...(latestAppointmentRef.current ?? targetAppointment),
+            ...fresh,
+          };
+          setCurrentAppointment((prev) => (prev && prev.id === synced.id ? { ...prev, ...synced } : synced));
+          onAppointmentSyncedRef.current?.(synced);
         })
         .catch(() => {});
+    }
+
+    const isAptTeleconsult =
+      targetAppointment?.isTeleconsult ||
+      targetAppointment?.appointmentType === 'Teleconsult' ||
+      targetAppointment?.serviceType === 'Teleconsult' ||
+      targetAppointment?.serviceType === 'Teleconsultation';
+
+    if (visible && isAptTeleconsult && targetAppointment && targetAppointment.status !== 'Cancelled') {
+      const cached = getCachedAppointmentInvite(targetAppointment.id);
+      if (cached) {
+        setActiveInvite(cached);
+      } else {
+        setActiveInvite(null);
+        clinicService
+          .createTeleconsultGuestInvite(targetAppointment.id)
+          .then(([freshInvite, err]) => {
+            if (!cancelled && !err && freshInvite?.inviteUrl) {
+              setCachedAppointmentInvite(targetAppointment.id, freshInvite);
+              setActiveInvite(freshInvite);
+            }
+          })
+          .catch(() => {});
+      }
     } else {
       setActiveInvite(null);
     }
-  }, [appointment, visible]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, appointment?.id]);
 
   if (!visible || !currentAppointment) {
     return null;
   }
 
+  const { dateStr: scheduledLocalDateStr, formattedTime } = getAppointmentLocalDateTime(
+    currentAppointment.scheduledAt,
+    clinicTimeZoneId,
+  );
+  const { dateStr: todayLocalDateStr } = getAppointmentLocalDateTime(
+    new Date().toISOString(),
+    clinicTimeZoneId,
+  );
+  const scheduledTimeMs = new Date(currentAppointment.scheduledAt).getTime();
+  const isPastSchedule = Number.isFinite(scheduledTimeMs) && scheduledTimeMs < Date.now();
+  const isPastDate =
+    Boolean(scheduledLocalDateStr) &&
+    Boolean(todayLocalDateStr) &&
+    scheduledLocalDateStr < todayLocalDateStr;
+
   const isReminderDisabled =
     currentAppointment.status === 'Cancelled' ||
     currentAppointment.status === 'Completed' ||
+    currentAppointment.status === 'NoShow' ||
+    isPastDate ||
     sendingReminder;
+
+  const syncAppointmentAfterReminderError = async () => {
+    if (typeof clinicService?.getAppointment !== 'function') return;
+    try {
+      const [fresh, freshErr] = await clinicService.getAppointment(currentAppointment.id);
+      if (!freshErr && fresh) {
+        const synced: ExtendedAppointmentItem = {
+          ...currentAppointment,
+          ...fresh,
+        };
+        setCurrentAppointment(synced);
+        onAppointmentSynced?.(synced);
+      }
+    } catch {
+      // Ignore secondary refresh failure
+    }
+  };
 
   const handleSendReminder = async () => {
     if (isReminderDisabled) return;
@@ -168,6 +236,7 @@ export function AppointmentInspectionModal({
       const [updated, err] = await clinicService.sendAppointmentReminder(currentAppointment.id);
       if (err || !updated) {
         notify.error(err?.message || 'Failed to dispatch appointment push reminder.');
+        await syncAppointmentAfterReminderError();
         return;
       }
       const merged: ExtendedAppointmentItem = {
@@ -176,9 +245,11 @@ export function AppointmentInspectionModal({
       };
       setCurrentAppointment(merged);
       onReminderSent?.(merged);
+      onAppointmentSynced?.(merged);
       notify.success('Appointment push reminder sent to patient.');
     } catch {
       notify.error('Failed to dispatch appointment push reminder.');
+      await syncAppointmentAfterReminderError();
     } finally {
       setSendingReminder(false);
     }
@@ -188,9 +259,8 @@ export function AppointmentInspectionModal({
   const urgencyTokens = resolveUrgencyTokens(urgency);
   const statusTokens = resolveStatusTokens(currentAppointment.status);
 
-  const { dateStr, formattedTime } = getAppointmentLocalDateTime(currentAppointment.scheduledAt);
-  const formattedScheduledAt = dateStr && formattedTime
-    ? `${dateStr} at ${formattedTime}`
+  const formattedScheduledAt = scheduledLocalDateStr && formattedTime
+    ? `${scheduledLocalDateStr} at ${formattedTime}`
     : currentAppointment.scheduledAt;
 
   const canCheckIn =
@@ -514,7 +584,7 @@ export function AppointmentInspectionModal({
                   {formattedScheduledAt}
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Local clinic station schedule (Asia/Manila)
+                  Local clinic station schedule ({clinicTimeZoneId})
                 </ThemedText>
               </View>
             </View>
@@ -655,11 +725,19 @@ export function AppointmentInspectionModal({
                       <ThemedText
                         data-testid="status-reminder-24h"
                         variant="body"
-                        color={currentAppointment.reminder24hSent ? theme.colors.successText : theme.colors.text}
+                        color={
+                          currentAppointment.reminder24hSent
+                            ? theme.colors.successText
+                            : isPastSchedule
+                              ? theme.colors.textMuted
+                              : theme.colors.text
+                        }
                       >
                         {currentAppointment.reminder24hSent
                           ? `Sent at ${formatDateTimeDisplay(currentAppointment.reminder24hSentAt)}`
-                          : 'Scheduled (24h advance)'}
+                          : isPastSchedule
+                            ? 'Not sent (Past schedule)'
+                            : 'Scheduled (24h advance)'}
                       </ThemedText>
                     </View>
                   </View>
@@ -680,11 +758,19 @@ export function AppointmentInspectionModal({
                       <ThemedText
                         data-testid="status-reminder-2h"
                         variant="body"
-                        color={currentAppointment.reminder2hSent ? theme.colors.successText : theme.colors.text}
+                        color={
+                          currentAppointment.reminder2hSent
+                            ? theme.colors.successText
+                            : isPastSchedule
+                              ? theme.colors.textMuted
+                              : theme.colors.text
+                        }
                       >
                         {currentAppointment.reminder2hSent
                           ? `Sent at ${formatDateTimeDisplay(currentAppointment.reminder2hSentAt)}`
-                          : 'Scheduled (2h advance)'}
+                          : isPastSchedule
+                            ? 'Not sent (Past schedule)'
+                            : 'Scheduled (2h advance)'}
                       </ThemedText>
                     </View>
                   </View>

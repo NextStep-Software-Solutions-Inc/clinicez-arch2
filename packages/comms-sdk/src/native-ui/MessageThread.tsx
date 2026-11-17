@@ -45,6 +45,9 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   error = null,
   hasMoreHistory = false,
   onLoadMoreHistory,
+  isArchived = false,
+  archivedBannerText,
+  noticeBannerText,
   colors,
   shadows: shadowsProp,
   style
@@ -110,7 +113,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   };
 
   const handleSend = async () => {
-    if (!inputText.trim() || isSubmitting) return;
+    if (isArchived || !inputText.trim() || isSubmitting) return;
     setIsSubmitting(true);
     try {
       await onSendMessage(inputText.trim(), isInternal);
@@ -325,6 +328,17 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         </View>
       )}
 
+      {/* Inline Notice Banner */}
+      {Boolean(noticeBannerText) && (
+        <View
+          style={styles.noticeBanner}
+          testID="message-thread-notice-banner"
+          accessibilityRole="text"
+        >
+          <Text style={styles.noticeBannerText}>{noticeBannerText}</Text>
+        </View>
+      )}
+
       {/* Content States */}
       {isLoading ? (
         <View style={styles.skeletonContainer}>
@@ -477,45 +491,57 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         </View>
       )}
 
-      {/* Input Bar */}
-      <View style={styles.inputContainer}>
-        {canWriteInternalNotes && (
-          <TouchableOpacity
-            style={[styles.internalToggle, isInternal && styles.internalToggleActive]}
-            onPress={() => setIsInternal((prev) => !prev)}
-            accessibilityLabel="Toggle internal staff note"
-          >
-            <Text style={[styles.internalToggleText, isInternal && styles.internalToggleTextActive]}>
-              {isInternal ? 'Internal Note: ACTIVE' : 'Note'}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        <View style={styles.inputRow}>
-          <TextInput
-            style={[styles.input, isInternal && styles.inputInternal]}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder={isInternal ? 'Type internal note for care team...' : 'Type message...'}
-            placeholderTextColor={c.textMuted}
-            multiline
-            onKeyPress={handleKeyPress}
-            onSubmitEditing={handleSend}
-            blurOnSubmit={false}
-            accessibilityLabel="Message input field"
-          />
-
-          <TouchableOpacity
-            style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || isSubmitting}
-            accessibilityLabel="Send message"
-          >
-            {renderSendIcon ? renderSendIcon() : null}
-            <Text style={styles.sendButtonText}>Send</Text>
-          </TouchableOpacity>
+      {/* Input Bar or Archived Read-Only Banner */}
+      {isArchived ? (
+        <View
+          style={styles.archivedBanner}
+          testID="message-thread-archived-banner"
+          accessibilityRole="text"
+        >
+          <Text style={styles.archivedBannerText}>
+            {archivedBannerText ?? 'This conversation is closed and archived. Message history is read-only.'}
+          </Text>
         </View>
-      </View>
+      ) : (
+        <View style={styles.inputContainer}>
+          {canWriteInternalNotes && (
+            <TouchableOpacity
+              style={[styles.internalToggle, isInternal && styles.internalToggleActive]}
+              onPress={() => setIsInternal((prev) => !prev)}
+              accessibilityLabel="Toggle internal staff note"
+            >
+              <Text style={[styles.internalToggleText, isInternal && styles.internalToggleTextActive]}>
+                {isInternal ? 'Internal Note: ACTIVE' : 'Note'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <View style={styles.inputRow}>
+            <TextInput
+              style={[styles.input, isInternal && styles.inputInternal]}
+              value={inputText}
+              onChangeText={setInputText}
+              placeholder={isInternal ? 'Type internal note for care team...' : 'Type message...'}
+              placeholderTextColor={c.textMuted}
+              multiline
+              onKeyPress={handleKeyPress}
+              onSubmitEditing={handleSend}
+              blurOnSubmit={false}
+              accessibilityLabel="Message input field"
+            />
+
+            <TouchableOpacity
+              style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+              onPress={handleSend}
+              disabled={!inputText.trim() || isSubmitting}
+              accessibilityLabel="Send message"
+            >
+              {renderSendIcon ? renderSendIcon() : null}
+              <Text style={styles.sendButtonText}>Send</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -880,6 +906,33 @@ function createStyles(
       backgroundColor: c.surface,
       borderTopWidth: 1,
       borderTopColor: c.border
+    },
+    noticeBanner: {
+      paddingHorizontal: spaceScale.md,
+      paddingVertical: spaceScale.xs,
+      backgroundColor: c.surfaceSubtle,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border
+    },
+    noticeBannerText: {
+      fontSize: fontSizeScale.xs,
+      color: c.textSecondary,
+      lineHeight: 16
+    },
+    archivedBanner: {
+      paddingHorizontal: spaceScale.md,
+      paddingVertical: spaceScale.md,
+      backgroundColor: c.surfaceSubtle,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    archivedBannerText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '600',
+      color: c.textMuted,
+      textAlign: 'center'
     },
     internalToggle: {
       flexDirection: 'row',

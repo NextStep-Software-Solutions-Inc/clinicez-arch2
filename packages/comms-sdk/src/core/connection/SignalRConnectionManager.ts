@@ -37,6 +37,7 @@ export class SignalRConnectionManager implements ICommsClient {
   private readonly renewalTimer: TicketRenewalTimer;
   public readonly events: CommsEventEmitter = new CommsEventEmitter();
   private readonly activeConversations: Set<string> = new Set();
+  private readonly lastSeenSeqByConversation: Map<string, number> = new Map();
   private isConnecting: boolean = false;
   private inFlightConnect: Promise<void> | null = null;
 
@@ -100,14 +101,8 @@ export class SignalRConnectionManager implements ICommsClient {
         ]);
         this.events.emit('connectionStateChanged', 'Connected');
 
-        // Rejoin any previously active conversations
-        for (const convId of this.activeConversations) {
-          try {
-            await this.connection.invoke('JoinConversation', convId);
-          } catch (e) {
-            this.events.emit('error', e instanceof Error ? e : new Error(String(e)));
-          }
-        }
+        // Rejoin any previously active conversations and catch up missed messages
+        await this.rejoinAndCatchUpConversations();
       } catch (err: any) {
         const error = err instanceof Error ? err : new Error(String(err));
         this.events.emit('connectionStateChanged', 'Disconnected', error);
@@ -132,6 +127,7 @@ export class SignalRConnectionManager implements ICommsClient {
     }
     if (clearConversations) {
       this.activeConversations.clear();
+      this.lastSeenSeqByConversation.clear();
     }
     this.events.emit('connectionStateChanged', 'Disconnected');
   }
@@ -167,7 +163,11 @@ export class SignalRConnectionManager implements ICommsClient {
 
   public async sendMessage(request: SendMessageRequest): Promise<MessageDto> {
     this.ensureConnected();
-    return await this.connection.invoke<MessageDto>('SendMessage', request);
+    const sent = await this.connection.invoke<MessageDto>('SendMessage', request);
+    if (sent) {
+      this.recordSeenSeq(sent.conversationId || request.conversationId, sent.seq);
+    }
+    return sent;
   }
 
   public async sendReaction(messageId: string, reaction: string): Promise<void> {
@@ -187,7 +187,18 @@ export class SignalRConnectionManager implements ICommsClient {
 
   public async getMessagesAfterSeq(conversationId: string, afterSeq: number): Promise<MessageDto[]> {
     this.ensureConnected();
-    return await this.connection.invoke<MessageDto[]>('GetMessagesAfterSeq', conversationId, afterSeq);
+    this.recordSeenSeq(conversationId, afterSeq);
+    const messages = await this.connection.invoke<MessageDto[]>('GetMessagesAfterSeq', conversationId, afterSeq);
+    if (Array.isArray(messages)) {
+      for (const msg of messages) {
+        this.recordSeenSeq(msg.conversationId || conversationId, msg.seq);
+      }
+    }
+    return messages;
+  }
+
+  public getLastSeenSeq(conversationId: string): number {
+    return this.lastSeenSeqByConversation.get(conversationId) ?? 0;
   }
 
   public getRenewalTimer(): TicketRenewalTimer {
@@ -205,14 +216,8 @@ export class SignalRConnectionManager implements ICommsClient {
 
     this.connection.onreconnected(async () => {
       this.events.emit('connectionStateChanged', 'Connected');
-      // Resubscribe active conversation channels
-      for (const convId of this.activeConversations) {
-        try {
-          await this.connection.invoke('JoinConversation', convId);
-        } catch (e) {
-          this.events.emit('error', e instanceof Error ? e : new Error(String(e)));
-        }
-      }
+      // Resubscribe active conversation channels and catch up missed messages
+      await this.rejoinAndCatchUpConversations();
     });
 
     this.connection.onclose((err) => {
@@ -220,8 +225,41 @@ export class SignalRConnectionManager implements ICommsClient {
     });
   }
 
+  private recordSeenSeq(conversationId: string, seq: number): void {
+    if (!conversationId || typeof seq !== 'number' || Number.isNaN(seq)) return;
+    const prev = this.lastSeenSeqByConversation.get(conversationId) ?? 0;
+    if (seq > prev) {
+      this.lastSeenSeqByConversation.set(conversationId, seq);
+    }
+  }
+
+  private async rejoinAndCatchUpConversations(): Promise<void> {
+    for (const convId of this.activeConversations) {
+      try {
+        await this.connection.invoke('JoinConversation', convId);
+        const afterSeq = this.lastSeenSeqByConversation.get(convId) ?? 0;
+        const missed = await this.connection.invoke<MessageDto[]>(
+          'GetMessagesAfterSeq',
+          convId,
+          afterSeq
+        );
+        if (Array.isArray(missed)) {
+          for (const msg of missed) {
+            this.recordSeenSeq(msg.conversationId || convId, msg.seq);
+            this.events.emit('messageReceived', msg);
+          }
+        }
+      } catch (e) {
+        this.events.emit('error', e instanceof Error ? e : new Error(String(e)));
+      }
+    }
+  }
+
   private registerHubEventHandlers(): void {
     this.connection.on('OnMessageReceived', (message: MessageDto) => {
+      if (message) {
+        this.recordSeenSeq(message.conversationId, message.seq);
+      }
       this.events.emit('messageReceived', message);
     });
 

@@ -211,6 +211,7 @@ public sealed class SendAppointmentReminderCommandStressTests
     [InlineData(AppointmentStatus.InConsultation, true)]
     [InlineData(AppointmentStatus.Completed, false)]
     [InlineData(AppointmentStatus.Cancelled, false)]
+    [InlineData(AppointmentStatus.NoShow, false)]
     public async Task Handle_StatusMatrix_BehavesAccordingToDomainInvariants(AppointmentStatus status, bool expectedSuccess)
     {
         // Arrange
@@ -249,7 +250,7 @@ public sealed class SendAppointmentReminderCommandStressTests
         else
         {
             Func<Task> act = async () => await handler.Handle(command, CancellationToken.None);
-            var exception = await act.Should().ThrowAsync<InvalidOperationException>();
+            var exception = await act.Should().ThrowAsync<ValidationException>();
             exception.WithMessage($"*{status}*");
 
             await dispatcher.DidNotReceive().DispatchAlertAsync(

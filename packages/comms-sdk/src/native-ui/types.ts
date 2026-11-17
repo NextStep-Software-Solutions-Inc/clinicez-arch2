@@ -9,7 +9,8 @@ export type ConversationScopeFilter =
   | 'PatientFacility'
   | 'StaffContext'
   | 'Facility'
-  | 'Direct';
+  | 'Direct'
+  | 'Archived';
 
 export interface ChatDrawerItem {
   id: string;
@@ -22,6 +23,8 @@ export interface ChatDrawerItem {
   urgentCount?: number;
   isEmergency?: boolean;
   isActive?: boolean;
+  isArchived?: boolean;
+  isMuted?: boolean;
   patientId?: string;
   patientNameMasked?: string;
   isOffHours?: boolean;
@@ -60,6 +63,7 @@ export interface ThreadAttachment {
 
 export interface ThreadMessage {
   id: string;
+  clientMessageId?: string;
   seq: number;
   conversationId: string;
   senderType: 'Staff' | 'Patient' | 'System' | 'Guest';
@@ -101,6 +105,9 @@ export interface MessageThreadProps {
   error?: string | null;
   hasMoreHistory?: boolean;
   onLoadMoreHistory?: () => void;
+  isArchived?: boolean;
+  archivedBannerText?: string;
+  noticeBannerText?: string;
   colors?: CommsThemeColors;
   shadows?: CommsThemeShadows;
   style?: ViewStyle;

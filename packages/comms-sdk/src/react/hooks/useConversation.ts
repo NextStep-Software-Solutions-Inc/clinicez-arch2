@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConversationDto, MessageDto, ParticipantDto } from '../../core/types';
 import { useCommsContext } from '../CommsContext';
+import { resolveCommsAuthHeaders } from '../internal/authHeaders';
 import { TypingParticipant, UseConversationOptions, UseConversationResult } from '../types';
 
 export function useConversation(
@@ -14,7 +15,8 @@ export function useConversation(
     connectionState,
     baseUrl,
     activeTicket,
-    refreshTicket
+    refreshTicket,
+    staffId
   } = useCommsContext();
 
   const [conversation, setConversation] = useState<ConversationDto | null>(null);
@@ -68,20 +70,8 @@ export function useConversation(
       if (!baseUrl) return;
       try {
         const cleanBase = baseUrl.replace(/\/$/, '');
-        let ticket = activeTicket?.ticket;
-        if (!ticket && refreshTicket) {
-          try {
-            const refreshed = await refreshTicket();
-            ticket = refreshed?.ticket;
-          } catch {
-            // ignore
-          }
-        }
+        const headers = await resolveCommsAuthHeaders(activeTicket, refreshTicket);
         const url = `${cleanBase}/api/v1/comms/conversations/${conversationId}`;
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          ...(ticket ? { Authorization: `Bearer ${ticket}` } : {})
-        };
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
         const timer = controller ? setTimeout(() => controller.abort(), 4000) : null;
         try {
@@ -113,7 +103,66 @@ export function useConversation(
     };
   }, [activeTicket?.ticket, baseUrl, conversationId, refreshTicket]);
 
-  // Room subscription retain/release and initial message load
+  const markAsRead = useCallback(
+    async (overrideLastReadMessageId?: string): Promise<void> => {
+      if (!conversationId) return;
+
+      const currentMessages = store.getMessages(conversationId);
+      const latestServerMsg = [...currentMessages]
+        .reverse()
+        .find((m) => !m.messageId.startsWith('opt-'));
+      const explicitMsgId =
+        typeof overrideLastReadMessageId === 'string' && overrideLastReadMessageId.length > 0
+          ? overrideLastReadMessageId
+          : undefined;
+      const lastReadMessageId = explicitMsgId ?? latestServerMsg?.messageId ?? null;
+
+      setConversation((prev) => (prev ? { ...prev, unreadCount: 0 } : prev));
+      client.events.emit('conversationUpdated', {
+        id: conversationId,
+        unreadCount: 0
+      } as ConversationDto);
+
+      if (!baseUrl) {
+        Promise.resolve().then(() => {
+          client.events.emit('conversationUpdated', {
+            id: conversationId,
+            unreadCount: 0
+          } as ConversationDto);
+        });
+        return;
+      }
+
+      try {
+        const cleanBase = baseUrl.replace(/\/$/, '');
+        const headers = await resolveCommsAuthHeaders(activeTicket, refreshTicket);
+        const res = await fetch(
+          `${cleanBase}/api/v1/comms/conversations/${conversationId}/read`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ lastReadMessageId })
+          }
+        );
+        if (res.ok) {
+          client.events.emit('conversationUpdated', {
+            id: conversationId,
+            unreadCount: 0
+          } as ConversationDto);
+        }
+      } catch {
+        // Non-blocking read-receipt persistence
+      }
+    },
+    [activeTicket, baseUrl, client, conversationId, refreshTicket, store]
+  );
+
+  const markAsReadRef = useRef(markAsRead);
+  useEffect(() => {
+    markAsReadRef.current = markAsRead;
+  }, [markAsRead]);
+
+  // Room subscription retain/release, initial message load, and mark-as-read on mount
   useEffect(() => {
     if (!conversationId) {
       setMessages([]);
@@ -127,12 +176,33 @@ export function useConversation(
 
     refreshRef.current().catch(() => {});
 
+    if (options?.markAsReadOnMount !== false) {
+      markAsReadRef.current().catch(() => {});
+    }
+
     return () => {
       subscriptionTracker.releaseRoom(client, conversationId).catch((err) => {
         console.warn('releaseRoom error:', err);
       });
     };
-  }, [client, conversationId, subscriptionTracker]);
+  }, [client, conversationId, options?.markAsReadOnMount, subscriptionTracker]);
+
+  // Mark incoming messages as read automatically while conversation is open
+  useEffect(() => {
+    if (!conversationId || options?.markAsReadOnMount === false) return;
+
+    const unsub = client.events.on('messageReceived', (msg) => {
+      if (msg.conversationId !== conversationId) return;
+      const isOwn = Boolean(msg.senderId && staffId && msg.senderId === staffId);
+      if (!isOwn) {
+        markAsReadRef.current(msg.messageId).catch(() => {});
+      }
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [client, conversationId, options?.markAsReadOnMount, staffId]);
 
   // Sync when connection reconnects
   useEffect(() => {
@@ -219,11 +289,6 @@ export function useConversation(
     },
     []
   );
-
-  const markAsRead = useCallback(async (): Promise<void> => {
-    if (!conversationId) return;
-    // Mark read locally / server
-  }, [conversationId]);
 
   const acknowledgeMessage = useCallback(
     async (messageId: string): Promise<boolean> => {

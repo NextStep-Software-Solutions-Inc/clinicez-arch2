@@ -28,6 +28,7 @@ import type { BadgeVariant } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useClinic } from '../../context/ClinicContext';
+import { useClinicComms } from '../../context/ClinicCommsContext';
 import PatientSearchResultRow, {
   parseConfiguredSearchFields,
 } from '../../components/patient/PatientSearchResultRow';
@@ -153,6 +154,8 @@ function getStatusBadge(status: AppointmentStatus): { variant: BadgeVariant; lab
       return { variant: 'warning', label: 'Pending' };
     case 'Cancelled':
       return { variant: 'emergency', label: 'Cancelled' };
+    case 'NoShow':
+      return { variant: 'neutral', label: 'No Show' };
     case 'Confirmed':
     default:
       return { variant: 'primary', label: 'Confirmed' };
@@ -266,6 +269,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   } | null>(null);
   const { staff } = useStaff();
   const { settings, rooms } = useClinic();
+  const { lastTeleconsultEndedAt = 0 } = useClinicComms() ?? {};
   const doctors = staff.filter((s) => s.role === 'Doctor');
   const activeDoctors = useMemo(() => staff.filter((s) => s.role === 'Doctor' && s.isActive), [staff]);
   const activeRooms = useMemo(() => (rooms || []).filter((r) => r.isActive), [rooms]);
@@ -438,7 +442,13 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       setLoadError(err.message || 'Unable to load appointments.');
       return;
     }
-    setAppointments(data ?? []);
+    const nextAppointments = data ?? [];
+    setAppointments(nextAppointments);
+    setInspectedAppointment((prev) => {
+      if (!prev) return prev;
+      const updated = nextAppointments.find((a) => a.id === prev.id);
+      return updated ? { ...prev, ...updated } : prev;
+    });
     setLoadError(null);
   }, [viewMode, currentDate, calendarDoctorId, statusFilter]);
 
@@ -446,6 +456,14 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     setLoading(true);
     fetchAppointments().finally(() => setLoading(false));
   }, [fetchAppointments]);
+
+  const prevTeleconsultEndedAtRef = useRef<number>(lastTeleconsultEndedAt);
+  useEffect(() => {
+    if (lastTeleconsultEndedAt && lastTeleconsultEndedAt !== prevTeleconsultEndedAtRef.current) {
+      prevTeleconsultEndedAtRef.current = lastTeleconsultEndedAt;
+      void fetchAppointments();
+    }
+  }, [lastTeleconsultEndedAt, fetchAppointments]);
 
   // Debounced patient lookup for the booking form.
   useEffect(() => {
@@ -1300,6 +1318,22 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         visible={!!inspectedAppointment}
         appointment={inspectedAppointment}
         onClose={() => setInspectedAppointment(null)}
+        onReminderSent={(updated) => {
+          setAppointments((prev) =>
+            prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a))
+          );
+          setInspectedAppointment((prev) =>
+            prev && prev.id === updated.id ? { ...prev, ...updated } : prev
+          );
+        }}
+        onAppointmentSynced={(updated) => {
+          setAppointments((prev) =>
+            prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a))
+          );
+          setInspectedAppointment((prev) =>
+            prev && prev.id === updated.id ? { ...prev, ...updated } : prev
+          );
+        }}
         onCheckIn={(appt) => {
           setInspectedAppointment(null);
           handleOpenCheckInModal(appt);

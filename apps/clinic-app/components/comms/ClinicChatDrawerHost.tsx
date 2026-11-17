@@ -69,17 +69,7 @@ export default function ClinicChatDrawerHost() {
   const [isNewConvModalOpen, setIsNewConvModalOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [removedConversationIds, setRemovedConversationIds] = useState<Set<string>>(new Set());
-
-  // Play audio chime when any incoming message is received
-  useEffect(() => {
-    if (!comms?.client?.events) return;
-    const unsub = comms.client.events.on('messageReceived', () => {
-      playMessageChime();
-    });
-    return () => {
-      unsub();
-    };
-  }, [comms?.client]);
+  const [locallyArchivedIds, setLocallyArchivedIds] = useState<Set<string>>(new Set());
 
   // Reset tab to conversations whenever drawer is opened/closed
   useEffect(() => {
@@ -103,7 +93,49 @@ export default function ClinicChatDrawerHost() {
     error,
     refresh: refreshConversations,
     createConversation,
+    markConversationRead,
+    setConversationMuted,
   } = useConversations();
+
+  const mutedConversationIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of conversations) {
+      const selfParticipant = c.participants?.find(
+        (p) => p.participantId === user?.id || p.userId === user?.id || p.id === user?.id,
+      );
+      if (Boolean(selfParticipant?.isMuted ?? c.isMuted)) {
+        ids.add(c.id);
+      }
+    }
+    return ids;
+  }, [conversations, user?.id]);
+
+  const mutedConversationIdsRef = useRef<Set<string>>(mutedConversationIds);
+  mutedConversationIdsRef.current = mutedConversationIds;
+
+  // Play audio chime when an incoming message arrives for an unmuted conversation from another sender
+  useEffect(() => {
+    if (!comms?.client?.events) return;
+    const unsub = comms.client.events.on('messageReceived', (msg) => {
+      if (msg?.senderId && user?.id && msg.senderId === user.id) {
+        return;
+      }
+      if (msg?.conversationId && mutedConversationIdsRef.current.has(msg.conversationId)) {
+        return;
+      }
+      playMessageChime();
+    });
+    return () => {
+      unsub();
+    };
+  }, [comms?.client, user?.id]);
+
+  // Mark active conversation read whenever it becomes selected in an open drawer
+  useEffect(() => {
+    if (isChatDrawerOpen && activeConversationId && typeof markConversationRead === 'function') {
+      void Promise.resolve(markConversationRead(activeConversationId)).catch(() => {});
+    }
+  }, [isChatDrawerOpen, activeConversationId, markConversationRead]);
 
   const {
     items: triageItems,
@@ -168,7 +200,7 @@ export default function ClinicChatDrawerHost() {
 
   const handleCloseAndArchive = useCallback(
     async (id: string) => {
-      setRemovedConversationIds((prev) => new Set(prev).add(id));
+      setLocallyArchivedIds((prev) => new Set(prev).add(id));
       setActiveConversationId(undefined);
       try {
         const cleanBase = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
@@ -194,22 +226,40 @@ export default function ClinicChatDrawerHost() {
             throw new Error(`Server returned HTTP ${res.status}`);
           }
         }
+        const existingConversation = conversations.find((c) => c.id === id);
+        if (existingConversation) {
+          comms?.client?.events?.emit?.('conversationUpdated', {
+            ...existingConversation,
+            status: 'Closed' as const,
+          });
+        }
         await refreshConversations();
         notify.success('Conversation closed and archived.');
       } catch (err) {
+        setLocallyArchivedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
         console.warn('Failed to archive conversation on server:', err);
         notify.error('Failed to archive conversation on server.');
       }
     },
-    [comms, facilityId, refreshConversations, setActiveConversationId],
+    [comms, conversations, facilityId, refreshConversations, setActiveConversationId],
   );
 
   const chatItems: ChatDrawerItem[] = useMemo(() => {
     return conversations
       .filter((c) => {
         if (removedConversationIds.has(c.id)) return false;
-        if (c.status === 'Closed') return false;
-        if (selectedScope !== 'All' && c.scope !== selectedScope) return false;
+        if (c.scope === 'StaffContext' && c.contextType === 'TeleconsultCall') return false;
+        const isArchived = c.status === 'Closed' || locallyArchivedIds.has(c.id);
+        if (selectedScope === 'Archived') {
+          if (!isArchived) return false;
+        } else {
+          if (isArchived) return false;
+          if (selectedScope !== 'All' && c.scope !== selectedScope) return false;
+        }
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
           const displayTitle = resolveConversationDisplayTitle(
@@ -230,27 +280,42 @@ export default function ClinicChatDrawerHost() {
         }
         return true;
       })
-      .map((c) => ({
-        id: c.id,
-        scope: c.scope as ChatDrawerItem['scope'],
-        title: resolveConversationDisplayTitle(
-          c,
-          user?.id,
-          user?.name,
-          (p) => {
-            const pid = p.participantId || p.userId || p.id;
-            const match = staff.find((s) => s.id === pid);
-            return match ? formatStaffName(match) : null;
-          },
-        ),
-        lastMessageSnippet: c.lastMessageSnippet ?? undefined,
-        lastMessageAtUtc: c.lastMessageAtUtc ?? undefined,
-        unreadCount: c.unreadCount ?? 0,
-        urgentCount: c.priority === 'Urgent' ? 1 : 0,
-        isEmergency: c.priority === 'Critical',
-        isActive: c.id === activeConversationId,
-      }));
-  }, [conversations, removedConversationIds, selectedScope, searchQuery, activeConversationId, user, staff]);
+      .map((c) => {
+        const isArchived = c.status === 'Closed' || locallyArchivedIds.has(c.id);
+        return {
+          id: c.id,
+          scope: c.scope as ChatDrawerItem['scope'],
+          title: resolveConversationDisplayTitle(
+            c,
+            user?.id,
+            user?.name,
+            (p) => {
+              const pid = p.participantId || p.userId || p.id;
+              const match = staff.find((s) => s.id === pid);
+              return match ? formatStaffName(match) : null;
+            },
+          ),
+          lastMessageSnippet: c.lastMessageSnippet ?? undefined,
+          lastMessageAtUtc: c.lastMessageAtUtc ?? undefined,
+          unreadCount: c.unreadCount ?? 0,
+          urgentCount: c.priority === 'Urgent' ? 1 : 0,
+          isEmergency: c.priority === 'Critical',
+          isActive: c.id === activeConversationId,
+          isArchived,
+          isMuted: mutedConversationIds.has(c.id),
+        };
+      });
+  }, [
+    conversations,
+    removedConversationIds,
+    locallyArchivedIds,
+    selectedScope,
+    searchQuery,
+    activeConversationId,
+    user,
+    staff,
+    mutedConversationIds,
+  ]);
 
   const mappedTriageItems: TriageQueueItem[] = useMemo(() => {
     return triageItems.map((i) => ({
@@ -598,7 +663,26 @@ export default function ClinicChatDrawerHost() {
         {activeConversationId ? (
           <ClinicActiveThread
             conversationId={activeConversationId}
-            initialConversation={conversations.find((c) => c.id === activeConversationId)}
+            initialConversation={(() => {
+              const found = conversations.find((c) => c.id === activeConversationId);
+              if (found && locallyArchivedIds.has(found.id) && found.status !== 'Closed') {
+                return { ...found, status: 'Closed' as const };
+              }
+              return found;
+            })()}
+            isMuted={mutedConversationIds.has(activeConversationId)}
+            onToggleMute={async (nextMuted) => {
+              if (nextMuted) {
+                mutedConversationIdsRef.current = new Set(mutedConversationIdsRef.current).add(
+                  activeConversationId,
+                );
+              } else {
+                const next = new Set(mutedConversationIdsRef.current);
+                next.delete(activeConversationId);
+                mutedConversationIdsRef.current = next;
+              }
+              await setConversationMuted?.(activeConversationId, nextMuted);
+            }}
             onBack={() => setActiveConversationId(undefined)}
             onOpenPatientChart={handleOpenPatientChart}
             currentUserId={user?.id || ''}
@@ -680,7 +764,22 @@ export default function ClinicChatDrawerHost() {
           const created = await createConversation({
             scope: params.scope,
             title: params.title,
-            contextId: params.patientId,
+            contextType:
+              params.scope === 'Facility'
+                ? params.department
+                  ? 'Department'
+                  : undefined
+                : params.scope === 'StaffContext'
+                ? params.patientId
+                  ? 'Patient'
+                  : undefined
+                : undefined,
+            contextId:
+              params.scope === 'Facility'
+                ? params.department
+                : params.scope === 'StaffContext'
+                ? params.patientId
+                : undefined,
             department: params.department,
             participantStaffIds: params.participantStaffIds,
             participants: params.participants,
