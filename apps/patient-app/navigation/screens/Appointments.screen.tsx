@@ -1,24 +1,25 @@
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState, useEffect } from 'react';
 import {
+  Animated,
   Linking,
   Platform,
   Pressable,
-  ScrollView,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth as useClerkAuth, useUser } from '@clerk/expo';
-import { useNetInfo } from '@react-native-community/netinfo';
 import { isToday, isFuture, isPast, parseISO } from 'date-fns';
 import { and, eq, desc } from 'drizzle-orm';
 import { SkeletonCard } from '../../components/ui/Skeleton';
 import { ActiveSearchBanner, SearchModal } from '../../components/ui/SearchModal';
 import { AppIcon } from '../../components/ui/Icon';
-import { FilterChipBar } from '../../components/ui/FilterChipBar';
 import BottomTabsHeaderRight from '../../components/BottomTabsHeaderRight';
-import OfflineBanner from '../../components/appointments/OfflineBanner';
+import HomeHeader from '../../components/home/HomeHeader';
+import HomeOfflinePillBanner from '../../components/home/HomeOfflinePillBanner';
 import AppointmentsFilterBar, {
   type AppointmentFilterTab,
 } from '../../components/appointments/AppointmentsFilterBar';
@@ -27,10 +28,10 @@ import PastAppointmentCard from '../../components/appointments/PastAppointmentCa
 import EmptyAppointmentsView, {
   type SuggestedCareServiceItem,
 } from '../../components/appointments/EmptyAppointmentsView';
-import { useAppTheme } from '../../contexts/ThemeContext';
+import { useNotificationContext } from '../../contexts/NotificationContext';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 import { useContentInsets } from '../../hooks/useContentInsets';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNetworkOnline } from '../../hooks/useNetworkOnline';
 import { usePatientId } from '../../hooks/usePatientId';
 import { db } from '../../db/index';
 import { bookingDrafts } from '../../db/schema/bookingDrafts';
@@ -80,20 +81,21 @@ function isPastItem(item: AppointmentItem): boolean {
 }
 
 export default function AppointmentsScreen() {
-  const { colors, spacing, radii, shadows } = useAppTheme();
   const empathy = useClinicalEmpathyTheme();
+  const { spacing, radii } = empathy;
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
   const { user } = useUser();
+  const { unreadCount } = useNotificationContext();
+  const { isOnline } = useNetworkOnline();
   const contentInsets = useContentInsets();
-  const insets = useSafeAreaInsets();
-  const netInfo = useNetInfo();
+
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isFromCache, setIsFromCache] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<AppointmentFilterTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -123,6 +125,42 @@ export default function AppointmentsScreen() {
       ),
     });
   }, [navigation, openSearchDialog, hasActiveSearch]);
+
+  const navigateToMainRoute = useCallback(
+    (screenName: string, params?: Record<string, unknown>) => {
+      const parent = navigation.getParent?.();
+      const grandParent = parent?.getParent?.();
+      if (grandParent) {
+        grandParent.navigate(screenName, params);
+        return;
+      }
+      if (parent) {
+        parent.navigate(screenName, params);
+        return;
+      }
+      navigation.navigate('Main', { screen: screenName, params });
+    },
+    [navigation],
+  );
+
+  const navigateToTab = useCallback(
+    (tabName: 'HomeScreen' | 'RecordsScreen' | 'AppointmentsScreen' | 'MessagesScreen') => {
+      const parent = navigation.getParent?.();
+      if (parent) {
+        if (tabName === 'RecordsScreen') {
+          parent.navigate('RecordsScreen', { screen: 'FilesBrowserScreen' });
+        } else {
+          parent.navigate(tabName);
+        }
+        return;
+      }
+      navigation.navigate('Main', {
+        screen: 'BottomTabs',
+        params: { screen: tabName },
+      });
+    },
+    [navigation],
+  );
 
   const dbRef = useRef(db);
   const getTokenRef = useRef(getToken);
@@ -164,7 +202,7 @@ export default function AppointmentsScreen() {
     };
   }, [patientId, user]);
 
-  // Load live suggested services catalog
+  // Load live suggested services catalog from backend/SQLite
   useEffect(() => {
     let active = true;
     (async () => {
@@ -174,7 +212,6 @@ export default function AppointmentsScreen() {
 
         const items: SuggestedCareServiceItem[] = [];
 
-        // Add doctors / services from real catalog
         if (data.doctors && data.doctors.length > 0) {
           const doc = data.doctors[0];
           items.push({
@@ -187,49 +224,43 @@ export default function AppointmentsScreen() {
             buttonLabel: 'Book Slot',
             buttonVariant: 'primary',
             onPress: () => {
-              navigation.navigate('Main', {
-                screen: 'BookingDraftScreen',
-                params: { clinicId: doc.clinicId, providerId: doc.id },
+              navigateToMainRoute('BookingDraftScreen', {
+                clinicId: doc.clinicId,
+                providerId: doc.id,
               });
             },
           });
         }
 
-        // Add quick teleconsult option if any clinic supports telehealth
         const teleClinic = data.clinics.find((c) => c.supportsAppointments) || data.clinics[0];
         if (teleClinic) {
           items.push({
             id: `tele-${teleClinic.id}`,
             title: 'Telehealth Quick Care',
-            subtitle: 'Available in 15 mins',
-            detail: `${teleClinic.name} • On-duty clinician ready`,
+            subtitle: 'Virtual consultation',
+            detail: `${teleClinic.name}`,
             badgeType: 'video',
             buttonLabel: 'Instant Connect',
             buttonVariant: 'mint',
-            onPress: () => {
-              navigation.navigate('Main', {
-                screen: 'ClinicDetailsScreen',
-                params: { clinicId: teleClinic.id, id: teleClinic.id },
-              });
-            },
+            // Newly introduced button with no dedicated instant teleconsult flow yet: no-op
+            onPress: () => {},
           });
         }
 
-        // Add wellness / routine checkup
         if (data.clinics.length > 1) {
           const wellnessClinic = data.clinics[1];
           items.push({
             id: `well-${wellnessClinic.id}`,
-            title: 'Annual Wellness Checkup',
-            subtitle: wellnessClinic.primarySpecialty || 'Preventative Health',
-            detail: `Covered at ${wellnessClinic.name}`,
+            title: wellnessClinic.name,
+            subtitle: wellnessClinic.primarySpecialty || 'Outpatient Care Center',
+            detail: wellnessClinic.openStatusLabel || 'Open network clinic',
             badgeType: 'shield',
             buttonLabel: 'Explore Clinic',
             buttonVariant: 'outline',
             onPress: () => {
-              navigation.navigate('Main', {
-                screen: 'ClinicDetailsScreen',
-                params: { clinicId: wellnessClinic.id, id: wellnessClinic.id },
+              navigateToMainRoute('ClinicDetailsScreen', {
+                clinicId: wellnessClinic.id,
+                id: wellnessClinic.id,
               });
             },
           });
@@ -239,13 +270,13 @@ export default function AppointmentsScreen() {
           setSuggestedServices(items);
         }
       } catch {
-        // Keep empty if unable to query
+        // Keep empty if catalog cannot be read
       }
     })();
     return () => {
       active = false;
     };
-  }, [patientId, navigation]);
+  }, [patientId, navigateToMainRoute]);
 
   const loadDrafts = useCallback(async () => {
     try {
@@ -271,7 +302,7 @@ export default function AppointmentsScreen() {
           reason: r.reason ?? null,
           preferredDate: r.preferredDate ?? null,
           updatedAt: r.updatedAt,
-        }))
+        })),
       );
     } catch {
       // Drafts failure should not crash screen
@@ -289,14 +320,12 @@ export default function AppointmentsScreen() {
 
       if (cached.items.length > 0) {
         setAppointments(cached.items);
-        setIsFromCache(true);
         setIsLoading(false);
       }
 
       try {
         const live = await fetchAppointments(patientId, dbRef.current, getTokenRef.current);
         setAppointments(live.items);
-        setIsFromCache(live.isFromCache);
       } catch {
         // Cache is already displayed
       } finally {
@@ -304,16 +333,15 @@ export default function AppointmentsScreen() {
         if (isManualRefresh) setIsRefreshing(false);
       }
     },
-    [patientId, loadDrafts]
+    [patientId, loadDrafts],
   );
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
-    }, [loadData])
+      void loadData();
+    }, [loadData]),
   );
 
-  // Filter appointments according to search query and active tab
   const filteredAppointments = useMemo(() => {
     let result = appointments;
 
@@ -324,7 +352,7 @@ export default function AppointmentsScreen() {
           a.provider.name.toLowerCase().includes(q) ||
           a.clinic.name.toLowerCase().includes(q) ||
           (a.serviceType && a.serviceType.toLowerCase().includes(q)) ||
-          (a.notes && a.notes.toLowerCase().includes(q))
+          (a.notes && a.notes.toLowerCase().includes(q)),
       );
     }
 
@@ -342,83 +370,120 @@ export default function AppointmentsScreen() {
 
   const upcomingList = useMemo(
     () => filteredAppointments.filter(isUpcoming),
-    [filteredAppointments]
+    [filteredAppointments],
   );
 
   const pastList = useMemo(
     () => filteredAppointments.filter(isPastItem),
-    [filteredAppointments]
+    [filteredAppointments],
   );
 
   const countUpcoming = useMemo(() => appointments.filter(isUpcoming).length, [appointments]);
   const countPast = useMemo(() => appointments.filter(isPastItem).length, [appointments]);
 
-  const handleCardPress = (id: string) => {
-    navigation.navigate('Main', {
-      screen: 'AppointmentDetailScreen',
-      params: { id, appointmentId: id },
+  const handleCardPress = useCallback(
+    (id: string) => {
+      navigateToMainRoute('AppointmentDetailScreen', { id, appointmentId: id });
+    },
+    [navigateToMainRoute],
+  );
+
+  const handleGetDirections = useCallback((clinicName: string, clinicAddress?: string) => {
+    const query = encodeURIComponent([clinicName, clinicAddress].filter(Boolean).join(', '));
+    const url = Platform.select({
+      ios: `http://maps.apple.com/?q=${query}`,
+      android: `geo:0,0?q=${query}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${query}`,
     });
-  };
+    if (url) {
+      Linking.openURL(url).catch(() => {});
+    }
+  }, []);
 
-  const handleGetDirections = (clinicName: string, clinicAddress?: string) => {
-    const query = encodeURIComponent(`${clinicName} ${clinicAddress || ''}`);
-    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`).catch(() => {});
-  };
+  const handleReschedule = useCallback(
+    (item: AppointmentItem) => {
+      navigateToMainRoute('RescheduleScreen', {
+        appointmentId: item.id,
+        id: item.id,
+        clinicId: item.clinic.id,
+        currentScheduledAt: item.scheduledAt,
+      });
+    },
+    [navigateToMainRoute],
+  );
 
-  const handleReschedule = (id: string) => {
-    navigation.navigate('Main', {
-      screen: 'RescheduleScreen',
-      params: { appointmentId: id, id },
-    });
-  };
-
-  const handlePrepGuide = (id: string) => {
-    navigation.navigate('Main', {
-      screen: 'AppointmentDetailScreen',
-      params: { id, appointmentId: id },
-    });
-  };
-
-  const handleBookAgain = (appt: AppointmentItem) => {
-    navigation.navigate('Main', {
-      screen: 'BookingDraftScreen',
-      params: {
+  const handleBookAgain = useCallback(
+    (appt: AppointmentItem) => {
+      navigateToMainRoute('BookingDraftScreen', {
         clinicId: appt.clinic.id,
         providerId: appt.provider.id !== 'local-pending' ? appt.provider.id : undefined,
-      },
-    });
-  };
+      });
+    },
+    [navigateToMainRoute],
+  );
 
-  const isOffline = !netInfo.isConnected;
+  const effectiveUnreadCount = Math.max(unreadCount, unreadNotificationsCount);
 
   return (
-    <View style={[styles.root, { backgroundColor: empathy.colors.canvas }]}>
-      <ScrollView
+    <SafeAreaView
+      edges={['top']}
+      style={[styles.root, { backgroundColor: empathy.colors.canvas }]}
+    >
+      <HomeHeader
+        scrollY={scrollY}
+        title="Appointments"
+        subtitle="Scheduled visits across open network"
+        fullName={patientProfile.fullName}
+        avatarUrl={patientProfile.avatarUrl}
+        unreadCount={effectiveUnreadCount}
+        showBrand={true}
+        alwaysShowTitle={false}
+        onBrandPress={() => navigateToTab('HomeScreen')}
+        onNotificationsPress={() => navigateToMainRoute('NotificationScreen')}
+        onAvatarPress={() => navigateToMainRoute('ProfileScreen')}
+      />
+
+      <Animated.ScrollView
+        style={styles.flex}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => void loadData(true)}
+            tintColor={empathy.colors.primary}
+          />
+        }
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: insets.top + 8,
-            paddingBottom: contentInsets.bottom + 48,
+            paddingHorizontal: spacing.lg,
+            paddingTop: spacing.xs,
+            paddingBottom: Math.max(contentInsets.bottom, 24) + (isOnline ? 28 : 76),
           },
         ]}
-        showsVerticalScrollIndicator={false}
       >
-        {/* Top Header */}
-        {/* Title & Action Row: Appointments + Book New */}
-        <View style={styles.compactTitleRow}>
-          <View style={{ flex: 1, paddingRight: spacing.sm }}>
+        {/* Inline Title & Action Row: animates into HomeHeader when scrolled past */}
+        <View style={[styles.compactTitleRow, { marginBottom: spacing.base }]}>
+          <View style={styles.titleCol}>
             <Text
+              numberOfLines={1}
               style={[
                 empathy.typography.headlineLg,
-                { color: empathy.colors.navyText, fontWeight: '700' },
+                { color: empathy.colors.navyText },
               ]}
             >
               Appointments
             </Text>
             <Text
+              numberOfLines={1}
               style={[
                 empathy.typography.bodySm,
-                { color: empathy.colors.mutedText, marginTop: 2 },
+                { color: empathy.colors.mutedText, marginTop: spacing.xxs },
               ]}
             >
               Scheduled visits across open network
@@ -428,14 +493,13 @@ export default function AppointmentsScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Book New Appointment"
-            onPress={() => navigation.navigate('Main', { screen: 'BookingDraftScreen' })}
+            onPress={() => navigateToMainRoute('BookingDraftScreen')}
             style={({ pressed }) => [
               styles.bookNewBtn,
               {
-                backgroundColor: empathy.colors.primaryDeep,
+                backgroundColor: empathy.colors.primary,
                 borderRadius: radii.full,
-                paddingHorizontal: spacing.lg,
-                paddingVertical: spacing.sm + 2,
+                paddingHorizontal: spacing.base,
                 opacity: pressed ? 0.9 : 1,
               },
             ]}
@@ -443,11 +507,10 @@ export default function AppointmentsScreen() {
             <AppIcon name="plus" size={16} color={empathy.colors.onPrimary} strokeWidth={2.5} />
             <Text
               style={[
-                empathy.typography.labelMd,
+                empathy.typography.labelBold,
                 {
                   color: empathy.colors.onPrimary,
-                  fontWeight: '700',
-                  marginLeft: 4,
+                  marginLeft: spacing.xs,
                 },
               ]}
             >
@@ -456,26 +519,18 @@ export default function AppointmentsScreen() {
           </Pressable>
         </View>
 
-        {/* Search & Filter Bar */}
-        <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
-          <AppointmentsFilterBar
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            onFilterSlidersPress={openSearchDialog}
-            hideTabs={true}
-          />
-          <FilterChipBar
-            items={[
-              { key: 'all', label: 'All', count: appointments.length },
-              { key: 'upcoming', label: 'Upcoming', count: countUpcoming },
-              { key: 'past', label: 'Past', count: countPast },
-              { key: 'waitlist', label: 'Waitlist', count: drafts.length > 0 ? drafts.length : undefined },
-            ]}
-            selectedKey={activeTab}
-            onSelect={(key) => setActiveTab(key as AppointmentFilterTab)}
-            showZeroCount={true}
-          />
-        </View>
+        {/* Search Pill + Unified Filter Tabs */}
+        <AppointmentsFilterBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          counts={{
+            all: appointments.length,
+            upcoming: countUpcoming,
+            past: countPast,
+          }}
+        />
 
         {searchQuery.trim().length > 0 ? (
           <View style={{ marginTop: spacing.sm }}>
@@ -494,8 +549,8 @@ export default function AppointmentsScreen() {
             <SkeletonCard />
           </View>
         ) : activeTab === 'waitlist' ? (
-          /* Drafts / Waitlist Tab */
-          <View style={{ marginTop: spacing.lg }}>
+          /* Waitlist / Draft Bookings Tab */
+          <View style={{ marginTop: spacing.xl }}>
             <View style={styles.sectionHeaderRow}>
               <View style={styles.sectionTitleWithDot}>
                 <View
@@ -510,14 +565,10 @@ export default function AppointmentsScreen() {
                 <Text
                   style={[
                     empathy.typography.overline,
-                    {
-                      color: empathy.colors.mutedText,
-                      letterSpacing: 0.8,
-                      fontWeight: '700',
-                    },
+                    { color: empathy.colors.navyText },
                   ]}
                 >
-                  Draft Bookings & Waitlist
+                  BOOKING DRAFTS & WAITLIST
                 </Text>
               </View>
               <Text style={[empathy.typography.bodySm, { color: empathy.colors.mutedText }]}>
@@ -528,12 +579,7 @@ export default function AppointmentsScreen() {
             {drafts.length === 0 ? (
               <View style={{ marginTop: spacing.md }}>
                 <EmptyAppointmentsView
-                  onFindDoctorPress={() =>
-                    navigation.navigate('Main', { screen: 'BookingDraftScreen' })
-                  }
-                  onQuickConnectPress={() =>
-                    navigation.navigate('Main', { screen: 'BookingDraftScreen' })
-                  }
+                  onFindDoctorPress={() => navigateToMainRoute('BookingDraftScreen')}
                   suggestedServices={suggestedServices}
                 />
               </View>
@@ -545,21 +591,21 @@ export default function AppointmentsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`Continue booking draft for ${d.clinicName || 'Clinic'}`}
                     onPress={() =>
-                      navigation.navigate('Main', {
-                        screen: 'BookingDraftScreen',
-                        params: { draftId: d.id, clinicId: d.clinicId },
+                      navigateToMainRoute('BookingDraftScreen', {
+                        draftId: d.id,
+                        clinicId: d.clinicId,
                       })
                     }
                     style={({ pressed }) => [
                       styles.draftCard,
+                      empathy.elevation.card,
                       {
                         backgroundColor: empathy.colors.surface,
-                        borderColor: empathy.colors.border,
+                        borderColor: empathy.colors.borderSubtle,
                         borderRadius: radii.xl,
-                        padding: spacing.md,
+                        padding: spacing.base,
                         opacity: pressed ? 0.95 : 1,
                       },
-                      shadows.sm,
                     ]}
                   >
                     <View style={styles.draftHeaderRow}>
@@ -593,7 +639,7 @@ export default function AppointmentsScreen() {
                     <Text
                       style={[
                         empathy.typography.bodySm,
-                        { color: empathy.colors.mutedText, marginTop: 4 },
+                        { color: empathy.colors.mutedText, marginTop: spacing.xs },
                       ]}
                     >
                       {d.reason || 'General Consultation'}
@@ -604,22 +650,16 @@ export default function AppointmentsScreen() {
             )}
           </View>
         ) : filteredAppointments.length === 0 ? (
-          /* Empty State Screen */
+          /* Empty State */
           <View style={{ marginTop: spacing.xl }}>
             <EmptyAppointmentsView
-              onFindDoctorPress={() =>
-                navigation.navigate('Main', { screen: 'BookingDraftScreen' })
-              }
-              onQuickConnectPress={() =>
-                navigation.navigate('Main', { screen: 'BookingDraftScreen' })
-              }
+              onFindDoctorPress={() => navigateToMainRoute('BookingDraftScreen')}
               suggestedServices={suggestedServices}
             />
           </View>
         ) : (
           /* Populated Appointments View */
-          <View style={{ marginTop: spacing.lg, gap: spacing.xl }}>
-            {/* UPCOMING VISITS SECTION */}
+          <View style={{ marginTop: spacing.xl, gap: spacing.xl }}>
             {upcomingList.length > 0 ? (
               <View>
                 <View style={styles.sectionHeaderRow}>
@@ -628,7 +668,7 @@ export default function AppointmentsScreen() {
                       style={[
                         styles.sectionDot,
                         {
-                          backgroundColor: empathy.colors.primaryDeep,
+                          backgroundColor: empathy.colors.primary,
                           borderRadius: radii.full,
                         },
                       ]}
@@ -636,14 +676,10 @@ export default function AppointmentsScreen() {
                     <Text
                       style={[
                         empathy.typography.overline,
-                        {
-                          color: empathy.colors.mutedText,
-                          letterSpacing: 0.8,
-                          fontWeight: '700',
-                        },
+                        { color: empathy.colors.navyText },
                       ]}
                     >
-                      Upcoming Visits
+                      UPCOMING VISITS
                     </Text>
                   </View>
 
@@ -651,7 +687,7 @@ export default function AppointmentsScreen() {
                     style={[
                       styles.countBadge,
                       {
-                        backgroundColor: empathy.colors.mintSoftBg,
+                        backgroundColor: empathy.colors.mintBadgeBg,
                         borderRadius: radii.full,
                       },
                     ]}
@@ -659,10 +695,7 @@ export default function AppointmentsScreen() {
                     <Text
                       style={[
                         empathy.typography.labelSm,
-                        {
-                          color: empathy.colors.primaryDeep,
-                          fontWeight: '700',
-                        },
+                        { color: empathy.colors.primaryDeep, fontWeight: '700' },
                       ]}
                     >
                       {upcomingList.length} Scheduled
@@ -680,15 +713,13 @@ export default function AppointmentsScreen() {
                       onGetDirectionsPress={() =>
                         handleGetDirections(item.clinic.name, item.clinic.address)
                       }
-                      onPrepGuidePress={() => handlePrepGuide(item.id)}
-                      onReschedulePress={() => handleReschedule(item.id)}
+                      onReschedulePress={() => handleReschedule(item)}
                     />
                   ))}
                 </View>
               </View>
             ) : null}
 
-            {/* PAST CONSULTATIONS SECTION */}
             {pastList.length > 0 ? (
               <View>
                 <View style={styles.sectionHeaderRow}>
@@ -697,7 +728,7 @@ export default function AppointmentsScreen() {
                       style={[
                         styles.sectionDot,
                         {
-                          backgroundColor: empathy.colors.mutedText,
+                          backgroundColor: empathy.colors.subtleText,
                           borderRadius: radii.full,
                         },
                       ]}
@@ -705,14 +736,10 @@ export default function AppointmentsScreen() {
                     <Text
                       style={[
                         empathy.typography.overline,
-                        {
-                          color: empathy.colors.mutedText,
-                          letterSpacing: 0.8,
-                          fontWeight: '700',
-                        },
+                        { color: empathy.colors.mutedText },
                       ]}
                     >
-                      Past Consultations
+                      PAST CONSULTATIONS
                     </Text>
                   </View>
 
@@ -741,16 +768,10 @@ export default function AppointmentsScreen() {
             ) : null}
           </View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
 
-      {/* Floating Offline Banner */}
-      {isOffline ? (
-        <View style={styles.offlineBannerWrap}>
-          <OfflineBanner />
-        </View>
-      ) : null}
+      <HomeOfflinePillBanner isOnline={isOnline} />
 
-      {/* Search Modal for compatibility with regression suite */}
       <SearchModal
         visible={isSearchModalOpen}
         value={searchQuery}
@@ -760,7 +781,7 @@ export default function AppointmentsScreen() {
           setIsSearchModalOpen(false);
         }}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -769,8 +790,28 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
+  flex: {
+    flex: 1,
+  },
   scrollContent: {
-    paddingHorizontal: 16,
+    width: '100%',
+  },
+  compactTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  titleCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  bookNewBtn: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -783,8 +824,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionDot: {
-    width: 7,
-    height: 7,
+    width: 8,
+    height: 8,
   },
   countBadge: {
     paddingHorizontal: 10,
@@ -802,24 +843,5 @@ const styles = StyleSheet.create({
   draftBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-  },
-  offlineBannerWrap: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
-    alignItems: 'center',
-  },
-  compactTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  bookNewBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

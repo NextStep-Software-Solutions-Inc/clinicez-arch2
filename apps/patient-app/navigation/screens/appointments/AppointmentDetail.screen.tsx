@@ -1,27 +1,32 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
+  Animated,
   Image,
   Linking,
   Platform,
   Pressable,
-  ScrollView,
-  Share,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
-import { format, parseISO } from 'date-fns';
+import { differenceInMinutes, format, isToday, parseISO, subMinutes } from 'date-fns';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { AppIcon } from '../../../components/ui/Icon';
 import Screen from '../../../components/layout/Screen';
 import { SkeletonCard } from '../../../components/ui/Skeleton';
 import DigitalClinicPassCard from '../../../components/appointments/DigitalClinicPassCard';
-import OfflineBanner from '../../../components/appointments/OfflineBanner';
+import HomeOfflinePillBanner from '../../../components/home/HomeOfflinePillBanner';
 import AfterVisitSummaryCard from '../../../components/records/AfterVisitSummaryCard';
 import TeleconsultRecordingPlayerModal from '../../../components/teleconsult/TeleconsultRecordingPlayerModal';
 import { useClinicalEmpathyTheme } from '../../../constants/clinicalEmpathy';
+import {
+  HEADER_REVEAL_SCROLL_END,
+  HEADER_REVEAL_SCROLL_START,
+} from '../../../components/home/HomeHeader';
+import { useNetworkOnline } from '../../../hooks/useNetworkOnline';
 import { db } from '../../../db/index';
 import {
   getAppointmentDetail,
@@ -47,8 +52,11 @@ export default function AppointmentDetailScreen({ route }: Props) {
   const navigation = useNavigation<any>();
   const { getToken } = useClerkAuth();
   const patientId = usePatientId();
+  const { isOnline } = useNetworkOnline();
 
   const appointmentId = route.params?.appointmentId ?? (route.params as any)?.id ?? '';
+
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   const [item, setItem] = useState<AppointmentItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,24 +74,51 @@ export default function AppointmentDetailScreen({ route }: Props) {
     {
       id: 'task-2',
       title: 'Bring Current Medication Bottles',
-      subtitle: 'Lisinopril 10mg & OTC supplements for reconciliation.',
+      subtitle: 'Bring current prescription bottles or medication list for reconciliation.',
       completed: true,
     },
     {
       id: 'task-3',
       title: 'Arrive 10–15 Minutes Early',
-      subtitle: 'Allows smooth check-in at reception terminal and vitals prep.',
+      subtitle: 'Allows smooth check-in at clinic reception and vitals prep.',
       completed: false,
     },
   ]);
+
+  const titleOpacity = useMemo(
+    () =>
+      scrollY.interpolate({
+        inputRange: [HEADER_REVEAL_SCROLL_START, HEADER_REVEAL_SCROLL_END],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+      }),
+    [scrollY],
+  );
+
+  const titleTranslateY = useMemo(
+    () =>
+      scrollY.interpolate({
+        inputRange: [HEADER_REVEAL_SCROLL_START, HEADER_REVEAL_SCROLL_END],
+        outputRange: [6, 0],
+        extrapolate: 'clamp',
+      }),
+    [scrollY],
+  );
+
+  const borderOpacity = useMemo(
+    () =>
+      scrollY.interpolate({
+        inputRange: [0, HEADER_REVEAL_SCROLL_START],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+      }),
+    [scrollY],
+  );
 
   const loadAppointment = useCallback(async () => {
     try {
       const detail = await getAppointmentDetail(appointmentId, db);
       setItem(detail);
-      if (detail?.status === 'confirmed') {
-        // If confirmed with recent check-in, set isCheckedIn
-      }
     } catch {
       dialog.alert('Error', 'Unable to load appointment details.', [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -103,33 +138,48 @@ export default function AppointmentDetailScreen({ route }: Props) {
 
   const toggleChecklist = (id: string) => {
     setChecklist((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)),
     );
   };
 
-  const handleShare = async () => {
-    if (!item) return;
-    try {
-      await Share.share({
-        title: `Appointment with ${item.provider.name}`,
-        message: `Appointment with ${item.provider.name} at ${item.clinic.name} on ${item.scheduledAt}.`,
-      });
-    } catch {
-      // Ignored
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
     }
+    navigation.navigate('Main', {
+      screen: 'BottomTabs',
+      params: { screen: 'AppointmentsScreen' },
+    });
   };
 
   const handleGetDirections = () => {
     if (!item) return;
-    const address = encodeURIComponent(`${item.clinic.name} ${item.clinic.address}`);
-    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${address}`).catch(() => {});
+    const address = encodeURIComponent(
+      [item.clinic.name, item.clinic.address].filter(Boolean).join(', '),
+    );
+    const url = Platform.select({
+      ios: `http://maps.apple.com/?q=${address}`,
+      android: `geo:0,0?q=${address}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${address}`,
+    });
+    if (url) {
+      Linking.openURL(url).catch(() => {});
+    }
   };
 
   const handleCallClinic = () => {
     if (!item) return;
-    const phone = item.clinic.phoneNumber || '0281234567';
-    Linking.openURL(`tel:${phone}`).catch(() => {
-      dialog.alert('Call Clinic', `Clinic phone number: ${phone}`);
+    const phone = item.clinic.phoneNumber?.trim();
+    if (!phone) return;
+    Linking.openURL(`tel:${phone}`).catch(() => {});
+  };
+
+  const handleViewProviderProfile = () => {
+    if (!item || item.provider.id === 'local-pending') return;
+    navigation.navigate('Main', {
+      screen: 'ProviderProfileScreen',
+      params: { providerData: item.provider },
     });
   };
 
@@ -139,10 +189,15 @@ export default function AppointmentDetailScreen({ route }: Props) {
     try {
       await checkInAppointment(item.id, db, getToken, patientId);
       setIsCheckedIn(true);
-      dialog.alert('Check-In Confirmed', 'You are checked in! Please proceed to reception when called.');
+      dialog.alert(
+        'Check-In Confirmed',
+        'You are checked in! Please proceed to reception when called.',
+      );
     } catch {
-      dialog.alert('Check-In Notice', 'Check-in recorded offline. Present your pass at reception.');
-      setIsCheckedIn(true);
+      dialog.alert(
+        'Check-In Unavailable',
+        'Unable to submit check-in right now. Please present your pass at the clinic reception desk.',
+      );
     } finally {
       setIsCheckInLoading(false);
     }
@@ -154,6 +209,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
       screen: 'RescheduleScreen',
       params: {
         appointmentId: item.id,
+        id: item.id,
         clinicId: item.clinic.id,
         currentScheduledAt: item.scheduledAt,
       },
@@ -175,12 +231,13 @@ export default function AppointmentDetailScreen({ route }: Props) {
       try {
         await cancelAppointment(item.id, 'Cancelled by patient', db, getToken, patientId);
         dialog.alert('Appointment Canceled', 'Your appointment has been canceled successfully.', [
-          { text: 'OK', onPress: () => navigation.goBack() },
+          { text: 'OK', onPress: () => handleBack() },
         ]);
       } catch {
-        dialog.alert('Notice', 'Appointment canceled locally.', [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
+        dialog.alert(
+          'Cancellation Failed',
+          'Could not cancel your appointment right now. Please check your connection and try again.',
+        );
       }
     }
   };
@@ -198,15 +255,45 @@ export default function AppointmentDetailScreen({ route }: Props) {
   const isFinalStatus =
     item.status === 'canceled' || item.status === 'completed' || item.status === 'no_show';
 
+  let parsedDate: Date | null = null;
   let dateLabel = '';
+  let shortDateLabel = '';
   let timeLabel = '';
+  let readyTimeText: string | undefined;
+  let isTodayVisit = false;
   try {
-    const d = parseISO(item.scheduledAt);
-    dateLabel = format(d, 'EEEE, MMMM d, yyyy');
-    timeLabel = format(d, 'h:mm a');
+    parsedDate = parseISO(item.scheduledAt);
+    dateLabel = format(parsedDate, 'EEEE, MMMM d, yyyy');
+    shortDateLabel = format(parsedDate, 'EEE, MMM d');
+    timeLabel = format(parsedDate, 'h:mm a');
+    readyTimeText = `Ready at ${format(subMinutes(parsedDate, 15), 'h:mm a')}`;
+    isTodayVisit = isToday(parsedDate);
   } catch {
     dateLabel = item.scheduledAt;
+    shortDateLabel = item.scheduledAt;
   }
+
+  const scheduleBannerText = (() => {
+    if (isCheckedIn) return 'Checked in — ready at reception';
+    if (!parsedDate) return item.scheduledAt;
+    const minsUntil = differenceInMinutes(parsedDate, new Date());
+    if (minsUntil > 15 && minsUntil <= 1440) {
+      return `Check-in window opens in ${minsUntil - 15}m`;
+    }
+    if (minsUntil >= -30 && minsUntil <= 15) {
+      return 'Check-in window open now';
+    }
+    return `${dateLabel}${timeLabel ? ` at ${timeLabel}` : ''}`;
+  })();
+
+  const scheduleStatusBadge =
+    item.status === 'confirmed'
+      ? 'On Schedule'
+      : item.status === 'pending'
+        ? 'Pending'
+        : item.status === 'action_required'
+          ? 'Action Required'
+          : item.status.replace('_', ' ');
 
   const passCode = `#APT-${item.id.replace(/-/g, '').slice(0, 5).toUpperCase()}`;
   const qrData = JSON.stringify({
@@ -217,37 +304,79 @@ export default function AppointmentDetailScreen({ route }: Props) {
     passCode,
   });
 
+  const providerCredentialsLine = [
+    item.provider.specialty || 'Healthcare Provider',
+    ...(item.provider.credentials ?? []),
+  ]
+    .filter(Boolean)
+    .join(' • ');
+
+  const clinicPhone = item.clinic.phoneNumber?.trim() || null;
+
+  const billingTitle =
+    item.invoiceAmount != null
+      ? `${item.currency ?? 'PHP'} ${item.invoiceAmount.toFixed(2)}`
+      : 'Pay at Clinic Reception';
+  const billingBadgeLabel =
+    item.paymentStatus === 'paid'
+      ? 'Paid'
+      : item.paymentStatus === 'waived'
+        ? 'Waived'
+        : 'Standard Visit';
+  const isPaidOrWaived = item.paymentStatus === 'paid' || item.paymentStatus === 'waived';
+
   return (
-    <View style={[styles.root, { backgroundColor: colors.canvas }]}>
-      <ScrollView
-        contentContainerStyle={[styles.scrollContent, { padding: spacing.base }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Navigation Bar: < Appointments | Share & Calendar */}
+    <SafeAreaView
+      edges={['top']}
+      style={[styles.root, { backgroundColor: colors.canvas }]}
+    >
+      {/* Seamless Sticky Header with Scroll-Animated Summary */}
+      <View style={[styles.stickyHeader, { backgroundColor: colors.canvas, paddingHorizontal: spacing.base }]}>
         <View style={styles.navBar}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back to Appointments"
-            onPress={() => navigation.goBack()}
+            onPress={handleBack}
             hitSlop={8}
-            style={styles.backBtn}
+            style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.7 : 1 }]}
           >
-            <AppIcon name="chevronLeft" size={20} color={colors.primaryDeep} />
+            <AppIcon name="chevronLeft" size={22} color={colors.navyText} />
             <Text
               style={[
-                typography.labelMd,
-                { color: colors.primaryDeep, fontWeight: '700', marginLeft: 4 },
+                typography.headlineSm,
+                { color: colors.navyText, fontWeight: '700', marginLeft: spacing.xxs },
               ]}
             >
               Appointments
             </Text>
           </Pressable>
 
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.scrolledSummary,
+              {
+                opacity: titleOpacity,
+                transform: [{ translateY: titleTranslateY }],
+              },
+            ]}
+          >
+            <Text numberOfLines={1} style={[typography.labelBold, { color: colors.navyText }]}>
+              {item.provider.name}
+            </Text>
+            {timeLabel ? (
+              <Text numberOfLines={1} style={[typography.bodySm, { color: colors.mutedText }]}>
+                {timeLabel}
+              </Text>
+            ) : null}
+          </Animated.View>
+
           <View style={[styles.navActions, { gap: spacing.md }]}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Share appointment"
-              onPress={handleShare}
+              // Newly introduced header action with no share flow wired yet: strict NO-OP
+              onPress={() => {}}
               hitSlop={8}
             >
               <AppIcon name="share" size={20} color={colors.navyText} />
@@ -255,97 +384,117 @@ export default function AppointmentDetailScreen({ route }: Props) {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Add to Calendar"
-              onPress={() => dialog.alert('Calendar', 'Appointment date added to your personal calendar.')}
+              // Newly introduced header action with no native calendar sync screen: strict NO-OP
+              onPress={() => {}}
               hitSlop={8}
             >
-              <AppIcon name="calendar" size={20} color={colors.navyText} />
+              <AppIcon name="calendarPlus" size={20} color={colors.navyText} />
             </Pressable>
           </View>
         </View>
 
-        {/* Live Status Header Banner */}
-        <View
+        <Animated.View
+          pointerEvents="none"
           style={[
-            styles.statusBanner,
+            styles.headerHairline,
             {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              borderRadius: radii.xl,
-              padding: spacing.md,
-              marginTop: spacing.md,
+              backgroundColor: colors.border,
+              opacity: borderOpacity,
             },
-            elevation.card,
           ]}
-        >
-          <View style={styles.statusRow}>
-            <View style={styles.statusDotWrap}>
-              <View
-                style={[
-                  styles.statusDot,
-                  {
-                    backgroundColor:
-                      item.status === 'confirmed'
-                        ? colors.emeraldDot
-                        : item.status === 'canceled'
-                        ? colors.roseAccent
-                        : colors.amberText,
-                    borderRadius: radii.full,
-                  },
-                ]}
-              />
-              <Text
-                style={[
-                  typography.overline,
-                  {
-                    color:
-                      item.status === 'confirmed'
-                        ? colors.primaryDeep
-                        : item.status === 'canceled'
-                        ? colors.roseAccent
-                        : colors.amberText,
-                    fontWeight: '700',
-                  },
-                ]}
-              >
-                {item.status.toUpperCase()} • {timeLabel}
-              </Text>
-            </View>
+        />
+      </View>
 
-            <Text style={[typography.bodySmMedium, { color: colors.mutedText }]}>
-              {item.durationMinutes} min visit
+      <Animated.ScrollView
+        style={styles.flex}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: Platform.OS !== 'web' },
+        )}
+        scrollEventThrottle={16}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingHorizontal: spacing.base,
+            paddingTop: spacing.xs,
+            paddingBottom: isOnline ? 48 : 92,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Canvas Status Row (no outer white box) */}
+        <View style={[styles.statusCanvasRow, { marginTop: spacing.xs }]}>
+          <View style={styles.statusDotWrap}>
+            <View
+              style={[
+                styles.statusDot,
+                {
+                  backgroundColor:
+                    item.status === 'confirmed'
+                      ? colors.emeraldDot
+                      : item.status === 'canceled'
+                        ? colors.roseAccent
+                        : colors.amberText,
+                  borderRadius: radii.full,
+                },
+              ]}
+            />
+            <Text
+              numberOfLines={1}
+              style={[
+                typography.overline,
+                {
+                  color:
+                    item.status === 'confirmed'
+                      ? colors.primary
+                      : item.status === 'canceled'
+                        ? colors.roseAccent
+                        : colors.amberText,
+                },
+              ]}
+            >
+              {item.status.toUpperCase()} •{' '}
+              {isTodayVisit ? `TODAY, ${timeLabel}` : `${shortDateLabel.toUpperCase()}${timeLabel ? `, ${timeLabel}` : ''}`}
             </Text>
           </View>
+
+          <Text style={[typography.bodySm, { color: colors.mutedText }]}>
+            {item.durationMinutes} min visit
+          </Text>
         </View>
 
-        {/* Countdown Card */}
+        {/* Check-in Window Countdown Pill */}
         {!isFinalStatus ? (
           <View
             style={[
               styles.countdownCard,
               {
-                backgroundColor: colors.mintSoftBg,
-                borderRadius: radii.xl,
-                padding: spacing.md,
+                backgroundColor: colors.surfaceLow,
+                borderRadius: radii.lg,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.sm + 2,
                 marginTop: spacing.sm,
               },
             ]}
           >
             <View style={styles.countdownLeft}>
-              <AppIcon name="clock" size={16} color={colors.primaryDeep} />
+              <AppIcon name="clock" size={16} color={colors.primary} />
               <Text
+                numberOfLines={1}
                 style={[
                   typography.bodySmMedium,
-                  { color: colors.navyText, marginLeft: 6, fontWeight: '600' },
+                  { color: colors.navyText, marginLeft: spacing.xs + 2, flexShrink: 1 },
                 ]}
               >
-                Check-in window opens in 15m
+                {scheduleBannerText}
               </Text>
             </View>
             <View
               style={[
                 styles.onScheduleBadge,
                 {
-                  backgroundColor: colors.emeraldSoftBg,
+                  backgroundColor:
+                    item.status === 'confirmed' ? colors.mintBadgeBg : colors.amberSoftBg,
                   borderRadius: radii.full,
                 },
               ]}
@@ -353,10 +502,14 @@ export default function AppointmentDetailScreen({ route }: Props) {
               <Text
                 style={[
                   typography.labelSm,
-                  { color: colors.emeraldText, fontWeight: '700' },
+                  {
+                    color:
+                      item.status === 'confirmed' ? colors.primaryDeep : colors.amberText,
+                    fontWeight: '700',
+                  },
                 ]}
               >
-                On Schedule
+                {scheduleStatusBadge}
               </Text>
             </View>
           </View>
@@ -367,11 +520,9 @@ export default function AppointmentDetailScreen({ route }: Props) {
           <DigitalClinicPassCard
             passNumber={passCode}
             clinicName={item.clinic.name}
-            terminalName="Bay Terminal"
             qrPayload={qrData}
             isCheckedIn={isCheckedIn}
-            readyTimeText="Ready at 10:15 AM"
-            onTapEnlarge={() => dialog.alert('Pass QR Code', 'Present this high-contrast QR code directly to the kiosk tablet.')}
+            readyTimeText={readyTimeText}
             onExpressCheckIn={handleExpressCheckIn}
             isCheckInLoading={isCheckInLoading}
           />
@@ -383,7 +534,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
             styles.doctorClinicCard,
             {
               backgroundColor: colors.surface,
-              borderColor: colors.border,
+              borderColor: colors.borderSubtle,
               borderRadius: radii.xxl,
               padding: spacing.base,
               marginTop: spacing.md,
@@ -391,8 +542,17 @@ export default function AppointmentDetailScreen({ route }: Props) {
             elevation.card,
           ]}
         >
-          {/* Doctor Info */}
-          <View style={styles.doctorHeaderRow}>
+          {/* Doctor Header (wires to ProviderProfileScreen when provider is assigned) */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`View provider ${item.provider.name}`}
+            disabled={item.provider.id === 'local-pending'}
+            onPress={handleViewProviderProfile}
+            style={({ pressed }) => [
+              styles.doctorHeaderRow,
+              { opacity: pressed && item.provider.id !== 'local-pending' ? 0.85 : 1 },
+            ]}
+          >
             {item.provider.avatarUrl ? (
               <Image
                 source={{ uri: item.provider.avatarUrl }}
@@ -412,7 +572,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
                 <Text
                   style={[
                     typography.labelMd,
-                    { color: colors.primaryDeep, fontWeight: '700' },
+                    { color: colors.primary, fontWeight: '700' },
                   ]}
                 >
                   {item.provider.name.slice(0, 2).toUpperCase()}
@@ -435,36 +595,30 @@ export default function AppointmentDetailScreen({ route }: Props) {
                   { color: colors.mutedText, marginTop: 2 },
                 ]}
               >
-                {item.provider.specialty || 'General Practitioner'} • Fellow ACC
+                {providerCredentialsLine}
               </Text>
-              <View style={styles.ratingRow}>
-                <AppIcon name="star" size={13} color={colors.amberText} fill={colors.amberText} />
-                <Text
-                  style={[
-                    typography.labelSm,
-                    { color: colors.navyText, fontWeight: '700', marginLeft: 4 },
-                  ]}
-                >
-                  4.9
-                </Text>
-                <Text
-                  style={[
-                    typography.bodySm,
-                    { color: colors.mutedText, marginLeft: 4 },
-                  ]}
-                >
-                  • 128 verified reviews
-                </Text>
-              </View>
+              {item.provider.rating > 0 ? (
+                <View style={styles.ratingRow}>
+                  <AppIcon name="star" size={13} color={colors.amberText} />
+                  <Text
+                    style={[
+                      typography.labelSm,
+                      { color: colors.navyText, fontWeight: '700', marginLeft: 4 },
+                    ]}
+                  >
+                    {item.provider.rating.toFixed(1)}
+                  </Text>
+                </View>
+              ) : null}
             </View>
-          </View>
+          </Pressable>
 
-          {/* Clinic Address Container */}
+          {/* Clinic Info Container */}
           <View
             style={[
               styles.clinicAddressBox,
               {
-                backgroundColor: colors.mintSoftBg,
+                backgroundColor: colors.surfaceLow,
                 borderRadius: radii.lg,
                 padding: spacing.md,
                 marginTop: spacing.md,
@@ -472,8 +626,8 @@ export default function AppointmentDetailScreen({ route }: Props) {
             ]}
           >
             <View style={styles.clinicAddressRow}>
-              <AppIcon name="building" size={16} color={colors.primaryDeep} />
-              <View style={{ flex: 1, marginLeft: 8 }}>
+              <AppIcon name="building" size={16} color={colors.primary} />
+              <View style={{ flex: 1, marginLeft: spacing.sm }}>
                 <Text
                   style={[
                     typography.labelMd,
@@ -482,68 +636,44 @@ export default function AppointmentDetailScreen({ route }: Props) {
                 >
                   {item.clinic.name}
                 </Text>
-                <Text
-                  style={[
-                    typography.bodySm,
-                    { color: colors.mutedText, marginTop: 2 },
-                  ]}
-                >
-                  {item.clinic.address || 'Suite 304, Floor 3 • Medical Arts Wing'}
-                </Text>
-                <Text
-                  style={[
-                    typography.bodySmMedium,
-                    { color: colors.primaryDeep, marginTop: 2, fontWeight: '600' },
-                  ]}
-                >
-                  1.2 miles away
-                </Text>
+                {item.clinic.address ? (
+                  <Text
+                    style={[
+                      typography.bodySm,
+                      { color: colors.mutedText, marginTop: 2 },
+                    ]}
+                  >
+                    {item.clinic.address}
+                  </Text>
+                ) : null}
               </View>
             </View>
           </View>
 
-          {/* Parking Container */}
+          {/* Stylized Clinic Location Callout */}
           <View
             style={[
-              styles.parkingBox,
+              styles.locationBox,
               {
-                backgroundColor: colors.mintSoftBg,
-                borderColor: colors.border,
+                backgroundColor: colors.surfaceLow,
+                borderColor: colors.borderSubtle,
                 borderRadius: radii.lg,
                 padding: spacing.md,
                 marginTop: spacing.sm,
               },
             ]}
           >
-            <View style={styles.parkingRow}>
-              <AppIcon name="location" size={16} color={colors.primaryDeep} />
+            <View style={styles.locationRow}>
+              <AppIcon name="location" size={16} color={colors.primary} />
               <Text
+                numberOfLines={2}
                 style={[
                   typography.bodySmMedium,
-                  { color: colors.navyText, marginLeft: 6, flex: 1, fontWeight: '600' },
+                  { color: colors.navyText, marginLeft: spacing.xs + 2, flex: 1 },
                 ]}
               >
-                Main Patient Parking in Garage B
+                {item.clinic.address || item.clinic.name}
               </Text>
-              <View
-                style={[
-                  styles.validationBadge,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: radii.full,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    typography.labelSm,
-                    { color: colors.primaryDeep, fontWeight: '700' },
-                  ]}
-                >
-                  Free Validation
-                </Text>
-              </View>
             </View>
           </View>
 
@@ -552,22 +682,22 @@ export default function AppointmentDetailScreen({ route }: Props) {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Call Clinic"
-              onPress={handleCallClinic}
+              onPress={clinicPhone ? handleCallClinic : () => {}}
               style={({ pressed }) => [
                 styles.subActionBtn,
                 {
-                  backgroundColor: colors.mintSoftBg,
+                  backgroundColor: colors.surfaceLow,
                   borderRadius: radii.full,
                   borderColor: colors.border,
                   opacity: pressed ? 0.9 : 1,
                 },
               ]}
             >
-              <AppIcon name="phone" size={15} color={colors.primaryDeep} />
+              <AppIcon name="phone" size={15} color={colors.primary} />
               <Text
                 style={[
-                  typography.labelMd,
-                  { color: colors.primaryDeep, fontWeight: '700', marginLeft: 6 },
+                  typography.labelBold,
+                  { color: colors.navyText, marginLeft: 6 },
                 ]}
               >
                 Call Clinic
@@ -581,18 +711,18 @@ export default function AppointmentDetailScreen({ route }: Props) {
               style={({ pressed }) => [
                 styles.subActionBtn,
                 {
-                  backgroundColor: colors.mintSoftBg,
+                  backgroundColor: colors.surfaceLow,
                   borderRadius: radii.full,
                   borderColor: colors.border,
                   opacity: pressed ? 0.9 : 1,
                 },
               ]}
             >
-              <AppIcon name="navigation" size={15} color={colors.primaryDeep} />
+              <AppIcon name="cornerUpRight" size={15} color={colors.primary} />
               <Text
                 style={[
-                  typography.labelMd,
-                  { color: colors.primaryDeep, fontWeight: '700', marginLeft: 6 },
+                  typography.labelBold,
+                  { color: colors.navyText, marginLeft: 6 },
                 ]}
               >
                 Directions
@@ -607,7 +737,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
             styles.consultationCard,
             {
               backgroundColor: colors.surface,
-              borderColor: colors.border,
+              borderColor: colors.borderSubtle,
               borderRadius: radii.xxl,
               padding: spacing.base,
               marginTop: spacing.md,
@@ -628,28 +758,29 @@ export default function AppointmentDetailScreen({ route }: Props) {
               style={[
                 styles.categoryBadge,
                 {
-                  backgroundColor: colors.mintSoftBg,
+                  backgroundColor: colors.mintBadgeBg,
                   borderRadius: radii.full,
                 },
               ]}
             >
               <Text
+                numberOfLines={1}
                 style={[
                   typography.labelSm,
                   { color: colors.primaryDeep, fontWeight: '700' },
                 ]}
               >
-                Routine Follow-up
+                {item.serviceType || 'Consultation'}
               </Text>
             </View>
           </View>
 
-          {/* Service Details Box */}
+          {/* Subject & Reason Box */}
           <View
             style={[
               styles.detailBox,
               {
-                backgroundColor: colors.mintSoftBg,
+                backgroundColor: colors.surfaceLow,
                 borderRadius: radii.lg,
                 padding: spacing.md,
                 marginTop: spacing.md,
@@ -657,15 +788,15 @@ export default function AppointmentDetailScreen({ route }: Props) {
             ]}
           >
             <View style={styles.detailBoxRow}>
-              <AppIcon name="stethoscope" size={18} color={colors.primaryDeep} />
-              <View style={{ flex: 1, marginLeft: 8 }}>
+              <AppIcon name="heartPulse" size={18} color={colors.primary} />
+              <View style={{ flex: 1, marginLeft: spacing.sm }}>
                 <Text
                   style={[
                     typography.labelMd,
                     { color: colors.navyText, fontWeight: '700' },
                   ]}
                 >
-                  {item.serviceType || 'Cardiology Follow-Up & ECG Review'}
+                  {item.subject || item.serviceType || 'Scheduled Consultation'}
                 </Text>
                 <Text
                   style={[
@@ -673,19 +804,20 @@ export default function AppointmentDetailScreen({ route }: Props) {
                     { color: colors.mutedText, marginTop: 4, lineHeight: 18 },
                   ]}
                 >
-                  {item.notes ||
-                    'Post-medication titration review for Lisinopril. Resting 12-lead ECG will be administered in exam room.'}
+                  {item.chiefComplaint ||
+                    item.notes ||
+                    'No additional consultation notes recorded.'}
                 </Text>
               </View>
             </View>
           </View>
 
-          {/* Insurance & Copay Box */}
+          {/* Payment / Billing Status Box */}
           <View
             style={[
               styles.detailBox,
               {
-                backgroundColor: colors.mintSoftBg,
+                backgroundColor: colors.surfaceLow,
                 borderRadius: radii.lg,
                 padding: spacing.md,
                 marginTop: spacing.sm,
@@ -693,8 +825,8 @@ export default function AppointmentDetailScreen({ route }: Props) {
             ]}
           >
             <View style={styles.detailBoxRow}>
-              <AppIcon name="shield" size={18} color={colors.primaryDeep} />
-              <View style={{ flex: 1, marginLeft: 8 }}>
+              <AppIcon name="shieldPlus" size={18} color={colors.primary} />
+              <View style={{ flex: 1, marginLeft: spacing.sm }}>
                 <View style={styles.insuranceTopRow}>
                   <Text
                     style={[
@@ -702,13 +834,15 @@ export default function AppointmentDetailScreen({ route }: Props) {
                       { color: colors.navyText, fontWeight: '700' },
                     ]}
                   >
-                    BlueCross BlueShield
+                    {billingTitle}
                   </Text>
                   <View
                     style={[
                       styles.inNetworkBadge,
                       {
-                        backgroundColor: colors.emeraldSoftBg,
+                        backgroundColor: isPaidOrWaived
+                          ? colors.emeraldSoftBg
+                          : colors.slatePillBg,
                         borderRadius: radii.full,
                       },
                     ]}
@@ -716,39 +850,119 @@ export default function AppointmentDetailScreen({ route }: Props) {
                     <Text
                       style={[
                         typography.labelSm,
-                        { color: colors.emeraldText, fontWeight: '700' },
+                        {
+                          color: isPaidOrWaived
+                            ? colors.emeraldText
+                            : colors.slatePillText,
+                          fontWeight: '700',
+                        },
                       ]}
                     >
-                      In-Network
+                      {billingBadgeLabel}
                     </Text>
                   </View>
                 </View>
 
-                <View style={[styles.copayRow, { marginTop: 6 }]}>
-                  <Text style={[typography.bodySm, { color: colors.mutedText }]}>
-                    Copay at Check-in:
-                  </Text>
-                  <Text
-                    style={[
-                      typography.labelMd,
-                      { color: colors.navyText, fontWeight: '700', marginLeft: 6 },
-                    ]}
-                  >
-                    $25.00
-                  </Text>
-                  <Text
-                    style={[
-                      typography.bodySm,
-                      { color: colors.primaryDeep, marginLeft: 6, fontWeight: '600' },
-                    ]}
-                  >
-                    • Deductible Met
-                  </Text>
-                </View>
+                <Text
+                  style={[
+                    typography.bodySm,
+                    { color: colors.mutedText, marginTop: 4 },
+                  ]}
+                >
+                  Clinic billing & payment status
+                </Text>
               </View>
             </View>
           </View>
         </View>
+
+        {/* Sealed Clinical Visit Summary (when provided by clinic) */}
+        {(item.clinicalAssessment || item.doctorPlan || item.prescriptionsSummary) ? (
+          <View
+            style={[
+              styles.consultationCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.borderSubtle,
+                borderRadius: radii.xxl,
+                padding: spacing.base,
+                marginTop: spacing.md,
+              },
+              elevation.card,
+            ]}
+          >
+            <View style={styles.consultationHeaderRow}>
+              <Text style={[typography.cardTitle, { color: colors.navyText }]}>
+                Clinical Visit Summary
+              </Text>
+              <View
+                style={[
+                  styles.categoryBadge,
+                  { backgroundColor: colors.emeraldSoftBg, borderRadius: radii.full },
+                ]}
+              >
+                <Text style={[typography.labelSm, { color: colors.emeraldText }]}>
+                  Sealed Record
+                </Text>
+              </View>
+            </View>
+            {item.clinicalAssessment ? (
+              <Text style={[typography.bodySm, { color: colors.bodyText, marginTop: spacing.sm }]}>
+                {item.clinicalAssessment}
+              </Text>
+            ) : null}
+            {item.doctorPlan ? (
+              <Text style={[typography.bodySm, { color: colors.mutedText, marginTop: spacing.xs }]}>
+                {item.doctorPlan}
+              </Text>
+            ) : null}
+            {item.prescriptionsSummary ? (
+              <Text style={[typography.bodySmMedium, { color: colors.primary, marginTop: spacing.xs }]}>
+                {item.prescriptionsSummary}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Attached Documents (when present) */}
+        {item.attachedDocuments.length > 0 ? (
+          <View
+            style={[
+              styles.consultationCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.borderSubtle,
+                borderRadius: radii.xxl,
+                padding: spacing.base,
+                marginTop: spacing.md,
+              },
+              elevation.card,
+            ]}
+          >
+            <Text style={[typography.cardTitle, { color: colors.navyText }]}>
+              Attached Documents ({item.attachedDocuments.length})
+            </Text>
+            <View style={{ marginTop: spacing.sm, gap: spacing.xs }}>
+              {item.attachedDocuments.map((doc) => (
+                <View
+                  key={doc.id}
+                  style={[
+                    styles.detailBox,
+                    {
+                      backgroundColor: colors.surfaceLow,
+                      borderRadius: radii.md,
+                      padding: spacing.sm,
+                    },
+                  ]}
+                >
+                  <Text style={[typography.labelMd, { color: colors.navyText }]}>
+                    {doc.name}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         {/* Pre-Visit Checklist */}
         <View
@@ -756,7 +970,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
             styles.checklistCard,
             {
               backgroundColor: colors.surface,
-              borderColor: colors.border,
+              borderColor: colors.borderSubtle,
               borderRadius: radii.xxl,
               padding: spacing.base,
               marginTop: spacing.md,
@@ -766,7 +980,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
         >
           <View style={styles.checklistHeaderRow}>
             <View style={styles.checklistTitleWrap}>
-              <AppIcon name="checklist" size={18} color={colors.primaryDeep} />
+              <AppIcon name="clipboardCheck" size={18} color={colors.primary} />
               <Text
                 style={[
                   typography.cardTitle,
@@ -792,7 +1006,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
                 style={({ pressed }) => [
                   styles.checklistItem,
                   {
-                    backgroundColor: colors.mintSoftBg,
+                    backgroundColor: colors.surfaceLow,
                     borderRadius: radii.lg,
                     padding: spacing.md,
                     opacity: pressed ? 0.9 : 1,
@@ -803,8 +1017,8 @@ export default function AppointmentDetailScreen({ route }: Props) {
                   style={[
                     styles.checkboxWrap,
                     {
-                      borderColor: task.completed ? colors.primaryDeep : colors.border,
-                      backgroundColor: task.completed ? colors.primaryDeep : colors.surface,
+                      borderColor: task.completed ? colors.primary : colors.border,
+                      backgroundColor: task.completed ? colors.primary : colors.surface,
                       borderRadius: radii.xs,
                     },
                   ]}
@@ -814,7 +1028,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
                   ) : null}
                 </View>
 
-                <View style={{ flex: 1, marginLeft: 10 }}>
+                <View style={{ flex: 1, marginLeft: spacing.sm + 2 }}>
                   <Text
                     style={[
                       typography.labelMd,
@@ -841,22 +1055,23 @@ export default function AppointmentDetailScreen({ route }: Props) {
           </View>
         </View>
 
-        {/* Teleconsultation Gated Card (Preserved for tests) */}
+        {/* Teleconsultation Gated Card (Preserved invariant for virtual visits) */}
         {!isFinalStatus && (item.serviceType === 'teleconsult' || item.serviceType === 'virtual') && (
           <View
             style={[
               styles.teleconsultCard,
               {
                 backgroundColor: colors.surface,
-                borderColor: colors.border,
+                borderColor: colors.borderSubtle,
                 borderRadius: radii.xl,
                 padding: spacing.base,
                 marginTop: spacing.md,
               },
+              elevation.card,
             ]}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <AppIcon name="camera" size={20} color={colors.primaryDeep} />
+              <AppIcon name="camera" size={20} color={colors.primary} />
               <Text
                 style={[
                   typography.cardTitle,
@@ -889,7 +1104,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
               style={[
                 styles.teleconsultBtn,
                 {
-                  backgroundColor: colors.primaryDeep,
+                  backgroundColor: colors.primary,
                   borderRadius: radii.full,
                   paddingVertical: spacing.md,
                   marginTop: spacing.md,
@@ -899,7 +1114,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
               <Text
                 style={[
                   typography.labelBold,
-                  { color: colors.onPrimary, fontWeight: '700' },
+                  { color: colors.onPrimary },
                 ]}
               >
                 Enter Teleconsult Waiting Room
@@ -908,7 +1123,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
           </View>
         )}
 
-        {/* Completed Visit Summary (Preserved for tests) */}
+        {/* Completed Visit Summary (Preserved invariant) */}
         {item.status === 'completed' && (
           <View style={{ marginTop: spacing.md }}>
             <AfterVisitSummaryCard
@@ -938,7 +1153,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
               style={({ pressed }) => [
                 styles.rescheduleBtn,
                 {
-                  backgroundColor: colors.mintSoftBg,
+                  backgroundColor: colors.surfaceLow,
                   borderRadius: radii.full,
                   borderColor: colors.border,
                   paddingVertical: spacing.md,
@@ -946,11 +1161,11 @@ export default function AppointmentDetailScreen({ route }: Props) {
                 },
               ]}
             >
-              <AppIcon name="calendar" size={16} color={colors.primaryDeep} />
+              <AppIcon name="calendar" size={16} color={colors.primary} />
               <Text
                 style={[
                   typography.labelBold,
-                  { color: colors.primaryDeep, fontWeight: '700', marginLeft: 6 },
+                  { color: colors.primary, marginLeft: 6 },
                 ]}
               >
                 Reschedule Appointment
@@ -972,7 +1187,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
               <Text
                 style={[
                   typography.labelBold,
-                  { color: colors.roseAccent, fontWeight: '700', textAlign: 'center' },
+                  { color: colors.roseAccent, textAlign: 'center' },
                 ]}
               >
                 Cancel Appointment
@@ -980,7 +1195,9 @@ export default function AppointmentDetailScreen({ route }: Props) {
             </Pressable>
           </View>
         ) : null}
-      </ScrollView>
+      </Animated.ScrollView>
+
+      <HomeOfflinePillBanner isOnline={isOnline} />
 
       <TeleconsultRecordingPlayerModal
         visible={showPlayerModal}
@@ -990,7 +1207,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
         physicianName={item.provider.name}
         consultationDate={dateLabel}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -999,30 +1216,53 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
-  scrollContent: {
-    paddingBottom: 48,
+  flex: {
+    flex: 1,
+  },
+  stickyHeader: {
+    width: '100%',
+    position: 'relative',
+    zIndex: 10,
+  },
+  navBar: {
     maxWidth: 720,
     width: '100%',
     alignSelf: 'center',
-  },
-  navBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    minHeight: 44,
+    paddingVertical: 6,
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
+  },
+  scrolledSummary: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    minWidth: 0,
   },
   navActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
   },
-  statusBanner: {
-    borderWidth: 1,
+  headerHairline: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: StyleSheet.hairlineWidth,
   },
-  statusRow: {
+  scrollContent: {
+    maxWidth: 720,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  statusCanvasRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1031,23 +1271,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
   },
   statusDot: {
     width: 8,
     height: 8,
+    flexShrink: 0,
   },
   countdownCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   countdownLeft: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
   },
   onScheduleBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 3,
+    flexShrink: 0,
   },
   doctorClinicCard: {
     borderWidth: 1,
@@ -1082,18 +1330,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  parkingBox: {
+  locationBox: {
     width: '100%',
     borderWidth: 1,
   },
-  parkingRow: {
+  locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  validationBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderWidth: 1,
   },
   doctorActionsRow: {
     flexDirection: 'row',
@@ -1101,6 +1344,7 @@ const styles = StyleSheet.create({
   },
   subActionBtn: {
     flex: 1,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1114,10 +1358,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   categoryBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    flexShrink: 1,
   },
   detailBox: {
     width: '100%',
@@ -1130,14 +1376,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   inNetworkBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-  },
-  copayRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   checklistCard: {
     borderWidth: 1,
@@ -1177,6 +1420,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   rescheduleBtn: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

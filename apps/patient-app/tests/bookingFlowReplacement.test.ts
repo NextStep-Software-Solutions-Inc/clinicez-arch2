@@ -101,21 +101,110 @@ describe('Patient Appointment Booking Flow Replacement Suite', () => {
     expect(screenNativeSrc.includes('isKeyboardVisible')).toBe(true);
   });
 
-  test('8. Header & Routing: AppointmentsScreen styles built-in header seamlessly and routes Book New to BookingDraftScreen', () => {
+  test('8. Header & Routing: Appointments screens use seamless scroll-animated HomeHeader, exempt outer headers, and wire NotificationScreen/BookingDraftScreen', () => {
     const webFrameSrc = readAppFile('components/layout/WebAppFrame.web.tsx');
-    expect(webFrameSrc.includes("seamless={headerInfo.tabKey === 'AppointmentsScreen'}")).toBe(true);
+    expect(webFrameSrc.includes("headerInfo.tabKey !== 'AppointmentsScreen'")).toBe(true);
+    expect(webFrameSrc.includes("'AppointmentDetailScreen'")).toBe(true);
+    expect(webFrameSrc.includes("'BookingDraftScreen'")).toBe(true);
 
-    const webPageHeaderSrc = readAppFile('components/layout/WebPageHeader.web.tsx');
-    expect(webPageHeaderSrc.includes('seamless = false')).toBe(true);
-    expect(webPageHeaderSrc.includes('backgroundColor: seamless ? colors.background : colors.surface')).toBe(true);
+    const apptsStackSrc = readAppFile('navigation/navigators/AppointmentsStack.tsx');
+    expect(apptsStackSrc.includes('headerShown: false')).toBe(true);
 
-    const apptsNativeSrc = readAppFile('navigation/screens/Appointments.screen.tsx');
-    const apptsWebSrc = readAppFile('navigation/screens/Appointments.screen.web.tsx');
+    const mainStackSrc = readAppFile('navigation/navigators/MainStack.tsx');
+    expect(mainStackSrc.includes('AppointmentDetailScreen')).toBe(true);
 
-    // Both screens route Book New to BookingDraftScreen
-    expect(apptsNativeSrc.includes("screen: 'BookingDraftScreen'")).toBe(true);
-    expect(apptsWebSrc.includes("screen: 'BookingDraftScreen'")).toBe(true);
-    expect(apptsNativeSrc.includes('compactTitleRow')).toBe(true);
-    expect(apptsWebSrc.includes('compactTitleRow')).toBe(true);
+    for (const screenPath of [
+      'navigation/screens/Appointments.screen.tsx',
+      'navigation/screens/Appointments.screen.web.tsx',
+    ]) {
+      const src = readAppFile(screenPath);
+      expect(src.includes('<HomeHeader')).toBe(true);
+      expect(src.includes('Animated.ScrollView')).toBe(true);
+      expect(src.includes('Animated.event')).toBe(true);
+      expect(src.includes('title="Appointments"')).toBe(true);
+      expect(src.includes('subtitle="Scheduled visits across open network"')).toBe(true);
+      expect(src.includes('alwaysShowTitle={false}')).toBe(true);
+      expect(src.includes("navigateToMainRoute('NotificationScreen')")).toBe(true);
+      expect(src.includes("navigateToMainRoute('NotificationsScreen')")).toBe(false);
+      expect(src.includes("navigateToMainRoute('ProfileScreen')")).toBe(true);
+      expect(src.includes("navigateToMainRoute('BookingDraftScreen')")).toBe(true);
+      expect(src.includes('<HomeOfflinePillBanner isOnline={isOnline} />')).toBe(true);
+    }
+  });
+
+  test('9. Button Wiring & Strict No-Ops: newly introduced buttons without screens stay no-ops and card buttons call stopPropagation', () => {
+    const upcomingCardSrc = readAppFile('components/appointments/UpcomingAppointmentCard.tsx');
+    expect(upcomingCardSrc.includes('onPrepGuidePress?: () => void')).toBe(true);
+    expect(upcomingCardSrc.includes('stopPropagation?.()')).toBe(true);
+    expect(upcomingCardSrc.includes('onPrepGuidePress?.()')).toBe(true);
+
+    const pastCardSrc = readAppFile('components/appointments/PastAppointmentCard.tsx');
+    expect(pastCardSrc.includes('stopPropagation?.()')).toBe(true);
+
+    const emptyViewSrc = readAppFile('components/appointments/EmptyAppointmentsView.tsx');
+    expect(emptyViewSrc.includes('onQuickConnectPress ?? (() => {})')).toBe(true);
+    expect(emptyViewSrc.includes('service.onPress ?? (() => {})')).toBe(true);
+
+    const filterBarSrc = readAppFile('components/appointments/AppointmentsFilterBar.tsx');
+    expect(filterBarSrc.includes('onFilterSlidersPress ?? (() => {})')).toBe(true);
+
+    for (const screenPath of [
+      'navigation/screens/Appointments.screen.tsx',
+      'navigation/screens/Appointments.screen.web.tsx',
+    ]) {
+      const src = readAppFile(screenPath);
+      // Newly introduced Instant Connect button is a no-op
+      expect(src.includes("buttonLabel: 'Instant Connect'")).toBe(true);
+      expect(src.includes('onPress: () => {}')).toBe(true);
+      // Prep Guide & Quick Connect are omitted (no-op) and Reschedule passes full params
+      expect(src.includes('onPrepGuidePress')).toBe(false);
+      expect(src.includes('onQuickConnectPress')).toBe(false);
+      expect(src.includes('clinicId: item.clinic.id')).toBe(true);
+      expect(src.includes('currentScheduledAt: item.scheduledAt')).toBe(true);
+    }
+
+    const detailSrc = readAppFile('navigation/screens/appointments/AppointmentDetail.screen.tsx');
+    expect(detailSrc.includes('onTapEnlarge')).toBe(false);
+    expect(detailSrc.includes('Share.share')).toBe(false);
+    expect(detailSrc.includes("dialog.alert('Calendar'")).toBe(false);
+    expect(detailSrc.includes('clinicPhone ? handleCallClinic : () => {}')).toBe(true);
+
+    const passCardSrc = readAppFile('components/appointments/DigitalClinicPassCard.tsx');
+    expect(passCardSrc.includes('onTapEnlarge ?? (() => {})')).toBe(true);
+  });
+
+  test('10. Zero Mock Data: purges hardcoded demo clinical strings across all appointment screens and components', () => {
+    const forbiddenMocks = [
+      'Fellow ACC',
+      'BlueCross BlueShield',
+      'Lisinopril',
+      'Room 304',
+      'Bay Terminal',
+      '0281234567',
+      '128 verified reviews',
+      'Garage B',
+      '$25.00',
+      'Medical Arts Wing',
+      '1.2 miles away',
+      'Deductible Met',
+      'Ready at 10:15 AM',
+    ];
+
+    const filesToSweep = [
+      'navigation/screens/Appointments.screen.tsx',
+      'navigation/screens/Appointments.screen.web.tsx',
+      'navigation/screens/appointments/AppointmentDetail.screen.tsx',
+      'components/appointments/UpcomingAppointmentCard.tsx',
+      'components/appointments/PastAppointmentCard.tsx',
+      'components/appointments/EmptyAppointmentsView.tsx',
+      'components/appointments/DigitalClinicPassCard.tsx',
+    ];
+
+    for (const file of filesToSweep) {
+      const content = readAppFile(file);
+      for (const forbidden of forbiddenMocks) {
+        expect(content.includes(forbidden)).toBe(false);
+      }
+    }
   });
 });

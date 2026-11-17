@@ -48,6 +48,27 @@ function PastAppointmentCardComponent({
   const initials = extractInitials(providerName);
   const serviceTitle = appointment.serviceType || 'Consultation';
   const isCanceled = appointment.status === 'canceled';
+  const isNoShow = appointment.status === 'no_show';
+  const hasPublishedNotes =
+    !isCanceled &&
+    Boolean(
+      appointment.clinicalAssessment ||
+        appointment.doctorPlan ||
+        appointment.prescriptionsSummary ||
+        appointment.attachedDocuments.length > 0,
+    );
+
+  const statusPillBg = isCanceled
+    ? colors.roseSoftBg
+    : isNoShow
+      ? colors.amberSoftBg
+      : colors.slatePillBg;
+  const statusPillText = isCanceled
+    ? colors.roseAccent
+    : isNoShow
+      ? colors.amberText
+      : colors.slatePillText;
+  const statusLabel = isCanceled ? 'Canceled' : isNoShow ? 'No Show' : 'Completed';
 
   return (
     <Pressable
@@ -58,21 +79,21 @@ function PastAppointmentCardComponent({
         styles.card,
         {
           backgroundColor: colors.surface,
-          borderColor: colors.border,
+          borderColor: colors.borderSubtle,
           borderRadius: radii.xl,
           padding: spacing.base,
-          opacity: pressed ? 0.95 : 1,
+          opacity: pressed ? 0.96 : 1,
         },
         elevation.card,
       ]}
     >
-      {/* Top Header: Avatar + Info + Completed Badge */}
+      {/* Top Header: Circular Avatar + Info + Completed Pill */}
       <View style={styles.headerRow}>
         <View style={styles.avatarContainer}>
           {appointment.provider.avatarUrl ? (
             <Image
               source={{ uri: appointment.provider.avatarUrl }}
-              style={[styles.avatar, { borderRadius: radii.md }]}
+              style={[styles.avatar, { borderRadius: radii.full }]}
               resizeMode="cover"
             />
           ) : (
@@ -80,16 +101,16 @@ function PastAppointmentCardComponent({
               style={[
                 styles.avatarFallback,
                 {
-                  borderRadius: radii.md,
+                  borderRadius: radii.full,
                   backgroundColor: colors.mintSoftBg,
                 },
               ]}
             >
               <Text
                 style={[
-                  typography.labelSm,
+                  typography.labelMd,
                   {
-                    color: colors.primaryDeep,
+                    color: colors.primary,
                     fontWeight: '700',
                   },
                 ]}
@@ -119,7 +140,7 @@ function PastAppointmentCardComponent({
               style={[
                 styles.statusPill,
                 {
-                  backgroundColor: isCanceled ? colors.roseSoftBg : colors.slatePillBg,
+                  backgroundColor: statusPillBg,
                   borderRadius: radii.full,
                 },
               ]}
@@ -128,12 +149,12 @@ function PastAppointmentCardComponent({
                 style={[
                   typography.labelSm,
                   {
-                    color: isCanceled ? colors.roseAccent : colors.slatePillText,
+                    color: statusPillText,
                     fontWeight: '600',
                   },
                 ]}
               >
-                {isCanceled ? 'Canceled' : 'Completed'}
+                {statusLabel}
               </Text>
             </View>
           </View>
@@ -152,14 +173,14 @@ function PastAppointmentCardComponent({
           </Text>
 
           {/* Published Notes & Rx Badge */}
-          {!isCanceled ? (
+          {hasPublishedNotes ? (
             <View style={styles.notesRow}>
-              <AppIcon name="checkCircle" size={13} color={colors.primaryDeep} />
+              <AppIcon name="badgeCheck" size={14} color={colors.primary} />
               <Text
                 style={[
                   typography.bodySmMedium,
                   {
-                    color: colors.primaryDeep,
+                    color: colors.primary,
                     marginLeft: 4,
                     fontWeight: '600',
                   },
@@ -177,24 +198,26 @@ function PastAppointmentCardComponent({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="View Visit Summary"
-          onPress={onViewSummaryPress}
+          onPress={(e) => {
+            e?.stopPropagation?.();
+            onViewSummaryPress();
+          }}
           style={({ pressed }) => [
             styles.actionBtn,
             {
-              backgroundColor: colors.mintSoftBg,
+              backgroundColor: colors.surfaceLow,
               borderRadius: radii.full,
-              borderColor: colors.border,
               opacity: pressed ? 0.9 : 1,
             },
           ]}
         >
-          <AppIcon name="document" size={15} color={colors.primaryDeep} />
+          <AppIcon name="document" size={15} color={colors.primary} />
           <Text
+            numberOfLines={1}
             style={[
-              typography.labelMd,
+              typography.labelBold,
               {
-                color: colors.primaryDeep,
-                fontWeight: '700',
+                color: colors.primary,
               },
             ]}
           >
@@ -205,24 +228,26 @@ function PastAppointmentCardComponent({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Book Again"
-          onPress={onBookAgainPress}
+          onPress={(e) => {
+            e?.stopPropagation?.();
+            onBookAgainPress();
+          }}
           style={({ pressed }) => [
             styles.actionBtn,
             {
               backgroundColor: colors.mintSoftBg,
               borderRadius: radii.full,
-              borderColor: colors.border,
               opacity: pressed ? 0.9 : 1,
             },
           ]}
         >
-          <AppIcon name="refresh" size={15} color={colors.primaryDeep} />
+          <AppIcon name="rotateCcw" size={15} color={colors.primaryDeep} />
           <Text
+            numberOfLines={1}
             style={[
-              typography.labelMd,
+              typography.labelBold,
               {
-                color: colors.primaryDeep,
-                fontWeight: '700',
+                color: colors.navyText,
               },
             ]}
           >
@@ -261,6 +286,7 @@ const styles = StyleSheet.create({
   },
   providerInfoColumn: {
     flex: 1,
+    minWidth: 0,
   },
   nameBadgeRow: {
     flexDirection: 'row',
@@ -269,8 +295,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   statusPill: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 3,
+    flexShrink: 0,
   },
   notesRow: {
     flexDirection: 'row',
@@ -283,11 +310,12 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     flex: 1,
+    minHeight: 42,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    borderWidth: 1,
+    paddingHorizontal: 12,
     gap: 6,
   },
 });

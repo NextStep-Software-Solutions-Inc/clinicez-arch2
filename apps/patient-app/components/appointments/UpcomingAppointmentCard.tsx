@@ -18,7 +18,7 @@ export interface UpcomingAppointmentCardProps {
   onPressCard: () => void;
   onCheckInPassPress: () => void;
   onGetDirectionsPress: () => void;
-  onPrepGuidePress: () => void;
+  onPrepGuidePress?: () => void;
   onReschedulePress: () => void;
 }
 
@@ -57,6 +57,29 @@ function UpcomingAppointmentCardComponent({
   const serviceTitle = appointment.serviceType || 'Consultation';
   const clinicName = appointment.clinic.name || 'Clinic';
   const isConfirmed = appointment.status === 'confirmed';
+  const isPending = appointment.status === 'pending';
+  const isActionRequired = appointment.status === 'action_required';
+  const showStatusPill = isTodayAppt || isConfirmed || isPending || isActionRequired;
+  const statusPillBg = isActionRequired
+    ? colors.roseSoftBg
+    : isPending
+      ? colors.amberSoftBg
+      : colors.emeraldSoftBg;
+  const statusDotColor = isActionRequired
+    ? colors.roseAccent
+    : isPending
+      ? colors.amberText
+      : colors.emeraldDot;
+  const statusTextColor = isActionRequired
+    ? colors.roseAccent
+    : isPending
+      ? colors.amberText
+      : colors.emeraldText;
+  const statusLabel = isActionRequired
+    ? 'Action Required'
+    : isPending
+      ? 'Pending'
+      : 'Confirmed';
 
   return (
     <Pressable
@@ -67,21 +90,21 @@ function UpcomingAppointmentCardComponent({
         styles.card,
         {
           backgroundColor: colors.surface,
-          borderColor: colors.border,
+          borderColor: colors.borderSubtle,
           borderRadius: radii.xl,
           padding: spacing.base,
-          opacity: pressed ? 0.95 : 1,
+          opacity: pressed ? 0.96 : 1,
         },
         elevation.card,
       ]}
     >
-      {/* Top Header: Avatar + Info + Confirmed Badge */}
+      {/* Top Header: Avatar + Info + Status Badge */}
       <View style={styles.headerRow}>
         <View style={styles.avatarContainer}>
           {appointment.provider.avatarUrl ? (
             <Image
               source={{ uri: appointment.provider.avatarUrl }}
-              style={[styles.avatar, { borderRadius: radii.md }]}
+              style={[styles.avatar, { borderRadius: radii.lg }]}
               resizeMode="cover"
             />
           ) : (
@@ -89,16 +112,16 @@ function UpcomingAppointmentCardComponent({
               style={[
                 styles.avatarFallback,
                 {
-                  borderRadius: radii.md,
+                  borderRadius: radii.lg,
                   backgroundColor: colors.mintSoftBg,
                 },
               ]}
             >
               <Text
                 style={[
-                  typography.labelSm,
+                  typography.cardTitle,
                   {
-                    color: colors.primaryDeep,
+                    color: colors.primary,
                     fontWeight: '700',
                   },
                 ]}
@@ -107,17 +130,27 @@ function UpcomingAppointmentCardComponent({
               </Text>
             </View>
           )}
-          {/* Status Indicator Dot on Avatar */}
+          {/* Bottom-right hollow amber ring indicator */}
           <View
             style={[
-              styles.avatarStatusDot,
+              styles.avatarStatusOuter,
               {
-                backgroundColor: isTodayAppt ? colors.amberText : colors.emeraldDot,
-                borderColor: colors.surface,
+                backgroundColor: colors.surface,
                 borderRadius: radii.full,
               },
             ]}
-          />
+          >
+            <View
+              style={[
+                styles.avatarStatusInner,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.amberText,
+                  borderRadius: radii.full,
+                },
+              ]}
+            />
+          </View>
         </View>
 
         <View style={styles.providerInfoColumn}>
@@ -135,36 +168,40 @@ function UpcomingAppointmentCardComponent({
             >
               {providerName}
             </Text>
-            <View
-              style={[
-                styles.statusPill,
-                {
-                  backgroundColor: isConfirmed ? colors.emeraldSoftBg : colors.amberSoftBg,
-                  borderRadius: radii.full,
-                },
-              ]}
-            >
+            {showStatusPill ? (
               <View
                 style={[
-                  styles.statusPillDot,
+                  styles.statusPill,
                   {
-                    backgroundColor: isConfirmed ? colors.emeraldDot : colors.amberText,
+                    backgroundColor: statusPillBg,
+                    borderColor: isConfirmed ? colors.mintBadgeBorder : 'transparent',
+                    borderWidth: isConfirmed ? 1 : 0,
                     borderRadius: radii.full,
                   },
                 ]}
-              />
-              <Text
-                style={[
-                  typography.labelSm,
-                  {
-                    color: isConfirmed ? colors.emeraldText : colors.amberText,
-                    fontWeight: '700',
-                  },
-                ]}
               >
-                {isConfirmed ? 'Confirmed' : 'Pending'}
-              </Text>
-            </View>
+                <View
+                  style={[
+                    styles.statusPillDot,
+                    {
+                      backgroundColor: statusDotColor,
+                      borderRadius: radii.full,
+                    },
+                  ]}
+                />
+                <Text
+                  style={[
+                    typography.labelSm,
+                    {
+                      color: statusTextColor,
+                      fontWeight: '700',
+                    },
+                  ]}
+                >
+                  {statusLabel}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <Text
@@ -181,15 +218,19 @@ function UpcomingAppointmentCardComponent({
           </Text>
 
           <View style={styles.clinicRow}>
-            <AppIcon name="building" size={13} color={colors.primaryDeep} />
+            <AppIcon
+              name={isTodayAppt ? 'building' : 'location'}
+              size={13}
+              color={colors.primary}
+            />
             <Text
               numberOfLines={1}
               style={[
-                typography.bodySmMedium,
+                typography.bodySm,
                 {
-                  color: colors.primaryDeep,
-                  marginLeft: 4,
-                  fontWeight: '600',
+                  color: colors.mutedText,
+                  marginLeft: 5,
+                  flex: 1,
                 },
               ]}
             >
@@ -199,13 +240,13 @@ function UpcomingAppointmentCardComponent({
         </View>
       </View>
 
-      {/* Schedule Info Box */}
+      {/* Schedule Info Tray */}
       <View
         style={[
           styles.scheduleBox,
           {
-            backgroundColor: colors.mintSoftBg,
-            borderRadius: radii.lg,
+            backgroundColor: colors.surfaceLow,
+            borderRadius: radii.md,
             paddingHorizontal: spacing.md,
             paddingVertical: spacing.sm + 2,
             marginTop: spacing.md,
@@ -216,15 +257,15 @@ function UpcomingAppointmentCardComponent({
           <AppIcon
             name={isTodayAppt ? 'calendar' : 'clock'}
             size={16}
-            color={colors.primaryDeep}
+            color={colors.primary}
           />
           <Text
+            numberOfLines={1}
             style={[
-              typography.labelMd,
+              typography.labelBold,
               {
                 color: colors.navyText,
-                marginLeft: 6,
-                fontWeight: '700',
+                marginLeft: spacing.sm,
               },
             ]}
           >
@@ -232,16 +273,19 @@ function UpcomingAppointmentCardComponent({
           </Text>
         </View>
 
-        {isTodayAppt ? (
+        {appointment.subject ? (
           <Text
+            numberOfLines={1}
             style={[
               typography.bodySm,
               {
                 color: colors.mutedText,
+                flexShrink: 1,
+                marginLeft: spacing.sm,
               },
             ]}
           >
-            Room 304 • Floor 3
+            {appointment.subject}
           </Text>
         ) : null}
       </View>
@@ -253,23 +297,26 @@ function UpcomingAppointmentCardComponent({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="View Check-in Pass"
-              onPress={onCheckInPassPress}
+              onPress={(e) => {
+                e?.stopPropagation?.();
+                onCheckInPassPress();
+              }}
               style={({ pressed }) => [
                 styles.primaryActionBtn,
                 {
-                  backgroundColor: colors.primaryDeep,
+                  backgroundColor: colors.primary,
                   borderRadius: radii.full,
                   opacity: pressed ? 0.9 : 1,
                 },
               ]}
             >
-              <AppIcon name="badge" size={16} color={colors.onPrimary} />
+              <AppIcon name="idCard" size={16} color={colors.onPrimary} />
               <Text
+                numberOfLines={1}
                 style={[
-                  typography.labelMd,
+                  typography.labelBold,
                   {
                     color: colors.onPrimary,
-                    fontWeight: '700',
                   },
                 ]}
               >
@@ -280,24 +327,27 @@ function UpcomingAppointmentCardComponent({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Get Directions"
-              onPress={onGetDirectionsPress}
+              onPress={(e) => {
+                e?.stopPropagation?.();
+                onGetDirectionsPress();
+              }}
               style={({ pressed }) => [
                 styles.secondaryActionBtn,
                 {
-                  backgroundColor: colors.mintSoftBg,
+                  backgroundColor: colors.surfaceLow,
                   borderRadius: radii.full,
                   borderColor: colors.border,
                   opacity: pressed ? 0.9 : 1,
                 },
               ]}
             >
-              <AppIcon name="navigation" size={15} color={colors.primaryDeep} />
+              <AppIcon name="navigation" size={15} color={colors.primary} />
               <Text
+                numberOfLines={1}
                 style={[
-                  typography.labelMd,
+                  typography.labelBold,
                   {
-                    color: colors.primaryDeep,
-                    fontWeight: '700',
+                    color: colors.navyText,
                   },
                 ]}
               >
@@ -310,24 +360,27 @@ function UpcomingAppointmentCardComponent({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="View Prep Guide"
-              onPress={onPrepGuidePress}
+              onPress={(e) => {
+                e?.stopPropagation?.();
+                onPrepGuidePress?.();
+              }}
               style={({ pressed }) => [
                 styles.secondaryActionBtn,
                 {
-                  backgroundColor: colors.mintSoftBg,
+                  backgroundColor: colors.skySoftBg,
                   borderRadius: radii.full,
-                  borderColor: colors.border,
+                  borderColor: colors.surfaceContainer,
                   opacity: pressed ? 0.9 : 1,
                 },
               ]}
             >
-              <AppIcon name="clipboard" size={15} color={colors.primaryDeep} />
+              <AppIcon name="clipboard" size={15} color={colors.primary} />
               <Text
+                numberOfLines={1}
                 style={[
-                  typography.labelMd,
+                  typography.labelBold,
                   {
-                    color: colors.primaryDeep,
-                    fontWeight: '700',
+                    color: colors.navyText,
                   },
                 ]}
               >
@@ -338,24 +391,27 @@ function UpcomingAppointmentCardComponent({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Reschedule Appointment"
-              onPress={onReschedulePress}
+              onPress={(e) => {
+                e?.stopPropagation?.();
+                onReschedulePress();
+              }}
               style={({ pressed }) => [
                 styles.secondaryActionBtn,
                 {
-                  backgroundColor: colors.mintSoftBg,
+                  backgroundColor: colors.surfaceLow,
                   borderRadius: radii.full,
                   borderColor: colors.border,
                   opacity: pressed ? 0.9 : 1,
                 },
               ]}
             >
-              <AppIcon name="calendar" size={15} color={colors.primaryDeep} />
+              <AppIcon name="clipboardPen" size={15} color={colors.bodyText} />
               <Text
+                numberOfLines={1}
                 style={[
-                  typography.labelMd,
+                  typography.labelBold,
                   {
-                    color: colors.primaryDeep,
-                    fontWeight: '700',
+                    color: colors.navyText,
                   },
                 ]}
               >
@@ -386,25 +442,32 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   avatar: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
   },
   avatarFallback: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarStatusDot: {
+  avatarStatusOuter: {
     position: 'absolute',
     bottom: -2,
     right: -2,
-    width: 12,
-    height: 12,
+    width: 14,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarStatusInner: {
+    width: 10,
+    height: 10,
     borderWidth: 2,
   },
   providerInfoColumn: {
     flex: 1,
+    minWidth: 0,
   },
   nameBadgeRow: {
     flexDirection: 'row',
@@ -418,6 +481,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     gap: 4,
+    flexShrink: 0,
   },
   statusPillDot: {
     width: 6,
@@ -436,6 +500,7 @@ const styles = StyleSheet.create({
   timeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
   },
   actionsRow: {
     flexDirection: 'row',
@@ -443,18 +508,22 @@ const styles = StyleSheet.create({
   },
   primaryActionBtn: {
     flex: 1,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
+    paddingHorizontal: 12,
     gap: 6,
   },
   secondaryActionBtn: {
     flex: 1,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
+    paddingHorizontal: 12,
     borderWidth: 1,
     gap: 6,
   },

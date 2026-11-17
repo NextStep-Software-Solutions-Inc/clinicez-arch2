@@ -114,6 +114,13 @@ import {
   Sunset,
   Car,
   Zap,
+  IdCard,
+  CornerUpRight,
+  RotateCcw,
+  ShieldPlus,
+  CalendarPlus,
+  ClipboardCheck,
+  Maximize,
   type LucideIcon,
 } from 'lucide-react-native';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -254,6 +261,13 @@ const WEB_ICONS: Record<IconName, LucideIcon> = {
   car: Car,
   zap: Zap,
   shieldCheck: ShieldCheck,
+  idCard: IdCard,
+  cornerUpRight: CornerUpRight,
+  rotateCcw: RotateCcw,
+  shieldPlus: ShieldPlus,
+  calendarPlus: CalendarPlus,
+  clipboardCheck: ClipboardCheck,
+  maximize: Maximize,
 };
 
 /**

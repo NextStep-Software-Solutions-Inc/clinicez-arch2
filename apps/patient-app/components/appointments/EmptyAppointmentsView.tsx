@@ -1,7 +1,6 @@
 import React, { memo } from 'react';
 import {
   Image,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -9,6 +8,7 @@ import {
 } from 'react-native';
 import { AppIcon } from '../ui/Icon';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
+import { extractInitials } from '../../services/home/homeDashboardService';
 
 export interface SuggestedCareServiceItem {
   id: string;
@@ -19,7 +19,7 @@ export interface SuggestedCareServiceItem {
   imageUrl?: string | null;
   buttonLabel: string;
   buttonVariant: 'primary' | 'mint' | 'outline';
-  onPress: () => void;
+  onPress?: () => void;
 }
 
 export interface EmptyAppointmentsViewProps {
@@ -43,31 +43,42 @@ function EmptyAppointmentsViewComponent({
           styles.emptyCard,
           {
             backgroundColor: colors.surface,
-            borderColor: colors.border,
-            borderRadius: radii.xl,
-            padding: spacing.xl,
+            borderColor: colors.borderSubtle,
+            borderRadius: radii.xxl,
+            paddingVertical: spacing.xxl,
+            paddingHorizontal: spacing.xl,
           },
           elevation.card,
         ]}
       >
         <View
           style={[
-            styles.iconBadge,
+            styles.iconOuterRing,
             {
               backgroundColor: colors.mintSoftBg,
               borderRadius: radii.full,
             },
           ]}
         >
-          <AppIcon name="calendarX" size={32} color={colors.primaryDeep} />
+          <View
+            style={[
+              styles.iconInnerRing,
+              {
+                backgroundColor: colors.surfaceLow,
+                borderRadius: radii.full,
+              },
+            ]}
+          >
+            <AppIcon name="calendarX" size={30} color={colors.primary} />
+          </View>
         </View>
 
         <Text
           style={[
-            typography.headlineSm,
+            typography.headlineMd,
             {
               color: colors.navyText,
-              marginTop: spacing.md,
+              marginTop: spacing.lg,
               fontWeight: '700',
               textAlign: 'center',
             },
@@ -97,10 +108,9 @@ function EmptyAppointmentsViewComponent({
           style={({ pressed }) => [
             styles.bookBtn,
             {
-              backgroundColor: colors.primaryDeep,
+              backgroundColor: colors.primary,
               borderRadius: radii.full,
               paddingHorizontal: spacing.xl,
-              paddingVertical: spacing.md - 2,
               marginTop: spacing.lg,
               opacity: pressed ? 0.9 : 1,
             },
@@ -109,11 +119,10 @@ function EmptyAppointmentsViewComponent({
           <AppIcon name="plus" size={16} color={colors.onPrimary} strokeWidth={2.5} />
           <Text
             style={[
-              typography.labelMd,
+              typography.labelBold,
               {
                 color: colors.onPrimary,
-                fontWeight: '700',
-                marginLeft: 4,
+                marginLeft: spacing.xs + 2,
               },
             ]}
           >
@@ -131,7 +140,7 @@ function EmptyAppointmentsViewComponent({
                 style={[
                   styles.sectionDot,
                   {
-                    backgroundColor: colors.primaryDeep,
+                    backgroundColor: colors.primary,
                     borderRadius: radii.full,
                   },
                 ]}
@@ -140,36 +149,33 @@ function EmptyAppointmentsViewComponent({
                 style={[
                   typography.overline,
                   {
-                    color: colors.mutedText,
-                    letterSpacing: 0.8,
+                    color: colors.navyText,
+                  },
+                ]}
+              >
+                SUGGESTED CARE SERVICES
+              </Text>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Quick Connect"
+              onPress={onQuickConnectPress ?? (() => {})}
+              hitSlop={8}
+              style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+            >
+              <Text
+                style={[
+                  typography.labelMd,
+                  {
+                    color: colors.primary,
                     fontWeight: '700',
                   },
                 ]}
               >
-                Suggested Care Services
+                Quick Connect
               </Text>
-            </View>
-
-            {onQuickConnectPress ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Quick Connect"
-                onPress={onQuickConnectPress}
-                hitSlop={8}
-              >
-                <Text
-                  style={[
-                    typography.labelSm,
-                    {
-                      color: colors.primaryDeep,
-                      fontWeight: '700',
-                    },
-                  ]}
-                >
-                  Quick Connect
-                </Text>
-              </Pressable>
-            ) : null}
+            </Pressable>
           </View>
 
           {/* Service Cards */}
@@ -181,32 +187,58 @@ function EmptyAppointmentsViewComponent({
                   styles.serviceCard,
                   {
                     backgroundColor: colors.surface,
-                    borderColor: colors.border,
+                    borderColor: colors.borderSubtle,
                     borderRadius: radii.xl,
-                    padding: spacing.md,
+                    padding: spacing.base,
                   },
                   elevation.card,
                 ]}
               >
-                {/* Left Badge / Icon */}
+                {/* Left Badge / Avatar / Icon */}
                 <View style={styles.serviceLeftBlock}>
-                  {service.badgeType === 'doctor' && service.imageUrl ? (
+                  {service.badgeType === 'doctor' ? (
                     <View style={styles.serviceAvatarWrap}>
-                      <Image
-                        source={{ uri: service.imageUrl }}
-                        style={[styles.serviceAvatar, { borderRadius: radii.md }]}
-                        resizeMode="cover"
-                      />
+                      {service.imageUrl ? (
+                        <Image
+                          source={{ uri: service.imageUrl }}
+                          style={[styles.serviceAvatar, { borderRadius: radii.full }]}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.serviceAvatarFallback,
+                            {
+                              backgroundColor: colors.mintSoftBg,
+                              borderRadius: radii.full,
+                            },
+                          ]}
+                        >
+                          <Text style={[typography.labelMd, { color: colors.primary, fontWeight: '700' }]}>
+                            {extractInitials(service.subtitle)}
+                          </Text>
+                        </View>
+                      )}
                       <View
                         style={[
-                          styles.onlineDot,
+                          styles.onlineRingOuter,
                           {
-                            backgroundColor: colors.emeraldDot,
-                            borderColor: colors.surface,
+                            backgroundColor: colors.surface,
                             borderRadius: radii.full,
                           },
                         ]}
-                      />
+                      >
+                        <View
+                          style={[
+                            styles.onlineRingInner,
+                            {
+                              backgroundColor: colors.surface,
+                              borderColor: colors.emeraldDot,
+                              borderRadius: radii.full,
+                            },
+                          ]}
+                        />
+                      </View>
                     </View>
                   ) : (
                     <View
@@ -219,9 +251,9 @@ function EmptyAppointmentsViewComponent({
                       ]}
                     >
                       <AppIcon
-                        name={service.badgeType === 'video' ? 'video' : 'shield'}
-                        size={22}
-                        color={colors.primaryDeep}
+                        name={service.badgeType === 'video' ? 'video' : 'shieldPlus'}
+                        size={20}
+                        color={colors.primary}
                       />
                     </View>
                   )}
@@ -258,9 +290,8 @@ function EmptyAppointmentsViewComponent({
                     style={[
                       typography.bodySmMedium,
                       {
-                        color: colors.primaryDeep,
+                        color: colors.primary,
                         marginTop: 2,
-                        fontWeight: '500',
                       },
                     ]}
                   >
@@ -272,17 +303,17 @@ function EmptyAppointmentsViewComponent({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={service.buttonLabel}
-                  onPress={service.onPress}
+                  onPress={service.onPress ?? (() => {})}
                   style={({ pressed }) => [
                     styles.serviceActionBtn,
                     {
                       borderRadius: radii.full,
                       backgroundColor:
                         service.buttonVariant === 'primary'
-                          ? colors.primaryDeep
+                          ? colors.primary
                           : service.buttonVariant === 'mint'
-                          ? colors.primaryVibrant
-                          : colors.mintSoftBg,
+                            ? colors.mintAvatarBg
+                            : colors.surfaceLow,
                       borderColor:
                         service.buttonVariant === 'outline' ? colors.border : 'transparent',
                       borderWidth: service.buttonVariant === 'outline' ? 1 : 0,
@@ -291,15 +322,16 @@ function EmptyAppointmentsViewComponent({
                   ]}
                 >
                   <Text
+                    numberOfLines={1}
                     style={[
-                      typography.labelSm,
+                      typography.labelMd,
                       {
                         color:
                           service.buttonVariant === 'primary'
                             ? colors.onPrimary
                             : service.buttonVariant === 'mint'
-                            ? colors.primaryDeep
-                            : colors.primaryDeep,
+                              ? colors.mintAvatarText
+                              : colors.primary,
                         fontWeight: '700',
                       },
                     ]}
@@ -329,13 +361,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
   },
-  iconBadge: {
+  iconOuterRing: {
+    width: 88,
+    height: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconInnerRing: {
     width: 64,
     height: 64,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bookBtn: {
+    minHeight: 46,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -354,8 +393,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionDot: {
-    width: 7,
-    height: 7,
+    width: 8,
+    height: 8,
   },
   servicesList: {
     width: '100%',
@@ -373,31 +412,45 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   serviceAvatar: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
   },
-  onlineDot: {
+  serviceAvatarFallback: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  onlineRingOuter: {
     position: 'absolute',
     bottom: -2,
     right: -2,
+    width: 14,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  onlineRingInner: {
     width: 10,
     height: 10,
-    borderWidth: 1.5,
+    borderWidth: 2,
   },
   serviceIconWrap: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
   serviceContentBlock: {
     flex: 1,
+    minWidth: 0,
     paddingRight: 8,
   },
   serviceActionBtn: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
 });

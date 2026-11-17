@@ -134,6 +134,13 @@ export const iconNames = [
   'car',
   'zap',
   'shieldCheck',
+  'idCard',
+  'cornerUpRight',
+  'rotateCcw',
+  'shieldPlus',
+  'calendarPlus',
+  'clipboardCheck',
+  'maximize',
 ] as const;
 
 export type IconName = (typeof iconNames)[number];

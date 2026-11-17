@@ -1,6 +1,5 @@
 import React, { memo } from 'react';
 import {
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -13,10 +12,10 @@ import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 export interface DigitalClinicPassCardProps {
   passNumber: string;
   clinicName: string;
-  terminalName?: string;
+  terminalName?: string | null;
   qrPayload: string;
   isCheckedIn?: boolean;
-  readyTimeText?: string;
+  readyTimeText?: string | null;
   onTapEnlarge?: () => void;
   onExpressCheckIn?: () => void;
   isCheckInLoading?: boolean;
@@ -25,10 +24,10 @@ export interface DigitalClinicPassCardProps {
 function DigitalClinicPassCardComponent({
   passNumber,
   clinicName,
-  terminalName = 'Bay Terminal',
+  terminalName,
   qrPayload,
   isCheckedIn = false,
-  readyTimeText = 'Ready at 10:15 AM',
+  readyTimeText,
   onTapEnlarge,
   onExpressCheckIn,
   isCheckInLoading = false,
@@ -41,7 +40,7 @@ function DigitalClinicPassCardComponent({
         styles.card,
         {
           backgroundColor: colors.surface,
-          borderColor: colors.border,
+          borderColor: colors.borderSubtle,
           borderRadius: radii.xxl,
           padding: spacing.base,
         },
@@ -55,13 +54,11 @@ function DigitalClinicPassCardComponent({
             style={[
               typography.overline,
               {
-                color: colors.primaryDeep,
-                letterSpacing: 0.9,
-                fontWeight: '700',
+                color: colors.mutedText,
               },
             ]}
           >
-            Digital Clinic Pass
+            DIGITAL CLINIC PASS
           </Text>
           <Text
             style={[
@@ -85,7 +82,8 @@ function DigitalClinicPassCardComponent({
               },
             ]}
           >
-            {clinicName} • {terminalName}
+            {clinicName}
+            {terminalName ? ` • ${terminalName}` : ''}
           </Text>
         </View>
 
@@ -93,9 +91,8 @@ function DigitalClinicPassCardComponent({
           style={[
             styles.passIdBadge,
             {
-              backgroundColor: colors.mintSoftBg,
+              backgroundColor: colors.mintBadgeBg,
               borderRadius: radii.full,
-              borderColor: colors.border,
             },
           ]}
         >
@@ -113,31 +110,48 @@ function DigitalClinicPassCardComponent({
         </View>
       </View>
 
-      {/* QR Code Container */}
+      {/* QR Code Outer Well & Crisp Inner White Tile */}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Tap to enlarge reception scanner QR code"
-        onPress={onTapEnlarge}
+        accessibilityLabel="Tap to enlarge for reception scanner"
+        onPress={onTapEnlarge ?? (() => {})}
         style={[
           styles.qrWrapper,
           {
-            backgroundColor: colors.mintSoftBg,
+            backgroundColor: colors.surfaceLow,
             borderRadius: radii.xl,
             paddingVertical: spacing.lg,
+            paddingHorizontal: spacing.base,
             marginTop: spacing.md,
           },
         ]}
       >
-        <QrCodeView value={qrPayload} size={150} accessibilityLabel={`Clinic Pass QR code for ${passNumber}`} />
-        <View style={[styles.enlargeRow, { marginTop: spacing.sm }]}>
-          <AppIcon name="fullscreen" size={14} color={colors.primaryDeep} />
+        <View
+          style={[
+            styles.qrInnerTile,
+            elevation.card,
+            {
+              backgroundColor: colors.surface,
+              borderRadius: radii.lg,
+              padding: spacing.base,
+            },
+          ]}
+        >
+          <QrCodeView
+            value={qrPayload}
+            size={150}
+            accessibilityLabel={`Clinic Pass QR code for ${passNumber}`}
+          />
+        </View>
+
+        <View style={[styles.enlargeRow, { marginTop: spacing.md }]}>
+          <AppIcon name="maximize" size={14} color={colors.primary} />
           <Text
             style={[
               typography.bodySmMedium,
               {
-                color: colors.primaryDeep,
-                fontWeight: '600',
-                marginLeft: 4,
+                color: colors.mutedText,
+                marginLeft: 6,
               },
             ]}
           >
@@ -146,12 +160,12 @@ function DigitalClinicPassCardComponent({
         </View>
       </Pressable>
 
-      {/* Touchless Check-in NFC Note */}
+      {/* Touchless Check-in Note */}
       <View
         style={[
           styles.nfcNoteBox,
           {
-            backgroundColor: colors.mintSoftBg,
+            backgroundColor: colors.surfaceLow,
             borderRadius: radii.lg,
             padding: spacing.md,
             marginTop: spacing.md,
@@ -159,13 +173,13 @@ function DigitalClinicPassCardComponent({
         ]}
       >
         <View style={styles.nfcIconWrap}>
-          <AppIcon name="nfc" size={18} color={colors.primaryDeep} />
+          <AppIcon name="nfc" size={18} color={colors.primary} />
         </View>
         <Text
           style={[
             typography.bodySm,
             {
-              color: colors.mutedText,
+              color: colors.bodyText,
               marginLeft: spacing.sm,
               flex: 1,
               lineHeight: 18,
@@ -179,15 +193,21 @@ function DigitalClinicPassCardComponent({
       {/* Express Check-In Action Button */}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={isCheckedIn ? 'Checked in successfully' : `Express Check-In, ${readyTimeText}`}
+        accessibilityLabel={
+          isCheckedIn
+            ? 'Checked in successfully'
+            : readyTimeText
+              ? `Express Check-In, ${readyTimeText}`
+              : 'Express Check-In'
+        }
         disabled={isCheckedIn || isCheckInLoading}
         onPress={onExpressCheckIn}
         style={({ pressed }) => [
           styles.checkInBtn,
           {
-            backgroundColor: isCheckedIn ? colors.mintSoftBg : colors.primaryDeep,
+            backgroundColor: isCheckedIn ? colors.mintSoftBg : colors.primary,
             borderRadius: radii.full,
-            borderColor: isCheckedIn ? colors.border : 'transparent',
+            borderColor: isCheckedIn ? colors.mintBadgeBorder : 'transparent',
             borderWidth: isCheckedIn ? 1 : 0,
             paddingVertical: spacing.md,
             marginTop: spacing.md,
@@ -196,7 +216,7 @@ function DigitalClinicPassCardComponent({
         ]}
       >
         <AppIcon
-          name={isCheckedIn ? 'checkCircle' : 'badge'}
+          name={isCheckedIn ? 'checkCircle' : 'idCard'}
           size={18}
           color={isCheckedIn ? colors.primaryDeep : colors.onPrimary}
         />
@@ -205,7 +225,6 @@ function DigitalClinicPassCardComponent({
             typography.labelBold,
             {
               color: isCheckedIn ? colors.primaryDeep : colors.onPrimary,
-              fontWeight: '700',
               marginLeft: 6,
             },
           ]}
@@ -213,8 +232,10 @@ function DigitalClinicPassCardComponent({
           {isCheckedIn
             ? 'Checked In'
             : isCheckInLoading
-            ? 'Checking In...'
-            : `Express Check-In (${readyTimeText})`}
+              ? 'Checking In...'
+              : readyTimeText
+                ? `Express Check-In (${readyTimeText})`
+                : 'Express Check-In'}
         </Text>
       </Pressable>
     </View>
@@ -241,9 +262,12 @@ const styles = StyleSheet.create({
   passIdBadge: {
     paddingHorizontal: 12,
     paddingVertical: 5,
-    borderWidth: 1,
   },
   qrWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrInnerTile: {
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -259,6 +283,7 @@ const styles = StyleSheet.create({
     paddingTop: 1,
   },
   checkInBtn: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

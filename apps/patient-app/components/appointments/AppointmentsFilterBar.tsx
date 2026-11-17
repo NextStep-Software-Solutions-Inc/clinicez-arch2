@@ -1,6 +1,5 @@
 import React, { memo } from 'react';
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,7 +21,6 @@ export interface AppointmentsFilterBarProps {
     all: number;
     upcoming: number;
     past: number;
-    waitlist?: number;
   };
   onFilterSlidersPress?: () => void;
   hideTabs?: boolean;
@@ -37,71 +35,79 @@ function AppointmentsFilterBarComponent({
   onFilterSlidersPress,
   hideTabs = false,
 }: AppointmentsFilterBarProps) {
-  const { colors, typography, radii, spacing } = useClinicalEmpathyTheme();
+  const { colors, typography, radii, spacing, elevation } = useClinicalEmpathyTheme();
 
   const tabs: Array<{ id: AppointmentFilterTab; label: string; count?: number }> = counts
     ? [
         { id: 'all', label: 'All', count: counts.all },
         { id: 'upcoming', label: 'Upcoming', count: counts.upcoming },
         { id: 'past', label: 'Past', count: counts.past },
-        { id: 'waitlist', label: 'Waitlist', count: counts.waitlist },
+        { id: 'waitlist', label: 'Waitlist' },
       ]
     : [];
 
   return (
     <View style={styles.container}>
-      {/* Search Input Bar */}
+      {/* Search Input Bar matching HomeSearchBar visual design */}
       <View
         style={[
           styles.searchBox,
+          elevation.card,
           {
             backgroundColor: colors.surface,
-            borderColor: colors.border,
+            borderColor: colors.borderSubtle,
             borderRadius: radii.full,
-            paddingHorizontal: spacing.md,
-            paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+            paddingLeft: spacing.base,
+            paddingRight: spacing.xs,
           },
         ]}
       >
-        <AppIcon name="search" size={18} color={colors.mutedText} />
-        <TextInput
-          value={searchQuery}
-          onChangeText={onSearchChange}
-          placeholder="Search clinics, doctors, appointments..."
-          placeholderTextColor={colors.mutedText}
-          style={[
-            styles.input,
-            typography.bodyMd,
-            {
-              color: colors.navyText,
-              marginLeft: spacing.sm,
-            },
-          ]}
-          returnKeyType="search"
-          accessibilityLabel="Search clinics, doctors, appointments"
-        />
+        <View style={[styles.inputCluster, { gap: spacing.sm }]}>
+          <AppIcon name="search" size={18} color={colors.primary} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={onSearchChange}
+            placeholder="Search clinics, doctors, appointments..."
+            placeholderTextColor={colors.mutedText}
+            style={[
+              styles.input,
+              typography.bodyMd,
+              { color: colors.navyText },
+            ]}
+            returnKeyType="search"
+            accessibilityLabel="Search clinics, doctors, appointments"
+          />
+        </View>
 
-        {searchQuery.length > 0 ? (
+        <View style={[styles.actionsCluster, { gap: spacing.xxs }]}>
+          {searchQuery.length > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear search text"
+              onPress={() => onSearchChange('')}
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                { borderRadius: radii.full, opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <AppIcon name="close" size={16} color={colors.mutedText} />
+            </Pressable>
+          ) : null}
+
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Clear search text"
-            onPress={() => onSearchChange('')}
-            hitSlop={8}
-            style={styles.actionIcon}
+            accessibilityLabel="Filter appointments"
+            onPress={onFilterSlidersPress ?? (() => {})}
+            hitSlop={6}
+            style={({ pressed }) => [
+              styles.iconBtn,
+              { borderRadius: radii.full, opacity: pressed ? 0.7 : 1 },
+            ]}
           >
-            <AppIcon name="close" size={16} color={colors.mutedText} />
+            <AppIcon name="sliders" size={18} color={colors.navyText} />
           </Pressable>
-        ) : (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Filter options"
-            onPress={onFilterSlidersPress}
-            hitSlop={8}
-            style={styles.actionIcon}
-          >
-            <AppIcon name="sliders" size={18} color={colors.primaryDeep} />
-          </Pressable>
-        )}
+        </View>
       </View>
 
       {/* Filter Tabs Scroll/Row */}
@@ -127,15 +133,16 @@ function AppointmentsFilterBarComponent({
                   styles.tabPill,
                   {
                     borderRadius: radii.full,
-                    paddingHorizontal: spacing.lg,
+                    paddingHorizontal: spacing.base + 2,
                     paddingVertical: spacing.sm + 1,
-                    backgroundColor: isActive ? colors.primaryDeep : colors.surface,
-                    borderColor: isActive ? colors.primaryDeep : colors.border,
+                    backgroundColor: isActive ? colors.primary : colors.surface,
+                    borderColor: isActive ? colors.primary : colors.border,
                     opacity: pressed ? 0.85 : 1,
                   },
                 ]}
               >
                 <Text
+                  numberOfLines={1}
                   style={[
                     typography.labelMd,
                     {
@@ -163,16 +170,31 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   searchBox: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     borderWidth: 1,
+  },
+  inputCluster: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+    minHeight: 46,
   },
   input: {
     flex: 1,
     paddingVertical: 0,
+    minWidth: 0,
   },
-  actionIcon: {
-    padding: 4,
+  actionsCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconBtn: {
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
   },

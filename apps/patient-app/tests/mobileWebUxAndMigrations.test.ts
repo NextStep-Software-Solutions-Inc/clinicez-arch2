@@ -138,10 +138,11 @@ describe('Mobile Web UI/UX & Compact Header State Resolution', () => {
     expect(pillBarSource.includes("flexWrap: 'wrap'")).toBe(false);
   });
 
-  test('Appointments.screen.web.tsx hides redundant hero header on compact screens and MainBottomTabs.web.tsx avoids truncating label', () => {
+  test('Appointments.screen.web.tsx uses seamless HomeHeader and MainBottomTabs.web.tsx avoids truncating label', () => {
     const apptsWebSource = readApp('navigation/screens/Appointments.screen.web.tsx');
-    expect(apptsWebSource.includes('!isCompact &&')).toBe(true);
-    expect(apptsWebSource.includes('Appointments & Visits')).toBe(true);
+    expect(apptsWebSource.includes('<HomeHeader')).toBe(true);
+    expect(apptsWebSource.includes('title="Appointments"')).toBe(true);
+    expect(apptsWebSource.includes('<HomeOfflinePillBanner')).toBe(true);
 
     const bottomTabsWeb = readApp('navigation/navigators/MainBottomTabs.web.tsx');
     expect(bottomTabsWeb.includes("title: 'Appointments'")).toBe(true);
@@ -194,7 +195,7 @@ describe('Mobile Web UI/UX & Compact Header State Resolution', () => {
     expect(notifNativeSource.includes('<FilterChipBar')).toBe(true);
 
     const apptsWebSource = readApp('navigation/screens/Appointments.screen.web.tsx');
-    expect(apptsWebSource.includes('<FilterChipBar')).toBe(true);
+    expect(apptsWebSource.includes('<AppointmentsFilterBar')).toBe(true);
 
     const offlineBannerSource = readApp('components/appointments/OfflineBanner.tsx');
     expect(offlineBannerSource.includes('if (!rendered && !shouldShow)')).toBe(true);

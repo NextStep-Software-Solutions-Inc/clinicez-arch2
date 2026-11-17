@@ -124,4 +124,11 @@ export const NATIVE_ICONS: Record<IconName, { android: string; ios: string }> = 
   car: { android: 'directions_car', ios: 'car.fill' },
   zap: { android: 'bolt', ios: 'bolt.fill' },
   shieldCheck: { android: 'verified_user', ios: 'shield.lefthalf.filled' },
+  idCard: { android: 'badge', ios: 'person.text.rectangle' },
+  cornerUpRight: { android: 'turn_right', ios: 'arrow.turn.up.right' },
+  rotateCcw: { android: 'replay', ios: 'arrow.counterclockwise' },
+  shieldPlus: { android: 'health_and_safety', ios: 'checkmark.shield' },
+  calendarPlus: { android: 'event', ios: 'calendar.badge.plus' },
+  clipboardCheck: { android: 'assignment_turned_in', ios: 'checklist.checked' },
+  maximize: { android: 'fullscreen', ios: 'viewfinder' },
 };

@@ -186,12 +186,12 @@ const MainStack = createNativeStackNavigator({
         sheetAllowedDetents: [0.92],
         sheetGrabberVisible: true,
         sheetCornerRadius: radiusScale.xl,
-        headerShown: true,
+        headerShown: false,
       },
     }),
     AppointmentDetailScreen: createNativeStackScreen({
       screen: AppointmentDetailScreen,
-      options: { title: 'Appointment Details', headerBackTitle: '' },
+      options: { headerShown: false },
     }),
     ProviderProfileScreen: createNativeStackScreen({
       screen: ProviderProfileScreen,
