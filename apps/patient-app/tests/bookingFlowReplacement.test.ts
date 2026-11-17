@@ -29,76 +29,148 @@ describe('Patient Appointment Booking Flow Replacement Suite', () => {
     expect(iconRegistrySrc.includes('shieldCheck:')).toBe(true);
   });
 
-  test('2. Step Indicator: renders 3 steps with proper active and completed states', () => {
+  test('2. Step Indicator & Dedicated Seamless Chrome: renders 3 steps, seamless header, and sticky bottom CTA bar', () => {
     const indicatorSrc = readAppFile('components/booking/BookingStepIndicator.tsx');
     expect(indicatorSrc.includes("label: 'Doctor'")).toBe(true);
     expect(indicatorSrc.includes("label: 'Slot'")).toBe(true);
     expect(indicatorSrc.includes("label: 'Confirm'")).toBe(true);
     expect(indicatorSrc.includes('isDone')).toBe(true);
     expect(indicatorSrc.includes('isCurrent')).toBe(true);
+    expect(indicatorSrc.includes('onSelectStep')).toBe(true);
+
+    const headerSrc = readAppFile('components/booking/BookingSeamlessHeader.tsx');
+    expect(headerSrc.includes('Book Appointment')).toBe(true);
+    expect(headerSrc.includes('Done')).toBe(true);
+    expect(headerSrc.includes('ClinicEzLogo')).toBe(true);
+    expect(headerSrc.includes('HEADER_REVEAL_SCROLL_START')).toBe(true);
+    expect(headerSrc.includes('onHelpPress = NO_OP')).toBe(true);
+
+    const footerSrc = readAppFile('components/booking/BookingStickyFooter.tsx');
+    expect(footerSrc.includes('SELECTED CONSULTATION')).toBe(true);
+    expect(footerSrc.includes('Proceed to Choose Slot')).toBe(true);
+    expect(footerSrc.includes('SELECTED APPOINTMENT SLOT')).toBe(true);
+    expect(footerSrc.includes('Continue to Review &amp; Confirm')).toBe(true);
+    expect(footerSrc.includes('Estimated Copay')).toBe(true);
+    expect(footerSrc.includes('Confirm & Book')).toBe(true);
   });
 
-  test('3. Step 1 (Doctor Selection): renders search, specialty filter chips, provider cards, facility card, and bottom consultation bar', () => {
+  test('3. Step 1 (Doctor Selection): renders search with strict no-op filter button, checkCircle specialty pill, provider cards, and real facility card', () => {
     const doctorStepSrc = readAppFile('components/booking/BookingDoctorStep.tsx');
     expect(doctorStepSrc.includes('RECOMMENDED PROVIDERS')).toBe(true);
     expect(doctorStepSrc.includes('SELECTED FACILITY LOCATION')).toBe(true);
     expect(doctorStepSrc.includes('No-Hassle Rescheduling')).toBe(true);
-    expect(doctorStepSrc.includes('Proceed to Choose Slot')).toBe(true);
-    expect(doctorStepSrc.includes('ADA')).toBe(true);
-    expect(doctorStepSrc.includes('Garage')).toBe(true);
+    expect(doctorStepSrc.includes('name="checkCircle"')).toBe(true);
+    expect(doctorStepSrc.includes('onFilterSlidersPress = NO_OP')).toBe(true);
+    expect(doctorStepSrc.includes('onViewAllHubs')).toBe(true);
+    expect(doctorStepSrc.includes('onViewClinicInfo')).toBe(true);
+    expect(doctorStepSrc.includes('selectedClinic.openStatusLabel')).toBe(true);
   });
 
-  test('4. Step 2 (Slot Selection): renders selected doctor header, in-person vs telehealth toggle, horizontal calendar strip, time period filters, and arrival guarantee', () => {
+  test('4. Step 2 (Slot Selection): renders selected doctor header, in-person vs telehealth toggle, Today pill, 6-day calendar strip, time period counts, and arrival guarantee', () => {
     const slotStepSrc = readAppFile('components/booking/BookingSlotStep.tsx');
     expect(slotStepSrc.includes('In-Person Visit')).toBe(true);
     expect(slotStepSrc.includes('Telehealth Video')).toBe(true);
+    expect(slotStepSrc.includes('Today')).toBe(true);
     expect(slotStepSrc.includes('Morning')).toBe(true);
     expect(slotStepSrc.includes('Afternoon')).toBe(true);
     expect(slotStepSrc.includes('Evening')).toBe(true);
     expect(slotStepSrc.includes('On-Time Clinic Arrival Guarantee')).toBe(true);
-    expect(slotStepSrc.includes('Continue to Review & Confirm')).toBe(true);
+    expect(slotStepSrc.includes('s.available !== false')).toBe(true);
   });
 
-  test('5. Step 3 (Review & Confirm): renders 15-minute live countdown timer, consultation mode, estimated cost breakdown, guarantees, and confirm button', () => {
+  test('5. Step 3 (Review & Confirm): renders 15-minute live countdown timer, consultation mode, editable reason input, real cost breakdown, and guarantees', () => {
     const reviewStepSrc = readAppFile('components/booking/BookingReviewStep.tsx');
     expect(reviewStepSrc.includes('Slot reserved for')).toBe(true);
-    expect(reviewStepSrc.includes('Time & Consultation Mode')).toBe(true);
+    expect(reviewStepSrc.includes('Time &amp; Consultation Mode')).toBe(true);
+    expect(reviewStepSrc.includes('REASON FOR VISIT')).toBe(true);
+    expect(reviewStepSrc.includes('onChangeReasonForVisit')).toBe(true);
     expect(reviewStepSrc.includes('Estimated Cost Breakdown')).toBe(true);
     expect(reviewStepSrc.includes('Total Patient Responsibility')).toBe(true);
     expect(reviewStepSrc.includes('Clinic EZ Guarantees')).toBe(true);
-    expect(reviewStepSrc.includes('SMS & Calendar reminders')).toBe(true);
-    expect(reviewStepSrc.includes('Confirm & Book')).toBe(true);
+    expect(reviewStepSrc.includes('SMS &amp; Calendar reminders')).toBe(true);
     expect(reviewStepSrc.includes('setInterval')).toBe(true);
   });
 
-  test('6. Step 4 (Confirmation): renders brand header, success hero checkmark, reference code with copy action, 3-task pre-visit checklist, and navigation actions', () => {
+  test('6. Step 4 (Confirmation): renders 3-ring success hero, reference code with copy action, 3-task pre-visit checklist, and navigation actions', () => {
     const confirmStepSrc = readAppFile('components/booking/BookingConfirmationStep.tsx');
+    expect(confirmStepSrc.includes('STEP 3 OF 3 • COMPLETED')).toBe(true);
     expect(confirmStepSrc.includes('Appointment Confirmed!')).toBe(true);
-    expect(confirmStepSrc.includes('Booking Reference')).toBe(true);
+    expect(confirmStepSrc.includes('Booking Ref')).toBe(true);
     expect(confirmStepSrc.includes('setStringAsync')).toBe(true);
     expect(confirmStepSrc.includes('Before Your Visit')).toBe(true);
     expect(confirmStepSrc.includes('View in My Appointments')).toBe(true);
     expect(confirmStepSrc.includes('Back to Home')).toBe(true);
   });
 
-  test('7. Screen Integration: both native and web screens wire to patient-api without mock data and respect keyboard and safe area handling', () => {
+  test('7. Dedicated Screen Integration, Strict No-Ops & Zero Mock Data: configures full-screen presentation, wires backend, and purges fake clinical placeholders', () => {
+    const mainStackSrc = readAppFile('navigation/navigators/MainStack.tsx');
+    const bookingRouteSection = mainStackSrc.slice(
+      mainStackSrc.indexOf('BookingDraftScreen:'),
+      mainStackSrc.indexOf('AppointmentDetailScreen:'),
+    );
+    expect(bookingRouteSection.includes("presentation: 'formSheet'")).toBe(false);
+    expect(bookingRouteSection.includes('headerShown: false')).toBe(true);
+
     const screenNativeSrc = readAppFile('navigation/screens/BookingDraft.screen.tsx');
     const screenWebSrc = readAppFile('navigation/screens/BookingDraft.screen.web.tsx');
 
-    // Wired to backend services
-    expect(screenNativeSrc.includes('queryPatientSearchCatalog')).toBe(true);
-    expect(screenNativeSrc.includes('createBookingDraftOnline')).toBe(true);
-    expect(screenNativeSrc.includes('submitBookingDraftOnline')).toBe(true);
-    expect(screenNativeSrc.includes('saveBookingDraft')).toBe(true);
+    for (const src of [screenNativeSrc, screenWebSrc]) {
+      expect(src.includes('<BookingSeamlessHeader')).toBe(true);
+      expect(src.includes('<BookingStickyFooter')).toBe(true);
+      expect(src.includes('<HomeOfflinePillBanner')).toBe(true);
+      expect(src.includes('Animated.ScrollView')).toBe(true);
+      expect(src.includes('queryPatientSearchCatalog')).toBe(true);
+      expect(src.includes('createBookingDraftOnline')).toBe(true);
+      expect(src.includes('submitBookingDraftOnline')).toBe(true);
+      expect(src.includes('saveBookingDraft')).toBe(true);
+      expect(src.includes('onHelpPress={NO_OP}')).toBe(true);
+      expect(src.includes('onFilterSlidersPress={NO_OP}')).toBe(true);
+      expect(src.includes('AppointmentsTab')).toBe(false);
+      expect(src.includes("'AppointmentsScreen'")).toBe(true);
+      expect(src.includes("'HomeScreen'")).toBe(true);
+      expect(src.includes("'ClinicDetailsScreen'")).toBe(true);
+      expect(src.includes("'ExploreClinicsScreen'")).toBe(true);
+      expect(src.includes('Booking Assistance')).toBe(false);
+      expect(src.includes('Booking Notice')).toBe(false);
+      expect(src.includes('Math.random()')).toBe(false);
+    }
 
-    expect(screenWebSrc.includes('queryPatientSearchCatalog')).toBe(true);
-    expect(screenWebSrc.includes('createBookingDraftOnline')).toBe(true);
-    expect(screenWebSrc.includes('submitBookingDraftOnline')).toBe(true);
-    expect(screenWebSrc.includes('saveBookingDraft')).toBe(true);
-
-    // Keyboard avoidance & safe insets
+    // Keyboard avoidance & safe insets on native
     expect(screenNativeSrc.includes('useKeyboardVisible')).toBe(true);
     expect(screenNativeSrc.includes('isKeyboardVisible')).toBe(true);
+
+    // Zero hardcoded booking mock data across screens & components
+    const forbiddenBookingMocks = [
+      'Blue Shield PPO',
+      '450 Elm Blvd',
+      'Medical District, Metro City',
+      'Diagnostic 12-Lead ECG',
+      '₱180.00',
+      'EZ-84920',
+      '128 reviews',
+      'Health Parkway',
+      'Clinic Suite',
+      'Routine Cardiology Follow-up',
+      'Ste 320',
+      'Open Now • Walk-ins Welcome',
+    ];
+    const bookingFiles = [
+      'navigation/screens/BookingDraft.screen.tsx',
+      'navigation/screens/BookingDraft.screen.web.tsx',
+      'components/booking/BookingSeamlessHeader.tsx',
+      'components/booking/BookingStickyFooter.tsx',
+      'components/booking/BookingStepIndicator.tsx',
+      'components/booking/BookingDoctorStep.tsx',
+      'components/booking/BookingSlotStep.tsx',
+      'components/booking/BookingReviewStep.tsx',
+      'components/booking/BookingConfirmationStep.tsx',
+    ];
+    for (const file of bookingFiles) {
+      const content = readAppFile(file);
+      for (const forbidden of forbiddenBookingMocks) {
+        expect(content.includes(forbidden)).toBe(false);
+      }
+    }
   });
 
   test('8. Header & Routing: Appointments screens use seamless scroll-animated HomeHeader, exempt outer headers, and wire NotificationScreen/BookingDraftScreen', () => {

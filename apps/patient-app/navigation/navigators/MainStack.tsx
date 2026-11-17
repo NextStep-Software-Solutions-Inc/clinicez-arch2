@@ -182,10 +182,6 @@ const MainStack = createNativeStackNavigator({
       screen: BookingDraftScreen,
       options: {
         title: 'Book Appointment',
-        presentation: 'formSheet',
-        sheetAllowedDetents: [0.92],
-        sheetGrabberVisible: true,
-        sheetCornerRadius: radiusScale.xl,
         headerShown: false,
       },
     }),

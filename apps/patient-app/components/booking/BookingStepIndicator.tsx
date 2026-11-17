@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppIcon } from '../ui/Icon';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 
@@ -7,6 +7,7 @@ export type BookingStep = 1 | 2 | 3;
 
 export interface BookingStepIndicatorProps {
   currentStep: BookingStep;
+  onSelectStep?: (step: BookingStep) => void;
 }
 
 const STEPS: Array<{ step: BookingStep; label: string }> = [
@@ -15,12 +16,15 @@ const STEPS: Array<{ step: BookingStep; label: string }> = [
   { step: 3, label: 'Confirm' },
 ];
 
-function BookingStepIndicatorComponent({ currentStep }: BookingStepIndicatorProps) {
+function BookingStepIndicatorComponent({
+  currentStep,
+  onSelectStep,
+}: BookingStepIndicatorProps) {
   const { colors, typography, radii, spacing } = useClinicalEmpathyTheme();
 
   return (
     <View
-      style={styles.container}
+      style={[styles.container, { paddingTop: spacing.xs, paddingBottom: spacing.md }]}
       accessibilityRole="progressbar"
       accessibilityValue={{ min: 1, max: 3, now: currentStep }}
       accessibilityLabel={`Step ${currentStep} of 3`}
@@ -29,57 +33,76 @@ function BookingStepIndicatorComponent({ currentStep }: BookingStepIndicatorProp
         {STEPS.map((s, index) => {
           const isDone = s.step < currentStep;
           const isCurrent = s.step === currentStep;
+          const isInteractive = Boolean(onSelectStep && isDone);
+
+          const circleContent = (
+            <View
+              style={[
+                styles.stepCircle,
+                {
+                  borderRadius: radii.full,
+                  backgroundColor:
+                    isDone || isCurrent ? colors.primary : colors.surfaceLow,
+                  borderColor:
+                    isDone || isCurrent ? colors.primary : colors.surfaceLow,
+                },
+              ]}
+            >
+              {isDone ? (
+                <AppIcon
+                  name="check"
+                  size={14}
+                  color={colors.onPrimary}
+                  strokeWidth={2.5}
+                />
+              ) : (
+                <Text
+                  style={[
+                    typography.labelSm,
+                    {
+                      color: isCurrent ? colors.onPrimary : colors.bodyText,
+                    },
+                  ]}
+                >
+                  {s.step}
+                </Text>
+              )}
+            </View>
+          );
 
           return (
             <React.Fragment key={s.step}>
-              {/* Connector line between steps */}
               {index > 0 && (
                 <View
                   style={[
                     styles.connectorLine,
                     {
-                      backgroundColor: isDone || isCurrent ? colors.primaryDeep : colors.border,
+                      backgroundColor:
+                        isDone || isCurrent ? colors.primary : colors.border,
                     },
                   ]}
                 />
               )}
 
-              {/* Step circle + label container */}
-              <View style={styles.stepColumn}>
-                <View
-                  style={[
-                    styles.stepCircle,
-                    {
-                      borderRadius: radii.full,
-                      backgroundColor: isDone || isCurrent ? colors.primaryDeep : colors.surface,
-                      borderColor: isDone || isCurrent ? colors.primaryDeep : colors.border,
-                    },
-                  ]}
-                >
-                  {isDone ? (
-                    <AppIcon name="check" size={14} color={colors.onPrimary} strokeWidth={2.5} />
-                  ) : (
-                    <Text
-                      style={[
-                        typography.labelSm,
-                        {
-                          color: isCurrent ? colors.onPrimary : colors.mutedText,
-                          fontWeight: '700',
-                        },
-                      ]}
-                    >
-                      {s.step}
-                    </Text>
-                  )}
-                </View>
+              <Pressable
+                disabled={!isInteractive}
+                onPress={() => onSelectStep?.(s.step)}
+                accessibilityRole={isInteractive ? 'button' : 'text'}
+                accessibilityLabel={`${s.label}, step ${s.step} of 3${isDone ? ', completed' : isCurrent ? ', current step' : ''}`}
+                style={({ pressed }) => [
+                  styles.stepColumn,
+                  { opacity: isInteractive && pressed ? 0.75 : 1 },
+                ]}
+              >
+                {circleContent}
 
                 <Text
                   style={[
-                    typography.bodySm,
+                    isCurrent || isDone ? typography.labelSm : typography.bodySm,
                     styles.stepLabel,
                     {
-                      color: isCurrent ? colors.primaryDeep : colors.mutedText,
-                      fontWeight: isCurrent ? '700' : '500',
+                      color:
+                        isCurrent || isDone ? colors.primary : colors.mutedText,
                       marginTop: spacing.xxs + 2,
                     },
                   ]}
@@ -87,7 +110,7 @@ function BookingStepIndicatorComponent({ currentStep }: BookingStepIndicatorProp
                 >
                   {s.label}
                 </Text>
-              </View>
+              </Pressable>
             </React.Fragment>
           );
         })}
@@ -99,7 +122,6 @@ function BookingStepIndicatorComponent({ currentStep }: BookingStepIndicatorProp
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    paddingVertical: 12,
     alignItems: 'center',
   },
   stepsRow: {
@@ -116,8 +138,8 @@ const styles = StyleSheet.create({
     minWidth: 56,
   },
   stepCircle: {
-    width: 26,
-    height: 26,
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
@@ -129,7 +151,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 2,
     marginHorizontal: 4,
-    marginBottom: 16, // Centers the line with the circle relative to the label below
+    marginBottom: 18,
   },
 });
 

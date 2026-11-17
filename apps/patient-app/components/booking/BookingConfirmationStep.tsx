@@ -1,14 +1,7 @@
-import React, { memo, useState } from 'react';
-import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, { memo, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { AppIcon } from '../ui/Icon';
-import ClinicEzLogo from '../ui/ClinicEzLogo';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 
 export interface BookingConfirmationStepProps {
@@ -17,7 +10,6 @@ export interface BookingConfirmationStepProps {
   doctorName: string;
   onViewAppointments: () => void;
   onBackToHome: () => void;
-  onDone: () => void;
 }
 
 function BookingConfirmationStepComponent({
@@ -26,20 +18,17 @@ function BookingConfirmationStepComponent({
   doctorName,
   onViewAppointments,
   onBackToHome,
-  onDone,
 }: BookingConfirmationStepProps) {
   const { colors, typography, radii, spacing, elevation } = useClinicalEmpathyTheme();
   const [hasCopied, setHasCopied] = useState(false);
 
-  // Mask patient email for privacy: sarah.j***@email.com
-  const maskedEmail = React.useMemo(() => {
+  const maskedEmail = useMemo(() => {
     if (!patientEmail) return 'your registered email';
     const parts = patientEmail.split('@');
     if (parts.length < 2) return patientEmail;
     const name = parts[0] || '';
     const domain = parts[1] || '';
-    const visibleLen = Math.min(name.length, 7);
-    const prefix = name.slice(0, Math.min(visibleLen, 5));
+    const prefix = name.slice(0, Math.min(name.length, 5));
     return `${prefix}***@${domain}`;
   }, [patientEmail]);
 
@@ -49,46 +38,14 @@ function BookingConfirmationStepComponent({
       setHasCopied(true);
       setTimeout(() => setHasCopied(false), 2000);
     } catch {
-      // Fallback
+      // Clipboard may be restricted in some environments
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Top Bar with Logo & Done */}
-      <View style={styles.topBar}>
-        <ClinicEzLogo size={32} />
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Done"
-          onPress={onDone}
-          style={({ pressed }) => [
-            styles.doneBtn,
-            {
-              backgroundColor: colors.skySoftBg,
-              borderRadius: radii.full,
-              paddingHorizontal: spacing.md,
-              paddingVertical: spacing.sm,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-        >
-          <AppIcon name="check" size={14} color={colors.primaryDeep} strokeWidth={2.5} />
-          <Text
-            style={[
-              typography.labelMd,
-              { color: colors.primaryDeep, fontWeight: '700', marginLeft: spacing.xxs + 2 },
-            ]}
-          >
-            Done
-          </Text>
-        </Pressable>
-      </View>
-
       {/* Success Hero Section */}
-      <View style={[styles.heroSection, { marginTop: spacing.xxl }]}>
-        {/* Large Checkmark Badge */}
+      <View style={[styles.heroSection, { marginTop: spacing.lg }]}>
         <View
           style={[
             styles.outerBadgeCircle,
@@ -100,23 +57,32 @@ function BookingConfirmationStepComponent({
         >
           <View
             style={[
-              styles.innerBadgeCircle,
+              styles.middleBadgeCircle,
               {
                 borderRadius: radii.full,
-                backgroundColor: colors.primaryDeep,
+                backgroundColor: colors.mintBadgeBg,
               },
             ]}
           >
-            <AppIcon name="check" size={32} color={colors.onPrimary} strokeWidth={3} />
+            <View
+              style={[
+                styles.innerBadgeCircle,
+                {
+                  borderRadius: radii.full,
+                  backgroundColor: colors.primary,
+                },
+              ]}
+            >
+              <AppIcon name="check" size={30} color={colors.onPrimary} strokeWidth={3} />
+            </View>
           </View>
         </View>
 
-        {/* Step 3 of 3 Completed Pill */}
         <View
           style={[
             styles.completedPill,
             {
-              backgroundColor: colors.mintBadgeBg,
+              backgroundColor: colors.mintAvatarBg,
               borderRadius: radii.full,
               paddingHorizontal: spacing.md,
               paddingVertical: spacing.xs,
@@ -127,20 +93,18 @@ function BookingConfirmationStepComponent({
           <Text
             style={[
               typography.labelSm,
-              { color: colors.primaryDeep, fontWeight: '700', letterSpacing: 0.5 },
+              { color: colors.mintAvatarText, fontWeight: '700', letterSpacing: 0.5 },
             ]}
           >
             STEP 3 OF 3 • COMPLETED
           </Text>
         </View>
 
-        {/* Headline & Subtitle */}
         <Text
           style={[
-            typography.displayLg,
+            typography.headlineLg,
             {
               color: colors.navyText,
-              fontWeight: '800',
               textAlign: 'center',
               marginTop: spacing.md,
             },
@@ -155,21 +119,19 @@ function BookingConfirmationStepComponent({
             {
               color: colors.bodyText,
               textAlign: 'center',
-              lineHeight: 22,
               marginTop: spacing.sm,
               paddingHorizontal: spacing.md,
             },
           ]}
         >
           Your consultation is officially scheduled. We&apos;ve sent a summary to{' '}
-          <Text style={{ fontWeight: '700', color: colors.navyText }}>{maskedEmail}</Text> and via
-          SMS.
+          <Text style={{ fontWeight: '700', color: colors.navyText }}>{maskedEmail}</Text>{' '}
+          and via SMS.
         </Text>
 
-        {/* Booking Reference Pill */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Booking reference ${bookingReference}, tap to copy`}
+          accessibilityLabel={`Booking Ref ${bookingReference}, tap to copy`}
           onPress={handleCopyReference}
           style={({ pressed }) => [
             styles.bookingRefPill,
@@ -185,7 +147,7 @@ function BookingConfirmationStepComponent({
         >
           <Text style={[typography.labelMd, { color: colors.bodyText }]}>
             Booking Ref{' '}
-            <Text style={{ color: colors.primaryDeep, fontWeight: '800' }}>
+            <Text style={{ color: colors.primary, fontWeight: '700' }}>
               #{bookingReference}
             </Text>
           </Text>
@@ -193,7 +155,7 @@ function BookingConfirmationStepComponent({
             <AppIcon
               name={hasCopied ? 'check' : 'copy'}
               size={14}
-              color={colors.primaryDeep}
+              color={colors.primary}
             />
           </View>
         </Pressable>
@@ -205,7 +167,7 @@ function BookingConfirmationStepComponent({
           styles.checklistCard,
           {
             backgroundColor: colors.surface,
-            borderColor: colors.border,
+            borderColor: colors.borderSubtle,
             borderRadius: radii.xl,
             padding: spacing.base,
             marginTop: spacing.xxl,
@@ -214,11 +176,11 @@ function BookingConfirmationStepComponent({
         ]}
       >
         <View style={styles.checklistHeaderRow}>
-          <AppIcon name="checklist" size={18} color={colors.primaryDeep} />
+          <AppIcon name="checklist" size={18} color={colors.primary} />
           <Text
             style={[
-              typography.headlineMd,
-              { color: colors.navyText, fontWeight: '700', marginLeft: spacing.xs },
+              typography.cardTitle,
+              { color: colors.navyText, marginLeft: spacing.xs },
             ]}
           >
             Before Your Visit
@@ -226,7 +188,6 @@ function BookingConfirmationStepComponent({
         </View>
 
         <View style={{ marginTop: spacing.base, gap: spacing.md }}>
-          {/* Item 1 */}
           <View
             style={[
               styles.checklistItem,
@@ -238,11 +199,11 @@ function BookingConfirmationStepComponent({
             ]}
           >
             <View style={styles.itemIconWrap}>
-              <AppIcon name="checkCircle" size={18} color={colors.primaryDeep} />
+              <AppIcon name="checkCircle" size={18} color={colors.primary} />
             </View>
             <View style={{ flex: 1, marginLeft: spacing.sm }}>
-              <Text style={[typography.labelMd, { color: colors.navyText, fontWeight: '700' }]}>
-                Government Photo ID & Insurance Card
+              <Text style={[typography.labelBold, { color: colors.navyText }]}>
+                Government Photo ID &amp; Insurance Card
               </Text>
               <Text style={[typography.bodySm, { color: colors.bodyText, marginTop: spacing.xxs }]}>
                 Required for front-desk identification and insurance verification.
@@ -250,7 +211,6 @@ function BookingConfirmationStepComponent({
             </View>
           </View>
 
-          {/* Item 2 */}
           <View
             style={[
               styles.checklistItem,
@@ -262,10 +222,10 @@ function BookingConfirmationStepComponent({
             ]}
           >
             <View style={styles.itemIconWrap}>
-              <AppIcon name="checkCircle" size={18} color={colors.primaryDeep} />
+              <AppIcon name="checkCircle" size={18} color={colors.primary} />
             </View>
             <View style={{ flex: 1, marginLeft: spacing.sm }}>
-              <Text style={[typography.labelMd, { color: colors.navyText, fontWeight: '700' }]}>
+              <Text style={[typography.labelBold, { color: colors.navyText }]}>
                 Current Prescription Bottles or List
               </Text>
               <Text style={[typography.bodySm, { color: colors.bodyText, marginTop: spacing.xxs }]}>
@@ -274,7 +234,6 @@ function BookingConfirmationStepComponent({
             </View>
           </View>
 
-          {/* Item 3 */}
           <View
             style={[
               styles.checklistItem,
@@ -286,10 +245,10 @@ function BookingConfirmationStepComponent({
             ]}
           >
             <View style={styles.itemIconWrap}>
-              <AppIcon name="info" size={18} color={colors.primaryDeep} />
+              <AppIcon name="info" size={18} color={colors.primary} />
             </View>
             <View style={{ flex: 1, marginLeft: spacing.sm }}>
-              <Text style={[typography.labelMd, { color: colors.navyText, fontWeight: '700' }]}>
+              <Text style={[typography.labelBold, { color: colors.navyText }]}>
                 No Fasting Required
               </Text>
               <Text style={[typography.bodySm, { color: colors.bodyText, marginTop: spacing.xxs }]}>
@@ -309,19 +268,14 @@ function BookingConfirmationStepComponent({
           style={({ pressed }) => [
             styles.primaryButton,
             {
-              backgroundColor: colors.primaryDeep,
+              backgroundColor: colors.primary,
               borderRadius: radii.full,
-              paddingVertical: spacing.md,
+              paddingVertical: spacing.md + 2,
               opacity: pressed ? 0.9 : 1,
             },
           ]}
         >
-          <Text
-            style={[
-              typography.labelLg,
-              { color: colors.onPrimary, fontWeight: '700', marginRight: spacing.xs },
-            ]}
-          >
+          <Text style={[typography.labelLg, { color: colors.onPrimary, marginRight: spacing.xs }]}>
             View in My Appointments
           </Text>
           <AppIcon name="arrowRight" size={18} color={colors.onPrimary} />
@@ -336,17 +290,12 @@ function BookingConfirmationStepComponent({
             {
               backgroundColor: colors.surfaceLow,
               borderRadius: radii.full,
-              paddingVertical: spacing.md,
+              paddingVertical: spacing.md + 2,
               opacity: pressed ? 0.85 : 1,
             },
           ]}
         >
-          <Text
-            style={[
-              typography.labelLg,
-              { color: colors.primaryDeep, fontWeight: '700' },
-            ]}
-          >
+          <Text style={[typography.labelLg, { color: colors.primary }]}>
             Back to Home
           </Text>
         </Pressable>
@@ -359,29 +308,25 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
   },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  doneBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   heroSection: {
     alignItems: 'center',
     width: '100%',
   },
   outerBadgeCircle: {
-    width: 84,
-    height: 84,
+    width: 96,
+    height: 96,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  middleBadgeCircle: {
+    width: 78,
+    height: 78,
     alignItems: 'center',
     justifyContent: 'center',
   },
   innerBadgeCircle: {
-    width: 64,
-    height: 64,
+    width: 60,
+    height: 60,
     alignItems: 'center',
     justifyContent: 'center',
   },

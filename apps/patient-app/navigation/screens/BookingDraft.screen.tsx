@@ -1,120 +1,152 @@
-import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
-  ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { format, startOfToday } from 'date-fns';
 import { useAuth as useClerkAuth, useUser } from '@clerk/expo';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppIcon } from '../../components/ui/Icon';
+import { safeAwait } from '@shared/safe';
 import { SkeletonCard } from '../../components/ui/Skeleton';
-import { useAppTheme } from '../../contexts/ThemeContext';
+import HomeOfflinePillBanner from '../../components/home/HomeOfflinePillBanner';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 import { usePatientId } from '../../hooks/usePatientId';
-import { useContentInsets } from '../../hooks/useContentInsets';
+import { useNetworkOnline } from '../../hooks/useNetworkOnline';
 import { useSafeHeaderHeight } from '../../hooks/useSafeHeaderHeight';
 import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
 import { dialog } from '../../utils/dialog';
-import { safeAwait } from '@shared/safe';
-import { db } from '../../db/index';
-import { bookingDrafts } from '../../db/schema/bookingDrafts';
 import {
   createBookingDraftOnline,
-  submitBookingDraftOnline,
+  getClinicDetail,
   saveBookingDraft,
+  submitBookingDraftOnline,
 } from '../../services/discovery/discoveryService';
+import type { ShareableFieldKey } from '../../services/discovery/types';
 import { fetchAvailableSlots } from '../../services/appointments/appointmentsService';
 import { queryPatientSearchCatalog } from '../../services/search/patientSearchService';
 import type {
-  PatientSearchDoctorDto,
   PatientSearchClinicDto,
+  PatientSearchDoctorDto,
+  PatientSearchServiceDto,
 } from '../../services/api/homeApi';
 import type { AvailableSlot } from '../../services/appointments/types';
-import BookingStepIndicator, { type BookingStep } from '../../components/booking/BookingStepIndicator';
+import BookingSeamlessHeader from '../../components/booking/BookingSeamlessHeader';
+import BookingStickyFooter from '../../components/booking/BookingStickyFooter';
+import BookingStepIndicator, {
+  type BookingStep,
+} from '../../components/booking/BookingStepIndicator';
 import BookingDoctorStep from '../../components/booking/BookingDoctorStep';
-import BookingSlotStep, { type ConsultationMode } from '../../components/booking/BookingSlotStep';
+import BookingSlotStep, {
+  type ConsultationMode,
+} from '../../components/booking/BookingSlotStep';
 import BookingReviewStep from '../../components/booking/BookingReviewStep';
 import BookingConfirmationStep from '../../components/booking/BookingConfirmationStep';
 
-type Props = StaticScreenProps<
-  { clinicId?: string; providerId?: string; serviceId?: string } | undefined
->;
+type BookingRouteParams =
+  | { clinicId?: string; providerId?: string; serviceId?: string; reason?: string }
+  | undefined;
+
+type Props = StaticScreenProps<BookingRouteParams>;
+
+const NO_OP = () => {};
+
+function formatSlotSummary(
+  slot: AvailableSlot | null,
+  date: Date,
+  doctorName?: string,
+): string | null {
+  if (!slot) return null;
+  const dateStr = format(date, 'EEE, MMM d');
+  const timeStr = slot.displayTime || slot.time;
+  return doctorName ? `${dateStr} at ${timeStr} • ${doctorName}` : `${dateStr} at ${timeStr}`;
+}
 
 export default function BookingDraftScreen(props: Props) {
-  const { colors, typography, radii, spacing, elevation } = useClinicalEmpathyTheme();
-  const theme = useAppTheme();
+  const { colors, spacing } = useClinicalEmpathyTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
   const { user } = useUser();
-  const contentInsets = useContentInsets();
   const insets = useSafeAreaInsets();
   const headerHeight = useSafeHeaderHeight();
   const isKeyboardVisible = useKeyboardVisible();
+  const { isOnline } = useNetworkOnline();
 
-  const routeParams = (route.params ?? props.route?.params) as
-    | { clinicId?: string; providerId?: string }
-    | undefined;
+  const routeParams = (route.params ?? props.route?.params) as BookingRouteParams;
   const initialClinicId = routeParams?.clinicId;
   const initialProviderId = routeParams?.providerId;
+  const initialServiceId = routeParams?.serviceId;
+  const initialReason = routeParams?.reason;
 
-  // Wizard state: 1: Doctor, 2: Slot, 3: Review & Confirm, 4: Confirmed
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const scrollRef = useRef<any>(null);
+
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(
-    initialProviderId ? 2 : 1
+    initialProviderId ? 2 : 1,
   );
-
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [doctors, setDoctors] = useState<PatientSearchDoctorDto[]>([]);
   const [clinics, setClinics] = useState<PatientSearchClinicDto[]>([]);
+  const [services, setServices] = useState<PatientSearchServiceDto[]>([]);
 
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | undefined>(
-    initialProviderId
+    initialProviderId,
   );
   const [selectedDate, setSelectedDate] = useState<Date>(startOfToday());
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState<boolean>(false);
-  const [consultationMode, setConsultationMode] = useState<ConsultationMode>('in_person');
-  const [bookingReference, setBookingReference] = useState<string>('EZ-84920');
+  const [consultationMode, setConsultationMode] =
+    useState<ConsultationMode>('in_person');
+  const [reasonForVisit, setReasonForVisit] = useState<string>(initialReason ?? '');
+  const [hasEditedReason, setHasEditedReason] = useState<boolean>(Boolean(initialReason));
+  const [sendReminders, setSendReminders] = useState<boolean>(true);
+  const [bookingReference, setBookingReference] = useState<string>('');
 
-  // Load catalog on mount
+  // Load care catalog on mount
   useEffect(() => {
     let active = true;
     (async () => {
       try {
         setIsLoading(true);
-        const catalog = await queryPatientSearchCatalog(
-          getToken,
-          patientId,
-          { q: '', category: 'all' }
-        );
-        if (active) {
-          setDoctors(catalog.data.doctors);
-          setClinics(catalog.data.clinics);
+        const catalog = await queryPatientSearchCatalog(getToken, patientId, {
+          q: '',
+          category: 'all',
+        });
+        if (!active) return;
 
-          if (!selectedDoctorId) {
-            if (initialProviderId) {
-              setSelectedDoctorId(initialProviderId);
-            } else if (initialClinicId) {
-              const matched = catalog.data.doctors.find((d: PatientSearchDoctorDto) => d.clinicId === initialClinicId);
-              if (matched) setSelectedDoctorId(matched.id);
-              else if (catalog.data.doctors.length > 0) setSelectedDoctorId(catalog.data.doctors[0]!.id);
-            } else if (catalog.data.doctors.length > 0) {
-              setSelectedDoctorId(catalog.data.doctors[0]!.id);
-            }
+        const catalogDoctors = catalog.data.doctors;
+        setDoctors(catalogDoctors);
+        setClinics(catalog.data.clinics);
+        setServices(catalog.data.services);
+
+        if (initialProviderId) {
+          const matchedDoc = catalogDoctors.find((d) => d.id === initialProviderId);
+          if (matchedDoc) {
+            setSelectedDoctorId(matchedDoc.id);
+          } else {
+            setCurrentStep(1);
+            const fallbackDoc =
+              (initialClinicId
+                ? catalogDoctors.find((d) => d.clinicId === initialClinicId)
+                : undefined) ?? catalogDoctors[0];
+            if (fallbackDoc) setSelectedDoctorId(fallbackDoc.id);
           }
+        } else if (!selectedDoctorId && catalogDoctors.length > 0) {
+          const matchedByClinic = initialClinicId
+            ? catalogDoctors.find((d) => d.clinicId === initialClinicId)
+            : undefined;
+          setSelectedDoctorId((matchedByClinic ?? catalogDoctors[0])?.id);
         }
       } catch {
-        // Handled gracefully with cached SQLite items
+        // Handled cleanly with empty catalog state
       } finally {
         if (active) setIsLoading(false);
       }
@@ -122,11 +154,11 @@ export default function BookingDraftScreen(props: Props) {
     return () => {
       active = false;
     };
-  }, [patientId, initialClinicId, initialProviderId]);
+  }, [getToken, initialClinicId, initialProviderId, patientId]);
 
   const selectedDoctor = useMemo(
     () => doctors.find((d) => d.id === selectedDoctorId) ?? doctors[0] ?? null,
-    [doctors, selectedDoctorId]
+    [doctors, selectedDoctorId],
   );
 
   const selectedClinic = useMemo(() => {
@@ -134,7 +166,34 @@ export default function BookingDraftScreen(props: Props) {
     return clinics.find((c) => c.id === selectedDoctor.clinicId) ?? clinics[0] ?? null;
   }, [clinics, selectedDoctor]);
 
-  // Fetch slots whenever doctor or date changes
+  const selectedService = useMemo(() => {
+    if (!selectedDoctor) return null;
+    if (initialServiceId) {
+      const exactMatch = services.find(
+        (s) => s.id === initialServiceId && s.clinicId === selectedDoctor.clinicId,
+      );
+      if (exactMatch) return exactMatch;
+    }
+    return services.find((s) => s.clinicId === selectedDoctor.clinicId) ?? null;
+  }, [initialServiceId, selectedDoctor, services]);
+
+  // Pre-fill real default reason while untouched by the user
+  useEffect(() => {
+    if (hasEditedReason) return;
+    if (selectedService?.name) {
+      setReasonForVisit(selectedService.name);
+    } else if (selectedDoctor?.specialty) {
+      setReasonForVisit(`${selectedDoctor.specialty} Consultation`);
+    }
+  }, [hasEditedReason, selectedDoctor?.specialty, selectedService?.name]);
+
+  // Reset scroll offset smoothly on step transitions
+  useEffect(() => {
+    scrollY.setValue(0);
+    scrollRef.current?.scrollTo?.({ y: 0, animated: false });
+  }, [currentStep, scrollY]);
+
+  // Fetch available slots whenever doctor or date changes
   useEffect(() => {
     if (!selectedDoctor || currentStep > 3) return;
 
@@ -148,18 +207,18 @@ export default function BookingDraftScreen(props: Props) {
           selectedDoctor.id,
           dateStr,
           getToken,
-          patientId
+          patientId,
         );
-        if (active) {
-          const slots = res.slots || [];
-          setAvailableSlots(slots);
-          // Auto-select first available slot if none selected or invalid
-          if (slots.length > 0) {
-            const defaultSlot = slots.find((s) => s.id.includes('10:30')) || slots[0];
-            setSelectedSlot(defaultSlot ?? null);
-          } else {
-            setSelectedSlot(null);
-          }
+        if (!active) return;
+
+        const openSlots = (res.slots || []).filter((s) => s.available !== false);
+        setAvailableSlots(openSlots);
+        if (openSlots.length > 0) {
+          const preferred =
+            openSlots.find((s) => s.time.startsWith('10:')) ?? openSlots[0];
+          setSelectedSlot(preferred ?? null);
+        } else {
+          setSelectedSlot(null);
         }
       } catch {
         if (active) {
@@ -174,119 +233,191 @@ export default function BookingDraftScreen(props: Props) {
     return () => {
       active = false;
     };
-  }, [selectedDoctor, selectedDate, currentStep, patientId]);
+  }, [currentStep, getToken, patientId, selectedDate, selectedDoctor]);
 
-  // Navigation / Back handler
-  const handleBack = () => {
-    if (currentStep === 1) {
-      navigation.goBack();
-    } else if (currentStep === 2) {
+  const navigateBackToTabs = useCallback(
+    (tabScreen: 'AppointmentsScreen' | 'HomeScreen') => {
+      navigation.navigate('BottomTabs', { screen: tabScreen });
+    },
+    [navigation],
+  );
+
+  const handleBack = useCallback(() => {
+    if (currentStep === 2) {
       setCurrentStep(1);
-    } else if (currentStep === 3) {
-      setCurrentStep(2);
-    } else {
-      navigation.goBack();
+      return;
     }
-  };
+    if (currentStep === 3) {
+      setCurrentStep(2);
+      return;
+    }
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigateBackToTabs('AppointmentsScreen');
+  }, [currentStep, navigateBackToTabs, navigation]);
 
-  const handleHelpPress = () => {
-    dialog.alert(
-      'Booking Assistance',
-      'Select your preferred healthcare specialist and available time slot. Your consultation appointment will be verified with the clinic with zero upfront charges.'
-    );
-  };
-
-  // Submit appointment to backend
-  const handleConfirmAndBook = async (_options: { sendReminders: boolean }) => {
+  const handleConfirmAndBook = useCallback(async () => {
     if (!selectedDoctor || !selectedSlot) return;
+
+    if (!isOnline) {
+      dialog.alert(
+        'Offline',
+        'An internet connection is required to submit a booking request.',
+      );
+      return;
+    }
 
     setIsSubmitting(true);
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
     const timeStr = selectedSlot.time || '10:30';
+    const effectiveReason =
+      reasonForVisit.trim() ||
+      selectedService?.name ||
+      `${selectedDoctor.specialty} Consultation`;
+
+    const servicePrefix = selectedService
+      ? `[[service:id=${selectedService.id};name=${selectedService.name}]]\n`
+      : '';
+    const notesPayload = [
+      `Provider: ${selectedDoctor.name}`,
+      `Mode: ${consultationMode === 'telehealth' ? 'Telehealth Video' : 'In-Person Visit'}`,
+      `Reminders: ${sendReminders ? 'SMS & Calendar reminders enabled' : 'Disabled'}`,
+    ].join('\n');
+
+    let consentedShareFields: ShareableFieldKey[] = [
+      'fullName',
+      'dateOfBirth',
+      'mobile',
+      'email',
+    ];
+    try {
+      const clinicDetail = await getClinicDetail(patientId, selectedDoctor.clinicId);
+      if (clinicDetail?.requiredShareFields?.length) {
+        consentedShareFields = clinicDetail.requiredShareFields;
+      }
+    } catch {
+      // Keep default share fields
+    }
 
     try {
-      // 1. Create server draft online
       const [serverDraftId, onlineErr] = await safeAwait(
         createBookingDraftOnline(getToken, patientId, {
           clinicId: selectedDoctor.clinicId,
           preferredDate: dateStr,
           preferredTime: timeStr,
-          reason: 'Routine Cardiology Follow-up & ECG Check',
-          notes: `Doctor: ${selectedDoctor.name}. Mode: ${consultationMode}`,
-          shareFieldsJson: JSON.stringify(['fullName', 'dateOfBirth', 'mobile', 'email']),
-        })
+          reason: effectiveReason,
+          notes: `${servicePrefix}${notesPayload}`,
+          shareFieldsJson: JSON.stringify(consentedShareFields),
+        }),
       );
 
-      let draftIdToSubmit = serverDraftId;
-
-      // 2. Save locally in SQLite
-      const [, localSaveErr] = await safeAwait(
-        saveBookingDraft(patientId, {
-          clinicId: selectedDoctor.clinicId,
-          preferredDate: dateStr,
-          preferredTime: timeStr,
-          reason: 'Routine Cardiology Follow-up & ECG Check',
-          notes: `Doctor: ${selectedDoctor.name}. Mode: ${consultationMode}`,
-          shareFields: ['fullName', 'dateOfBirth', 'mobile', 'email'],
-          shareSections: [],
-        })
-      );
-
-      if (!draftIdToSubmit && localSaveErr) {
-        throw new Error('Failed to create booking draft.');
-      }
-
-      // 3. Submit draft to clinic dashboard via patient-api
-      let assignedRef = `EZ-${Math.floor(10000 + Math.random() * 90000)}`;
-      if (draftIdToSubmit) {
-        const [refResult] = await safeAwait(
-          submitBookingDraftOnline(getToken, patientId, draftIdToSubmit)
+      if (onlineErr || !serverDraftId) {
+        dialog.alert(
+          'Booking Failed',
+          onlineErr?.message || 'Unable to create booking request on server. Please try again.',
         );
-        if (refResult) {
-          assignedRef = refResult.replace(/^PENDING-/, 'EZ-').slice(0, 8).toUpperCase();
-          if (!assignedRef.startsWith('EZ-')) assignedRef = `EZ-${assignedRef}`;
-        }
+        return;
       }
 
-      setBookingReference(assignedRef);
-      setCurrentStep(4);
-    } catch {
-      dialog.alert(
-        'Booking Notice',
-        'Your appointment request was queued for clinic confirmation. You can review its live status under My Appointments.'
+      const [refResult, submitErr] = await safeAwait(
+        submitBookingDraftOnline(getToken, patientId, serverDraftId),
       );
-      setBookingReference(`EZ-${Math.floor(10000 + Math.random() * 90000)}`);
+
+      if (submitErr) {
+        dialog.alert(
+          'Booking Failed',
+          'Unable to submit booking request to the clinic. Please try again.',
+        );
+        return;
+      }
+
+      await safeAwait(
+        saveBookingDraft(
+          patientId,
+          {
+            clinicId: selectedDoctor.clinicId,
+            preferredDate: dateStr,
+            preferredTime: timeStr,
+            reason: effectiveReason,
+            notes: `${servicePrefix}${notesPayload}`,
+            shareFields: consentedShareFields,
+            shareSections: [],
+          },
+          serverDraftId,
+        ),
+      );
+
+      const normalizedRef = refResult
+        ? refResult.replace(/^PENDING-/, 'EZ-').slice(0, 10).toUpperCase()
+        : `EZ-${serverDraftId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+      setBookingReference(
+        normalizedRef.startsWith('EZ-') ? normalizedRef : `EZ-${normalizedRef}`,
+      );
       setCurrentStep(4);
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [
+    consultationMode,
+    getToken,
+    isOnline,
+    patientId,
+    reasonForVisit,
+    selectedDate,
+    selectedDoctor,
+    selectedService,
+    selectedSlot,
+    sendReminders,
+  ]);
 
-  const handleViewAppointments = () => {
-    navigation.navigate('Main', {
-      screen: 'AppointmentsTab',
-    });
-  };
+  const selectedSlotSummary = useMemo(
+    () => formatSlotSummary(selectedSlot, selectedDate, selectedDoctor?.name),
+    [selectedDate, selectedDoctor?.name, selectedSlot],
+  );
 
-  const handleBackToHome = () => {
-    navigation.navigate('Main', {
-      screen: 'HomeScreen',
-    });
-  };
+  const unitPrice =
+    typeof selectedService?.price === 'number' && selectedService.price > 0
+      ? selectedService.price
+      : 0;
+  const formattedCopay = `₱${unitPrice.toFixed(2)}`;
+
+  const showFooter = currentStep < 4 && !isLoading && !isKeyboardVisible;
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.canvas }]}>
+    <SafeAreaView
+      edges={['top']}
+      style={[styles.root, { backgroundColor: colors.canvas }]}
+    >
+      <BookingSeamlessHeader
+        scrollY={scrollY}
+        isConfirmedStep={currentStep === 4}
+        onBackPress={handleBack}
+        onHelpPress={NO_OP}
+        onDonePress={() => navigateBackToTabs('AppointmentsScreen')}
+      />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={headerHeight}
         style={styles.keyboardContainer}
       >
-        <ScrollView
+        <Animated.ScrollView
+          ref={scrollRef}
+          style={styles.flex}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: false },
+          )}
+          scrollEventThrottle={16}
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingTop: insets.top + (currentStep === 4 ? 8 : 12),
-              paddingBottom: contentInsets.bottom + (isKeyboardVisible ? 16 : 48),
+              paddingHorizontal: spacing.base,
+              paddingBottom:
+                (isKeyboardVisible ? spacing.base : spacing.xxl) +
+                (showFooter ? spacing.md : insets.bottom),
             },
           ]}
           showsVerticalScrollIndicator={false}
@@ -294,46 +425,13 @@ export default function BookingDraftScreen(props: Props) {
           automaticallyAdjustKeyboardInsets={true}
           keyboardDismissMode="on-drag"
         >
-          {/* Top Bar for Steps 1-3 */}
-          {currentStep < 4 && (
-            <View style={styles.topBar}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Go back"
-                onPress={handleBack}
-                hitSlop={8}
-                style={styles.backButton}
-              >
-                <AppIcon name="chevronLeft" size={24} color={colors.navyText} />
-              </Pressable>
+          {currentStep < 4 ? (
+            <BookingStepIndicator
+              currentStep={currentStep as BookingStep}
+              onSelectStep={(step) => setCurrentStep(step)}
+            />
+          ) : null}
 
-              <Text
-                style={[
-                  typography.headlineLg,
-                  { color: colors.navyText, fontWeight: '700' },
-                ]}
-              >
-                Book Appointment
-              </Text>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Booking help"
-                onPress={handleHelpPress}
-                hitSlop={8}
-                style={styles.helpButton}
-              >
-                <AppIcon name="helpCircle" size={22} color={colors.navyText} />
-              </Pressable>
-            </View>
-          )}
-
-          {/* Stepper (Steps 1, 2, 3) */}
-          {currentStep < 4 && (
-            <BookingStepIndicator currentStep={currentStep as BookingStep} />
-          )}
-
-          {/* Body Content */}
           {isLoading ? (
             <View style={{ marginTop: spacing.xl, gap: spacing.md }}>
               <SkeletonCard />
@@ -343,22 +441,18 @@ export default function BookingDraftScreen(props: Props) {
             <BookingDoctorStep
               doctors={doctors}
               clinics={clinics}
-              selectedDoctorId={selectedDoctorId}
-              onSelectDoctor={(doc) => {
-                setSelectedDoctorId(doc.id);
-              }}
-              onProceed={() => {
-                if (selectedDoctor) setCurrentStep(2);
-              }}
+              selectedDoctorId={selectedDoctor?.id}
+              onSelectDoctor={(doc) => setSelectedDoctorId(doc.id)}
               onViewClinicInfo={(clinicId) => {
-                navigation.navigate('Main', {
-                  screen: 'ClinicDetailsScreen',
-                  params: { clinicId },
+                navigation.navigate('ClinicDetailsScreen', {
+                  clinicId,
+                  id: clinicId,
                 });
               }}
               onViewAllHubs={() => {
-                navigation.navigate('Main', { screen: 'ExploreClinicsScreen' });
+                navigation.navigate('ExploreClinicsScreen');
               }}
+              onFilterSlidersPress={NO_OP}
             />
           ) : currentStep === 2 && selectedDoctor ? (
             <BookingSlotStep
@@ -371,35 +465,61 @@ export default function BookingDraftScreen(props: Props) {
               isLoadingSlots={isLoadingSlots}
               consultationMode={consultationMode}
               onChangeConsultationMode={setConsultationMode}
+              serviceDurationMinutes={selectedService?.durationMinutes ?? 30}
               onChangeDoctor={() => setCurrentStep(1)}
-              onProceed={() => {
-                if (selectedSlot) setCurrentStep(3);
-              }}
             />
           ) : currentStep === 3 && selectedDoctor && selectedSlot ? (
             <BookingReviewStep
               doctor={selectedDoctor}
               clinic={selectedClinic}
+              service={selectedService}
               selectedDate={selectedDate}
               selectedSlot={selectedSlot}
               consultationMode={consultationMode}
-              isSubmitting={isSubmitting}
+              reasonForVisit={reasonForVisit}
+              onChangeReasonForVisit={(text) => {
+                setHasEditedReason(true);
+                setReasonForVisit(text);
+              }}
+              sendReminders={sendReminders}
+              onToggleSendReminders={() => setSendReminders((prev) => !prev)}
               onChangeTimeOrMode={() => setCurrentStep(2)}
-              onConfirmAndBook={handleConfirmAndBook}
             />
           ) : currentStep === 4 && selectedDoctor ? (
             <BookingConfirmationStep
               bookingReference={bookingReference}
               patientEmail={user?.primaryEmailAddress?.emailAddress}
               doctorName={selectedDoctor.name}
-              onViewAppointments={handleViewAppointments}
-              onBackToHome={handleBackToHome}
-              onDone={handleBackToHome}
+              onViewAppointments={() => navigateBackToTabs('AppointmentsScreen')}
+              onBackToHome={() => navigateBackToTabs('HomeScreen')}
             />
           ) : null}
-        </ScrollView>
+        </Animated.ScrollView>
+
+        {showFooter ? (
+          <BookingStickyFooter
+            currentStep={currentStep as BookingStep}
+            selectedDoctor={selectedDoctor}
+            selectedSlotSummary={selectedSlotSummary}
+            formattedCopay={formattedCopay}
+            isSubmitting={isSubmitting}
+            bottomInset={insets.bottom}
+            onProceedStep1={() => {
+              if (selectedDoctor) setCurrentStep(2);
+            }}
+            onProceedStep2={() => {
+              if (selectedSlot) setCurrentStep(3);
+            }}
+            onConfirmAndBook={handleConfirmAndBook}
+          />
+        ) : null}
       </KeyboardAvoidingView>
-    </View>
+
+      <HomeOfflinePillBanner
+        isOnline={isOnline}
+        bottomOffset={showFooter ? Math.max(insets.bottom, spacing.md) + 112 : Math.max(insets.bottom, spacing.md)}
+      />
+    </SafeAreaView>
   );
 }
 
@@ -408,23 +528,13 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
+  flex: {
+    flex: 1,
+  },
   keyboardContainer: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-  },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    width: '100%',
-  },
-  backButton: {
-    padding: 4,
-  },
-  helpButton: {
-    padding: 4,
+    paddingTop: 4,
   },
 });

@@ -1,4 +1,4 @@
-import React, { memo, useState, useMemo } from 'react';
+import React, { memo, useEffect, useState, useMemo } from 'react';
 import {
   Image,
   Pressable,
@@ -8,13 +8,13 @@ import {
   View,
 } from 'react-native';
 import {
-  format,
   addDays,
-  subDays,
+  differenceInCalendarDays,
+  format,
   isSameDay,
   isToday,
-  parseISO,
   startOfToday,
+  subDays,
 } from 'date-fns';
 import { AppIcon } from '../ui/Icon';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
@@ -22,7 +22,7 @@ import type { PatientSearchDoctorDto } from '../../services/api/homeApi';
 import type { AvailableSlot } from '../../services/appointments/types';
 
 export type ConsultationMode = 'in_person' | 'telehealth';
-export type TimeOfDayPeriod = 'all' | 'morning' | 'afternoon' | 'evening';
+export type TimeOfDayPeriod = 'morning' | 'afternoon' | 'evening';
 
 export interface BookingSlotStepProps {
   doctor: PatientSearchDoctorDto;
@@ -34,8 +34,29 @@ export interface BookingSlotStepProps {
   isLoadingSlots?: boolean;
   consultationMode: ConsultationMode;
   onChangeConsultationMode: (mode: ConsultationMode) => void;
+  serviceDurationMinutes?: number;
   onChangeDoctor: () => void;
-  onProceed: () => void;
+}
+
+function getSlotPeriod(slot: AvailableSlot): TimeOfDayPeriod {
+  const raw = (slot.period || '').toLowerCase();
+  if (raw === 'morning' || raw === 'afternoon' || raw === 'evening') {
+    return raw;
+  }
+  const hour = parseInt(slot.time.split(':')[0] || '10', 10);
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  return 'evening';
+}
+
+function extractInitials(name: string): string {
+  const clean = name.replace(/^Dr\.\s*/i, '').trim();
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'DR';
+  return parts
+    .slice(0, 2)
+    .map((n) => n[0]?.toUpperCase() ?? '')
+    .join('');
 }
 
 function BookingSlotStepComponent({
@@ -48,76 +69,80 @@ function BookingSlotStepComponent({
   isLoadingSlots = false,
   consultationMode,
   onChangeConsultationMode,
+  serviceDurationMinutes = 30,
   onChangeDoctor,
-  onProceed,
 }: BookingSlotStepProps) {
   const { colors, typography, radii, spacing, elevation } = useClinicalEmpathyTheme();
   const [selectedPeriod, setSelectedPeriod] = useState<TimeOfDayPeriod>('morning');
 
-  // Generate 7-day strip centered on selectedDate or starting from today
+  const openSlots = useMemo(
+    () => availableSlots.filter((s) => s.available !== false),
+    [availableSlots],
+  );
+
+  // Stable 6-day window containing selectedDate without shifting cards unexpectedly on click
   const dateStripDays = useMemo(() => {
     const today = startOfToday();
-    // Anchor to today or start a few days earlier if selectedDate is further out
-    const baseDate = selectedDate < today ? today : selectedDate;
-    const days: Date[] = [];
-    for (let i = -1; i < 6; i++) {
-      const d = addDays(baseDate, i);
-      if (d >= today) {
-        days.push(d);
-      }
-    }
-    // Ensure at least 6 days
-    while (days.length < 6) {
-      days.push(addDays(days[days.length - 1] || today, 1));
-    }
-    return days.slice(0, 6);
+    const diffDays = Math.max(0, differenceInCalendarDays(selectedDate, today));
+    const windowOffset = Math.floor(diffDays / 6) * 6;
+    const windowStart = addDays(today, windowOffset);
+    return Array.from({ length: 6 }, (_, i) => addDays(windowStart, i));
   }, [selectedDate]);
 
-  // Filter slots by period
   const periodCounts = useMemo(() => {
     let morning = 0;
     let afternoon = 0;
     let evening = 0;
-    availableSlots.forEach((s) => {
-      const p = (s.period || '').toLowerCase();
-      if (p === 'morning') morning++;
-      else if (p === 'afternoon') afternoon++;
-      else if (p === 'evening') evening++;
-      else {
-        // Fallback: estimate by time
-        const hour = parseInt(s.time.split(':')[0] || '10', 10);
-        if (hour < 12) morning++;
-        else if (hour < 17) afternoon++;
-        else evening++;
-      }
+    openSlots.forEach((slot) => {
+      const period = getSlotPeriod(slot);
+      if (period === 'morning') morning += 1;
+      else if (period === 'afternoon') afternoon += 1;
+      else evening += 1;
     });
     return { morning, afternoon, evening };
-  }, [availableSlots]);
+  }, [openSlots]);
 
-  const filteredSlots = useMemo(() => {
-    if (selectedPeriod === 'all') return availableSlots;
-    return availableSlots.filter((s) => {
-      const p = (s.period || '').toLowerCase();
-      if (p === selectedPeriod) return true;
-      const hour = parseInt(s.time.split(':')[0] || '10', 10);
-      if (selectedPeriod === 'morning' && hour < 12) return true;
-      if (selectedPeriod === 'afternoon' && hour >= 12 && hour < 17) return true;
-      if (selectedPeriod === 'evening' && hour >= 17) return true;
-      return false;
-    });
-  }, [availableSlots, selectedPeriod]);
+  // If the current period has zero slots while another period has slots, switch to the first available period
+  useEffect(() => {
+    if (openSlots.length === 0) return;
+    if (periodCounts[selectedPeriod] > 0) return;
+    if (periodCounts.morning > 0) setSelectedPeriod('morning');
+    else if (periodCounts.afternoon > 0) setSelectedPeriod('afternoon');
+    else if (periodCounts.evening > 0) setSelectedPeriod('evening');
+  }, [openSlots.length, periodCounts, selectedPeriod]);
+
+  const filteredSlots = useMemo(
+    () => openSlots.filter((slot) => getSlotPeriod(slot) === selectedPeriod),
+    [openSlots, selectedPeriod],
+  );
+
+  const recommendedSlotId = useMemo(
+    () => (openSlots.find((s) => s.time.startsWith('10:')) ?? openSlots[0])?.id ?? null,
+    [openSlots],
+  );
 
   const formattedDateTitle = useMemo(
     () => format(selectedDate, 'MMMM yyyy'),
-    [selectedDate]
+    [selectedDate],
   );
 
-  const formattedSlotSummary = useMemo(() => {
-    if (!selectedSlot) return null;
-    const dateStr = format(selectedDate, 'EEE, MMM d');
-    const timeStr = selectedSlot.displayTime || selectedSlot.time;
-    return `${dateStr} at ${timeStr} • ${doctor.name}`;
-  }, [selectedSlot, selectedDate, doctor.name]);
+  const locationLabel = doctor.clinicAddress
+    ? `${doctor.clinicName} • ${doctor.clinicAddress}`
+    : doctor.clinicName;
+
+  const durationMins = serviceDurationMinutes > 0 ? serviceDurationMinutes : 30;
+  const isAtToday = isToday(selectedDate);
+
+  const PERIOD_TABS: Array<{
+    key: TimeOfDayPeriod;
+    label: string;
+    icon: 'sun' | 'sunset' | 'moon';
+    count: number;
+  }> = [
+    { key: 'morning', label: 'Morning', icon: 'sun', count: periodCounts.morning },
+    { key: 'afternoon', label: 'Afternoon', icon: 'sunset', count: periodCounts.afternoon },
+    { key: 'evening', label: 'Evening', icon: 'moon', count: periodCounts.evening },
+  ];
 
   return (
     <View style={styles.container}>
@@ -127,7 +152,7 @@ function BookingSlotStepComponent({
           styles.doctorSummaryCard,
           {
             backgroundColor: colors.surface,
-            borderColor: colors.border,
+            borderColor: colors.borderSubtle,
             borderRadius: radii.xl,
             padding: spacing.base,
           },
@@ -151,64 +176,26 @@ function BookingSlotStepComponent({
                   },
                 ]}
               >
-                <Text
-                  style={[
-                    typography.labelLg,
-                    { color: colors.primaryDeep, fontWeight: '700' },
-                  ]}
-                >
-                  {doctor.name
-                    .replace('Dr. ', '')
-                    .split(' ')
-                    .map((n) => n[0])
-                    .slice(0, 2)
-                    .join('')}
+                <Text style={[typography.cardTitle, { color: colors.primaryDeep }]}>
+                  {extractInitials(doctor.name)}
                 </Text>
               </View>
             )}
           </View>
 
           <View style={styles.doctorInfoCol}>
-            <Text
-              style={[
-                typography.headlineMd,
-                { color: colors.navyText, fontWeight: '700' },
-              ]}
-              numberOfLines={1}
-            >
+            <Text style={[typography.cardTitle, { color: colors.navyText }]} numberOfLines={1}>
               {doctor.name}
             </Text>
             <Text
               style={[
-                typography.bodyMd,
-                { color: colors.primaryDeep, fontWeight: '600', marginTop: spacing.xxs },
+                typography.bodySmMedium,
+                { color: colors.primary, marginTop: spacing.xxs },
               ]}
               numberOfLines={1}
             >
-              {doctor.specialty} • MD
+              {doctor.specialty}
             </Text>
-            <View style={[styles.metaRow, { marginTop: spacing.xxs + 2 }]}>
-              <Text
-                style={[
-                  typography.bodySm,
-                  { color: colors.mutedText, flex: 1 },
-                ]}
-                numberOfLines={1}
-              >
-                {doctor.clinicName} • Ste 320
-              </Text>
-              <View style={styles.ratingRow}>
-                <AppIcon name="star" size={13} color={colors.amberText} fill={colors.amberText} />
-                <Text
-                  style={[
-                    typography.labelSm,
-                    { color: colors.navyText, marginLeft: spacing.xxs + 1 },
-                  ]}
-                >
-                  4.9 <Text style={{ color: colors.mutedText, fontWeight: '500' }}>(128)</Text>
-                </Text>
-              </View>
-            </View>
           </View>
 
           <Pressable
@@ -218,24 +205,67 @@ function BookingSlotStepComponent({
             style={({ pressed }) => [
               styles.changeBtn,
               {
-                backgroundColor: colors.skySoftBg,
+                backgroundColor: colors.surfaceLow,
                 borderRadius: radii.full,
-                paddingHorizontal: spacing.sm + 2,
-                paddingVertical: spacing.xs,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.xs + 2,
                 opacity: pressed ? 0.85 : 1,
               },
             ]}
           >
-            <Text
-              style={[
-                typography.labelSm,
-                { color: colors.primaryDeep, fontWeight: '700', marginRight: spacing.xxs },
-              ]}
-            >
+            <Text style={[typography.labelSm, { color: colors.primary, marginRight: spacing.xxs }]}>
               Change
             </Text>
-            <AppIcon name="arrowLeftRight" size={12} color={colors.primaryDeep} />
+            <AppIcon name="arrowLeftRight" size={12} color={colors.primary} />
           </Pressable>
+        </View>
+
+        <View
+          style={[
+            styles.metaBottomRow,
+            {
+              marginTop: spacing.md,
+              paddingTop: spacing.sm,
+              borderTopColor: colors.borderSubtle,
+              borderTopWidth: StyleSheet.hairlineWidth,
+            },
+          ]}
+        >
+          <AppIcon name="location" size={14} color={colors.mutedText} />
+          <Text
+            style={[
+              typography.bodySm,
+              { color: colors.mutedText, flex: 1, marginLeft: spacing.xs },
+            ]}
+            numberOfLines={1}
+          >
+            {locationLabel}
+          </Text>
+
+          {doctor.isVerified ? (
+            <View
+              style={[
+                styles.verifiedPill,
+                {
+                  backgroundColor: colors.mintSoftBg,
+                  borderRadius: radii.full,
+                  paddingHorizontal: spacing.sm,
+                  paddingVertical: spacing.xxs,
+                  marginLeft: spacing.sm,
+                },
+              ]}
+            >
+              <AppIcon name="badgeCheck" size={12} color={colors.primary} />
+              <Text
+                style={[
+                  typography.labelSm,
+                  { color: colors.primary, marginLeft: spacing.xxs },
+                ]}
+              >
+                Verified
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -245,8 +275,8 @@ function BookingSlotStepComponent({
           styles.modeToggleContainer,
           {
             backgroundColor: colors.surfaceLow,
-            borderRadius: radii.lg,
-            padding: spacing.xxs + 2,
+            borderRadius: radii.xl,
+            padding: spacing.xs,
             marginTop: spacing.lg,
           },
         ]}
@@ -259,26 +289,23 @@ function BookingSlotStepComponent({
           style={[
             styles.modeTab,
             {
-              borderRadius: radii.md,
+              borderRadius: radii.lg,
               backgroundColor:
                 consultationMode === 'in_person' ? colors.surface : 'transparent',
-              borderColor:
-                consultationMode === 'in_person' ? colors.border : 'transparent',
-              borderWidth: consultationMode === 'in_person' ? 1 : 0,
             },
+            consultationMode === 'in_person' ? elevation.card : null,
           ]}
         >
           <AppIcon
             name="building"
             size={16}
-            color={consultationMode === 'in_person' ? colors.primaryDeep : colors.mutedText}
+            color={consultationMode === 'in_person' ? colors.primary : colors.mutedText}
           />
           <Text
             style={[
-              typography.labelMd,
+              consultationMode === 'in_person' ? typography.labelBold : typography.bodyMedium,
               {
-                color: consultationMode === 'in_person' ? colors.primaryDeep : colors.mutedText,
-                fontWeight: consultationMode === 'in_person' ? '700' : '500',
+                color: consultationMode === 'in_person' ? colors.primary : colors.mutedText,
                 marginLeft: spacing.xs,
               },
             ]}
@@ -295,26 +322,23 @@ function BookingSlotStepComponent({
           style={[
             styles.modeTab,
             {
-              borderRadius: radii.md,
+              borderRadius: radii.lg,
               backgroundColor:
                 consultationMode === 'telehealth' ? colors.surface : 'transparent',
-              borderColor:
-                consultationMode === 'telehealth' ? colors.border : 'transparent',
-              borderWidth: consultationMode === 'telehealth' ? 1 : 0,
             },
+            consultationMode === 'telehealth' ? elevation.card : null,
           ]}
         >
           <AppIcon
             name="video"
             size={16}
-            color={consultationMode === 'telehealth' ? colors.primaryDeep : colors.mutedText}
+            color={consultationMode === 'telehealth' ? colors.primary : colors.mutedText}
           />
           <Text
             style={[
-              typography.labelMd,
+              consultationMode === 'telehealth' ? typography.labelBold : typography.bodyMedium,
               {
-                color: consultationMode === 'telehealth' ? colors.primaryDeep : colors.mutedText,
-                fontWeight: consultationMode === 'telehealth' ? '700' : '500',
+                color: consultationMode === 'telehealth' ? colors.primary : colors.mutedText,
                 marginLeft: spacing.xs,
               },
             ]}
@@ -324,58 +348,46 @@ function BookingSlotStepComponent({
         </Pressable>
       </View>
 
-      {/* Calendar Month & Date Strip */}
+      {/* Calendar Month & 6-Day Strip */}
       <View style={{ marginTop: spacing.xl }}>
-        {/* Month Header Row */}
         <View style={styles.monthHeaderRow}>
-          <Text
-            style={[
-              typography.headlineMd,
-              { color: colors.navyText, fontWeight: '700' },
-            ]}
-          >
-            {formattedDateTitle}
-          </Text>
+          <View style={styles.monthTitleCluster}>
+            <Text style={[typography.headlineSm, { color: colors.navyText }]}>
+              {formattedDateTitle}
+            </Text>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Jump to today"
+              onPress={() => onSelectDate(startOfToday())}
+              style={({ pressed }) => [
+                styles.todayPill,
+                {
+                  backgroundColor: isAtToday ? colors.mintSoftBg : colors.mintBadgeBg,
+                  borderRadius: radii.full,
+                  paddingHorizontal: spacing.sm + 2,
+                  paddingVertical: spacing.xxs + 1,
+                  marginLeft: spacing.sm,
+                  opacity: pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              <Text style={[typography.labelSm, { color: colors.primary }]}>Today</Text>
+            </Pressable>
+          </View>
 
           <View style={styles.monthControlsRow}>
-            {isToday(selectedDate) ? null : (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Go to today"
-                onPress={() => onSelectDate(startOfToday())}
-                style={[
-                  styles.todayPill,
-                  {
-                    backgroundColor: colors.skySoftBg,
-                    borderRadius: radii.full,
-                    paddingHorizontal: spacing.sm + 2,
-                    paddingVertical: spacing.xxs + 1,
-                    marginRight: spacing.sm,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    typography.labelSm,
-                    { color: colors.primaryDeep, fontWeight: '700' },
-                  ]}
-                >
-                  Today
-                </Text>
-              </Pressable>
-            )}
-
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Previous day"
               onPress={() => onSelectDate(subDays(selectedDate, 1))}
-              disabled={isToday(selectedDate)}
+              disabled={isAtToday}
               style={({ pressed }) => [
                 styles.arrowBtn,
                 {
                   borderRadius: radii.full,
                   backgroundColor: colors.surfaceLow,
-                  opacity: isToday(selectedDate) ? 0.3 : pressed ? 0.8 : 1,
+                  opacity: isAtToday ? 0.35 : pressed ? 0.8 : 1,
                 },
               ]}
             >
@@ -401,15 +413,7 @@ function BookingSlotStepComponent({
           </View>
         </View>
 
-        {/* Date Day Cards Row */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.dateStripRow,
-            { gap: spacing.sm, paddingTop: spacing.md },
-          ]}
-        >
+        <View style={[styles.dateStripRow, { gap: spacing.xs + 2, marginTop: spacing.md }]}>
           {dateStripDays.map((day) => {
             const isSelected = isSameDay(day, selectedDate);
             const dayName = format(day, 'EEE');
@@ -420,19 +424,19 @@ function BookingSlotStepComponent({
                 key={day.toISOString()}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isSelected }}
-                accessibilityLabel={`${format(day, 'EEEE, MMMM d')}`}
+                accessibilityLabel={format(day, 'EEEE, MMMM d')}
                 onPress={() => onSelectDate(day)}
                 style={({ pressed }) => [
                   styles.dayCard,
                   {
                     borderRadius: radii.lg,
-                    backgroundColor: isSelected ? colors.primaryDeep : colors.surface,
-                    borderColor: isSelected ? colors.primaryDeep : colors.border,
+                    backgroundColor: isSelected ? colors.primary : colors.surface,
+                    borderColor: isSelected ? colors.primary : colors.borderSubtle,
                     borderWidth: 1,
                     paddingVertical: spacing.md,
-                    paddingHorizontal: spacing.sm + 4,
                     opacity: pressed ? 0.85 : 1,
                   },
+                  isSelected ? elevation.card : null,
                 ]}
               >
                 <Text
@@ -440,7 +444,6 @@ function BookingSlotStepComponent({
                     typography.bodySm,
                     {
                       color: isSelected ? colors.healthPassMuted : colors.mutedText,
-                      fontWeight: '500',
                       textAlign: 'center',
                     },
                   ]}
@@ -450,10 +453,9 @@ function BookingSlotStepComponent({
 
                 <Text
                   style={[
-                    typography.headlineMd,
+                    typography.cardTitle,
                     {
                       color: isSelected ? colors.onPrimary : colors.navyText,
-                      fontWeight: '700',
                       textAlign: 'center',
                       marginTop: spacing.xxs + 2,
                     },
@@ -467,126 +469,87 @@ function BookingSlotStepComponent({
                     styles.dayDot,
                     {
                       borderRadius: radii.full,
-                      backgroundColor: isSelected ? colors.inverseAccent : colors.emeraldDot,
-                      marginTop: spacing.xxs + 3,
+                      backgroundColor: isSelected
+                        ? colors.inverseAccent
+                        : colors.emeraldDot,
+                      marginTop: spacing.xs,
                     },
                   ]}
                 />
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
       </View>
 
       {/* Time of Day Filter Pills */}
-      <View style={[styles.periodPillsRow, { marginTop: spacing.xl, gap: spacing.sm }]}>
-        <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: selectedPeriod === 'morning' }}
-          onPress={() => setSelectedPeriod('morning')}
-          style={({ pressed }) => [
-            styles.periodPill,
-            {
-              borderRadius: radii.full,
-              paddingHorizontal: spacing.md,
-              paddingVertical: spacing.sm,
-              backgroundColor:
-                selectedPeriod === 'morning' ? colors.primaryDeep : colors.surfaceLow,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-        >
-          <AppIcon
-            name="sun"
-            size={14}
-            color={selectedPeriod === 'morning' ? colors.onPrimary : colors.navyText}
-          />
-          <Text
-            style={[
-              typography.labelMd,
-              {
-                color: selectedPeriod === 'morning' ? colors.onPrimary : colors.navyText,
-                fontWeight: selectedPeriod === 'morning' ? '700' : '600',
-                marginLeft: spacing.xs,
-              },
-            ]}
-          >
-            Morning {periodCounts.morning > 0 ? periodCounts.morning : ''}
-          </Text>
-        </Pressable>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[styles.periodPillsRow, { marginTop: spacing.xl, gap: spacing.sm }]}
+      >
+        {PERIOD_TABS.map((tab) => {
+          const isSelected = selectedPeriod === tab.key;
+          return (
+            <Pressable
+              key={tab.key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isSelected }}
+              onPress={() => setSelectedPeriod(tab.key)}
+              style={({ pressed }) => [
+                styles.periodPill,
+                {
+                  borderRadius: radii.full,
+                  paddingHorizontal: spacing.md,
+                  paddingVertical: spacing.sm,
+                  backgroundColor: isSelected ? colors.primary : colors.surfaceLow,
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}
+            >
+              <AppIcon
+                name={tab.icon}
+                size={14}
+                color={isSelected ? colors.onPrimary : colors.navyText}
+              />
+              <Text
+                style={[
+                  typography.labelMd,
+                  {
+                    color: isSelected ? colors.onPrimary : colors.navyText,
+                    marginLeft: spacing.xs,
+                  },
+                ]}
+              >
+                {tab.label}
+              </Text>
+              <View
+                style={[
+                  styles.periodCountBadge,
+                  {
+                    borderRadius: radii.full,
+                    backgroundColor: isSelected
+                      ? colors.primaryVibrant
+                      : colors.surfaceContainer,
+                    marginLeft: spacing.xs,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    typography.labelSm,
+                    { color: isSelected ? colors.onPrimary : colors.navyText },
+                  ]}
+                >
+                  {tab.count}
+                </Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
-        <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: selectedPeriod === 'afternoon' }}
-          onPress={() => setSelectedPeriod('afternoon')}
-          style={({ pressed }) => [
-            styles.periodPill,
-            {
-              borderRadius: radii.full,
-              paddingHorizontal: spacing.md,
-              paddingVertical: spacing.sm,
-              backgroundColor:
-                selectedPeriod === 'afternoon' ? colors.primaryDeep : colors.surfaceLow,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-        >
-          <AppIcon
-            name="sunset"
-            size={14}
-            color={selectedPeriod === 'afternoon' ? colors.onPrimary : colors.navyText}
-          />
-          <Text
-            style={[
-              typography.labelMd,
-              {
-                color: selectedPeriod === 'afternoon' ? colors.onPrimary : colors.navyText,
-                fontWeight: selectedPeriod === 'afternoon' ? '700' : '600',
-                marginLeft: spacing.xs,
-              },
-            ]}
-          >
-            Afternoon {periodCounts.afternoon > 0 ? periodCounts.afternoon : ''}
-          </Text>
-        </Pressable>
-
-        <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: selectedPeriod === 'evening' }}
-          onPress={() => setSelectedPeriod('evening')}
-          style={({ pressed }) => [
-            styles.periodPill,
-            {
-              borderRadius: radii.full,
-              paddingHorizontal: spacing.md,
-              paddingVertical: spacing.sm,
-              backgroundColor:
-                selectedPeriod === 'evening' ? colors.primaryDeep : colors.surfaceLow,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-        >
-          <AppIcon
-            name="moon"
-            size={14}
-            color={selectedPeriod === 'evening' ? colors.onPrimary : colors.navyText}
-          />
-          <Text
-            style={[
-              typography.labelMd,
-              {
-                color: selectedPeriod === 'evening' ? colors.onPrimary : colors.navyText,
-                fontWeight: selectedPeriod === 'evening' ? '700' : '600',
-                marginLeft: spacing.xs,
-              },
-            ]}
-          >
-            Evening {periodCounts.evening > 0 ? periodCounts.evening : ''}
-          </Text>
-        </Pressable>
-      </View>
-
-      {/* Available Slots Section Header */}
+      {/* Available Slots Header */}
       <View style={[styles.slotsHeaderRow, { marginTop: spacing.xl, marginBottom: spacing.md }]}>
         <Text style={[typography.overline, { color: colors.mutedText }]}>
           AVAILABLE SLOTS ({format(selectedDate, 'EEE, MMM d').toUpperCase()})
@@ -602,7 +565,7 @@ function BookingSlotStepComponent({
           <Text
             style={[
               typography.labelSm,
-              { color: colors.primaryDeep, marginLeft: spacing.xxs + 2 },
+              { color: colors.primary, marginLeft: spacing.xxs + 2 },
             ]}
           >
             Fastest Option
@@ -638,10 +601,13 @@ function BookingSlotStepComponent({
           </Text>
         </View>
       ) : (
-        <View style={styles.slotsGrid}>
+        <View style={[styles.slotsGrid, { rowGap: spacing.md }]}>
           {filteredSlots.map((slot) => {
             const isSelected = selectedSlot?.id === slot.id;
-            const isRecommended = slot.id.includes('10:30') || slot.id.includes('10:00');
+            const isRecommended = slot.id === recommendedSlotId;
+            const slotSubtitle = isRecommended
+              ? 'Recommended'
+              : `${consultationMode === 'telehealth' ? 'Telehealth' : 'In-Person'} • ${durationMins} mins`;
 
             return (
               <Pressable
@@ -654,11 +620,11 @@ function BookingSlotStepComponent({
                   styles.slotCard,
                   {
                     borderRadius: radii.lg,
-                    backgroundColor: isSelected ? colors.primaryDeep : colors.surface,
-                    borderColor: isSelected ? colors.primaryDeep : colors.border,
-                    borderWidth: 1.5,
+                    backgroundColor: isSelected ? colors.primary : colors.surface,
+                    borderColor: isSelected ? colors.primary : colors.borderSubtle,
+                    borderWidth: 1,
                     padding: spacing.md,
-                    opacity: pressed ? 0.85 : 1,
+                    opacity: pressed ? 0.88 : 1,
                   },
                   elevation.card,
                 ]}
@@ -666,10 +632,9 @@ function BookingSlotStepComponent({
                 <View style={styles.slotCardTopRow}>
                   <Text
                     style={[
-                      typography.headlineMd,
+                      typography.headlineSm,
                       {
                         color: isSelected ? colors.onPrimary : colors.navyText,
-                        fontWeight: '700',
                       },
                     ]}
                   >
@@ -681,14 +646,21 @@ function BookingSlotStepComponent({
                       styles.slotCheckCircle,
                       {
                         borderRadius: radii.full,
-                        backgroundColor: isSelected ? colors.primaryDeep : colors.surface,
-                        borderColor: isSelected ? colors.onPrimary : colors.border,
+                        backgroundColor: isSelected
+                          ? colors.inverseAccent
+                          : colors.surface,
+                        borderColor: isSelected ? colors.inverseAccent : colors.border,
                       },
                     ]}
                   >
-                    {isSelected && (
-                      <AppIcon name="check" size={11} color={colors.onPrimary} strokeWidth={2.5} />
-                    )}
+                    {isSelected ? (
+                      <AppIcon
+                        name="check"
+                        size={11}
+                        color={colors.primaryDeep}
+                        strokeWidth={3}
+                      />
+                    ) : null}
                   </View>
                 </View>
 
@@ -698,22 +670,26 @@ function BookingSlotStepComponent({
                       typography.bodySm,
                       {
                         color: isSelected ? colors.healthPassMuted : colors.mutedText,
-                        fontWeight: '500',
+                        flex: 1,
                       },
                     ]}
+                    numberOfLines={1}
                   >
-                    {isRecommended ? 'Recommended' : 'In-Person • 30 mins'}
+                    {slotSubtitle}
                   </Text>
 
-                  {isRecommended && (
+                  {isRecommended ? (
                     <View
                       style={[
                         styles.primeBadge,
                         {
-                          backgroundColor: isSelected ? colors.primaryVibrant : colors.mintBadgeBg,
+                          backgroundColor: isSelected
+                            ? colors.primaryVibrant
+                            : colors.mintBadgeBg,
                           borderRadius: radii.full,
                           paddingHorizontal: spacing.xs + 2,
                           paddingVertical: spacing.xxs,
+                          marginLeft: spacing.xxs,
                         },
                       ]}
                     >
@@ -721,15 +697,14 @@ function BookingSlotStepComponent({
                         style={[
                           typography.labelSm,
                           {
-                            color: isSelected ? colors.navyText : colors.primaryDeep,
-                            fontWeight: '700',
+                            color: isSelected ? colors.onPrimary : colors.primaryDeep,
                           },
                         ]}
                       >
                         Prime
                       </Text>
                     </View>
-                  )}
+                  ) : null}
                 </View>
               </Pressable>
             );
@@ -742,88 +717,32 @@ function BookingSlotStepComponent({
         style={[
           styles.arrivalBox,
           {
-            backgroundColor: colors.welcomeSurface,
-            borderColor: colors.welcomeBorder,
-            borderRadius: radii.lg,
+            backgroundColor: colors.surfaceLow,
+            borderRadius: radii.xl,
             padding: spacing.base,
             marginTop: spacing.xl,
             gap: spacing.sm,
           },
         ]}
       >
-        <AppIcon name="shieldCheck" size={20} color={colors.primaryDeep} />
+        <View
+          style={[
+            styles.guaranteeIconBadge,
+            { backgroundColor: colors.mintAvatarBg, borderRadius: radii.full },
+          ]}
+        >
+          <AppIcon name="shieldCheck" size={18} color={colors.mintAvatarText} />
+        </View>
         <View style={{ flex: 1 }}>
-          <Text
-            style={[
-              typography.labelMd,
-              { color: colors.navyText, fontWeight: '700' },
-            ]}
-          >
+          <Text style={[typography.labelBold, { color: colors.navyText }]}>
             On-Time Clinic Arrival Guarantee
           </Text>
-          <Text
-            style={[
-              typography.bodySm,
-              { color: colors.bodyText, marginTop: spacing.xxs },
-            ]}
-          >
-            Please arrive 10 minutes prior to complete routine blood pressure and vitals triage.
+          <Text style={[typography.bodySm, { color: colors.bodyText, marginTop: spacing.xxs }]}>
+            {consultationMode === 'telehealth'
+              ? 'Please join your virtual waiting room 10 minutes prior to test audio and video.'
+              : 'Please arrive 10 minutes prior to complete routine blood pressure and vitals triage.'}
           </Text>
         </View>
-      </View>
-
-      {/* Sticky Bottom Confirmation Bar */}
-      <View
-        style={[
-          styles.bottomBar,
-          {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.border,
-            padding: spacing.base,
-            marginTop: spacing.xl,
-          },
-          elevation.card,
-        ]}
-      >
-        <Text style={[typography.labelSm, { color: colors.mutedText, letterSpacing: 0.5 }]}>
-          SELECTED APPOINTMENT SLOT
-        </Text>
-        <Text
-          style={[
-            typography.bodyMd,
-            { color: colors.navyText, fontWeight: '700', marginTop: spacing.xxs },
-          ]}
-          numberOfLines={1}
-        >
-          {formattedSlotSummary || 'Select an appointment slot to continue'}
-        </Text>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Continue to review and confirm"
-          disabled={!selectedSlot}
-          onPress={onProceed}
-          style={({ pressed }) => [
-            styles.proceedButton,
-            {
-              backgroundColor: selectedSlot ? colors.primaryDeep : colors.border,
-              borderRadius: radii.full,
-              paddingVertical: spacing.md,
-              marginTop: spacing.md,
-              opacity: pressed ? 0.9 : 1,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              typography.labelLg,
-              { color: colors.onPrimary, fontWeight: '700', marginRight: spacing.xs },
-            ]}
-          >
-            Continue to Review & Confirm
-          </Text>
-          <AppIcon name="arrowRight" size={18} color={colors.onPrimary} />
-        </Pressable>
       </View>
     </View>
   );
@@ -845,12 +764,12 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   avatar: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
   },
   avatarPlaceholder: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -858,18 +777,18 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
   },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   changeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: 8,
+  },
+  metaBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  verifiedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   modeToggleContainer: {
     flexDirection: 'row',
@@ -886,16 +805,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  monthTitleCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   monthControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  todayPill: {
-    paddingVertical: 2,
-  },
+  todayPill: {},
   arrowBtn: {
-    width: 28,
-    height: 28,
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -904,9 +825,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dayCard: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 52,
   },
   dayDot: {
     width: 5,
@@ -919,6 +840,13 @@ const styles = StyleSheet.create({
   periodPill: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  periodCountBadge: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   slotsHeaderRow: {
     flexDirection: 'row',
@@ -945,7 +873,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 12,
   },
   slotCard: {
     width: '48%',
@@ -957,8 +884,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   slotCheckCircle: {
-    width: 18,
-    height: 18,
+    width: 20,
+    height: 20,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
@@ -974,18 +901,13 @@ const styles = StyleSheet.create({
   },
   arrivalBox: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    borderWidth: 1,
+    alignItems: 'center',
   },
-  bottomBar: {
-    width: '100%',
-    borderTopWidth: 1,
-  },
-  proceedButton: {
-    flexDirection: 'row',
+  guaranteeIconBadge: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    width: '100%',
   },
 });
 

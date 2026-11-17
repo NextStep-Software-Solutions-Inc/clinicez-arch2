@@ -11,16 +11,31 @@ import {
 } from 'react-native';
 import { AppIcon } from '../ui/Icon';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
-import type { PatientSearchDoctorDto, PatientSearchClinicDto } from '../../services/api/homeApi';
+import type {
+  PatientSearchDoctorDto,
+  PatientSearchClinicDto,
+} from '../../services/api/homeApi';
 
 export interface BookingDoctorStepProps {
   doctors: PatientSearchDoctorDto[];
   clinics: PatientSearchClinicDto[];
   selectedDoctorId?: string;
   onSelectDoctor: (doctor: PatientSearchDoctorDto) => void;
-  onProceed: () => void;
   onViewClinicInfo?: (clinicId: string) => void;
   onViewAllHubs?: () => void;
+  onFilterSlidersPress?: () => void;
+}
+
+const NO_OP = () => {};
+
+function extractDoctorInitials(name: string): string {
+  const clean = name.replace(/^Dr\.\s*/i, '').trim();
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'DR';
+  return parts
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
 }
 
 function BookingDoctorStepComponent({
@@ -28,20 +43,19 @@ function BookingDoctorStepComponent({
   clinics,
   selectedDoctorId,
   onSelectDoctor,
-  onProceed,
   onViewClinicInfo,
   onViewAllHubs,
+  onFilterSlidersPress = NO_OP,
 }: BookingDoctorStepProps) {
   const { colors, typography, radii, spacing, elevation } = useClinicalEmpathyTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'availability' | 'rating'>('availability');
+  const [sortBy, setSortBy] = useState<'availability' | 'name'>('availability');
 
-  // Derive specialties dynamically with counts
   const specialties = useMemo(() => {
     const map = new Map<string, number>();
     doctors.forEach((d) => {
-      const spec = d.specialty || 'General';
+      const spec = d.specialty || 'General Practice';
       map.set(spec, (map.get(spec) || 0) + 1);
     });
 
@@ -54,7 +68,6 @@ function BookingDoctorStepComponent({
     return items;
   }, [doctors]);
 
-  // Filter & sort doctors
   const filteredDoctors = useMemo(() => {
     let result = doctors;
 
@@ -65,31 +78,30 @@ function BookingDoctorStepComponent({
           d.name.toLowerCase().includes(q) ||
           d.specialty.toLowerCase().includes(q) ||
           d.clinicName.toLowerCase().includes(q) ||
-          (d.clinicAddress ?? '').toLowerCase().includes(q)
+          (d.clinicAddress ?? '').toLowerCase().includes(q),
       );
     }
 
     if (selectedSpecialty !== 'all') {
-      result = result.filter((d) => d.specialty === selectedSpecialty);
+      result = result.filter((d) => (d.specialty || 'General Practice') === selectedSpecialty);
     }
 
     if (sortBy === 'availability') {
-      // Prioritize doctors with nextAvailableAt
       result = [...result].sort((a, b) => {
         if (a.nextAvailableAt && !b.nextAvailableAt) return -1;
         if (!a.nextAvailableAt && b.nextAvailableAt) return 1;
         return a.name.localeCompare(b.name);
       });
-    } else if (sortBy === 'rating') {
-      result = [...result].sort((a, b) => b.name.localeCompare(a.name));
+    } else {
+      result = [...result].sort((a, b) => a.name.localeCompare(b.name));
     }
 
     return result;
   }, [doctors, searchQuery, selectedSpecialty, sortBy]);
 
   const selectedDoctor = useMemo(
-    () => doctors.find((d) => d.id === selectedDoctorId) ?? doctors[0],
-    [doctors, selectedDoctorId]
+    () => doctors.find((d) => d.id === selectedDoctorId) ?? doctors[0] ?? null,
+    [doctors, selectedDoctorId],
   );
 
   const selectedClinic = useMemo(() => {
@@ -105,11 +117,12 @@ function BookingDoctorStepComponent({
           styles.searchBox,
           {
             backgroundColor: colors.surface,
-            borderColor: colors.border,
+            borderColor: colors.borderSubtle,
             borderRadius: radii.full,
             paddingHorizontal: spacing.md,
             paddingVertical: Platform.OS === 'ios' ? 10 : 8,
           },
+          elevation.card,
         ]}
       >
         <AppIcon name="search" size={18} color={colors.mutedText} />
@@ -136,7 +149,14 @@ function BookingDoctorStepComponent({
             <AppIcon name="close" size={16} color={colors.mutedText} />
           </Pressable>
         ) : (
-          <AppIcon name="sliders" size={18} color={colors.primaryDeep} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Filter options"
+            onPress={onFilterSlidersPress}
+            hitSlop={8}
+          >
+            <AppIcon name="sliders" size={18} color={colors.navyText} />
+          </Pressable>
         )}
       </View>
 
@@ -144,7 +164,10 @@ function BookingDoctorStepComponent({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.specialtyRow, { gap: spacing.sm, paddingTop: spacing.md }]}
+        contentContainerStyle={[
+          styles.specialtyRow,
+          { gap: spacing.sm, paddingTop: spacing.md },
+        ]}
       >
         {specialties.map((item) => {
           const isActive = selectedSpecialty === item.id;
@@ -160,23 +183,22 @@ function BookingDoctorStepComponent({
                   borderRadius: radii.full,
                   paddingHorizontal: spacing.md,
                   paddingVertical: spacing.sm,
-                  backgroundColor: isActive ? colors.primaryDeep : colors.surface,
-                  borderColor: isActive ? colors.primaryDeep : colors.border,
+                  backgroundColor: isActive ? colors.primary : colors.surfaceLow,
+                  borderColor: isActive ? colors.primary : colors.surfaceLow,
                   opacity: pressed ? 0.85 : 1,
                 },
               ]}
             >
-              {isActive && (
+              {isActive ? (
                 <View style={{ marginRight: spacing.xs }}>
-                  <AppIcon name="check" size={14} color={colors.onPrimary} strokeWidth={2.5} />
+                  <AppIcon name="checkCircle" size={14} color={colors.onPrimary} />
                 </View>
-              )}
+              ) : null}
               <Text
                 style={[
                   typography.labelMd,
                   {
                     color: isActive ? colors.onPrimary : colors.navyText,
-                    fontWeight: isActive ? '700' : '600',
                   },
                 ]}
               >
@@ -203,219 +225,341 @@ function BookingDoctorStepComponent({
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Sort by availability or rating"
+          accessibilityLabel="Change provider sort order"
           onPress={() =>
-            setSortBy((prev) => (prev === 'availability' ? 'rating' : 'availability'))
+            setSortBy((prev) => (prev === 'availability' ? 'name' : 'availability'))
           }
           style={styles.sortButton}
         >
           <Text style={[typography.bodySm, { color: colors.mutedText }]}>
             Sort:{' '}
-            <Text style={{ color: colors.primaryDeep, fontWeight: '700' }}>
-              {sortBy === 'availability' ? 'Availability' : 'Rating'}
-            </Text>{' '}
-            ∨
           </Text>
+          <Text style={[typography.labelSm, { color: colors.primary, marginRight: spacing.xxs }]}>
+            {sortBy === 'availability' ? 'Availability' : 'Name'}
+          </Text>
+          <AppIcon name="chevronDown" size={14} color={colors.primary} />
         </Pressable>
       </View>
 
-      {/* Doctors List */}
-      <View style={{ gap: spacing.md }}>
-        {filteredDoctors.map((doctor) => {
-          const isSelected = doctor.id === selectedDoctorId;
-
-          return (
+      {/* Doctors List / Empty States */}
+      {doctors.length === 0 ? (
+        <View
+          style={[
+            styles.emptyCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.borderSubtle,
+              borderRadius: radii.xl,
+              padding: spacing.xl,
+            },
+            elevation.card,
+          ]}
+        >
+          <View
+            style={[
+              styles.emptyIconCircle,
+              { backgroundColor: colors.surfaceLow, borderRadius: radii.full },
+            ]}
+          >
+            <AppIcon name="calendarX" size={24} color={colors.primary} />
+          </View>
+          <Text
+            style={[
+              typography.cardTitle,
+              { color: colors.navyText, marginTop: spacing.md, textAlign: 'center' },
+            ]}
+          >
+            No providers available yet
+          </Text>
+          <Text
+            style={[
+              typography.bodyMd,
+              { color: colors.mutedText, marginTop: spacing.xs, textAlign: 'center' },
+            ]}
+          >
+            Explore partner clinics in your care network to find specialists with online booking.
+          </Text>
+          {onViewAllHubs ? (
             <Pressable
-              key={doctor.id}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: isSelected }}
-              accessibilityLabel={`Select doctor ${doctor.name}`}
-              onPress={() => onSelectDoctor(doctor)}
+              accessibilityRole="button"
+              accessibilityLabel="Explore Clinics"
+              onPress={onViewAllHubs}
               style={({ pressed }) => [
-                styles.doctorCard,
+                styles.emptyActionBtn,
                 {
-                  backgroundColor: colors.surface,
-                  borderColor: isSelected ? colors.primaryDeep : colors.border,
-                  borderWidth: isSelected ? 2 : 1,
-                  borderRadius: radii.xl,
-                  padding: spacing.base,
-                  opacity: pressed ? 0.92 : 1,
+                  backgroundColor: colors.primary,
+                  borderRadius: radii.full,
+                  paddingHorizontal: spacing.lg,
+                  paddingVertical: spacing.sm + 2,
+                  marginTop: spacing.md,
+                  opacity: pressed ? 0.85 : 1,
                 },
-                elevation.card,
               ]}
             >
-              {/* Top Row: Avatar, Name, Specialty, Selection Circle */}
-              <View style={styles.doctorHeaderRow}>
-                <View style={styles.avatarContainer}>
-                  {doctor.avatarUrl ? (
-                    <Image
-                      source={{ uri: doctor.avatarUrl }}
-                      style={[styles.avatar, { borderRadius: radii.full }]}
-                    />
-                  ) : (
-                    <View
-                      style={[
-                        styles.avatarPlaceholder,
-                        {
-                          borderRadius: radii.full,
-                          backgroundColor: colors.mintSoftBg,
-                        },
-                      ]}
-                    >
-                      <Text
+              <Text style={[typography.labelMd, { color: colors.onPrimary }]}>
+                Explore Clinics
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : filteredDoctors.length === 0 ? (
+        <View
+          style={[
+            styles.emptyCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.borderSubtle,
+              borderRadius: radii.xl,
+              padding: spacing.xl,
+            },
+          ]}
+        >
+          <Text style={[typography.cardTitle, { color: colors.navyText, textAlign: 'center' }]}>
+            No matching specialists found
+          </Text>
+          <Text
+            style={[
+              typography.bodyMd,
+              { color: colors.mutedText, marginTop: spacing.xs, textAlign: 'center' },
+            ]}
+          >
+            Try adjusting your search query or selecting All Specialists.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Reset filters"
+            onPress={() => {
+              setSearchQuery('');
+              setSelectedSpecialty('all');
+            }}
+            style={({ pressed }) => [
+              styles.emptyActionBtn,
+              {
+                backgroundColor: colors.surfaceLow,
+                borderRadius: radii.full,
+                paddingHorizontal: spacing.lg,
+                paddingVertical: spacing.sm + 2,
+                marginTop: spacing.md,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            <Text style={[typography.labelMd, { color: colors.primary }]}>
+              Reset Filters
+            </Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={{ gap: spacing.md }}>
+          {filteredDoctors.map((doctor) => {
+            const isSelected = doctor.id === (selectedDoctor?.id ?? selectedDoctorId);
+            const isTelehealth = doctor.tags.some((t) =>
+              t.toLowerCase().includes('telehealth'),
+            );
+            const locationLabel = doctor.clinicAddress
+              ? `${doctor.clinicName} • ${doctor.clinicAddress}`
+              : doctor.clinicName;
+
+            return (
+              <Pressable
+                key={doctor.id}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: isSelected }}
+                accessibilityLabel={`Select doctor ${doctor.name}`}
+                onPress={() => onSelectDoctor(doctor)}
+                style={({ pressed }) => [
+                  styles.doctorCard,
+                  {
+                    backgroundColor: isSelected ? colors.welcomeSurface : colors.surface,
+                    borderColor: isSelected ? colors.primary : colors.borderSubtle,
+                    borderWidth: isSelected ? 1.5 : 1,
+                    borderRadius: radii.xl,
+                    padding: spacing.base,
+                    opacity: pressed ? 0.92 : 1,
+                  },
+                  elevation.card,
+                ]}
+              >
+                <View style={styles.doctorHeaderRow}>
+                  <View style={styles.avatarContainer}>
+                    {doctor.avatarUrl ? (
+                      <Image
+                        source={{ uri: doctor.avatarUrl }}
+                        style={[styles.avatar, { borderRadius: radii.full }]}
+                      />
+                    ) : (
+                      <View
                         style={[
-                          typography.labelLg,
-                          { color: colors.primaryDeep, fontWeight: '700' },
+                          styles.avatarPlaceholder,
+                          {
+                            borderRadius: radii.full,
+                            backgroundColor: colors.mintSoftBg,
+                          },
                         ]}
                       >
-                        {doctor.name
-                          .replace('Dr. ', '')
-                          .split(' ')
-                          .map((n) => n[0])
-                          .slice(0, 2)
-                          .join('')}
-                      </Text>
-                    </View>
-                  )}
-                  {doctor.isVerified && (
+                        <Text style={[typography.cardTitle, { color: colors.primaryDeep }]}>
+                          {extractDoctorInitials(doctor.name)}
+                        </Text>
+                      </View>
+                    )}
+
                     <View
                       style={[
-                        styles.verifiedBadge,
+                        styles.onlineStatusDot,
                         {
-                          backgroundColor: colors.surface,
+                          backgroundColor: doctor.clinicSupportsAppointments
+                            ? colors.emeraldDot
+                            : colors.subtleText,
+                          borderColor: colors.surface,
                           borderRadius: radii.full,
                         },
                       ]}
-                    >
-                      <AppIcon name="badgeCheck" size={14} color={colors.primaryDeep} />
-                    </View>
-                  )}
-                </View>
+                    />
+                  </View>
 
-                {/* Doctor Details */}
-                <View style={styles.doctorInfoCol}>
-                  <View style={styles.doctorNameRow}>
+                  <View style={styles.doctorInfoCol}>
+                    <View style={styles.doctorNameRow}>
+                      <Text
+                        style={[
+                          typography.cardTitle,
+                          { color: colors.navyText, flexShrink: 1 },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {doctor.name}
+                      </Text>
+                      {doctor.isVerified ? (
+                        <View style={{ marginLeft: spacing.xs }}>
+                          <AppIcon name="badgeCheck" size={16} color={colors.primary} />
+                        </View>
+                      ) : null}
+                    </View>
+
                     <Text
                       style={[
-                        typography.headlineMd,
-                        { color: colors.navyText, fontWeight: '700' },
+                        typography.bodyMedium,
+                        {
+                          color: isSelected ? colors.primary : colors.bodyText,
+                          marginTop: spacing.xxs,
+                        },
                       ]}
                       numberOfLines={1}
                     >
-                      {doctor.name}
+                      {doctor.specialty}
                     </Text>
+
+                    {doctor.professionalLicenseNo ? (
+                      <Text
+                        style={[
+                          typography.bodySm,
+                          { color: colors.mutedText, marginTop: spacing.xxs },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        License #{doctor.professionalLicenseNo}
+                      </Text>
+                    ) : null}
                   </View>
 
+                  <View
+                    style={[
+                      styles.radioCircle,
+                      {
+                        borderRadius: radii.full,
+                        backgroundColor: isSelected ? colors.primary : colors.surfaceLow,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    {isSelected ? (
+                      <AppIcon name="check" size={13} color={colors.onPrimary} strokeWidth={2.5} />
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={[styles.locationRow, { marginTop: spacing.sm }]}>
+                  <AppIcon
+                    name={isTelehealth ? 'video' : 'location'}
+                    size={14}
+                    color={colors.mutedText}
+                  />
                   <Text
                     style={[
-                      typography.bodyMd,
-                      { color: colors.primaryDeep, fontWeight: '600', marginTop: spacing.xxs },
+                      typography.bodySm,
+                      { color: colors.mutedText, marginLeft: spacing.xs, flex: 1 },
                     ]}
                     numberOfLines={1}
                   >
-                    {doctor.specialty}
+                    {locationLabel}
                   </Text>
+                </View>
 
-                  <View style={[styles.ratingRow, { marginTop: spacing.xxs + 1 }]}>
-                    <AppIcon name="star" size={13} color={colors.amberText} fill={colors.amberText} />
+                <View style={[styles.badgesRow, { marginTop: spacing.sm, gap: spacing.sm }]}>
+                  <View
+                    style={[
+                      styles.tagBadge,
+                      {
+                        backgroundColor: colors.surfaceLow,
+                        borderRadius: radii.full,
+                        paddingHorizontal: spacing.sm + 2,
+                        paddingVertical: spacing.xxs + 2,
+                      },
+                    ]}
+                  >
+                    <AppIcon
+                      name={isTelehealth ? 'video' : 'stethoscope'}
+                      size={12}
+                      color={isTelehealth ? colors.navyText : colors.primary}
+                    />
                     <Text
                       style={[
                         typography.labelSm,
-                        { color: colors.navyText, marginLeft: spacing.xxs + 1 },
+                        {
+                          color: isTelehealth ? colors.navyText : colors.primary,
+                          marginLeft: spacing.xxs + 2,
+                        },
                       ]}
                     >
-                      4.9{' '}
-                      <Text style={{ color: colors.mutedText, fontWeight: '500' }}>
-                        (128 reviews)
-                      </Text>
+                      {isTelehealth ? 'Telehealth' : 'In Person'}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.tagBadge,
+                      {
+                        backgroundColor: doctor.nextAvailableAt
+                          ? colors.mintBadgeBg
+                          : colors.surfaceLow,
+                        borderRadius: radii.full,
+                        paddingHorizontal: spacing.sm + 2,
+                        paddingVertical: spacing.xxs + 2,
+                      },
+                    ]}
+                  >
+                    <AppIcon
+                      name={doctor.nextAvailableAt ? 'zap' : 'calendar'}
+                      size={12}
+                      color={colors.primaryDeep}
+                    />
+                    <Text
+                      style={[
+                        typography.labelSm,
+                        { color: colors.primaryDeep, marginLeft: spacing.xxs + 2 },
+                      ]}
+                    >
+                      {doctor.nextAvailableLabel || 'Schedule online'}
                     </Text>
                   </View>
                 </View>
-
-                {/* Selection Radio / Circle */}
-                <View
-                  style={[
-                    styles.radioCircle,
-                    {
-                      borderRadius: radii.full,
-                      backgroundColor: isSelected ? colors.primaryDeep : colors.surface,
-                      borderColor: isSelected ? colors.primaryDeep : colors.border,
-                    },
-                  ]}
-                >
-                  {isSelected && (
-                    <AppIcon name="check" size={13} color={colors.onPrimary} strokeWidth={2.5} />
-                  )}
-                </View>
-              </View>
-
-              {/* Location Row */}
-              <View style={[styles.locationRow, { marginTop: spacing.sm }]}>
-                <AppIcon name="location" size={14} color={colors.mutedText} />
-                <Text
-                  style={[
-                    typography.bodySm,
-                    { color: colors.mutedText, marginLeft: spacing.xs, flex: 1 },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {doctor.clinicName} • {doctor.clinicAddress || 'Clinic Suite'}
-                </Text>
-              </View>
-
-              {/* Badges Row: Mode & Next Slot */}
-              <View style={[styles.badgesRow, { marginTop: spacing.sm, gap: spacing.sm }]}>
-                <View
-                  style={[
-                    styles.tagBadge,
-                    {
-                      backgroundColor: colors.skySoftBg,
-                      borderRadius: radii.full,
-                      paddingHorizontal: spacing.sm + 2,
-                      paddingVertical: spacing.xxs + 1,
-                    },
-                  ]}
-                >
-                  <AppIcon name="building" size={12} color={colors.skyIcon} />
-                  <Text
-                    style={[
-                      typography.labelSm,
-                      { color: colors.primaryDeep, marginLeft: spacing.xxs + 2 },
-                    ]}
-                  >
-                    In Person
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.tagBadge,
-                    {
-                      backgroundColor: colors.mintBadgeBg,
-                      borderRadius: radii.full,
-                      paddingHorizontal: spacing.sm + 2,
-                      paddingVertical: spacing.xxs + 1,
-                    },
-                  ]}
-                >
-                  <AppIcon name="zap" size={12} color={colors.primaryDeep} />
-                  <Text
-                    style={[
-                      typography.labelSm,
-                      { color: colors.primaryDeep, marginLeft: spacing.xxs + 2 },
-                    ]}
-                  >
-                    {doctor.nextAvailableLabel || 'Next: Tomorrow • 10:30 AM'}
-                  </Text>
-                </View>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
       {/* Selected Facility Location Card */}
-      {selectedClinic && (
+      {selectedClinic ? (
         <View style={{ marginTop: spacing.xxl }}>
           <View style={[styles.sectionHeaderRow, { marginBottom: spacing.md }]}>
             <View style={styles.sectionTitleWithDot}>
@@ -435,12 +579,7 @@ function BookingDoctorStepComponent({
               accessibilityLabel="View all network hubs"
               onPress={onViewAllHubs}
             >
-              <Text
-                style={[
-                  typography.labelSm,
-                  { color: colors.primaryDeep, fontWeight: '700' },
-                ]}
-              >
+              <Text style={[typography.labelSm, { color: colors.primary }]}>
                 All Network Hubs
               </Text>
             </Pressable>
@@ -451,72 +590,86 @@ function BookingDoctorStepComponent({
               styles.facilityCard,
               {
                 backgroundColor: colors.surface,
-                borderColor: colors.border,
+                borderColor: colors.borderSubtle,
                 borderRadius: radii.xl,
                 overflow: 'hidden',
               },
               elevation.card,
             ]}
           >
-            {/* Visual Header Banner */}
-            <View
-              style={[
-                styles.facilityBanner,
-                { backgroundColor: colors.primaryDeep },
-              ]}
-            >
+            <View style={[styles.facilityBanner, { backgroundColor: colors.primaryDeep }]}>
+              {selectedClinic.coverImageUrl ? (
+                <>
+                  <Image
+                    source={{ uri: selectedClinic.coverImageUrl }}
+                    style={StyleSheet.absoluteFill}
+                    resizeMode="cover"
+                  />
+                  <View
+                    style={[
+                      StyleSheet.absoluteFill,
+                      { backgroundColor: colors.backdropScrim },
+                    ]}
+                  />
+                </>
+              ) : null}
+
               <View style={styles.facilityBannerTopRow}>
                 <View
                   style={[
                     styles.openBadge,
                     {
-                      backgroundColor: colors.glassPillBg,
-                      borderColor: colors.glassPillBorder,
+                      backgroundColor: colors.surface,
                       borderRadius: radii.full,
+                      paddingHorizontal: spacing.sm + 2,
+                      paddingVertical: spacing.xxs + 2,
                     },
                   ]}
                 >
                   <View
                     style={[
                       styles.sectionDot,
-                      { borderRadius: radii.full, backgroundColor: colors.emeraldDot },
+                      {
+                        borderRadius: radii.full,
+                        backgroundColor: selectedClinic.isOpenNow
+                          ? colors.emeraldDot
+                          : colors.mutedText,
+                      },
                     ]}
                   />
-                  <Text style={[typography.labelSm, { color: colors.onPrimary, marginLeft: spacing.xs }]}>
-                    Open Now • Walk-ins Welcome
+                  <Text
+                    style={[
+                      typography.labelSm,
+                      { color: colors.navyText, marginLeft: spacing.xs },
+                    ]}
+                  >
+                    {selectedClinic.openStatusLabel}
                   </Text>
                 </View>
               </View>
 
               <View style={{ marginTop: spacing.lg }}>
                 <Text
-                  style={[
-                    typography.headlineMd,
-                    { color: colors.onPrimary, fontWeight: '700' },
-                  ]}
+                  style={[typography.headlineSm, { color: colors.onPrimary }]}
+                  numberOfLines={1}
                 >
                   {selectedClinic.name}
                 </Text>
-                <View style={[styles.facilityAddressRow, { marginTop: spacing.xxs + 2 }]}>
-                  <Text style={[typography.bodySm, { color: colors.healthPassMuted, flex: 1 }]}>
-                    {selectedClinic.address || 'Health Parkway, Building B'}
+                {selectedClinic.address ? (
+                  <Text
+                    style={[
+                      typography.bodySm,
+                      { color: colors.healthPassMuted, marginTop: spacing.xxs },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {selectedClinic.address}
                   </Text>
-                  <View style={styles.ratingRow}>
-                    <AppIcon name="star" size={13} color={colors.amberText} fill={colors.amberText} />
-                    <Text
-                      style={[
-                        typography.labelSm,
-                        { color: colors.onPrimary, marginLeft: spacing.xxs + 1 },
-                      ]}
-                    >
-                      4.9
-                    </Text>
-                  </View>
-                </View>
+                ) : null}
               </View>
             </View>
 
-            {/* Facility Amenities Row */}
+            {/* Facility Attributes + View Info CTA */}
             <View
               style={[
                 styles.facilityAmenitiesRow,
@@ -524,18 +677,26 @@ function BookingDoctorStepComponent({
               ]}
             >
               <View style={styles.amenityItem}>
-                <AppIcon name="car" size={16} color={colors.primaryDeep} />
+                <AppIcon name="calendarCheck" size={16} color={colors.primary} />
                 <View style={{ marginLeft: spacing.xs }}>
-                  <Text style={[typography.labelSm, { color: colors.navyText }]}>Free</Text>
-                  <Text style={[typography.bodySm, { color: colors.mutedText }]}>Garage</Text>
+                  <Text style={[typography.labelSm, { color: colors.navyText }]}>
+                    {selectedClinic.supportsAppointments ? 'Online' : 'By'}
+                  </Text>
+                  <Text style={[typography.bodySm, { color: colors.mutedText }]}>
+                    {selectedClinic.supportsAppointments ? 'Booking' : 'Inquiry'}
+                  </Text>
                 </View>
               </View>
 
               <View style={styles.amenityItem}>
-                <AppIcon name="accessibility" size={16} color={colors.primaryDeep} />
+                <AppIcon name="shieldCheck" size={16} color={colors.primary} />
                 <View style={{ marginLeft: spacing.xs }}>
-                  <Text style={[typography.labelSm, { color: colors.navyText }]}>ADA</Text>
-                  <Text style={[typography.bodySm, { color: colors.mutedText }]}>Compliant</Text>
+                  <Text style={[typography.labelSm, { color: colors.navyText }]}>
+                    {selectedClinic.isPublic ? 'Open' : 'Partner'}
+                  </Text>
+                  <Text style={[typography.bodySm, { color: colors.mutedText }]}>
+                    Network
+                  </Text>
                 </View>
               </View>
 
@@ -546,7 +707,7 @@ function BookingDoctorStepComponent({
                 style={({ pressed }) => [
                   styles.viewInfoBtn,
                   {
-                    backgroundColor: colors.skySoftBg,
+                    backgroundColor: colors.surfaceLow,
                     borderRadius: radii.full,
                     paddingHorizontal: spacing.md,
                     paddingVertical: spacing.sm,
@@ -557,93 +718,45 @@ function BookingDoctorStepComponent({
                 <Text
                   style={[
                     typography.labelMd,
-                    { color: colors.primaryDeep, fontWeight: '700', marginRight: spacing.xxs },
+                    { color: colors.primary, marginRight: spacing.xxs },
                   ]}
                 >
                   View Info
                 </Text>
-                <AppIcon name="arrowRight" size={14} color={colors.primaryDeep} />
+                <AppIcon name="arrowRight" size={14} color={colors.primary} />
               </Pressable>
             </View>
           </View>
         </View>
-      )}
+      ) : null}
 
       {/* Rescheduling Policy Callout */}
       <View
         style={[
           styles.policyBox,
           {
-            backgroundColor: colors.welcomeSurface,
-            borderColor: colors.welcomeBorder,
+            backgroundColor: colors.surfaceLow,
             borderRadius: radii.lg,
-            padding: spacing.md,
+            padding: spacing.base,
             marginTop: spacing.xl,
             gap: spacing.sm,
           },
         ]}
       >
-        <AppIcon name="shieldCheck" size={18} color={colors.primaryDeep} />
+        <View
+          style={[
+            styles.policyIconBadge,
+            { backgroundColor: colors.surface, borderRadius: radii.full },
+          ]}
+        >
+          <AppIcon name="shieldCheck" size={16} color={colors.primary} />
+        </View>
         <Text style={[typography.bodySm, { color: colors.bodyText, flex: 1 }]}>
-          <Text style={{ fontWeight: '700', color: colors.navyText }}>No-Hassle Rescheduling: </Text>
+          <Text style={{ color: colors.navyText, fontWeight: '700' }}>
+            No-Hassle Rescheduling:{' '}
+          </Text>
           Cancel or modify your timeslot up to 2 hours before with zero penalty.
         </Text>
-      </View>
-
-      {/* Sticky Bottom Confirmation Bar */}
-      <View
-        style={[
-          styles.bottomBar,
-          {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.border,
-            padding: spacing.base,
-            marginTop: spacing.xl,
-          },
-          elevation.card,
-        ]}
-      >
-        <Text style={[typography.labelSm, { color: colors.mutedText, letterSpacing: 0.5 }]}>
-          SELECTED CONSULTATION
-        </Text>
-        <Text
-          style={[
-            typography.bodyMd,
-            { color: colors.navyText, fontWeight: '700', marginTop: spacing.xxs },
-          ]}
-          numberOfLines={1}
-        >
-          {selectedDoctor
-            ? `${selectedDoctor.name} • ${selectedDoctor.specialty}`
-            : 'Select a doctor to continue'}
-        </Text>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Proceed to choose slot"
-          disabled={!selectedDoctor}
-          onPress={onProceed}
-          style={({ pressed }) => [
-            styles.proceedButton,
-            {
-              backgroundColor: selectedDoctor ? colors.primaryDeep : colors.border,
-              borderRadius: radii.full,
-              paddingVertical: spacing.md,
-              marginTop: spacing.md,
-              opacity: pressed ? 0.9 : 1,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              typography.labelLg,
-              { color: colors.onPrimary, fontWeight: '700', marginRight: spacing.xs },
-            ]}
-          >
-            Proceed to Choose Slot
-          </Text>
-          <AppIcon name="arrowRight" size={18} color={colors.onPrimary} />
-        </Pressable>
       </View>
     </View>
   );
@@ -686,7 +799,24 @@ const styles = StyleSheet.create({
     height: 7,
   },
   sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 4,
+  },
+  emptyCard: {
+    width: '100%',
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  emptyIconCircle: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyActionBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   doctorCard: {
     width: '100%',
@@ -699,20 +829,22 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   avatar: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
   },
   avatarPlaceholder: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  verifiedBadge: {
+  onlineStatusDot: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
-    padding: 1,
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderWidth: 2,
   },
   doctorInfoCol: {
     flex: 1,
@@ -722,13 +854,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   radioCircle: {
-    width: 22,
-    height: 22,
+    width: 24,
+    height: 24,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
@@ -753,6 +881,7 @@ const styles = StyleSheet.create({
   },
   facilityBanner: {
     padding: 16,
+    position: 'relative',
   },
   facilityBannerTopRow: {
     flexDirection: 'row',
@@ -761,14 +890,6 @@ const styles = StyleSheet.create({
   openBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  facilityAddressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   facilityAmenitiesRow: {
     flexDirection: 'row',
@@ -786,17 +907,12 @@ const styles = StyleSheet.create({
   policyBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
   },
-  bottomBar: {
-    width: '100%',
-    borderTopWidth: 1,
-  },
-  proceedButton: {
-    flexDirection: 'row',
+  policyIconBadge: {
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    width: '100%',
   },
 });
 

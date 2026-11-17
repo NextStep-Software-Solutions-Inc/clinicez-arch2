@@ -1,44 +1,66 @@
 import React, { memo, useState, useEffect, useMemo } from 'react';
 import {
   Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
-import { format, subDays, addMinutes, parseISO } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { AppIcon } from '../ui/Icon';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
-import type { PatientSearchDoctorDto, PatientSearchClinicDto } from '../../services/api/homeApi';
+import type {
+  PatientSearchDoctorDto,
+  PatientSearchClinicDto,
+  PatientSearchServiceDto,
+} from '../../services/api/homeApi';
 import type { AvailableSlot } from '../../services/appointments/types';
 import type { ConsultationMode } from './BookingSlotStep';
 
 export interface BookingReviewStepProps {
   doctor: PatientSearchDoctorDto;
   clinic?: PatientSearchClinicDto | null;
+  service?: PatientSearchServiceDto | null;
   selectedDate: Date;
   selectedSlot: AvailableSlot;
   consultationMode: ConsultationMode;
-  reasonForVisit?: string;
-  isSubmitting?: boolean;
+  reasonForVisit: string;
+  onChangeReasonForVisit: (value: string) => void;
+  sendReminders: boolean;
+  onToggleSendReminders: () => void;
   onChangeTimeOrMode: () => void;
-  onConfirmAndBook: (options: { sendReminders: boolean }) => void;
+}
+
+function shiftSlotTime(rawTime: string | undefined, deltaMinutes: number): string {
+  const parts = (rawTime || '10:30').split(':');
+  const hour = parseInt(parts[0] || '10', 10);
+  const min = parseInt(parts[1] || '30', 10);
+  if (Number.isNaN(hour) || Number.isNaN(min)) return rawTime || '';
+  const totalMinutes = (hour * 60 + min + deltaMinutes + 24 * 60) % (24 * 60);
+  const nextHour24 = Math.floor(totalMinutes / 60);
+  const nextMin = totalMinutes % 60;
+  const period = nextHour24 >= 12 ? 'PM' : 'AM';
+  const displayHour = nextHour24 > 12 ? nextHour24 - 12 : nextHour24 === 0 ? 12 : nextHour24;
+  return `${displayHour}:${nextMin < 10 ? '0' : ''}${nextMin} ${period}`;
 }
 
 function BookingReviewStepComponent({
   doctor,
   clinic,
+  service,
   selectedDate,
   selectedSlot,
   consultationMode,
-  reasonForVisit = 'Routine Cardiology Follow-up & ECG Check',
-  isSubmitting = false,
+  reasonForVisit,
+  onChangeReasonForVisit,
+  sendReminders,
+  onToggleSendReminders,
   onChangeTimeOrMode,
-  onConfirmAndBook,
 }: BookingReviewStepProps) {
   const { colors, typography, radii, spacing, elevation } = useClinicalEmpathyTheme();
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(14 * 60 + 48); // 14:48 min
-  const [sendReminders, setSendReminders] = useState<boolean>(true);
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(15 * 60);
 
   // Live 15-minute countdown
   useEffect(() => {
@@ -54,57 +76,50 @@ function BookingReviewStepComponent({
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   }, [secondsRemaining]);
 
-  // Compute cancellation cutoff (24 hours prior)
   const cancellationCutoff = useMemo(() => {
     const prevDay = subDays(selectedDate, 1);
     return `${format(prevDay, 'EEEE, MMM d')} at ${selectedSlot.displayTime || selectedSlot.time}`;
   }, [selectedDate, selectedSlot]);
 
-  // Compute early arrival time (10 mins prior)
-  const earlyArrivalTime = useMemo(() => {
-    try {
-      const parts = (selectedSlot.time || '10:30').split(':');
-      const hour = parseInt(parts[0] || '10', 10);
-      const min = parseInt(parts[1] || '30', 10);
-      let earlyHour = hour;
-      let earlyMin = min - 10;
-      if (earlyMin < 0) {
-        earlyMin += 60;
-        earlyHour -= 1;
-      }
-      const period = earlyHour >= 12 ? 'PM' : 'AM';
-      const displayHour = earlyHour > 12 ? earlyHour - 12 : earlyHour === 0 ? 12 : earlyHour;
-      return `${displayHour}:${earlyMin < 10 ? '0' : ''}${earlyMin} ${period}`;
-    } catch {
-      return '10:20 AM';
-    }
-  }, [selectedSlot]);
+  const earlyArrivalTime = useMemo(
+    () => shiftSlotTime(selectedSlot.time, -10),
+    [selectedSlot.time],
+  );
 
-  // End time (30 mins after slot start)
-  const endTime = useMemo(() => {
-    try {
-      const parts = (selectedSlot.time || '10:30').split(':');
-      const hour = parseInt(parts[0] || '10', 10);
-      const min = parseInt(parts[1] || '30', 10);
-      let endHour = hour;
-      let endMin = min + 30;
-      if (endMin >= 60) {
-        endMin -= 60;
-        endHour += 1;
-      }
-      const period = endHour >= 12 ? 'PM' : 'AM';
-      const displayHour = endHour > 12 ? endHour - 12 : endHour === 0 ? 12 : endHour;
-      return `${displayHour}:${endMin < 10 ? '0' : ''}${endMin} ${period}`;
-    } catch {
-      return '11:00 AM';
-    }
-  }, [selectedSlot]);
+  const durationMinutes =
+    service?.durationMinutes && service.durationMinutes > 0
+      ? service.durationMinutes
+      : 30;
+
+  const endTime = useMemo(
+    () => shiftSlotTime(selectedSlot.time, durationMinutes),
+    [selectedSlot.time, durationMinutes],
+  );
+
+  const facilityName = clinic?.name || doctor.clinicName;
+  const facilityAddress = clinic?.address || doctor.clinicAddress || '';
+  const hasMapTarget = Boolean(facilityAddress || facilityName);
 
   const handleGetDirections = () => {
-    const address = clinic?.address || doctor.clinicAddress || 'Metro Cardiology Clinic';
-    const query = encodeURIComponent(`${clinic?.name || doctor.clinicName} ${address}`);
-    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`).catch(() => {});
+    if (!hasMapTarget) return;
+    const encoded = encodeURIComponent(
+      [facilityName, facilityAddress].filter(Boolean).join(', '),
+    );
+    const url = Platform.select({
+      ios: `http://maps.apple.com/?q=${encoded}`,
+      android: `geo:0,0?q=${encoded}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${encoded}`,
+    });
+    if (url) {
+      Linking.openURL(url).catch(() => {});
+    }
   };
+
+  const unitPrice = typeof service?.price === 'number' && service.price > 0 ? service.price : 0;
+  const formattedPrice = `₱${unitPrice.toFixed(2)}`;
+  const costDescription =
+    service?.priceBadgeLabel ||
+    (unitPrice === 0 ? 'No upfront booking charge' : 'Payable at clinic reception');
 
   return (
     <View style={styles.container}>
@@ -113,8 +128,7 @@ function BookingReviewStepComponent({
         style={[
           styles.countdownBanner,
           {
-            backgroundColor: colors.welcomeSurface,
-            borderColor: colors.welcomeBorder,
+            backgroundColor: colors.surfaceLow,
             borderRadius: radii.xl,
             padding: spacing.base,
           },
@@ -124,45 +138,38 @@ function BookingReviewStepComponent({
           style={[
             styles.timerIconBadge,
             {
-              backgroundColor: colors.mintBadgeBg,
+              backgroundColor: colors.mintAvatarBg,
               borderRadius: radii.full,
             },
           ]}
         >
-          <AppIcon name="shieldCheck" size={18} color={colors.primaryDeep} />
+          <AppIcon name="shieldCheck" size={18} color={colors.mintAvatarText} />
         </View>
 
         <View style={{ flex: 1, marginLeft: spacing.sm }}>
-          <View style={styles.countdownTitleRow}>
-            <Text
-              style={[
-                typography.labelMd,
-                { color: colors.navyText, fontWeight: '700' },
-              ]}
-            >
-              Slot reserved for {formattedCountdown} min
-            </Text>
-            <View
-              style={[
-                styles.pulsingDot,
-                {
-                  borderRadius: radii.full,
-                  backgroundColor: colors.emeraldDot,
-                  marginLeft: spacing.xs,
-                },
-              ]}
-            />
-          </View>
+          <Text style={[typography.labelBold, { color: colors.navyText }]}>
+            Slot reserved for {formattedCountdown} min
+          </Text>
           <Text
-            style={[
-              typography.bodySm,
-              { color: colors.bodyText, marginTop: spacing.xxs },
-            ]}
+            style={[typography.bodySm, { color: colors.mutedText, marginTop: spacing.xxs }]}
             numberOfLines={1}
           >
-            No charges until your visit at the clinic reception.
+            {consultationMode === 'telehealth'
+              ? 'No charges until your consultation session begins.'
+              : 'No charges until your visit at the clinic reception.'}
           </Text>
         </View>
+
+        <View
+          style={[
+            styles.statusDot,
+            {
+              borderRadius: radii.full,
+              backgroundColor: colors.primary,
+              marginLeft: spacing.sm,
+            },
+          ]}
+        />
       </View>
 
       {/* Time & Consultation Mode Card */}
@@ -171,7 +178,7 @@ function BookingReviewStepComponent({
           styles.card,
           {
             backgroundColor: colors.surface,
-            borderColor: colors.border,
+            borderColor: colors.borderSubtle,
             borderRadius: radii.xl,
             padding: spacing.base,
             marginTop: spacing.lg,
@@ -179,27 +186,27 @@ function BookingReviewStepComponent({
           elevation.card,
         ]}
       >
-        {/* Header */}
         <View style={styles.cardHeaderRow}>
           <View style={styles.cardHeaderLeft}>
             <View
               style={[
                 styles.iconBox,
                 {
-                  backgroundColor: colors.skySoftBg,
+                  backgroundColor: colors.surfaceLow,
                   borderRadius: radii.full,
                 },
               ]}
             >
-              <AppIcon name="calendarCheck" size={18} color={colors.skyIcon} />
+              <AppIcon name="calendarCheck" size={18} color={colors.primary} />
             </View>
             <Text
               style={[
-                typography.headlineMd,
-                { color: colors.navyText, fontWeight: '700', marginLeft: spacing.sm },
+                typography.cardTitle,
+                { color: colors.navyText, marginLeft: spacing.sm, flexShrink: 1 },
               ]}
+              numberOfLines={1}
             >
-              Time & Consultation Mode
+              Time &amp; Consultation Mode
             </Text>
           </View>
 
@@ -210,22 +217,15 @@ function BookingReviewStepComponent({
             style={({ pressed }) => [
               styles.changeBtn,
               {
-                backgroundColor: colors.skySoftBg,
+                backgroundColor: colors.surfaceLow,
                 borderRadius: radii.full,
-                paddingHorizontal: spacing.sm + 2,
-                paddingVertical: spacing.xs,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.xs + 1,
                 opacity: pressed ? 0.85 : 1,
               },
             ]}
           >
-            <Text
-              style={[
-                typography.labelSm,
-                { color: colors.primaryDeep, fontWeight: '700' },
-              ]}
-            >
-              Change
-            </Text>
+            <Text style={[typography.labelSm, { color: colors.primary }]}>Change</Text>
           </Pressable>
         </View>
 
@@ -235,28 +235,20 @@ function BookingReviewStepComponent({
             style={[
               styles.subIconBox,
               {
-                backgroundColor: colors.skySoftBg,
+                backgroundColor: colors.surfaceLow,
                 borderRadius: radii.md,
               },
             ]}
           >
-            <AppIcon name="calendar" size={16} color={colors.skyIcon} />
+            <AppIcon name="calendar" size={16} color={colors.primary} />
           </View>
 
           <View style={{ marginLeft: spacing.sm }}>
-            <Text
-              style={[
-                typography.labelLg,
-                { color: colors.navyText, fontWeight: '700' },
-              ]}
-            >
+            <Text style={[typography.cardTitle, { color: colors.navyText }]}>
               {format(selectedDate, 'EEEE, MMM d, yyyy')}
             </Text>
             <Text
-              style={[
-                typography.bodyMd,
-                { color: colors.bodyText, marginTop: spacing.xxs },
-              ]}
+              style={[typography.bodyMd, { color: colors.bodyText, marginTop: spacing.xxs }]}
             >
               {selectedSlot.displayTime || selectedSlot.time} – {endTime}
             </Text>
@@ -268,74 +260,71 @@ function BookingReviewStepComponent({
           style={[
             styles.earlyArrivalBox,
             {
-              backgroundColor: colors.skySoftBg,
+              backgroundColor: colors.surfaceLow,
               borderRadius: radii.lg,
               padding: spacing.md,
               marginTop: spacing.md,
             },
           ]}
         >
-          <AppIcon name="clock" size={16} color={colors.skyIcon} />
+          <AppIcon name="clock" size={16} color={colors.primary} />
           <View style={{ marginLeft: spacing.sm, flex: 1 }}>
-            <Text
-              style={[
-                typography.labelSm,
-                { color: colors.navyText, fontWeight: '700' },
-              ]}
-            >
-              Arrive 10 minutes early ({earlyArrivalTime})
+            <Text style={[typography.labelMd, { color: colors.navyText }]}>
+              {consultationMode === 'telehealth'
+                ? `Join 10 minutes early (${earlyArrivalTime})`
+                : `Arrive 10 minutes early (${earlyArrivalTime})`}
             </Text>
-            <Text
-              style={[
-                typography.bodySm,
-                { color: colors.bodyText, marginTop: spacing.xxs },
-              ]}
-            >
-              Allows reception team to process vitals & intake check-in smoothly.
+            <Text style={[typography.bodySm, { color: colors.bodyText, marginTop: spacing.xxs }]}>
+              {consultationMode === 'telehealth'
+                ? 'Allows time to verify your camera, microphone, and connection.'
+                : 'Allows reception team to process vitals & intake check-in smoothly.'}
             </Text>
           </View>
         </View>
 
-        {/* Location Row */}
+        {/* Location / Mode Row */}
         <View style={[styles.locationRow, { marginTop: spacing.base }]}>
-          <AppIcon name="location" size={16} color={colors.mutedText} />
+          <AppIcon
+            name={consultationMode === 'telehealth' ? 'video' : 'location'}
+            size={16}
+            color={colors.mutedText}
+          />
           <View style={{ marginLeft: spacing.sm, flex: 1 }}>
-            <Text
-              style={[
-                typography.labelMd,
-                { color: colors.navyText, fontWeight: '600' },
-              ]}
-              numberOfLines={1}
-            >
-              {clinic?.address || doctor.clinicAddress || '450 Elm Blvd, Suite 320'}
+            <Text style={[typography.labelMd, { color: colors.navyText }]} numberOfLines={1}>
+              {consultationMode === 'telehealth'
+                ? 'Telehealth Video Consultation'
+                : facilityAddress || facilityName}
             </Text>
             <Text
-              style={[
-                typography.bodySm,
-                { color: colors.mutedText, marginTop: spacing.xxs },
-              ]}
+              style={[typography.bodySm, { color: colors.mutedText, marginTop: spacing.xxs }]}
               numberOfLines={1}
             >
-              Medical District, Metro City • {clinic?.name || doctor.clinicName}
+              {consultationMode === 'telehealth'
+                ? facilityName
+                : facilityAddress
+                  ? facilityName
+                  : 'In-Person Clinic Visit'}
             </Text>
           </View>
 
-          <Pressable
-            accessibilityRole="link"
-            accessibilityLabel="Get directions in Google Maps"
-            onPress={handleGetDirections}
-            style={styles.directionsBtn}
-          >
-            <Text
-              style={[
-                typography.labelSm,
-                { color: colors.primaryDeep, fontWeight: '700', marginRight: spacing.xxs },
-              ]}
+          {consultationMode === 'in_person' && hasMapTarget ? (
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="Get directions in Google Maps"
+              onPress={handleGetDirections}
+              style={styles.directionsBtn}
             >
-              Get Directions
-            </Text>
-            <AppIcon name="externalLink" size={12} color={colors.primaryDeep} />
-          </Pressable>
+              <Text
+                style={[
+                  typography.labelSm,
+                  { color: colors.primary, marginRight: spacing.xxs },
+                ]}
+              >
+                Get Directions
+              </Text>
+              <AppIcon name="externalLink" size={12} color={colors.primary} />
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -345,7 +334,7 @@ function BookingReviewStepComponent({
           styles.card,
           {
             backgroundColor: colors.surface,
-            borderColor: colors.border,
+            borderColor: colors.borderSubtle,
             borderRadius: radii.xl,
             padding: spacing.base,
             marginTop: spacing.lg,
@@ -353,17 +342,29 @@ function BookingReviewStepComponent({
           elevation.card,
         ]}
       >
-        <Text style={[typography.labelSm, { color: colors.mutedText, letterSpacing: 0.5 }]}>
+        <Text style={[typography.overline, { color: colors.mutedText }]}>
           REASON FOR VISIT
         </Text>
-        <Text
+        <TextInput
+          value={reasonForVisit}
+          onChangeText={onChangeReasonForVisit}
+          placeholder="Describe your reason for this consultation..."
+          placeholderTextColor={colors.mutedText}
+          multiline
+          accessibilityLabel="Reason for visit"
           style={[
-            typography.bodyMd,
-            { color: colors.navyText, fontWeight: '600', marginTop: spacing.xs },
+            typography.bodyMedium,
+            styles.reasonInput,
+            {
+              color: colors.navyText,
+              backgroundColor: colors.surfaceLow,
+              borderRadius: radii.md,
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.sm,
+              marginTop: spacing.sm,
+            },
           ]}
-        >
-          {reasonForVisit}
-        </Text>
+        />
       </View>
 
       {/* Estimated Cost Breakdown Card */}
@@ -372,7 +373,7 @@ function BookingReviewStepComponent({
           styles.card,
           {
             backgroundColor: colors.surface,
-            borderColor: colors.border,
+            borderColor: colors.borderSubtle,
             borderRadius: radii.xl,
             padding: spacing.base,
             marginTop: spacing.lg,
@@ -380,80 +381,54 @@ function BookingReviewStepComponent({
           elevation.card,
         ]}
       >
-        <View style={styles.cardHeaderRow}>
-          <View style={styles.cardHeaderLeft}>
-            <View
-              style={[
-                styles.iconBox,
-                {
-                  backgroundColor: colors.skySoftBg,
-                  borderRadius: radii.full,
-                },
-              ]}
-            >
-              <AppIcon name="building" size={18} color={colors.skyIcon} />
-            </View>
-            <Text
-              style={[
-                typography.headlineMd,
-                { color: colors.navyText, fontWeight: '700', marginLeft: spacing.sm },
-              ]}
-            >
-              Estimated Cost Breakdown
-            </Text>
+        <View style={styles.cardHeaderLeft}>
+          <View
+            style={[
+              styles.iconBox,
+              {
+                backgroundColor: colors.surfaceLow,
+                borderRadius: radii.full,
+              },
+            ]}
+          >
+            <AppIcon name="document" size={18} color={colors.primary} />
           </View>
+          <Text
+            style={[
+              typography.cardTitle,
+              { color: colors.navyText, marginLeft: spacing.sm },
+            ]}
+          >
+            Estimated Cost Breakdown
+          </Text>
         </View>
 
-        {/* Breakdown Items */}
         <View style={{ marginTop: spacing.base, gap: spacing.md }}>
-          {/* Fee 1 */}
           <View style={styles.costItemRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[typography.labelMd, { color: colors.navyText, fontWeight: '600' }]}>
-                Consultation Fee ({doctor.name})
+              <Text style={[typography.labelBold, { color: colors.navyText }]}>
+                {service?.name
+                  ? `${service.name} (${doctor.name})`
+                  : `Consultation (${doctor.name})`}
               </Text>
               <Text
                 style={[
                   typography.bodySm,
-                  { color: colors.emeraldText, fontWeight: '600', marginTop: spacing.xxs },
+                  { color: colors.emeraldText, marginTop: spacing.xxs },
                 ]}
               >
-                100% Covered by Blue Shield PPO
+                {costDescription}
               </Text>
             </View>
 
             <View style={styles.priceColumn}>
-              <Text style={[typography.bodySm, styles.strikethroughPrice, { color: colors.mutedText }]}>
-                ₱180.00
-              </Text>
-              <Text style={[typography.labelMd, { color: colors.emeraldText, fontWeight: '700' }]}>
-                ₱0.00
-              </Text>
-            </View>
-          </View>
-
-          {/* Fee 2 */}
-          <View style={styles.costItemRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={[typography.labelMd, { color: colors.navyText, fontWeight: '600' }]}>
-                Diagnostic 12-Lead ECG Screening
-              </Text>
               <Text
                 style={[
-                  typography.bodySm,
-                  { color: colors.emeraldText, fontWeight: '600', marginTop: spacing.xxs },
+                  typography.labelBold,
+                  { color: unitPrice === 0 ? colors.emeraldText : colors.navyText },
                 ]}
               >
-                In-Network Preventive Benefit
-              </Text>
-            </View>
-
-            <View style={styles.priceColumn}>
-              <Text style={[typography.bodySm, styles.strikethroughPrice, { color: colors.mutedText }]}>
-                ₱180.00
-              </Text>
-              <Text style={[typography.labelMd, { color: colors.emeraldText, fontWeight: '700' }]}>
-                ₱0.00
+                {formattedPrice}
               </Text>
             </View>
           </View>
@@ -471,21 +446,18 @@ function BookingReviewStepComponent({
             ]}
           >
             <View style={{ flex: 1 }}>
-              <Text style={[typography.labelMd, { color: colors.navyText, fontWeight: '700' }]}>
+              <Text style={[typography.labelBold, { color: colors.navyText }]}>
                 Total Patient Responsibility
               </Text>
-              <Text style={[typography.bodySm, { color: colors.mutedText, marginTop: spacing.xxs }]}>
+              <Text
+                style={[typography.bodySm, { color: colors.mutedText, marginTop: spacing.xxs }]}
+              >
                 Due at clinic check-in on {format(selectedDate, 'MMM d')}
               </Text>
             </View>
 
-            <Text
-              style={[
-                typography.headlineLg,
-                { color: colors.primaryDeep, fontWeight: '800' },
-              ]}
-            >
-              ₱0.00
+            <Text style={[typography.headlineMd, { color: colors.primary }]}>
+              {formattedPrice}
             </Text>
           </View>
         </View>
@@ -497,7 +469,7 @@ function BookingReviewStepComponent({
           styles.card,
           {
             backgroundColor: colors.surface,
-            borderColor: colors.border,
+            borderColor: colors.borderSubtle,
             borderRadius: radii.xl,
             padding: spacing.base,
             marginTop: spacing.lg,
@@ -510,17 +482,17 @@ function BookingReviewStepComponent({
             style={[
               styles.iconBox,
               {
-                backgroundColor: colors.mintBadgeBg,
+                backgroundColor: colors.mintAvatarBg,
                 borderRadius: radii.full,
               },
             ]}
           >
-            <AppIcon name="shieldCheck" size={18} color={colors.primaryDeep} />
+            <AppIcon name="shieldCheck" size={18} color={colors.mintAvatarText} />
           </View>
           <Text
             style={[
-              typography.headlineMd,
-              { color: colors.navyText, fontWeight: '700', marginLeft: spacing.sm },
+              typography.cardTitle,
+              { color: colors.navyText, marginLeft: spacing.sm },
             ]}
           >
             Clinic EZ Guarantees
@@ -528,30 +500,27 @@ function BookingReviewStepComponent({
         </View>
 
         <View style={{ marginTop: spacing.base, gap: spacing.md }}>
-          {/* Guarantee 1 */}
           <View style={styles.guaranteeRow}>
-            <AppIcon name="calendarCheck" size={18} color={colors.primaryDeep} />
+            <AppIcon name="calendarCheck" size={18} color={colors.primary} />
             <Text style={[typography.bodySm, { color: colors.bodyText, marginLeft: spacing.sm, flex: 1 }]}>
               <Text style={{ fontWeight: '700', color: colors.navyText }}>Free cancellation </Text>
               up to 24 hours prior ({cancellationCutoff}) with zero cancellation fees.
             </Text>
           </View>
 
-          {/* Guarantee 2 */}
           <View style={styles.guaranteeRow}>
-            <AppIcon name="qrCode" size={18} color={colors.primaryDeep} />
+            <AppIcon name="qrCode" size={18} color={colors.primary} />
             <Text style={[typography.bodySm, { color: colors.bodyText, marginLeft: spacing.sm, flex: 1 }]}>
               <Text style={{ fontWeight: '700', color: colors.navyText }}>Instant digital pass </Text>
-              added automatically to your Clinic EZ Health Pass & Apple/Google Wallet.
+              added automatically to your Clinic EZ Health Pass &amp; Apple/Google Wallet.
             </Text>
           </View>
 
-          {/* Guarantee 3: Interactive Reminders Checkbox */}
           <Pressable
             accessibilityRole="checkbox"
             accessibilityState={{ checked: sendReminders }}
             accessibilityLabel="SMS and Calendar reminders"
-            onPress={() => setSendReminders(!sendReminders)}
+            onPress={onToggleSendReminders}
             style={[
               styles.remindersBox,
               {
@@ -562,13 +531,15 @@ function BookingReviewStepComponent({
               },
             ]}
           >
-            <AppIcon name="notifications" size={18} color={colors.primaryDeep} />
+            <AppIcon name="notifications" size={18} color={colors.primary} />
             <View style={{ flex: 1, marginLeft: spacing.sm }}>
-              <Text style={[typography.labelSm, { color: colors.navyText, fontWeight: '700' }]}>
-                SMS & Calendar reminders
+              <Text style={[typography.labelSm, { color: colors.navyText }]}>
+                SMS &amp; Calendar reminders
               </Text>
-              <Text style={[typography.bodySm, { color: colors.mutedText, marginTop: spacing.xxs }]}>
-                Sends updates 24h & 2h before consultation
+              <Text
+                style={[typography.bodySm, { color: colors.mutedText, marginTop: spacing.xxs }]}
+              >
+                Sends updates 24h &amp; 2h before consultation
               </Text>
             </View>
 
@@ -577,78 +548,15 @@ function BookingReviewStepComponent({
                 styles.checkbox,
                 {
                   borderRadius: radii.xs,
-                  backgroundColor: sendReminders ? colors.primaryDeep : colors.surface,
-                  borderColor: sendReminders ? colors.primaryDeep : colors.border,
+                  backgroundColor: sendReminders ? colors.primary : colors.surface,
+                  borderColor: sendReminders ? colors.primary : colors.border,
                 },
               ]}
             >
-              {sendReminders && (
+              {sendReminders ? (
                 <AppIcon name="check" size={12} color={colors.onPrimary} strokeWidth={2.5} />
-              )}
+              ) : null}
             </View>
-          </Pressable>
-        </View>
-      </View>
-
-      {/* Sticky Bottom Confirmation Bar */}
-      <View
-        style={[
-          styles.bottomBar,
-          {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.border,
-            padding: spacing.base,
-            marginTop: spacing.xl,
-          },
-          elevation.card,
-        ]}
-      >
-        <View style={styles.bottomBarContentRow}>
-          {/* Estimated Copay */}
-          <View>
-            <Text style={[typography.bodySm, { color: colors.mutedText }]}>Estimated Copay</Text>
-            <Text
-              style={[
-                typography.headlineLg,
-                { color: colors.navyText, fontWeight: '800', marginTop: spacing.xxs },
-              ]}
-            >
-              ₱0.00
-            </Text>
-            <Text style={[typography.bodySm, { color: colors.mutedText }]}>due at visit</Text>
-          </View>
-
-          {/* Confirm Button */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Confirm and book appointment"
-            disabled={isSubmitting}
-            onPress={() => onConfirmAndBook({ sendReminders })}
-            style={({ pressed }) => [
-              styles.confirmButton,
-              {
-                backgroundColor: colors.primaryDeep,
-                borderRadius: radii.full,
-                paddingVertical: spacing.md,
-                paddingHorizontal: spacing.xl,
-                opacity: isSubmitting ? 0.7 : pressed ? 0.9 : 1,
-              },
-            ]}
-          >
-            <AppIcon name="lock" size={16} color={colors.onPrimary} />
-            <Text
-              style={[
-                typography.labelLg,
-                { color: colors.onPrimary, fontWeight: '700', marginLeft: spacing.xs },
-              ]}
-            >
-              {isSubmitting ? 'Booking...' : 'Confirm & Book'}
-            </Text>
-            {!isSubmitting && (
-              <View style={{ marginLeft: spacing.xs }}>
-                <AppIcon name="arrowRight" size={16} color={colors.onPrimary} />
-              </View>
-            )}
           </Pressable>
         </View>
       </View>
@@ -663,7 +571,6 @@ const styles = StyleSheet.create({
   countdownBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
   },
   timerIconBadge: {
     width: 36,
@@ -671,11 +578,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  countdownTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  pulsingDot: {
+  statusDot: {
     width: 8,
     height: 8,
   },
@@ -692,22 +595,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    paddingRight: 8,
   },
   iconBox: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
   },
   subIconBox: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  changeBtn: {
-    paddingVertical: 4,
-  },
+  changeBtn: {},
   timeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -725,6 +627,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingLeft: 8,
   },
+  reasonInput: {
+    minHeight: 48,
+    textAlignVertical: 'top',
+  },
   costItemRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -733,9 +639,6 @@ const styles = StyleSheet.create({
   priceColumn: {
     alignItems: 'flex-end',
     marginLeft: 12,
-  },
-  strikethroughPrice: {
-    textDecorationLine: 'line-through',
   },
   totalResponsibilityBox: {
     flexDirection: 'row',
@@ -757,20 +660,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 12,
-  },
-  bottomBar: {
-    width: '100%',
-    borderTopWidth: 1,
-  },
-  bottomBarContentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  confirmButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
 
