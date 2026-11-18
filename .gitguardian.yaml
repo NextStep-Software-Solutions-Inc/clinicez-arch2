@@ -2,6 +2,7 @@ version: 2
 secret:
   ignored_paths:
     - "services/clinic-api/ClinicEz.Clinic.Application.Tests/**/*"
+    - "services/organization-api/ClinicEz.Organization.Tests/**/*"
     - "services/pharmacy-api/ClinicEz.Pharmacy.Application.Tests/**/*"
     - "services/billing-api/ClinicEz.Billing.Tests/**/*"
     - "apps/clinic-app/tests/**/*"

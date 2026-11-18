@@ -11,10 +11,10 @@ using Microsoft.EntityFrameworkCore;
 namespace ClinicEz.Clinic.Application.Features.ServicesCatalog.Commands;
 
 public record UpdateClinicServiceItemCommand(
+    Guid Id,
     string Name,
     string Category,
     decimal StandardPrice,
-    Guid Id = default,
     string? Description = null,
     bool IsActive = true,
     string? PhilHealthCode = null,

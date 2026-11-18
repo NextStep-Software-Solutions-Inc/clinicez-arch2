@@ -49,10 +49,21 @@ public sealed class ServicesController : ControllerBase
     [HasPermission(ClinicPermissions.ServicesManage)]
     public async Task<ActionResult<ApiResponse<ClinicServiceItemDto>>> UpdateService(
         [FromRoute] Guid id,
-        [FromBody] UpdateClinicServiceItemCommand command,
+        [FromBody] UpdateClinicServiceItemRequest request,
         CancellationToken ct)
     {
-        var result = await _sender.Send(command with { Id = id }, ct);
+        var command = new UpdateClinicServiceItemCommand(
+            Id: id,
+            Name: request.Name,
+            Category: request.Category,
+            StandardPrice: request.StandardPrice,
+            Description: request.Description,
+            IsActive: request.IsActive,
+            PhilHealthCode: request.PhilHealthCode,
+            PhilHealthDescription: request.PhilHealthDescription,
+            IsPhilHealthFormulary: request.IsPhilHealthFormulary,
+            IsNurseOrderable: request.IsNurseOrderable);
+        var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicServiceItemDto>.Success(result, "Service updated successfully."));
     }
 
@@ -74,3 +85,14 @@ public sealed class ServicesController : ControllerBase
         return Ok(ApiResponse<List<ClinicServiceItemDto>>.Success(result, "Dental service presets seeded successfully."));
     }
 }
+
+public sealed record UpdateClinicServiceItemRequest(
+    string Name,
+    string Category,
+    decimal StandardPrice,
+    string? Description = null,
+    bool IsActive = true,
+    string? PhilHealthCode = null,
+    string? PhilHealthDescription = null,
+    bool IsPhilHealthFormulary = false,
+    bool IsNurseOrderable = false);

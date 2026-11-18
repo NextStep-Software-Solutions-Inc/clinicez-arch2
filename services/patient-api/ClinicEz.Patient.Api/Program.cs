@@ -39,8 +39,8 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
-    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Patient App API"));
+    app.MapOpenApi().AllowAnonymous();
+    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Patient App API")).AllowAnonymous();
 }
 
 app.UseForwardedHeaders();

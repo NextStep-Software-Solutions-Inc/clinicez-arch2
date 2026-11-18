@@ -30,8 +30,8 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
-    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Organization Dashboard API"));
+    app.MapOpenApi().AllowAnonymous();
+    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Organization Dashboard API")).AllowAnonymous();
 }
 
 // 4. Add middleware

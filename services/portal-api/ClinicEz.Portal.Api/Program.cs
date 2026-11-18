@@ -157,8 +157,8 @@ using (var scope = app.Services.CreateScope())
 // Configure the HTTP request pipeline.
 if (isDevelopment)
 {
-    app.MapOpenApi();
-    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Main Portal API"));
+    app.MapOpenApi().AllowAnonymous();
+    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Main Portal API")).AllowAnonymous();
 }
 
 // 4. Add middleware
