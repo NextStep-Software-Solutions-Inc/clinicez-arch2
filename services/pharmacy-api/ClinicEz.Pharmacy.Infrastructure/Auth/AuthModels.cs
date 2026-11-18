@@ -31,7 +31,7 @@ public sealed record AuthUserDto(
 
 public sealed record AuthTokensDto(
     string AccessToken,
-    string RefreshToken,
+    string? RefreshToken,
     DateTime AccessTokenExpiresAtUtc,
     DateTime RefreshTokenExpiresAtUtc,
     AuthUserDto User);

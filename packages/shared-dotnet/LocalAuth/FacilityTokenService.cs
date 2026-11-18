@@ -14,6 +14,8 @@ public interface IFacilityTokenService
 {
     IssuedAccessToken CreateAccessToken(IEnumerable<Claim> claims);
 
+    IssuedAccessToken CreateAccessToken(IEnumerable<Claim> claims, TimeSpan? lifetimeOverride);
+
     /// <summary>Generates a cryptographically random opaque refresh token (URL-safe).</summary>
     string GenerateRefreshToken();
 
@@ -41,10 +43,13 @@ public sealed class FacilityTokenService : IFacilityTokenService
             SecurityAlgorithms.HmacSha256);
     }
 
-    public IssuedAccessToken CreateAccessToken(IEnumerable<Claim> claims)
+    public IssuedAccessToken CreateAccessToken(IEnumerable<Claim> claims) =>
+        CreateAccessToken(claims, null);
+
+    public IssuedAccessToken CreateAccessToken(IEnumerable<Claim> claims, TimeSpan? lifetimeOverride)
     {
         var now = DateTime.UtcNow;
-        var expires = now.AddMinutes(Options.AccessTokenMinutes);
+        var expires = now.Add(lifetimeOverride ?? TimeSpan.FromMinutes(Options.AccessTokenMinutes));
         var token = new JwtSecurityToken(
             issuer: Options.Issuer,
             audience: Options.Audience,

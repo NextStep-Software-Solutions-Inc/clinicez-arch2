@@ -17,6 +17,7 @@ import { parseRuntimeSettings, pickSetting, SettingName, SettingValues } from '.
  */
 const SERVER_URL_KEY = 'clinicez.serverUrl';
 const DEFAULT_OFFLINE_GRACE_HOURS = 12;
+export const DEFAULT_WEB_IDLE_TIMEOUT_MINUTES = 30;
 
 /** Values published at run time by the web host (`/config.json`); empty on native and when the file is absent. */
 export type RuntimeConfig = SettingValues;
@@ -39,6 +40,7 @@ const BUILD_SETTINGS: SettingValues = {
   get EXPO_PUBLIC_STORAGE_PUBLIC_URL() { return process.env.EXPO_PUBLIC_STORAGE_PUBLIC_URL; },
   get EXPO_PUBLIC_OFFLINE_GRACE_HOURS() { return process.env.EXPO_PUBLIC_OFFLINE_GRACE_HOURS; },
   get EXPO_PUBLIC_ENABLE_COMMS() { return process.env.EXPO_PUBLIC_ENABLE_COMMS; },
+  get EXPO_PUBLIC_IDLE_TIMEOUT_MINUTES() { return process.env.EXPO_PUBLIC_IDLE_TIMEOUT_MINUTES; },
 };
 
 /** One setting, resolved the same way on every deployment: runtime (on-prem `config.json`) first, then build-time. */
@@ -192,4 +194,12 @@ export function isCommsEnabled(): boolean {
   const setting = getSetting('EXPO_PUBLIC_ENABLE_COMMS');
   if (setting === 'false' || setting === '0') return false;
   return true;
+}
+
+/** Inactivity auto-logout threshold in minutes for web workstations (`0` disables the timer). */
+export function getWebIdleTimeoutMinutes(): number {
+  const raw = getSetting('EXPO_PUBLIC_IDLE_TIMEOUT_MINUTES');
+  if (raw === undefined) return DEFAULT_WEB_IDLE_TIMEOUT_MINUTES;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_WEB_IDLE_TIMEOUT_MINUTES;
 }

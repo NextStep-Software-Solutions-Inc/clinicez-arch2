@@ -3,24 +3,31 @@ import { type AppStateStatus } from 'react-native';
 import * as ReactNative from 'react-native';
 
 const AppState = (ReactNative as any).AppState ?? (ReactNative as any).default?.AppState;
+const Platform = (ReactNative as any).Platform ?? (ReactNative as any).default?.Platform;
+import { createWebIdleMonitor } from '@shared/safe';
 import {
   AdminRecoveryInput,
   AuthUser,
   BootstrapInput,
   bootstrapAdmin,
+  broadcastActivity,
   changePassword as changePasswordRequest,
   discardLocalSession,
   getAuthStatus,
   hasPermission,
+  idleLogout,
   login as loginRequest,
   logout as logoutRequest,
   onSessionExpired,
+  onSessionIdleExpired,
   recoverAdmin as recoverAdminRequest,
   restoreSession,
   resumeOnline,
+  subscribeRemoteActivity,
   subscribeSession,
 } from '../services/authSession';
 import { isUnlockConfigured } from '../services/offlineUnlock';
+import { getWebIdleTimeoutMinutes } from '../services/runtimeConfig';
 
 /**
  * Where the signed-in experience stands:
@@ -41,6 +48,11 @@ export type AuthState =
   | 'mustChangePassword'
   | 'signedIn';
 
+export interface AccountSwitchAlert {
+  previousUser: AuthUser;
+  currentUser: AuthUser;
+}
+
 export interface AuthContextValue {
   state: AuthState;
   user: AuthUser | null;
@@ -49,6 +61,10 @@ export interface AuthContextValue {
   offline: boolean;
   /** Notice shown on the sign-in screen (e.g. the session ended). */
   notice: string | null;
+  /** Non-null when another browser tab signed in as a different staff account while this tab was active. */
+  accountSwitchAlert: AccountSwitchAlert | null;
+  /** Dismisses the account-switch safety modal after confirming the new active user. */
+  acknowledgeAccountSwitch: () => void;
   /** Resolves to an error message, or `null` on success. */
   login: (email: string, password: string) => Promise<string | null>;
   bootstrap: (input: BootstrapInput) => Promise<string | null>;
@@ -72,6 +88,8 @@ const AuthContext = createContext<AuthContextValue>({
   permissions: [],
   offline: false,
   notice: null,
+  accountSwitchAlert: null,
+  acknowledgeAccountSwitch: () => {},
   login: noop,
   bootstrap: noop,
   recoverAdmin: noop,
@@ -102,11 +120,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [offline, setOffline] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [accountSwitchAlert, setAccountSwitchAlert] = useState<AccountSwitchAlert | null>(null);
   const [bootNonce, setBootNonce] = useState(0);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const userRef = useRef<AuthUser | null>(user);
+  userRef.current = user;
 
   const afterSignIn = useCallback((signedIn: AuthUser) => {
+    setAccountSwitchAlert(null);
     setUser(signedIn);
     setState(signedIn.mustChangePassword ? 'mustChangePassword' : 'signedIn');
   }, []);
@@ -159,23 +181,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [afterSignIn, bootNonce, resolveSignedOutState]);
 
-  // The server rejected the refresh token (revoked, expired, deactivated): back to the sign-in screen.
+  // The server rejected the refresh token (revoked, expired, deactivated) or idle timeout fired: back to sign-in.
   useEffect(() => {
     onSessionExpired(() => {
+      const wasBooting = stateRef.current === 'booting';
       setUser(null);
       setOffline(false);
-      setNotice('Your session has ended. Please sign in again.');
+      setAccountSwitchAlert(null);
+      if (!wasBooting) {
+        setNotice('Your session has ended. Please sign in again.');
+        setState('signedOut');
+      }
+    });
+    onSessionIdleExpired(() => {
+      setUser(null);
+      setOffline(false);
+      setAccountSwitchAlert(null);
+      setNotice('Signed out due to inactivity. Please sign in again.');
       setState('signedOut');
     });
     const unsubscribe = subscribeSession((snapshot) => {
       setOffline(snapshot.offline);
-      if (snapshot.user && stateRef.current === 'signedIn') setUser(snapshot.user);
+      if (snapshot.user) {
+        if (
+          (stateRef.current === 'signedIn' || stateRef.current === 'mustChangePassword') &&
+          userRef.current &&
+          userRef.current.id !== snapshot.user.id
+        ) {
+          setAccountSwitchAlert({
+            previousUser: userRef.current,
+            currentUser: snapshot.user,
+          });
+        }
+        setUser(snapshot.user);
+        if (stateRef.current === 'signedOut') {
+          setNotice(null);
+          setState(snapshot.user.mustChangePassword ? 'mustChangePassword' : 'signedIn');
+        }
+      } else if (stateRef.current === 'signedIn' || stateRef.current === 'mustChangePassword') {
+        setUser(null);
+        setOffline(false);
+        setAccountSwitchAlert(null);
+        setState('signedOut');
+      }
     });
     return () => {
       onSessionExpired(null);
+      onSessionIdleExpired(null);
       unsubscribe();
     };
   }, []);
+
+  // Web workstation inactivity auto-logout synchronized across browser tabs.
+  useEffect(() => {
+    if (Platform?.OS !== 'web' || (state !== 'signedIn' && state !== 'mustChangePassword')) {
+      return undefined;
+    }
+    const timeoutMinutes = getWebIdleTimeoutMinutes();
+    if (timeoutMinutes <= 0) return undefined;
+
+    const monitor = createWebIdleMonitor({
+      timeoutMs: timeoutMinutes * 60_000,
+      onActivityBroadcast: broadcastActivity,
+      onIdleTimeout: () => {
+        void idleLogout();
+      },
+    });
+    const unsubRemote = subscribeRemoteActivity((ts) => {
+      monitor.recordActivity(ts, true);
+    });
+    monitor.start();
+
+    return () => {
+      unsubRemote();
+      monitor.stop();
+    };
+  }, [state]);
 
   // While working on a cached session, keep trying to reach the server so the device resumes normal operation.
   // Pauses when backgrounded to prevent wake locks and battery drain.
@@ -279,8 +360,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState('signedIn');
   }, []);
 
+  const acknowledgeAccountSwitch = useCallback(() => {
+    setAccountSwitchAlert(null);
+  }, []);
+
   const useDifferentAccount = useCallback(async () => {
     await discardLocalSession();
+    setAccountSwitchAlert(null);
     setUser(null);
     setOffline(false);
     setBootNonce((n) => n + 1);
@@ -288,6 +374,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await logoutRequest();
+    setAccountSwitchAlert(null);
     setUser(null);
     setOffline(false);
     setNotice(null);
@@ -306,6 +393,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       permissions,
       offline,
       notice,
+      accountSwitchAlert,
+      acknowledgeAccountSwitch,
       login,
       bootstrap,
       recoverAdmin,
@@ -316,7 +405,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       retry,
       can,
     }),
-    [state, user, permissions, offline, notice, login, bootstrap, recoverAdmin, changePassword, completeUnlock, useDifferentAccount, logout, retry, can],
+    [
+      state,
+      user,
+      permissions,
+      offline,
+      notice,
+      accountSwitchAlert,
+      acknowledgeAccountSwitch,
+      login,
+      bootstrap,
+      recoverAdmin,
+      changePassword,
+      completeUnlock,
+      useDifferentAccount,
+      logout,
+      retry,
+      can,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

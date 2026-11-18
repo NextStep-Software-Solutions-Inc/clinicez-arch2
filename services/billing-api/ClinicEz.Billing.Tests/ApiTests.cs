@@ -501,7 +501,7 @@ public class ApiTests
             }
         }
 
-        publicActions.Should().BeEquivalentTo(new[] { "AuthController.Login" });
+        publicActions.Should().BeEquivalentTo(new[] { "AuthController.Login", "AuthController.Refresh", "AuthController.Logout" });
         unguarded.Should().BeEmpty("every non-public action must declare the permission it needs");
     }
 }

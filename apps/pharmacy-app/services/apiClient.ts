@@ -1,9 +1,11 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { safeAwait, ApiResponse, ApiError, extractApiError } from '@shared/safe';
 import { getPharmacyApiBaseUrl } from './runtimeConfig';
-import { getValidAccessToken, tenantHeaders } from './authSession';
+import { getAccessToken, getValidAccessToken, refreshSession, tenantHeaders } from './authSession';
 
 const API_PREFIX = '/api/v1';
+
+type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
 
 export class PharmacyApiClient {
   private client: AxiosInstance;
@@ -24,6 +26,19 @@ export class PharmacyApiClient {
       }
       Object.entries(tenantHeaders()).forEach(([name, value]) => config.headers.set(name, value));
       return config;
+    });
+
+    this.client.interceptors.response.use(undefined, async (error) => {
+      const original = error?.config as RetriableConfig | undefined;
+      if (error?.response?.status === 401 && original && !original._retried) {
+        original._retried = true;
+        if (await refreshSession()) {
+          const token = getAccessToken();
+          if (token) original.headers.set('Authorization', `Bearer ${token}`);
+          return this.client.request(original);
+        }
+      }
+      throw error;
     });
   }
 

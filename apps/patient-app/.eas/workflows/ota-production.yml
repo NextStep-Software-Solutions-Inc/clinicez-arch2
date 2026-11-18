@@ -20,7 +20,12 @@ jobs:
         run: |
           REPO_ROOT=$(git rev-parse --show-toplevel)
           cd "$REPO_ROOT"
+          if [ "$(bun --version)" != "1.4.3" ]; then
+            curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.3"
+            export PATH="$HOME/.bun/bin:$PATH"
+          fi
           bun install --frozen-lockfile
+          rm -rf packages/comms-sdk/node_modules/react packages/comms-sdk/node_modules/react-dom packages/comms-sdk/node_modules/@types/react packages/comms-sdk/node_modules/@types/react-dom
           bun run --cwd apps/patient-app typecheck
           bun run --cwd apps/patient-app lint:tokens
           bun run --cwd apps/patient-app test
