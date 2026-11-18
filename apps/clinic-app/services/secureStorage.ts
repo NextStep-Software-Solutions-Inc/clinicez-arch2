@@ -1,8 +1,8 @@
 /**
- * Secret storage for session credentials (web implementation).
+ * Tab-scoped storage helper (web implementation).
  *
- * Browsers have no hardware-backed store, so the refresh token lives in `sessionStorage`: it is scoped to the tab,
- * never written to disk and is cleared when the tab closes. Native builds resolve `secureStorage.native.ts`
+ * Web refresh tokens are stored in an HttpOnly session cookie managed by `clinic-api` (shared across tabs
+ * without exposing credentials to JavaScript). Native builds resolve `secureStorage.native.ts`
  * (Keychain / Keystore via expo-secure-store).
  */
 const memory = new Map<string, string>();

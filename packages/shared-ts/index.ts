@@ -10,3 +10,4 @@ export * from './analytics';
 export * from './publicRoutes';
 export * from './options';
 export * from './allergies';
+export * from './webIdleMonitor';

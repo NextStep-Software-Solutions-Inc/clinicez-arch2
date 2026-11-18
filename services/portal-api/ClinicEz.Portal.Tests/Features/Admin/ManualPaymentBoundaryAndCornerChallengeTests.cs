@@ -626,7 +626,7 @@ public class ManualPaymentBoundaryAndCornerChallengeTests : IDisposable
     {
         const string slug = "slug-lookup-clinic";
         var (tenant, _) = await SeedTenantWithFacilityAsync(slug);
-        var paymentDate = new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc);
+        var paymentDate = DateTime.UtcNow.AddDays(-1);
         const string expectedRef = "GCASH-REF-5544332211";
         const string expectedNotes = "GCash QR code counter settlement";
 
@@ -668,7 +668,7 @@ public class ManualPaymentBoundaryAndCornerChallengeTests : IDisposable
     public async Task QueryReflection_GetBillingInfoQuery_PromotionalPayment_ReturnsCorrectReceiptAndActiveStatus()
     {
         var (tenant, _) = await SeedTenantWithFacilityAsync("promo-query-clinic");
-        var paymentDate = new DateTime(2026, 10, 15, 14, 0, 0, DateTimeKind.Utc);
+        var paymentDate = DateTime.UtcNow.AddDays(-1);
         const string promoNotes = "Free tier beta onboarding grant";
 
         var command = new RecordManualPaymentCommand(

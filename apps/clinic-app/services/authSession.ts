@@ -29,7 +29,7 @@ export interface AuthUser {
 
 export interface AuthTokens {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string | null;
   accessTokenExpiresAtUtc: string;
   refreshTokenExpiresAtUtc: string;
   user: AuthUser;
@@ -54,6 +54,82 @@ const REFRESH_KEY = 'clinicez.auth.refresh';
 const USER_KEY = 'clinicez.auth.user';
 const LAST_ONLINE_KEY = 'clinicez.auth.lastOnline';
 const EXPIRY_SKEW_MS = 30_000;
+const AUTH_CHANNEL_NAME = 'clinicez-auth';
+const REFRESH_LOCK_NAME = 'clinicez.auth.refresh';
+
+const isWeb = (): boolean => Platform.OS === 'web';
+
+type AuthBroadcastMessage =
+  | { type: 'session-refreshed'; accessToken: string; accessTokenExpiresAtUtc: string; user: AuthUser }
+  | { type: 'session-cleared'; reason?: 'logout' | 'expired' | 'idle' }
+  | { type: 'activity'; timestamp: number };
+
+let authChannel: BroadcastChannel | null = null;
+let authChannelBound = false;
+
+function handleBroadcastMessage(data: AuthBroadcastMessage | null | undefined) {
+  if (!data || typeof data !== 'object') return;
+  if (data.type === 'session-refreshed') {
+    accessToken = data.accessToken;
+    accessExpiresAt = Date.parse(data.accessTokenExpiresAtUtc) || Date.now() + 10 * 60_000;
+    user = data.user;
+    offline = false;
+    emit();
+  } else if (data.type === 'session-cleared') {
+    const hadSession = user !== null || accessToken !== null;
+    accessToken = null;
+    accessExpiresAt = 0;
+    refreshToken = null;
+    user = null;
+    offline = false;
+    emit();
+    if (hadSession) {
+      if (data.reason === 'idle') sessionIdleHandler?.();
+      else if (data.reason === 'expired') sessionExpiredHandler?.();
+    }
+  } else if (data.type === 'activity') {
+    if (typeof data.timestamp === 'number' && Number.isFinite(data.timestamp)) {
+      activityListeners.forEach((listener) => listener(data.timestamp));
+    }
+  }
+}
+
+function getAuthChannel(): BroadcastChannel | null {
+  if (!isWeb() || typeof BroadcastChannel === 'undefined') return null;
+  if (!authChannel) {
+    try {
+      authChannel = new BroadcastChannel(AUTH_CHANNEL_NAME);
+    } catch {
+      return null;
+    }
+  }
+  if (!authChannelBound && authChannel) {
+    authChannelBound = true;
+    authChannel.onmessage = (event: MessageEvent<AuthBroadcastMessage>) => {
+      handleBroadcastMessage(event?.data);
+    };
+  }
+  return authChannel;
+}
+
+function broadcastAuth(message: AuthBroadcastMessage) {
+  try {
+    getAuthChannel()?.postMessage(message);
+  } catch {
+    // Ignore channel errors (e.g. closed channel or restricted contexts)
+  }
+}
+
+/** Resets cached BroadcastChannel reference (used by unit tests). */
+export function __resetAuthChannelForTests() {
+  try {
+    authChannel?.close?.();
+  } catch {
+    // ignore
+  }
+  authChannel = null;
+  authChannelBound = false;
+}
 
 let accessToken: string | null = null;
 let accessExpiresAt = 0;
@@ -66,7 +142,10 @@ const NETWORK_RETRY_BACKOFF_MS = 15_000;
 
 type Listener = (snapshot: SessionSnapshot) => void;
 const listeners = new Set<Listener>();
+type ActivityListener = (timestamp: number) => void;
+const activityListeners = new Set<ActivityListener>();
 let sessionExpiredHandler: (() => void) | null = null;
+let sessionIdleHandler: (() => void) | null = null;
 
 function snapshot(): SessionSnapshot {
   return { user, offline };
@@ -78,8 +157,20 @@ function emit() {
 }
 
 export function subscribeSession(listener: Listener): () => void {
+  getAuthChannel();
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+export function subscribeRemoteActivity(listener: ActivityListener): () => void {
+  getAuthChannel();
+  activityListeners.add(listener);
+  return () => activityListeners.delete(listener);
+}
+
+export function broadcastActivity(timestamp: number): void {
+  if (!isWeb()) return;
+  broadcastAuth({ type: 'activity', timestamp });
 }
 
 export function getSessionSnapshot(): SessionSnapshot {
@@ -89,6 +180,11 @@ export function getSessionSnapshot(): SessionSnapshot {
 /** Called when the server rejects the refresh token (revoked, expired, reuse detected). */
 export function onSessionExpired(handler: (() => void) | null) {
   sessionExpiredHandler = handler;
+}
+
+/** Called when the web workstation logs out automatically due to inactivity. */
+export function onSessionIdleExpired(handler: (() => void) | null) {
+  sessionIdleHandler = handler;
 }
 
 export function getAccessToken(): string | null {
@@ -120,8 +216,10 @@ async function post<T>(path: string, body: unknown, authorized = false): Promise
   try {
     const response = await axios.post<ApiResponse<T>>(`${apiRoot()}${path}`, body, {
       timeout: 15000,
+      withCredentials: isWeb(),
       headers: {
         'Content-Type': 'application/json',
+        'X-Client-Platform': Platform.OS,
         ...tenantHeaders(),
         ...(authorized && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
@@ -139,16 +237,30 @@ async function persist(tokens: AuthTokens, fallbackEmail?: string | null) {
     : tokens.user;
   accessToken = tokens.accessToken;
   accessExpiresAt = Date.parse(tokens.accessTokenExpiresAtUtc) || Date.now() + 10 * 60_000;
-  refreshToken = tokens.refreshToken;
   user = normalizedUser;
   offline = false;
-  await setSecureItem(REFRESH_KEY, tokens.refreshToken);
-  await setSecureItem(USER_KEY, JSON.stringify(normalizedUser));
-  await setSecureItem(LAST_ONLINE_KEY, String(Date.now()));
+
+  if (isWeb()) {
+    // Web refresh tokens live in an HttpOnly cookie managed by clinic-api; never store them in sessionStorage.
+    refreshToken = null;
+    broadcastAuth({
+      type: 'session-refreshed',
+      accessToken: tokens.accessToken,
+      accessTokenExpiresAtUtc: tokens.accessTokenExpiresAtUtc,
+      user: normalizedUser,
+    });
+  } else {
+    refreshToken = tokens.refreshToken ?? null;
+    if (tokens.refreshToken) {
+      await setSecureItem(REFRESH_KEY, tokens.refreshToken);
+    }
+    await setSecureItem(USER_KEY, JSON.stringify(normalizedUser));
+    await setSecureItem(LAST_ONLINE_KEY, String(Date.now()));
+  }
   emit();
 }
 
-async function clearSession(notify: boolean) {
+async function clearSession(reason: 'none' | 'expired' | 'idle' = 'none') {
   accessToken = null;
   accessExpiresAt = 0;
   refreshToken = null;
@@ -157,8 +269,15 @@ async function clearSession(notify: boolean) {
   await deleteSecureItem(REFRESH_KEY);
   await deleteSecureItem(USER_KEY);
   await deleteSecureItem(LAST_ONLINE_KEY);
+  if (isWeb()) {
+    broadcastAuth({
+      type: 'session-cleared',
+      reason: reason === 'none' ? 'logout' : reason,
+    });
+  }
   emit();
-  if (notify) sessionExpiredHandler?.();
+  if (reason === 'expired') sessionExpiredHandler?.();
+  else if (reason === 'idle') sessionIdleHandler?.();
 }
 
 function deviceLabel(): string {
@@ -246,6 +365,39 @@ export async function changePassword(currentPassword: string, newPassword: strin
   return [user!, null];
 }
 
+async function executeRefresh(): Promise<boolean> {
+  if (isWeb()) {
+    // Another tab may have refreshed and broadcast a fresh access token while we waited on the Web Lock.
+    if (accessToken && Date.now() < accessExpiresAt - EXPIRY_SKEW_MS) {
+      return true;
+    }
+    const [tokens, error] = await post<AuthTokens>('/auth/refresh', {});
+    if (tokens) {
+      await persist(tokens);
+      return true;
+    }
+    if (error && error.status !== 0 && error.status >= 400 && error.status < 500) {
+      await clearSession('expired');
+    } else {
+      lastNetworkFailureAt = Date.now();
+    }
+    return false;
+  }
+
+  if (!refreshToken) return false;
+  const [tokens, error] = await post<AuthTokens>('/auth/refresh', { refreshToken });
+  if (tokens) {
+    await persist(tokens);
+    return true;
+  }
+  if (error && error.status !== 0 && error.status >= 400 && error.status < 500) {
+    await clearSession('expired');
+  } else {
+    lastNetworkFailureAt = Date.now();
+  }
+  return false;
+}
+
 /**
  * Rotates the refresh token. Returns true when a fresh access token is available.
  * A definitive rejection (401/400) ends the session; a network failure leaves it intact so the caller can retry.
@@ -253,18 +405,11 @@ export async function changePassword(currentPassword: string, newPassword: strin
 export function refreshSession(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
-    if (!refreshToken) return false;
-    const [tokens, error] = await post<AuthTokens>('/auth/refresh', { refreshToken });
-    if (tokens) {
-      await persist(tokens);
-      return true;
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+    if (isWeb() && locks?.request) {
+      return locks.request(REFRESH_LOCK_NAME, () => executeRefresh());
     }
-    if (error && error.status !== 0 && error.status >= 400 && error.status < 500) {
-      await clearSession(true);
-    } else {
-      lastNetworkFailureAt = Date.now();
-    }
-    return false;
+    return executeRefresh();
   })().finally(() => {
     refreshInFlight = null;
   });
@@ -290,6 +435,15 @@ export type RestoreOutcome =
  * instead of a password.
  */
 export async function restoreSession(): Promise<RestoreOutcome> {
+  if (isWeb()) {
+    // Web uses an HttpOnly session cookie sent automatically via withCredentials.
+    // A fresh tab has empty JS memory, so try refreshing directly (no sessionStorage token needed).
+    if (await refreshSession()) {
+      return { state: 'signedIn', user: user! };
+    }
+    return { state: 'signedOut' };
+  }
+
   const storedRefresh = await getSecureItem(REFRESH_KEY);
   const storedUser = await getSecureItem(USER_KEY);
   const storedOnline = await getSecureItem(LAST_ONLINE_KEY);
@@ -328,17 +482,35 @@ export async function resumeOnline(): Promise<boolean> {
 }
 
 export async function logout(): Promise<void> {
-  const token = refreshToken;
-  if (token) {
-    // Best effort: revoke server-side, but never block sign-out on connectivity.
-    await post('/auth/logout', { refreshToken: token });
+  if (isWeb()) {
+    // Best effort: revoke server-side cookie session, but never block sign-out on connectivity.
+    await post('/auth/logout', {});
+  } else {
+    const token = refreshToken;
+    if (token) {
+      // Best effort: revoke server-side, but never block sign-out on connectivity.
+      await post('/auth/logout', { refreshToken: token });
+    }
   }
-  await clearSession(false);
+  await clearSession('none');
+}
+
+/** Signs out all open web tabs after prolonged user inactivity. */
+export async function idleLogout(): Promise<void> {
+  if (isWeb()) {
+    await post('/auth/logout', {});
+  } else {
+    const token = refreshToken;
+    if (token) {
+      await post('/auth/logout', { refreshToken: token });
+    }
+  }
+  await clearSession('idle');
 }
 
 /** Local sign-out without contacting the server (e.g. offline lock or forgotten PIN). */
 export async function discardLocalSession(): Promise<void> {
-  await clearSession(false);
+  await clearSession('none');
 }
 
 export function hasPermission(permissions: readonly string[] | undefined, permission: string): boolean {

@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
 import Button from '../ui/Button';
+import Modal from '../ui/Modal';
+import ThemedText from '../ui/ThemedText';
 import { theme } from '../../constants/theme';
-import { AuthProvider, useAuth } from '../../context/AuthContext';
+import { AccountSwitchAlert, AuthProvider, useAuth } from '../../context/AuthContext';
 import { useConnection } from '../connection/ConnectionGate';
 import { getDeviceItem, setDeviceItem } from '../../utils/deviceStorage';
 import { isUnlockConfigured, offlineUnlockSupported } from '../../services/offlineUnlock';
@@ -33,7 +35,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 function AuthGateContent({ children }: { children: React.ReactNode }) {
-  const { state, offline, user } = useAuth();
+  const { state, offline, user, accountSwitchAlert, acknowledgeAccountSwitch, logout } = useAuth();
   const [pinPrompt, setPinPrompt] = useState(false);
   const [inviteToken, setInviteToken] = useState<string | null>(() => {
     if (typeof window !== 'undefined' && window.location?.pathname) {
@@ -115,7 +117,19 @@ function AuthGateContent({ children }: { children: React.ReactNode }) {
     case 'locked':
       return <OfflineUnlockScreen />;
     case 'mustChangePassword':
-      return <ChangePasswordScreen />;
+      return (
+        <>
+          <ChangePasswordScreen />
+          <AccountSwitchSafetyModal
+            alert={accountSwitchAlert}
+            onContinue={acknowledgeAccountSwitch}
+            onSignOut={() => {
+              acknowledgeAccountSwitch();
+              void logout();
+            }}
+          />
+        </>
+      );
     case 'signedIn':
       if (pinPrompt) {
         const finish = () => setPinPrompt(false);
@@ -132,11 +146,77 @@ function AuthGateContent({ children }: { children: React.ReactNode }) {
           />
         );
       }
-      return <>{children}</>;
+      return (
+        <>
+          <React.Fragment key={user?.id ?? 'signed-in'}>{children}</React.Fragment>
+          <AccountSwitchSafetyModal
+            alert={accountSwitchAlert}
+            onContinue={acknowledgeAccountSwitch}
+            onSignOut={() => {
+              acknowledgeAccountSwitch();
+              void logout();
+            }}
+          />
+        </>
+      );
     case 'signedOut':
     default:
       return <LoginScreen />;
   }
+}
+
+function AccountSwitchSafetyModal({
+  alert,
+  onContinue,
+  onSignOut,
+}: {
+  alert: AccountSwitchAlert | null;
+  onContinue: () => void;
+  onSignOut: () => void;
+}) {
+  if (!alert) return null;
+  const identityDetail = alert.currentUser.email || alert.currentUser.roleName || alert.currentUser.role;
+
+  return (
+    <Modal
+      visible
+      backdropDismissible={false}
+      maxWidth={460}
+      title="Active staff account changed"
+      subtitle="Another tab in this browser signed in with a different account."
+      footer={
+        <View style={styles.switchActions}>
+          <Button title="Sign out all tabs" variant="secondary" onPress={onSignOut} />
+          <Button title={`Continue as ${alert.currentUser.name}`} onPress={onContinue} />
+        </View>
+      }
+    >
+      <View style={styles.switchBody}>
+        <View style={styles.switchBanner}>
+          <ThemedText variant="smallBold" color={theme.colors.warningText}>
+            Verify the active clinician before charting or signing orders.
+          </ThemedText>
+        </View>
+        <View style={styles.switchRow}>
+          <ThemedText variant="caption" color={theme.colors.textMuted}>
+            Previous session
+          </ThemedText>
+          <ThemedText variant="body">{alert.previousUser.name}</ThemedText>
+        </View>
+        <View style={styles.switchRow}>
+          <ThemedText variant="caption" color={theme.colors.textMuted}>
+            New active session
+          </ThemedText>
+          <ThemedText variant="bodyBold">{alert.currentUser.name}</ThemedText>
+          {identityDetail ? (
+            <ThemedText variant="small" color={theme.colors.textSecondary}>
+              {identityDetail}
+            </ThemedText>
+          ) : null}
+        </View>
+      </View>
+    </Modal>
+  );
 }
 
 function UnreachableScreen() {
@@ -161,5 +241,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.background,
+  },
+  switchBody: {
+    gap: theme.spacing.md,
+  },
+  switchBanner: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.warningBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.warningBorder,
+  },
+  switchRow: {
+    gap: theme.spacing.xs,
+  },
+  switchActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: theme.spacing.sm,
   },
 });

@@ -8,6 +8,7 @@ using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.Middlewares;
 using Hangfire;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -45,6 +46,12 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0
             }));
 });
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 var app = builder.Build();
 
@@ -56,6 +63,7 @@ if (app.Environment.IsDevelopment())
 }
 
 // 4. Add middleware
+app.UseForwardedHeaders();
 app.UseCors();
 app.UseHttpsRedirection();
 app.UseExceptionHandler(); // Use our global exception handler
