@@ -1,13 +1,14 @@
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useUser } from '@clerk/expo';
 import type { NavigationState, ParamListBase } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import { AppIcon } from '@ui/Icon';
 import ClinicEzMark from '@ui/ClinicEzMark';
-import { dialog } from '@utils/dialog';
-import { useAuth } from 'contexts/AuthContext';
 import { useNotificationContext } from 'contexts/NotificationContext';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
+import { extractInitials } from '../../services/home/homeDashboardService';
 import {
   WEB_PRIMARY_NAV,
   WEB_SECONDARY_NAV,
@@ -25,16 +26,34 @@ interface WebSidebarProps {
 
 /**
  * Persistent left sidebar for the web workstation layout (>= 768px).
- * Mirrors the clinic-app workstation sidebar: brand, primary sections, secondary
- * links, then the signed-in user with sign-out.
+ * Renders brand, primary sections, secondary links, and the signed-in user summary.
+ * Sign-out lives exclusively in Settings.
  */
 export default function WebSidebar({ state, navigation, collapsed }: WebSidebarProps) {
   const theme = useAppTheme();
   const { colors, spacing, radii, sizes } = theme;
+  const { colors: ceColors, typography: ceTypography } = useClinicalEmpathyTheme();
   const { user } = useUser();
-  const { logout } = useAuth();
   const { unreadCount } = useNotificationContext();
   const active = resolveActiveSection(state);
+
+  const [localAvatarUri, setLocalAvatarUri] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const cached = window.localStorage.getItem('patient_avatar_local');
+      setLocalAvatarUri(cached || null);
+    } catch {
+      // Ignore storage errors
+    }
+  }, [user?.imageUrl]);
+
+  const avatarUrl = user?.imageUrl ?? localAvatarUri;
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [avatarUrl]);
 
   const displayName =
     user?.fullName ||
@@ -42,16 +61,7 @@ export default function WebSidebar({ state, navigation, collapsed }: WebSidebarP
     user?.primaryEmailAddress?.emailAddress?.split('@')[0] ||
     'Patient';
   const email = user?.primaryEmailAddress?.emailAddress;
-
-  const confirmSignOut = async () => {
-    const ok = await dialog.confirm({
-      title: 'Sign out?',
-      message: 'You will need to sign in again to see your records.',
-      confirmLabel: 'Sign out',
-      destructive: true,
-    });
-    if (ok) await logout();
-  };
+  const initials = useMemo(() => extractInitials(displayName), [displayName]);
 
   const renderItem = (item: WebNavItem) => {
     const isActive = active === item.key;
@@ -133,8 +143,10 @@ export default function WebSidebar({ state, navigation, collapsed }: WebSidebarP
         <ClinicEzMark size={sizes.controlMd} variant="inverted" />
         {!collapsed && (
           <View style={{ marginLeft: spacing.md }}>
-            <ThemedText variant="h3">Clinic EZ</ThemedText>
-            <ThemedText variant="caption" color="textMuted">
+            <ThemedText variant="h3" style={{ lineHeight: 20 }}>
+              Clinic EZ
+            </ThemedText>
+            <ThemedText color="textMuted" style={[ceTypography.brandSubtitle, { marginTop: 1 }]}>
               Patient Portal
             </ThemedText>
           </View>
@@ -148,23 +160,51 @@ export default function WebSidebar({ state, navigation, collapsed }: WebSidebarP
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: colors.sidebarBorder, paddingTop: spacing.md }]}>
-        <View style={[styles.user, { justifyContent: collapsed ? 'center' : 'flex-start' }]}>
+        <Pressable
+          onPress={() => navigateToSection(navigation, 'ProfileScreen')}
+          accessibilityRole="button"
+          accessibilityLabel="Open profile"
+          // @ts-expect-error react-native-web: native tooltip when the label is hidden
+          title={collapsed ? displayName : undefined}
+          style={({ pressed }) => [
+            styles.user,
+            {
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              opacity: pressed ? 0.82 : 1,
+            },
+          ]}
+        >
           <View
             style={{
               width: sizes.avatarMd,
               height: sizes.avatarMd,
               borderRadius: radii.full,
-              backgroundColor: colors.primaryLight,
+              backgroundColor: ceColors.mintAvatarBg,
+              borderColor: colors.sidebarBorder,
+              borderWidth: sizes.borderWidth,
               alignItems: 'center',
               justifyContent: 'center',
+              overflow: 'hidden',
             }}
           >
-            <ThemedText variant="bodyBold" color="primaryText">
-              {displayName.charAt(0).toUpperCase()}
-            </ThemedText>
+            {avatarUrl && !avatarError ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                onError={() => setAvatarError(true)}
+                style={{
+                  width: sizes.avatarMd,
+                  height: sizes.avatarMd,
+                  borderRadius: radii.full,
+                }}
+              />
+            ) : (
+              <ThemedText variant="smallBold" style={{ color: ceColors.mintAvatarText }}>
+                {initials}
+              </ThemedText>
+            )}
           </View>
           {!collapsed && (
-            <View style={{ flex: 1, marginLeft: spacing.md }}>
+            <View style={{ flex: 1, marginLeft: spacing.md, minWidth: 0 }}>
               <ThemedText variant="bodyBold" numberOfLines={1}>
                 {displayName}
               </ThemedText>
@@ -174,34 +214,6 @@ export default function WebSidebar({ state, navigation, collapsed }: WebSidebarP
                 </ThemedText>
               ) : null}
             </View>
-          )}
-        </View>
-        <Pressable
-          onPress={confirmSignOut}
-          accessibilityRole="button"
-          accessibilityLabel="Sign out"
-          // @ts-expect-error react-native-web: native tooltip when the label is hidden
-          title={collapsed ? 'Sign out' : undefined}
-          style={(s) => {
-            const hovered = (s as { hovered?: boolean }).hovered;
-            return [
-              styles.item,
-              {
-                marginTop: spacing.sm,
-                borderRadius: radii.md,
-                minHeight: sizes.controlMd,
-                paddingHorizontal: collapsed ? 0 : spacing.md,
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                backgroundColor: hovered ? colors.sidebarHover : 'transparent',
-              },
-            ];
-          }}
-        >
-          <AppIcon name="logout" size={sizes.iconMd} color="emergency" />
-          {!collapsed && (
-            <ThemedText variant="body" color="emergency" style={{ marginLeft: spacing.md }}>
-              Sign out
-            </ThemedText>
           )}
         </Pressable>
       </View>

@@ -43,12 +43,16 @@ public sealed class Patient : BaseEntity, ISyncable
     // PhilHealth consent
     public bool ConsentToShareInfo { get; set; }
 
+    /// <summary>JSON array of visited welcome checklist step keys (complete_profile, link_insurance, find_clinic).</summary>
+    public string WelcomeVisitedStepsJson { get; set; } = "[]";
+
     // Navigation — patient self-entry (ISyncable children)
     public ICollection<PatientGovernmentId> GovernmentIds { get; set; } = [];
     public ICollection<PatientAddress> Addresses { get; set; } = [];
     public ICollection<EmergencyContact> EmergencyContacts { get; set; } = [];
     public ICollection<PatientAllergy> Allergies { get; set; } = [];
     public ICollection<PatientMedication> Medications { get; set; } = [];
+    public ICollection<PatientMedicationLog> MedicationLogs { get; set; } = [];
     public ICollection<PatientSurgicalHistory> SurgicalHistories { get; set; } = [];
     public ICollection<PatientPastIllness> PastIllnesses { get; set; } = [];
     public ICollection<PatientChronicCondition> ChronicConditions { get; set; } = [];

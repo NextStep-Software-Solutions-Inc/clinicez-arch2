@@ -203,6 +203,13 @@ RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Services.IOrphanTenancyC
     "0 2 * * *"
 );
 
+// Daily PRC license expiration sweeper revoking expired practitioners via Interop Hub
+RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Services.IPrcExpirySweeperJob>(
+    "prc-expiry-sweeper",
+    job => job.SweepExpiredPrcLicensesAsync(CancellationToken.None),
+    "0 1 * * *"
+);
+
 // IMPORTANT: Authentication MUST run before Authorization
 app.UseAuthentication();
 app.UseAuthorization();

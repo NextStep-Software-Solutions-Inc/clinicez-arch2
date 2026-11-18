@@ -12,6 +12,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
@@ -291,8 +292,76 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
 
         msg.Should().Contain("Facility has not been granted workspace eligibility");
         msg.Should().Contain("Operating hours must be configured");
+        msg.Should().Contain("A DOH LTO number or LTO proof document is required");
         msg.Should().Contain("At least one active licensed doctor with PRC license number is required");
         msg.Should().Contain("At least one active clinic service must be published in the fee schedule");
+    }
+
+    [Fact]
+    public async Task PublishClinic_WhenUnverified_SetsPendingReviewAndEmitsFacilityVerificationRequested()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var publisher = Substitute.For<IInteropPublisher>();
+
+        await staffRepo.AddAsync(new StaffMember
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            FirstName = "Maria",
+            LastName = "Reyes",
+            Role = StaffRole.Doctor,
+            PrcLicenseNumber = "PRC-0099001",
+            IsDirectoryOptIn = true,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await servicesRepo.AddAsync(new ServiceItem
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            Code = "PED-01",
+            Name = "Well Child Checkup",
+            Category = "Pediatrics",
+            StandardPrice = 650m,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var settings = new FacilitySettings
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            ClinicName = "Pending Verification Clinic",
+            OperatingHours = "Mon-Sat 8AM-4PM",
+            LetterheadDohLto = "DOH-LTO-2026-901",
+            IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Unverified,
+            IsDirectoryPublished = false
+        };
+        await settingsRepo.AddAsync(settings, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new PublishClinicToDirectoryCommandHandler(
+            settingsRepo, staffRepo, servicesRepo, _clinicContext, uow, publisher);
+
+        // Act
+        var result = await handler.Handle(new PublishClinicToDirectoryCommand(true), CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.PendingReview);
+        settings.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.PendingReview);
+
+        publisher.Received(1).Enqueue(
+            InteropTypes.FacilityVerificationRequested,
+            Arg.Any<Party>(),
+            Arg.Is<Party>(p => p.Kind == PartyKind.ControlPlane && p.Service == InteropServices.Portal),
+            _testClinicId,
+            Arg.Is<FacilityVerificationRequestedPayload>(p => p.FacilityId == _testClinicId && p.Practitioners.Count == 1));
+        publisher.DidNotReceiveWithAnyArgs().Enqueue<FacilityCreatedEvent>(default!, default!, default!, default, default!);
     }
 
     [Fact]
@@ -414,7 +483,9 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
             ClinicId = _testClinicId,
             ClinicName = "Transactional Clinic",
             OperatingHours = "8AM-5PM",
+            LetterheadDohLto = "DOH-LTO-SEQ-01",
             IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
@@ -498,6 +569,7 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
             Role = StaffRole.Doctor,
             PrcLicenseNumber = "PRC-99001",
             Specialty = "Pediatrics",
+            IsDirectoryOptIn = true,
             IsActive = true
         }, CancellationToken.None);
 
@@ -522,12 +594,14 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
             OperatingHours = "Mon-Sat 8AM-4PM",
             LetterheadAddress = "77 Quezon Ave, QC",
             LetterheadContact = "0918-123-4567",
+            LetterheadDohLto = "DOH-LTO-PED-01",
             SpecialtyMode = "Medical",
             IsPhilHealthConfigured = true,
             IsOnlineBookingPaused = true,
             IsJoinEnabled = true,
             JoinCode = "METRO2026",
             IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
@@ -567,6 +641,9 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
                 e.IsPhilHealthAccredited == true &&
                 e.IsDirectoryPublished == true &&
                 e.IsWorkspaceEligible == true &&
+                e.IsPlatformVerified == true &&
+                e.DirectorySource == DirectorySourceKind.ClinicSelfPublish &&
+                e.ReplaceProvidersSnapshot == true &&
                 e.IsPublic == true &&
                 e.IsBookingPaused == true &&
                 e.IsJoinGated == true &&

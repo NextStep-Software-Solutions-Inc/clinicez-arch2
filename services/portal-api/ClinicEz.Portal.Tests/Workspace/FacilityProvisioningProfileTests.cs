@@ -159,20 +159,70 @@ public class FacilityProvisioningProfileTests : IDisposable
     }
 
     [Fact]
-    public async Task Provisioning_SetsIsPublicToTrue_WhenFacilityIsPatientDiscoveryEligible()
+    public async Task Provisioning_EmitsIsPublicFalse_WhenEligibleButUnverified()
     {
         var facilityId = Guid.NewGuid();
         var facility = new Facility
         {
             Id = facilityId,
             TenantId = _tenant.Id,
-            Name = "Eligible Clinic",
-            Slug = "eligible-clinic",
+            Name = "Eligible Unverified Clinic",
+            Slug = "eligible-unverified-clinic",
             FacilityType = FacilityType.Clinic,
             Status = FacilityStatus.Active,
-            IsPatientDiscoveryEligible = true
+            IsPatientDiscoveryEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Unverified
         };
         _context.Facilities.Add(facility);
+
+        await StageAsync(facilityId, FacilityType.Clinic);
+        await _context.SaveChangesAsync();
+
+        var directoryMessages = TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated);
+        Assert.Equal(2, directoryMessages.Count);
+        var directoryEvent = directoryMessages.First(m => m.To.Service == InteropServices.Patient).GetPayload<FacilityCreatedEvent>();
+        Assert.False(directoryEvent.IsPublic ?? true, "Facility with IsPatientDiscoveryEligible = true MUST remain IsPublic = false until PlatformVerificationStatus == Verified.");
+        Assert.True(directoryEvent.IsWorkspaceEligible);
+        Assert.False(directoryEvent.IsPlatformVerified ?? true);
+        Assert.Equal(PlatformVerificationStatus.Unverified, directoryEvent.PlatformVerificationStatus);
+        Assert.Equal(DirectorySourceKind.PortalControlPlane, directoryEvent.DirectorySource);
+        Assert.False(directoryEvent.ReplaceProvidersSnapshot);
+    }
+
+    [Fact]
+    public async Task Provisioning_SetsIsPublicToTrue_WhenFacilityIsEligibleAndPlatformVerified_WithoutReadingStaffMembers()
+    {
+        var facilityId = Guid.NewGuid();
+        var facility = new Facility
+        {
+            Id = facilityId,
+            TenantId = _tenant.Id,
+            Name = "Eligible Verified Clinic",
+            Slug = "eligible-verified-clinic",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Active,
+            IsPatientDiscoveryEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified
+        };
+        var member = new WorkspaceMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenant.Id,
+            Email = "doc@metro.ph",
+            FullName = "Dr. Workspace Staff",
+            Status = MemberStatus.Active
+        };
+        var staff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenant.Id,
+            WorkspaceMemberId = member.Id,
+            FacilityId = facilityId,
+            Role = "Doctor"
+        };
+        _context.Facilities.Add(facility);
+        _context.WorkspaceMembers.Add(member);
+        _context.StaffMembers.Add(staff);
 
         await StageAsync(facilityId, FacilityType.Clinic);
         await _context.SaveChangesAsync();
@@ -182,8 +232,13 @@ public class FacilityProvisioningProfileTests : IDisposable
         Assert.Contains(directoryMessages, m => m.To.Kind == PartyKind.ControlPlane && m.To.Service == InteropServices.Patient);
         Assert.Contains(directoryMessages, m => m.To.Kind == PartyKind.Facility && m.To.FacilityId == facilityId.ToString());
         var directoryEvent = directoryMessages.First(m => m.To.Service == InteropServices.Patient).GetPayload<FacilityCreatedEvent>();
-        Assert.True(directoryEvent.IsPublic, "Facility with IsPatientDiscoveryEligible = true MUST have IsPublic = true.");
+        Assert.True(directoryEvent.IsPublic, "Facility with IsPatientDiscoveryEligible = true and PlatformVerificationStatus = Verified MUST have IsPublic = true.");
         Assert.True(directoryEvent.IsWorkspaceEligible);
+        Assert.True(directoryEvent.IsPlatformVerified);
+        Assert.Equal(PlatformVerificationStatus.Verified, directoryEvent.PlatformVerificationStatus);
+        Assert.Equal(DirectorySourceKind.PortalControlPlane, directoryEvent.DirectorySource);
+        Assert.False(directoryEvent.ReplaceProvidersSnapshot);
+        Assert.Null(directoryEvent.Providers);
     }
 }
 

@@ -73,38 +73,11 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
                 effectiveStatus = staff.IsActive ? StaffAccountStatus.Active : StaffAccountStatus.Suspended;
             }
 
-            return new StaffMemberDto(
-                staff.Id,
-                staff.TenantId,
-                staff.ClinicId,
-                staff.ClinicRoleId,
+            return StaffMemberDto.FromEntity(
+                staff,
                 staff.ClinicRole?.Name,
-                staff.FirstName,
-                staff.LastName,
-                staff.MiddleName,
-                staff.Title,
-                staff.Role,
-                staff.Email,
-                staff.PhoneNumber,
-                staff.PrcLicenseNumber,
-                staff.PtrNumber,
-                staff.S2LicenseNumber,
-                staff.Specialty,
-                staff.IsActive,
-                staff.CreatedAt,
-                HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-                MustChangePassword: staff.MustChangePassword,
-                PhilHealthPan: staff.PhilHealthPan,
-                AssignedRoomIds: roomIds,
-                AssignedRoomNames: roomNames,
-                SignatureSpecimen: staff.SignatureSpecimen,
-                DefaultSignatureMode: staff.DefaultSignatureMode,
-                Status: effectiveStatus,
-                InvitationToken: staff.InvitationToken,
-                InvitationExpiresAt: staff.InvitationExpiresAt,
-                InviteAcceptedAt: staff.InviteAcceptedAt,
-                PreferencesJson: staff.PreferencesJson
-            );
+                roomNames,
+                statusOverride: effectiveStatus);
         }).ToList();
     }
 }
@@ -155,36 +128,10 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
             effectiveStatus = staff.IsActive ? StaffAccountStatus.Active : StaffAccountStatus.Suspended;
         }
 
-        return new StaffMemberDto(
-            staff.Id,
-            staff.TenantId,
-            staff.ClinicId,
-            staff.ClinicRoleId,
+        return StaffMemberDto.FromEntity(
+            staff,
             staff.ClinicRole?.Name,
-            staff.FirstName,
-            staff.LastName,
-            staff.MiddleName,
-            staff.Title,
-            staff.Role,
-            staff.Email,
-            staff.PhoneNumber,
-            staff.PrcLicenseNumber,
-            staff.PtrNumber,
-            staff.S2LicenseNumber,
-            staff.Specialty,
-            staff.IsActive,
-            staff.CreatedAt,
-            HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-            MustChangePassword: staff.MustChangePassword,
-            PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomIds: roomIds,
-            AssignedRoomNames: roomNames,
-            SignatureSpecimen: staff.SignatureSpecimen,
-            DefaultSignatureMode: staff.DefaultSignatureMode,
-            Status: effectiveStatus,
-            InvitationToken: staff.InvitationToken,
-            InvitationExpiresAt: staff.InvitationExpiresAt,
-            InviteAcceptedAt: staff.InviteAcceptedAt,
-            PreferencesJson: staff.PreferencesJson);
+            roomNames,
+            statusOverride: effectiveStatus);
     }
 }

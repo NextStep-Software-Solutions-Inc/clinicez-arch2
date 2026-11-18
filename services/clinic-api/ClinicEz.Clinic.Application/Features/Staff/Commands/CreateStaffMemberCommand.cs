@@ -7,6 +7,7 @@ using ClinicEz.Clinic.Application.Features.Staff.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using MediatR;
@@ -40,7 +41,13 @@ public sealed record CreateStaffMemberCommand(
     string? PhilHealthPan = null,
     IReadOnlyList<Guid>? AssignedRoomIds = null,
     string? SignatureSpecimen = null,
-    SignatureMode? DefaultSignatureMode = null) : IRequest<StaffMemberDto>;
+    SignatureMode? DefaultSignatureMode = null,
+    bool IsDirectoryOptIn = false,
+    DateOnly? PrcExpiryDate = null,
+    string? PrcEvidenceObjectKey = null,
+    string? VerificationContact = null,
+    string? PublicBio = null,
+    string? AvatarUrl = null) : IRequest<StaffMemberDto>;
 
 public sealed class CreateStaffMemberCommandValidator : AbstractValidator<CreateStaffMemberCommand>
 {
@@ -56,6 +63,30 @@ public sealed class CreateStaffMemberCommandValidator : AbstractValidator<Create
             RuleFor(x => x.PrcLicenseNumber)
                 .NotEmpty()
                 .WithMessage("PRC License Number is mandatory for Doctors.");
+        });
+
+        When(x => x.IsDirectoryOptIn, () =>
+        {
+            RuleFor(x => x.Role)
+                .Must(ClinicianDirectoryValidationHelper.IsClinicianRole)
+                .WithMessage("Only Doctors and Nurses can opt into the public directory.");
+
+            RuleFor(x => x.PrcLicenseNumber)
+                .Must(PractitionerIdentity.IsValidPrcFormat)
+                .WithMessage("A valid PRC license number is required for directory verification.");
+
+            RuleFor(x => x.PrcExpiryDate)
+                .Must(d => d.HasValue && d.Value >= DateOnly.FromDateTime(DateTime.UtcNow))
+                .WithMessage("A valid, non-expired PRC expiry date is required for directory verification.");
+
+            RuleFor(x => x.PrcEvidenceObjectKey)
+                .NotEmpty()
+                .WithMessage("PRC proof document must be uploaded before opting into directory verification.");
+
+            RuleFor(x => x.VerificationContact)
+                .NotEmpty()
+                .MaximumLength(255)
+                .WithMessage("A practitioner verification contact is required for directory verification.");
         });
 
         When(x => !string.IsNullOrEmpty(x.PhilHealthPan), () =>
@@ -153,6 +184,14 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         {
             throw new ValidationException("Facility license has expired. The clinic is operating in Grace Read-Only mode. Staff management is locked.");
         }
+
+        ClinicianDirectoryValidationHelper.ValidateOptInRequirements(
+            request.Role,
+            request.IsDirectoryOptIn,
+            request.PrcLicenseNumber,
+            request.PrcExpiryDate,
+            request.PrcEvidenceObjectKey,
+            request.VerificationContact);
 
         var normalizedEmail = StaffEmailUniquenessHelper.NormalizeEmail(request.Email);
 
@@ -309,6 +348,12 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             S2LicenseNumber = request.S2LicenseNumber?.Trim(),
             Specialty = request.Specialty?.Trim(),
             PhilHealthPan = request.PhilHealthPan?.Trim(),
+            IsDirectoryOptIn = request.IsDirectoryOptIn,
+            PrcExpiryDate = request.PrcExpiryDate,
+            PrcEvidenceObjectKey = string.IsNullOrWhiteSpace(request.PrcEvidenceObjectKey) ? null : request.PrcEvidenceObjectKey.Trim(),
+            VerificationContact = string.IsNullOrWhiteSpace(request.VerificationContact) ? null : request.VerificationContact.Trim(),
+            PublicBio = string.IsNullOrWhiteSpace(request.PublicBio) ? null : request.PublicBio.Trim(),
+            AvatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl.Trim(),
             SignatureSpecimen = request.SignatureSpecimen,
             DefaultSignatureMode = request.DefaultSignatureMode ?? SignatureMode.ESignatureSpecimen,
             IsActive = true,
@@ -350,37 +395,12 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             throw new ValidationException(StaffEmailUniquenessHelper.DuplicateStaffEmailMessage);
         }
 
-        return new StaffMemberDto(
-            staff.Id,
-            staff.TenantId,
-            staff.ClinicId,
-            staff.ClinicRoleId,
+        return StaffMemberDto.FromEntity(
+            staff,
             assignedRoleName,
-            staff.FirstName,
-            staff.LastName,
-            staff.MiddleName,
-            staff.Title,
-            staff.Role,
-            staff.Email,
-            staff.PhoneNumber,
-            staff.PrcLicenseNumber,
-            staff.PtrNumber,
-            staff.S2LicenseNumber,
-            staff.Specialty,
-            staff.IsActive,
-            staff.CreatedAt,
-            HasCredentials: passwordHash != null,
-            MustChangePassword: mustChangePassword,
-            TemporaryPassword: returnedTempPassword,
-            PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomIds: staff.GetAssignedRoomIds(),
-            AssignedRoomNames: assignedRoomNames,
-            SignatureSpecimen: staff.SignatureSpecimen,
-            DefaultSignatureMode: staff.DefaultSignatureMode,
-            Status: staff.Status,
-            InvitationToken: staff.InvitationToken,
-            InvitationExpiresAt: staff.InvitationExpiresAt,
-            InviteAcceptedAt: staff.InviteAcceptedAt,
-            InviteUrl: inviteUrl);
+            assignedRoomNames,
+            hasCredentials: passwordHash != null,
+            temporaryPassword: returnedTempPassword,
+            inviteUrl: inviteUrl);
     }
 }

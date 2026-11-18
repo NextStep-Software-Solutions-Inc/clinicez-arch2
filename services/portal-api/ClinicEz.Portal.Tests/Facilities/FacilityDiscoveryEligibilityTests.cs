@@ -69,21 +69,38 @@ public class FacilityDiscoveryEligibilityTests : IDisposable
         Assert.NotNull(facilityInDb);
         Assert.True(facilityInDb.IsPatientDiscoveryEligible);
 
-        // Verify dual outbox dispatch
+        // Verify dual outbox dispatch: unverified facility stays IsPublic = false even when workspace-eligible
         var outboxMessages = TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated);
         Assert.Equal(2, outboxMessages.Count);
 
         var patientMsg = outboxMessages.Single(m => m.To.Kind == PartyKind.ControlPlane && m.To.Service == InteropServices.Patient);
         var patientPayload = patientMsg.GetPayload<FacilityCreatedEvent>();
-        Assert.True(patientPayload.IsPublic);
+        Assert.False(patientPayload.IsPublic ?? true);
+        Assert.False(patientPayload.IsPlatformVerified ?? true);
         Assert.True(patientPayload.IsWorkspaceEligible);
 
         var facilityMsg = outboxMessages.Single(m => m.To.Kind == PartyKind.Facility && m.To.FacilityId == _facilityId.ToString());
         Assert.Equal(_tenantId.ToString(), facilityMsg.To.TenantId);
         Assert.Equal(FacilityType.Clinic, facilityMsg.To.FacilityType);
         var facilityPayload = facilityMsg.GetPayload<FacilityCreatedEvent>();
-        Assert.True(facilityPayload.IsPublic);
+        Assert.False(facilityPayload.IsPublic ?? true);
         Assert.True(facilityPayload.IsWorkspaceEligible);
+
+        // Once platform-verified, enabling discovery eligibility emits IsPublic = true
+        facilityInDb.PlatformVerificationStatus = PlatformVerificationStatus.Verified;
+        _context.InteropOutbox.RemoveRange(_context.InteropOutbox);
+        await _context.SaveChangesAsync();
+
+        await handler.Handle(command, CancellationToken.None);
+        var verifiedOutbox = TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated);
+        Assert.Equal(2, verifiedOutbox.Count);
+        Assert.All(verifiedOutbox, m =>
+        {
+            var p = m.GetPayload<FacilityCreatedEvent>();
+            Assert.True(p.IsPublic);
+            Assert.True(p.IsPlatformVerified);
+            Assert.True(p.IsWorkspaceEligible);
+        });
     }
 
     [Fact]

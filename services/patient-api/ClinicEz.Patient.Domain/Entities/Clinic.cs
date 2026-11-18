@@ -17,6 +17,7 @@ public sealed class Clinic
     public string? Address { get; set; }
     public bool IsWorkspaceEligible { get; set; } = false;
     public bool IsDirectoryPublished { get; set; } = false;
+    public bool IsPlatformVerified { get; set; } = false;
     public bool IsPublic { get; set; } = false;
     public bool SupportsAppointments { get; set; } = true;
     public string? OperatingHours { get; set; }
@@ -53,8 +54,14 @@ public sealed class Clinic
         SyncPublicStatus();
     }
 
+    public void SetPlatformVerified(bool isVerified)
+    {
+        IsPlatformVerified = isVerified;
+        SyncPublicStatus();
+    }
+
     public void SyncPublicStatus()
     {
-        IsPublic = IsWorkspaceEligible && IsDirectoryPublished;
+        IsPublic = IsWorkspaceEligible && IsDirectoryPublished && IsPlatformVerified;
     }
 }

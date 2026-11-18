@@ -684,8 +684,10 @@ public class ChallengerMaEmpiricalTests
             ClinicId = _clinicId,
             ClinicName = "Test Healthcare Hub",
             OperatingHours = "8:00 AM - 5:00 PM Mon-Fri",
+            LetterheadDohLto = "DOH-LTO-2026-030",
             SpecialtyMode = specialtyMode!,
             IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);

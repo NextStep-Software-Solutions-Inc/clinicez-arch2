@@ -1,9 +1,16 @@
 using ClinicEz.Portal.Application.Features.Admin.Queries;
 using ClinicEz.Portal.Application.Features.Admin.Services;
+using ClinicEz.Portal.Application.Features.DirectoryVerification;
 using ClinicEz.Portal.Application.Features.Hub;
+using ClinicEz.Portal.Application.Features.PublicUploads;
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Security.Claims;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Api.Abstractions;
 using ClinicEz.Portal.Application.Features.Admin.Commands;
@@ -14,6 +21,7 @@ using ClinicEz.Portal.Application.Features.Entitlements;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -602,8 +610,260 @@ public class FacilityEndpoints : IEndpoint
         .WithName("SetFacilityDiscoveryEligibility")
         .WithDescription("Sets master patient app directory discovery eligibility for a facility (Workspace Owner or Admin only).")
         .WithTags("Facilities");
+
+        // 9. Get platform directory verification status and latest submission summary for a facility
+        app.MapGet("/facilities/{id:guid}/verification-status", async (
+            Guid id,
+            string? tenantSlug,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            CancellationToken ct) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
+
+            var tenant = await ResolveTenantForFacilityAsync(context, id, tenantSlug, ct);
+            if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isStaff = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active, ct);
+            if (!isOwner && !isStaff) return Results.Forbid();
+
+            var facility = await context.Facilities
+                .AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Id == id && f.TenantId == tenant.Id && !f.IsDeleted, ct);
+            if (facility == null) return Results.NotFound(new { Message = "Facility not found." });
+
+            var latestRequest = await context.FacilityVerificationRequests
+                .AsNoTracking()
+                .Where(r => r.FacilityId == facility.Id && !r.IsDeleted)
+                .OrderByDescending(r => r.SubmissionNumber)
+                .ThenByDescending(r => r.SubmittedAtUtc)
+                .FirstOrDefaultAsync(ct);
+
+            var practitionerRequests = latestRequest == null
+                ? new List<object>()
+                : (await context.PractitionerVerificationRequests
+                    .AsNoTracking()
+                    .Where(p => p.FacilityVerificationRequestId == latestRequest.Id && !p.IsDeleted)
+                    .OrderBy(p => p.SubmittedAtUtc)
+                    .ToListAsync(ct))
+                    .Select(p =>
+                    {
+                        var snap = DirectoryVerificationHelper.DeserializePractitionerSnapshot(p.SubmittedSnapshotJson);
+                        return (object)new
+                        {
+                            requestId = p.Id,
+                            clinicStaffMemberId = p.ClinicStaffMemberId,
+                            practitionerId = p.PractitionerId,
+                            name = snap is null
+                                ? p.SubmittedPrcLicenseNo
+                                : DirectoryVerificationHelper.FormatDisplayName(snap.Title, snap.FirstName, snap.LastName),
+                            professionKind = p.ProfessionKind,
+                            normalizedPrcLicenseNo = p.NormalizedPrcLicenseNo,
+                            status = p.Status,
+                            reviewerNotes = p.ReviewerNotes
+                        };
+                    })
+                    .ToList();
+
+            return Results.Ok(new
+            {
+                facilityId = facility.Id,
+                platformVerificationStatus = facility.PlatformVerificationStatus,
+                isPatientDiscoveryEligible = facility.IsPatientDiscoveryEligible,
+                isPlatformVerified = facility.PlatformVerificationStatus == PlatformVerificationStatus.Verified,
+                ltoEvidenceObjectKey = facility.LtoEvidenceObjectKey,
+                latestVerificationRequestId = facility.LatestVerificationRequestId,
+                verifiedAtUtc = facility.VerifiedAtUtc,
+                rejectionReason = facility.RejectionReason,
+                latestRequest = latestRequest == null ? null : new
+                {
+                    id = latestRequest.Id,
+                    submissionNumber = latestRequest.SubmissionNumber,
+                    requestKind = latestRequest.RequestKind,
+                    status = latestRequest.Status,
+                    submittedAtUtc = latestRequest.SubmittedAtUtc,
+                    reviewedAtUtc = latestRequest.ReviewedAtUtc,
+                    reviewerNotes = latestRequest.ReviewerNotes,
+                    withdrawnAtUtc = latestRequest.WithdrawnAtUtc,
+                    withdrawalReason = latestRequest.WithdrawalReason
+                },
+                practitioners = practitionerRequests
+            });
+        })
+        .RequireAuthorization()
+        .WithName("GetFacilityVerificationStatus")
+        .WithDescription("Returns the platform directory verification status, latest verification request, and practitioner statuses for a facility.")
+        .WithTags("Facilities");
+
+        // 10. Upload or attach DOH LTO verification proof for a facility
+        app.MapPost("/facilities/{id:guid}/lto-proof", async (
+            Guid id,
+            string? tenantSlug,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            IPortalEvidenceStorageService storage,
+            CancellationToken ct) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
+
+            string? resolvedTenantSlug = tenantSlug;
+            string? explicitObjectKey = null;
+            IFormFile? uploadedFile = null;
+
+            if (httpContext.Request.HasFormContentType)
+            {
+                const int maxBytes = 5 * 1024 * 1024;
+                const long maxBodyBytes = maxBytes + (64 * 1024);
+
+                var sizeFeature = httpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
+                if (sizeFeature is { IsReadOnly: false }) sizeFeature.MaxRequestBodySize = maxBodyBytes;
+                if (httpContext.Request.ContentLength > maxBodyBytes)
+                    return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+
+                IFormCollection form;
+                try
+                {
+                    form = await httpContext.Request.ReadFormAsync(ct);
+                }
+                catch (Exception ex) when (ex is BadHttpRequestException or InvalidDataException)
+                {
+                    return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+                }
+
+                resolvedTenantSlug ??= form["tenantSlug"].FirstOrDefault();
+                uploadedFile = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
+                if (uploadedFile == null || uploadedFile.Length == 0)
+                    return Results.BadRequest(new { Message = "Attach the DOH LTO proof file (PDF, JPEG, or PNG)." });
+                if (uploadedFile.Length > maxBytes)
+                    return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            }
+            else if (httpContext.Request.ContentLength != 0 && httpContext.Request.HasJsonContentType())
+            {
+                UploadLtoProofJsonRequest? jsonBody;
+                try
+                {
+                    jsonBody = await httpContext.Request.ReadFromJsonAsync<UploadLtoProofJsonRequest>(cancellationToken: ct);
+                }
+                catch (JsonException)
+                {
+                    return Results.BadRequest(new { Message = "Invalid JSON payload." });
+                }
+
+                resolvedTenantSlug ??= jsonBody?.TenantSlug;
+                explicitObjectKey = jsonBody?.LtoEvidenceObjectKey ?? jsonBody?.ObjectKey;
+            }
+            else
+            {
+                return Results.BadRequest(new { Message = "Upload a PDF, JPEG, or PNG file or supply ltoEvidenceObjectKey." });
+            }
+
+            var tenant = await ResolveTenantForFacilityAsync(context, id, resolvedTenantSlug, ct);
+            if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active &&
+                (s.Role == WorkspaceMemberRole.Admin || context.StaffMembers.Any(p => p.WorkspaceMemberId == s.Id && p.Role == "Facility Administrator")), ct);
+
+            if (!isOwner && !isAdmin) return Results.Forbid();
+
+            var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == id && f.TenantId == tenant.Id && !f.IsDeleted, ct);
+            if (facility == null) return Results.NotFound(new { Message = "Facility not found." });
+
+            string objectKey;
+            if (uploadedFile != null)
+            {
+                using var buffer = new MemoryStream((int)uploadedFile.Length);
+                await using (var stream = uploadedFile.OpenReadStream())
+                {
+                    await stream.CopyToAsync(buffer, ct);
+                }
+                var bytes = buffer.ToArray();
+                var uploadOptions = new LabUploadOptions();
+                var verdict = LabUploadValidator.Validate(uploadOptions, uploadedFile.ContentType, bytes);
+                switch (verdict)
+                {
+                    case LabUploadVerdict.UnsupportedType:
+                        return Results.StatusCode(StatusCodes.Status415UnsupportedMediaType);
+                    case LabUploadVerdict.TooLarge:
+                        return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+                    case LabUploadVerdict.EmptyFile or LabUploadVerdict.ContentMismatch:
+                        return Results.BadRequest(new { Message = "The file is empty or does not match its declared type." });
+                }
+
+                var normalizedType = LabUploadValidator.Normalize(uploadedFile.ContentType)!;
+                objectKey = await storage.SaveLtoProofAsync(tenant.Id, facility.Id, normalizedType, bytes, ct);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(explicitObjectKey)
+                    || explicitObjectKey.Length > 512
+                    || explicitObjectKey.Contains("..")
+                    || explicitObjectKey.Contains('\0'))
+                {
+                    return Results.BadRequest(new { Message = "A valid LTO evidence object key is required." });
+                }
+
+                objectKey = explicitObjectKey.Trim();
+            }
+
+            var previousKey = facility.LtoEvidenceObjectKey;
+            facility.LtoEvidenceObjectKey = objectKey;
+            facility.UpdatedAt = DateTime.UtcNow;
+
+            DirectoryVerificationHelper.StageAuditEntry(
+                context,
+                tenant.Id,
+                clerkUserId,
+                httpContext.User.FindFirst("name")?.Value ?? clerkUserId,
+                isOwner ? "Owner" : "Admin",
+                "lto-proof-uploaded",
+                new { facilityId = facility.Id, oldKey = previousKey, newKey = objectKey });
+
+            await context.SaveChangesAsync(ct);
+
+            return Results.Ok(new
+            {
+                objectKey,
+                facilityId = facility.Id,
+                ltoEvidenceObjectKey = objectKey
+            });
+        })
+        .RequireAuthorization()
+        .DisableAntiforgery()
+        .WithName("UploadFacilityLtoProof")
+        .WithDescription("Uploads or records DOH License to Operate (LTO) proof for facility directory verification.")
+        .WithTags("Facilities");
+    }
+
+    private static async Task<Tenant?> ResolveTenantForFacilityAsync(
+        IApplicationDbContext context,
+        Guid facilityId,
+        string? tenantSlug,
+        CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(tenantSlug))
+        {
+            return await context.Tenants.FirstOrDefaultAsync(
+                t => t.TenantSlug.ToLower() == tenantSlug.ToLower() || t.Id.ToString() == tenantSlug,
+                ct);
+        }
+
+        return await context.Facilities
+            .Where(f => f.Id == facilityId && !f.IsDeleted)
+            .Select(f => f.Tenant)
+            .FirstOrDefaultAsync(ct);
     }
 }
+
+public record UploadLtoProofJsonRequest(
+    string? ObjectKey = null,
+    string? LtoEvidenceObjectKey = null,
+    string? TenantSlug = null);
 
 public record UpdateFacilityRequest(string TenantSlug, string Name, ClinicEz.Portal.Domain.Entities.FacilityStatus? Status = null, string? Slug = null);
 

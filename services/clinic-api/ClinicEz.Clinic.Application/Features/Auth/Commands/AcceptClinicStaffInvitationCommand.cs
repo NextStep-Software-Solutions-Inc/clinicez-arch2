@@ -128,37 +128,9 @@ public sealed class AcceptClinicStaffInvitationCommandHandler : IRequestHandler<
 
         _accessCache?.Invalidate(staff.Id);
 
-        return new StaffMemberDto(
-            staff.Id,
-            staff.TenantId,
-            staff.ClinicId,
-            staff.ClinicRoleId,
+        return StaffMemberDto.FromEntity(
+            staff,
             staff.ClinicRole?.Name,
-            staff.FirstName,
-            staff.LastName,
-            staff.MiddleName,
-            staff.Title,
-            staff.Role,
-            staff.Email,
-            staff.PhoneNumber,
-            staff.PrcLicenseNumber,
-            staff.PtrNumber,
-            staff.S2LicenseNumber,
-            staff.Specialty,
-            staff.IsActive,
-            staff.CreatedAt,
-            HasCredentials: true,
-            MustChangePassword: false,
-            TemporaryPassword: null,
-            PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomIds: staff.GetAssignedRoomIds(),
-            AssignedRoomNames: null,
-            SignatureSpecimen: staff.SignatureSpecimen,
-            DefaultSignatureMode: staff.DefaultSignatureMode,
-            Status: staff.Status,
-            InvitationToken: staff.InvitationToken,
-            InvitationExpiresAt: staff.InvitationExpiresAt,
-            InviteAcceptedAt: staff.InviteAcceptedAt,
-            InviteUrl: null);
+            hasCredentials: true);
     }
 }

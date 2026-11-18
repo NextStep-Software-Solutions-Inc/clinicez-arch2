@@ -106,6 +106,20 @@ public static class AuditRequestMetadataRegistry
             // Operations & Admin
             case "UpdateClinicSettingsCommand":
                 return (ClinicAuditCategories.Operations, "operations.settings.updated", ClinicAuditSeverities.Urgent, "FacilitySettings", "Updated clinic profile, facility details, or queue config");
+            case "PublishClinicToDirectoryCommand":
+                return (ClinicAuditCategories.Operations, "operations.directory_publishing.updated", ClinicAuditSeverities.Urgent, "FacilitySettings", "Updated clinic public directory publishing state");
+            case "WithdrawFacilityVerificationCommand":
+                return (ClinicAuditCategories.Operations, "operations.facility_verification.withdrawn", ClinicAuditSeverities.Urgent, "FacilitySettings", "Withdrew clinic facility directory verification submission");
+            case "UploadLtoProofCommand":
+                return (ClinicAuditCategories.Operations, "operations.lto_proof.uploaded", ClinicAuditSeverities.Routine, "FacilitySettings", "Uploaded DOH LTO evidence document");
+            case "ToggleOnlineBookingPauseCommand":
+                return (ClinicAuditCategories.Operations, "operations.booking_pause.updated", ClinicAuditSeverities.Routine, "FacilitySettings", "Updated online booking pause state");
+            case "UploadStaffPrcProofCommand":
+                return (ClinicAuditCategories.Security, "security.practitioner_prc_proof.uploaded", ClinicAuditSeverities.Routine, "StaffMember", "Uploaded practitioner PRC proof evidence document");
+            case "SubmitPractitionerVerificationCommand":
+                return (ClinicAuditCategories.Security, "security.practitioner_verification.submitted", ClinicAuditSeverities.Urgent, "StaffMember", "Submitted practitioner directory verification request");
+            case "WithdrawPractitionerVerificationCommand":
+                return (ClinicAuditCategories.Security, "security.practitioner_verification.withdrawn", ClinicAuditSeverities.Urgent, "StaffMember", "Withdrew practitioner directory verification");
             case "CreateClinicRoomCommand":
                 return (ClinicAuditCategories.Operations, "operations.room.created", ClinicAuditSeverities.Routine, "Room", "Created new clinic consultation room or station");
             case "UpdateClinicRoomCommand":

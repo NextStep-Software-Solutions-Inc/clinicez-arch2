@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, type ViewStyle } from 'react-native';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 import ClinicEzMark, { type ClinicEzMarkProps } from './ClinicEzMark';
 import ThemedText from './ThemedText';
 
@@ -20,6 +21,7 @@ export default function ClinicEzLogo({
   style,
 }: ClinicEzLogoProps) {
   const { spacing } = useAppTheme();
+  const { typography: ceTypography } = useClinicalEmpathyTheme();
 
   return (
     <View style={[styles.container, style]}>
@@ -30,7 +32,7 @@ export default function ClinicEzLogo({
             Clinic EZ
           </ThemedText>
           {subtitle ? (
-            <ThemedText variant="captionBold" color="primary" style={styles.subtitle}>
+            <ThemedText color="primary" style={[ceTypography.brandSubtitle, styles.subtitle]}>
               {subtitle}
             </ThemedText>
           ) : null}
@@ -49,11 +51,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   brandTitle: {
+    lineHeight: 21,
     letterSpacing: -0.5,
     fontWeight: '700',
   },
   subtitle: {
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+    marginTop: 1,
   },
 });

@@ -338,6 +338,7 @@ public class Challenger2M1AdversarialTests : IDisposable
     {
         var publisher = TestSupport.ProvisioningPublisher(_context);
         _facility.IsPatientDiscoveryEligible = true;
+        _facility.PlatformVerificationStatus = PlatformVerificationStatus.Verified;
         await _context.SaveChangesAsync();
 
         await publisher.StageDirectoryUpdateAsync(_tenant, _facility, CancellationToken.None);

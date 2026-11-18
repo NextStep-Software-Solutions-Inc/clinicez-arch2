@@ -6,6 +6,7 @@ export * from './emergencyContacts';
 export * from './patientHealthcareProviders';
 export * from './patientAllergies';
 export * from './patientMedications';
+export * from './medicationLogs';
 export * from './patientSurgicalHistory';
 export * from './patientPastIllnesses';
 export * from './patientChronicConditions';

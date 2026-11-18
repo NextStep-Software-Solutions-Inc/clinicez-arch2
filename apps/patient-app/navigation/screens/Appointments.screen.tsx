@@ -1,32 +1,49 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState, useEffect } from 'react';
+import {
+  Animated,
+  Linking,
+  Platform,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { useNetInfo } from '@react-native-community/netinfo';
-import { format, isToday, isFuture, isPast, parseISO } from 'date-fns';
+import { useAuth as useClerkAuth, useUser } from '@clerk/expo';
+import { isToday, isFuture, isPast, parseISO } from 'date-fns';
 import { and, eq, desc } from 'drizzle-orm';
-import { useAuth as useClerkAuth } from '@clerk/expo';
-import ThemedText from '../../components/ui/ThemedText';
-import ThemedView from '../../components/ui/ThemedView';
-import EmptyState from '../../components/ui/EmptyState';
 import { SkeletonCard } from '../../components/ui/Skeleton';
-import { AppIcon } from '../../components/ui/Icon';
 import { ActiveSearchBanner, SearchModal } from '../../components/ui/SearchModal';
+import { AppIcon } from '../../components/ui/Icon';
 import BottomTabsHeaderRight from '../../components/BottomTabsHeaderRight';
-import AppointmentCard from '../../components/appointments/AppointmentCard';
-import SegmentedControl from '../../components/appointments/SegmentedControl';
-import OfflineBanner from '../../components/appointments/OfflineBanner';
-import { usePersistedTab } from '../../hooks/usePersistedTab';
-import { useAppTheme } from '../../contexts/ThemeContext';
+import HomeHeader from '../../components/home/HomeHeader';
+import HomeOfflinePillBanner from '../../components/home/HomeOfflinePillBanner';
+import AppointmentsFilterBar, {
+  type AppointmentFilterTab,
+} from '../../components/appointments/AppointmentsFilterBar';
+import UpcomingAppointmentCard from '../../components/appointments/UpcomingAppointmentCard';
+import PastAppointmentCard from '../../components/appointments/PastAppointmentCard';
+import EmptyAppointmentsView, {
+  type SuggestedCareServiceItem,
+} from '../../components/appointments/EmptyAppointmentsView';
+import { useNotificationContext } from '../../contexts/NotificationContext';
+import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 import { useContentInsets } from '../../hooks/useContentInsets';
+import { useNetworkOnline } from '../../hooks/useNetworkOnline';
 import { usePatientId } from '../../hooks/usePatientId';
 import { db } from '../../db/index';
 import { bookingDrafts } from '../../db/schema/bookingDrafts';
 import { clinics as clinicsTable } from '../../db/schema/clinics';
-import { fetchAppointments, getCachedAppointmentsWithLocalBookings } from '../../services/appointments/appointmentsService';
+import { patients as patientsTable } from '../../db/schema/patients';
+import { notifications as notificationsTable } from '../../db/schema/notifications';
+import {
+  fetchAppointments,
+  getCachedAppointmentsWithLocalBookings,
+} from '../../services/appointments/appointmentsService';
 import type { AppointmentItem } from '../../services/appointments/types';
-import { dialog } from '../../utils/dialog';
-
-type Segment = 0 | 1;
+import { queryDirectorySearchCatalog } from '../../services/search/directorySearchService';
 
 interface DraftSummary {
   id: string;
@@ -37,101 +54,14 @@ interface DraftSummary {
   updatedAt: Date;
 }
 
-function DraftCard({
-  draft,
-  onContinue,
-  onDiscard,
-}: {
-  draft: DraftSummary;
-  onContinue: () => void;
-  onDiscard: () => void;
-}) {
-  const { colors, radii, spacing, shadows } = useAppTheme();
-  const dateLabel = (() => {
-    try {
-      return format(draft.updatedAt, 'MMM d');
-    } catch {
-      return '';
-    }
-  })();
-
-  return (
-    <Pressable
-      onPress={onContinue}
-      accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.draftCard,
-        {
-          borderColor: colors.warningBorder,
-          backgroundColor: colors.warningBg,
-          borderRadius: radii.lg,
-          padding: spacing.md,
-          gap: spacing.sm,
-          opacity: pressed ? 0.84 : 1,
-        },
-        shadows.sm,
-      ]}
-    >
-      <View style={styles.draftHeader}>
-        <ThemedText variant="bodyBold" numberOfLines={1} style={styles.flex}>
-          {draft.clinicName ?? 'Unknown Clinic'}
-        </ThemedText>
-        <ThemedText variant="small" color="textMuted">
-          {dateLabel}
-        </ThemedText>
-      </View>
-      {draft.reason ? (
-        <ThemedText variant="body" color="textSecondary" numberOfLines={2}>
-          {/* Strip service metadata prefix if present */}
-          {draft.reason.replace(/^\[\[service:[^\]]+\]\]\n?/, '')}
-        </ThemedText>
-      ) : null}
-      <View style={styles.draftActions}>
-        <Pressable
-          onPress={onContinue}
-          style={[
-            styles.draftContinueBtn,
-            {
-              backgroundColor: colors.warning,
-              borderRadius: radii.full,
-              paddingHorizontal: spacing.md,
-              paddingVertical: spacing.sm,
-            },
-          ]}
-          accessibilityRole="button"
-        >
-          <ThemedText variant="smallBold" color="textInverted">
-            Continue Booking
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={onDiscard}
-          style={[styles.draftDiscardBtn, { paddingHorizontal: spacing.md, paddingVertical: spacing.sm }]}
-          accessibilityRole="button"
-        >
-          <ThemedText variant="smallBold" color="textMuted">
-            Discard
-          </ThemedText>
-        </Pressable>
-      </View>
-    </Pressable>
-  );
-}
-
 function isUpcoming(item: AppointmentItem): boolean {
   try {
     const d = parseISO(item.scheduledAt);
-    const active = item.status !== 'canceled' && item.status !== 'completed' && item.status !== 'no_show';
+    const active =
+      item.status !== 'canceled' &&
+      item.status !== 'completed' &&
+      item.status !== 'no_show';
     return active && (isToday(d) || isFuture(d));
-  } catch {
-    return false;
-  }
-}
-
-function isActiveTodayItem(item: AppointmentItem): boolean {
-  try {
-    const d = parseISO(item.scheduledAt);
-    return isToday(d) && (item.status === 'confirmed' || item.status === 'action_required');
   } catch {
     return false;
   }
@@ -140,7 +70,10 @@ function isActiveTodayItem(item: AppointmentItem): boolean {
 function isPastItem(item: AppointmentItem): boolean {
   try {
     const d = parseISO(item.scheduledAt);
-    const terminal = item.status === 'canceled' || item.status === 'completed' || item.status === 'no_show';
+    const terminal =
+      item.status === 'completed' ||
+      item.status === 'no_show' ||
+      item.status === 'canceled';
     return terminal || (!isToday(d) && isPast(d));
   } catch {
     return false;
@@ -148,31 +81,34 @@ function isPastItem(item: AppointmentItem): boolean {
 }
 
 export default function AppointmentsScreen() {
-  const { colors, spacing, radii, sizes, shadows } = useAppTheme();
+  const empathy = useClinicalEmpathyTheme();
+  const { spacing, radii } = empathy;
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
+  const { user } = useUser();
+  const { unreadCount } = useNotificationContext();
+  const { isOnline } = useNetworkOnline();
   const contentInsets = useContentInsets();
 
-  const netInfo = useNetInfo();
+  const scrollY = useRef(new Animated.Value(0)).current;
+
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
+  const [drafts, setDrafts] = useState<DraftSummary[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isFromCache, setIsFromCache] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [segment, setSegment] = usePersistedTab<Segment>({
-    key: 'appointments.segment',
-    defaultValue: 0,
-    queryParam: 'tab',
-    serialize: (s) => (s === 1 ? 'past' : 'upcoming'),
-    deserialize: (raw) => (raw === 'past' || raw === '1' ? 1 : 0),
-  });
+  const [activeTab, setActiveTab] = useState<AppointmentFilterTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
-  const [drafts, setDrafts] = useState<DraftSummary[]>([]);
-  const dbRef = useRef(db);
-
-  const getTokenRef = useRef(getToken);
-  getTokenRef.current = getToken;
+  const [patientProfile, setPatientProfile] = useState<{
+    fullName: string;
+    avatarUrl?: string | null;
+  }>({
+    fullName: user?.fullName || 'Patient',
+    avatarUrl: user?.imageUrl || null,
+  });
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [suggestedServices, setSuggestedServices] = useState<SuggestedCareServiceItem[]>([]);
 
   const hasActiveSearch = searchQuery.trim().length > 0;
   const openSearchDialog = useCallback(() => {
@@ -190,6 +126,171 @@ export default function AppointmentsScreen() {
     });
   }, [navigation, openSearchDialog, hasActiveSearch]);
 
+  const navigateToMainRoute = useCallback(
+    (screenName: string, params?: Record<string, unknown>) => {
+      const parent = navigation.getParent?.();
+      const grandParent = parent?.getParent?.();
+      if (grandParent) {
+        grandParent.navigate(screenName, params);
+        return;
+      }
+      if (parent) {
+        parent.navigate(screenName, params);
+        return;
+      }
+      navigation.navigate('Main', { screen: screenName, params });
+    },
+    [navigation],
+  );
+
+  const navigateToTab = useCallback(
+    (tabName: 'HomeScreen' | 'RecordsScreen' | 'AppointmentsScreen' | 'MessagesScreen') => {
+      const parent = navigation.getParent?.();
+      if (parent) {
+        if (tabName === 'RecordsScreen') {
+          parent.navigate('RecordsScreen', { screen: 'FilesBrowserScreen' });
+        } else {
+          parent.navigate(tabName);
+        }
+        return;
+      }
+      navigation.navigate('Main', {
+        screen: 'BottomTabs',
+        params: { screen: tabName },
+      });
+    },
+    [navigation],
+  );
+
+  const dbRef = useRef(db);
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
+  // Load patient metadata and unread notifications
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        if (patientId) {
+          const pRows = await dbRef.current
+            .select()
+            .from(patientsTable)
+            .where(eq(patientsTable.id, patientId));
+          if (mounted && pRows.length > 0) {
+            const p = pRows[0];
+            const name = [p.firstName, p.lastName].filter(Boolean).join(' ') || 'Patient';
+            setPatientProfile({
+              fullName: name,
+              avatarUrl: user?.imageUrl || null,
+            });
+          }
+
+          const nRows = await dbRef.current
+            .select()
+            .from(notificationsTable)
+            .where(and(eq(notificationsTable.patientId, patientId), eq(notificationsTable.isRead, false)));
+          if (mounted) {
+            setUnreadNotificationsCount(nRows.length);
+          }
+        }
+      } catch {
+        // Safe fallback
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [patientId, user]);
+
+  // Load live suggested services catalog from backend/SQLite
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { data } = await queryDirectorySearchCatalog(getTokenRef.current, patientId);
+        if (!active) return;
+
+        const items: SuggestedCareServiceItem[] = [];
+
+        if (data.doctors && data.doctors.length > 0) {
+          const doc =
+            data.doctors.find((d) => d.clinicSupportsAppointments) ?? data.doctors[0];
+          const canBookDoc = doc.clinicSupportsAppointments;
+          items.push({
+            id: `doc-${doc.id}`,
+            title: doc.specialty || 'General Consultation',
+            subtitle: doc.name,
+            detail: canBookDoc
+              ? `${doc.clinicName} • Available`
+              : `${doc.clinicName} • Booking Paused`,
+            badgeType: 'doctor',
+            imageUrl: doc.avatarUrl,
+            buttonLabel: canBookDoc ? 'Book Slot' : 'View Profile',
+            buttonVariant: 'primary',
+            onPress: () => {
+              if (canBookDoc) {
+                navigateToMainRoute('BookingDraftScreen', {
+                  clinicId: doc.clinicId,
+                  providerId: doc.id,
+                  practitionerId: doc.practitionerId ?? undefined,
+                  providerName: doc.name,
+                });
+                return;
+              }
+              navigateToMainRoute('ProviderProfileScreen', {
+                id: doc.practitionerId ?? doc.id,
+                directoryDoctor: doc,
+              });
+            },
+          });
+        }
+
+        const teleClinic = data.clinics.find((c) => c.supportsAppointments) || data.clinics[0];
+        if (teleClinic) {
+          items.push({
+            id: `tele-${teleClinic.id}`,
+            title: 'Telehealth Quick Care',
+            subtitle: 'Virtual consultation',
+            detail: `${teleClinic.name}`,
+            badgeType: 'video',
+            buttonLabel: 'Instant Connect',
+            buttonVariant: 'mint',
+            // Newly introduced button with no dedicated instant teleconsult flow yet: no-op
+            onPress: () => {},
+          });
+        }
+
+        if (data.clinics.length > 1) {
+          const wellnessClinic = data.clinics[1];
+          items.push({
+            id: `well-${wellnessClinic.id}`,
+            title: wellnessClinic.name,
+            subtitle: wellnessClinic.primarySpecialty || 'Outpatient Care Center',
+            detail: wellnessClinic.openStatusLabel || 'Open network clinic',
+            badgeType: 'shield',
+            buttonLabel: 'Explore Clinic',
+            buttonVariant: 'outline',
+            onPress: () => {
+              navigateToMainRoute('ClinicDetailsScreen', {
+                clinicId: wellnessClinic.id,
+                id: wellnessClinic.id,
+              });
+            },
+          });
+        }
+
+        if (active) {
+          setSuggestedServices(items);
+        }
+      } catch {
+        // Keep empty if catalog cannot be read
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [patientId, navigateToMainRoute]);
+
   const loadDrafts = useCallback(async () => {
     try {
       const rows = await dbRef.current
@@ -205,362 +306,555 @@ export default function AppointmentsScreen() {
         .leftJoin(clinicsTable, eq(bookingDrafts.clinicId, clinicsTable.id))
         .where(and(eq(bookingDrafts.patientId, patientId), eq(bookingDrafts.status, 'draft')))
         .orderBy(desc(bookingDrafts.updatedAt));
+
       setDrafts(
-        rows.map((r) => {
-          const rawReason = r.reason ?? null;
-          return {
-            id: r.id,
-            clinicId: r.clinicId,
-            clinicName: r.clinicName ?? null,
-            reason: rawReason,
-            preferredDate: r.preferredDate ?? null,
-            updatedAt: r.updatedAt,
-          };
-        }),
+        rows.map((r) => ({
+          id: r.id,
+          clinicId: r.clinicId,
+          clinicName: r.clinicName ?? null,
+          reason: r.reason ?? null,
+          preferredDate: r.preferredDate ?? null,
+          updatedAt: r.updatedAt,
+        })),
       );
-    } catch (error) {
-      console.error('Failed to load drafts:', error);
+    } catch {
+      // Drafts failure should not crash screen
     }
   }, [patientId]);
 
-  const fetchLiveAppointments = useCallback(async () => {
-    if (netInfo.isConnected === false) return;
+  const loadData = useCallback(
+    async (isManualRefresh = false) => {
+      if (isManualRefresh) setIsRefreshing(true);
 
-    setIsRefreshing(true);
-    try {
-      const liveResult = await fetchAppointments(patientId, dbRef.current, getTokenRef.current);
-      setAppointments(liveResult.items);
-      setIsFromCache(false);
-    } catch (error) {
-      setIsFromCache(true);
-      dialog.alert(
-        'Connection Error',
-        'Failed to pull the latest appointments from the server. Showing cached data instead.',
-        [
-          { text: 'Close', style: 'cancel' },
-          { text: 'Retry', onPress: fetchLiveAppointments },
-        ],
-      );
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [patientId, netInfo.isConnected]);
+      const [cached] = await Promise.all([
+        getCachedAppointmentsWithLocalBookings(patientId, dbRef.current),
+        loadDrafts(),
+      ]);
 
-  const loadAppointments = useCallback(async () => {
-    try {
-      const cachedResult = await getCachedAppointmentsWithLocalBookings(patientId, dbRef.current);
-      setAppointments(cachedResult.items);
-    } catch {
-      /* ignore cache read error */
-    } finally {
-      setIsLoading(false);
-    }
+      if (cached.items.length > 0) {
+        setAppointments(cached.items);
+        setIsLoading(false);
+      }
 
-    await fetchLiveAppointments();
-  }, [patientId, fetchLiveAppointments]);
+      try {
+        const live = await fetchAppointments(patientId, dbRef.current, getTokenRef.current);
+        setAppointments(live.items);
+      } catch {
+        // Cache is already displayed
+      } finally {
+        setIsLoading(false);
+        if (isManualRefresh) setIsRefreshing(false);
+      }
+    },
+    [patientId, loadDrafts],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      loadAppointments();
-      loadDrafts();
-    }, [loadAppointments, loadDrafts]),
+      void loadData();
+    }, [loadData]),
   );
 
-  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredAppointments = useMemo(() => {
+    let result = appointments;
 
-  const matchesSearch = useCallback(
-    (item: AppointmentItem) => {
-      if (!normalizedQuery) return true;
-      return (
-        item.clinic.name.toLowerCase().includes(normalizedQuery) ||
-        (item.provider?.name?.toLowerCase().includes(normalizedQuery) ?? false) ||
-        (item.chiefComplaint?.toLowerCase().includes(normalizedQuery) ?? false) ||
-        (item.subject?.toLowerCase().includes(normalizedQuery) ?? false)
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (a) =>
+          a.provider.name.toLowerCase().includes(q) ||
+          a.clinic.name.toLowerCase().includes(q) ||
+          (a.serviceType && a.serviceType.toLowerCase().includes(q)) ||
+          (a.notes && a.notes.toLowerCase().includes(q)),
       );
+    }
+
+    if (activeTab === 'upcoming') {
+      return result.filter(isUpcoming);
+    }
+    if (activeTab === 'past') {
+      return result.filter(isPastItem);
+    }
+    if (activeTab === 'waitlist') {
+      return [];
+    }
+    return result;
+  }, [appointments, searchQuery, activeTab]);
+
+  const upcomingList = useMemo(
+    () => filteredAppointments.filter(isUpcoming),
+    [filteredAppointments],
+  );
+
+  const pastList = useMemo(
+    () => filteredAppointments.filter(isPastItem),
+    [filteredAppointments],
+  );
+
+  const countUpcoming = useMemo(() => appointments.filter(isUpcoming).length, [appointments]);
+  const countPast = useMemo(() => appointments.filter(isPastItem).length, [appointments]);
+
+  const handleCardPress = useCallback(
+    (id: string) => {
+      navigateToMainRoute('AppointmentDetailScreen', { id, appointmentId: id });
     },
-    [normalizedQuery],
+    [navigateToMainRoute],
   );
 
-  const upcomingItems = useMemo(
-    () => appointments.filter(isUpcoming).filter(matchesSearch),
-    [appointments, matchesSearch],
-  );
-  const pastItems = useMemo(
-    () => appointments.filter(isPastItem).filter(matchesSearch),
-    [appointments, matchesSearch],
-  );
-  const filteredDrafts = useMemo(() => {
-    if (!normalizedQuery) return drafts;
-    return drafts.filter(
-      (d) =>
-        (d.clinicName?.toLowerCase().includes(normalizedQuery) ?? false) ||
-        (d.reason?.toLowerCase().includes(normalizedQuery) ?? false),
-    );
-  }, [drafts, normalizedQuery]);
+  const handleGetDirections = useCallback((clinicName: string, clinicAddress?: string) => {
+    const query = encodeURIComponent([clinicName, clinicAddress].filter(Boolean).join(', '));
+    const url = Platform.select({
+      ios: `http://maps.apple.com/?q=${query}`,
+      android: `geo:0,0?q=${query}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${query}`,
+    });
+    if (url) {
+      Linking.openURL(url).catch(() => {});
+    }
+  }, []);
 
-  const activeTodayItem = upcomingItems.find(isActiveTodayItem) ?? null;
-  const listItems = segment === 0 ? upcomingItems : pastItems;
-
-  const handleCardPress = (item: AppointmentItem) =>
-    navigation.navigate('Main', { screen: 'AppointmentDetailScreen', params: { appointmentId: item.id } });
-
-  const handleReschedule = (item: AppointmentItem) =>
-    navigation.navigate('Main', {
-      screen: 'RescheduleScreen',
-      params: {
+  const handleReschedule = useCallback(
+    (item: AppointmentItem) => {
+      navigateToMainRoute('RescheduleScreen', {
         appointmentId: item.id,
+        id: item.id,
         clinicId: item.clinic.id,
         currentScheduledAt: item.scheduledAt,
-      },
-    });
-
-  const handleCancel = (item: AppointmentItem) =>
-    dialog.alert('Cancel Appointment', `Cancel at ${item.clinic.name}?`, [
-      { text: 'Keep', style: 'cancel' },
-      {
-        text: 'Cancel Appointment',
-        style: 'destructive',
-        onPress: () => dialog.alert('Coming soon', 'Cancellation requires the backend API.'),
-      },
-    ]);
-
-  const handleBookNew = () => navigation.navigate('Main', { screen: 'BookingDraftScreen' });
-
-  const handleDiscardDraft = (draftId: string) => {
-    dialog.alert('Discard Draft', 'Remove this booking draft?', [
-      { text: 'Keep', style: 'cancel' },
-      {
-        text: 'Discard',
-        style: 'destructive',
-        onPress: async () => {
-          await dbRef.current.delete(bookingDrafts).where(eq(bookingDrafts.id, draftId));
-          loadDrafts();
-        },
-      },
-    ]);
-  };
-
-  const renderHeader = () => (
-    <View style={styles.listHeader}>
-      <OfflineBanner isFromCache={isFromCache} />
-      <View style={[styles.segmentWrapper, { paddingHorizontal: spacing.lg, paddingVertical: spacing.md }]}>
-        <SegmentedControl options={['Upcoming', 'Past']} selectedIndex={segment} onChange={setSegment} />
-      </View>
-
-      {hasActiveSearch ? (
-        <View style={{ paddingHorizontal: spacing.lg, marginBottom: spacing.md }}>
-          <ActiveSearchBanner
-            query={searchQuery}
-            onEdit={openSearchDialog}
-            onClear={() => setSearchQuery('')}
-          />
-        </View>
-      ) : null}
-
-      {/* Drafts - only in Upcoming tab */}
-      {segment === 0 && filteredDrafts.length > 0 && (
-        <View style={[styles.draftSection, { gap: spacing.sm, marginBottom: spacing.sm }]}>
-          <ThemedText
-            variant="captionBold"
-            color="textMuted"
-            style={[styles.sectionLabel, { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }]}
-          >
-            DRAFTS
-          </ThemedText>
-          {filteredDrafts.map((draft) => (
-            <View key={draft.id} style={[styles.cardWrapper, { paddingHorizontal: spacing.lg }]}>
-              <DraftCard
-                draft={draft}
-                onContinue={() =>
-                  navigation.navigate('Main', {
-                    screen: 'BookingDraftScreen',
-                    params: { clinicId: draft.clinicId },
-                  })
-                }
-                onDiscard={() => handleDiscardDraft(draft.id)}
-              />
-            </View>
-          ))}
-        </View>
-      )}
-
-      {segment === 0 && activeTodayItem && (
-        <View style={[styles.todaySection, { paddingHorizontal: spacing.lg, gap: spacing.sm, marginBottom: spacing.lg }]}>
-          <ThemedText
-            variant="captionBold"
-            color="textMuted"
-            style={[styles.sectionLabel, { paddingBottom: spacing.xs }]}
-          >
-            TODAY
-          </ThemedText>
-          <AppointmentCard
-            item={activeTodayItem}
-            onPress={() => handleCardPress(activeTodayItem)}
-            onReschedule={() => handleReschedule(activeTodayItem)}
-            onCancel={() => handleCancel(activeTodayItem)}
-            isToday
-          />
-        </View>
-      )}
-
-      {listItems.length > 0 && (
-        <ThemedText
-          variant="captionBold"
-          color="textMuted"
-          style={[styles.sectionLabel, { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }]}
-        >
-          {segment === 0 ? 'UPCOMING' : 'PAST APPOINTMENTS'}
-        </ThemedText>
-      )}
-    </View>
+      });
+    },
+    [navigateToMainRoute],
   );
 
-  if (isLoading) {
-    return (
-      <View style={[styles.screen, { paddingBottom: contentInsets.bottom }]}>
-        <View style={[styles.loadingContainer, { padding: spacing.lg, gap: spacing.md }]}>
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </View>
-      </View>
-    );
-  }
+  const handleBookAgain = useCallback(
+    (appt: AppointmentItem) => {
+      navigateToMainRoute('BookingDraftScreen', {
+        clinicId: appt.clinic.id,
+        providerId: appt.provider.id !== 'local-pending' ? appt.provider.id : undefined,
+      });
+    },
+    [navigateToMainRoute],
+  );
+
+  const effectiveUnreadCount = Math.max(unreadCount, unreadNotificationsCount);
 
   return (
-    <ThemedView style={styles.screen}>
-      <FlatList
-        data={listItems}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: contentInsets.bottom + spacing['3xl'] },
-        ]}
-        ListHeaderComponent={renderHeader()}
-        showsVerticalScrollIndicator={false}
-        onRefresh={loadAppointments}
-        refreshing={isRefreshing}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
-        ListEmptyComponent={
-          <View style={[styles.emptyWrapper, { paddingHorizontal: spacing.lg, paddingTop: spacing.sm }]}>
-            <EmptyState
-              title={
-                hasActiveSearch
-                  ? 'No matching appointments'
-                  : segment === 0
-                    ? 'No upcoming appointments'
-                    : 'No past appointments'
-              }
-              message={
-                hasActiveSearch
-                  ? 'No appointments matched your search keyword.'
-                  : segment === 0
-                    ? "You don't have any scheduled appointments. Book one to get started."
-                    : 'Your previous visit history will appear here.'
-              }
-              actionLabel={
-                hasActiveSearch
-                  ? 'Clear Search'
-                  : undefined
-              }
-              onActionPress={
-                hasActiveSearch
-                  ? () => setSearchQuery('')
-                  : undefined
-              }
-            />
-          </View>
-        }
-        renderItem={({ item }) => {
-          if (isActiveTodayItem(item)) return null;
-          return (
-            <View style={[styles.cardWrapper, { paddingHorizontal: spacing.lg }]}>
-              <AppointmentCard
-                item={item}
-                onPress={() => handleCardPress(item)}
-                onReschedule={() => handleReschedule(item)}
-                onCancel={() => handleCancel(item)}
-              />
-            </View>
-          );
-        }}
+    <SafeAreaView
+      edges={['top']}
+      style={[styles.root, { backgroundColor: empathy.colors.canvas }]}
+    >
+      <HomeHeader
+        scrollY={scrollY}
+        title="Appointments"
+        subtitle="Scheduled visits across open network"
+        fullName={patientProfile.fullName}
+        avatarUrl={patientProfile.avatarUrl}
+        unreadCount={effectiveUnreadCount}
+        showBrand={true}
+        alwaysShowTitle={false}
+        onBrandPress={() => navigateToTab('HomeScreen')}
+        onNotificationsPress={() => navigateToMainRoute('NotificationScreen')}
+        onAvatarPress={() => navigateToMainRoute('ProfileScreen')}
       />
 
-      {/* Floating Action Button */}
-      <Pressable
-        onPress={handleBookNew}
-        style={({ pressed }) => [
-          styles.fab,
+      <Animated.ScrollView
+        style={styles.flex}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => void loadData(true)}
+            tintColor={empathy.colors.primary}
+          />
+        }
+        contentContainerStyle={[
+          styles.scrollContent,
           {
-            backgroundColor: colors.primary,
-            borderRadius: radii.full,
-            bottom: contentInsets.fabBottom + spacing.lg,
-            right: spacing.lg,
             paddingHorizontal: spacing.lg,
-            paddingVertical: spacing.md,
-            opacity: pressed ? 0.88 : 1,
+            paddingTop: spacing.xs,
+            paddingBottom: Math.max(contentInsets.bottom, 24) + (isOnline ? 28 : 76),
           },
-          shadows.md,
         ]}
-        accessibilityRole="button"
-        accessibilityLabel="Book a new appointment"
       >
-        <AppIcon name="plus" size={sizes.iconMd} color="onPrimary" />
-        <ThemedText variant="bodyBold" color="onPrimary">
-          Book
-        </ThemedText>
-      </Pressable>
+        {/* Inline Title & Action Row: animates into HomeHeader when scrolled past */}
+        <View style={[styles.compactTitleRow, { marginBottom: spacing.base }]}>
+          <View style={styles.titleCol}>
+            <Text
+              numberOfLines={1}
+              style={[
+                empathy.typography.headlineLg,
+                { color: empathy.colors.navyText },
+              ]}
+            >
+              Appointments
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={[
+                empathy.typography.bodySm,
+                { color: empathy.colors.mutedText, marginTop: spacing.xxs },
+              ]}
+            >
+              Scheduled visits across open network
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Book New Appointment"
+            onPress={() => navigateToMainRoute('BookingDraftScreen')}
+            style={({ pressed }) => [
+              styles.bookNewBtn,
+              {
+                backgroundColor: empathy.colors.primary,
+                borderRadius: radii.full,
+                paddingHorizontal: spacing.base,
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}
+          >
+            <AppIcon name="plus" size={16} color={empathy.colors.onPrimary} strokeWidth={2.5} />
+            <Text
+              style={[
+                empathy.typography.labelBold,
+                {
+                  color: empathy.colors.onPrimary,
+                  marginLeft: spacing.xs,
+                },
+              ]}
+            >
+              Book New
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Search Pill + Unified Filter Tabs */}
+        <AppointmentsFilterBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          counts={{
+            all: appointments.length,
+            upcoming: countUpcoming,
+            past: countPast,
+          }}
+        />
+
+        {searchQuery.trim().length > 0 ? (
+          <View style={{ marginTop: spacing.sm }}>
+            <ActiveSearchBanner
+              query={searchQuery}
+              onEdit={openSearchDialog}
+              onClear={() => setSearchQuery('')}
+            />
+          </View>
+        ) : null}
+
+        {/* Content Body */}
+        {isLoading ? (
+          <View style={{ marginTop: spacing.lg, gap: spacing.md }}>
+            <SkeletonCard />
+            <SkeletonCard />
+          </View>
+        ) : activeTab === 'waitlist' ? (
+          /* Waitlist / Draft Bookings Tab */
+          <View style={{ marginTop: spacing.xl }}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionTitleWithDot}>
+                <View
+                  style={[
+                    styles.sectionDot,
+                    {
+                      backgroundColor: empathy.colors.amberText,
+                      borderRadius: radii.full,
+                    },
+                  ]}
+                />
+                <Text
+                  style={[
+                    empathy.typography.overline,
+                    { color: empathy.colors.navyText },
+                  ]}
+                >
+                  BOOKING DRAFTS & WAITLIST
+                </Text>
+              </View>
+              <Text style={[empathy.typography.bodySm, { color: empathy.colors.mutedText }]}>
+                {drafts.length} {drafts.length === 1 ? 'Draft' : 'Drafts'}
+              </Text>
+            </View>
+
+            {drafts.length === 0 ? (
+              <View style={{ marginTop: spacing.md }}>
+                <EmptyAppointmentsView
+                  onFindDoctorPress={() => navigateToMainRoute('BookingDraftScreen')}
+                  suggestedServices={suggestedServices}
+                />
+              </View>
+            ) : (
+              <View style={{ gap: spacing.md, marginTop: spacing.md }}>
+                {drafts.map((d) => (
+                  <Pressable
+                    key={d.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Continue booking draft for ${d.clinicName || 'Clinic'}`}
+                    onPress={() =>
+                      navigateToMainRoute('BookingDraftScreen', {
+                        draftId: d.id,
+                        clinicId: d.clinicId,
+                      })
+                    }
+                    style={({ pressed }) => [
+                      styles.draftCard,
+                      empathy.elevation.card,
+                      {
+                        backgroundColor: empathy.colors.surface,
+                        borderColor: empathy.colors.borderSubtle,
+                        borderRadius: radii.xl,
+                        padding: spacing.base,
+                        opacity: pressed ? 0.95 : 1,
+                      },
+                    ]}
+                  >
+                    <View style={styles.draftHeaderRow}>
+                      <Text
+                        style={[
+                          empathy.typography.cardTitle,
+                          { color: empathy.colors.navyText, flex: 1 },
+                        ]}
+                      >
+                        {d.clinicName || 'Clinic'}
+                      </Text>
+                      <View
+                        style={[
+                          styles.draftBadge,
+                          {
+                            backgroundColor: empathy.colors.amberSoftBg,
+                            borderRadius: radii.full,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            empathy.typography.labelSm,
+                            { color: empathy.colors.amberText },
+                          ]}
+                        >
+                          Draft
+                        </Text>
+                      </View>
+                    </View>
+                    <Text
+                      style={[
+                        empathy.typography.bodySm,
+                        { color: empathy.colors.mutedText, marginTop: spacing.xs },
+                      ]}
+                    >
+                      {d.reason || 'General Consultation'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+        ) : filteredAppointments.length === 0 ? (
+          /* Empty State */
+          <View style={{ marginTop: spacing.xl }}>
+            <EmptyAppointmentsView
+              onFindDoctorPress={() => navigateToMainRoute('BookingDraftScreen')}
+              suggestedServices={suggestedServices}
+            />
+          </View>
+        ) : (
+          /* Populated Appointments View */
+          <View style={{ marginTop: spacing.xl, gap: spacing.xl }}>
+            {upcomingList.length > 0 ? (
+              <View>
+                <View style={styles.sectionHeaderRow}>
+                  <View style={styles.sectionTitleWithDot}>
+                    <View
+                      style={[
+                        styles.sectionDot,
+                        {
+                          backgroundColor: empathy.colors.primary,
+                          borderRadius: radii.full,
+                        },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        empathy.typography.overline,
+                        { color: empathy.colors.navyText },
+                      ]}
+                    >
+                      UPCOMING VISITS
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.countBadge,
+                      {
+                        backgroundColor: empathy.colors.mintBadgeBg,
+                        borderRadius: radii.full,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        empathy.typography.labelSm,
+                        { color: empathy.colors.primaryDeep, fontWeight: '700' },
+                      ]}
+                    >
+                      {upcomingList.length} Scheduled
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ gap: spacing.md, marginTop: spacing.md }}>
+                  {upcomingList.map((item) => (
+                    <UpcomingAppointmentCard
+                      key={item.id}
+                      appointment={item}
+                      onPressCard={() => handleCardPress(item.id)}
+                      onCheckInPassPress={() => handleCardPress(item.id)}
+                      onGetDirectionsPress={() =>
+                        handleGetDirections(item.clinic.name, item.clinic.address)
+                      }
+                      onReschedulePress={() => handleReschedule(item)}
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {pastList.length > 0 ? (
+              <View>
+                <View style={styles.sectionHeaderRow}>
+                  <View style={styles.sectionTitleWithDot}>
+                    <View
+                      style={[
+                        styles.sectionDot,
+                        {
+                          backgroundColor: empathy.colors.subtleText,
+                          borderRadius: radii.full,
+                        },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        empathy.typography.overline,
+                        { color: empathy.colors.mutedText },
+                      ]}
+                    >
+                      PAST CONSULTATIONS
+                    </Text>
+                  </View>
+
+                  <Text
+                    style={[
+                      empathy.typography.bodySm,
+                      { color: empathy.colors.mutedText },
+                    ]}
+                  >
+                    {pastList.length} {pastList.length === 1 ? 'Record' : 'Records'}
+                  </Text>
+                </View>
+
+                <View style={{ gap: spacing.md, marginTop: spacing.md }}>
+                  {pastList.map((item) => (
+                    <PastAppointmentCard
+                      key={item.id}
+                      appointment={item}
+                      onPressCard={() => handleCardPress(item.id)}
+                      onViewSummaryPress={() => handleCardPress(item.id)}
+                      onBookAgainPress={() => handleBookAgain(item)}
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </View>
+        )}
+      </Animated.ScrollView>
+
+      <HomeOfflinePillBanner isOnline={isOnline} />
 
       <SearchModal
         visible={isSearchModalOpen}
-        title="Search Appointments"
-        placeholder="Search by clinic, doctor, or reason..."
         value={searchQuery}
-        onApply={setSearchQuery}
         onClose={() => setIsSearchModalOpen(false)}
+        onApply={(keyword) => {
+          setSearchQuery(keyword);
+          setIsSearchModalOpen(false);
+        }}
       />
-    </ThemedView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    width: '100%',
+  },
   flex: {
     flex: 1,
   },
-  screen: {
+  scrollContent: {
+    width: '100%',
+  },
+  compactTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  titleCol: {
     flex: 1,
+    minWidth: 0,
   },
-  loadingContainer: {},
-  listContent: {},
-  listHeader: {},
-  segmentWrapper: {},
-  todaySection: {},
-  sectionLabel: {
-    textTransform: 'uppercase',
+  bookNewBtn: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  emptyWrapper: {},
-  cardWrapper: {},
-  draftSection: {},
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitleWithDot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionDot: {
+    width: 8,
+    height: 8,
+  },
+  countBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
   draftCard: {
     borderWidth: 1,
+    width: '100%',
   },
-  draftHeader: {
+  draftHeaderRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
   },
-  draftActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-  },
-  draftContinueBtn: {},
-  draftDiscardBtn: {},
-  fab: {
-    position: 'absolute',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    zIndex: 50,
+  draftBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
 });

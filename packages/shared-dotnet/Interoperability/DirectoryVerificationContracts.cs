@@ -1,0 +1,156 @@
+using System;
+using System.Collections.Generic;
+using ClinicEz.Shared.Common;
+
+namespace ClinicEz.Shared.Interoperability;
+
+/// <summary>
+/// Practitioner verification submission bundled inside a facility verification request.
+/// Contains object storage keys rather than raw binary evidence.
+/// </summary>
+public sealed record BundledPractitionerSubmissionDto
+{
+    public Guid ClinicStaffMemberId { get; init; }
+    public string ProfessionKind { get; init; } = string.Empty;
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string? Title { get; init; }
+    public string SubmittedPrcLicenseNo { get; init; } = string.Empty;
+    public string NormalizedPrcLicenseNo { get; init; } = string.Empty;
+    public DateOnly? PrcExpiryDate { get; init; }
+    public string? PrcEvidenceObjectKey { get; init; }
+    public string? VerificationContact { get; init; }
+    public string? Specialty { get; init; }
+    public string? PublicBio { get; init; }
+    public string? AvatarUrl { get; init; }
+    public IReadOnlyList<ProviderAvailabilityWindowDto> Availabilities { get; init; } = Array.Empty<ProviderAvailabilityWindowDto>();
+}
+
+/// <summary>
+/// Clinic -> portal, type <c>facility.verification.requested</c> (<c>InteropTypes.FacilityVerificationRequested</c>).
+/// Submits a clinic's public directory profile, service schedule, and bundled practitioner verification entries for platform review.
+/// </summary>
+public sealed record FacilityVerificationRequestedPayload
+{
+    public Guid RequestId { get; init; }
+    public string TenantId { get; init; } = string.Empty;
+    public Guid FacilityId { get; init; }
+    public string FacilityName { get; init; } = string.Empty;
+    public string? FacilitySlug { get; init; }
+    public string? Classification { get; init; }
+    public string? DohLtoNumber { get; init; }
+    public string? LtoEvidenceObjectKey { get; init; }
+    public string? Address { get; init; }
+    public string? ContactNumber { get; init; }
+    public string? ContactEmail { get; init; }
+    public string? OperatingHours { get; init; }
+    public bool IsOnlineBookingPaused { get; init; }
+    public string RequestKind { get; init; } = string.Empty;
+    public string? SubmittedByClinicUserId { get; init; }
+    public string? SubmittedByDisplayName { get; init; }
+    public DateTime SubmittedAtUtc { get; init; } = DateTime.UtcNow;
+    public IReadOnlyList<ClinicServiceDto> Services { get; init; } = Array.Empty<ClinicServiceDto>();
+    public IReadOnlyList<BundledPractitionerSubmissionDto> Practitioners { get; init; } = Array.Empty<BundledPractitionerSubmissionDto>();
+}
+
+/// <summary>
+/// Clinic -> portal, type <c>facility.verification.withdrawn</c> (<c>InteropTypes.FacilityVerificationWithdrawn</c>).
+/// Notifies the portal that a clinic withdrew its directory listing or pending verification request.
+/// </summary>
+public sealed record FacilityVerificationWithdrawnPayload
+{
+    public string TenantId { get; init; } = string.Empty;
+    public Guid FacilityId { get; init; }
+    public string? WithdrawnByActor { get; init; }
+    public string? Reason { get; init; }
+    public DateTime WithdrawnAtUtc { get; init; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Portal -> clinic, type <c>facility.verification.rejected</c> (<c>InteropTypes.FacilityVerificationRejected</c>).
+/// Communicates platform review rejection or suspension details for a clinic verification request.
+/// </summary>
+public sealed record FacilityVerificationRejectedPayload
+{
+    public Guid RequestId { get; init; }
+    public string TenantId { get; init; } = string.Empty;
+    public Guid FacilityId { get; init; }
+    public string Status { get; init; } = string.Empty;
+    public string Reason { get; init; } = string.Empty;
+    public string? ReviewedByAdminUserId { get; init; }
+    public DateTime ReviewedAtUtc { get; init; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Clinic -> portal, type <c>practitioner.verification.requested</c> (<c>InteropTypes.PractitionerVerificationRequested</c>).
+/// Submits an individual practitioner's PRC credential evidence and directory profile for platform verification.
+/// </summary>
+public sealed record PractitionerVerificationRequestedPayload
+{
+    public Guid RequestId { get; init; }
+    public string TenantId { get; init; } = string.Empty;
+    public Guid FacilityId { get; init; }
+    public string FacilityName { get; init; } = string.Empty;
+    public Guid ClinicStaffMemberId { get; init; }
+    public string RequestKind { get; init; } = string.Empty;
+    public string ProfessionKind { get; init; } = string.Empty;
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string? Title { get; init; }
+    public string SubmittedPrcLicenseNo { get; init; } = string.Empty;
+    public string NormalizedPrcLicenseNo { get; init; } = string.Empty;
+    public DateOnly? PrcExpiryDate { get; init; }
+    public string? PrcEvidenceObjectKey { get; init; }
+    public string? VerificationContact { get; init; }
+    public string? Specialty { get; init; }
+    public string? PublicBio { get; init; }
+    public string? AvatarUrl { get; init; }
+    public IReadOnlyList<ProviderAvailabilityWindowDto> Availabilities { get; init; } = Array.Empty<ProviderAvailabilityWindowDto>();
+    public string? SubmittedByClinicUserId { get; init; }
+    public DateTime SubmittedAtUtc { get; init; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Portal -> clinic / patient-api, type <c>practitioner.identity.updated</c> (<c>InteropTypes.PractitionerIdentityUpdated</c>).
+/// Propagates canonical practitioner verification state, profile details, and optional facility affiliation projection.
+/// </summary>
+public sealed record PractitionerIdentityUpdatedPayload
+{
+    public Guid PractitionerId { get; init; }
+    public Guid? MergedIntoPractitionerId { get; init; }
+    public string ProfessionKind { get; init; } = string.Empty;
+    public string NormalizedPrcLicenseNo { get; init; } = string.Empty;
+    public string DisplayPrcLicenseNo { get; init; } = string.Empty;
+    public DateOnly? PrcExpiryDate { get; init; }
+    public PractitionerVerificationLevel VerificationLevel { get; init; }
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string? Title { get; init; }
+    public string PrimarySpecialty { get; init; } = string.Empty;
+    public string? PublicBio { get; init; }
+    public string? AvatarUrl { get; init; }
+    public DateTime? VerifiedAtUtc { get; init; }
+    public string? TenantId { get; init; }
+    public Guid? FacilityId { get; init; }
+    public Guid? ClinicStaffMemberId { get; init; }
+    public string? AffiliationStatus { get; init; }
+    public string? LocalSpecialty { get; init; }
+    public IReadOnlyList<ProviderAvailabilityWindowDto>? Availabilities { get; init; }
+}
+
+/// <summary>
+/// Portal -> clinic / patient-api, type <c>practitioner.verification.revoked</c> (<c>InteropTypes.PractitionerVerificationRevoked</c>).
+/// Propagates revocation, expiration, or rejection of a practitioner's verification status.
+/// </summary>
+public sealed record PractitionerVerificationRevokedPayload
+{
+    public Guid? PractitionerId { get; init; }
+    public string? TenantId { get; init; }
+    public Guid? FacilityId { get; init; }
+    public Guid? ClinicStaffMemberId { get; init; }
+    public string ProfessionKind { get; init; } = string.Empty;
+    public string NormalizedPrcLicenseNo { get; init; } = string.Empty;
+    public PractitionerVerificationLevel NewStatus { get; init; }
+    public string Reason { get; init; } = string.Empty;
+    public DateTime RevokedAtUtc { get; init; } = DateTime.UtcNow;
+}

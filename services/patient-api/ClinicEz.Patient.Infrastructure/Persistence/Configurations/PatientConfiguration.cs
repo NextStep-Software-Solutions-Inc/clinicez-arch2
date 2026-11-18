@@ -41,6 +41,7 @@ public sealed class PatientConfiguration : IEntityTypeConfiguration<Patient>
         builder.Property(p => p.AltPhone).HasMaxLength(20);
         builder.Property(p => p.Email).HasMaxLength(254);
         builder.Property(p => p.MessengerHandle).HasMaxLength(100);
+        builder.Property(p => p.WelcomeVisitedStepsJson).HasMaxLength(256).HasDefaultValue("[]").IsRequired();
         builder.Property(p => p.CreatedBy).HasMaxLength(128).IsRequired();
         builder.Property(p => p.UpdatedBy).HasMaxLength(128);
         builder.Property(p => p.DeletedBy).HasMaxLength(128);

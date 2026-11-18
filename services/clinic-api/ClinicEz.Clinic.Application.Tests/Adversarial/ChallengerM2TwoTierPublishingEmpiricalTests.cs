@@ -265,7 +265,9 @@ public class ChallengerM2TwoTierPublishingEmpiricalTests
             SpecialtyMode = "multispecialty",
             LetterheadAddress = "Medical Center Plaza, Pasig",
             LetterheadContact = "0918-123-4567",
+            LetterheadDohLto = "DOH-LTO-2026-010",
             IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
@@ -390,6 +392,7 @@ public class ChallengerM2TwoTierPublishingEmpiricalTests
             ClinicId = _testClinicId,
             ClinicName = "Readiness Clinic",
             OperatingHours = "Mon-Fri 8:00 AM - 5:00 PM",
+            LetterheadDohLto = "DOH-LTO-2026-011",
             IsWorkspaceEligible = isEligible
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
@@ -488,8 +491,10 @@ public class ChallengerM2TwoTierPublishingEmpiricalTests
             ClinicId = _testClinicId,
             ClinicName = "Apex Dental",
             OperatingHours = "Mon-Sat 8:00 AM - 5:00 PM",
+            LetterheadDohLto = "DOH-LTO-2026-012",
             SpecialtyMode = "dental",
             IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);

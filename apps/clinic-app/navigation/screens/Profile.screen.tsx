@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Platform } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { Input, Card, CardContent, SkeletonList } from '@ui';
+import { Input, Card, CardHeader, CardContent, SkeletonList } from '@ui';
+import Badge from '../../components/ui/Badge';
+import Icon from '../../components/ui/Icon';
+import ThemedText from '../../components/ui/ThemedText';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { HEX_COLOR } from '../../constants/color';
@@ -12,6 +15,10 @@ import { useConnection } from '../../components/connection/ConnectionGate';
 import { clinicService, SignatureMode, StaffMember } from '../../services/clinicService';
 import { notify } from '@utils/feedback';
 import { validatePasswordPolicy } from '../../services/passwordPolicy';
+import {
+  isClinicianRole,
+  resolvePractitionerVerificationBadge,
+} from '../../utils/directoryVerification';
 import { useTextScale } from '../../context/TextScaleContext';
 import {
   THEME_MODE_OPTIONS,
@@ -602,6 +609,21 @@ export default function ProfileScreen({ route: propRoute }: ProfileScreenProps =
   const isClinicMetaLoading = Boolean(clinicLoading) && !resolvedFacilityName;
 
   const isDoctor = user.role === 'Doctor' || effectiveStaff?.role === 'Doctor';
+  const isNurse = user.role === 'Nurse' || effectiveStaff?.role === 'Nurse';
+  const isClinician = isClinicianRole(effectiveStaff?.role ?? user.role) || isDoctor || isNurse;
+  const directoryBadge = isClinician
+    ? resolvePractitionerVerificationBadge(effectiveStaff?.publicVerificationStatus)
+    : null;
+  const showVerificationReason = Boolean(
+    isClinician &&
+      effectiveStaff?.publicVerificationReason?.trim() &&
+      (!effectiveStaff?.publicVerificationStatus ||
+        effectiveStaff.publicVerificationStatus === 'Rejected' ||
+        effectiveStaff.publicVerificationStatus === 'Expired' ||
+        effectiveStaff.publicVerificationStatus === 'Suspended'),
+  );
+  const listedClinicsCount = effectiveStaff?.affiliatedVerifiedClinicCount ?? 0;
+
   const baselineNames = resolveDefaultNames(effectiveStaff, user);
   const baselineTitle = effectiveStaff?.title || '';
 
@@ -916,6 +938,69 @@ export default function ProfileScreen({ route: propRoute }: ProfileScreenProps =
               onSave={handleSaveCredentials}
               onReset={handleResetCredentials}
             />
+
+            {isClinician && directoryBadge ? (
+              <Card>
+                <CardHeader
+                  title="Patient Directory Verification"
+                  subtitle="Synced from Portal via Hub (no Portal login required)"
+                  rightAction={
+                    <Badge
+                      label={directoryBadge.label}
+                      variant={directoryBadge.variant}
+                      size="sm"
+                      icon={directoryBadge.icon}
+                    />
+                  }
+                />
+                <CardContent style={styles.cardSection}>
+                  {showVerificationReason ? (
+                    <View style={styles.errorBox}>
+                      <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+                      <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex1}>
+                        {effectiveStaff?.publicVerificationReason}
+                      </ThemedText>
+                    </View>
+                  ) : null}
+
+                  <View style={styles.sessionGrid}>
+                    <View style={styles.sessionItem}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Directory Status
+                      </ThemedText>
+                      <Badge
+                        label={directoryBadge.label}
+                        variant={directoryBadge.variant}
+                        size="sm"
+                        icon={directoryBadge.icon}
+                      />
+                    </View>
+
+                    <View style={styles.sessionItem}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        PRC Expiry Date
+                      </ThemedText>
+                      <ThemedText variant="smallBold" color={theme.colors.text}>
+                        {effectiveStaff?.prcExpiryDate || 'Not set'}
+                      </ThemedText>
+                    </View>
+
+                    <View style={styles.sessionItem}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Listed Clinics
+                      </ThemedText>
+                      <ThemedText variant="smallBold" color={theme.colors.text}>
+                        {String(listedClinicsCount)}
+                      </ThemedText>
+                    </View>
+                  </View>
+
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Verification status and multi-clinic listings sync from Portal via Hub without a separate Portal sign-in. Editing a PRC license triggers re-verification.
+                  </ThemedText>
+                </CardContent>
+              </Card>
+            ) : null}
           </View>
         ) : null}
 
@@ -1053,8 +1138,34 @@ const styles = StyleSheet.create({
   activeTabPanel: {
     width: '100%',
     alignSelf: 'stretch',
+    gap: theme.spacing.lg,
   },
   hiddenTabPanel: {
     display: 'none',
+  },
+  cardSection: {
+    gap: theme.spacing.md,
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.emergencySubtle,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  flex1: {
+    flex: 1,
+  },
+  sessionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.lg,
+  },
+  sessionItem: {
+    minWidth: 180,
+    gap: theme.spacing.xs,
   },
 });

@@ -10,6 +10,7 @@ using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Application.Features.Admin.Consumers;
 using ClinicEz.Portal.Application.Features.Admin.Services;
 using ClinicEz.Portal.Application.Features.Billing;
+using ClinicEz.Portal.Application.Features.DirectoryVerification;
 using ClinicEz.Portal.Application.Features.Entitlements;
 using ClinicEz.Portal.Application.Features.Finance;
 using ClinicEz.Portal.Application.Features.Licensing;
@@ -121,6 +122,9 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
         services.AddScoped<IFacilityProvisioningReconciliationJob, FacilityProvisioningReconciliationJob>();
+        services.AddScoped<IPrcExpirySweeperJob, PrcExpirySweeperJob>();
+        services.AddScoped<IPortalEvidenceStorageService, LocalPortalEvidenceStorageService>();
+        services.AddScoped<IDirectoryVerificationSyncService, DirectoryVerificationSyncService>();
 
         // Outbound webhooks: no redirects, no proxy, and every connection is checked against private/reserved ranges.
         services.AddHttpClient(ClinicEz.Portal.Infrastructure.Webhooks.WebhookDeliveryJob.HttpClientName, client =>
@@ -147,6 +151,9 @@ public static class DependencyInjection
             .Handle<FacilityJoinSettingsUpdatedPayload, FacilityJoinSettingsUpdatedHandler>(InteropTypes.FacilityJoinSettingsUpdated)
             .Handle<DocumentAttestationPublishedPayload, DocumentAttestationPublishedHandler>(InteropTypes.DocumentAttestationPublished)
             .Handle<QueueBoardUpdatedPayload, QueueBoardUpdatedHandler>(InteropTypes.QueueBoardUpdated)
+            .Handle<FacilityVerificationRequestedPayload, FacilityVerificationRequestedHandler>(InteropTypes.FacilityVerificationRequested)
+            .Handle<FacilityVerificationWithdrawnPayload, FacilityVerificationWithdrawnHandler>(InteropTypes.FacilityVerificationWithdrawn)
+            .Handle<PractitionerVerificationRequestedPayload, PractitionerVerificationRequestedHandler>(InteropTypes.PractitionerVerificationRequested)
             .Handle<GuestTeleconsultInviteIssuedPayload, GuestTeleconsultInviteIssuedHandler>(InteropTypes.GuestTeleconsultInviteIssued)
             .Handle<GuestTeleconsultInviteRevokedPayload, GuestTeleconsultInviteRevokedHandler>(InteropTypes.GuestTeleconsultInviteRevoked)
             .Handle<MediaUsageRecordedPayload, MediaUsageRecordedHandler>(InteropTypes.MediaUsageRecorded)

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Enums;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Patient.Infrastructure.Persistence;
 
@@ -89,6 +90,7 @@ public class CatalogSeeder : IDataSeeder
 
         var organizations = new List<Organization>();
         var clinics = new List<Clinic>();
+        var practitioners = new List<Practitioner>();
         var links = new List<ClinicOrganizationLink>();
 
         // Seed 100 Organizations
@@ -177,6 +179,43 @@ public class CatalogSeeder : IDataSeeder
 
             var provider1Id = Guid.NewGuid();
             var provider2Id = Guid.NewGuid();
+            var practitioner1Id = Guid.NewGuid();
+            var practitioner2Id = Guid.NewGuid();
+            var license1 = $"PRC-{100000 + i:D6}";
+            var license2 = $"PRC-{200000 + i:D6}";
+
+            practitioners.Add(new Practitioner
+            {
+                Id = practitioner1Id,
+                ProfessionKind = "Doctor",
+                NormalizedPrcLicenseNo = PractitionerIdentity.NormalizePrc(license1)!,
+                DisplayPrcLicenseNo = license1,
+                VerificationLevel = PractitionerVerificationLevel.Verified,
+                Name = $"Dr. Jane {specialty} Smith",
+                FirstName = "Jane",
+                LastName = "Smith",
+                PrimarySpecialty = specialty,
+                AvatarUrl = $"https://picsum.photos/seed/provider-avatar-{i}-1/150/150",
+                VerifiedAtUtc = now,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            practitioners.Add(new Practitioner
+            {
+                Id = practitioner2Id,
+                ProfessionKind = "Doctor",
+                NormalizedPrcLicenseNo = PractitionerIdentity.NormalizePrc(license2)!,
+                DisplayPrcLicenseNo = license2,
+                VerificationLevel = PractitionerVerificationLevel.Verified,
+                Name = $"Dr. John {specialty} Doe",
+                FirstName = "John",
+                LastName = "Doe",
+                PrimarySpecialty = specialty,
+                AvatarUrl = $"https://picsum.photos/seed/provider-avatar-{i}-2/150/150",
+                VerifiedAtUtc = now,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
             
             var clinicProviders = new List<ClinicHealthcareProvider>
             {
@@ -184,10 +223,15 @@ public class CatalogSeeder : IDataSeeder
                 {
                     Id = provider1Id,
                     ClinicId = clinicId,
+                    PractitionerId = practitioner1Id,
                     Name = $"Dr. Jane {specialty} Smith",
                     Specialty = specialty,
+                    Role = "Doctor",
                     AvatarUrl = $"https://picsum.photos/seed/provider-avatar-{i}-1/150/150",
-                    ProfessionalLicenseNo = $"PRC-{100000 + i:D6}",
+                    ProfessionalLicenseNo = license1,
+                    NormalizedLicenseNo = PractitionerIdentity.NormalizePrc(license1),
+                    IsDirectoryOptIn = true,
+                    AffiliationStatus = "Active",
                     IsActive = true,
                     DisplayOrder = 1,
                     CreatedAt = now,
@@ -203,10 +247,15 @@ public class CatalogSeeder : IDataSeeder
                 {
                     Id = provider2Id,
                     ClinicId = clinicId,
+                    PractitionerId = practitioner2Id,
                     Name = $"Dr. John {specialty} Doe",
                     Specialty = specialty,
+                    Role = "Doctor",
                     AvatarUrl = $"https://picsum.photos/seed/provider-avatar-{i}-2/150/150",
-                    ProfessionalLicenseNo = $"PRC-{200000 + i:D6}",
+                    ProfessionalLicenseNo = license2,
+                    NormalizedLicenseNo = PractitionerIdentity.NormalizePrc(license2),
+                    IsDirectoryOptIn = true,
+                    AffiliationStatus = "Active",
                     IsActive = true,
                     DisplayOrder = 2,
                     CreatedAt = now,
@@ -273,6 +322,7 @@ public class CatalogSeeder : IDataSeeder
                 CoverImageUrl = $"https://picsum.photos/seed/clinic-cover-{i}/400/180",
                 IsWorkspaceEligible = isPublic,
                 IsDirectoryPublished = isPublic,
+                IsPlatformVerified = isPublic,
                 IsPublic = isPublic,
                 SupportsAppointments = supportsAppointments,
                 PrivacyPolicyUrl = $"https://Clinic EZ.app/privacy/{slug}",
@@ -331,6 +381,7 @@ public class CatalogSeeder : IDataSeeder
         }
 
         context.Organizations.AddRange(organizations);
+        context.Practitioners.AddRange(practitioners);
         context.Clinics.AddRange(clinics);
         context.ClinicOrganizationLinks.AddRange(links);
 

@@ -34,6 +34,7 @@ const EXCLUDED_DIRS = new Set([
   "sync-auth",
   // Auxiliary, token, or display flows
   "invitations",
+  "practitioner",
   "reset-password",
   "notfound",
   "queue-display",

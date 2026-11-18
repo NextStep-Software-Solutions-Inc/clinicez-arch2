@@ -120,6 +120,13 @@
       "when": 1792732800000,
       "tag": "0017_sync_queue_error_message",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1793673600000,
+      "tag": "0018_home_dashboard_telemetry",
+      "breakpoints": true
     }
   ]
 }

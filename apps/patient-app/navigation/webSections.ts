@@ -44,8 +44,8 @@ export interface WebNavItem {
 
 export const WEB_PRIMARY_NAV: WebNavItem[] = [
   { key: 'HomeScreen', label: 'Home', icon: 'home', shortcut: 'H' },
-  { key: 'AppointmentsScreen', label: 'Appointments', icon: 'appointments', shortcut: 'A' },
-  { key: 'RecordsScreen', label: 'Records', icon: 'files', shortcut: 'R' },
+  { key: 'RecordsScreen', label: 'Records', icon: 'heartPulse', shortcut: 'R' },
+  { key: 'AppointmentsScreen', label: 'Appointments', icon: 'calendar', shortcut: 'A' },
   { key: 'MessagesInboxScreen', label: 'Messages', icon: 'chat', shortcut: 'M' },
   { key: 'ProfileScreen', label: 'My Profile', icon: 'profile', shortcut: 'P' },
 ];
@@ -68,6 +68,7 @@ const APPOINTMENT_ROUTES = new Set([
 ]);
 
 const PROFILE_ROUTES = new Set([
+  'ProfileScreen',
   'PersonalDemographicsScreen', 'GovernmentIdsScreen', 'ContactInfoScreen', 'AddressesScreen',
   'EmergencyContactsScreen', 'HealthcareProvidersScreen', 'AllergiesScreen', 'MedicationsScreen',
   'SurgicalHistoryScreen', 'PastIllnessesScreen', 'ChronicConditionsScreen', 'DisabilitiesScreen',
@@ -219,6 +220,7 @@ export function navigateToSection(
     case 'NotificationScreen':
     case 'SettingsScreen':
     case 'MessagesInboxScreen':
+    case 'ProfileScreen':
       navigation.navigate(key);
       return;
     case 'RecordsScreen':

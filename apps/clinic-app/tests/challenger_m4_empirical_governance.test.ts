@@ -169,6 +169,7 @@ const fullyReadyProps = {
   letterheadAddress: '123 Rizal Ave, Manila',
   letterheadContact: '0917-000-0000',
   accreditationNumber: 'PHIC-1234',
+  letterheadDohLto: 'DOH-LTO-04A-2026-0089',
   operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
   staff: mockDoctors as any,
   services: mockServices as any,
@@ -202,10 +203,11 @@ describe('Challenger M4 — Adversarial Two-Tier Governance UI Stress Harness', 
     expect(markup).toContain('data-disabled="true"');
   });
 
-  test('T2: Eligible workspace (isWorkspaceEligible = true) with 100% facility readiness unlocks publishing', () => {
+  test('T2: Eligible workspace (isWorkspaceEligible = true) with 100% facility readiness and Verified status unlocks publishing', () => {
     const markup = renderToStaticMarkup(
       React.createElement(FacilityReadinessTab, {
         ...fullyReadyProps,
+        platformVerificationStatus: 'Verified',
         isWorkspaceEligible: true,
         isDirectoryPublished: false,
       })
@@ -219,7 +221,7 @@ describe('Challenger M4 — Adversarial Two-Tier Governance UI Stress Harness', 
 
     // 3. Overall facility readiness badge indicates Ready to Open
     expect(markup).toContain('Ready to Open');
-    expect(markup).toContain('Draft (Unlisted)');
+    expect(markup).toContain('Unlisted');
 
     // 4. ToggleSwitch must be enabled (data-disabled="false")
     expect(markup).toContain('data-disabled="false"');
@@ -307,6 +309,7 @@ describe('Challenger M4 — Adversarial Two-Tier Governance UI Stress Harness', 
     const markup = renderToStaticMarkup(
       React.createElement(FacilityReadinessTab, {
         ...fullyReadyProps,
+        platformVerificationStatus: 'Verified',
         isWorkspaceEligible: true,
         isPublishingMutating: true,
       })
@@ -329,5 +332,32 @@ describe('Challenger M4 — Adversarial Two-Tier Governance UI Stress Harness', 
     expect(markup).toContain('Pause Online Appointment Booking');
     expect(markup).toContain('Booking Paused');
     expect(markup).toContain('Online appointment booking is currently paused');
+  });
+
+  test('T8: Verification workflow states gate Submit, Withdraw, and Action Required banner cleanly', () => {
+    const pendingMarkup = renderToStaticMarkup(
+      React.createElement(FacilityReadinessTab, {
+        ...fullyReadyProps,
+        platformVerificationStatus: 'PendingReview',
+        isWorkspaceEligible: true,
+        isDirectoryPublished: true,
+      })
+    );
+    expect(pendingMarkup).toContain('Pending Review');
+    expect(pendingMarkup).toContain('Withdraw Submission');
+    expect(pendingMarkup).not.toContain('Publish to Directory');
+
+    const rejectedMarkup = renderToStaticMarkup(
+      React.createElement(FacilityReadinessTab, {
+        ...fullyReadyProps,
+        platformVerificationStatus: 'Rejected',
+        verificationRejectionReason: 'LTO facility address mismatch',
+        isWorkspaceEligible: true,
+        isDirectoryPublished: false,
+      })
+    );
+    expect(rejectedMarkup).toContain('Action Required');
+    expect(rejectedMarkup).toContain('LTO facility address mismatch');
+    expect(rejectedMarkup).toContain('Submit for Verification');
   });
 });

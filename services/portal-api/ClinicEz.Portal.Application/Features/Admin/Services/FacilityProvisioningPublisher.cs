@@ -35,16 +35,6 @@ public interface IFacilityProvisioningPublisher
 public sealed class FacilityProvisioningPublisher(IApplicationDbContext context, IInteropPublisher publisher)
     : IFacilityProvisioningPublisher
 {
-    private static readonly HashSet<string> NonClinicalRoles = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Billing",
-        "Cashier",
-        "Receptionist",
-        "Front Desk",
-        "IT Support",
-        "Encoder"
-    };
-
     public async Task StageProvisionedAsync(Tenant tenant, FacilityCreatedEvent facilityCreated, CancellationToken cancellationToken)
     {
         // Enrich patient-api catalogue copy with facility/branch metadata and clinical providers (licence stripped).
@@ -191,44 +181,16 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
         var classification = FirstNonEmpty(source.Classification, facility?.Classification);
         var isBranchAccredited = branch is not null && branch.IsPhilHealthAccredited && !string.IsNullOrWhiteSpace(branch.PhilHealthAccreditationNumber);
         var isPhilHealthAccredited = source.IsPhilHealthAccredited ?? isBranchAccredited;
+        var platformVerificationStatus = source.PlatformVerificationStatus ?? facility?.PlatformVerificationStatus;
+        var isPlatformVerified = source.IsPlatformVerified
+            ?? (facility is not null && facility.PlatformVerificationStatus == PlatformVerificationStatus.Verified);
+        var verificationRejectionReason = source.VerificationRejectionReason ?? facility?.RejectionReason;
         var isPublic = source.IsPublic ?? (facility is not null
             && facility.IsPatientDiscoveryEligible
+            && facility.PlatformVerificationStatus == PlatformVerificationStatus.Verified
             && !facility.IsDeleted
             && facility.Status != FacilityStatus.Suspended
             && facility.Status != FacilityStatus.Failed);
-
-        IReadOnlyList<FacilityProviderDto>? providers = source.Providers;
-        if (providers is null && source.FacilityType == FacilityType.Clinic)
-        {
-            var staffRows = await context.StaffMembers
-                .AsNoTracking()
-                .Include(s => s.WorkspaceMember)
-                .Where(s => !s.IsDeleted
-                            && s.TenantId == tenant.Id
-                            && (s.FacilityId == source.ResourceId || s.FacilityId == null)
-                            && !s.WorkspaceMember.IsDeleted
-                            && s.WorkspaceMember.Status == MemberStatus.Active)
-                .OrderBy(s => s.WorkspaceMember.FullName)
-                .ToListAsync(cancellationToken);
-
-            var clinicalRows = staffRows
-                .Where(s => !NonClinicalRoles.Contains(s.Role) && !string.IsNullOrWhiteSpace(s.WorkspaceMember.FullName))
-                .Select((s, index) => new FacilityProviderDto(
-                    Id: s.Id,
-                    Name: s.WorkspaceMember.FullName,
-                    Specialty: string.IsNullOrWhiteSpace(s.Role) || string.Equals(s.Role, "Staff", StringComparison.OrdinalIgnoreCase)
-                        ? FirstNonEmpty(classification, "General Practice")!
-                        : s.Role,
-                    ProfessionalLicenseNo: null,
-                    IsActive: true,
-                    DisplayOrder: index))
-                .ToList();
-
-            if (clinicalRows.Count > 0)
-            {
-                providers = clinicalRows;
-            }
-        }
 
         return source with
         {
@@ -245,7 +207,12 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
             IsPhilHealthAccredited = isPhilHealthAccredited,
             IsWorkspaceEligible = facility?.IsPatientDiscoveryEligible,
             IsPublic = isPublic,
-            Providers = providers,
+            IsPlatformVerified = isPlatformVerified,
+            PlatformVerificationStatus = platformVerificationStatus,
+            VerificationRejectionReason = verificationRejectionReason,
+            DirectorySource = DirectorySourceKind.PortalControlPlane,
+            ReplaceProvidersSnapshot = false,
+            Providers = source.Providers,
             BranchId = branch?.Id ?? source.BranchId,
             BranchName = branch?.Name ?? source.BranchName,
             BranchPhilHealthAccreditationNumber = branch?.PhilHealthAccreditationNumber ?? source.BranchPhilHealthAccreditationNumber,

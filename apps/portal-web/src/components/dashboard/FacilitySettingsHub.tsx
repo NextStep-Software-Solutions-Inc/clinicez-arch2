@@ -35,6 +35,17 @@ import {
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { facilityService } from "@/services/facility.service";
+import {
+  verificationService,
+  type FacilityVerificationStatusDto,
+} from "@/services/verification.service";
+import type { PlatformVerificationStatus } from "@/lib/wire";
+import {
+  formatVerificationTimestamp,
+  getPlatformVerificationDisplay,
+  getQueueStatusDisplay,
+  validateLtoProofFile,
+} from "@/lib/verificationStatus";
 import { toastApiError } from "@/lib/apiToast";
 
 // Prevent legacy hardcoded dummy strings from being assumed as authentic user configurations
@@ -68,6 +79,10 @@ export interface FacilityData {
   contactEmail?: string | null;
   notificationPreferencesJson?: string | null;
   isPatientDiscoveryEligible?: boolean | null;
+  platformVerificationStatus?: PlatformVerificationStatus | null;
+  rejectionReason?: string | null;
+  ltoEvidenceObjectKey?: string | null;
+  verifiedAtUtc?: string | null;
 }
 
 interface FacilitySettingsHubProps {
@@ -94,6 +109,76 @@ export default function FacilitySettingsHub({
     Boolean(facility?.isPatientDiscoveryEligible)
   );
   const [updatingDiscovery, setUpdatingDiscovery] = useState(false);
+
+  // Directory Verification Status & LTO Proof Upload State
+  const [verificationStatus, setVerificationStatus] =
+    useState<FacilityVerificationStatusDto | null>(null);
+  const [loadingVerification, setLoadingVerification] = useState(false);
+  const [uploadingLtoProof, setUploadingLtoProof] = useState(false);
+  const [ltoUploadError, setLtoUploadError] = useState<string | null>(null);
+  const ltoFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const facilityId = facility?.id;
+  const loadVerificationStatus = React.useCallback(async () => {
+    if (!facilityId || !tenantSlug) return;
+    setLoadingVerification(true);
+    try {
+      const statusDto = await verificationService.getFacilityVerificationStatus(
+        facilityId,
+        tenantSlug,
+      );
+      setVerificationStatus(statusDto);
+    } catch {
+      // Keep fallback status from facility prop if detail query fails
+    } finally {
+      setLoadingVerification(false);
+    }
+  }, [facilityId, tenantSlug]);
+
+  React.useEffect(() => {
+    if (open && facilityId) {
+      setLtoUploadError(null);
+      void loadVerificationStatus();
+    } else if (!open) {
+      setVerificationStatus(null);
+    }
+  }, [open, facilityId, loadVerificationStatus]);
+
+  const handleLtoProofUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !facility) return;
+
+    const validation = validateLtoProofFile(file);
+    if (!validation.valid) {
+      setLtoUploadError(validation.message);
+      toast.error(validation.message);
+      e.target.value = "";
+      return;
+    }
+
+    setLtoUploadError(null);
+    setUploadingLtoProof(true);
+    try {
+      const result = await verificationService.uploadFacilityLtoProof(
+        facility.id,
+        file,
+        tenantSlug,
+      );
+      setVerificationStatus((prev) =>
+        prev
+          ? { ...prev, ltoEvidenceObjectKey: result.ltoEvidenceObjectKey }
+          : prev,
+      );
+      toast.success("DOH LTO proof uploaded.");
+      await loadVerificationStatus();
+      if (onSaved) onSaved();
+    } catch (err: unknown) {
+      toastApiError(err, "Failed to upload DOH LTO proof", tenantSlug);
+    } finally {
+      setUploadingLtoProof(false);
+      e.target.value = "";
+    }
+  };
 
   // Cryptographic Facility License State
   const [licenseData, setLicenseData] = useState<{
@@ -323,6 +408,20 @@ export default function FacilitySettingsHub({
 
   if (!facility) return null;
 
+  const effectiveVerificationStatus =
+    verificationStatus?.platformVerificationStatus ??
+    facility.platformVerificationStatus ??
+    "Unverified";
+  const verificationBadge = getPlatformVerificationDisplay(effectiveVerificationStatus);
+  const effectiveRejectionReason =
+    verificationStatus?.rejectionReason ?? facility.rejectionReason ?? null;
+  const effectiveLtoEvidenceKey =
+    verificationStatus?.ltoEvidenceObjectKey ?? facility.ltoEvidenceObjectKey ?? null;
+  const latestSubmission = verificationStatus?.latestRequest ?? null;
+  const latestSubmissionBadge = latestSubmission
+    ? getQueueStatusDisplay(latestSubmission.status)
+    : null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-4xl h-[92dvh] sm:h-auto sm:max-h-[90vh] flex flex-col gap-0 rounded-2xl sm:rounded-3xl p-0 overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-950">
@@ -345,9 +444,16 @@ export default function FacilitySettingsHub({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+          <div className="flex items-center gap-2 self-start sm:self-center shrink-0 flex-wrap">
             <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1 bg-background border-slate-200 dark:border-slate-800">
               Status: <span className="font-bold text-emerald-600 dark:text-emerald-400 ml-1">{status}</span>
+            </Badge>
+
+            <Badge
+              variant="outline"
+              className={cn("text-xs font-bold px-2.5 py-1", verificationBadge.badgeClassName)}
+            >
+              {verificationBadge.label}
             </Badge>
 
             {isPatientDiscoveryEligible ? (
@@ -423,6 +529,12 @@ export default function FacilitySettingsHub({
                       <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
                         Patient App Directory Discovery
                       </span>
+                      <Badge
+                        variant="outline"
+                        className={cn("text-[10px] font-bold", verificationBadge.badgeClassName)}
+                      >
+                        {verificationBadge.label}
+                      </Badge>
                       {isPatientDiscoveryEligible ? (
                         <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-bold">
                           Directory Eligible
@@ -473,7 +585,120 @@ export default function FacilitySettingsHub({
                   <IconSparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                   <div>
                     <strong className="text-slate-800 dark:text-slate-200">Two-Tier Publishing Governance: </strong>
-                    Enabling directory discovery marks this facility eligible. Before the clinic goes live to patients, the clinic team must verify the pre-flight readiness checklist (operating hours, licensed doctors with PRC, active service catalog) in the clinic workstation.
+                    Enabling directory discovery marks this facility eligible. Before the clinic goes live to patients, the clinic team must complete the pre-flight readiness checklist and submit DOH LTO credentials for platform verification.
+                  </div>
+                </div>
+
+                {/* Rejection Reason Notice */}
+                {effectiveRejectionReason ? (
+                  <div
+                    role="alert"
+                    className="p-3 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive flex items-start gap-2.5 text-xs"
+                  >
+                    <IconAlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <div className="font-bold">Action Required — Verification Rejected</div>
+                      <p className="text-[11px] leading-relaxed">{effectiveRejectionReason}</p>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* DOH LTO Proof Upload & Submission History */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div className="p-3 rounded-xl border border-border bg-muted/30 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-foreground">DOH LTO Proof Document</span>
+                      {effectiveLtoEvidenceKey ? (
+                        <Badge variant="outline" className="text-[10px] font-semibold bg-success/10 text-success border-success/25">
+                          On File
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] font-semibold bg-muted text-muted-foreground border-border">
+                          Not Uploaded
+                        </Badge>
+                      )}
+                    </div>
+                    {effectiveLtoEvidenceKey ? (
+                      <p className="text-[11px] font-mono text-muted-foreground truncate" title={effectiveLtoEvidenceKey}>
+                        {effectiveLtoEvidenceKey}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">
+                        Upload PDF, JPEG, or PNG (max 5 MiB) for platform verification.
+                      </p>
+                    )}
+                    {ltoUploadError ? (
+                      <p className="text-[11px] text-destructive font-medium">{ltoUploadError}</p>
+                    ) : null}
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={ltoFileInputRef}
+                        type="file"
+                        accept="application/pdf,image/jpeg,image/png"
+                        onChange={handleLtoProofUpload}
+                        className="sr-only"
+                        aria-label="Upload DOH LTO proof file"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={uploadingLtoProof}
+                        onClick={() => ltoFileInputRef.current?.click()}
+                        className="h-8 rounded-xl text-xs font-semibold gap-1.5"
+                      >
+                        {uploadingLtoProof ? (
+                          <>
+                            <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                            <span>Uploading...</span>
+                          </>
+                        ) : (
+                          <span>{effectiveLtoEvidenceKey ? "Replace LTO Proof" : "Upload DOH LTO Proof"}</span>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-border bg-muted/30 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-foreground">Submission History Summary</span>
+                      {latestSubmissionBadge ? (
+                        <Badge variant="outline" className={cn("text-[10px] font-bold", latestSubmissionBadge.badgeClassName)}>
+                          {latestSubmissionBadge.label}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    {loadingVerification ? (
+                      <p className="text-[11px] text-muted-foreground">Loading submission history...</p>
+                    ) : latestSubmission ? (
+                      <div className="space-y-1 text-[11px] text-muted-foreground">
+                        <div className="font-semibold text-foreground">
+                          Submission #{latestSubmission.submissionNumber} • {latestSubmission.requestKind}
+                        </div>
+                        <div>Submitted: {formatVerificationTimestamp(latestSubmission.submittedAtUtc)}</div>
+                        {latestSubmission.reviewedAtUtc ? (
+                          <div>Reviewed: {formatVerificationTimestamp(latestSubmission.reviewedAtUtc)}</div>
+                        ) : null}
+                        {latestSubmission.reviewerNotes ? (
+                          <div className="text-foreground">Reviewer notes: {latestSubmission.reviewerNotes}</div>
+                        ) : null}
+                        {latestSubmission.withdrawnAtUtc ? (
+                          <div>
+                            Withdrawn: {formatVerificationTimestamp(latestSubmission.withdrawnAtUtc)}
+                            {latestSubmission.withdrawalReason ? ` (${latestSubmission.withdrawalReason})` : ""}
+                          </div>
+                        ) : null}
+                        {verificationStatus && verificationStatus.practitioners.length > 0 ? (
+                          <div>
+                            Bundled clinicians: {verificationStatus.practitioners.length}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">
+                        No verification submission recorded yet. Submit directory verification from the clinic workstation once readiness checks pass.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

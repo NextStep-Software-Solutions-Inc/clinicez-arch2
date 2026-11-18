@@ -27,6 +27,7 @@ import { linkService } from "@/services/link.service";
 import { ENTITLEMENT_KEYS } from "@/services/entitlement.service";
 import { apiErrorMessage } from "@/lib/apiError";
 import { toastApiError } from "@/lib/apiToast";
+import { getPlatformVerificationDisplay } from "@/lib/verificationStatus";
 
 const selectClass =
     "h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary";
@@ -160,6 +161,15 @@ function FacilityRow({ tenantSlug, facility, interopAvailable, onSaved }: Facili
                 <Badge variant="outline" className="text-[10px]">{facility.facilityType}</Badge>
                 <Badge variant={facility.status === "Active" ? "default" : "secondary"} className="text-[10px]">{facility.status}</Badge>
 
+                {(() => {
+                    const badge = getPlatformVerificationDisplay(facility.platformVerificationStatus);
+                    return (
+                        <Badge variant="outline" className={cn("text-[10px] font-bold", badge.badgeClassName)}>
+                            {badge.label}
+                        </Badge>
+                    );
+                })()}
+
                 {facility.isPatientDiscoveryEligible ? (
                     <Badge variant="outline" className="text-[10px] font-bold bg-primary/10 text-primary border-primary/20">
                         Directory Eligible
@@ -265,9 +275,17 @@ function FacilityRow({ tenantSlug, facility, interopAvailable, onSaved }: Facili
             {/* Milestone 2: Patient App Discovery Control Card */}
             <div className="space-y-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <IconWorld className="h-3.5 w-3.5 text-primary" />
-                        <span className="text-xs font-bold">Patient App Discovery</span>
+                        <span className="text-xs font-bold">Patient App Directory Discovery</span>
+                        {(() => {
+                            const badge = getPlatformVerificationDisplay(facility.platformVerificationStatus);
+                            return (
+                                <Badge variant="outline" className={cn("text-[10px] font-bold", badge.badgeClassName)}>
+                                    {badge.label}
+                                </Badge>
+                            );
+                        })()}
                         {isDiscoveryEligible ? (
                             <Badge variant="outline" className="text-[10px] font-bold bg-primary/10 text-primary border-primary/20">
                                 Directory Eligible

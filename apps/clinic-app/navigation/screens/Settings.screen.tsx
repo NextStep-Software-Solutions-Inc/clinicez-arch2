@@ -21,6 +21,7 @@ import { PERMISSIONS } from '../../constants/permissions';
 import {
   clinicService,
   ClinicSettingsRecord,
+  ClinicPublishingReadiness,
   StaffMember,
   ClinicCustomFieldDefinition,
   ClinicServiceItem,
@@ -198,6 +199,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
 
   // Core Data States
   const [settings, setSettings] = useState<ClinicSettingsRecord | null>(null);
+  const [readiness, setReadiness] = useState<ClinicPublishingReadiness | null>(null);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [roles, setRoles] = useState<ClinicRole[]>([]);
   const [customFields, setCustomFields] = useState<ClinicCustomFieldDefinition[]>([]);
@@ -285,21 +287,33 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingTab, incomingOpenAddStaff]);
 
+  const refreshReadiness = useCallback(async () => {
+    const [readinessData] = await clinicService.getPublishingReadiness();
+    if (readinessData) {
+      setReadiness(readinessData);
+    }
+  }, []);
+
   const loadAll = useCallback(async () => {
     const [
       [settingsData, settingsErr],
+      [readinessData],
       [staffData, staffErr],
       [customFieldsData, fieldsErr],
       [servicesData, servicesErr],
       [rolesData, rolesErr],
     ] = await Promise.all([
       clinicService.getSettings(),
+      clinicService.getPublishingReadiness(),
       clinicService.getStaff(),
       clinicService.getCustomFields('ClinicPatient'),
       clinicService.getServices(),
       clinicService.getRoles(),
     ]);
 
+    if (readinessData) {
+      setReadiness(readinessData);
+    }
     setSettingsLoadError(settingsErr ? settingsErr.message || 'Unable to load clinic settings.' : null);
     if (settingsData) {
       setSettings(settingsData);
@@ -430,6 +444,21 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const activeStaffCount = staff.filter((s) => s.isActive).length;
 
   // Compute readiness state
+  const effectiveDohLto = settings?.letterheadDohLto ?? readiness?.letterheadDohLto ?? '';
+  const effectiveLtoProofKey = settings?.ltoEvidenceObjectKey ?? readiness?.ltoEvidenceObjectKey ?? null;
+  const effectiveVerificationStatus =
+    settings?.platformVerificationStatus ?? readiness?.platformVerificationStatus ?? 'Unverified';
+  const effectiveRejectionReason =
+    settings?.verificationRejectionReason ?? readiness?.verificationRejectionReason ?? null;
+  const effectiveLastSubmittedAt =
+    settings?.lastVerificationSubmittedAtUtc ?? readiness?.lastVerificationSubmittedAtUtc ?? null;
+  const effectiveIsDirectoryPublished =
+    settings?.isDirectoryPublished ?? readiness?.isDirectoryPublished ?? false;
+  const effectiveIsOnlineBookingPaused =
+    settings?.isOnlineBookingPaused ?? readiness?.isOnlineBookingPaused ?? false;
+  const effectiveIsWorkspaceEligible =
+    settings?.isWorkspaceEligible ?? readiness?.isWorkspaceEligible ?? false;
+
   const hasActiveLicense = Boolean(
     license &&
       license.status === 'Active' &&
@@ -439,13 +468,101 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   );
   const hasProfile = Boolean(clinicName?.trim() && (letterheadAddress?.trim() || letterheadContact?.trim()));
   const hasOperatingHours = Boolean(operatingHours && operatingHours.trim().length > 0);
+  const hasDohLtoOrProof = Boolean(
+    effectiveDohLto?.trim() || effectiveLtoProofKey?.trim() || readiness?.checks?.hasDohLtoOrProof
+  );
   const hasDoctor = staff.some((s) => s.isActive && s.role === 'Doctor' && Boolean(s.prcLicenseNumber?.trim()));
   const hasFrontDesk = staff.some((s) => s.isActive && (s.role === 'Receptionist' || s.role === 'Cashier' || s.role === 'Admin'));
   const hasServices = services.some((s) => s.isActive);
-  const isFacilityReady = hasActiveLicense && hasProfile && hasOperatingHours && hasDoctor && hasFrontDesk && hasServices;
+  const isFacilityReady =
+    hasActiveLicense && hasProfile && hasOperatingHours && hasDohLtoOrProof && hasDoctor && hasFrontDesk && hasServices;
 
   const [publishingLoading, setPublishingLoading] = useState(false);
+  const [withdrawingLoading, setWithdrawingLoading] = useState(false);
   const [pauseLoading, setPauseLoading] = useState(false);
+  const [ltoSaving, setLtoSaving] = useState(false);
+  const [ltoUploading, setLtoUploading] = useState(false);
+
+  const handleSaveDohLto = async (dohLto: string) => {
+    setLtoSaving(true);
+    const [saved, err] = await clinicService.updateSettings({
+      letterheadDohLto: dohLto.trim(),
+    });
+    setLtoSaving(false);
+    if (err || !saved) {
+      notify.error(err?.message || 'Could not save DOH LTO number.');
+      return false;
+    }
+    setSettings(saved);
+    await refreshReadiness();
+    notify.success('DOH LTO number saved.');
+    return true;
+  };
+
+  const handleUploadLtoProof = async (formData: FormData) => {
+    setLtoUploading(true);
+    const [res, err] = await clinicService.uploadLtoProof(formData);
+    setLtoUploading(false);
+    if (err || !res?.objectKey) {
+      notify.error(err?.message || 'Could not upload DOH LTO proof.');
+      return false;
+    }
+    setSettings((prev) => (prev ? { ...prev, ltoEvidenceObjectKey: res.objectKey } : prev));
+    await refreshReadiness();
+    notify.success('DOH LTO proof uploaded.');
+    return true;
+  };
+
+  const handleSubmitVerification = async () => {
+    if (!settings) return;
+    setPublishingLoading(true);
+    const [result, err] = await clinicService.publishToDirectory(true);
+    setPublishingLoading(false);
+
+    if (err || !result?.success) {
+      notify.error(err?.message || result?.message || 'Failed to submit facility for directory verification.');
+      return;
+    }
+
+    const nextStatus = result.platformVerificationStatus ?? 'PendingReview';
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            isDirectoryPublished: result.isPublished,
+            platformVerificationStatus: nextStatus,
+            verificationRejectionReason: null,
+          }
+        : null
+    );
+    await refreshReadiness();
+    notify.success(result.message || 'Clinic verification request submitted.');
+  };
+
+  const handleWithdrawVerification = async () => {
+    if (!settings) return;
+    setWithdrawingLoading(true);
+    const [result, err] = await clinicService.withdrawDirectoryPublishing();
+    setWithdrawingLoading(false);
+
+    if (err || !result?.success) {
+      notify.error(err?.message || result?.message || 'Failed to withdraw verification submission.');
+      return;
+    }
+
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            isDirectoryPublished: false,
+            platformVerificationStatus: result.platformVerificationStatus ?? 'Unverified',
+            verificationRejectionReason: null,
+          }
+        : null
+    );
+    await refreshReadiness();
+    notify.success(result.message || 'Verification submission withdrawn.');
+  };
 
   const handleTogglePublishDirectory = async (nextValue: boolean) => {
     if (!settings) return;
@@ -464,8 +581,12 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
 
     const updatedPublishedSettings = (result as any).settings ?? (settings ? { ...settings, isDirectoryPublished: result.isPublished } : null);
     if (updatedPublishedSettings) {
-      setSettings(updatedPublishedSettings);
-      updateClinicSettings(updatedPublishedSettings);
+      const nextSettings = {
+        ...updatedPublishedSettings,
+        platformVerificationStatus: result.platformVerificationStatus ?? updatedPublishedSettings.platformVerificationStatus,
+      };
+      setSettings(nextSettings);
+      updateClinicSettings(nextSettings);
       void refreshClinic();
     } else {
       setSettings((prev) =>
@@ -473,15 +594,18 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
           ? {
               ...prev,
               isDirectoryPublished: result.isPublished,
+              platformVerificationStatus: result.platformVerificationStatus ?? prev.platformVerificationStatus,
             }
           : null
       );
       void refreshClinic();
     }
+    await refreshReadiness();
     notify.success(
-      result.isPublished
-        ? 'Facility is now published to the Patient App directory.'
-        : 'Facility has been unpublished from the Patient App directory.'
+      result.message ||
+        (result.isPublished
+          ? 'Facility is now published to the Patient App directory.'
+          : 'Facility has been unpublished from the Patient App directory.')
     );
   };
 
@@ -516,6 +640,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       );
       void refreshClinic();
     }
+    await refreshReadiness();
     notify.success(
       result.isPaused
         ? 'Online patient bookings are now paused.'
@@ -674,11 +799,25 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             staff={staff}
             services={services}
             roles={roles}
-            isDirectoryPublished={settings?.isDirectoryPublished ?? false}
-            isOnlineBookingPaused={settings?.isOnlineBookingPaused ?? false}
-            isWorkspaceEligible={settings?.isWorkspaceEligible ?? false}
+            isDirectoryPublished={effectiveIsDirectoryPublished}
+            isOnlineBookingPaused={effectiveIsOnlineBookingPaused}
+            isWorkspaceEligible={effectiveIsWorkspaceEligible}
+            platformVerificationStatus={effectiveVerificationStatus}
+            verificationRejectionReason={effectiveRejectionReason}
+            lastVerificationSubmittedAtUtc={effectiveLastSubmittedAt}
+            letterheadDohLto={effectiveDohLto}
+            ltoEvidenceObjectKey={effectiveLtoProofKey}
+            optedInCliniciansCount={readiness?.optedInCliniciansCount}
+            optedInCliniciansReadyCount={readiness?.optedInCliniciansReadyCount}
+            onSaveDohLto={handleSaveDohLto}
+            onUploadLtoProof={handleUploadLtoProof}
+            onSubmitVerification={handleSubmitVerification}
+            onWithdrawVerification={handleWithdrawVerification}
             onTogglePublishDirectory={handleTogglePublishDirectory}
             onToggleBookingPause={handleToggleBookingPause}
+            isLtoSaving={ltoSaving}
+            isLtoUploading={ltoUploading}
+            isWithdrawingVerification={withdrawingLoading}
             isPublishingMutating={publishingLoading}
             isBookingPauseMutating={pauseLoading}
             showSkeletons={showSkeletons}

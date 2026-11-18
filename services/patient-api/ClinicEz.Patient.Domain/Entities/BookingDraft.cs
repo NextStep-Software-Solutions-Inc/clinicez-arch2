@@ -10,6 +10,8 @@ public sealed class BookingDraft : BaseEntity, ISyncable
     public Patient Patient { get; set; } = null!;
     public Guid ClinicId { get; set; }
     public Clinic Clinic { get; set; } = null!;
+    public Guid? ProviderId { get; set; }
+    public string? ProviderName { get; set; }
     public Guid? OrganizationId { get; set; }
     public Organization? Organization { get; set; }
 

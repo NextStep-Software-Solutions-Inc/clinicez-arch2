@@ -5,6 +5,8 @@ import type { SyncWireStatus } from './wireEnums';
 
 export interface PatientSummary {
     id: string;
+    clinicEzId?: string | null;
+    welcomeVisitedStepsJson?: string | null;
     firstName: string;
     middleName: string | null;
     lastName: string;

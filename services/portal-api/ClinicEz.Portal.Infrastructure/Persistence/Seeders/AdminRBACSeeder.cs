@@ -32,6 +32,7 @@ public class AdminRBACSeeder : IBaseSeeder
         var superAdminRoleId = Guid.Parse("44444444-4444-4444-4444-444444444444");
         var supportStaffRoleId = Guid.Parse("55555555-5555-5555-5555-555555555555");
         var contentWriterRoleId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+        var directoryVerifierRoleId = Guid.Parse("67777777-7777-7777-7777-777777777777");
 
         var roles = new[]
         {
@@ -59,6 +60,21 @@ public class AdminRBACSeeder : IBaseSeeder
                 Name = "Content Writer",
                 Description = "Maintains marketing resources, writes blog articles.",
                 Permissions = new List<string> { Permissions.ManageBlogs },
+                CreatedAt = seedDate,
+                CreatedBy = "System"
+            },
+            new AdminRole
+            {
+                Id = directoryVerifierRoleId,
+                Name = "Directory Verifier",
+                Description = "Reviews and approves clinic DOH LTO and practitioner PRC directory verification requests.",
+                Permissions = new List<string>
+                {
+                    Permissions.ViewAnalytics,
+                    Permissions.ViewTenants,
+                    Permissions.ViewVerifications,
+                    Permissions.VerifyDirectory
+                },
                 CreatedAt = seedDate,
                 CreatedBy = "System"
             }

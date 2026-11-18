@@ -161,37 +161,9 @@ public sealed class SuspendStaffMemberCommandHandler : IRequestHandler<SuspendSt
             roomNames = roomIds.Where(id => roomMap.ContainsKey(id)).Select(id => roomMap[id]).ToList();
         }
 
-        return new StaffMemberDto(
-            staff.Id,
-            staff.TenantId,
-            staff.ClinicId,
-            staff.ClinicRoleId,
+        return StaffMemberDto.FromEntity(
+            staff,
             staff.ClinicRole?.Name,
-            staff.FirstName,
-            staff.LastName,
-            staff.MiddleName,
-            staff.Title,
-            staff.Role,
-            staff.Email,
-            staff.PhoneNumber,
-            staff.PrcLicenseNumber,
-            staff.PtrNumber,
-            staff.S2LicenseNumber,
-            staff.Specialty,
-            staff.IsActive,
-            staff.CreatedAt,
-            HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-            MustChangePassword: staff.MustChangePassword,
-            TemporaryPassword: null,
-            PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomIds: staff.GetAssignedRoomIds(),
-            AssignedRoomNames: roomNames,
-            SignatureSpecimen: staff.SignatureSpecimen,
-            DefaultSignatureMode: staff.DefaultSignatureMode,
-            Status: staff.Status,
-            InvitationToken: staff.InvitationToken,
-            InvitationExpiresAt: staff.InvitationExpiresAt,
-            InviteAcceptedAt: staff.InviteAcceptedAt,
-            InviteUrl: null);
+            roomNames);
     }
 }

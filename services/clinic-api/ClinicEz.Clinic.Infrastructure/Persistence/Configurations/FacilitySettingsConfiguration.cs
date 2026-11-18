@@ -5,6 +5,7 @@ using System.Text.Json;
 using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop.Persistence;
 using ClinicEz.Shared.Workspace;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -64,6 +65,14 @@ public sealed class FacilitySettingsConfiguration : IEntityTypeConfiguration<Fac
             entity.Property(e => e.IsWorkspaceEligible).HasDefaultValue(false);
             entity.Property(e => e.IsDirectoryPublished).HasDefaultValue(false);
             entity.Property(e => e.IsOnlineBookingPaused).HasDefaultValue(false);
+            entity.Property(e => e.PlatformVerificationStatus)
+                .HasConversion<string>()
+                .HasMaxLength(50)
+                .HasDefaultValue(PlatformVerificationStatus.Unverified)
+                .HasSentinel((PlatformVerificationStatus)(-1));
+            entity.Property(e => e.VerificationRejectionReason).HasMaxLength(1000);
+            entity.Property(e => e.LastVerificationSubmittedAtUtc);
+            entity.Property(e => e.LtoEvidenceObjectKey).HasMaxLength(500);
             entity.Property(e => e.DefaultApproverName).HasMaxLength(200);
             entity.Property(e => e.DefaultApproverTitle).HasMaxLength(200);
             entity.Property(e => e.DocumentSignatoriesJson).HasColumnType("text");

@@ -27,6 +27,8 @@ import RescheduleScreen from '../screens/appointments/Reschedule.screen';
 import AttachFilesScreen from '../screens/appointments/AttachFiles.screen';
 
 // Profile Part A
+import ProfileScreen from '../screens/profile/Profile.screen';
+import DirectorySearchScreen from '../screens/Search.screen';
 import PersonalDemographicsScreen from '../screens/profile/PersonalDemographics.screen';
 import GovernmentIdsScreen from '../screens/profile/GovernmentIds.screen';
 import ContactInfoScreen from '../screens/profile/ContactInfo.screen';
@@ -180,16 +182,12 @@ const MainStack = createNativeStackNavigator({
       screen: BookingDraftScreen,
       options: {
         title: 'Book Appointment',
-        presentation: 'formSheet',
-        sheetAllowedDetents: [0.92],
-        sheetGrabberVisible: true,
-        sheetCornerRadius: radiusScale.xl,
-        headerShown: true,
+        headerShown: false,
       },
     }),
     AppointmentDetailScreen: createNativeStackScreen({
       screen: AppointmentDetailScreen,
-      options: { title: 'Appointment Details', headerBackTitle: '' },
+      options: { headerShown: false },
     }),
     ProviderProfileScreen: createNativeStackScreen({
       screen: ProviderProfileScreen,
@@ -222,6 +220,14 @@ const MainStack = createNativeStackNavigator({
       },
     }),
     // ── Profile Part A ────────────────────────────────────────────────────────
+    ProfileScreen: createNativeStackScreen({
+      screen: ProfileScreen,
+      options: { title: 'My Profile', headerLargeTitleEnabled: true },
+    }),
+    DirectorySearchScreen: createNativeStackScreen({
+      screen: DirectorySearchScreen,
+      options: { headerShown: false },
+    }),
     PersonalDemographicsScreen: createNativeStackScreen({
       screen: PersonalDemographicsScreen,
       options: { title: 'Personal Demographics', headerLargeTitleEnabled: true },

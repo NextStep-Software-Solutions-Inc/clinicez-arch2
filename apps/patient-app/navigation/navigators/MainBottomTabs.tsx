@@ -5,16 +5,15 @@ import { isLiquidGlassSupported } from '@callstack/liquid-glass';
 import { AppIcon, type IconName } from '../../components/ui/Icon';
 
 import HomeStack from './HomeStack';
+import FilesStack from './FilesStack';
 import AppointmentsStack from './AppointmentsStack';
 import MessagesStack from './MessagesStack';
-import FilesStack from './FilesStack';
-import ProfileStack from './ProfileStack';
 
 interface TabDefinition {
   title: string;
   screen: Parameters<typeof createBottomTabScreen>[0]['screen'];
-  androidSymbol: 'home' | 'favorite' | 'chat_bubble' | 'description' | 'person';
-  iosSymbol: 'house.fill' | 'heart.fill' | 'bubble.left.and.bubble.right.fill' | 'doc.fill' | 'person.fill';
+  androidSymbol: 'home' | 'monitor_heart' | 'calendar_today' | 'chat_bubble';
+  iosSymbol: 'house.fill' | 'heart.text.square.fill' | 'calendar' | 'bubble.left.fill';
   webIcon: IconName;
 }
 
@@ -26,33 +25,26 @@ const TAB_DEFINITIONS = {
     iosSymbol: 'house.fill',
     webIcon: 'home',
   },
+  RecordsScreen: {
+    title: 'Records',
+    screen: FilesStack,
+    androidSymbol: 'monitor_heart',
+    iosSymbol: 'heart.text.square.fill',
+    webIcon: 'heartPulse',
+  },
   AppointmentsScreen: {
-    title: 'My Appointments',
+    title: 'Appointments',
     screen: AppointmentsStack,
-    androidSymbol: 'favorite',
-    iosSymbol: 'heart.fill',
-    webIcon: 'appointments',
+    androidSymbol: 'calendar_today',
+    iosSymbol: 'calendar',
+    webIcon: 'calendar',
   },
   MessagesScreen: {
     title: 'Messages',
     screen: MessagesStack,
     androidSymbol: 'chat_bubble',
-    iosSymbol: 'bubble.left.and.bubble.right.fill',
+    iosSymbol: 'bubble.left.fill',
     webIcon: 'chat',
-  },
-  RecordsScreen: {
-    title: 'Records',
-    screen: FilesStack,
-    androidSymbol: 'description',
-    iosSymbol: 'doc.fill',
-    webIcon: 'files',
-  },
-  ProfileScreen: {
-    title: 'My Profile',
-    screen: ProfileStack,
-    androidSymbol: 'person',
-    iosSymbol: 'person.fill',
-    webIcon: 'profile',
   },
 } as const satisfies Record<string, TabDefinition>;
 
@@ -170,10 +162,9 @@ const MainBottomTabs = createBottomTabNavigator({
   }),
   screens: {
     HomeScreen: createScreen('HomeScreen'),
+    RecordsScreen: createScreen('RecordsScreen'),
     AppointmentsScreen: createScreen('AppointmentsScreen'),
     MessagesScreen: createScreen('MessagesScreen'),
-    RecordsScreen: createScreen('RecordsScreen'),
-    ProfileScreen: createScreen('ProfileScreen'),
   },
 });
 

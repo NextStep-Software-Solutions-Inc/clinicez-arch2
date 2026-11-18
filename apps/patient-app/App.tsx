@@ -10,6 +10,8 @@ import { ActivityIndicator, ColorValue, Platform, StyleSheet, View } from 'react
 import { AppThemeProvider, useAppTheme } from 'contexts/ThemeContext';
 import { buildNavigationTheme } from './constants/navigationTheme';
 import { fontAssets, setCustomFontsAvailable } from './constants/fonts';
+import { clinicalEmpathyFontAssets } from './constants/clinicalEmpathyFonts';
+import { setClinicalEmpathyFontsAvailable } from './constants/clinicalEmpathy';
 import { lightTheme } from './constants/theme';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -205,12 +207,16 @@ function AppWithTheme() {
 }
 
 export default function App() {
-  const [fontsLoaded, fontError] = useFonts(fontAssets);
+  const [fontsLoaded, fontError] = useFonts({
+    ...fontAssets,
+    ...clinicalEmpathyFontAssets,
+  });
 
   // If the typeface fails to load, fall back to the system font instead of rendering
   // text against missing font families.
   if (fontError) {
     setCustomFontsAvailable(false);
+    setClinicalEmpathyFontsAvailable(false);
   }
 
   if (!fontsLoaded && !fontError) {

@@ -12,7 +12,9 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import Icon, { IconName } from '../ui/Icon';
 import ActionMenu from '../ui/ActionMenu';
 import SegmentedControl from '../ui/SegmentedControl';
+import ValidatedDateInput from '../ui/ValidatedDateInput';
 import SignatureSpecimenModal from './SignatureSpecimenModal';
+import { ToggleSwitch } from './FacilityReadinessTab';
 import { theme } from '../../constants/theme';
 import { notify, Alert } from '../../utils/feedback';
 import {
@@ -39,6 +41,16 @@ import { useClinic } from '../../context/ClinicContext';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { DoctorRosterCalendarModal } from '../roster/DoctorRosterCalendarModal';
 import { resolveStaffBadge, getAvailableStaffActions } from '../../utils/staffStatus';
+import {
+  getPractitionerDirectoryActions,
+  isClinicianRole,
+  isStaffRecordReadyForVerification,
+  pickVerificationEvidenceFile,
+  resolvePractitionerVerificationBadge,
+  toEvidenceFormData,
+  validateClinicianDirectoryOptIn,
+  type PickedEvidenceFile,
+} from '../../utils/directoryVerification';
 import { buildStaffCreationPayload, validateStaffEmailNotInClinic } from '../../utils/staffManagement';
 
 export const DUPLICATE_STAFF_EMAIL_ERROR =
@@ -207,6 +219,16 @@ export default function StaffManagementTab({
   const [defaultSignatureMode, setDefaultSignatureMode] = useState<SignatureMode>('ESignatureSpecimen');
   const [signatureModalVisible, setSignatureModalVisible] = useState(false);
 
+  // Clinician Patient Directory Verification Fields (Doctor / Nurse only)
+  const [isDirectoryOptIn, setIsDirectoryOptIn] = useState(false);
+  const [prcExpiryDate, setPrcExpiryDate] = useState('');
+  const [prcEvidenceObjectKey, setPrcEvidenceObjectKey] = useState<string | null>(null);
+  const [pickedPrcFile, setPickedPrcFile] = useState<PickedEvidenceFile | null>(null);
+  const [uploadingPrcProof, setUploadingPrcProof] = useState(false);
+  const [verificationContact, setVerificationContact] = useState('');
+  const [publicBio, setPublicBio] = useState('');
+  const [submittingVerificationId, setSubmittingVerificationId] = useState<string | null>(null);
+
   const isEditingSelf = isSelf(editingStaff);
   const isSystemAdminStaff = (s?: StaffMember | null) => {
     if (!s || !s.isActive) return false;
@@ -264,6 +286,12 @@ export default function StaffManagementTab({
       return;
     }
     setSelectedRoleId(r.id);
+    setRole(r.staffRole);
+    if (!isClinicianRole(r.staffRole)) {
+      setAssignedRoomIds([]);
+      setIsDirectoryOptIn(false);
+      setPickedPrcFile(null);
+    }
   };
 
   const handleSelectArchetype = (newRole: StaffRole) => {
@@ -271,9 +299,64 @@ export default function StaffManagementTab({
       return;
     }
     setRole(newRole);
-    if (newRole !== 'Doctor' && newRole !== 'Nurse') {
+    if (!isClinicianRole(newRole)) {
       setAssignedRoomIds([]);
+      setIsDirectoryOptIn(false);
+      setPickedPrcFile(null);
     }
+  };
+
+  const resetDirectoryOptInFields = () => {
+    setIsDirectoryOptIn(false);
+    setPrcExpiryDate('');
+    setPrcEvidenceObjectKey(null);
+    setPickedPrcFile(null);
+    setUploadingPrcProof(false);
+    setVerificationContact('');
+    setPublicBio('');
+  };
+
+  const handleToggleDirectoryOptIn = (nextVal: boolean) => {
+    setIsDirectoryOptIn(nextVal);
+    if (nextVal && !verificationContact.trim()) {
+      const candidate = email.trim() || phone.trim();
+      if (candidate) setVerificationContact(candidate);
+    }
+  };
+
+  const handlePickOrUploadPrcProof = async (targetStaffId?: string) => {
+    const picked = await pickVerificationEvidenceFile();
+    if (picked.canceled) return;
+    if (picked.error || !picked.file) {
+      notify.error(picked.error || 'Could not select PRC proof file.');
+      return;
+    }
+
+    if (!targetStaffId) {
+      setPickedPrcFile(picked.file);
+      return;
+    }
+
+    setUploadingPrcProof(true);
+    const [res, err] = await clinicService.uploadStaffPrcProof(targetStaffId, toEvidenceFormData(picked.file));
+    setUploadingPrcProof(false);
+
+    if (err || !res?.objectKey) {
+      const msg = err?.message || 'Could not upload PRC proof.';
+      setEditError(msg);
+      notify.error(msg);
+      return;
+    }
+
+    setPrcEvidenceObjectKey(res.objectKey);
+    setPickedPrcFile(picked.file);
+    setEditingStaff((prev) => (prev && prev.id === targetStaffId ? { ...prev, prcEvidenceObjectKey: res.objectKey } : prev));
+    setStaff((prev) =>
+      prev.map((member) =>
+        member.id === targetStaffId ? { ...member, prcEvidenceObjectKey: res.objectKey } : member,
+      ),
+    );
+    notify.success('PRC proof uploaded.');
   };
 
   const handleOpenAddModal = () => {
@@ -299,6 +382,7 @@ export default function StaffManagementTab({
     setTemporaryPassword(generateRandomPassword());
     setSignatureSpecimen(null);
     setDefaultSignatureMode('ESignatureSpecimen');
+    resetDirectoryOptInFields();
     setAddError(null);
     setEmailFieldError(null);
     prevShowAddModalRef.current = true;
@@ -344,13 +428,14 @@ export default function StaffManagementTab({
       setTemporaryPassword(generateRandomPassword());
       setSignatureSpecimen(null);
       setDefaultSignatureMode('ESignatureSpecimen');
+      resetDirectoryOptInFields();
       setAddError(null);
       setEmailFieldError(null);
     }
     prevShowAddModalRef.current = showAddModal;
   }, [showAddModal, systemRoleOptions]);
 
-  const handleOpenEditModal = (s: StaffMember) => {
+  const handleOpenEditModal = (s: StaffMember, options?: { prefillOptIn?: boolean; initialError?: string | null }) => {
     setEditingStaff(s);
     setEmailFieldError(null);
     setFirstName(s.firstName || '');
@@ -370,6 +455,15 @@ export default function StaffManagementTab({
     setRole(s.role);
     setIsActiveStaff(s.isActive);
 
+    const optInInitial = options?.prefillOptIn ? isClinicianRole(s.role) : Boolean(s.isDirectoryOptIn);
+    setIsDirectoryOptIn(optInInitial);
+    setPrcExpiryDate(s.prcExpiryDate || '');
+    setPrcEvidenceObjectKey(s.prcEvidenceObjectKey || null);
+    setPickedPrcFile(null);
+    setUploadingPrcProof(false);
+    setVerificationContact(s.verificationContact || (optInInitial ? s.email || s.phoneNumber || '' : ''));
+    setPublicBio(s.publicBio || '');
+
     const matchingRole =
       (s.clinicRoleId ? allRoleOptions.find((r) => r.id === s.clinicRoleId) : null) ||
       systemRoleOptions.find((r) => r.staffRole === s.role) ||
@@ -378,7 +472,7 @@ export default function StaffManagementTab({
     if (matchingRole) {
       setSelectedRoleId(matchingRole.id);
     }
-    setEditError(null);
+    setEditError(options?.initialError ?? null);
   };
 
   const handleSaveEditStaff = async () => {
@@ -412,6 +506,22 @@ export default function StaffManagementTab({
       return;
     }
 
+    const clinicianAllowed = isClinicianRole(effectiveStaffRole);
+    const effectiveOptIn = clinicianAllowed && isDirectoryOptIn;
+    if (effectiveOptIn) {
+      const optInErr = validateClinicianDirectoryOptIn({
+        role: effectiveStaffRole,
+        prcLicenseNumber: prc,
+        prcExpiryDate,
+        prcEvidenceObjectKey,
+        verificationContact,
+      });
+      if (optInErr) {
+        setEditError(optInErr);
+        return;
+      }
+    }
+
     const duplicateEditEmailError = validateStaffEmailNotInClinic(email, staff, editingStaff.id);
     if (duplicateEditEmailError) {
       setEmailFieldError(duplicateEditEmailError);
@@ -426,7 +536,7 @@ export default function StaffManagementTab({
     const resolvedClinicRoleId = effectiveRoleId.startsWith('sys-') ? undefined : effectiveRoleId;
     const clinicRoleId = isEditingSelf ? editingStaff.clinicRoleId : resolvedClinicRoleId;
 
-    const canHaveRoom = effectiveStaffRole === 'Doctor' || effectiveStaffRole === 'Nurse';
+    const canHaveRoom = clinicianAllowed;
     const nextRoomIds = canHaveRoom ? assignedRoomIds : [];
 
     const [updated, err] = await clinicService.updateStaff(editingStaff.id, {
@@ -438,7 +548,7 @@ export default function StaffManagementTab({
       clinicRoleId: clinicRoleId || undefined,
       email: email.trim() || undefined,
       phoneNumber: phone.trim() || undefined,
-      prcLicenseNumber: effectiveStaffRole === 'Doctor' ? prc.trim() : undefined,
+      prcLicenseNumber: effectiveStaffRole === 'Doctor' ? prc.trim() : clinicianAllowed ? prc.trim() || undefined : undefined,
       ptrNumber: effectiveStaffRole === 'Doctor' ? ptr.trim() || undefined : undefined,
       s2LicenseNumber: effectiveStaffRole === 'Doctor' ? s2.trim() || undefined : undefined,
       philHealthPan: effectiveStaffRole === 'Doctor' ? pan.trim() || undefined : undefined,
@@ -447,18 +557,57 @@ export default function StaffManagementTab({
       isActive: isEditingSelf ? editingStaff.isActive : isActiveStaff,
       signatureSpecimen: effectiveStaffRole === 'Doctor' ? signatureSpecimen : undefined,
       defaultSignatureMode: effectiveStaffRole === 'Doctor' ? defaultSignatureMode : undefined,
+      isDirectoryOptIn: effectiveOptIn,
+      prcExpiryDate: clinicianAllowed && prcExpiryDate.trim() ? prcExpiryDate.trim() : null,
+      prcEvidenceObjectKey: clinicianAllowed ? prcEvidenceObjectKey || null : null,
+      verificationContact: clinicianAllowed ? verificationContact.trim() || null : null,
+      publicBio: clinicianAllowed ? publicBio.trim() || null : null,
     });
 
-    setSavingEdit(false);
-
     if (err || !updated) {
+      setSavingEdit(false);
       setEditError(err?.message || 'Failed to update staff member.');
       return;
     }
 
-    setStaff((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    let finalUpdated = updated;
+    const needsVerificationSubmit =
+      effectiveOptIn &&
+      (!editingStaff.publicVerificationStatus ||
+        editingStaff.publicVerificationStatus === 'Unverified' ||
+        editingStaff.publicVerificationStatus === 'Rejected' ||
+        editingStaff.publicVerificationStatus === 'Expired' ||
+        editingStaff.publicVerificationStatus === 'Suspended');
+    const prcChangedWhileVerified =
+      effectiveOptIn &&
+      editingStaff.publicVerificationStatus === 'Verified' &&
+      (editingStaff.prcLicenseNumber ?? '').trim() !== prc.trim();
+
+    if ((needsVerificationSubmit || prcChangedWhileVerified) && updated.publicVerificationStatus !== 'PendingVerification') {
+      const [submitted, submitErr] = await clinicService.submitStaffVerification(updated.id);
+      if (submitErr || !submitted) {
+        setSavingEdit(false);
+        setStaff((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+        setEditingStaff(updated);
+        setEditError(submitErr?.message || 'Profile saved, but directory verification submission failed.');
+        return;
+      }
+      finalUpdated = submitted;
+    } else if (!effectiveOptIn && editingStaff.isDirectoryOptIn && editingStaff.publicVerificationStatus && editingStaff.publicVerificationStatus !== 'Unverified') {
+      const [withdrawn] = await clinicService.withdrawStaffVerification(updated.id);
+      if (withdrawn) {
+        finalUpdated = withdrawn;
+      }
+    }
+
+    setSavingEdit(false);
+    setStaff((prev) => prev.map((s) => (s.id === finalUpdated.id ? finalUpdated : s)));
     setEditingStaff(null);
-    notify.success(`Staff member ${updated.firstName} ${updated.lastName} updated.`);
+    notify.success(
+      needsVerificationSubmit || prcChangedWhileVerified
+        ? `${finalUpdated.firstName} ${finalUpdated.lastName} saved and submitted for verification.`
+        : `Staff member ${finalUpdated.firstName} ${finalUpdated.lastName} updated.`,
+    );
     await Promise.all([onRefreshStaff(), refreshRooms(), refreshGlobalStaff()]);
   };
 
@@ -471,6 +620,23 @@ export default function StaffManagementTab({
     if (role === 'Doctor' && !prc.trim()) {
       setAddError('PRC License Number is mandatory for Doctors.');
       return;
+    }
+
+    const clinicianAllowed = isClinicianRole(role);
+    const effectiveOptIn = clinicianAllowed && isDirectoryOptIn;
+    if (effectiveOptIn) {
+      const optInErr = validateClinicianDirectoryOptIn({
+        role,
+        prcLicenseNumber: prc,
+        prcExpiryDate,
+        prcEvidenceObjectKey,
+        hasPickedProofFile: Boolean(pickedPrcFile),
+        verificationContact,
+      });
+      if (optInErr) {
+        setAddError(optInErr);
+        return;
+      }
     }
 
     const preflightDuplicateError = validateAddStaffDuplicateEmail(email, staff, inviteDeliveryMode);
@@ -507,7 +673,7 @@ export default function StaffManagementTab({
 
     const effectiveRoleId = selectedRoleId || selectedRoleOption.id;
     const clinicRoleId = effectiveRoleId.startsWith('sys-') ? undefined : effectiveRoleId;
-    const canHaveRoom = role === 'Doctor' || role === 'Nurse';
+    const canHaveRoom = clinicianAllowed;
 
     const [created, err] = await clinicService.createStaff({
       firstName: firstName.trim(),
@@ -518,7 +684,7 @@ export default function StaffManagementTab({
       clinicRoleId: clinicRoleId || undefined,
       email: deliveryPayload.email,
       phoneNumber: phone.trim() || undefined,
-      prcLicenseNumber: role === 'Doctor' ? prc.trim() : undefined,
+      prcLicenseNumber: role === 'Doctor' ? prc.trim() : clinicianAllowed ? prc.trim() || undefined : undefined,
       ptrNumber: role === 'Doctor' ? ptr.trim() || undefined : undefined,
       s2LicenseNumber: role === 'Doctor' ? s2.trim() || undefined : undefined,
       philHealthPan: role === 'Doctor' ? pan.trim() || undefined : undefined,
@@ -528,45 +694,88 @@ export default function StaffManagementTab({
       assignedRoomIds: canHaveRoom && assignedRoomIds.length > 0 ? assignedRoomIds : undefined,
       initialPassword: deliveryPayload.initialPassword,
       sendInviteEmail: deliveryPayload.sendInviteEmail,
+      isDirectoryOptIn: effectiveOptIn && Boolean(prcEvidenceObjectKey) && !pickedPrcFile,
+      prcExpiryDate: clinicianAllowed && prcExpiryDate.trim() ? prcExpiryDate.trim() : undefined,
+      prcEvidenceObjectKey: clinicianAllowed && prcEvidenceObjectKey ? prcEvidenceObjectKey : undefined,
+      verificationContact: clinicianAllowed && verificationContact.trim() ? verificationContact.trim() : undefined,
+      publicBio: clinicianAllowed && publicBio.trim() ? publicBio.trim() : undefined,
     });
 
-    setAddingStaff(false);
-
     if (err || !created) {
+      setAddingStaff(false);
       setAddError(err?.message || 'Failed to create staff member. Check facility seat limits.');
       return;
     }
 
-    setStaff((prev) => [...prev, created]);
+    let finalCreated = created;
+    if (effectiveOptIn) {
+      if (pickedPrcFile) {
+        const [uploadRes, uploadErr] = await clinicService.uploadStaffPrcProof(
+          created.id,
+          toEvidenceFormData(pickedPrcFile),
+        );
+        if (uploadErr || !uploadRes?.objectKey) {
+          setAddingStaff(false);
+          setStaff((prev) => [...prev, finalCreated]);
+          setShowAddModal(false);
+          await Promise.all([onStaffAdded(), refreshRooms(), refreshGlobalStaff()]);
+          const msg = uploadErr?.message || 'Staff created, but PRC proof upload failed. Upload PRC proof to submit.';
+          notify.error(msg);
+          handleOpenEditModal(finalCreated, { prefillOptIn: true, initialError: msg });
+          return;
+        }
+        finalCreated = { ...finalCreated, prcEvidenceObjectKey: uploadRes.objectKey };
+      }
+
+      const [submitted, submitErr] = await clinicService.submitStaffVerification(created.id);
+      if (submitErr || !submitted) {
+        setAddingStaff(false);
+        setStaff((prev) => [...prev, finalCreated]);
+        setShowAddModal(false);
+        await Promise.all([onStaffAdded(), refreshRooms(), refreshGlobalStaff()]);
+        const msg = submitErr?.message || 'Staff created, but verification submission failed.';
+        notify.error(msg);
+        handleOpenEditModal(finalCreated, { prefillOptIn: true, initialError: msg });
+        return;
+      }
+      finalCreated = submitted;
+    }
+
+    setAddingStaff(false);
+    setStaff((prev) => [...prev, finalCreated]);
     setShowAddModal(false);
     await Promise.all([onStaffAdded(), refreshRooms(), refreshGlobalStaff()]);
 
     if (inviteDeliveryMode === 'email' || inviteDeliveryMode === 'link') {
       const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
       const inviteUrl =
-        created.inviteUrl ||
-        (created.invitationToken
-          ? (origin ? `${origin}/invitations/${created.invitationToken}` : `/invitations/${created.invitationToken}`)
+        finalCreated.inviteUrl ||
+        (finalCreated.invitationToken
+          ? (origin ? `${origin}/invitations/${finalCreated.invitationToken}` : `/invitations/${finalCreated.invitationToken}`)
           : '');
 
       setInviteModal({
         visible: true,
-        name: `${created.firstName} ${created.lastName}`.trim(),
-        email: created.email || email.trim(),
-        role: created.roleName || created.role,
+        name: `${finalCreated.firstName} ${finalCreated.lastName}`.trim(),
+        email: finalCreated.email || email.trim(),
+        role: finalCreated.roleName || finalCreated.role,
         inviteUrl,
         sentEmail: inviteDeliveryMode === 'email',
       });
     } else if (inviteDeliveryMode === 'password' && temporaryPassword) {
       setCredentialsModal({
         visible: true,
-        name: `${created.firstName} ${created.lastName}`.trim(),
-        email: created.email || email.trim(),
-        role: created.roleName || created.role,
+        name: `${finalCreated.firstName} ${finalCreated.lastName}`.trim(),
+        email: finalCreated.email || email.trim(),
+        role: finalCreated.roleName || finalCreated.role,
         temporaryPassword,
       });
     } else {
-      notify.success(`Staff member ${created.firstName} ${created.lastName} added.`);
+      notify.success(
+        effectiveOptIn
+          ? `${finalCreated.firstName} ${finalCreated.lastName} added and submitted for verification.`
+          : `Staff member ${finalCreated.firstName} ${finalCreated.lastName} added.`,
+      );
     }
   };
 
@@ -826,6 +1035,213 @@ export default function StaffManagementTab({
     await Promise.all([onRefreshStaff(), refreshGlobalStaff()]);
   };
 
+  const handleRowSubmitVerification = async (staffMember: StaffMember) => {
+    if (!isStaffRecordReadyForVerification(staffMember)) {
+      handleOpenEditModal(staffMember, {
+        prefillOptIn: true,
+        initialError: 'Complete PRC license, PRC expiry date, PRC proof, and verification contact to submit.',
+      });
+      return;
+    }
+    setSubmittingVerificationId(staffMember.id);
+    const [updated, err] = await clinicService.submitStaffVerification(staffMember.id);
+    setSubmittingVerificationId(null);
+
+    if (err || !updated) {
+      notify.error(err?.message || 'Could not submit practitioner verification.');
+      return;
+    }
+
+    setStaff((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    notify.success(`Submitted ${updated.firstName} ${updated.lastName} for directory verification.`);
+    await Promise.all([onRefreshStaff(), refreshGlobalStaff()]);
+  };
+
+  const handleRowResubmitPrc = async (staffMember: StaffMember) => {
+    if (staffMember.publicVerificationStatus === 'Expired' || !isStaffRecordReadyForVerification(staffMember)) {
+      handleOpenEditModal(staffMember, {
+        prefillOptIn: true,
+        initialError:
+          staffMember.publicVerificationReason ||
+          'Update PRC expiry date or PRC proof document, then save and submit for verification.',
+      });
+      return;
+    }
+    setSubmittingVerificationId(staffMember.id);
+    const [updated, err] = await clinicService.submitStaffVerification(staffMember.id);
+    setSubmittingVerificationId(null);
+
+    if (err || !updated) {
+      notify.error(err?.message || 'Could not resubmit PRC verification.');
+      return;
+    }
+
+    setStaff((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    notify.success(`Resubmitted ${updated.firstName} ${updated.lastName} for directory verification.`);
+    await Promise.all([onRefreshStaff(), refreshGlobalStaff()]);
+  };
+
+  const handleRowWithdrawVerification = async (staffMember: StaffMember) => {
+    setSubmittingVerificationId(staffMember.id);
+    const [updated, err] = await clinicService.withdrawStaffVerification(staffMember.id);
+    setSubmittingVerificationId(null);
+
+    if (err || !updated) {
+      notify.error(err?.message || 'Could not withdraw directory verification.');
+      return;
+    }
+
+    setStaff((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    notify.success(`Directory verification withdrawn for ${updated.firstName} ${updated.lastName}.`);
+    await Promise.all([onRefreshStaff(), refreshGlobalStaff()]);
+  };
+
+  const renderClinicianDirectorySection = (mode: 'add' | 'edit') => {
+    const activeRole = mode === 'edit' && isEditingSelf && editingStaff ? editingStaff.role : role;
+    if (!isClinicianRole(activeRole)) return null;
+
+    const existingBadge =
+      mode === 'edit' && editingStaff
+        ? resolvePractitionerVerificationBadge(editingStaff.publicVerificationStatus)
+        : null;
+    const isActionRequired =
+      mode === 'edit' &&
+      editingStaff &&
+      (editingStaff.publicVerificationStatus === 'Rejected' ||
+        editingStaff.publicVerificationStatus === 'Expired' ||
+        editingStaff.publicVerificationStatus === 'Suspended');
+    const prcChangedWhileVerified =
+      mode === 'edit' &&
+      editingStaff?.publicVerificationStatus === 'Verified' &&
+      (editingStaff.prcLicenseNumber ?? '').trim() !== prc.trim();
+    const targetStaffId = mode === 'edit' ? editingStaff?.id : undefined;
+
+    return (
+      <View style={styles.directorySection} testID="clinician-directory-section">
+        <View style={styles.directoryHeaderRow}>
+          <View style={styles.flex1}>
+            <View style={styles.directoryTitleRow}>
+              <ThemedText variant="smallBold" color={theme.colors.text}>
+                List in Patient Directory
+              </ThemedText>
+              {existingBadge ? (
+                <Badge
+                  label={existingBadge.label}
+                  variant={existingBadge.variant}
+                  size="sm"
+                  icon={existingBadge.icon}
+                />
+              ) : null}
+            </View>
+            <ThemedText variant="caption" color={theme.colors.textMuted}>
+              Allow patients to discover this {activeRole.toLowerCase()} in the clinic directory after PRC verification.
+            </ThemedText>
+          </View>
+          <ToggleSwitch
+            value={isDirectoryOptIn}
+            onValueChange={handleToggleDirectoryOptIn}
+            accessibilityLabel="List in Patient Directory"
+            testID={`switch-directory-opt-in-${mode}`}
+          />
+        </View>
+
+        {isActionRequired && editingStaff?.publicVerificationReason ? (
+          <View style={styles.directoryAlertBox}>
+            <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+            <ThemedText variant="caption" color={theme.colors.emergencyText} style={styles.flex1}>
+              {editingStaff.publicVerificationReason}
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {prcChangedWhileVerified ? (
+          <View style={styles.directoryNoteBox}>
+            <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+            <ThemedText variant="caption" color={theme.colors.warningText} style={styles.flex1}>
+              Editing a PRC license number triggers re-verification.
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {activeRole === 'Nurse' ? (
+          <Input
+            label="PRC license number"
+            required={isDirectoryOptIn}
+            value={prc}
+            onChangeText={setPrc}
+            placeholder="e.g. 0412345"
+            helperText="Required when listing a Nurse in the patient directory."
+          />
+        ) : null}
+
+        {isDirectoryOptIn ? (
+          <View style={styles.directoryFieldsStack}>
+            <View style={styles.formRow}>
+              <ValidatedDateInput
+                containerStyle={styles.flexWide}
+                label="PRC Expiry Date"
+                required
+                value={prcExpiryDate}
+                onChangeText={setPrcExpiryDate}
+                boundaryMode="futureOrToday"
+                placeholder="YYYY-MM-DD"
+                testID={`input-prc-expiry-${mode}`}
+              />
+              <Input
+                containerStyle={styles.flexWide}
+                label="Verification Contact"
+                required
+                value={verificationContact}
+                onChangeText={setVerificationContact}
+                placeholder="Email or mobile for OTP confirmation"
+                helperText="Used to send affiliation confirmation OTP or link."
+              />
+            </View>
+
+            <View style={styles.prcProofRow}>
+              <View style={styles.flex1}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  PRC Proof Document *
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  {pickedPrcFile
+                    ? `Selected: ${pickedPrcFile.name}`
+                    : prcEvidenceObjectKey
+                    ? 'PRC proof document uploaded on file.'
+                    : 'PDF, JPEG, or PNG up to 5 MB.'}
+                </ThemedText>
+              </View>
+              <Badge
+                label={prcEvidenceObjectKey || pickedPrcFile ? 'Proof Ready' : 'Required'}
+                variant={prcEvidenceObjectKey || pickedPrcFile ? 'success' : 'neutral'}
+                size="sm"
+                icon={prcEvidenceObjectKey || pickedPrcFile ? 'checkCircle' : 'file'}
+              />
+              <Button
+                title={prcEvidenceObjectKey || pickedPrcFile ? 'Replace PRC Proof' : 'Upload PRC Proof'}
+                variant="secondary"
+                size="sm"
+                icon="upload"
+                loading={uploadingPrcProof}
+                disabled={uploadingPrcProof}
+                onPress={() => handlePickOrUploadPrcProof(targetStaffId)}
+                testID={`btn-upload-prc-proof-${mode}`}
+              />
+            </View>
+
+            <Input
+              label="Public Bio"
+              value={publicBio}
+              onChangeText={setPublicBio}
+              multiline
+              placeholder="Concise clinical background and areas of focus for patients"
+            />
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
   const copyToClipboard = async (text: string, successMsg = 'Login credentials copied to clipboard!') => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       await navigator.clipboard.writeText(text);
@@ -907,6 +1323,17 @@ export default function StaffManagementTab({
                   { ...s, inviteUrl: inviteUrl || s.inviteUrl },
                   { isSelf: isSelfRow }
                 );
+                const isClinician = isClinicianRole(s.role);
+                const directoryBadge = isClinician
+                  ? resolvePractitionerVerificationBadge(s.publicVerificationStatus)
+                  : null;
+                const directoryActions = isClinician ? getPractitionerDirectoryActions(s) : [];
+                const isActionRequiredRow =
+                  isClinician &&
+                  (s.publicVerificationStatus === 'Rejected' ||
+                    s.publicVerificationStatus === 'Expired' ||
+                    s.publicVerificationStatus === 'Suspended');
+                const isSubmittingRow = submittingVerificationId === s.id;
 
                 return (
                   <View key={s.id} style={styles.staffItem}>
@@ -917,6 +1344,14 @@ export default function StaffManagementTab({
                           <Badge label="You" variant="info" size="sm" />
                         ) : null}
                         <Badge label={s.role} variant={s.role === 'Doctor' ? 'primary' : 'neutral'} size="sm" />
+                        {directoryBadge ? (
+                          <Badge
+                            label={directoryBadge.label}
+                            variant={directoryBadge.variant}
+                            size="sm"
+                            icon={directoryBadge.icon}
+                          />
+                        ) : null}
                         {s.assignedRoomNames && s.assignedRoomNames.length > 0 ? (
                           s.assignedRoomNames.map((roomName, idx) => (
                             <Badge
@@ -946,6 +1381,7 @@ export default function StaffManagementTab({
                           s.roleName,
                           s.email ? s.email : 'No email',
                           s.prcLicenseNumber ? `PRC ${s.prcLicenseNumber}` : null,
+                          isClinician && s.prcExpiryDate ? `Exp ${s.prcExpiryDate}` : null,
                           s.ptrNumber ? `PTR ${s.ptrNumber}` : null,
                           s.philHealthPan ? `PAN ${s.philHealthPan}` : null,
                           s.s2LicenseNumber ? `S2 ${s.s2LicenseNumber}` : null,
@@ -954,9 +1390,45 @@ export default function StaffManagementTab({
                           .filter(Boolean)
                           .join(' · ')}
                       </ThemedText>
+
+                      {isActionRequiredRow && s.publicVerificationReason ? (
+                        <ThemedText variant="caption" color={theme.colors.emergencyText}>
+                          Action required: {s.publicVerificationReason}
+                        </ThemedText>
+                      ) : null}
                     </View>
 
                     <View style={[styles.staffActionsCol, isCompact && styles.staffActionsColMobile]}>
+                      {directoryActions.includes('submit-verification') ? (
+                        <Button
+                          title="Submit for Verification"
+                          variant="outline"
+                          size="sm"
+                          loading={isSubmittingRow}
+                          disabled={isSubmittingRow}
+                          onPress={() => handleRowSubmitVerification(s)}
+                        />
+                      ) : null}
+                      {directoryActions.includes('resubmit-prc') ? (
+                        <Button
+                          title="Resubmit PRC"
+                          variant="outline"
+                          size="sm"
+                          loading={isSubmittingRow}
+                          disabled={isSubmittingRow}
+                          onPress={() => handleRowResubmitPrc(s)}
+                        />
+                      ) : null}
+                      {directoryActions.includes('withdraw-verification') ? (
+                        <Button
+                          title="Withdraw"
+                          variant="ghost"
+                          size="sm"
+                          loading={isSubmittingRow}
+                          disabled={isSubmittingRow}
+                          onPress={() => handleRowWithdrawVerification(s)}
+                        />
+                      ) : null}
                       {actions.includes('edit') ? (
                         <Button
                           title="Edit"
@@ -971,11 +1443,44 @@ export default function StaffManagementTab({
                         <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.revokedText}>
                           Revoked
                         </ThemedText>
-                      ) : actions.length > 0 ? (
+                      ) : actions.length > 0 || directoryActions.length > 0 ? (
                         <ActionMenu
                           align="right"
                           triggerAriaLabel={`More actions for ${fullName}`}
                           items={[
+                            ...(directoryActions.includes('submit-verification')
+                              ? [
+                                  {
+                                    id: 'submit-verification',
+                                    label: 'Submit for Verification',
+                                    icon: 'shield' as const,
+                                    hint: 'Submit PRC credentials for directory listing',
+                                    onPress: () => handleRowSubmitVerification(s),
+                                  },
+                                ]
+                              : []),
+                            ...(directoryActions.includes('resubmit-prc')
+                              ? [
+                                  {
+                                    id: 'resubmit-prc',
+                                    label: 'Resubmit PRC',
+                                    icon: 'refresh' as const,
+                                    hint: 'Update PRC details and resubmit for review',
+                                    onPress: () => handleRowResubmitPrc(s),
+                                  },
+                                ]
+                              : []),
+                            ...(directoryActions.includes('withdraw-verification')
+                              ? [
+                                  {
+                                    id: 'withdraw-verification',
+                                    label: 'Withdraw',
+                                    icon: 'undo' as const,
+                                    hint: 'Withdraw pending directory verification',
+                                    onPress: () => handleRowWithdrawVerification(s),
+                                  },
+                                ]
+                              : []),
                             ...(s.role === 'Doctor' && actions.includes('edit')
                               ? [
                                   {
@@ -1131,7 +1636,9 @@ export default function StaffManagementTab({
             <Button title="Cancel" variant="ghost" onPress={() => setShowAddModal(false)} disabled={addingStaff} />
             <Button
               title={
-                inviteDeliveryMode === 'email'
+                isClinicianRole(role) && isDirectoryOptIn
+                  ? 'Save & Submit for Verification'
+                  : inviteDeliveryMode === 'email'
                   ? 'Send Invitation Email'
                   : inviteDeliveryMode === 'link'
                   ? 'Generate Invite Link'
@@ -1425,6 +1932,8 @@ export default function StaffManagementTab({
           placeholder="Specialty or clinical role"
         />
 
+        {renderClinicianDirectorySection('add')}
+
         {(role === 'Doctor' || role === 'Nurse') && activeRoomsForRole.length > 0 ? (
           <FieldGroup label="Assigned Room / Station (Optional)">
             <ThemedText variant="caption" color={theme.colors.textMuted}>
@@ -1626,7 +2135,19 @@ export default function StaffManagementTab({
                 disabled={savingEdit}
               />
               <Button
-                title="Save Changes"
+                title={
+                  isClinicianRole(isEditingSelf ? editingStaff.role : role) &&
+                  isDirectoryOptIn &&
+                  (!editingStaff.publicVerificationStatus ||
+                    editingStaff.publicVerificationStatus === 'Unverified' ||
+                    editingStaff.publicVerificationStatus === 'Rejected' ||
+                    editingStaff.publicVerificationStatus === 'Expired' ||
+                    editingStaff.publicVerificationStatus === 'Suspended' ||
+                    (editingStaff.publicVerificationStatus === 'Verified' &&
+                      (editingStaff.prcLicenseNumber ?? '').trim() !== prc.trim()))
+                    ? 'Save & Submit for Verification'
+                    : 'Save Changes'
+                }
                 onPress={handleSaveEditStaff}
                 loading={savingEdit}
               />
@@ -2052,6 +2573,8 @@ export default function StaffManagementTab({
               )}
             </FieldGroup>
           ) : null}
+
+          {renderClinicianDirectorySection('edit')}
         </Modal>
       ) : null}
 
@@ -2635,6 +3158,60 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     marginVertical: theme.spacing.xs,
     gap: theme.spacing.sm,
+  },
+  directorySection: {
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    gap: theme.spacing.sm,
+  },
+  directoryHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  directoryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  directoryFieldsStack: {
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.xs,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
+  directoryAlertBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.emergencySubtle,
+    borderRadius: theme.radii.sm,
+  },
+  directoryNoteBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.warningBg,
+    borderRadius: theme.radii.sm,
+  },
+  prcProofRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
   },
   stampPreviewCard: {
     padding: theme.spacing.sm,

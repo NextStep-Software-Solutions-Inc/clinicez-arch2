@@ -20,6 +20,12 @@ interface WebAppFrameProps {
   children: ReactNode;
 }
 
+const SELF_HEADER_PUSHED_SCREENS = new Set([
+  'DirectorySearchScreen',
+  'AppointmentDetailScreen',
+  'BookingDraftScreen',
+]);
+
 function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFrameProps) {
   const { colors, sizes } = useAppTheme();
   const { isWorkstation, isDesktop, isCompact } = useBreakpoint();
@@ -28,8 +34,12 @@ function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFr
   const headerInfo = resolveWebHeaderState(state, descriptors);
   const focusedScreenName = resolveFocusedScreenName(state);
   const headerOverride = useWebHeaderOverride(!headerInfo.isRootTab ? focusedScreenName : undefined);
-  const showBackHeader = !headerInfo.isRootTab;
-  const showCompactTabHeader = headerInfo.isRootTab && isCompact;
+  const showBackHeader = !headerInfo.isRootTab && !(focusedScreenName && SELF_HEADER_PUSHED_SCREENS.has(focusedScreenName));
+  const showCompactTabHeader =
+    headerInfo.isRootTab &&
+    isCompact &&
+    headerInfo.tabKey !== 'HomeScreen' &&
+    headerInfo.tabKey !== 'AppointmentsScreen';
   const activeSearch = useHeaderSearchEntry(headerInfo.isRootTab ? headerInfo.tabKey : undefined);
 
   const onBack = () => {
@@ -74,7 +84,9 @@ function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFr
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {isWorkstation ? <WebSidebar state={state} navigation={navigation} collapsed={!isDesktop} /> : null}
+      {isWorkstation ? (
+        <WebSidebar state={state} navigation={navigation} collapsed={!isDesktop} />
+      ) : null}
       {content}
     </View>
   );

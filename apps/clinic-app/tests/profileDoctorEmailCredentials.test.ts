@@ -392,4 +392,120 @@ describe('Issue 106: Doctor & Staff Account Email and Credentials in My Profile'
       expect(markup).toContain('data-value="lovelyjean.maureal@ustp.edu.ph"');
     });
   });
+
+  describe('3. Clinician Profile Directory Verification Display', () => {
+    test('3.1 Displays read-only Verified status, PRC expiry date, Listed Clinics count, Hub sync note, and PRC edit notice', () => {
+      const verifiedDoctor: StaffMember = {
+        ...doctorStaffProfile,
+        isDirectoryOptIn: true,
+        prcExpiryDate: '2028-06-30',
+        affiliatedVerifiedClinicCount: 3,
+        publicVerificationStatus: 'Verified',
+        publicVerificationReason: null,
+      };
+      (globalThis as any).__mockStaffContext = {
+        staff: [verifiedDoctor],
+        current: verifiedDoctor,
+        currentName: 'Dr. Ely An Real',
+        loading: false,
+        error: null,
+        reload: async () => {},
+      };
+
+      const markup = renderToStaticMarkup(React.createElement(ProfileScreen));
+
+      expect(markup).toContain('Patient Directory Verification');
+      expect(markup).toContain('Verified');
+      expect(markup).toContain('2028-06-30');
+      expect(markup).toContain('Listed Clinics');
+      expect(markup).toContain('>3<');
+      expect(markup).toContain('Synced from Portal via Hub (no Portal login required)');
+      expect(markup).toContain('Editing a PRC license triggers re-verification');
+    });
+
+    test('3.2 Displays Action Required status and publicVerificationReason when rejected or revoked', () => {
+      const rejectedDoctor: StaffMember = {
+        ...doctorStaffProfile,
+        isDirectoryOptIn: true,
+        prcExpiryDate: '2028-06-30',
+        affiliatedVerifiedClinicCount: 1,
+        publicVerificationStatus: 'Rejected',
+        publicVerificationReason: 'PRC certificate image was illegible.',
+      };
+      (globalThis as any).__mockStaffContext = {
+        staff: [rejectedDoctor],
+        current: rejectedDoctor,
+        currentName: 'Dr. Ely An Real',
+        loading: false,
+        error: null,
+        reload: async () => {},
+      };
+
+      const markup = renderToStaticMarkup(React.createElement(ProfileScreen));
+
+      expect(markup).toContain('Action Required');
+      expect(markup).toContain('PRC certificate image was illegible.');
+    });
+
+    test('3.3 Renders Pending Review, Awaiting Confirmation, and Not Listed statuses for clinicians, and omits section for non-clinicians', () => {
+      const pendingNurse: StaffMember = {
+        ...doctorStaffProfile,
+        role: 'Nurse',
+        roleName: 'Triage Nurse',
+        publicVerificationStatus: 'PendingVerification',
+      };
+      (globalThis as any).__mockAuthContext = {
+        ...(globalThis as any).__mockAuthContext,
+        user: { ...doctorUser, role: 'Nurse', roleName: 'Triage Nurse' },
+      };
+      (globalThis as any).__mockStaffContext = {
+        staff: [pendingNurse],
+        current: pendingNurse,
+        currentName: 'Ely An Real',
+        loading: false,
+        error: null,
+        reload: async () => {},
+      };
+      expect(renderToStaticMarkup(React.createElement(ProfileScreen))).toContain('Pending Review');
+
+      const awaitingNurse: StaffMember = {
+        ...pendingNurse,
+        publicVerificationStatus: 'AwaitingConfirmation',
+      };
+      (globalThis as any).__mockStaffContext = {
+        ...(globalThis as any).__mockStaffContext,
+        staff: [awaitingNurse],
+        current: awaitingNurse,
+      };
+      expect(renderToStaticMarkup(React.createElement(ProfileScreen))).toContain('Awaiting Confirmation');
+
+      const unverifiedNurse: StaffMember = {
+        ...pendingNurse,
+        publicVerificationStatus: 'Unverified',
+      };
+      (globalThis as any).__mockStaffContext = {
+        ...(globalThis as any).__mockStaffContext,
+        staff: [unverifiedNurse],
+        current: unverifiedNurse,
+      };
+      expect(renderToStaticMarkup(React.createElement(ProfileScreen))).toContain('Not Listed');
+
+      const receptionist: StaffMember = {
+        ...doctorStaffProfile,
+        role: 'Receptionist',
+        roleName: 'Front Desk Receptionist',
+        publicVerificationStatus: 'Unverified',
+      };
+      (globalThis as any).__mockAuthContext = {
+        ...(globalThis as any).__mockAuthContext,
+        user: { ...doctorUser, role: 'Receptionist', roleName: 'Front Desk Receptionist' },
+      };
+      (globalThis as any).__mockStaffContext = {
+        ...(globalThis as any).__mockStaffContext,
+        staff: [receptionist],
+        current: receptionist,
+      };
+      expect(renderToStaticMarkup(React.createElement(ProfileScreen))).not.toContain('Patient Directory Verification');
+    });
+  });
 });

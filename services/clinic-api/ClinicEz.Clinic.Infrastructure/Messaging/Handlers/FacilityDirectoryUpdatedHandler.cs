@@ -1,7 +1,9 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Audit;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Infrastructure.Messaging.Handlers;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
@@ -13,33 +15,30 @@ namespace ClinicEz.Clinic.Infrastructure.Messaging;
 
 /// <summary>
 /// Handles <c>facility.directory.updated</c> control-plane messages from Portal.
-/// Updates the clinic's Tier-1 workspace discovery eligibility (<c>IsWorkspaceEligible</c>)
-/// and synchronizes clinic name and routing slugs.
+/// Updates the clinic's Tier-1 workspace discovery eligibility (<c>IsWorkspaceEligible</c>),
+/// platform verification status, and synchronizes clinic name, routing slugs, and branch metadata.
 /// </summary>
 public sealed class FacilityDirectoryUpdatedHandler : IInteropHandler<FacilityCreatedEvent>
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<FacilityDirectoryUpdatedHandler> _logger;
+    private readonly IInteropPublisher? _publisher;
 
     public FacilityDirectoryUpdatedHandler(
         ApplicationDbContext dbContext,
-        ILogger<FacilityDirectoryUpdatedHandler> logger)
+        ILogger<FacilityDirectoryUpdatedHandler> logger,
+        IInteropPublisher? publisher = null)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _publisher = publisher;
     }
 
     public async Task HandleAsync(FacilityCreatedEvent message, InteropMessageContext context, CancellationToken ct)
     {
-        // 1. Sender Authentication: Only Portal control-plane may update workspace eligibility
-        var isAuthorizedPortal = context.From.Kind == PartyKind.ControlPlane &&
-            string.Equals(InteropServices.For(context.From), InteropServices.Portal, StringComparison.OrdinalIgnoreCase);
-
-        if (!isAuthorizedPortal)
+        // 1. Sender Authentication: Only Portal control-plane may update workspace eligibility or verification status
+        if (!DirectoryInteropSyncHelper.IsAuthorizedPortalSender(context, _logger, InteropTypes.FacilityDirectoryUpdated))
         {
-            _logger.LogWarning(
-                "[ClinicEz.Clinic] Ignoring facility.directory.updated {MessageId}: sender {Sender} is not authorized portal control plane.",
-                context.MessageId, context.From.Address);
             return;
         }
 
@@ -79,6 +78,29 @@ public sealed class FacilityDirectoryUpdatedHandler : IInteropHandler<FacilityCr
         }
 
         settings.IsWorkspaceEligible = message.IsWorkspaceEligible ?? false;
+
+        var previousVerificationStatus = settings.PlatformVerificationStatus;
+        if (message.PlatformVerificationStatus.HasValue)
+        {
+            settings.PlatformVerificationStatus = message.PlatformVerificationStatus.Value;
+        }
+        else if (message.IsPlatformVerified.HasValue)
+        {
+            settings.PlatformVerificationStatus = message.IsPlatformVerified.Value
+                ? PlatformVerificationStatus.Verified
+                : PlatformVerificationStatus.Unverified;
+        }
+
+        if (settings.PlatformVerificationStatus == PlatformVerificationStatus.Verified)
+        {
+            settings.VerificationRejectionReason = null;
+        }
+        else if (message.VerificationRejectionReason != null)
+        {
+            settings.VerificationRejectionReason = string.IsNullOrWhiteSpace(message.VerificationRejectionReason)
+                ? null
+                : message.VerificationRejectionReason.Trim();
+        }
 
         if (!string.IsNullOrWhiteSpace(message.Name))
             settings.ClinicName = message.Name;
@@ -144,10 +166,59 @@ public sealed class FacilityDirectoryUpdatedHandler : IInteropHandler<FacilityCr
 
         settings.UpdatedAt = DateTime.UtcNow;
 
+        if (settings.PlatformVerificationStatus != previousVerificationStatus)
+        {
+            var (action, outcome, description) = settings.PlatformVerificationStatus switch
+            {
+                PlatformVerificationStatus.Verified => (
+                    "operations.facility_verification.approved",
+                    ClinicAuditOutcomes.Success,
+                    "Platform approved facility directory verification."),
+                PlatformVerificationStatus.Rejected => (
+                    "operations.facility_verification.rejected",
+                    ClinicAuditOutcomes.Warning,
+                    $"Platform rejected facility directory verification: {settings.VerificationRejectionReason}"),
+                PlatformVerificationStatus.Suspended => (
+                    "operations.facility_verification.suspended",
+                    ClinicAuditOutcomes.Warning,
+                    $"Platform suspended facility directory verification: {settings.VerificationRejectionReason}"),
+                _ => (
+                    "operations.facility_verification.updated",
+                    ClinicAuditOutcomes.Success,
+                    $"Platform updated facility verification status to {settings.PlatformVerificationStatus}.")
+            };
+
+            _dbContext.AuditEntries.Add(DirectoryVerificationAuditHelper.CreateEntry(
+                settings.TenantId,
+                settings.ClinicId,
+                ClinicAuditCategories.Operations,
+                ClinicAuditSeverities.Urgent,
+                action,
+                "FacilitySettings",
+                settings.ClinicId.ToString(),
+                outcome,
+                description,
+                actorName: "PortalControlPlane",
+                actorRole: "ControlPlane",
+                metadata: new
+                {
+                    PreviousStatus = previousVerificationStatus,
+                    NewStatus = settings.PlatformVerificationStatus,
+                    settings.VerificationRejectionReason,
+                    context.MessageId
+                }));
+        }
+
+        await DirectoryInteropSyncHelper.EnqueueDirectorySnapshotIfVerifiedAndPublishedAsync(
+            _dbContext,
+            _publisher ?? new InteropPublisher(_dbContext),
+            settings,
+            ct);
+
         await _dbContext.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "[ClinicEz.Clinic] Applied facility.directory.updated {MessageId} for clinic {ResourceId} (Tenant: {TenantId}). IsWorkspaceEligible={IsWorkspaceEligible}",
-            context.MessageId, message.ResourceId, message.TenantId, settings.IsWorkspaceEligible);
+            "[ClinicEz.Clinic] Applied facility.directory.updated {MessageId} for clinic {ResourceId} (Tenant: {TenantId}). IsWorkspaceEligible={IsWorkspaceEligible}, PlatformVerificationStatus={PlatformVerificationStatus}",
+            context.MessageId, message.ResourceId, message.TenantId, settings.IsWorkspaceEligible, settings.PlatformVerificationStatus);
     }
 }

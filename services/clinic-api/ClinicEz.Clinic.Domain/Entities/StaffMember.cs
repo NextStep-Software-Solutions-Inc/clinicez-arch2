@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Documents.Configuration;
 
 namespace ClinicEz.Clinic.Domain.Entities;
@@ -83,6 +84,18 @@ public sealed class StaffMember : ClinicScopedEntity
     public string? S2LicenseNumber { get; set; }
     public string? Specialty { get; set; }
     public string? PhilHealthPan { get; set; }
+
+    // Public directory verification & opt-in profile (Doctor and Nurse only)
+    public bool IsDirectoryOptIn { get; set; } = false;
+    public DateOnly? PrcExpiryDate { get; set; }
+    public string? PrcEvidenceObjectKey { get; set; }
+    public string? VerificationContact { get; set; }
+    public Guid? CanonicalProviderId { get; set; }
+    public string? PublicBio { get; set; }
+    public string? AvatarUrl { get; set; }
+    public PractitionerVerificationLevel PublicVerificationStatus { get; set; } = PractitionerVerificationLevel.Unverified;
+    public string? PublicVerificationReason { get; set; }
+    public int AffiliatedVerifiedClinicCount { get; set; } = 0;
 
     // E-Signature Specimen & Tri-Mode Signing
     public string? SignatureSpecimen { get; set; }
