@@ -48,12 +48,38 @@ public class AuditPipelineEmpiricalStressTests
     private readonly Guid _staffId = Guid.NewGuid();
     private readonly string _tenantId = "tenant_stress_test";
 
+    private sealed class ThreadSafeClinicContext : IClinicContext
+    {
+        public ThreadSafeClinicContext(Guid clinicId, Guid? staffId, string tenantId)
+        {
+            ClinicId = clinicId;
+            StaffId = staffId;
+            TenantId = tenantId;
+        }
+
+        public string TenantId { get; }
+        public Guid ClinicId { get; }
+        public Guid? BranchId => null;
+        public Guid? StaffId { get; }
+        public string? StaffName => "Dr. Stress Tester";
+        public string? StaffRole => "Administrator";
+        public IReadOnlyList<string> Permissions { get; } = Array.Empty<string>();
+        public bool HasPermission(string permission) => true;
+    }
+
+    private sealed class ThreadSafeHttpContextAccessor : IHttpContextAccessor
+    {
+        public ThreadSafeHttpContextAccessor(HttpContext context)
+        {
+            HttpContext = context;
+        }
+
+        public HttpContext? HttpContext { get; set; }
+    }
+
     private (IClinicContext clinicContext, IHttpContextAccessor httpContextAccessor) CreateContexts()
     {
-        var clinicContext = Substitute.For<IClinicContext>();
-        clinicContext.ClinicId.Returns(_clinicId);
-        clinicContext.StaffId.Returns(_staffId);
-        clinicContext.TenantId.Returns(_tenantId);
+        var clinicContext = new ThreadSafeClinicContext(_clinicId, _staffId, _tenantId);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("10.0.0.42");
@@ -69,8 +95,7 @@ public class AuditPipelineEmpiricalStressTests
         };
         httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "StressAuth"));
 
-        var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
-        httpContextAccessor.HttpContext.Returns(httpContext);
+        var httpContextAccessor = new ThreadSafeHttpContextAccessor(httpContext);
 
         return (clinicContext, httpContextAccessor);
     }

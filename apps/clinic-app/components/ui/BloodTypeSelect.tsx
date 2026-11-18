@@ -8,6 +8,7 @@ import {
   StandardBloodType,
   getBloodTypeMeta,
   partitionBloodTypeOptions,
+  formatBloodTypeLabel,
 } from '../../constants/bloodTypes';
 import { useEhrOptions } from '../../hooks/useEhrOptions';
 
@@ -43,7 +44,7 @@ export default function BloodTypeSelect({
     return partitionBloodTypeOptions(dynamicBloodTypes);
   }, [dynamicBloodTypes]);
 
-  const displayValue = value?.trim() || '';
+  const displayValue = formatBloodTypeLabel(value) ?? value?.trim() ?? '';
 
   const handleSelect = (bt: string) => {
     onChange(bt);

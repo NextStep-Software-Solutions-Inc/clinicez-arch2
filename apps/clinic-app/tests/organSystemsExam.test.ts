@@ -398,8 +398,8 @@ describe('Organ Systems Examination Suite', () => {
       expect(markup).toContain('Saving findings...');
     });
 
-    test('4.2 renders saved status indicator badge when savingStatus is saved', () => {
-      const markup = renderToStaticMarkup(
+    test('4.2 renders last saved status indicator badge when savingStatus is saved or lastSavedAt is provided', () => {
+      const markupWithoutTimestamp = renderToStaticMarkup(
         React.createElement(OrganSystemsExamSection, {
           values: DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
           onChange: () => {},
@@ -407,7 +407,31 @@ describe('Organ Systems Examination Suite', () => {
         })
       );
 
-      expect(markup).toContain('Saved to clinical record');
+      expect(markupWithoutTimestamp).toContain('Last saved just now');
+      expect(markupWithoutTimestamp).not.toContain('Saved to clinical record');
+
+      const markupWithTimestamp = renderToStaticMarkup(
+        React.createElement(OrganSystemsExamSection, {
+          values: DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
+          onChange: () => {},
+          savingStatus: 'idle',
+          lastSavedAt: '2026-11-04T01:15:00Z',
+          onSetAllNormal: () => {},
+        })
+      );
+
+      expect(markupWithTimestamp).toContain('Last saved Nov 4, 2026');
+      // Set All Normal button hidden when abnormalCount === 0
+      expect(markupWithTimestamp).not.toContain('Set All Normal');
+
+      const markupWithAbnormal = renderToStaticMarkup(
+        React.createElement(OrganSystemsExamSection, {
+          values: { ...DEFAULT_ORGAN_SYSTEM_NORMAL_CODES, skinId: '2' },
+          onChange: () => {},
+          onSetAllNormal: () => {},
+        })
+      );
+      expect(markupWithAbnormal).toContain('Set All Normal');
     });
 
     test('4.3 renders error status indicator badge when savingStatus is error', () => {

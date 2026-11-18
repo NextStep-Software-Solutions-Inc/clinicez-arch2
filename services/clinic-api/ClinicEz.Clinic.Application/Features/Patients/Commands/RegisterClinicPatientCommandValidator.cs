@@ -42,6 +42,13 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
                 s.Equals("U", StringComparison.OrdinalIgnoreCase))
             .WithMessage("Sex must be 'Male', 'Female', 'Intersex', or 'Unknown'.");
 
+        When(x => !string.IsNullOrWhiteSpace(x.PatientCode), () =>
+        {
+            RuleFor(x => x.PatientCode!)
+                .Must(code => code.Trim().Length <= 30)
+                .WithMessage("Patient code must not exceed 30 characters.");
+        });
+
         When(x => !string.IsNullOrWhiteSpace(x.GenderIdentity), () =>
         {
             RuleFor(x => x.GenderIdentity!)
@@ -67,6 +74,20 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
                     .NotEmpty().WithMessage("Allergen name is required when submitting structured allergy.")
                     .MaximumLength(150).WithMessage("Allergen name cannot exceed 150 characters.");
             });
+        });
+
+        When(x => !string.IsNullOrEmpty(x.SeriesPrefix), () =>
+        {
+            RuleFor(x => x.SeriesPrefix!)
+                .MaximumLength(10)
+                .WithMessage("Series prefix must not exceed 10 characters.");
+        });
+
+        When(x => !string.IsNullOrWhiteSpace(x.BloodType), () =>
+        {
+            RuleFor(x => x.BloodType!)
+                .Must(s => BloodTypeParser.TryParse(s, out _))
+                .WithMessage("Blood type must be a valid ABO/Rh blood group (e.g., A+, A-, B+, B-, AB+, AB-, O+, O-, Unknown).");
         });
     }
 

@@ -544,7 +544,7 @@ describe('Challenger 2 — Milestone 1 Frontend Empirical Stress Test Suite', ()
       const screenCode = readFileSync(screenPath, 'utf-8');
 
       // Verify ALERTS tab uses 'emergency' badgeVariant when alerts > 0
-      expect(screenCode).toContain("badgeVariant: (filterCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined");
+      expect(screenCode).toContain("badgeVariant: (totalCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined");
     });
   });
 });

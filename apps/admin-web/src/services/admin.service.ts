@@ -268,6 +268,31 @@ export interface AdminNewsletterSubscriberDto {
   subscribedAt: string;
 }
 
+export interface AdminTeleconsultBillingDto {
+  tenantId: string;
+  tenantSlug: string;
+  isEnabled: boolean;
+  billingMode: 'Prepaid' | 'Postpaid' | string;
+  ratePerMinutePhp: number;
+  allocatedBudgetPhp: number;
+  prepaidBalancePhp: number;
+  allowOverageBeyondAllocation: boolean;
+  currentPeriodYearMonth: string;
+  currentPeriodMinutesUsed: number;
+  currentPeriodBilledPhp: number;
+  currentPeriodOveragePhp: number;
+  estimatedAvailableMinutes: number;
+}
+
+export interface AdminUpdateTeleconsultBillingPayload {
+  isEnabled?: boolean;
+  billingMode?: 'Prepaid' | 'Postpaid' | string;
+  ratePerMinutePhp?: number;
+  allocatedBudgetPhp?: number;
+  prepaidCreditGrantPhp?: number;
+  allowOverageBeyondAllocation?: boolean;
+}
+
 export const adminService = {
   getMe: async (): Promise<AdminMeDto> => {
     const res = await apiClient.get<AdminMeDto>('/admin/me');
@@ -618,6 +643,22 @@ export const adminService = {
       generateResetLink,
       deliveryMode: options?.deliveryMode,
     });
+    return res.data;
+  },
+
+  getTenantTeleconsultBilling: async (tenantId: string): Promise<AdminTeleconsultBillingDto> => {
+    const res = await apiClient.get<AdminTeleconsultBillingDto>(`/admin/tenants/${tenantId}/teleconsult-billing`);
+    return res.data;
+  },
+
+  updateTenantTeleconsultBilling: async (
+    tenantId: string,
+    payload: AdminUpdateTeleconsultBillingPayload
+  ): Promise<AdminTeleconsultBillingDto> => {
+    const res = await apiClient.put<AdminTeleconsultBillingDto>(
+      `/admin/tenants/${tenantId}/teleconsult-billing`,
+      payload
+    );
     return res.data;
   },
 };

@@ -1,10 +1,17 @@
 import React from 'react';
-import { ColorValue } from 'react-native';
+import { ColorValue, StyleSheet, View } from 'react-native';
 import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { createStaticNavigation, DefaultTheme, type StaticParamList } from '@react-navigation/native';
+import {
+  createStaticNavigation,
+  DarkTheme,
+  DefaultTheme,
+  useNavigation,
+  type StaticParamList,
+  type Theme as ReactNavigationTheme,
+} from '@react-navigation/native';
 import Icon, { IconName } from '../components/ui/Icon';
 import { applyFontFamily } from '../constants/fonts';
-import { theme } from '../constants/theme';
+import { getActiveThemeState, theme } from '../constants/theme';
 import { useBreakpoint } from '../utils/useBreakpoint';
 import MobileBottomTabBar from '../components/layout/MobileBottomTabBar';
 import DashboardScreen from './screens/Dashboard.screen';
@@ -18,7 +25,9 @@ import ProfileScreen from './screens/Profile.screen';
 import ResultReviewScreen from './screens/ResultReview.screen';
 import ShareImportScreen from './screens/ShareImport.screen';
 import AuditScreen from './screens/Audit.screen';
-import TriageScreen from './screens/Triage.screen';
+import { parseBooleanRouteParam } from '../components/consultation';
+import ClinicChatDrawerHost from '../components/comms/ClinicChatDrawerHost';
+import TeleconsultWaitingRoomModal from '../components/teleconsult/TeleconsultWaitingRoomModal';
 
 /**
  * Bottom tab bar for phones only. Workstation widths use the sidebar instead.
@@ -35,9 +44,39 @@ const tabIcon = (name: IconName) => ({ color }: { focused: boolean; color: Color
   <Icon name={name} size={theme.sizes.iconMd} color={typeof color === 'string' ? color : theme.colors.textMuted} />
 );
 
+const navStyles = StyleSheet.create({
+  navigatorRoot: {
+    flex: 1,
+  },
+});
+
+function NavigatorOverlays({ children }: { children: React.ReactNode }) {
+  const navigation = useNavigation<any>();
+  const handleNavigateToChart = React.useCallback(
+    (patientId?: string, patientName?: string) => {
+      navigation?.navigate?.('Consultations', {
+        patientId,
+        patientName,
+      });
+    },
+    [navigation],
+  );
+
+  return (
+    <View style={navStyles.navigatorRoot}>
+      {children}
+      <ClinicChatDrawerHost />
+      <TeleconsultWaitingRoomModal onNavigateToChart={handleNavigateToChart} />
+    </View>
+  );
+}
+
 const Tab = createBottomTabNavigator({
   implementation: 'custom',
   tabBar: (props: BottomTabBarProps) => <ResponsiveTabBar {...props} />,
+  layout: ({ children }: { children: React.ReactNode }) => (
+    <NavigatorOverlays>{children}</NavigatorOverlays>
+  ),
   screenOptions: {
     headerShown: false,
     tabBarActiveTintColor: theme.colors.primary,
@@ -57,6 +96,19 @@ const Tab = createBottomTabNavigator({
       linking: {
         path: 'dashboard',
         alias: [''],
+        parse: {
+          tab: String,
+          report: String,
+          status: String,
+          queueStatus: String,
+          preset: String,
+          acuity: String,
+          visitType: String,
+          repPreset: String,
+          repStart: String,
+          repEnd: String,
+          eodDate: String,
+        },
       },
       options: {
         title: 'Dashboard',
@@ -65,7 +117,15 @@ const Tab = createBottomTabNavigator({
     },
     Patients: {
       screen: PatientsScreen,
-      linking: 'patients',
+      linking: {
+        path: 'patients',
+        parse: {
+          filter: String,
+          view: String,
+          chartTab: String,
+          openRegister: parseBooleanRouteParam,
+        },
+      },
       options: {
         title: 'Patients',
         tabBarIcon: tabIcon('patients'),
@@ -73,7 +133,15 @@ const Tab = createBottomTabNavigator({
     },
     Consultations: {
       screen: ConsultationsScreen,
-      linking: 'consultations',
+      linking: {
+        path: 'consultations',
+        parse: {
+          chartTab: String,
+          queueView: String,
+          station: String,
+          forceSeparateVisit: parseBooleanRouteParam,
+        },
+      },
       options: {
         title: 'Consultations',
         tabBarLabel: 'Consults',
@@ -82,25 +150,29 @@ const Tab = createBottomTabNavigator({
     },
     Appointments: {
       screen: AppointmentsScreen,
-      linking: 'appointments',
+      linking: {
+        path: 'appointments',
+        parse: {
+          view: String,
+          status: String,
+          doctorId: String,
+          date: String,
+        },
+      },
       options: {
         title: 'Appointments',
         tabBarLabel: 'Appts',
         tabBarIcon: tabIcon('appointments'),
       },
     },
-    Triage: {
-      screen: TriageScreen,
-      linking: 'triage',
-      options: {
-        title: 'Triage desk',
-        tabBarLabel: 'Triage',
-        tabBarIcon: tabIcon('activity'),
-      },
-    },
     Billing: {
       screen: BillingScreen,
-      linking: 'billing',
+      linking: {
+        path: 'billing',
+        parse: {
+          mode: String,
+        },
+      },
       options: {
         title: 'Billing',
         tabBarLabel: 'Billing',
@@ -109,7 +181,13 @@ const Tab = createBottomTabNavigator({
     },
     ResultReview: {
       screen: ResultReviewScreen,
-      linking: 'result-review',
+      linking: {
+        path: 'result-review',
+        parse: {
+          state: String,
+          scope: String,
+        },
+      },
       options: {
         title: 'Result review',
         tabBarLabel: 'Results',
@@ -127,7 +205,12 @@ const Tab = createBottomTabNavigator({
     },
     Yakap: {
       screen: YakapScreen,
-      linking: 'yakap',
+      linking: {
+        path: 'yakap',
+        parse: {
+          tab: String,
+        },
+      },
       options: {
         title: 'PhilHealth Yakap',
         tabBarLabel: 'PhilHealth',
@@ -136,7 +219,12 @@ const Tab = createBottomTabNavigator({
     },
     Settings: {
       screen: SettingsScreen,
-      linking: 'settings',
+      linking: {
+        path: 'settings',
+        parse: {
+          tab: String,
+        },
+      },
       options: {
         title: 'Settings',
         tabBarIcon: tabIcon('settings'),
@@ -152,7 +240,12 @@ const Tab = createBottomTabNavigator({
     },
     Profile: {
       screen: ProfileScreen,
-      linking: 'profile',
+      linking: {
+        path: 'profile',
+        parse: {
+          tab: String,
+        },
+      },
       options: {
         title: 'My Profile',
         tabBarIcon: tabIcon('staff'),
@@ -180,17 +273,31 @@ export const linkingOptions = {
   ],
 };
 
+/** Builds a reactive React Navigation theme aligned with the active Light/Dark scheme and brand palette. */
+export function buildNavigationTheme(
+  isDark: boolean = false,
+  resolvedColors?: Partial<Record<string, string>>,
+): ReactNavigationTheme {
+  const baseTheme = isDark ? DarkTheme : DefaultTheme;
+  const fallbackColors = getActiveThemeState().resolvedColors;
+  const source = resolvedColors ?? fallbackColors;
+
+  return {
+    ...baseTheme,
+    dark: isDark,
+    colors: {
+      ...baseTheme.colors,
+      primary: source.primary ?? fallbackColors.primary,
+      background: source.background ?? fallbackColors.background,
+      card: source.surface ?? fallbackColors.surface,
+      text: source.text ?? fallbackColors.text,
+      border: source.border ?? fallbackColors.border,
+      notification: source.emergency ?? fallbackColors.emergency,
+    },
+  };
+}
+
 /** Navigation container theme so React Navigation chrome matches the Clinic EZ tokens. */
-export const navigationTheme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    primary: theme.colors.primary,
-    background: theme.colors.background,
-    card: theme.colors.surface,
-    text: theme.colors.text,
-    border: theme.colors.border,
-  },
-};
+export const navigationTheme: ReactNavigationTheme = buildNavigationTheme(false);
 
 export const Navigation = createStaticNavigation(Tab);

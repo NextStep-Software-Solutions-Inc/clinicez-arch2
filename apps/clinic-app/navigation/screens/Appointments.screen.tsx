@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
+  Pressable,
   StyleSheet,
   ScrollView,
   RefreshControl,
-  Pressable,
 } from 'react-native';
 import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
 import { notify } from '@utils/feedback';
@@ -28,11 +28,13 @@ import type { BadgeVariant } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useClinic } from '../../context/ClinicContext';
+import { useClinicComms } from '../../context/ClinicCommsContext';
 import PatientSearchResultRow, {
   parseConfiguredSearchFields,
 } from '../../components/patient/PatientSearchResultRow';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
+import { isSeniorOrPwdEligible, resolveTicketPrefix, type VisitType } from '../../components/patient/ServiceCheckInModal';
 import {
   clinicService,
   AppointmentItem,
@@ -40,6 +42,7 @@ import {
   ClinicPatient,
   ClinicCustomFieldDefinition,
   GetAppointmentsOptions,
+  type TeleconsultPaymentPolicy,
   formatClinicDate,
   formatClinicTime,
   getClinicTodayStr,
@@ -47,6 +50,7 @@ import {
 import { SlotPicker } from '../../components/roster/SlotPicker';
 import { DoctorRosterCalendarModal } from '../../components/roster/DoctorRosterCalendarModal';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   CalendarHeader,
   CalendarSkeleton,
@@ -74,7 +78,9 @@ export type AppointmentsRouteParams = {
   date?: string;
   view?: CalendarViewMode;
   tab?: string;
+  status?: string;
   appointmentId?: string;
+  doctorId?: string;
 };
 
 export type AppointmentsScreenProps = StaticScreenProps<AppointmentsRouteParams | undefined>;
@@ -148,6 +154,8 @@ function getStatusBadge(status: AppointmentStatus): { variant: BadgeVariant; lab
       return { variant: 'warning', label: 'Pending' };
     case 'Cancelled':
       return { variant: 'emergency', label: 'Cancelled' };
+    case 'NoShow':
+      return { variant: 'neutral', label: 'No Show' };
     case 'Confirmed':
     default:
       return { variant: 'primary', label: 'Confirmed' };
@@ -188,6 +196,18 @@ export function AppointmentBookedSuccessView({ appointment }: AppointmentBookedS
             {[formatDay(appointment.scheduledAt), formatTime(appointment.scheduledAt)]
               .filter(Boolean)
               .join(' · ')}
+          </ThemedText>
+        </View>
+        <View style={styles.successSummaryRow}>
+          <ThemedText variant="caption" color={theme.colors.textSecondary}>
+            Visit modality
+          </ThemedText>
+          <ThemedText variant="bodyBold">
+            {appointment.appointmentType === 'Teleconsult' ||
+            appointment.isTeleconsult ||
+            /^teleconsult(ation)?$/i.test((appointment.serviceType || '').trim())
+              ? `Teleconsultation${appointment.paymentPolicy ? ` (${appointment.paymentPolicy})` : ''}`
+              : 'In-Person'}
           </ThemedText>
         </View>
         <View style={styles.successSummaryRow}>
@@ -249,6 +269,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   } | null>(null);
   const { staff } = useStaff();
   const { settings, rooms } = useClinic();
+  const { lastTeleconsultEndedAt = 0 } = useClinicComms() ?? {};
   const doctors = staff.filter((s) => s.role === 'Doctor');
   const activeDoctors = useMemo(() => staff.filter((s) => s.role === 'Doctor' && s.isActive), [staff]);
   const activeRooms = useMemo(() => (rooms || []).filter((r) => r.isActive), [rooms]);
@@ -277,16 +298,46 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const [checkInAppointment, setCheckInAppointment] = useState<AppointmentItem | null>(null);
   const [checkInDoctorId, setCheckInDoctorId] = useState<string>('');
   const [checkInRoomId, setCheckInRoomId] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = usePersistedTab<string>({
+    storageKey: 'clinicez_appointments_status_filter',
+    allowedValues: ['ALL', 'Scheduled', 'CheckedIn', 'Completed', 'Cancelled', 'NoShow'],
+    defaultValue: 'ALL',
+    routeParam: route?.params?.status,
+    queryParam: 'status',
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
 
   // Calendar View & Navigation State
-  const [viewMode, setViewMode] = useState<CalendarViewMode>(() =>
-    (route?.params?.view as CalendarViewMode) || 'month'
-  );
-  const [currentDate, setCurrentDate] = useState<string>(() =>
-    route?.params?.date || getManilaTodayStr()
-  );
-  const [calendarDoctorId, setCalendarDoctorId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = usePersistedTab<CalendarViewMode>({
+    storageKey: 'clinicez_appointments_view_mode',
+    allowedValues: ['month', 'week', 'day', 'agenda'],
+    defaultValue: 'month',
+    routeParam: (route?.params?.view as CalendarViewMode) || null,
+    queryParam: 'view',
+    queryParamAliases: ['viewMode'],
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
+  const [currentDate, setCurrentDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_appointments_selected_date',
+    defaultValue: getManilaTodayStr(),
+    routeParam: route?.params?.date,
+    queryParam: 'date',
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
+  const [calendarDoctorId, setCalendarDoctorId] = usePersistedTab<string>({
+    storageKey: 'clinicez_appointments_doctor_id',
+    defaultValue: 'ALL',
+    routeParam: route?.params?.doctorId,
+    queryParam: 'doctorId',
+    queryParamAliases: ['doctor'],
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
   const [inspectedAppointment, setInspectedAppointment] = useState<ExtendedAppointmentItem | null>(
     () => {
       const apt = (route?.params as any)?.appointment;
@@ -340,13 +391,25 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const [formDate, setFormDate] = useState<string>(() => (initialPreselected ? defaultSlot().date : ''));
   const [formTime, setFormTime] = useState<string>(() => (initialPreselected ? defaultSlot().time : ''));
   const [formServiceTypes, setFormServiceTypes] = useState<string[]>(['Consultation']);
+  const [formModality, setFormModality] = useState<'InPerson' | 'Teleconsult'>('InPerson');
+  const [formPaymentPolicy, setFormPaymentPolicy] = useState<TeleconsultPaymentPolicy>('Prepaid');
   const [formReason, setFormReason] = useState('');
   const [formNotes, setFormNotes] = useState('');
+
+  const isEffectiveTeleconsultEnabled = Boolean(
+    settings?.isWorkspaceTeleconsultEntitled && settings?.enableTeleconsultation
+  );
+
+  useEffect(() => {
+    if (!isEffectiveTeleconsultEnabled && formModality === 'Teleconsult') {
+      setFormModality('InPerson');
+    }
+  }, [isEffectiveTeleconsultEnabled, formModality]);
 
   const fetchAppointments = useCallback(async () => {
     const options: GetAppointmentsOptions = {};
 
-    if (calendarDoctorId) {
+    if (calendarDoctorId && calendarDoctorId !== 'ALL') {
       options.doctorId = calendarDoctorId;
     }
 
@@ -379,7 +442,13 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       setLoadError(err.message || 'Unable to load appointments.');
       return;
     }
-    setAppointments(data ?? []);
+    const nextAppointments = data ?? [];
+    setAppointments(nextAppointments);
+    setInspectedAppointment((prev) => {
+      if (!prev) return prev;
+      const updated = nextAppointments.find((a) => a.id === prev.id);
+      return updated ? { ...prev, ...updated } : prev;
+    });
     setLoadError(null);
   }, [viewMode, currentDate, calendarDoctorId, statusFilter]);
 
@@ -387,6 +456,14 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     setLoading(true);
     fetchAppointments().finally(() => setLoading(false));
   }, [fetchAppointments]);
+
+  const prevTeleconsultEndedAtRef = useRef<number>(lastTeleconsultEndedAt);
+  useEffect(() => {
+    if (lastTeleconsultEndedAt && lastTeleconsultEndedAt !== prevTeleconsultEndedAtRef.current) {
+      prevTeleconsultEndedAtRef.current = lastTeleconsultEndedAt;
+      void fetchAppointments();
+    }
+  }, [lastTeleconsultEndedAt, fetchAppointments]);
 
   // Debounced patient lookup for the booking form.
   useEffect(() => {
@@ -426,6 +503,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     setFormPatient(null);
     setFormDoctorId(null);
     setFormServiceTypes(['Consultation']);
+    setFormModality('InPerson');
+    setFormPaymentPolicy('Prepaid');
     setFormReason('');
     setFormNotes('');
   }, []);
@@ -448,6 +527,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     setFormDate(slot.date);
     setFormTime(slot.time);
     setFormServiceTypes(['Consultation']);
+    setFormModality('InPerson');
+    setFormPaymentPolicy('Prepaid');
     setFormReason('');
     setFormNotes('');
     setBookModalVisible(true);
@@ -527,19 +608,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     }
   }, [route?.params?.appointmentId, appointments, loading, navigation]);
 
-  // Deep-link / route param: date
-  useEffect(() => {
-    if (route?.params?.date && route.params.date !== currentDate) {
-      setCurrentDate(route.params.date);
-    }
-  }, [route?.params?.date]);
 
-  // Deep-link / route param: view
-  useEffect(() => {
-    if (route?.params?.view && route.params.view !== viewMode) {
-      setViewMode(route.params.view as CalendarViewMode);
-    }
-  }, [route?.params?.view]);
 
   const handlePrev = useCallback(() => {
     const { year, month, day } = parseDateOnly(currentDate);
@@ -595,6 +664,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       setFormDate(dateStr);
       setFormTime(timeStr);
       setFormServiceTypes(['Consultation']);
+      setFormModality('InPerson');
+      setFormPaymentPolicy('Prepaid');
       setFormReason('');
       setFormNotes('');
       setBookModalVisible(true);
@@ -619,7 +690,12 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       notify.error('Enter a valid date (YYYY-MM-DD) and time (HH:MM).');
       return;
     }
+    if (formModality === 'Teleconsult' && !isEffectiveTeleconsultEnabled) {
+      notify.error('Teleconsultation is not enabled for this clinic.');
+      return;
+    }
     const doctor = doctors.find((d) => d.id === formDoctorId);
+    const selectedServices = formServiceTypes.join(', ').trim();
 
     try {
       isBookingRef.current = true;
@@ -630,9 +706,11 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         doctorId: doctor?.id,
         doctorName: doctor ? formatStaffName(doctor) : undefined,
         scheduledAt,
-        serviceType: formServiceTypes.join(', ').trim() || undefined,
-        reason: formReason.trim() || 'General Consultation',
+        serviceType: formModality === 'Teleconsult' ? 'Teleconsult' : selectedServices || undefined,
+        reason: formReason.trim() || selectedServices || 'General Consultation',
         notes: formNotes.trim() || undefined,
+        appointmentType: formModality === 'Teleconsult' ? 'Teleconsult' : 'InPerson',
+        paymentPolicy: formModality === 'Teleconsult' ? formPaymentPolicy : undefined,
       });
 
       if (err || !newApt) {
@@ -640,8 +718,21 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         return;
       }
 
-      setAppointments((prev) => [newApt, ...prev]);
-      setBookedAppointment(newApt);
+      const createdApt: AppointmentItem =
+        formModality === 'Teleconsult'
+          ? {
+              ...newApt,
+              appointmentType: newApt.appointmentType ?? 'Teleconsult',
+              isTeleconsult: true,
+              paymentPolicy:
+                (newApt.paymentPolicy as TeleconsultPaymentPolicy | undefined) ?? formPaymentPolicy,
+              paymentStatus:
+                newApt.paymentStatus ?? (formPaymentPolicy === 'Exempt' ? 'Exempt' : 'Pending'),
+            }
+          : newApt;
+
+      setAppointments((prev) => [createdApt, ...prev]);
+      setBookedAppointment(createdApt);
       notify.success(`Appointment booked for ${formPatient.fullName}.`);
     } finally {
       setBooking(false);
@@ -699,6 +790,14 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     const chosenRoom = checkInRoomId ? activeRooms.find((r) => r.id === checkInRoomId) : undefined;
 
     try {
+      let seriesPrefix: string | undefined = undefined;
+      const [patient] = await clinicService.getPatientById(item.patientId);
+      if (patient) {
+        const isPriority = isSeniorOrPwdEligible(patient);
+        const visitType = (item.serviceType as VisitType) || 'RoutineCheckup';
+        seriesPrefix = resolveTicketPrefix(visitType, isPriority);
+      }
+
       const isUrgent = item.reason?.toLowerCase().includes('chest') || item.reason?.toLowerCase().includes('pain');
       const [queueItem, err] = await clinicService.checkInPatient({
         patientId: item.patientId,
@@ -711,6 +810,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         priority: isUrgent ? 'Urgent' : 'Routine',
         chiefComplaint: item.reason ?? 'General Consultation',
         queueDate: getManilaTodayStr(),
+        seriesPrefix,
       });
 
       if (err) {
@@ -797,7 +897,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
             onSelectDate={handleSelectDate}
             onSelectSlot={handleSelectSlot}
             onSelectAppointment={(appt) => setInspectedAppointment(appt)}
-            activeDoctorId={calendarDoctorId || undefined}
+            activeDoctorId={calendarDoctorId === 'ALL' ? undefined : calendarDoctorId}
             doctorOverlays={doctorOverlays}
           />
         );
@@ -857,8 +957,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
           onNext={handleNext}
           onToday={handleToday}
           onSelectDate={handleSelectDate}
-          activeDoctorId={calendarDoctorId || undefined}
-          onDoctorChange={(docId) => setCalendarDoctorId(docId || null)}
+          activeDoctorId={calendarDoctorId === 'ALL' ? undefined : calendarDoctorId}
+          onDoctorChange={(docId) => setCalendarDoctorId(docId || 'ALL')}
           doctors={activeDoctors.map((d) => ({ id: d.id, name: formatStaffName(d) }))}
         />
 
@@ -951,6 +1051,125 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
                 ) : null}
               </View>
             )}
+
+            <View style={styles.fieldGroup}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                Visit modality
+              </ThemedText>
+              <View style={styles.modalityToggleGroup} testID="book-modality-toggle-group">
+                <Pressable
+                  testID="book-modality-in-person"
+                  accessibilityRole="button"
+                  accessibilityLabel="In-Person Consultation"
+                  onPress={() => setFormModality('InPerson')}
+                  style={[
+                    styles.modalityOptionBtn,
+                    formModality === 'InPerson'
+                      ? styles.modalityChipSelected
+                      : styles.modalityChipUnselected,
+                  ]}
+                >
+                  <Icon
+                    name="patient"
+                    size={theme.sizes.iconSm}
+                    color={
+                      formModality === 'InPerson'
+                        ? theme.colors.routineText
+                        : theme.colors.textMuted
+                    }
+                  />
+                  <ThemedText
+                    variant="smallBold"
+                    color={
+                      formModality === 'InPerson' ? theme.colors.routineText : theme.colors.text
+                    }
+                  >
+                    In-Person
+                  </ThemedText>
+                </Pressable>
+
+                <Pressable
+                  testID="book-modality-teleconsult"
+                  accessibilityRole="button"
+                  accessibilityLabel="Virtual Teleconsultation"
+                  accessibilityState={{ disabled: !isEffectiveTeleconsultEnabled }}
+                  disabled={!isEffectiveTeleconsultEnabled}
+                  onPress={() => {
+                    if (isEffectiveTeleconsultEnabled) {
+                      setFormModality('Teleconsult');
+                    } else {
+                      notify.warning('Teleconsultation is disabled for this clinic.');
+                    }
+                  }}
+                  style={[
+                    styles.modalityOptionBtn,
+                    formModality === 'Teleconsult'
+                      ? styles.modalityChipSelected
+                      : styles.modalityChipUnselected,
+                    !isEffectiveTeleconsultEnabled && styles.modalityChipDisabled,
+                  ]}
+                >
+                  <Icon
+                    name={!isEffectiveTeleconsultEnabled ? 'lock' : 'consultations'}
+                    size={theme.sizes.iconSm}
+                    color={
+                      !isEffectiveTeleconsultEnabled
+                        ? theme.colors.textMuted
+                        : formModality === 'Teleconsult'
+                        ? theme.colors.routineText
+                        : theme.colors.textMuted
+                    }
+                  />
+                  <ThemedText
+                    variant="smallBold"
+                    color={
+                      !isEffectiveTeleconsultEnabled
+                        ? theme.colors.textMuted
+                        : formModality === 'Teleconsult'
+                        ? theme.colors.routineText
+                        : theme.colors.text
+                    }
+                  >
+                    {!isEffectiveTeleconsultEnabled ? 'Teleconsult (Disabled)' : 'Teleconsultation'}
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+
+            {formModality === 'Teleconsult' ? (
+              <View style={styles.fieldGroup}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  Payment policy
+                </ThemedText>
+                <View style={styles.chipRow} testID="book-teleconsult-policy-picker">
+                  {(['Prepaid', 'Postpaid', 'Exempt'] as const).map((pol) => {
+                    const isSelected = formPaymentPolicy === pol;
+                    return (
+                      <Pressable
+                        key={pol}
+                        testID={`book-policy-option-${pol.toLowerCase()}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${pol} Policy`}
+                        onPress={() => setFormPaymentPolicy(pol)}
+                        style={[
+                          styles.policyOptionBtn,
+                          isSelected
+                            ? styles.modalityChipSelected
+                            : styles.modalityChipUnselected,
+                        ]}
+                      >
+                        <ThemedText
+                          variant="smallBold"
+                          color={isSelected ? theme.colors.routineText : theme.colors.text}
+                        >
+                          {pol}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
 
             {doctors.length > 0 ? (
               <View style={styles.fieldGroup}>
@@ -1099,6 +1318,22 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         visible={!!inspectedAppointment}
         appointment={inspectedAppointment}
         onClose={() => setInspectedAppointment(null)}
+        onReminderSent={(updated) => {
+          setAppointments((prev) =>
+            prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a))
+          );
+          setInspectedAppointment((prev) =>
+            prev && prev.id === updated.id ? { ...prev, ...updated } : prev
+          );
+        }}
+        onAppointmentSynced={(updated) => {
+          setAppointments((prev) =>
+            prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a))
+          );
+          setInspectedAppointment((prev) =>
+            prev && prev.id === updated.id ? { ...prev, ...updated } : prev
+          );
+        }}
         onCheckIn={(appt) => {
           setInspectedAppointment(null);
           handleOpenCheckInModal(appt);
@@ -1216,16 +1451,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  cancelBtn: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.emergencyBg,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.emergencyBorder,
-    borderRadius: theme.radii.sm,
-  },
   modalFooter: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -1263,6 +1488,47 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
+  },
+  modalityToggleGroup: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  modalityOptionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+  },
+  policyOptionBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+  },
+  modalityChipSelected: {
+    backgroundColor: theme.colors.routineBg,
+    borderColor: theme.colors.routineBorder,
+  },
+  modalityChipUnselected: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+  },
+  modalityChipDisabled: {
+    opacity: 0.5,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.borderLight,
   },
   successContainer: {
     gap: theme.spacing.md,

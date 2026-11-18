@@ -1,6 +1,7 @@
 using System;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop.Contracts;
 
 namespace ClinicEz.Clinic.Application.Features.Settings.DTOs;
 
@@ -79,12 +80,22 @@ public sealed record ClinicSettingsDto(
     string? TvDisplayPin = null,
     bool IsKioskIntakeEnabled = false,
     int KioskTokenVersion = 1,
+    string TvDisplaySoundTheme = "classicChime",
+    bool TvDisplayVoiceEnabled = false,
+    bool TvDisplayShowPhysicianName = true,
+    string TeleconsultRecordingPolicy = "Disabled",
+    int TeleconsultRecordingRetentionDays = 90,
+    bool TeleconsultRecordingConsentRequired = true,
+    TeleconsultPaymentPolicy TeleconsultPaymentPolicy = TeleconsultPaymentPolicy.Prepaid,
+    decimal? TeleconsultDefaultFee = 400.00m,
+    bool EnableTeleconsultation = false,
+    bool IsWorkspaceTeleconsultEntitled = false,
     PlatformVerificationStatus PlatformVerificationStatus = PlatformVerificationStatus.Unverified,
     string? VerificationRejectionReason = null,
     DateTime? LastVerificationSubmittedAtUtc = null,
     string? LtoEvidenceObjectKey = null)
 {
-    public static ClinicSettingsDto FromEntity(FacilitySettings settings) => new(
+    public static ClinicSettingsDto FromEntity(FacilitySettings settings, bool isWorkspaceTeleconsultEntitled = false) => new(
         settings.Id,
         settings.TenantId,
         settings.ClinicId,
@@ -159,6 +170,16 @@ public sealed record ClinicSettingsDto(
         TvDisplayPin: settings.TvDisplayPin,
         IsKioskIntakeEnabled: settings.IsKioskIntakeEnabled,
         KioskTokenVersion: settings.KioskTokenVersion,
+        TvDisplaySoundTheme: settings.TvDisplaySoundTheme ?? "classicChime",
+        TvDisplayVoiceEnabled: settings.TvDisplayVoiceEnabled,
+        TvDisplayShowPhysicianName: settings.TvDisplayShowPhysicianName,
+        TeleconsultRecordingPolicy: settings.TeleconsultRecordingPolicy ?? "Disabled",
+        TeleconsultRecordingRetentionDays: settings.TeleconsultRecordingRetentionDays,
+        TeleconsultRecordingConsentRequired: settings.TeleconsultRecordingConsentRequired,
+        TeleconsultPaymentPolicy: Enum.TryParse<TeleconsultPaymentPolicy>(settings.TeleconsultPaymentPolicy, true, out var pol) ? pol : TeleconsultPaymentPolicy.Prepaid,
+        TeleconsultDefaultFee: settings.TeleconsultDefaultFee,
+        EnableTeleconsultation: settings.EnableTeleconsultation,
+        IsWorkspaceTeleconsultEntitled: isWorkspaceTeleconsultEntitled,
         PlatformVerificationStatus: settings.PlatformVerificationStatus,
         VerificationRejectionReason: settings.VerificationRejectionReason,
         LastVerificationSubmittedAtUtc: settings.LastVerificationSubmittedAtUtc,

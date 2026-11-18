@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Features.Dispensing.DTOs;
 using ClinicEz.Clinic.Application.Features.Triage.DTOs;
+using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -48,7 +51,11 @@ public sealed record UpdateTriageVitalsCommand(
     string? TriageAcuityReason = null,
     QueuePriority? Priority = null,
     bool ClearHeight = false,
-    bool ClearWeight = false) : IRequest<TriageVitalsDto>;
+    bool ClearWeight = false,
+    string? HomeInstructions = null,
+    string? RosCategory = null,
+    string? ChiefComplaint = null,
+    List<TriageDispensedItemInput>? DispensedItems = null) : IRequest<TriageVitalsDto>;
 
 public sealed class UpdateTriageVitalsCommandValidator : AbstractValidator<UpdateTriageVitalsCommand>
 {
@@ -73,6 +80,7 @@ public sealed class UpdateTriageVitalsCommandHandler : IRequestHandler<UpdateTri
     private readonly Application.Common.Interfaces.IWhoZScoreCalculator? _zScoreCalculator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<ClinicDispensingLog>? _dispensingLogRepository;
 
     public UpdateTriageVitalsCommandHandler(
         IRepository<QueueItem> queueRepository,
@@ -80,7 +88,8 @@ public sealed class UpdateTriageVitalsCommandHandler : IRequestHandler<UpdateTri
         IRepository<Patient> patientRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        Application.Common.Interfaces.IWhoZScoreCalculator? zScoreCalculator = null)
+        Application.Common.Interfaces.IWhoZScoreCalculator? zScoreCalculator = null,
+        IRepository<ClinicDispensingLog>? dispensingLogRepository = null)
     {
         _queueRepository = queueRepository;
         _vitalsRepository = vitalsRepository;
@@ -88,6 +97,7 @@ public sealed class UpdateTriageVitalsCommandHandler : IRequestHandler<UpdateTri
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _zScoreCalculator = zScoreCalculator;
+        _dispensingLogRepository = dispensingLogRepository;
     }
 
     public async Task<TriageVitalsDto> Handle(UpdateTriageVitalsCommand request, CancellationToken cancellationToken)
@@ -106,6 +116,8 @@ public sealed class UpdateTriageVitalsCommandHandler : IRequestHandler<UpdateTri
         {
             throw new NotFoundException($"No triage vitals found to update for queue ticket '{request.QueueItemId}'.");
         }
+
+        RecordTriageVitalsCommandHandler.ValidateTriageDispensingEligibility(queueItem, request.DispensedItems);
 
         // Nurse attribution
         if (request.NurseId.HasValue)
@@ -136,6 +148,16 @@ public sealed class UpdateTriageVitalsCommandHandler : IRequestHandler<UpdateTri
         vitals.PreAssessmentNotes = UpdateTextField(request.PreAssessmentNotes, vitals.PreAssessmentNotes);
         vitals.PreAssessmentRemarks = UpdateTextField(request.PreAssessmentRemarks, vitals.PreAssessmentRemarks);
         vitals.TriageAcuityReason = UpdateTextField(request.TriageAcuityReason, vitals.TriageAcuityReason);
+        vitals.HomeInstructions = UpdateTextField(request.HomeInstructions, vitals.HomeInstructions);
+        var parsedRos = RosCategoryHelper.ParseNullable(request.RosCategory);
+        if (parsedRos.HasValue)
+        {
+            vitals.RosCategory = parsedRos.Value;
+        }
+        else if (!vitals.RosCategory.HasValue && request.DispensedItems is { Count: > 0 })
+        {
+            vitals.RosCategory = RosCategoryHelper.InferFromSymptom(request.ChiefComplaint ?? queueItem.ChiefComplaint ?? vitals.PreAssessmentNotes);
+        }
 
         // Pediatric & adult anthropometrics
         if (request.HeadCircumferenceCm.HasValue)
@@ -274,6 +296,16 @@ public sealed class UpdateTriageVitalsCommandHandler : IRequestHandler<UpdateTri
 
         bool queueItemModified = false;
 
+        if (request.ChiefComplaint != null)
+        {
+            var trimmedComplaint = string.IsNullOrWhiteSpace(request.ChiefComplaint) ? null : request.ChiefComplaint.Trim();
+            if (queueItem.ChiefComplaint != trimmedComplaint)
+            {
+                queueItem.ChiefComplaint = trimmedComplaint;
+                queueItemModified = true;
+            }
+        }
+
         // Persist priority change to PostgreSQL if provided
         if (request.Priority.HasValue && queueItem.Priority != request.Priority.Value)
         {
@@ -295,46 +327,17 @@ public sealed class UpdateTriageVitalsCommandHandler : IRequestHandler<UpdateTri
             _queueRepository.Update(queueItem);
         }
 
+        var dispensedDtos = await RecordTriageVitalsCommandHandler.SyncNurseDispensedItemsAsync(
+            _dispensingLogRepository ?? (_unitOfWork as IRepositoryProvider)?.GetRepository<ClinicDispensingLog>(),
+            _clinicContext,
+            queueItem,
+            vitals,
+            request.DispensedItems,
+            cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return new TriageVitalsDto(
-            vitals.Id,
-            vitals.TenantId,
-            vitals.ClinicId,
-            vitals.QueueItemId,
-            vitals.PatientId,
-            vitals.NurseId,
-            vitals.RecordedByNurseName,
-            vitals.RecordedAt,
-            vitals.SystolicBp,
-            vitals.DiastolicBp,
-            vitals.HeartRateBpm,
-            vitals.TemperatureCelsius,
-            vitals.RespiratoryRateBreathsPerMin,
-            vitals.OxygenSaturationPercent,
-            vitals.HeightCm,
-            vitals.WeightKg,
-            vitals.Bmi,
-            vitals.PainScore,
-            vitals.Notes,
-            vitals.VisualAcuityLeft,
-            vitals.VisualAcuityRight,
-            vitals.HeadCircumferenceCm,
-            vitals.MidUpperArmCircumferenceCm,
-            vitals.IsMeasuredRecumbent,
-            vitals.ZScoreWeightForAge,
-            vitals.ZScoreLengthForAge,
-            vitals.ZScoreWeightForLength,
-            vitals.GrowthZScoreCategory,
-            vitals.GrowthZScoreCode,
-            vitals.WaistCircumferenceCm,
-            vitals.HipCircumferenceCm,
-            vitals.BodyLengthCm,
-            vitals.SkinfoldThicknessMm,
-            vitals.LimbsCircumferenceCm,
-            vitals.PreAssessmentNotes,
-            vitals.PreAssessmentRemarks,
-            vitals.TriageAcuityReason);
+        return RecordTriageVitalsCommandHandler.MapToDto(vitals, queueItem, dispensedDtos);
     }
 
     private static string? UpdateTextField(string? requestValue, string? existingValue)

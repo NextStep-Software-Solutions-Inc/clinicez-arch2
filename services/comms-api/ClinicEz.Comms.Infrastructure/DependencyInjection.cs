@@ -67,7 +67,8 @@ public static class DependencyInjection
         services.AddInterop<CommsDbContext>(configuration, handlers => handlers
             .Handle<CommsEligibilityGrantedPayload, CommsEligibilityGrantedHandler>(InteropTypes.CommsEligibilityGranted)
             .Handle<CommsEligibilityRevokedPayload, CommsEligibilityRevokedHandler>(InteropTypes.CommsEligibilityRevoked)
-            .Handle<GuestCallJoinRequestedPayload, GuestCallJoinRequestedHandler>(InteropTypes.GuestCallJoinRequested));
+            .Handle<GuestCallJoinRequestedPayload, GuestCallJoinRequestedHandler>(InteropTypes.GuestCallJoinRequested)
+            .HandleReply(InteropTypes.MediaRoomResponded));
 
         return services;
     }

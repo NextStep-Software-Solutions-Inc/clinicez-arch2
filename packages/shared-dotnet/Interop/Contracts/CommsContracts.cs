@@ -260,7 +260,8 @@ public sealed record CommsCallStateChangedPayload(
     string? RoomName,
     string? JoinToken,
     int StateVersion,
-    DateTime ChangedAtUtc);
+    DateTime ChangedAtUtc,
+    string? RelayUrl = null);
 
 /// <summary>Payload for <c>comms.call.event</c>.</summary>
 public sealed record CommsCallEventPayload(
@@ -323,7 +324,7 @@ public sealed record CommsTranscriptArchivedPayload(
     string? ContextType,
     string? ContextId,
     MessageCategory? Category,
-    string Title,
+    string? Title,
     DateTime OpenedAtUtc,
     DateTime ClosedAtUtc,
     string? ClosedByStaffId,
@@ -372,7 +373,7 @@ public sealed record PatientCommunicationTranscriptDocument(
     string? ContextType,
     string? ContextId,
     string Category,
-    string Title,
+    string? Title,
     DateTime CreatedAtUtc,
     DateTime ClosedAtUtc,
     string? ClosedByStaffId,

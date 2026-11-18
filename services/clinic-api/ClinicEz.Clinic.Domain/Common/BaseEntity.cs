@@ -1,8 +1,9 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using MediatR;
 
 namespace ClinicEz.Clinic.Domain.Common;
 
-public interface IDomainEvent
+public interface IDomainEvent : INotification
 {
     Guid EventId { get; }
     DateTime OccurredOnUtc { get; }

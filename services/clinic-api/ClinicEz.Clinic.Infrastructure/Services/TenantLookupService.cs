@@ -45,7 +45,7 @@ public class TenantLookupService : ITenantLookupService
         var settings = await Clinics().FirstOrDefaultAsync(
             s => s.TenantId.ToLower() == clean || (s.TenantSlug != null && s.TenantSlug.ToLower() == clean), ct);
 
-        return settings == null ? null : ToDto(settings, includeFacility: false);
+        return settings == null ? null : ToDto(settings, includeFacility: true);
     }
 
     public async Task<TenantLookupDto?> LookupAsync(string identifier, CancellationToken ct = default)

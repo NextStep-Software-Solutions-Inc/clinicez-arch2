@@ -3,16 +3,18 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   ScrollView,
   Platform,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import { darkColors } from '@clinicez/design-tokens';
 import { theme } from '../../constants/theme';
+import Button from '../../components/ui/Button';
 import Icon from '../../components/ui/Icon';
 import { clinicService } from '../../services/clinicService';
-import { isAudioMuted, setAudioMuted, playAlertChime, unlockAudio } from '../../utils/audioChime';
+import { isAudioMuted, setAudioMuted, playAlertChime, playQueueCallAlert, unlockAudio } from '../../utils/audioChime';
 import { CoBrandedLogo } from '../../components/ui/ClinicEzLogo';
 
 export interface ServingTicket {
@@ -47,6 +49,9 @@ export interface PublicQueueDisplayData {
   logoUrl?: string | null;
   isPinRequired?: boolean;
   isPinValid?: boolean;
+  tvDisplaySoundTheme?: string;
+  tvDisplayVoiceEnabled?: boolean;
+  tvDisplayShowPhysicianName?: boolean;
 }
 
 const PIN_STORAGE_KEY = 'clinicez_tv_pin_lan';
@@ -70,6 +75,7 @@ function getStoredPin(): string {
 }
 
 export default function PublicQueueDisplayScreen() {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [data, setData] = useState<PublicQueueDisplayData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +84,8 @@ export default function PublicQueueDisplayScreen() {
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDate, setCurrentDate] = useState<string>('');
   const [lastUpdatedTime, setLastUpdatedTime] = useState<number>(Date.now());
-  const [pulseActive, setPulseActive] = useState<boolean>(false);
+  const [pulsingTicketIds, setPulsingTicketIds] = useState<string[]>([]);
+  const alertTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
   // PIN / Passcode state
   const [pin, setPin] = useState<string>(getStoredPin);
@@ -86,6 +93,7 @@ export default function PublicQueueDisplayScreen() {
   const [pinError, setPinError] = useState<string | null>(null);
   const [unlocking, setUnlocking] = useState<boolean>(false);
 
+  const isInitialMountRef = useRef<boolean>(true);
   const prevServingRef = useRef<string[]>([]);
   const failureCountRef = useRef<number>(0);
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -127,6 +135,13 @@ export default function PublicQueueDisplayScreen() {
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
+  // Cleanup alert timeouts on unmount
+  useEffect(() => {
+    return () => {
+      alertTimeoutsRef.current.forEach(clearTimeout);
+    };
+  }, []);
+
   // Data fetching and ticket advancement detection
   const fetchQueue = useCallback(async (pinOverride?: string) => {
     const activePin = pinOverride !== undefined ? pinOverride : pin;
@@ -157,14 +172,32 @@ export default function PublicQueueDisplayScreen() {
       const newServing: string[] = res.nowServing?.map((s: ServingTicket) => s.ticketNumber) || [];
       const prevServing = prevServingRef.current;
 
-      // Audio & visual alert when a new ticket is called
-      const hasNewCall = newServing.some((t) => !prevServing.includes(t));
-      if (hasNewCall && prevServing.length > 0) {
-        setPulseActive(true);
-        setTimeout(() => setPulseActive(false), 3600);
-        playAlertChime();
+      // Audio & visual alerts when one or more tickets are newly called
+      const newlyCalled: ServingTicket[] = res.nowServing?.filter((s: ServingTicket) => !prevServing.includes(s.ticketNumber)) || [];
+      if (!isInitialMountRef.current && newlyCalled.length > 0) {
+        // Sequentially announce each newly called patient and keep the card glow active
+        // for that specific ticket until its announcement finishes
+        newlyCalled.forEach((ticket: ServingTicket, idx: number) => {
+          const alertTimer = setTimeout(() => {
+            playQueueCallAlert({
+              theme: res.tvDisplaySoundTheme || 'classicChime',
+              voiceEnabled: res.tvDisplayVoiceEnabled,
+              ticketNumber: ticket.ticketNumber,
+              roomOrStation: ticket.roomOrStation,
+              doctorName: ticket.doctorName,
+              onStart: () => {
+                setPulsingTicketIds((prev) => Array.from(new Set([...prev, ticket.queueItemId])));
+              },
+              onEnd: () => {
+                setPulsingTicketIds((prev) => prev.filter((id) => id !== ticket.queueItemId));
+              },
+            });
+          }, idx * 3600);
+          alertTimeoutsRef.current.push(alertTimer);
+        });
       }
 
+      isInitialMountRef.current = false;
       prevServingRef.current = newServing;
       setData(res);
       setLoading(false);
@@ -278,7 +311,7 @@ export default function PublicQueueDisplayScreen() {
     setMuted(nextMuted);
     setAudioMuted(nextMuted);
     if (!nextMuted) {
-      playAlertChime();
+      playAlertChime(data?.tvDisplaySoundTheme || 'classicChime');
     }
   };
 
@@ -303,6 +336,53 @@ export default function PublicQueueDisplayScreen() {
   const primaryServing = data?.nowServing?.[0];
   const otherServing = data?.nowServing?.slice(1) || [];
   const upNextList = data?.upNext || [];
+  const pulseActive = primaryServing ? pulsingTicketIds.includes(primaryServing.queueItemId) : false;
+
+  const safeWidth = windowWidth > 0 ? windowWidth : 1280;
+  const safeHeight = windowHeight > 0 ? windowHeight : 800;
+  const hasUpNext = upNextList.length > 0;
+  // Breakpoint strictly by screen size (<1024px) - Up Next column remains visible on widescreen displays to maintain balanced 65/35 grid layout
+  const isCompact = safeWidth < 1024;
+
+  // Responsive padding to squeeze content inwards from top, sides, and bottom
+  const bodyPaddingHorizontal = Math.max(28, Math.min(64, Math.round(safeWidth * 0.04)));
+  const bodyPaddingVertical = Math.max(20, Math.min(44, Math.round(safeHeight * 0.04)));
+
+  // Equal height constraint so Now Serving and Up Next match and avoid overly tall cards
+  const contentMaxHeight = Math.min(640, Math.max(400, Math.round((safeHeight - 110) * 0.84)));
+
+  const headerNowServingFontSize = Math.max(
+    theme.fontSizes['2xl'],
+    Math.min(theme.fontSizes['3xl'] + 2, Math.round(safeWidth * 0.02))
+  );
+  const sectionTitleFontSize = Math.max(
+    theme.fontSizes.xl,
+    Math.min(theme.fontSizes['3xl'] + 2, Math.round(safeWidth * 0.024))
+  );
+  const sectionSubtitleFontSize = Math.max(
+    theme.fontSizes.xs,
+    Math.min(theme.fontSizes.md, Math.round(safeWidth * 0.011))
+  );
+
+  // Dynamic ticket number font size calculation to guarantee zero truncation and zero overflow
+  const getTicketFontSize = (ticketNum: string, stationCount: number) => {
+    const len = Math.max(ticketNum?.length || 5, 4);
+    const colWidth = isCompact ? safeWidth * 0.95 : safeWidth * 0.65;
+    const cols = stationCount === 1 ? 1 : stationCount === 2 ? 2 : Math.min(stationCount, 3);
+    const cardWidth = (colWidth - (cols - 1) * 20 - 48) / cols;
+    // Monospace character width is ~0.62 * fontSize
+    const maxFontByWidth = Math.floor((cardWidth - 28) / (len * 0.62));
+
+    if (stationCount === 1) {
+      return Math.min(96, Math.max(52, maxFontByWidth));
+    } else if (stationCount === 2) {
+      return Math.min(60, Math.max(34, maxFontByWidth));
+    } else if (stationCount === 3) {
+      return Math.min(46, Math.max(26, maxFontByWidth));
+    } else {
+      return Math.min(36, Math.max(22, maxFontByWidth));
+    }
+  };
 
   return (
     <View
@@ -310,6 +390,28 @@ export default function PublicQueueDisplayScreen() {
       onTouchStart={handleUserInteraction}
       {...(Platform.OS === 'web' ? { onClick: handleUserInteraction } : {})}
     >
+      {Platform.OS === 'web' && (
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              @keyframes cardFadeIn {
+                from { opacity: 0; transform: scale(0.96) translateY(8px); }
+                to { opacity: 1; transform: scale(1) translateY(0); }
+              }
+              @keyframes cardPulseGlow {
+                0%, 100% {
+                  box-shadow: 0 0 20px ${darkColors.primaryBorder};
+                  border-color: ${darkColors.primaryBorder};
+                }
+                50% {
+                  box-shadow: 0 0 45px ${darkColors.primary}, 0 0 15px ${darkColors.primaryHover};
+                  border-color: ${darkColors.primary};
+                }
+              }
+            `,
+          }}
+        />
+      )}
       {/* Header Bar */}
       <View style={styles.header}>
         <View style={styles.brandRow}>
@@ -326,54 +428,41 @@ export default function PublicQueueDisplayScreen() {
               variant="squircle"
             />
           )}
-          <View>
-            <Text style={styles.clinicTitle}>{data?.clinicName || 'Clinic EZ Healthcare'}</Text>
-            <View style={styles.liveBadgeRow}>
-              <View
-                style={[
-                  styles.livePill,
-                  {
-                    backgroundColor: isLocked
-                      ? darkColors.warningBg
-                      : isStale
-                      ? darkColors.warningBg
-                      : darkColors.primaryLight,
-                  },
-                ]}
-              >
+          <View style={styles.brandTitleContainer}>
+            <Text
+              style={[
+                styles.clinicTitle,
+                { fontSize: headerNowServingFontSize },
+              ]}
+              numberOfLines={1}
+            >
+              NOW SERVING
+            </Text>
+            {(isLocked || isStale) && (
+              <View style={styles.liveBadgeRow}>
                 <View
                   style={[
-                    styles.pingDot,
-                    {
-                      backgroundColor: isLocked
-                        ? darkColors.warningText
-                        : isStale
-                        ? darkColors.warningText
-                        : darkColors.primary,
-                    },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.livePillText,
-                    {
-                      color: isLocked
-                        ? darkColors.warningText
-                        : isStale
-                        ? darkColors.warningText
-                        : darkColors.primary,
-                    },
+                    styles.livePill,
+                    { backgroundColor: darkColors.warningBg },
                   ]}
                 >
-                  {isLocked ? 'Locked (PIN Required)' : isStale ? 'Syncing...' : 'Live LAN Queue Kiosk'}
-                </Text>
+                  <View
+                    style={[
+                      styles.pingDot,
+                      { backgroundColor: darkColors.warningText },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.livePillText,
+                      { color: darkColors.warningText },
+                    ]}
+                  >
+                    {isLocked ? 'Locked (Passcode Required)' : 'Syncing...'}
+                  </Text>
+                </View>
               </View>
-              {!isLocked && (
-                <Text style={styles.waitingCountText}>
-                  {data?.patientsWaitingCount || 0} waiting in line
-                </Text>
-              )}
-            </View>
+            )}
           </View>
         </View>
 
@@ -386,20 +475,24 @@ export default function PublicQueueDisplayScreen() {
           <View style={styles.actionsBox}>
             {/* Lock / Relock Button */}
             {!isLocked && data?.isPinRequired && (
-              <TouchableOpacity
-                style={styles.controlBtn}
+              <Button
+                variant="subtle"
+                size="md"
+                icon="lock"
+                iconOnly
                 onPress={handleLockBoard}
                 accessibilityLabel="Lock TV Display Board"
-              >
-                <Icon
-                  name="lock"
-                  size={20}
-                  color={darkColors.textSecondary}
-                />
-              </TouchableOpacity>
+                style={styles.controlBtn}
+              />
             )}
 
-            <TouchableOpacity
+            <Button
+              variant={muted ? 'subtle' : 'outline'}
+              size="md"
+              icon={muted ? 'volumeX' : 'volume2'}
+              iconOnly
+              onPress={handleToggleMute}
+              accessibilityLabel={muted ? 'Unmute Audio' : 'Mute Audio'}
               style={[
                 styles.controlBtn,
                 {
@@ -407,28 +500,18 @@ export default function PublicQueueDisplayScreen() {
                   borderColor: muted ? darkColors.border : darkColors.primaryBorder,
                 },
               ]}
-              onPress={handleToggleMute}
-              accessibilityLabel={muted ? 'Unmute Audio' : 'Mute Audio'}
-            >
-              <Icon
-                name={muted ? 'volumeX' : 'volume2'}
-                size={22}
-                color={muted ? darkColors.textMuted : darkColors.primary}
-              />
-            </TouchableOpacity>
+            />
 
             {Platform.OS === 'web' && (
-              <TouchableOpacity
-                style={styles.controlBtn}
+              <Button
+                variant="subtle"
+                size="md"
+                icon={isFullscreen ? 'minimize' : 'maximize'}
+                iconOnly
                 onPress={handleToggleFullscreen}
                 accessibilityLabel={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-              >
-                <Icon
-                  name={isFullscreen ? 'minimize' : 'maximize'}
-                  size={22}
-                  color={darkColors.textSecondary}
-                />
-              </TouchableOpacity>
+                style={styles.controlBtn}
+              />
             )}
           </View>
         </View>
@@ -482,8 +565,10 @@ export default function PublicQueueDisplayScreen() {
             {/* Numeric Keypad */}
             <View style={styles.keypadGrid}>
               {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
-                <TouchableOpacity
+                <Pressable
                   key={digit}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Digit ${digit}`}
                   style={styles.keypadBtn}
                   onPress={() => {
                     setPinEntry((prev) => {
@@ -498,9 +583,11 @@ export default function PublicQueueDisplayScreen() {
                   }}
                 >
                   <Text style={styles.keypadDigit}>{digit}</Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
-              <TouchableOpacity
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear passcode"
                 style={styles.keypadActionBtn}
                 onPress={() => {
                   setPinEntry('');
@@ -508,8 +595,10 @@ export default function PublicQueueDisplayScreen() {
                 }}
               >
                 <Text style={styles.keypadActionText}>Clear</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Digit 0"
                 style={styles.keypadBtn}
                 onPress={() => {
                   setPinEntry((prev) => {
@@ -524,107 +613,51 @@ export default function PublicQueueDisplayScreen() {
                 }}
               >
                 <Text style={styles.keypadDigit}>0</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Backspace"
                 style={styles.keypadActionBtn}
                 onPress={() => {
                   setPinEntry((prev) => prev.slice(0, -1));
                   setPinError(null);
                 }}
               >
-                <Text style={styles.keypadActionText}>⌫</Text>
-              </TouchableOpacity>
+                <Icon name="arrowLeft" size={20} color={darkColors.textSecondary} />
+              </Pressable>
             </View>
 
             {/* Submit / Unlock Button */}
-            <TouchableOpacity
-              style={[
-                styles.unlockBtn,
-                (pinEntry.length === 0 || unlocking) && styles.unlockBtnDisabled,
-              ]}
+            <Button
+              title={unlocking ? 'Verifying Passcode...' : 'Unlock TV Display'}
+              variant="primary"
+              size="lg"
+              loading={unlocking}
               disabled={pinEntry.length === 0 || unlocking}
               onPress={() => handleUnlock(pinEntry)}
-            >
-              <Text style={styles.unlockBtnText}>
-                {unlocking ? 'Verifying Passcode...' : 'Unlock TV Display'}
-              </Text>
-            </TouchableOpacity>
+              style={styles.unlockBtn}
+            />
           </View>
         </View>
       ) : (
-        <View style={styles.mainGrid}>
-        {/* Left Column (60%): NOW SERVING */}
-        <View style={styles.servingCol}>
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>NOW SERVING</Text>
-              <Text style={styles.sectionSubtitle}>Kasalukuyang Tinatawag</Text>
-            </View>
-            {primaryServing && (
-              <View style={styles.inConsultationBadge}>
-                <Text style={styles.inConsultationText}>In Consultation</Text>
-              </View>
-            )}
-          </View>
-
-          {primaryServing ? (
-            <View
-              style={[
-                styles.servingCard,
-                pulseActive && { borderColor: darkColors.primary, borderWidth: 3 },
-              ]}
-            >
-              <View style={styles.ticketBox}>
-                <Text style={styles.ticketLabel}>TICKET NUMBER / NUMERO NG TIKET</Text>
-                <Text style={styles.ticketHero}>{primaryServing.ticketNumber}</Text>
-              </View>
-
-              <View style={styles.attributionGrid}>
-                {/* Station / Room */}
-                <View style={styles.attributionItem}>
-                  <View style={styles.attrIconBox}>
-                    <Icon name="mapPin" size={24} color={darkColors.primary} />
-                  </View>
-                  <View style={styles.attrTextBox}>
-                    <Text style={styles.attrCaption}>STATION / ROOM</Text>
-                    <Text style={styles.attrValue} numberOfLines={1}>
-                      {primaryServing.roomOrStation || 'Consultation Room 1'}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Doctor */}
-                <View style={styles.attributionItem}>
-                  <View style={styles.attrIconBox}>
-                    <Icon name="stethoscope" size={24} color={darkColors.primary} />
-                  </View>
-                  <View style={styles.attrTextBox}>
-                    <Text style={styles.attrCaption}>ATTENDING PHYSICIAN</Text>
-                    <Text style={styles.attrValue} numberOfLines={1}>
-                      {primaryServing.doctorName || 'Attending Physician'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Other concurrently serving stations */}
-              {otherServing.length > 0 && (
-                <View style={styles.concurrentBox}>
-                  <Text style={styles.concurrentCaption}>ALSO SERVING AT OTHER STATIONS:</Text>
-                  <View style={styles.concurrentGrid}>
-                    {otherServing.map((item) => (
-                      <View key={item.queueItemId} style={styles.concurrentCard}>
-                        <Text style={styles.concurrentTicket}>{item.ticketNumber}</Text>
-                        <Text style={styles.concurrentRoom} numberOfLines={1}>
-                          {item.roomOrStation || 'Exam Room'}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
-            </View>
-          ) : (
+        <View
+          style={[
+            styles.mainGrid,
+            {
+              paddingHorizontal: bodyPaddingHorizontal,
+              paddingVertical: bodyPaddingVertical,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.contentWrapper,
+              { maxHeight: contentMaxHeight },
+            ]}
+          >
+            {/* Left Column: Active Stations (NOW SERVING) */}
+            <View style={[styles.servingCol, isCompact && styles.servingColCompact]}>
+          {!primaryServing ? (
             <View style={styles.emptyServingCard}>
               <Icon name="clock" size={48} color={darkColors.primary} />
               <Text style={styles.emptyServingTitle}>No Active Patient Called</Text>
@@ -632,22 +665,142 @@ export default function PublicQueueDisplayScreen() {
                 Please wait for your ticket number to be called.
               </Text>
             </View>
+          ) : data?.nowServing && data.nowServing.length > 1 ? (
+            /* Multi-Station Equal Prominence Flexbox (Responsive, Zero-Scroll) */
+            <View style={styles.multiStationContainer}>
+              {data.nowServing.map((item) => {
+                const isItemPulsing = pulsingTicketIds.includes(item.queueItemId);
+                const count = data.nowServing.length;
+                return (
+                  <View
+                    key={item.queueItemId}
+                    style={[
+                      styles.stationCard,
+                      count === 2 && styles.stationCard2Up,
+                      count === 3 && styles.stationCard3Up,
+                      count === 4 && styles.stationCard4Up,
+                      count >= 5 && styles.stationCard5Plus,
+                      isItemPulsing && styles.stationCardPulsing,
+                    ]}
+                  >
+                    {/* Header: Station & Status */}
+                    <View style={styles.stationCardHeader}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={styles.stationCaption} numberOfLines={1}>
+                          STATION / ROOM
+                        </Text>
+                        <Text style={styles.stationName} numberOfLines={1}>
+                          {item.roomOrStation || '—'}
+                        </Text>
+                      </View>
+                      {isItemPulsing && (
+                        <View style={styles.stationStatusBadgePulsing}>
+                          <Text style={styles.stationStatusTextPulsing}>JUST CALLED</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Center: Ticket Number */}
+                    <View style={styles.stationTicketBox}>
+                      <Text style={styles.stationTicketLabel} numberOfLines={1}>
+                        TICKET NUMBER
+                      </Text>
+                      <Text
+                        style={[
+                          styles.stationTicketNumber,
+                          { fontSize: getTicketFontSize(item.ticketNumber, count) },
+                        ]}
+                      >
+                        {item.ticketNumber}
+                      </Text>
+                    </View>
+
+                    {/* Footer: Attending Physician */}
+                    {data?.tvDisplayShowPhysicianName !== false && (
+                      <View style={styles.stationFooter}>
+                        <Text style={styles.stationDoctorCaption} numberOfLines={1}>
+                          ATTENDING PHYSICIAN
+                        </Text>
+                        <Text style={styles.stationDoctorText} numberOfLines={1}>
+                          {item.doctorName || '—'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            /* Single Station Clean Display */
+            <View
+              style={[
+                styles.servingCard,
+                pulseActive && { borderColor: darkColors.primary, borderWidth: 3 },
+              ]}
+            >
+              {/* Header: Station & Status */}
+              <View style={styles.singleCardHeader}>
+                <View>
+                  <Text style={styles.stationCaption} numberOfLines={1}>
+                    STATION / ROOM
+                  </Text>
+                  <Text style={styles.singleStationName} numberOfLines={1}>
+                    {primaryServing.roomOrStation || '—'}
+                  </Text>
+                </View>
+                {pulseActive && (
+                  <View style={styles.stationStatusBadgePulsing}>
+                    <Text style={styles.stationStatusTextPulsing}>JUST CALLED</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Center: Hero Ticket Number */}
+              <View style={styles.ticketBox}>
+                <Text style={styles.ticketLabel} numberOfLines={1}>
+                  TICKET NUMBER
+                </Text>
+                <Text
+                  style={[
+                    styles.ticketHero,
+                    { fontSize: getTicketFontSize(primaryServing.ticketNumber, 1) },
+                  ]}
+                >
+                  {primaryServing.ticketNumber}
+                </Text>
+              </View>
+
+              {/* Footer: Attending Physician */}
+              {data?.tvDisplayShowPhysicianName !== false && (
+                <View style={styles.singleCardFooter}>
+                  <Text style={styles.stationDoctorCaption} numberOfLines={1}>
+                    ATTENDING PHYSICIAN
+                  </Text>
+                  <Text style={styles.singleDoctorName} numberOfLines={1}>
+                    {primaryServing.doctorName || '—'}
+                  </Text>
+                </View>
+              )}
+            </View>
           )}
         </View>
 
-        {/* Right Column (40%): UP NEXT */}
+        {/* Right Column: UP NEXT (Visible on widescreen displays) */}
+        {!isCompact && (
         <View style={styles.upNextCol}>
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>UP NEXT</Text>
-              <Text style={styles.sectionSubtitle}>Susunod Na Tiket</Text>
-            </View>
-            <View style={styles.queueOrderBadge}>
-              <Text style={styles.queueOrderText}>Queue Order</Text>
-            </View>
-          </View>
-
           <View style={styles.upNextContainer}>
+            <View style={styles.upNextCardHeader}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { fontSize: sectionTitleFontSize },
+                ]}
+                numberOfLines={1}
+              >
+                UP NEXT
+              </Text>
+            </View>
+
             {upNextList.length > 0 ? (
               <ScrollView style={styles.upNextScroll} contentContainerStyle={styles.upNextList}>
                 {upNextList.slice(0, 10).map((ticket, idx) => {
@@ -738,27 +891,32 @@ export default function PublicQueueDisplayScreen() {
             )}
           </View>
         </View>
-      </View>
+        )}
+          </View>
+        </View>
       )}
 
       {/* Footer Ticker */}
       <View style={styles.footer}>
         <View style={styles.footerLeft}>
-          <Text style={styles.footerHighlight}>INSTRUCTIONS:</Text>
           <Text style={styles.footerNote}>
-            Please prepare your PhilHealth ID or QR pass and wait for your ticket to be called.
+            Please wait for your ticket number to be called.
           </Text>
         </View>
 
         <View style={styles.footerRight}>
-          <Text style={styles.footerMode}>Display: LAN Kiosk (1080p/4K)</Text>
           <View style={styles.autoRefreshPill}>
             <View style={styles.refreshDot} />
-            <Text style={styles.autoRefreshText}>Auto-refresh: 4s</Text>
+            <Text style={styles.autoRefreshText}>Live</Text>
           </View>
-          <TouchableOpacity onPress={handleExitKiosk} style={styles.staffLink}>
-            <Text style={styles.staffLinkText}>Staff Sign In</Text>
-          </TouchableOpacity>
+          <Button
+            title="Staff Sign In"
+            variant="ghost"
+            size="xs"
+            onPress={handleExitKiosk}
+            style={styles.staffLink}
+            textStyle={styles.staffLinkText}
+          />
         </View>
       </View>
     </View>
@@ -775,12 +933,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     backgroundColor: darkColors.surface,
     borderBottomWidth: 1,
     borderBottomColor: darkColors.border,
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     gap: 12,
   },
   brandRow: {
@@ -792,6 +950,9 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: theme.radii.md - 2,
+  },
+  brandTitleContainer: {
+    justifyContent: 'center',
   },
   clinicTitle: {
     fontSize: theme.fontSizes['2xl'],
@@ -823,26 +984,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
   },
-  waitingCountText: {
-    fontSize: theme.fontSizes.xs,
-    color: darkColors.textMuted,
-  },
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 20,
+    gap: 12,
   },
   clockBox: {
     alignItems: 'flex-end',
   },
   clockTime: {
-    fontSize: theme.fontSizes['2xl'],
+    fontSize: theme.fontSizes.xl,
     fontWeight: '700',
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
     color: darkColors.text,
   },
   clockDate: {
-    fontSize: theme.fontSizes.xs,
+    fontSize: theme.fontSizes.xs - 1,
     color: darkColors.textSecondary,
     fontWeight: '500',
   },
@@ -876,17 +1033,28 @@ const styles = StyleSheet.create({
   },
   mainGrid: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contentWrapper: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
     flexDirection: 'row',
-    padding: 24,
     gap: 24,
   },
   servingCol: {
-    flex: 6,
-    gap: 16,
+    flex: 65,
+    height: '100%',
+    gap: 20,
+  },
+  servingColCompact: {
+    flex: 1,
   },
   upNextCol: {
-    flex: 4,
-    gap: 16,
+    flex: 35,
+    height: '100%',
+    gap: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -904,22 +1072,9 @@ const styles = StyleSheet.create({
     color: darkColors.textMuted,
     fontWeight: '500',
   },
-  inConsultationBadge: {
-    backgroundColor: darkColors.primaryLight,
-    borderColor: darkColors.primaryBorder,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: theme.radii.xl - 2,
-  },
-  inConsultationText: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '700',
-    color: darkColors.primary,
-    textTransform: 'uppercase',
-  },
   servingCard: {
     flex: 1,
+    height: '100%',
     backgroundColor: darkColors.surface,
     borderColor: darkColors.border,
     borderWidth: 2,
@@ -928,9 +1083,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   ticketBox: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 20,
+    width: '100%',
   },
   ticketLabel: {
     fontSize: theme.fontSizes.md,
@@ -940,92 +1097,207 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   ticketHero: {
-    fontSize: theme.fontSizes['4xl'] * 2.67,
+    fontSize: theme.fontSizes['4xl'] * 2.2,
     fontWeight: '900',
     color: darkColors.primary,
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
     letterSpacing: -2,
-    lineHeight: 104,
+    textAlign: 'center',
+    ...(Platform.OS === 'web'
+      ? ({
+          whiteSpace: 'nowrap' as any,
+          wordBreak: 'keep-all' as any,
+          textOverflow: 'clip' as any,
+        } as any)
+      : {}),
   },
-  attributionGrid: {
-    flexDirection: 'row',
-    gap: 16,
-    backgroundColor: darkColors.surfaceHighlight,
-    padding: 16,
-    borderRadius: theme.radii.xl - 2,
-    borderWidth: 1,
-    borderColor: darkColors.border,
+  ticketHeroCompact: {
+    fontSize: theme.fontSizes['4xl'] * 1.8,
+    lineHeight: 76,
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any, wordBreak: 'keep-all' as any } : {}),
   },
-  attributionItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  attrIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: theme.radii.lg - 2,
-    backgroundColor: darkColors.surface,
-    borderWidth: 1,
-    borderColor: darkColors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  attrTextBox: {
-    flex: 1,
-  },
-  attrCaption: {
-    fontSize: theme.fontSizes.xs - 1,
-    fontWeight: '700',
-    color: darkColors.textMuted,
-    letterSpacing: 0.5,
-  },
-  attrValue: {
-    fontSize: theme.fontSizes.xl,
-    fontWeight: '800',
-    color: darkColors.text,
-  },
-  concurrentBox: {
-    marginTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: darkColors.border,
-    paddingTop: 12,
-  },
-  concurrentCaption: {
-    fontSize: theme.fontSizes.xs - 1,
-    fontWeight: '700',
-    color: darkColors.textMuted,
-    marginBottom: 8,
-  },
-  concurrentGrid: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  concurrentCard: {
-    flex: 1,
-    minWidth: 140,
-    backgroundColor: darkColors.surfaceHighlight,
-    borderWidth: 1,
-    borderColor: darkColors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: theme.radii.md,
+  singleCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: darkColors.border,
   },
-  concurrentTicket: {
+  singleStationName: {
+    fontSize: theme.fontSizes['2xl'],
+    fontWeight: '800',
+    color: darkColors.text,
+    marginTop: 2,
+  },
+  stationCaption: {
+    fontSize: theme.fontSizes.xs - 1,
+    fontWeight: '700',
+    color: darkColors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
+  },
+  stationName: {
     fontSize: theme.fontSizes.xl,
     fontWeight: '800',
+    color: darkColors.text,
+    marginTop: 2,
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
+  },
+  stationStatusBadge: {
+    backgroundColor: darkColors.surfaceHighlight,
+    borderColor: darkColors.border,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: theme.radii.full,
+  },
+  stationStatusBadgePulsing: {
+    backgroundColor: darkColors.primaryLight,
+    borderColor: darkColors.primaryBorder,
+  },
+  stationStatusText: {
+    fontSize: theme.fontSizes.xs,
+    fontWeight: '700',
+    color: darkColors.textSecondary,
+    textTransform: 'uppercase',
+  },
+  stationStatusTextPulsing: {
+    color: darkColors.primary,
+  },
+  singleCardFooter: {
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: darkColors.border,
+  },
+  singleDoctorName: {
+    fontSize: theme.fontSizes.xl,
+    fontWeight: '800',
+    color: darkColors.text,
+    marginTop: 2,
+  },
+  stationDoctorCaption: {
+    fontSize: theme.fontSizes.xs - 1,
+    fontWeight: '700',
+    color: darkColors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
+  },
+  multiStationContainer: {
+    flex: 1,
+    height: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 20,
+    overflow: 'hidden',
+  },
+  stationCard: {
+    flexGrow: 1,
+    flexShrink: 1,
+    backgroundColor: darkColors.surface,
+    borderColor: darkColors.border,
+    borderWidth: 2,
+    borderRadius: theme.radii['2xl'],
+    padding: 20,
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? ({
+          transitionProperty: 'all',
+          transitionDuration: '400ms',
+          transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
+          animationKeyframes: 'cardFadeIn',
+          animationDuration: '350ms',
+          animationTimingFunction: 'ease-out',
+        } as any)
+      : {}),
+  },
+  stationCard2Up: {
+    flexBasis: '47%',
+    height: '100%',
+    padding: 24,
+  },
+  stationCard3Up: {
+    flexBasis: '31%',
+    height: '100%',
+    padding: 18,
+  },
+  stationCard4Up: {
+    flexBasis: '47%',
+    height: '47%',
+    padding: 16,
+  },
+  stationCard5Plus: {
+    flexBasis: '31%',
+    height: '47%',
+    padding: 14,
+  },
+  stationCardPulsing: {
+    borderColor: darkColors.primary,
+    borderWidth: 3,
+    backgroundColor: darkColors.surfaceHighlight,
+    ...(Platform.OS === 'web'
+      ? ({
+          boxShadow: `0 0 35px ${darkColors.primaryLight}, 0 0 15px ${darkColors.primary}`,
+          animationKeyframes: 'cardPulseGlow',
+          animationDuration: '1600ms',
+          animationTimingFunction: 'ease-in-out',
+          animationIterationCount: 'infinite',
+        } as any)
+      : {}),
+  },
+  stationCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 12,
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: darkColors.border,
+  },
+  stationTicketBox: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  stationTicketLabel: {
+    fontSize: theme.fontSizes.xs - 1,
+    fontWeight: '700',
+    color: darkColors.textMuted,
+    letterSpacing: 1,
+    marginBottom: 6,
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
+  },
+  stationTicketNumber: {
+    fontWeight: '900',
     color: darkColors.primary,
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
+    letterSpacing: -1,
+    textAlign: 'center',
+    ...(Platform.OS === 'web'
+      ? ({
+          whiteSpace: 'nowrap' as any,
+          wordBreak: 'keep-all' as any,
+          textOverflow: 'clip' as any,
+        } as any)
+      : {}),
   },
-  concurrentRoom: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '600',
-    color: darkColors.textSecondary,
+  stationFooter: {
+    paddingTop: 12,
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: darkColors.border,
+  },
+  stationDoctorText: {
+    fontSize: theme.fontSizes.md,
+    fontWeight: '800',
+    color: darkColors.text,
+    marginTop: 2,
   },
   emptyServingCard: {
     flex: 1,
@@ -1049,59 +1321,53 @@ const styles = StyleSheet.create({
     color: darkColors.textSecondary,
     textAlign: 'center',
   },
-  queueOrderBadge: {
-    backgroundColor: darkColors.surfaceHighlight,
-    borderColor: darkColors.border,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: theme.radii.lg - 2,
-  },
-  queueOrderText: {
-    fontSize: theme.fontSizes.xs - 1,
-    fontWeight: '700',
-    color: darkColors.textSecondary,
-    textTransform: 'uppercase',
-  },
   upNextContainer: {
     flex: 1,
+    height: '100%',
     backgroundColor: darkColors.surface,
     borderWidth: 2,
     borderColor: darkColors.border,
     borderRadius: theme.radii['2xl'],
-    padding: 16,
+    padding: 20,
+  },
+  upNextCardHeader: {
+    paddingBottom: 14,
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: darkColors.border,
   },
   upNextScroll: {
     flex: 1,
   },
   upNextList: {
-    gap: 10,
+    gap: 16,
   },
   upNextCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: theme.radii.lg,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: theme.radii.xl,
     backgroundColor: darkColors.surface,
     borderWidth: 1,
   },
   upNextLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
     flex: 1,
   },
   indexCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: theme.radii.lg - 1,
+    width: 28,
+    height: 28,
+    borderRadius: theme.radii.lg,
     backgroundColor: darkColors.surfaceHighlight,
     alignItems: 'center',
     justifyContent: 'center',
   },
   indexText: {
-    fontSize: theme.fontSizes.xs,
+    fontSize: theme.fontSizes.sm,
     fontWeight: '700',
     color: darkColors.textMuted,
   },
@@ -1110,6 +1376,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
     lineHeight: 26,
+    ...(Platform.OS === 'web'
+      ? ({
+          whiteSpace: 'nowrap' as any,
+          textOverflow: 'clip' as any,
+        } as any)
+      : {}),
   },
   upNextName: {
     fontSize: theme.fontSizes.md + 1,
@@ -1342,18 +1614,5 @@ const styles = StyleSheet.create({
   },
   unlockBtn: {
     width: '100%',
-    backgroundColor: darkColors.primary,
-    paddingVertical: 14,
-    borderRadius: theme.radii.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  unlockBtnDisabled: {
-    opacity: 0.5,
-  },
-  unlockBtnText: {
-    fontSize: theme.fontSizes.md,
-    fontWeight: '700',
-    color: darkColors.text,
   },
 });

@@ -354,6 +354,160 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.ToTable("AuditEntries", "public");
                 });
 
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicDispensingLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ConsultationEncounterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DirectionsOrInstructions")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("DispensedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DispensedByRole")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("DispensedByStaffId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DispensedByStaffName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("DoctorReviewNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("DosageOrSpec")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FormOrUnit")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("InterventionFlagged")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsConsultationValidated")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ItemCategory")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ItemName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PatientName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("PatientVitalsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PrescriptionItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("QuantityDispensed")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("QueueItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("RequiresDoctorReview")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByDoctorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReviewedByDoctorName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("RosCategory")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConsultationEncounterId");
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("PatientVitalsId");
+
+                    b.HasIndex("PrescriptionItemId");
+
+                    b.HasIndex("QueueItemId");
+
+                    b.HasIndex("ClinicId", "ConsultationEncounterId");
+
+                    b.HasIndex("ClinicId", "DispensedAt");
+
+                    b.HasIndex("ClinicId", "QueueItemId");
+
+                    b.HasIndex("ClinicId", "RequiresDoctorReview", "ReviewedAt");
+
+                    b.ToTable("ClinicDispensingLogs", "public");
+                });
+
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ConsultationEncounter", b =>
                 {
                     b.Property<Guid>("Id")
@@ -459,6 +613,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("DoctorS2License")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("DraftOrdersJson")
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("EncounterDate")
                         .HasColumnType("timestamp with time zone");
@@ -584,6 +741,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<Guid?>("QueueItemId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("RosCategory")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<DateOnly?>("RoutineVaccineDate")
                         .HasColumnType("date");
@@ -2039,6 +2200,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<bool>("EnableStatVibrationAlert")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("EnableTeleconsultation")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<int>("EntitlementVersion")
                         .HasColumnType("integer");
 
@@ -2264,6 +2430,23 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("TvDisplayPin")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("TvDisplayShowPhysicianName")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("TvDisplaySoundTheme")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("classicChime");
+
+                    b.Property<bool>("TvDisplayVoiceEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2771,6 +2954,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsSigned")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("LaboratoryFacilityId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -2829,6 +3015,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("PhilHealthRequestTransNo")
                         .HasMaxLength(23)
                         .HasColumnType("character varying(23)");
+
+                    b.Property<Guid?>("QueueItemId")
+                        .HasColumnType("uuid");
 
                     b.Property<decimal?>("QuotedAmount")
                         .HasPrecision(18, 2)
@@ -3265,6 +3454,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("QueueItemId")
+                        .HasColumnType("uuid");
 
                     b.Property<int?>("RecommendedRestDays")
                         .HasColumnType("integer");
@@ -6293,6 +6485,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)");
 
+                    b.Property<string>("HomeInstructions")
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -6350,6 +6545,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<int?>("RespiratoryRateBreathsPerMin")
                         .HasColumnType("integer");
+
+                    b.Property<string>("RosCategory")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("SamFormCode")
                         .HasMaxLength(20)
@@ -7012,6 +7211,16 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<DateTime?>("ClinicDispensedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ClinicDispensedBy")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<int?>("ClinicDispensedQuantity")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uuid");
 
@@ -7093,6 +7302,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<bool>("IsClinicDispensed")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsDangerousDrug")
                         .HasColumnType("boolean");
 
@@ -7137,6 +7349,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Remarks")
                         .HasColumnType("text");
+
+                    b.Property<string>("RosCategory")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("Route")
                         .IsRequired()
@@ -7553,6 +7769,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsDirectVisit")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("ParamedicOrEscortName")
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
@@ -7613,7 +7834,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
-                        .HasDefaultValue("Consultation");
+                        .HasDefaultValue("RoutineCheckup");
 
                     b.Property<string>("VisitWorkflowMode")
                         .IsRequired()
@@ -7852,6 +8073,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("ProvisionalDiagnosis")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("QueueItemId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("ReasonForReferral")
                         .IsRequired()
@@ -8496,6 +8720,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("PrcLicenseNumber")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("PreferencesJson")
+                        .HasColumnType("text");
 
                     b.Property<string>("PtrNumber")
                         .HasMaxLength(50)
@@ -9319,6 +9546,46 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicDispensingLog", b =>
+                {
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.ConsultationEncounter", "ConsultationEncounter")
+                        .WithMany()
+                        .HasForeignKey("ConsultationEncounterId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.Patient", "Patient")
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.PatientVitals", "PatientVitals")
+                        .WithMany()
+                        .HasForeignKey("PatientVitalsId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.PrescriptionItem", "PrescriptionItem")
+                        .WithMany()
+                        .HasForeignKey("PrescriptionItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.QueueItem", "QueueItem")
+                        .WithMany()
+                        .HasForeignKey("QueueItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ConsultationEncounter");
+
+                    b.Navigation("Patient");
+
+                    b.Navigation("PatientVitals");
+
+                    b.Navigation("PrescriptionItem");
+
+                    b.Navigation("QueueItem");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ConsultationEncounter", b =>

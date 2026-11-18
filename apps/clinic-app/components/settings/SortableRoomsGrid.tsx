@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, ScrollView, StyleSheet, Pressable } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import Button from '../ui/Button';
 import Icon from '../ui/Icon';
 import ThemedText from '../ui/ThemedText';
 import { theme } from '../../constants/theme';
@@ -44,34 +45,26 @@ export default function SortableRoomsGrid({
               #{index + 1}
             </ThemedText>
             <View style={styles.arrowPair}>
-              <Pressable
+              <Button
+                variant="ghost"
+                size="xs"
+                icon="arrowLeft"
+                iconOnly
                 onPress={() => onMoveEarlier(room.id)}
                 disabled={isFirst || isReordering}
-                accessibilityRole="button"
                 accessibilityLabel={`Move ${room.name} left`}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                style={[styles.arrowBtn, (isFirst || isReordering) && styles.arrowBtnDisabled]}
-              >
-                <Icon
-                  name="arrowLeft"
-                  size={12}
-                  color={isFirst || isReordering ? theme.colors.textLight : theme.colors.textMuted}
-                />
-              </Pressable>
-              <Pressable
+                style={styles.arrowBtn}
+              />
+              <Button
+                variant="ghost"
+                size="xs"
+                icon="arrowRight"
+                iconOnly
                 onPress={() => onMoveLater(room.id)}
                 disabled={isLast || isReordering}
-                accessibilityRole="button"
                 accessibilityLabel={`Move ${room.name} right`}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                style={[styles.arrowBtn, (isLast || isReordering) && styles.arrowBtnDisabled]}
-              >
-                <Icon
-                  name="arrowRight"
-                  size={12}
-                  color={isLast || isReordering ? theme.colors.textLight : theme.colors.textMuted}
-                />
-              </Pressable>
+                style={styles.arrowBtn}
+              />
             </View>
           </View>
         );
@@ -118,13 +111,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   arrowBtn: {
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 22,
+    minHeight: 22,
+    height: 22,
     borderRadius: theme.radii.xs,
-  },
-  arrowBtnDisabled: {
-    opacity: 0.3,
   },
 });

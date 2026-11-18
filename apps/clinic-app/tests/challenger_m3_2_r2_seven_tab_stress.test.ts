@@ -156,9 +156,12 @@ const {
   STATUTORY_MANAGEMENT_CODES,
 } = await import('../components/chart/NursingProceduresTab');
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 const {
   default: StatutoryImmunizationsTab,
-  PHILHEALTH_STATUTORY_VACCINES,
+  resolveCohortCategoryLabel,
 } = await import('../components/chart/StatutoryImmunizationsTab');
 
 const {
@@ -542,6 +545,21 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 Round 2 (Challenge
           diagnoses: [{ icd10Code: 'J06.9', description: 'Acute upper respiratory infection', isPrimary: true }],
           prescriptions: [],
         },
+        {
+          id: 'enc-2',
+          encounterDate: '2026-09-10T10:00:00Z',
+          doctorId: 'doc-2',
+          doctorName: 'Dr. Jose Rizal',
+          doctorPrcLicense: '0098765',
+          isSigned: true,
+          isYakapEligible: false,
+          subjective: 'Follow-up',
+          objective: 'Stable',
+          assessment: 'Controlled DM',
+          plan: 'Continue meds',
+          diagnoses: [{ icd10Code: 'E11.9', description: 'Type 2 diabetes mellitus without complications', isPrimary: true }],
+          prescriptions: [],
+        },
       ];
 
       const fullMarkup = renderToStaticMarkup(
@@ -552,8 +570,12 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 Round 2 (Challenge
       );
       expect(fullMarkup).toContain('Dr. Maria Santos');
       expect(fullMarkup).toContain('PRC-123456');
-      expect(fullMarkup).toContain('PhilHealth Konsulta');
-      expect(fullMarkup).toContain('J06.9');
+      expect(fullMarkup).toContain('YAKAP');
+      expect(fullMarkup).not.toContain('PhilHealth Konsulta');
+      expect(fullMarkup).toContain('>Standard<');
+      expect(fullMarkup).not.toContain('Standard Encounter');
+      expect(fullMarkup).toContain('Acute upper respiratory infection');
+      expect(fullMarkup).not.toContain('J06.9');
 
       // Empty encounters render
       const emptyMarkup = renderToStaticMarkup(
@@ -698,11 +720,30 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 Round 2 (Challenge
       expect(emptyMarkup).not.toContain('PhilHealth');
       expect(emptyMarkup).not.toContain('Fallback Code 999');
 
-      // Catalog completeness
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immchild.length).toBe(13);
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immyoungw.length).toBe(2);
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immpregw.length).toBe(5);
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immelderly.length).toBe(2);
+      // Backend seed catalog completeness
+      const loadSeedActiveVaccines = (lib: string) => {
+        const seedPath = join(
+          import.meta.dir,
+          '..',
+          '..',
+          '..',
+          'services',
+          'clinic-api',
+          'ClinicEz.Clinic.Infrastructure',
+          'PhilHealth',
+          'Catalog',
+          'Seed',
+          `${lib}.json`
+        );
+        const parsed = JSON.parse(readFileSync(seedPath, 'utf8'));
+        return parsed.items.filter((i: { code: string; isActive: boolean }) => i.isActive && i.code !== '999');
+      };
+
+      expect(loadSeedActiveVaccines('lib_immchild').length).toBe(13);
+      expect(loadSeedActiveVaccines('lib_immyoungw').length).toBe(2);
+      expect(loadSeedActiveVaccines('lib_immpregw').length).toBe(1);
+      expect(loadSeedActiveVaccines('lib_immelderly').length).toBe(2);
+      expect(resolveCohortCategoryLabel('OtherImm')).toBe('Adult / Other');
     });
 
     test('2.6 Tab 6: HealthProfilesTab renders all 4 sub-tabs safely with null profiles', () => {

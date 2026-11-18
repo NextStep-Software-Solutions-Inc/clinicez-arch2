@@ -1,6 +1,7 @@
 import React from 'react';
 import { lightColors } from '@clinicez/design-tokens';
 import { ConversationScopeFilter, WebChatDrawerProps } from './types';
+import { CloseIcon, LoaderIcon, AlertCircleIcon, MessageSquareIcon } from './icons';
 
 const SCOPES: ConversationScopeFilter[] = [
   'All',
@@ -54,7 +55,7 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
               className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
               aria-label="Close drawer"
             >
-              ×
+              <CloseIcon size={18} />
             </button>
           </div>
         </div>
@@ -69,7 +70,11 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
             }`}
             role="status"
           >
-            <span>{connectionState === 'Reconnecting' ? '...' : '!'}</span>
+            {connectionState === 'Reconnecting' ? (
+              <LoaderIcon size={14} className="animate-spin" />
+            ) : (
+              <AlertCircleIcon size={14} />
+            )}
             <span>
               {connectionState === 'Reconnecting'
                 ? 'Reconnecting to comms hub...'
@@ -102,7 +107,7 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
                 role="tab"
                 aria-selected={isSelected}
                 onClick={() => onSelectScope(scope)}
-                className={`min-h-[44px] px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`min-h-[30px] px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                   isSelected
                     ? 'bg-teal-700 text-white font-semibold'
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -122,12 +127,12 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
       {/* Content States */}
       {loading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-slate-400" role="status">
-          <div className="animate-spin text-2xl mb-2">...</div>
+          <LoaderIcon size={24} className="animate-spin mb-2" />
           <p className="text-sm">Loading conversations...</p>
         </div>
       ) : error ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center" role="alert">
-          <div className="text-3xl mb-2">!</div>
+          <AlertCircleIcon size={32} className="mb-2 text-red-600" />
           <p className="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">
             Error Loading Conversations
           </p>
@@ -135,7 +140,7 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
         </div>
       ) : items.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-500">
-          <div className="text-3xl mb-2">Chat</div>
+          <MessageSquareIcon size={32} className="mb-2 text-slate-400" />
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
             No Conversations
           </p>
@@ -193,17 +198,17 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
 
                 <div className="flex items-center gap-1.5">
                   {item.isEmergency && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200 border border-red-200 dark:border-red-800">
-                      STAT
+                    <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200 border border-red-200 dark:border-red-800">
+                      Emergency
                     </span>
                   )}
                   {item.urgentCount !== undefined && item.urgentCount > 0 && !item.isEmergency && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200 border border-orange-200 dark:border-orange-800">
+                    <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200 border border-orange-200 dark:border-orange-800">
                       Urgent
                     </span>
                   )}
                   {item.unreadCount > 0 && (
-                    <span className="ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-700 text-white">
+                    <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-bold bg-teal-700 text-white">
                       {item.unreadCount}
                     </span>
                   )}

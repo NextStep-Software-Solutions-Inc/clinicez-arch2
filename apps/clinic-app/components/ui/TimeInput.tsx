@@ -191,26 +191,26 @@ export default function TimeInput({
         />
 
         {value.length > 0 && isInteractive ? (
-          <Pressable
+          <Button
+            variant="ghost"
+            size="xs"
+            icon="close"
+            iconOnly
             onPress={() => onChangeText('')}
-            style={styles.actionBtn}
-            hitSlop={theme.spacing.sm}
             accessibilityLabel="Clear time"
-          >
-            <IconSlot value="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-          </Pressable>
+          />
         ) : null}
 
         {isInteractive ? (
-          <Pressable
+          <Button
+            variant="ghost"
+            size="xs"
+            icon="clock"
+            iconOnly
             onPress={handleOpenPicker}
-            style={styles.actionBtn}
-            hitSlop={theme.spacing.sm}
             testID={`${testID}-picker-btn`}
             accessibilityLabel="Open time picker"
-          >
-            <IconSlot value="clock" size={theme.sizes.iconSm} color={theme.colors.primary} />
-          </Pressable>
+          />
         ) : null}
       </View>
 

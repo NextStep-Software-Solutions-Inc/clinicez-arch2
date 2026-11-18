@@ -1,12 +1,15 @@
+using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Clinic.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Sieve.Services;
 
 namespace ClinicEz.Clinic.Infrastructure.Persistence;
 
-public sealed class UnitOfWork : IUnitOfWork, IDisposable
+public sealed class UnitOfWork : IUnitOfWork, IRepositoryProvider, IDisposable
 {
     private readonly ApplicationDbContext _context;
+    private readonly ISieveProcessor _sieveProcessor;
 
     public ApplicationDbContext DbContext => _context;
     public IProductRepository ProductRepository { get; }
@@ -17,8 +20,13 @@ public sealed class UnitOfWork : IUnitOfWork, IDisposable
         IProductRepository productRepository)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
-
+        _sieveProcessor = sieveProcessor;
         ProductRepository = productRepository ?? throw new ArgumentNullException(nameof(productRepository));
+    }
+
+    public IRepository<T> GetRepository<T>() where T : BaseEntity
+    {
+        return new Repository<T>(_context, _sieveProcessor);
     }
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

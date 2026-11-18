@@ -286,4 +286,52 @@ public class XenditBillingProvider(
         var customerResponse = await xenditClient.CreateCustomerAsync(customerRequest, cancellationToken);
         return customerResponse.Id;
     }
+
+    public async Task<string> CreateTeleconsultTopUpCheckoutAsync(string tenantIdOrSlug, decimal amountPhp, CancellationToken cancellationToken = default)
+    {
+        if (amountPhp <= 0m)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amountPhp), "Top-up amount must be greater than zero.");
+        }
+
+        var frontendBaseUrl = ResolveFrontendBaseUrl();
+        var tenant = await FindTenantAsync(tenantIdOrSlug, cancellationToken);
+        var roundedAmount = (long)Math.Round(amountPhp, MidpointRounding.AwayFromZero);
+        if (roundedAmount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amountPhp), "Top-up amount must be at least ₱1.");
+        }
+
+        var invoiceRequest = new XenditInvoiceRequest
+        {
+            ExternalId = $"topup-{tenant.Id}-{Guid.NewGuid():N}",
+            Amount = roundedAmount,
+            Currency = "PHP",
+            PayerEmail = tenant.Email,
+            Description = $"{tenant.Name} - Video Teleconsultation Credits Top-Up (₱{roundedAmount:N0})",
+            SuccessRedirectUrl = $"{frontendBaseUrl}/{tenant.TenantSlug}/dashboard/billing?topup=success",
+            FailureRedirectUrl = $"{frontendBaseUrl}/{tenant.TenantSlug}/dashboard/billing?topup=failed",
+            Metadata = new Dictionary<string, object>
+            {
+                { "tenantId", tenant.Id.ToString() },
+                { "type", "teleconsult_topup" },
+                { "amountPhp", roundedAmount }
+            }
+        };
+
+        try
+        {
+            var response = await xenditClient.CreateInvoiceAsync(invoiceRequest, cancellationToken);
+            if (string.IsNullOrWhiteSpace(response.InvoiceUrl))
+            {
+                throw new InvalidOperationException("Payment provider did not return a checkout URL.");
+            }
+            return response.InvoiceUrl;
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException && ex is not ArgumentOutOfRangeException)
+        {
+            logger.LogWarning(ex, "Failed to create teleconsult top-up Xendit invoice for tenant {TenantId}", tenant.Id);
+            throw new InvalidOperationException("Unable to create online top-up checkout session.", ex);
+        }
+    }
 }

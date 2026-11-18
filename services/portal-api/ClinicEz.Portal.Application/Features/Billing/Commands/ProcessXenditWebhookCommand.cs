@@ -2,6 +2,7 @@ using MediatR;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ClinicEz.Portal.Application.Features.Entitlements;
+using ClinicEz.Portal.Application.Features.Licensing;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -39,10 +40,12 @@ public class ProcessXenditWebhookCommandHandler(
     IApplicationDbContext context,
     ISubscriptionService subscriptions,
     TimeProvider timeProvider,
-    ILogger<ProcessXenditWebhookCommandHandler> logger) : IRequestHandler<ProcessXenditWebhookCommand, bool>
+    ILogger<ProcessXenditWebhookCommandHandler> logger,
+    IEntitlementsPublisher? entitlementsPublisher = null) : IRequestHandler<ProcessXenditWebhookCommand, bool>
 {
     private const string ProviderName = "xendit";
     private const string CheckoutReferencePrefix = "checkout-";
+    private const string TopUpReferencePrefix = "topup-";
 
     public async Task<bool> Handle(ProcessXenditWebhookCommand request, CancellationToken cancellationToken)
     {
@@ -160,7 +163,113 @@ public class ProcessXenditWebhookCommandHandler(
         var paymentMethod = Text(data, "payment_method") ?? "E-Wallet";
         if (Text(data, "payment_channel") is { } channel) paymentMethod += $" ({channel})";
 
+        var externalId = Text(data, "external_id");
+        var isTeleconsultTopUp =
+            string.Equals(Metadata(data, "type"), "teleconsult_topup", StringComparison.OrdinalIgnoreCase) ||
+            (externalId is not null && externalId.StartsWith(TopUpReferencePrefix, StringComparison.Ordinal));
+
+        if (isTeleconsultTopUp)
+        {
+            return await HandleTeleconsultTopUpPaidAsync(
+                tenant,
+                invoiceId,
+                Amount(data, "amount"),
+                Text(data, "currency") ?? "PHP",
+                paymentMethod,
+                cancellationToken);
+        }
+
         return await RecordPaymentAsync(tenant, data, invoiceId, Amount(data, "amount"), Text(data, "currency") ?? "PHP", paymentMethod, cancellationToken);
+    }
+
+    private async Task<bool> HandleTeleconsultTopUpPaidAsync(
+        Tenant tenant,
+        string invoiceId,
+        long amount,
+        string currency,
+        string paymentMethod,
+        CancellationToken cancellationToken)
+    {
+        if (amount <= 0)
+        {
+            logger.LogWarning("Ignoring teleconsult top-up webhook with non-positive amount {Amount} for tenant {TenantId}", amount, tenant.Id);
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(invoiceId) &&
+            await context.BillingInvoices.AnyAsync(i => i.XenditInvoiceId == invoiceId, cancellationToken))
+        {
+            logger.LogInformation("Teleconsult top-up invoice {InvoiceId} was already credited for tenant {TenantId}", invoiceId, tenant.Id);
+            return true;
+        }
+
+        var paidAt = timeProvider.GetUtcNow().UtcDateTime;
+        var subscription = await subscriptions.StartTrialAsync(tenant.Id, cancellationToken);
+
+        var invoice = new BillingInvoice
+        {
+            TenantId = tenant.Id,
+            XenditInvoiceId = string.IsNullOrEmpty(invoiceId) ? $"topup-{Guid.NewGuid():N}" : invoiceId,
+            InvoiceNumber = $"INV-TC-{paidAt:yyyyMMdd}-{Guid.NewGuid().ToString()[..6].ToUpper()}",
+            Amount = amount,
+            Currency = currency,
+            Status = "Paid",
+            IsAnnual = false,
+            PlanSlug = "teleconsult-topup",
+            CreatedAt = paidAt,
+            CreatedBy = "Webhook"
+        };
+        context.BillingInvoices.Add(invoice);
+        await context.SaveChangesAsync(cancellationToken);
+
+        context.PaymentReceipts.Add(new PaymentReceipt
+        {
+            TenantId = tenant.Id,
+            InvoiceId = invoice.Id,
+            ReceiptNumber = $"REC-{paidAt:yyyyMMdd}-{Guid.NewGuid().ToString()[..8].ToUpper()}",
+            AmountPaid = amount,
+            Currency = currency,
+            PaidAt = paidAt,
+            ExpiryDate = paidAt,
+            PaymentMethod = paymentMethod,
+            CreatedAt = paidAt,
+            CreatedBy = "Webhook"
+        });
+
+        var billing = await context.WorkspaceTeleconsultBillings
+            .FirstOrDefaultAsync(b => b.TenantId == tenant.Id && !b.IsDeleted, cancellationToken);
+        if (billing is null)
+        {
+            billing = new WorkspaceTeleconsultBilling
+            {
+                TenantId = tenant.Id,
+                IsEnabled = false,
+                BillingMode = WorkspaceTeleconsultBilling.ModePrepaid,
+                RatePerMinutePhp = WorkspaceTeleconsultBilling.DefaultRatePerMinutePhp,
+                AllocatedBudgetPhp = 0m,
+                PrepaidBalancePhp = 0m,
+                AllowOverageBeyondAllocation = true,
+                CurrentPeriodYearMonth = paidAt.ToString("yyyy-MM")
+            };
+            context.WorkspaceTeleconsultBillings.Add(billing);
+        }
+
+        billing.PrepaidBalancePhp += amount;
+        billing.UpdatedAt = paidAt;
+        billing.UpdatedBy = "Webhook";
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        if (entitlementsPublisher is not null)
+        {
+            await entitlementsPublisher.StageForWorkspaceAsync(tenant.Id, cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        logger.LogInformation(
+            "Credited ₱{Amount} teleconsult prepaid balance for tenant {TenantId} from paid invoice {InvoiceId}. New balance: ₱{Balance}",
+            amount, tenant.Id, invoiceId, billing.PrepaidBalancePhp);
+        return true;
     }
 
     private async Task<bool> HandleCycleSucceededAsync(Dictionary<string, JsonElement> data, CancellationToken cancellationToken)
@@ -345,11 +454,17 @@ public class ProcessXenditWebhookCommandHandler(
         }
 
         var externalId = Text(data, "external_id");
-        if (externalId is not null && externalId.StartsWith(CheckoutReferencePrefix, StringComparison.Ordinal) &&
-            externalId.Length >= CheckoutReferencePrefix.Length + 36 &&
-            Guid.TryParse(externalId.AsSpan(CheckoutReferencePrefix.Length, 36), out var checkoutTenantId))
+        if (externalId is not null)
         {
-            return await context.Tenants.FirstOrDefaultAsync(t => t.Id == checkoutTenantId, cancellationToken);
+            foreach (var prefix in new[] { CheckoutReferencePrefix, TopUpReferencePrefix })
+            {
+                if (externalId.StartsWith(prefix, StringComparison.Ordinal) &&
+                    externalId.Length >= prefix.Length + 36 &&
+                    Guid.TryParse(externalId.AsSpan(prefix.Length, 36), out var refTenantId))
+                {
+                    return await context.Tenants.FirstOrDefaultAsync(t => t.Id == refTenantId, cancellationToken);
+                }
+            }
         }
 
         return null;

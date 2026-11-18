@@ -43,11 +43,18 @@ public sealed class CloseConversationCommandHandler : IRequestHandler<CloseConve
 
     public async Task<ConversationDto> Handle(CloseConversationCommand request, CancellationToken ct)
     {
-        var conversation = await _db.Conversations
+        var query = _db.Conversations
             .Include(c => c.Participants)
             .Include(c => c.Messages)
                 .ThenInclude(m => m.Attachments)
-            .FirstOrDefaultAsync(c => c.Id == request.ConversationId && c.TenantId == request.TenantId, ct)
+            .Where(c => c.Id == request.ConversationId);
+
+        if (!string.IsNullOrWhiteSpace(request.TenantId))
+        {
+            query = query.Where(c => c.TenantId == request.TenantId);
+        }
+
+        var conversation = await query.FirstOrDefaultAsync(ct)
             ?? throw new NotFoundException($"Conversation '{request.ConversationId}' not found.");
 
         if (conversation.ClosedAtUtc.HasValue || conversation.Status == RequestStatus.Closed)
@@ -69,6 +76,7 @@ public sealed class CloseConversationCommandHandler : IRequestHandler<CloseConve
             {
                 Id = Guid.NewGuid(),
                 ConversationId = conversation.Id,
+                Conversation = conversation,
                 TenantId = conversation.TenantId,
                 FacilityId = conversation.FacilityId,
                 Seq = conversation.LastSeq,
@@ -82,7 +90,7 @@ public sealed class CloseConversationCommandHandler : IRequestHandler<CloseConve
                 ServerReceivedAtUtc = now,
                 RetentionDeadlineUtc = now.AddYears(10)
             };
-            conversation.Messages.Add(closingNote);
+            _db.Messages.Add(closingNote);
         }
 
         if (_publisher != null)

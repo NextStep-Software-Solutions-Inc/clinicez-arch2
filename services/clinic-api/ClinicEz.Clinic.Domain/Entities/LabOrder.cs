@@ -13,6 +13,8 @@ public class LabOrder : ClinicScopedEntity
     public Patient Patient { get; set; } = null!;
     public required string PatientName { get; set; }
     public Guid? ConsultationId { get; set; }
+    public Guid? QueueItemId { get; set; }
+    public bool IsSigned { get; set; } = true;
 
     public Guid? OrderedByDoctorId { get; set; }
     public string? OrderedByDoctorName { get; set; }

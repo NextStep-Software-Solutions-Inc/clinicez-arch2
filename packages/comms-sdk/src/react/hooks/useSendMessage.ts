@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import { DeliveryStateTracker } from '../../core/queue/DeliveryStateTracker';
-import { MessageDto } from '../../core/types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ConnectionError } from '../../core/errors';
+import { ClientMessageQueue } from '../../core/queue/ClientMessageQueue';
+import { ICommsClient, MessageDto } from '../../core/types';
 import { useCommsContext } from '../CommsContext';
 import {
   PendingMessageRecord,
@@ -9,7 +10,22 @@ import {
 } from '../types';
 
 export function useSendMessage(): UseSendMessageResult {
-  const { client, store, staffId, staffDisplayName } = useCommsContext();
+  const {
+    client,
+    store,
+    staffId,
+    staffDisplayName,
+    messageQueue: contextQueue
+  } = useCommsContext();
+
+  const fallbackQueueRef = useRef<ClientMessageQueue | null>(null);
+  const fallbackQueueClientRef = useRef<ICommsClient | null>(null);
+  if (!contextQueue && (!fallbackQueueRef.current || fallbackQueueClientRef.current !== client)) {
+    fallbackQueueRef.current?.dispose();
+    fallbackQueueClientRef.current = client;
+    fallbackQueueRef.current = new ClientMessageQueue(client);
+  }
+  const messageQueue = contextQueue ?? fallbackQueueRef.current!;
 
   const [isSending, setIsSending] = useState<boolean>(false);
   const [lastSentMessage, setLastSentMessage] = useState<MessageDto | null>(null);
@@ -23,6 +39,43 @@ export function useSendMessage(): UseSendMessageResult {
       setPendingMessages(store.getPending());
     });
   }, [store]);
+
+  useEffect(() => {
+    if (!contextQueue) {
+      messageQueue.attach();
+    }
+    const unsubQueue = messageQueue.subscribe({
+      onMessageSent: (queued, serverMsg) => {
+        const normalized = serverMsg.clientMessageId
+          ? serverMsg
+          : { ...serverMsg, clientMessageId: queued.clientMessageId };
+        store.appendMessage(normalized);
+        if (normalized.clientMessageId) {
+          store.updatePendingState(
+            normalized.clientMessageId,
+            normalized.deliveryState ?? 'Waiting'
+          );
+        }
+        setLastSentMessage(normalized);
+      },
+      onMessageFailed: (queued, err) => {
+        setError(err);
+        store.updatePendingState(queued.clientMessageId, 'NotReceived', err.message);
+        store.updateMessageState(
+          `opt-${queued.clientMessageId}`,
+          queued.conversationId,
+          'NotReceived'
+        );
+      }
+    });
+
+    return () => {
+      unsubQueue();
+      if (!contextQueue) {
+        fallbackQueueRef.current?.dispose();
+      }
+    };
+  }, [contextQueue, messageQueue, store]);
 
   const generateUUID = useCallback((): string => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -78,7 +131,26 @@ export function useSendMessage(): UseSendMessageResult {
       setIsSending(true);
       setError(null);
 
+      const queueForReconnect = async (): Promise<MessageDto> => {
+        await messageQueue.enqueue(
+          {
+            conversationId: input.conversationId,
+            clientMessageId,
+            contentText: input.contentText,
+            visibility: input.visibility ?? 'Public',
+            requiresAcknowledgement: input.requiresAcknowledgement ?? false,
+            attachments: input.attachments
+          },
+          { skipAutoProcess: true }
+        );
+        return optimisticMsg;
+      };
+
       try {
+        if (client.getConnectionState() !== 'Connected') {
+          return await queueForReconnect();
+        }
+
         const serverMsg = await client.sendMessage({
           conversationId: input.conversationId,
           clientMessageId,
@@ -94,9 +166,16 @@ export function useSendMessage(): UseSendMessageResult {
         setLastSentMessage(serverMsg);
         return serverMsg;
       } catch (err: any) {
+        const isConnErr =
+          err instanceof ConnectionError ||
+          (err && typeof err === 'object' && (err as { name?: string }).name === 'ConnectionError') ||
+          client.getConnectionState() !== 'Connected';
+        if (isConnErr) {
+          return await queueForReconnect();
+        }
         const failure = err instanceof Error ? err : new Error(String(err));
         setError(failure);
-        // Delivery failed / offline -> NotReceived
+        // Delivery failed -> NotReceived
         store.updatePendingState(clientMessageId, 'NotReceived', failure.message);
         store.updateMessageState(optimisticMsg.messageId, input.conversationId, 'NotReceived');
         throw failure;
@@ -104,23 +183,33 @@ export function useSendMessage(): UseSendMessageResult {
         setIsSending(false);
       }
     },
-    [client, generateUUID, staffDisplayName, staffId, store]
+    [client, generateUUID, messageQueue, staffDisplayName, staffId, store]
   );
 
   const resendMessage = useCallback(
     async (clientMessageIdOrMessageId: string): Promise<MessageDto> => {
+      const rawId = clientMessageIdOrMessageId.startsWith('opt-')
+        ? clientMessageIdOrMessageId.slice(4)
+        : clientMessageIdOrMessageId;
+
       let pending = store.getPending().find(
         (m) =>
-          m.clientMessageId === clientMessageIdOrMessageId
+          m.clientMessageId === clientMessageIdOrMessageId ||
+          m.clientMessageId === rawId
       );
 
       if (!pending) {
-        // Check if message exists in store with that clientMessageId
-        for (const pendingItem of store.getPending()) {
-          if (pendingItem.clientMessageId === clientMessageIdOrMessageId) {
-            pending = pendingItem;
-            break;
-          }
+        // Fallback: search store messages across conversations
+        const foundMsg = store.findMessageById(clientMessageIdOrMessageId);
+        if (foundMsg) {
+          return await sendMessage({
+            conversationId: foundMsg.conversationId,
+            contentText: foundMsg.contentText,
+            visibility: foundMsg.visibility,
+            requiresAcknowledgement: foundMsg.requiresAcknowledgement,
+            attachments: foundMsg.attachments,
+            clientMessageId: foundMsg.clientMessageId || rawId
+          });
         }
       }
 
@@ -144,8 +233,9 @@ export function useSendMessage(): UseSendMessageResult {
   const cancelPendingMessage = useCallback(
     (clientMessageId: string) => {
       store.removePending(clientMessageId);
+      messageQueue.cancel(clientMessageId).catch(() => {});
     },
-    [store]
+    [messageQueue, store]
   );
 
   return {

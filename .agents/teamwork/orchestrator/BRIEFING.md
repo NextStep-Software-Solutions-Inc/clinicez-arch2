@@ -1,68 +1,97 @@
-# BRIEFING — 2026-10-09T15:33:30Z
+# BRIEFING — 2026-11-13T11:56:00Z
 
 ## Mission
-Research Clinic EZ monorepo architecture and produce a comprehensive, production-ready, full-stack architectural plan and specification for missing clinic features (R1-R5) aligned with PhilHealth-case1 Yakap data dictionary.
+Bring the entire ClinicEZ teleconsultation workflow to production readiness end-to-end across the Clinic Workstation (apps/clinic-app), Patient App (apps/patient-app), Browser Guest Portal (apps/portal-web), Comms SDK (packages/comms-sdk), and backend services (clinic-api, media-broker, interop-hub, patient-api, portal-api) connected to LiveKit Cloud.
 
 ## 🔒 My Identity
 - Archetype: orchestrator
 - Roles: orchestrator, user_liaison, human_reporter, successor
-- Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator
+- Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api
+- State folder: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/orchestrator
 - Original parent: parent
-- Original parent conversation ID: da232b28-e513-4fe3-9939-ee4339c4a39a
+- Original parent conversation ID: 7eb99490-674f-4fdc-beb5-320cdcd7c3fb
 
 ## 🔒 My Workflow
-- **Pattern**: Project Orchestration
-- **Scope document**: c:\Users\User\projects\nextstep\github\clinicez-arch2\PROJECT.md
-1. **Decompose**: Survey existing Clinic EZ monorepo architecture, Yakap schema, and clinic app via Explorers, then decompose into R1-R5 architectural plan specification milestones.
-2. **Dispatch & Execute**: Subagent dispatch (Explorers -> Workers -> Reviewers -> Challengers -> Auditors).
-3. **On failure**: Retry -> Replace -> Skip -> Redistribute -> Redesign -> Escalate.
-4. **Succession**: At 16 spawns, write handoff.md, spawn successor.
+- **Pattern**: Project
+- **Scope document**: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/PROJECT.md
+1. **Decompose**: Survey (3 Explorers) -> Decompose into milestones -> Dispatch & Execute
+2. **Dispatch & Execute** (pick ONE):
+   - **Delegate (sub-orchestrator)**: Top-level Project Orchestrator decomposes scope into milestones and delegates each milestone to a sub-orchestrator (plus E2E Testing Orchestrator)
+3. **On failure** (in this order):
+   - Retry: nudge stuck agent or re-send task
+   - Replace: spawn fresh agent with partial progress
+   - Skip: proceed without (only if non-critical)
+   - Redistribute: split stuck agent's remaining work
+   - Redesign: re-partition decomposition
+   - Escalate: report to parent (sub-orchestrators only, last resort)
+4. **Succession**: At 16 spawns, write handoff.md, spawn successor
 - **Work items**:
-  1. Survey & Architecture Research (Explorers) [pending]
-  2. Synthesize & Author Comprehensive Plan (docs/plans/comprehensive-clinic-features-plan.md) [pending]
-  3. Review, Challenge & Audit Plan Specification [pending]
-- **Current phase**: 1
-- **Current focus**: Survey & Architecture Research
+  1. Survey phase (3 parallel Explorers) [completed]
+  2. Update PROJECT.md, feature inventory, and milestone decomposition [completed]
+  3. Milestone 7: Backend Services & Deployment Infrastructure [DONE: gate PASS, 3,227 tests pass]
+  4. Milestone 8: Communications SDK Adaptations & Plain Copy [DONE: gate PASS, 473 tests pass]
+  5. Milestone 9: Clinic Workstation UI/UX & Native PiP [DONE: gate PASS, 226 tests pass]
+  6. Milestone 10: Patient App & Browser Guest Portal Video [DONE: gate PASS, all tests pass]
+  7. Milestone 11: Final End-to-End Verification & Audit [DONE: gate PASS, 10/10 suites pass, auditor CLEAN]
+- **Current phase**: 4 (Completed / Reporting)
+- **Current focus**: Final Synthesis, Handoff & Reporting to Caller Parent
 
 ## 🔒 Key Constraints
-- Zero source code modifications in apps/ or services/. All deliverables are architectural plans and specifications (docs/plans/comprehensive-clinic-features-plan.md).
-- Strict Clean Architecture adherence in ClinicEz.Clinic (.Domain, .Application, .Infrastructure) and React Native Expo conventions in apps/clinic-app.
-- Strict 1:1 mapping with PhilHealth-case1 statutory coding libraries (lib_immchild, lib_immyoungw, lib_immpregw, lib_immelderly, OtherImm, statutory fallback 999) and bi-directional XML schema compatibility (<ENLISTMENT>, <PROFILE>, <SOAP>, <DIAGNOSTIC>, <MEDICINE>) with YakapClinicalMapper.
-- Define EF Core schemas, MediatR commands/queries/validators, Interop Hub event envelopes/topics, and Expo frontend components/state hooks.
-- Never reuse a subagent after it has delivered its handoff — always spawn fresh.
+- NEVER write, modify, or create source code files directly.
+- NEVER run build/test commands yourself — require workers to do so.
+- NEVER investigate or explore the problem at the code level — dispatch Explorers for technical investigation.
+- Audit is a BINARY VETO — violation means unconditional failure.
+- Zero PostgreSQL schema migrations.
+- Zero external message brokers: cross-service communication via ClinicEZ Interop Hub only.
+- Zero-PHI LiveKit room and participant identifiers.
+- Strict design token enforcement (zero hex/rgb color literals, zero numeric font sizes or border radii, zero emojis, minimum 44px touch targets).
+- Strict host guard enforcement (zero hardcoded URLs, localhost, or IP addresses).
+- Never reuse a subagent after it has delivered its handoff — always spawn fresh
+- Build directly on existing uncommitted changes in the worktree without reverting them.
+- Do not terminate port 8081 (active Expo web preview).
+- Execute dotnet CLI commands via /Users/macuser/.dotnet/dotnet.
 
 ## Current Parent
-- Conversation ID: da232b28-e513-4fe3-9939-ee4339c4a39a
-- Updated: 2026-10-09T15:33:30Z
+- Conversation ID: 7eb99490-674f-4fdc-beb5-320cdcd7c3fb
+- Updated: 2026-11-13T09:23:39Z
 
 ## Key Decisions Made
-- Architectural plan deliverable target: docs/plans/comprehensive-clinic-features-plan.md
-- Dispatch 3 Explorers in parallel to deeply investigate backend architecture/Yakap, appointments/scheduling, and frontend apps/clinic-app.
+- All milestones (M7, M8, M9, M10, M11) completed with gate PASS, full review approvals, and clean forensic audits.
+- 100% of all 10 acceptance verification suites passed cleanly (3,092 tests in acceptance suite, 3,227 .NET tests, 676 TS tests, all linters clean).
+- Zero schema migrations, zero external brokers, zero direct HTTP calls, zero PHI, zero design token violations, and port 8081 untouched throughout.
 
 ## Team Roster
 | Agent | Type | Work Item | Status | Conv ID |
 |-------|------|-----------|--------|---------|
-| Explorer 1 | teamwork_preview_explorer | Backend Architecture & Yakap Compliance | completed | fcf75f63-5f2d-4b63-8429-3d7bfa939359 |
-| Explorer 2 | teamwork_preview_explorer | Clinical Consultations & Scheduling | completed | 43163c87-60ca-4eff-b49f-38dba69e7524 |
-| Explorer 3 | teamwork_preview_explorer | Frontend Expo Architecture & UI | completed | 8e2f8c2d-4f81-4800-bfe9-93ed88208a7b |
-| Worker 1 | teamwork_preview_worker | Master Plan Author | completed | 47c21fcd-f85a-46bb-b934-78e8c96a1130 |
-| Reviewer 1 | teamwork_preview_reviewer | Backend Architecture Reviewer | completed | ba062032-072c-4bda-8d33-21c36e1c4084 |
-| Reviewer 2 | teamwork_preview_reviewer | Frontend Expo Reviewer | completed | ab9d0d03-6176-40f1-a862-f7b41b5306ed |
-| Challenger 1 | teamwork_preview_challenger | Scheduling & XML Challenger | completed | 6800944b-a479-40d7-9328-d4d3df0fc975 |
-| Challenger 2 | teamwork_preview_challenger | Growth & CDS Challenger | completed | 13a9999e-5e05-469b-b309-efe38d4fa438 |
-| Auditor 1 | teamwork_preview_auditor | Forensic Integrity Auditor | completed | 8f8a6b3c-682c-41af-8a71-ebc2e9f44b80 |
-| Worker 2 | teamwork_preview_worker | Master Plan Remediation Author | completed | 76f18eac-f80b-45aa-92c7-e89ce8ec9b64 |
+| explorer_survey_backend_r2 | teamwork_explorer | Backend Services & Deployment Survey | completed | 1a90ad1a-4a27-4dd8-a11c-177a13e02758 |
+| explorer_survey_comms_r2 | teamwork_explorer | Comms SDK Adaptations & Plain Copy Survey | completed | fad7ec19-13ee-438d-9550-5dad1a301446 |
+| explorer_survey_apps_r2 | teamwork_explorer | Frontend Applications Survey | completed | d8b993df-805e-46c2-bdb5-532007a0791b |
+| sub_orch_m7 | self | Milestone 7: Backend Services & Deployment | completed | a9c32e48-ce01-4570-85e2-bed48d89b945 |
+| sub_orch_m8 | self | Milestone 8: Comms SDK Adaptations & Plain Copy | completed | fe4c8bb2-4a8a-439d-8532-e83b31497020 |
+| sub_orch_m9 | self | Milestone 9: Clinic Workstation UI/UX & Native PiP | completed | e5ea12eb-09d6-42f4-ae19-73988d6b2a4d |
+| sub_orch_m10 | self | Milestone 10: Patient App & Browser Guest Portal Video | completed | cade03de-6e71-4434-a7b6-9f66f2f6a067 |
+| sub_orch_m11 | self | Milestone 11: Final End-to-End Verification & Audit | completed | caf09ff8-d5ac-43ab-9456-35a4a7384ba9 |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 10 / 16
+- Spawn count: 8 / 16
 - Pending subagents: none
 - Predecessor: none
-- Successor: not yet spawned
+- Successor spawned: not yet spawned
+- Successor generation: none
+- Successor state folder: none
 
 ## Active Timers
-- Heartbeat cron: 45a7f0e0-f5b1-41d1-a74d-e52fd5602522/task-147
-- Safety timer: none
+- Heartbeat cron: none (all tasks complete, task-31 killed)
+- Safety timer: none (all tasks complete, task-356 killed)
+- On succession: kill all timers before spawning successor
+- On context truncation: handle timers as step 4 of the State Recovery section of your prompt says
 
 ## Artifact Index
-- docs/plans/comprehensive-clinic-features-plan.md — Comprehensive clinic features plan and architectural specification
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/ORIGINAL_REQUEST.md — Original User Request
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/PROJECT.md — Master Project Index & Feature Inventory
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m7/handoff.md — Milestone 7 Handoff Report
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m8/handoff.md — Milestone 8 Handoff Report
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m9/handoff.md — Milestone 9 Handoff Report
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m10/handoff.md — Milestone 10 Handoff Report
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m11/handoff.md — Milestone 11 Handoff Report

@@ -28,4 +28,27 @@ config.resolver.blockList = [
   /.*[/\\]android[/\\]app[/\\]\.cxx[/\\].*/,
 ];
 
+// 5. Pin singleton runtime packages to patient-app's canonical resolution to avoid duplicate React with @clinicez/comms-sdk
+const SINGLETON_PACKAGES = ['react', 'react-dom', 'react-native', 'react-native-web'];
+const defaultResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const isSingleton = SINGLETON_PACKAGES.some(
+    (pkg) => moduleName === pkg || moduleName.startsWith(`${pkg}/`),
+  );
+  if (isSingleton) {
+    const canonicalContext = {
+      ...context,
+      originModulePath: path.join(projectRoot, 'index.ts'),
+    };
+    if (defaultResolveRequest) {
+      return defaultResolveRequest(canonicalContext, moduleName, platform);
+    }
+    return canonicalContext.resolveRequest(canonicalContext, moduleName, platform);
+  }
+  if (defaultResolveRequest) {
+    return defaultResolveRequest(context, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 module.exports = config;

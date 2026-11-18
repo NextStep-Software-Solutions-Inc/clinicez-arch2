@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, ViewStyle } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
@@ -7,7 +7,7 @@ import Input from '../ui/Input';
 import Icon from '../ui/Icon';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Skeleton, SkeletonList } from '../ui/Skeleton';
-import { theme } from '../../constants/theme';
+import { theme, subscribeActiveTheme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 import {
   pickVerificationEvidenceFile,
@@ -51,13 +51,14 @@ export function ToggleSwitch({
       <View
         style={[
           styles.switchTrack,
-          value ? styles.switchTrackActive : styles.switchTrackInactive,
-          disabled && styles.switchTrackDisabled,
+          { backgroundColor: value ? theme.colors.primary : theme.colors.surfaceHighlight },
+          disabled && { backgroundColor: theme.colors.borderDark },
         ]}
       >
         <View
           style={[
             styles.switchThumb,
+            { backgroundColor: theme.colors.surface },
             value ? styles.switchThumbActive : styles.switchThumbInactive,
           ]}
         />
@@ -143,6 +144,9 @@ export default function FacilityReadinessTab({
   onOpenLicenseModal,
   showSkeletons = false,
 }: FacilityReadinessTabProps) {
+  const [, setThemeTick] = useState(0);
+  useEffect(() => subscribeActiveTheme(() => setThemeTick((t) => t + 1)), []);
+
   const [localPublishingLoading, setLocalPublishingLoading] = useState(false);
   const [localPauseLoading, setLocalPauseLoading] = useState(false);
   const [localWithdrawLoading, setLocalWithdrawLoading] = useState(false);
@@ -438,28 +442,59 @@ export default function FacilityReadinessTab({
     );
   }
 
+  const heroStateStyle: ViewStyle = isFacilityReady
+    ? {
+        backgroundColor: theme.colors.primarySubtle,
+        borderColor: theme.colors.primaryBorder,
+        ...theme.shadows.brandSubtle,
+      }
+    : {
+        backgroundColor: theme.colors.surfaceSubtle,
+        borderColor: theme.colors.warningBorder,
+        ...theme.shadows.sm,
+      };
+
   return (
     <View style={styles.container}>
       {/* Pre-Flight Status Overview */}
-      <Card style={[styles.heroCard, isFacilityReady ? styles.heroReady : styles.heroPending]}>
+      <Card
+        testID="facility-readiness-hero-card"
+        style={[styles.heroCard, heroStateStyle]}
+      >
         <View style={styles.heroContent}>
           <View style={styles.heroIconBadge}>
             <Icon
               name={isFacilityReady ? 'checkCircle' : 'alertCircle'}
               size={theme.sizes.iconLg}
-              color={isFacilityReady ? theme.colors.success : theme.colors.emergency}
+              color={isFacilityReady ? theme.colors.primary : theme.colors.warningText}
             />
           </View>
           <View style={styles.heroText}>
             <View style={styles.heroHeaderRow}>
-              <ThemedText variant="title">
-                {isFacilityReady ? 'Facility Ready for Operations' : 'Facility Setup Required'}
-              </ThemedText>
-              <Badge
-                label={isFacilityReady ? 'Ready to Open' : `${passedMandatory}/${mandatoryChecks.length} Required`}
-                variant={isFacilityReady ? 'success' : 'emergency'}
-                size="md"
-              />
+              {isFacilityReady ? (
+                <ThemedText variant="title" color={theme.colors.primaryDark}>
+                  Facility Ready for Operations
+                </ThemedText>
+              ) : (
+                <ThemedText variant="title">
+                  Facility Setup Required
+                </ThemedText>
+              )}
+              {isFacilityReady ? (
+                <Badge
+                  label="Ready to Open"
+                  variant="primary"
+                  size="md"
+                  icon="checkCircle"
+                />
+              ) : (
+                <Badge
+                  label={`${passedMandatory}/${mandatoryChecks.length} Required`}
+                  variant="warning"
+                  size="md"
+                  icon="alertCircle"
+                />
+              )}
             </View>
             <ThemedText variant="body" color={theme.colors.textSecondary} style={styles.heroSubtext}>
               {isFacilityReady
@@ -469,13 +504,14 @@ export default function FacilityReadinessTab({
 
             {/* Progress bar */}
             <View style={styles.progressBarWrapper}>
-              <View style={styles.progressBarBg}>
+              <View style={[styles.progressBarBg, { backgroundColor: theme.colors.border }]}>
                 <View
+                  testID="facility-readiness-progress-fill"
                   style={[
                     styles.progressBarFill,
                     {
                       width: `${readinessPercent}%`,
-                      backgroundColor: isFacilityReady ? theme.colors.success : theme.colors.primary,
+                      backgroundColor: theme.colors.primary,
                     },
                   ]}
                 />
@@ -811,14 +847,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     borderRadius: theme.radii.lg,
   },
-  heroReady: {
-    backgroundColor: theme.colors.successBg,
-    borderColor: theme.colors.success,
-  },
-  heroPending: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.borderDark,
-  },
   heroContent: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1015,20 +1043,10 @@ const styles = StyleSheet.create({
     padding: 2,
     justifyContent: 'center',
   },
-  switchTrackActive: {
-    backgroundColor: theme.colors.primary,
-  },
-  switchTrackInactive: {
-    backgroundColor: theme.colors.surfaceHighlight,
-  },
-  switchTrackDisabled: {
-    backgroundColor: theme.colors.borderDark,
-  },
   switchThumb: {
     width: 22,
     height: 22,
     borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surface,
   },
   switchThumbActive: {
     alignSelf: 'flex-end',

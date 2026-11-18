@@ -48,6 +48,19 @@ export default function PhilHealthSettingsTab({
   const [formCipherKey, setFormCipherKey] = useState('');
   const [formEndpoint, setFormEndpoint] = useState('/soap/konsulta');
 
+  const baselineAccreditation = settings?.accreditationNumber || accreditationNumber || '';
+  const baselinePmcc = settings?.pmccNumber || '';
+  const baselineCertId = settings?.softwareCertificateId || '';
+  const baselineEndpoint = settings?.konsultaEndpoint || '/soap/konsulta';
+  const isOverrideDirty =
+    formAccreditation !== baselineAccreditation ||
+    formPmcc !== baselinePmcc ||
+    formCertId !== baselineCertId ||
+    formUsername.trim().length > 0 ||
+    formPassword.length > 0 ||
+    formCipherKey.trim().length > 0 ||
+    formEndpoint !== baselineEndpoint;
+
   const handleOpenOverrideModal = () => {
     setFormAccreditation(settings?.accreditationNumber || accreditationNumber || '');
     setFormPmcc(settings?.pmccNumber || '');
@@ -280,12 +293,14 @@ export default function PhilHealthSettingsTab({
               onPress={() => setOverrideModalVisible(false)}
               disabled={savingOverride}
             />
-            <Button
-              title={savingOverride ? 'Verifying & Saving...' : 'Save & Apply Override'}
-              variant="primary"
-              onPress={handleSaveOverride}
-              disabled={savingOverride}
-            />
+            {isOverrideDirty || savingOverride ? (
+              <Button
+                title={savingOverride ? 'Verifying & Saving...' : 'Save & Apply Override'}
+                variant="primary"
+                onPress={handleSaveOverride}
+                disabled={savingOverride}
+              />
+            ) : null}
           </View>
         }
       >

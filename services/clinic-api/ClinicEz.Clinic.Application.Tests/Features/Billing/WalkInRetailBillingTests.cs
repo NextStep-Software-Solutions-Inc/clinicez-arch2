@@ -52,7 +52,7 @@ public class WalkInRetailBillingTests
             },
             IsWalkInRetail: true,
             WalkInCustomerName: "Walk-In Customer",
-            VisitType: VisitType.RetailPurchase);
+            VisitType: null);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -98,7 +98,7 @@ public class WalkInRetailBillingTests
             },
             IsWalkInRetail: true,
             WalkInCustomerName: walkInName,
-            VisitType: VisitType.RetailPurchase);
+            VisitType: null);
 
         var act = () => handler.Handle(command, CancellationToken.None);
 
@@ -135,7 +135,7 @@ public class WalkInRetailBillingTests
             },
             IsWalkInRetail: true,
             WalkInCustomerName: "Maria Clara",
-            VisitType: VisitType.RetailPurchase);
+            VisitType: null);
 
         var result = await handler.Handle(command, CancellationToken.None);
 

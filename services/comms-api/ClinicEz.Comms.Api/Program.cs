@@ -2,6 +2,8 @@ using ClinicEz.Comms.Application;
 using ClinicEz.Comms.Infrastructure;
 using ClinicEz.Comms.Infrastructure.Hubs;
 using ClinicEz.Comms.Infrastructure.Middleware;
+using ClinicEz.Comms.Infrastructure.Persistence;
+using ClinicEz.Shared.Persistence;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,6 +36,17 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<CommsDbContext>();
+        dbContext.EnsureDevelopmentDatabaseCreatedAndMigrated(app.Environment);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[DB_INIT_NOTE] {ex.Message}");
+    }
+
     app.MapOpenApi().AllowAnonymous();
     app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Communications API")).AllowAnonymous();
 }
@@ -43,10 +56,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantMigrationWritePauseMiddleware>();
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "comms-api" })).AllowAnonymous();
 app.MapControllers();
 app.MapHub<CommsHub>("/hubs/comms");
 
 app.Run();
-
-public partial class Program { }

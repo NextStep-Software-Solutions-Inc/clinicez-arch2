@@ -216,6 +216,45 @@ public class ProcessXenditWebhookCommandHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Handle_InvoicePaid_TeleconsultTopUp_CreditsPrepaidBalanceIdempotently()
+    {
+        var (tenant, _) = await SeedWorkspaceAsync("topup-clinic", "starter", SubscriptionStatus.Active);
+        _context.WorkspaceTeleconsultBillings.Add(new WorkspaceTeleconsultBilling
+        {
+            TenantId = tenant.Id,
+            IsEnabled = true,
+            BillingMode = WorkspaceTeleconsultBilling.ModePrepaid,
+            PrepaidBalancePhp = 200m,
+            CurrentPeriodYearMonth = "2026-11"
+        });
+        await _context.SaveChangesAsync();
+
+        var payload = Payload(
+            "invoice.paid",
+            ("id", "inv_topup_001"),
+            ("external_id", $"topup-{tenant.Id}-abc"),
+            ("amount", 500),
+            ("currency", "PHP"),
+            ("payment_method", "EWALLET"),
+            ("payment_channel", "GCASH"),
+            ("metadata", new Dictionary<string, string>
+            {
+                ["tenantId"] = tenant.Id.ToString(),
+                ["type"] = "teleconsult_topup"
+            }));
+
+        var first = await _sut.Handle(new ProcessXenditWebhookCommand(payload), CancellationToken.None);
+        var replay = await _sut.Handle(new ProcessXenditWebhookCommand(payload), CancellationToken.None);
+
+        Assert.True(first);
+        Assert.True(replay);
+
+        var billing = await _context.WorkspaceTeleconsultBillings.SingleAsync(b => b.TenantId == tenant.Id);
+        Assert.Equal(700m, billing.PrepaidBalancePhp);
+        Assert.Equal(1, await _context.BillingInvoices.CountAsync(i => i.XenditInvoiceId == "inv_topup_001"));
+    }
+
+    [Fact]
     public void Test_XenditCustomerRequest_Serialization()
     {
         var request = new ClinicEz.Portal.Infrastructure.Xendit.Models.Customers.XenditCustomerRequest

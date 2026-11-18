@@ -6,7 +6,12 @@ import {
 } from '@microsoft/signalr';
 import { ExponentialBackoffRetryPolicy } from './ExponentialBackoffRetryPolicy';
 import { TicketRenewalTimer, TicketProvider } from './TicketRenewalTimer';
-import { CommsEventEmitter } from '../events/CommsEventEmitter';
+import {
+  CommsEventEmitter,
+  CallPaymentClearedPayload,
+  CallStateChangedPayload,
+  RecordingConsentLoggedPayload
+} from '../events/CommsEventEmitter';
 import { ConnectionError } from '../errors';
 import {
   ConnectionState,
@@ -32,7 +37,9 @@ export class SignalRConnectionManager implements ICommsClient {
   private readonly renewalTimer: TicketRenewalTimer;
   public readonly events: CommsEventEmitter = new CommsEventEmitter();
   private readonly activeConversations: Set<string> = new Set();
+  private readonly lastSeenSeqByConversation: Map<string, number> = new Map();
   private isConnecting: boolean = false;
+  private inFlightConnect: Promise<void> | null = null;
 
   constructor(private readonly options: CommsClientOptions) {
     this.renewalTimer = new TicketRenewalTimer(options.ticketProvider, {
@@ -48,11 +55,17 @@ export class SignalRConnectionManager implements ICommsClient {
 
     this.connection = new HubConnectionBuilder()
       .withUrl(options.hubUrl, {
-        accessTokenFactory: () => this.renewalTimer.getActiveTicket() ?? options.initialTicket ?? ''
+        accessTokenFactory: async () => {
+          return await this.renewalTimer.getValidTicket();
+        },
+        timeout: 10000,
       })
       .withAutomaticReconnect(retryPolicy)
       .configureLogging(options.logLevel ?? LogLevel.Warning)
       .build();
+
+    this.connection.serverTimeoutInMilliseconds = 60000;
+    this.connection.keepAliveIntervalInMilliseconds = 15000;
 
     this.registerConnectionHooks();
     this.registerHubEventHandlers();
@@ -60,41 +73,70 @@ export class SignalRConnectionManager implements ICommsClient {
 
   public async connect(): Promise<void> {
     if (this.connection.state === HubConnectionState.Connected) return;
-    if (this.isConnecting) return;
+    if (this.inFlightConnect) return this.inFlightConnect;
 
-    this.isConnecting = true;
-    try {
-      // Start proactive ticket renewal before handshake
-      await this.renewalTimer.start(this.options.initialTicket);
-
-      this.events.emit('connectionStateChanged', 'Connecting');
-      await this.connection.start();
-      this.events.emit('connectionStateChanged', 'Connected');
-
-      // Rejoin any previously active conversations
-      for (const convId of this.activeConversations) {
-        try {
-          await this.connection.invoke('JoinConversation', convId);
-        } catch (e) {
-          this.events.emit('error', e instanceof Error ? e : new Error(String(e)));
+    this.inFlightConnect = (async () => {
+      this.isConnecting = true;
+      try {
+        // If the connection is in a transient disconnecting/reconnecting state, ensure it is cleanly stopped first
+        if (
+          this.connection.state === HubConnectionState.Reconnecting ||
+          this.connection.state === HubConnectionState.Disconnecting ||
+          this.connection.state === HubConnectionState.Connecting
+        ) {
+          try {
+            await this.connection.stop();
+          } catch {
+            // Ignore stop errors during pre-connect reset
+          }
         }
+
+        // Start proactive ticket renewal before handshake
+        await this.renewalTimer.start(this.options.initialTicket);
+
+        this.events.emit('connectionStateChanged', 'Connecting');
+        await Promise.race([
+          this.connection.start(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('SignalR connection start timeout')), 10000)),
+        ]);
+        this.events.emit('connectionStateChanged', 'Connected');
+
+        // Rejoin any previously active conversations and catch up missed messages
+        await this.rejoinAndCatchUpConversations();
+      } catch (err: any) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        this.events.emit('connectionStateChanged', 'Disconnected', error);
+        throw new ConnectionError(error.message, error);
+      } finally {
+        this.isConnecting = false;
+        this.inFlightConnect = null;
       }
-    } catch (err: any) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      this.events.emit('connectionStateChanged', 'Disconnected', error);
-      throw new ConnectionError(error.message, error);
-    } finally {
-      this.isConnecting = false;
-    }
+    })();
+
+    return this.inFlightConnect;
   }
 
-  public async disconnect(): Promise<void> {
+  public async disconnect(clearConversations: boolean = true): Promise<void> {
     this.renewalTimer.stop();
     if (this.connection.state !== HubConnectionState.Disconnected) {
-      await this.connection.stop();
+      try {
+        await this.connection.stop();
+      } catch {
+        // Ignore stop error
+      }
     }
-    this.activeConversations.clear();
+    if (clearConversations) {
+      this.activeConversations.clear();
+      this.lastSeenSeqByConversation.clear();
+    }
     this.events.emit('connectionStateChanged', 'Disconnected');
+  }
+
+  public async reconnect(): Promise<void> {
+    // Gracefully stop connection and renewal timer without clearing activeConversations
+    await this.disconnect(false);
+    // Re-establish connection and rejoin activeConversations
+    await this.connect();
   }
 
   public getConnectionState(): ConnectionState {
@@ -121,7 +163,11 @@ export class SignalRConnectionManager implements ICommsClient {
 
   public async sendMessage(request: SendMessageRequest): Promise<MessageDto> {
     this.ensureConnected();
-    return await this.connection.invoke<MessageDto>('SendMessage', request);
+    const sent = await this.connection.invoke<MessageDto>('SendMessage', request);
+    if (sent) {
+      this.recordSeenSeq(sent.conversationId || request.conversationId, sent.seq);
+    }
+    return sent;
   }
 
   public async sendReaction(messageId: string, reaction: string): Promise<void> {
@@ -141,7 +187,18 @@ export class SignalRConnectionManager implements ICommsClient {
 
   public async getMessagesAfterSeq(conversationId: string, afterSeq: number): Promise<MessageDto[]> {
     this.ensureConnected();
-    return await this.connection.invoke<MessageDto[]>('GetMessagesAfterSeq', conversationId, afterSeq);
+    this.recordSeenSeq(conversationId, afterSeq);
+    const messages = await this.connection.invoke<MessageDto[]>('GetMessagesAfterSeq', conversationId, afterSeq);
+    if (Array.isArray(messages)) {
+      for (const msg of messages) {
+        this.recordSeenSeq(msg.conversationId || conversationId, msg.seq);
+      }
+    }
+    return messages;
+  }
+
+  public getLastSeenSeq(conversationId: string): number {
+    return this.lastSeenSeqByConversation.get(conversationId) ?? 0;
   }
 
   public getRenewalTimer(): TicketRenewalTimer {
@@ -159,14 +216,8 @@ export class SignalRConnectionManager implements ICommsClient {
 
     this.connection.onreconnected(async () => {
       this.events.emit('connectionStateChanged', 'Connected');
-      // Resubscribe active conversation channels
-      for (const convId of this.activeConversations) {
-        try {
-          await this.connection.invoke('JoinConversation', convId);
-        } catch (e) {
-          this.events.emit('error', e instanceof Error ? e : new Error(String(e)));
-        }
-      }
+      // Resubscribe active conversation channels and catch up missed messages
+      await this.rejoinAndCatchUpConversations();
     });
 
     this.connection.onclose((err) => {
@@ -174,8 +225,41 @@ export class SignalRConnectionManager implements ICommsClient {
     });
   }
 
+  private recordSeenSeq(conversationId: string, seq: number): void {
+    if (!conversationId || typeof seq !== 'number' || Number.isNaN(seq)) return;
+    const prev = this.lastSeenSeqByConversation.get(conversationId) ?? 0;
+    if (seq > prev) {
+      this.lastSeenSeqByConversation.set(conversationId, seq);
+    }
+  }
+
+  private async rejoinAndCatchUpConversations(): Promise<void> {
+    for (const convId of this.activeConversations) {
+      try {
+        await this.connection.invoke('JoinConversation', convId);
+        const afterSeq = this.lastSeenSeqByConversation.get(convId) ?? 0;
+        const missed = await this.connection.invoke<MessageDto[]>(
+          'GetMessagesAfterSeq',
+          convId,
+          afterSeq
+        );
+        if (Array.isArray(missed)) {
+          for (const msg of missed) {
+            this.recordSeenSeq(msg.conversationId || convId, msg.seq);
+            this.events.emit('messageReceived', msg);
+          }
+        }
+      } catch (e) {
+        this.events.emit('error', e instanceof Error ? e : new Error(String(e)));
+      }
+    }
+  }
+
   private registerHubEventHandlers(): void {
     this.connection.on('OnMessageReceived', (message: MessageDto) => {
+      if (message) {
+        this.recordSeenSeq(message.conversationId, message.seq);
+      }
       this.events.emit('messageReceived', message);
     });
 
@@ -209,6 +293,27 @@ export class SignalRConnectionManager implements ICommsClient {
 
     this.connection.on('OnConversationUpdated', (conversation: ConversationDto) => {
       this.events.emit('conversationUpdated', conversation);
+    });
+
+    this.connection.on('OnCallStateChanged', (payload: CallStateChangedPayload) => {
+      this.events.emit('callStateChanged', payload);
+    });
+    this.connection.on('CallStateChanged', (payload: CallStateChangedPayload) => {
+      this.events.emit('callStateChanged', payload);
+    });
+
+    this.connection.on('OnCallPaymentCleared', (payload: CallPaymentClearedPayload) => {
+      this.events.emit('callPaymentCleared', payload);
+    });
+    this.connection.on('CallPaymentCleared', (payload: CallPaymentClearedPayload) => {
+      this.events.emit('callPaymentCleared', payload);
+    });
+
+    this.connection.on('OnRecordingConsentLogged', (payload: RecordingConsentLoggedPayload) => {
+      this.events.emit('recordingConsentLogged', payload);
+    });
+    this.connection.on('RecordingConsentLogged', (payload: RecordingConsentLoggedPayload) => {
+      this.events.emit('recordingConsentLogged', payload);
     });
   }
 

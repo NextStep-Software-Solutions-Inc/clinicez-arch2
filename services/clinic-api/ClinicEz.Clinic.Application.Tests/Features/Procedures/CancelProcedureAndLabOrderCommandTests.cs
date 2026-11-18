@@ -94,6 +94,7 @@ public class CancelProcedureAndLabOrderCommandTests
             ProcedureName = "Nebulization Therapy",
             Category = "Procedure",
             Status = ProcedureStatus.Ordered,
+            OrderedByDoctorId = _staffId,
             ScheduledAt = DateTime.UtcNow
         };
         await db.Procedures.AddAsync(procedure);
@@ -303,5 +304,123 @@ public class CancelProcedureAndLabOrderCommandTests
         updatedOrder!.Status.Should().Be(LabOrderStatus.Cancelled);
         updatedOrder.StageReason.Should().Be("Doctor revised diagnostic workup");
         updatedOrder.Items.Should().ContainSingle(i => i.Status == LabOrderStatus.Cancelled);
+    }
+
+    [Fact]
+    public async Task CancelProcedure_WhenNonAdminWasNotOrderingUser_ThrowsForbiddenException()
+    {
+        var nonOrderingStaffId = Guid.NewGuid();
+        var orderingDoctorId = Guid.NewGuid();
+        var ctx = Substitute.For<IClinicContext>();
+        ctx.ClinicId.Returns(_clinicId);
+        ctx.TenantId.Returns(_tenantId);
+        ctx.StaffId.Returns(nonOrderingStaffId);
+        ctx.StaffRole.Returns("Nurse");
+        ctx.StaffName.Returns("Joy Nurse");
+
+        var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(ctx);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
+
+        var procedure = new Procedure
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Clarisse Alvarado",
+            ProcedureName = "Nebulization Therapy",
+            Category = "Procedure",
+            Status = ProcedureStatus.Ordered,
+            OrderedByDoctorId = orderingDoctorId,
+            OrderedByDoctorName = "Dr. Wave Ambray",
+            CreatedBy = orderingDoctorId.ToString(),
+            ScheduledAt = DateTime.UtcNow
+        };
+        await db.Procedures.AddAsync(procedure);
+        await db.SaveChangesAsync();
+
+        var handler = new CancelProcedureCommandHandler(procRepo, unitOfWork, ctx);
+        var act = () => handler.Handle(new CancelProcedureCommand(procedure.Id, "Unauthorized cancel"), CancellationToken.None);
+
+        await act.Should().ThrowAsync<ForbiddenException>()
+            .WithMessage("*Only an administrator or the user who ordered this procedure can cancel it*");
+    }
+
+    [Fact]
+    public async Task CancelProcedure_WhenCallerIsAdmin_AllowsCancellingProcedureOrderedByAnotherDoctor()
+    {
+        var adminStaffId = Guid.NewGuid();
+        var orderingDoctorId = Guid.NewGuid();
+        var ctx = Substitute.For<IClinicContext>();
+        ctx.ClinicId.Returns(_clinicId);
+        ctx.TenantId.Returns(_tenantId);
+        ctx.StaffId.Returns(adminStaffId);
+        ctx.StaffRole.Returns("Admin");
+        ctx.StaffName.Returns("Clinic Administrator");
+
+        var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(ctx);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
+
+        var procedure = new Procedure
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Clarisse Alvarado",
+            ProcedureName = "Nebulization Therapy",
+            Category = "Procedure",
+            Status = ProcedureStatus.Ordered,
+            OrderedByDoctorId = orderingDoctorId,
+            OrderedByDoctorName = "Dr. Wave Ambray",
+            CreatedBy = orderingDoctorId.ToString(),
+            ScheduledAt = DateTime.UtcNow
+        };
+        await db.Procedures.AddAsync(procedure);
+        await db.SaveChangesAsync();
+
+        var handler = new CancelProcedureCommandHandler(procRepo, unitOfWork, ctx);
+        var result = await handler.Handle(new CancelProcedureCommand(procedure.Id, "Admin override"), CancellationToken.None);
+
+        result.Status.Should().Be(ProcedureStatus.Cancelled);
+    }
+
+    [Fact]
+    public async Task CancelProcedure_WhenCallerIsOrderingNurseViaCreatedBy_AllowsCancellingOwnOrder()
+    {
+        var orderingNurseId = Guid.NewGuid();
+        var ctx = Substitute.For<IClinicContext>();
+        ctx.ClinicId.Returns(_clinicId);
+        ctx.TenantId.Returns(_tenantId);
+        ctx.StaffId.Returns(orderingNurseId);
+        ctx.StaffRole.Returns("Nurse");
+        ctx.StaffName.Returns("Joy Nurse");
+
+        var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(ctx);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
+
+        var procedure = new Procedure
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Clarisse Alvarado",
+            ProcedureName = "Nebulization Therapy",
+            Category = "Procedure",
+            Status = ProcedureStatus.Ordered,
+            OrderedByDoctorId = null,
+            OrderedByDoctorName = "Joy Nurse",
+            CreatedBy = orderingNurseId.ToString(),
+            ScheduledAt = DateTime.UtcNow
+        };
+        await db.Procedures.AddAsync(procedure);
+        await db.SaveChangesAsync();
+
+        var handler = new CancelProcedureCommandHandler(procRepo, unitOfWork, ctx);
+        var result = await handler.Handle(new CancelProcedureCommand(procedure.Id, "Entered in error"), CancellationToken.None);
+
+        result.Status.Should().Be(ProcedureStatus.Cancelled);
+        result.CreatedBy.Should().Be(orderingNurseId.ToString());
     }
 }

@@ -19,6 +19,11 @@ const nextConfig: NextConfig = {
         destination: "/sign-up",
         permanent: true,
       },
+      {
+        source: "/guest/teleconsult",
+        destination: "/teleconsult/join",
+        permanent: false,
+      },
     ];
   },
 };

@@ -570,7 +570,7 @@ public class ChallengerM1MultiConditionStressTests
             PatientName = "Gabriela Silang",
             DoctorName = "Dr. Antonio Luna",
             EncounterDate = consult3Date,
-            IsSigned = false
+            IsSigned = true
         };
         await consultRepo.AddAsync(consult3, CancellationToken.None);
 

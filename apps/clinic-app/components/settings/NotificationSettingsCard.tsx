@@ -33,13 +33,23 @@ export default function NotificationSettingsCard({
   showSkeletons = false,
 }: NotificationSettingsCardProps) {
   // Queue Push Settings
-  const [enablePush, setEnablePush] = useState<boolean>(true);
-  const [threshold, setThreshold] = useState<number>(2);
+  const [enablePush, setEnablePush] = useState<boolean>(
+    settings?.enableQueuePushNotifications ?? true
+  );
+  const [threshold, setThreshold] = useState<number>(() =>
+    Math.max(1, Math.min(5, settings?.queuePushNotificationThreshold ?? 2))
+  );
 
   // Staff Notification Settings
-  const [retentionDays, setRetentionDays] = useState<number>(30);
-  const [enableAudio, setEnableAudio] = useState<boolean>(true);
-  const [enableVibration, setEnableVibration] = useState<boolean>(true);
+  const [retentionDays, setRetentionDays] = useState<number>(
+    settings?.staffNotificationRetentionDays ?? 30
+  );
+  const [enableAudio, setEnableAudio] = useState<boolean>(
+    settings?.enableStatAudioAlert ?? true
+  );
+  const [enableVibration, setEnableVibration] = useState<boolean>(
+    settings?.enableStatVibrationAlert ?? true
+  );
 
   const [saving, setSaving] = useState<boolean>(false);
 
@@ -55,11 +65,12 @@ export default function NotificationSettingsCard({
   }, [settings]);
 
   const isDirty = useMemo(() => {
-    const origEnablePush = settings?.enableQueuePushNotifications ?? true;
-    const origThreshold = settings?.queuePushNotificationThreshold ?? 2;
-    const origRetention = settings?.staffNotificationRetentionDays ?? 30;
-    const origAudio = settings?.enableStatAudioAlert ?? true;
-    const origVibration = settings?.enableStatVibrationAlert ?? true;
+    if (!settings) return false;
+    const origEnablePush = settings.enableQueuePushNotifications ?? true;
+    const origThreshold = Math.max(1, Math.min(5, settings.queuePushNotificationThreshold ?? 2));
+    const origRetention = settings.staffNotificationRetentionDays ?? 30;
+    const origAudio = settings.enableStatAudioAlert ?? true;
+    const origVibration = settings.enableStatVibrationAlert ?? true;
 
     return (
       enablePush !== origEnablePush ||
@@ -307,16 +318,18 @@ export default function NotificationSettingsCard({
             </View>
 
             {/* SAVE BUTTON */}
-            <View style={styles.actionRow}>
-              <Button
-                title="Save Notification Settings"
-                variant="primary"
-                icon="check"
-                onPress={handleSaveSettings}
-                loading={saving}
-                disabled={saving || !isDirty}
-              />
-            </View>
+            {isDirty || saving ? (
+              <View style={styles.actionRow}>
+                <Button
+                  title="Save Notification Settings"
+                  variant="primary"
+                  icon="check"
+                  onPress={handleSaveSettings}
+                  loading={saving}
+                  disabled={saving}
+                />
+              </View>
+            ) : null}
           </View>
         )}
       </CardContent>

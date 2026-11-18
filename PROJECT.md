@@ -1,176 +1,120 @@
-# Project: Clinic Patient List and Dashboard UI/UX Enhancements & Backend Queue/Filter Support
+# Project: ClinicEZ Teleconsultation Feature
 
 ## Architecture
-
-ClinicEZ is an outpatient clinic electronic health record and clinical workstation system. This project enhances the Clinic Patient Directory (`apps/clinic-app/navigation/screens/Patients.screen.tsx`), Patient Directory Card/Table components (`apps/clinic-app/components/patient/PatientDirectoryCard.tsx`), live Queue Dashboard (`apps/clinic-app/navigation/screens/Dashboard.screen.tsx`), and the backend CQRS query/command endpoints (`services/clinic-api`).
-
-The system strictly adheres to:
-1. **ClinicEZ Design Tokens (`@clinicez/design-tokens`)**: Teal `#0D6963` brand palette, semantic badge variants, design token scales, zero raw emojis/pictographs in JSX strings.
-2. **Everyday Clinic Language (Zero Jargon)**: Plain clinic terminology without statutory numbers ("RA 9994", "RA 7277") or database/technical jargon.
-3. **Clinical Domain Boundaries**: Clinic care (SOAP notes, vitals, procedures, clearances) stays in `clinic-app` / `clinic-api`; diagnostic specimen collection stays in `laboratory-app`; pharmacy claims stay in `pharmacy-app`; cashier settlement stays in `cashier-app`.
-4. **No Backward Compatibility Constraints**: Clean removal of legacy or obsolete artifacts.
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Workstation Frontend                            │
-│                                                                        │
-│  Patients.screen.tsx                                                   │
-│   ├── Segmented Toolbar: ALL | MY_PATIENTS | STUDENTS | EMPLOYEES ...  │
-│   ├── PatientDirectoryCard.tsx (Card & Compact Table modes)            │
-│   │    ├── "Schedule visit" ──► ScheduleVisitModal.tsx                │
-│   │    │                          ├── Dynamic Doctor Shift Slots       │
-│   │    │                          └── 4-Button Post-Setup Dialog       │
-│   │    ├── "Queue Patient"  ──► ServiceCheckInModal.tsx               │
-│   │    └── ActionMenu (⋮)   ──► 4 Direct Service Intents               │
-│   │                                 ├── Doctor Consultation (Q / SQ)   │
-│   │                                 ├── Vitals Check Only (V / SV)     │
-│   │                                 ├── Clinical Procedure (P / SP)    │
-│   │                                 └── Administrative (A / SA)        │
-│   │                                 └── Auto Senior/PWD Priority       │
-│   └── Dashboard.screen.tsx                                             │
-│        ├── Removed: TV Board & Force EOD buttons                       │
-│        ├── Formatted Semantic Service Badges                           │
-│        └── 4 Semantic Clusters: Care | Flow | Exceptions | Emergency   │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ HTTP / JSON API
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                       Backend API: clinic-api                          │
-│                                                                        │
-│  Queries:                                                              │
-│   ├── GetClinicPatientsQuery: supports filterMode == "MY_PATIENTS"     │
-│   └── GetClinicPatientCountsQuery: computes MyPatients count           │
-│  Commands:                                                             │
-│   └── CheckInPatientCommand: supports SeriesPrefix for prefix-specific │
-│       sequential queue numbers (Q-001, SQ-001, V-001, etc.)            │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Feature Inventory
-
-| # | Feature | Description | Milestone | Source |
-|---|---------|-------------|-----------|--------|
-| 1 | 'My patients' Toolbar Tab | Add 'My patients' tab as 2nd tab in `Patients.screen.tsx` (`ALL`, `MY_PATIENTS`, `STUDENTS`, `EMPLOYEES`, `ALERTS`, `SENIOR_PWD`) | M1 | Survey |
-| 2 | Doctor Patient Ownership Filter | Filter patients assigned to or seen by current doctor (`assigned_doctor_id`, `doctor_id`, or active queue item doctor) | M1 | Survey |
-| 3 | Nurse Patient Ownership Filter | Filter patients whose vitals were recorded by this nurse or assigned to nurse's rooms (`assignedRoomIds`) | M1 | Survey |
-| 4 | Backend Query `MY_PATIENTS` Filter | Support `filterMode == "MY_PATIENTS"` and optional `StaffId`/`DoctorId` in `GetClinicPatientsQuery.cs` | M1 | Survey |
-| 5 | Reactive MyPatients Count | Update `GetClinicPatientCountsQuery.cs` and `PatientDirectoryCountsDto.cs` to return `MyPatients` count | M1 | Survey |
-| 6 | Relabel "Schedule visit" Button | Relabel button from "Book appointment" to "Schedule visit" on card, compact table, and ActionMenu | M2 | Survey |
-| 7 | In-Place `ScheduleVisitModal.tsx` | Implement in-place scheduling modal pre-selecting patient with identity banner, doctor picker, dates, and times | M2 | Survey |
-| 8 | Dynamic Doctor Shift Slots | Dynamically load attending doctor available shift slots via `clinicService.getDoctorAvailableSlots(doctorId, date)` | M2 | Survey |
-| 9 | Post-Appointment Setup Dialog | Display 4 distinct action buttons: "Notify patient (SMS / App)", "Set new", "Close", and "Open appointment screen" | M2 | Survey |
-| 10 | Relabel "Queue Patient" Button | Relabel primary check-in CTA button on card and compact table from "Add to queue" to "Queue Patient" | M3 | Survey |
-| 11 | ActionMenu Direct Service Intents | Add direct one-click actions under "Services & Queue" in ActionMenu: Doctor Consultation, Vitals Check, Clinical Procedure, Administrative & Clearance | M3 | Survey |
-| 12 | Dedicated `ServiceCheckInModal.tsx` | Implement dedicated check-in modal with specialized views for each of the 4 clinical services | M3 | Survey |
-| 13 | Prefix Ticket Series System | Generate Regular series (`Q`, `V`, `P`, `A`) vs Senior & PWD Priority series (`SQ`, `SV`, `SP`, `SA`) tickets | M3 | Survey |
-| 14 | Senior/PWD Priority Auto-Selection | Automatically default ticket series to Priority (`SQ`, `SV`, `SP`, `SA`) if patient age >= 60 or has Senior/PWD ID | M3 | Survey |
-| 15 | Backend `SeriesPrefix` Support | Extend `CheckInPatientCommand.cs` to accept `SeriesPrefix` and compute prefix-isolated monotonic sequences (`$"{{SeriesPrefix}}-{{nextSequence:D3}}"`) | M3 | Survey |
-| 16 | Domain Boundary Enforcement | Strictly maintain clinic care vs lab analyzer draws (`laboratory-app`) and pharmacy claim redemption (`pharmacy-app`) | M3 | Survey |
-| 17 | Dashboard Toolbar Cleanup | Remove "Open TV Board" and "Force EOD / Close Day" buttons from live queue toolbar in `Dashboard.screen.tsx` | M4 | Survey |
-| 18 | 4 Semantic Clusters for Actions | Group queue item action buttons into 4 clusters: Care & Encounter, Flow & Completion, Exceptions, Emergency: Divert to ER | M4 | Survey |
-| 19 | Formatted Service Badges | Map raw enum strings (`VitalsCheckOnly`, `StandaloneProcedure`, `AdministrativeDocument`, `Consultation`) to styled semantic badges | M4 | Survey |
-| 20 | Zero Jargon Clinical UI Copy | Enforce everyday clinic language across all components, labels, and dialogs; remove all statutory and legalistic references | M1-M4 | Survey |
-
----
-
-## Milestones
-
-| # | Name | Scope | Dependencies | Status |
-|---|------|-------|-------------|--------|
-| E2E | E2E Testing Track | Requirement-driven test suite (Tiers 1-4), TEST_INFRA.md, TEST_READY.md | none | DONE |
-| M1 | "My patients" Filter Tab & Server-side Filtering | R1: `Patients.screen.tsx`, `clinicService.ts`, `GetClinicPatientsQuery.cs`, `GetClinicPatientCountsQuery.cs`, `PatientDirectoryCountsDto.cs`, `PatientsController.cs` | none | DONE |
-| M2 | "Schedule visit" Modal & Post-Appointment Actions | R2: `PatientDirectoryCard.tsx`, `ScheduleVisitModal.tsx`, dynamic shift slot loading, 4-button post-appointment dialog | M1 | DONE |
-| M3 | Multi-Service Queueing, Ticket Series & Intents | R3: "Queue Patient" label, ActionMenu intents, `ServiceCheckInModal.tsx`, Regular/Priority series (`Q`/`SQ`, `V`/`SV`, `P`/`SP`, `A`/`SA`), `CheckInPatientCommand.cs` | M1 | DONE |
-| M4 | Dashboard Cleanup, Semantic Clusters & Badges | R4: `Dashboard.screen.tsx` toolbar cleanup, 4 semantic action clusters, formatted badges | M3 | DONE |
-| M5 | Final Milestone: 100% E2E Pass & Adversarial Hardening | Run full frontend & backend test suites, execute adversarial tests, forensic integrity audit | M1, M2, M3, M4, E2E | DONE |
-
-
-
-
----
-
-## Interface Contracts
-
-### 1. `GetClinicPatientsQuery` & `GetClinicPatientCountsQuery` ↔ `Patients.screen.tsx`
-- Query parameters on `GET /api/v1/patients`:
-  - `searchTerm?: string`
-  - `hasAlerts?: boolean`
-  - `verificationStatus?: string`
-  - `filterMode?: string` (`'ALL' | 'MY_PATIENTS' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES'`)
-  - `staffId?: Guid` (ID of the logged-in staff member)
-  - `doctorId?: Guid` (ID of the doctor if logged-in staff is a Doctor)
-  - `pageNumber: int`
-  - `pageSize: int`
-- Query parameters on `GET /api/v1/patients/counts`:
-  - `searchTerm?: string`
-  - `staffId?: Guid`
-  - `doctorId?: Guid`
-- Response from `GET /api/v1/patients/counts`:
-  ```json
-  {
-    "all": 120,
-    "myPatients": 18,
-    "students": 45,
-    "employees": 32,
-    "alerts": 12,
-    "seniorPwd": 24
-  }
-  ```
-
-### 2. `CheckInPatientCommand` ↔ `ServiceCheckInModal.tsx`
-- Request payload for `POST /api/v1/queue/check-in`:
-  ```json
-  {
-    "patientId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "patientName": "Juan Dela Cruz",
-    "seriesPrefix": "SQ",
-    "priority": "Routine",
-    "visitType": "Consultation",
-    "doctorId": "11111111-2222-3333-4444-555555555555",
-    "doctorName": "Dr. Maria Santos",
-    "roomId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-    "roomOrStation": "Room 101 - Consultation",
-    "chiefComplaint": "Persistent cough for 3 days"
-  }
-  ```
-- Output: `QueueItemDto` with `queueNumber: "SQ-001"`.
-
-### 3. Dynamic Doctor Slots: `clinicService.getDoctorAvailableSlots` ↔ `ScheduleVisitModal.tsx`
-- `GET /api/v1/doctors/{doctorId}/schedules/availability?date=YYYY-MM-DD`
-- Response:
-  ```json
-  {
-    "doctorId": "11111111-2222-3333-4444-555555555555",
-    "doctorName": "Dr. Maria Santos",
-    "date": "2026-11-01",
-    "isOnDuty": true,
-    "availableSlots": [
-      { "time": "09:00", "available": true },
-      { "time": "09:30", "available": true },
-      { "time": "10:00", "available": false, "reason": "Booked" }
-    ]
-  }
-  ```
-
----
+The teleconsultation system enables secure, sovereign clinical video visits, payment policy governance, encrypted vault recording, two-party event routing, and multi-client participation across the ClinicEZ ecosystem:
+- **`packages/shared-dotnet`**: Shared interop contracts (`AppointmentBookedEvent`, `MediaContracts`, `CommsContracts`, `GuestTeleconsultInviteIssuedPayload`, `Party.Media`, `Party.Portal`, `Party.ForPatient`).
+- **`deploy/` & `.github/workflows/`**: Deployment configurations and CI/CD for Interop Hub (client #8 Media Broker), Media Broker service, GHCR image publishing, and LiveKit Cloud credential distribution.
+- **`services/media-broker`**: WebRTC media signaling, token minting, room management, and call minute entitlement metering with configurable auto-provisioning.
+- **`services/clinic-api`**: Facility backend handling teleconsult appointment lifecycle, payment policy enforcement, cashiering clearance, zero-PHI WebRTC media signaling to patient and facility parties, guest invite generation, and CMK AES-256-GCM encrypted vault recordings.
+- **`services/portal-api`**: Public and authenticated portal backend ingesting guest teleconsult invite hashes and verifying tokens/OTP/DOB to mint guest LiveKit room tokens.
+- **`services/patient-api`**: Patient backend consuming `CommsCallStateChanged` events over Interop Hub, broadcasting via SignalR with `relayUrl`, and exposing call status query endpoints.
+- **`packages/comms-sdk`**: Unified cross-platform communications SDK providing pluggable WebRTC media adapters (`LiveKitMediaAdapter`, `LocalPreviewMediaAdapter`), segment recording, session management (`useCallSession`), portrait-first framing, centered toolbars with dock/PiP buttons, and plain copy UI (`CallWaitingRoom`, `CallStage`).
+- **`apps/clinic-app`**: Clinic workstation application featuring full-screen edge-to-edge call stage, ultra-thin draggable docked mini-bar (`~36-38px`), native browser PiP with persistent video element, call exit confirmation dialog, guest invite link generation, and consultation chart docking.
+- **`apps/patient-app`**: Mobile patient application polling call status, admitting patient upon clinician start, and rendering live teleconsultation via `CallStage`.
+- **`apps/portal-web`**: Web guest portal verifying guest invites, connecting to LiveKit room via `useCallSession`, and rendering active call stage with native PiP and plain copy.
 
 ## Code Layout
+- `deploy/interop-hub/`: Docker Compose and bootstrap registration for client #8 Media Broker.
+- `deploy/media-broker/`: Docker Compose deployment manifest for media broker.
+- `.github/workflows/`: CI/CD deployment and image publishing workflows.
+- `packages/shared-dotnet/Interop/Contracts/`: Interop contracts (`CommsCallStateChangedPayload`, `GuestTeleconsultInviteIssuedPayload`).
+- `services/media-broker/ClinicEz.MediaBroker.Application/Common/Options/`: `MediaMeteringOptions.cs`.
+- `services/media-broker/ClinicEz.MediaBroker.Tests/`: `CallMinuteMeteringTests.cs`.
+- `services/clinic-api/ClinicEz.Clinic.Application/Features/Teleconsult/`: Join/End call commands with patient routing, `CreateTeleconsultGuestInviteCommand`.
+- `services/clinic-api/ClinicEz.Clinic.Api/Controllers/`: `TeleconsultAdmissionController.cs`.
+- `services/portal-api/ClinicEz.Portal.Application/Features/Guest/`: `GuestVerificationService.cs`.
+- `services/portal-api/ClinicEz.Portal.Infrastructure/Messaging/Handlers/`: `GuestTeleconsultInviteIssuedHandler.cs`.
+- `services/patient-api/ClinicEz.Patient.Infrastructure/Messaging/Handlers/`: `CommsCallStateChangedInteropHandler.cs`.
+- `services/patient-api/ClinicEz.Patient.Api/Endpoints/`: Patient teleconsult endpoints.
+- `packages/comms-sdk/src/native-ui/` & `src/web-ui/`: `CallWaitingRoom.tsx`, `CallStage.tsx`, `types.ts`.
+- `packages/comms-sdk/src/react/hooks/`: `useCallSession.ts`.
+- `apps/clinic-app/components/teleconsult/`: `TeleconsultWaitingRoomModal.tsx`.
+- `apps/clinic-app/services/`: `clinicService.ts`.
+- `apps/patient-app/navigation/screens/teleconsult/`: `TeleconsultWaitingRoom.screen.tsx`, `TeleconsultCall.screen.tsx`.
+- `apps/portal-web/src/components/teleconsult/`: `TeleconsultGuestFlow.tsx`.
 
-- Frontend:
-  - `apps/clinic-app/navigation/screens/Patients.screen.tsx`: Tab toolbar, filter logic, modal mounting.
-  - `apps/clinic-app/components/patient/PatientDirectoryCard.tsx`: Relabeled buttons, ActionMenu direct intents.
-  - `apps/clinic-app/components/patient/ScheduleVisitModal.tsx`: [NEW] In-place modal with dynamic doctor slots & 4-button post-appointment view.
-  - `apps/clinic-app/components/patient/ServiceCheckInModal.tsx`: [NEW] Multi-service modal with 4 service views & Regular/Priority series.
-  - `apps/clinic-app/navigation/screens/Dashboard.screen.tsx`: Toolbar cleanup, semantic button clusters, formatted badges.
-  - `apps/clinic-app/services/clinicService.ts`: Query param extensions, DTO updates.
-  - `apps/clinic-app/tests/`: Automated tests.
-- Backend:
-  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Patients/Queries/GetClinicPatientsQuery.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Patients/Queries/GetClinicPatientCountsQuery.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Patients/DTOs/PatientDirectoryCountsDto.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Queue/Commands/CheckInPatientCommand.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Api/Controllers/PatientsController.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Api/Controllers/QueueController.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/`: Automated unit & integration tests.
+## Feature Inventory
+| # | Feature | Description | Milestone | Source |
+|---|---------|-------------|-----------|--------|
+| 1 | `AppointmentBookedEvent.AppointmentType` | Optional appointment modality on shared booking event | M1 | ORIGINAL_REQUEST §R1 (Foundation) |
+| 2 | Facility Teleconsult Settings | Expose/validate 5 teleconsult settings on ClinicSettingsDto and commands | M1 | ORIGINAL_REQUEST §R1 (Foundation) |
+| 3 | Teleconsult Appointment Creation | Infer modality, assign CallId, resolve policy, set status, create prepaid invoice | M2 | ORIGINAL_REQUEST §R2 (Foundation) |
+| 4 | AppointmentDto Teleconsult Metadata | Extend AppointmentDto with teleconsult fields | M2 | ORIGINAL_REQUEST §R2 (Foundation) |
+| 5 | Cashier Payment Clearance | Update teleconsult appointment on invoice paid & enqueue CommsCallPaymentCleared | M2 | ORIGINAL_REQUEST §R2 (Foundation) |
+| 6 | Non-Mutating YAKAP Status | Surface HasActiveYakapEnlistment as informational badge without auto-exemption | M2 | ORIGINAL_REQUEST §R2 (Foundation) |
+| 7 | Plain-Note Admission Override | Staff override with ReasonNote >= 5 chars, WORM audit, CommsCallPaymentCleared | M2 | ORIGINAL_REQUEST §R2 (Foundation) |
+| 8 | Update Teleconsult Payment Policy | PUT endpoint to let staff switch policy anytime | M2 | ORIGINAL_REQUEST §R2 (Foundation) |
+| 9 | Media Signaling (Join/End Call) | Join/End endpoints requesting zero-PHI tokens via Interop Hub with 10s fallback | M3 | ORIGINAL_REQUEST §R3 (Foundation) |
+| 10 | CMK AES-256-GCM Vault Encryption | Encrypt segment uploads with {storageKey}.key sidecars, ticketed streaming decryption | M3 | ORIGINAL_REQUEST §R3 (Foundation) |
+| 11 | Recording Sweeper Sidecar Cleanup | Clean up .key sidecars alongside segment and manifest purges | M3 | ORIGINAL_REQUEST §R3 (Foundation) |
+| 12 | Consultation Encounter Linkage | Backfill ConsultationId on recording sessions when encounter is created | M3 | ORIGINAL_REQUEST §R3 (Foundation) |
+| 13 | Interop Handlers & Registration | Register MediaRoomResponded and CommsRecordingConsentLogged handlers | M3 | ORIGINAL_REQUEST §R3 (Foundation) |
+| 14 | `livekit-client` SDK Dependency | Add livekit-client ^2.24.0 to packages/comms-sdk/package.json | M4 | ORIGINAL_REQUEST §R4 (Foundation) |
+| 15 | Comms Media Adapters | Implement IMediaRoomAdapter, LiveKitMediaAdapter, LocalPreviewMediaAdapter, SegmentRecorder | M4 | ORIGINAL_REQUEST §R4 (Foundation) |
+| 16 | `useCallSession` Upgrade | Upgrade hook with callbacks & CommsContext while keeping zero-arg test fallback | M4 | ORIGINAL_REQUEST §R4 (Foundation) |
+| 17 | `CallWaitingRoom` Realignment | Add staff policy selector, informational YAKAP badge, plain-note override | M4 | ORIGINAL_REQUEST §R4 (Foundation) |
+| 18 | `CallStage` Implementation | Shared native-ui and web-ui call stage with REC banner, controls, dock action | M4 | ORIGINAL_REQUEST §R4 (Foundation) |
+| 19 | Workstation Clinic Service Teleconsult APIs | Add teleconsult DTOs and all 16 API methods to clinicService.ts | M5 | ORIGINAL_REQUEST §R5 (Foundation) |
+| 20 | Workstation ClinicCommsContext Docking | Add chart docking state and onOpenConsultationChart bridge | M5 | ORIGINAL_REQUEST §R5 (Foundation) |
+| 21 | Workstation Waiting Room & Stage Modal | Integrate comms-sdk CallWaitingRoom, CallStage, and docked mini-bar | M5 | ORIGINAL_REQUEST §R5 (Foundation) |
+| 22 | Workstation Scheduling & Inspection | Modality selector, policy pills, waiting room launcher in Schedule/Inspect modals | M5 | ORIGINAL_REQUEST §R5 (Foundation) |
+| 23 | Facility Teleconsult Settings Card | TeleconsultSettingsCard mounted in GeneralSettingsTab | M5 | ORIGINAL_REQUEST §R5 (Foundation) |
+| 24 | Timeline Recording Player Modal | ClinicRecordingPlayerModal with 15-min HMAC playback and medico-legal hold | M5 | ORIGINAL_REQUEST §R5 (Foundation) |
+| 25 | Client #8 Media Broker Registration | Register Media Broker in Interop Hub docker-compose and dev/prod workflows | M7 | ORIGINAL_REQUEST §R1 |
+| 26 | Media Broker Deployment Manifests | Create deploy/media-broker/docker-compose.yml and CI workflow | M7 | ORIGINAL_REQUEST §R1 |
+| 27 | GHCR Publishing for Media Broker | Add media-broker to .github/workflows/publish-images.yml | M7 | ORIGINAL_REQUEST §R1 |
+| 28 | LiveKit Deployment Credentials | Pass LiveKit env to portal-api and patient-api deployments | M7 | ORIGINAL_REQUEST §R1 |
+| 29 | Entitlement Metering Verification | Verify AutoProvisionDefaultEntitlement in CallMinuteMeteringTests.cs | M7 | ORIGINAL_REQUEST §R1 |
+| 30 | Shared RelayUrl & Guest Invite Contracts | Extend CommsCallStateChangedPayload with RelayUrl, add GuestTeleconsultInviteIssuedPayload | M7 | ORIGINAL_REQUEST §R2 |
+| 31 | Clinic API Two-Party Token Routing | Publish CommsCallStateChangedPayload to Party.ForPatient on join/end call | M7 | ORIGINAL_REQUEST §R2 |
+| 32 | Clinic API Guest Invite Endpoint | POST guest-invite endpoint issuing token, OTP, DOB hint, publishing to Party.Portal | M7 | ORIGINAL_REQUEST §R2 |
+| 33 | Portal API Guest Invite Verification | GuestTeleconsultInviteIssuedHandler and GuestVerificationService hash verification | M7 | ORIGINAL_REQUEST §R2 |
+| 34 | Patient API Teleconsult Endpoint & SignalR | RelayUrl in SignalR CallStateChanged and GET /api/v1/patient/teleconsult/calls/{callId} | M7 | ORIGINAL_REQUEST §R2 |
+| 35 | Comms SDK Orientation & Link Props | Add orientation, orientation toggle, share patient link, dock, and PiP props | M8 | ORIGINAL_REQUEST §R3 |
+| 36 | Portrait-First Preview & Framing | 3/4 portrait preview default with rotation toggle and link sharing | M8 | ORIGINAL_REQUEST §R3 |
+| 37 | Centered Media Toolbar with Dock & PiP | Horizontally centered floating toolbar with btn-dock-call and btn-toggle-pip | M8 | ORIGINAL_REQUEST §R3 |
+| 38 | Comms SDK Plain Copy | Replace clinical/technical jargon with user-friendly plain copy across UI | M8 | ORIGINAL_REQUEST §R3 |
+| 39 | Participant Name Resolution | Fallback to provided name or generic fallback in useCallSession | M8 | ORIGINAL_REQUEST §R3 |
+| 40 | Workstation Headerless Full-Screen Stage | 100% full screen edge-to-edge active call stage without header bar | M9 | ORIGINAL_REQUEST §R4 |
+| 41 | Workstation Ultra-Thin Draggable Dock Bar | Single-row horizontal bar (~36-38px) with drag handle, labels, controls, zero inline video | M9 | ORIGINAL_REQUEST §R4 |
+| 42 | Call Exit Confirmation Dialog | confirm-end-call-dialog confirmation before disconnecting from full-screen or dock | M9 | ORIGINAL_REQUEST §R4 |
+| 43 | Workstation Native PiP & MediaSession | Native browser PiP with hidden persistent video element during docked transitions | M9 | ORIGINAL_REQUEST §R4 |
+| 44 | Workstation Guest Invite & Status Hydration | createTeleconsultGuestInvite integration, patient link copy, and real clinician names | M9 | ORIGINAL_REQUEST §R4 |
+| 45 | Patient App Teleconsult Polling & Admission | Poll call status, admit patient when ready, and wire CallStage | M10 | ORIGINAL_REQUEST §R5 |
+| 46 | Portal Web Guest Call Session & Stage | Wire useCallSession, CallStage, video/audio tracks, native PiP, fix T3.2 YAKAP test | M10 | ORIGINAL_REQUEST §R5 |
+| 47 | End-to-End Test Suite & Forensic Audit | Pass all 10 verification test suites and forensic integrity audit | M11 | ORIGINAL_REQUEST Acceptance |
+
+## Milestones
+| # | Name | Scope | Dependencies | Status |
+|---|------|-------|-------------|--------|
+| 1 | Shared Interop & Facility Settings | `packages/shared-dotnet` event & `services/clinic-api` settings DTO/query/command | none | DONE (gate PASS) |
+| 2 | Appointment & Payment Policy Management | `services/clinic-api` appointment creation, queries, cashiering, policy update, plain-note override | M1 | DONE (gate PASS) |
+| 3 | Media Signaling & Vault Recording Encryption | `services/clinic-api` join/end call, zero-PHI tokens, CMK AES-256-GCM encryption with .key sidecars, HMAC tickets, retention sweeper, DI | M2 | DONE (gate PASS) |
+| 4 | Workspace Communications & Media SDK | `packages/comms-sdk` livekit-client, adapters, useCallSession, CallWaitingRoom, CallStage native/web | none | DONE (gate PASS) |
+| 5 | Clinic Workstation App Integration | `apps/clinic-app` clinicService, ClinicCommsContext, TeleconsultWaitingRoomModal, ScheduleVisitModal, AppointmentInspectionModal, TeleconsultSettingsCard, ClinicRecordingPlayerModal | M3, M4 | DONE (gate PASS) |
+| 6 | Initial Final Verification & Hardening | Initial 6-milestone verification | M5 | DONE (gate PASS) |
+| 7 | Backend Services & Deployment Infrastructure | `deploy/`, `.github/workflows/`, `services/media-broker`, `packages/shared-dotnet`, `services/clinic-api`, `services/portal-api`, `services/patient-api` | none | DONE (a9c32e48: 3,227 backend tests pass, auditor CLEAN, gate PASS) |
+| 8 | Communications SDK Adaptations & Plain Copy | `packages/comms-sdk`: portrait preview, centered toolbar, dock/PiP buttons, plain copy, participant naming | none | DONE (fe4c8bb2: 473 tests pass, 0 typecheck/lint/token errors, gate PASS) |
+| 9 | Clinic Workstation UI/UX & Native PiP | `apps/clinic-app`: full-screen stage, ultra-thin draggable dock (~36-38px), confirm-end-call-dialog, native PiP with persistent video, guest invite | M7, M8 | DONE (e5ea12eb: 226 tests pass, 0 typecheck/lint/token errors, gate PASS) |
+| 10 | Patient App & Browser Guest Portal Video | `apps/patient-app`: call polling & admission; `apps/portal-web`: wire useCallSession & CallStage, fix T3.2 YAKAP test, native PiP | M7, M8 | DONE (cade03de: all tests pass, 0 token errors, auditor CLEAN, gate PASS) |
+| 11 | Final End-to-End Verification & Audit | All 10 acceptance verification suites, adversarial checks, forensic integrity audit | M9, M10 | DONE (caf09ff8: 10/10 suites pass, 3,092 tests pass, auditor CLEAN, gate PASS) |
+
+## Interface Contracts
+### `packages/shared-dotnet` <-> Backend Services
+- `CommsCallStateChangedPayload`: `Guid CallId`, `Guid? ConversationId`, `string TenantId`, `string FacilityId`, `CallKind Kind`, `string Status`, `string? RoomName`, `string? JoinToken`, `int StateVersion`, `DateTime ChangedAtUtc`, `string? RelayUrl = null`.
+- `GuestTeleconsultInviteIssuedPayload`: `Guid AppointmentId`, `Guid CallId`, `string TenantId`, `string FacilityId`, `string InviteTokenHash`, `string ExpectedDobHash`, `string OtpHash`, `DateTime ExpiresAtUtc`, `DateTime IssuedAtUtc`.
+- `InteropTypes`: `GuestTeleconsultInviteIssued = "portal.teleconsult.guest_invite_issued"`.
+
+### `services/clinic-api` <-> `services/patient-api` & `services/portal-api`
+- Clinic API publishes `CommsCallStateChangedPayload` to `Party.ForPatient(appointment.PatientId.ToString())` with `RelayUrl` and `JoinToken` (patient token).
+- Clinic API publishes `GuestTeleconsultInviteIssuedPayload` to `Party.Portal`.
+- Portal API consumes `GuestTeleconsultInviteIssued` via `GuestTeleconsultInviteIssuedHandler` to register pre-hashed guest credentials.
+- Patient API consumes `CommsCallStateChanged` via `CommsCallStateChangedInteropHandler` and relays via SignalR with `relayUrl`.
+- Patient API exposes `GET /api/v1/patient/teleconsult/calls/{callId}` returning `{ callId, status, roomName, relayUrl, joinToken }`.
+
+### `services/clinic-api` <-> `apps/clinic-app`
+- `POST /api/v1/teleconsult/appointments/{appointmentId}/guest-invite` -> returns `{ inviteToken, inviteUrl, otp, expiresAtUtc }`.
+
+### `packages/comms-sdk` <-> Applications
+- `CallWaitingRoomProps`: `videoOrientation?: 'portrait' | 'landscape'`, `onToggleOrientation?: () => void`, `patientLink?: string`, `onSharePatientLink?: () => void | Promise<void>`, `isCameraEnabled`, `isMicEnabled`, `onToggleCamera`, `onToggleMic`, `micLevel`.
+- `CallStageProps`: `videoOrientation?: 'portrait' | 'landscape'`, `onToggleOrientation?: () => void`, `patientLink?: string`, `onSharePatientLink?: () => void | Promise<void>`, `onDockCall?: () => void | Promise<void>`, `onTogglePip?: () => void | Promise<void>`, `isPipSupported?: boolean`, `isPipActive?: boolean`, `hideHeader?: boolean`, `renderIcon?: (icon: CommsCallIconName) => React.ReactNode`.

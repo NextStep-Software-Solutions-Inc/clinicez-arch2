@@ -21,7 +21,7 @@ public class ConversationConfiguration : IEntityTypeConfiguration<Conversation>
         builder.Property(c => c.ContextType).HasMaxLength(64);
         builder.Property(c => c.ContextId).HasMaxLength(128);
 
-        builder.Property(c => c.Title).IsRequired().HasMaxLength(200);
+        builder.Property(c => c.Title).IsRequired(false).HasMaxLength(200);
         builder.Property(c => c.Category).HasConversion<string>().HasMaxLength(32);
 
         builder.Property(c => c.Status).HasConversion<string>().HasMaxLength(32).IsRequired();

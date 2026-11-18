@@ -26,7 +26,23 @@ public sealed record GuestTeleconsultVerifyResponse(
     [property: JsonPropertyName("guestToken")] string? GuestToken,
     [property: JsonPropertyName("remainingAttempts")] int RemainingAttempts,
     [property: JsonPropertyName("message")] string? Message,
-    [property: JsonPropertyName("errorCode")] string? ErrorCode);
+    [property: JsonPropertyName("errorCode")] string? ErrorCode,
+    [property: JsonPropertyName("guestDisplayName")] string? GuestDisplayName = null,
+    [property: JsonPropertyName("clinicName")] string? ClinicName = null,
+    [property: JsonPropertyName("clinicSupportPhone")] string? ClinicSupportPhone = null,
+    [property: JsonPropertyName("clinicianName")] string? ClinicianName = null,
+    [property: JsonPropertyName("scheduledAtUtc")] DateTime? ScheduledAtUtc = null);
+
+public sealed record GuestTeleconsultStatusResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("isEnded")] bool IsEnded,
+    [property: JsonPropertyName("isExpired")] bool IsExpired,
+    [property: JsonPropertyName("isLockedOut")] bool IsLockedOut,
+    [property: JsonPropertyName("expiresAtUtc")] DateTime? ExpiresAtUtc,
+    [property: JsonPropertyName("clinicName")] string? ClinicName = null,
+    [property: JsonPropertyName("clinicSupportPhone")] string? ClinicSupportPhone = null,
+    [property: JsonPropertyName("clinicianName")] string? ClinicianName = null,
+    [property: JsonPropertyName("scheduledAtUtc")] DateTime? ScheduledAtUtc = null);
 
 public sealed class PublicGuestTeleconsultEndpoints : IEndpoint
 {
@@ -55,6 +71,91 @@ public sealed class PublicGuestTeleconsultEndpoints : IEndpoint
                 .Produces<ApiResponse<GuestTeleconsultVerifyResponse>>(StatusCodes.Status410Gone)
                 .Produces<ApiResponse<GuestTeleconsultVerifyResponse>>(StatusCodes.Status423Locked);
         }
+
+        (string Route, string Name)[] statusRoutes =
+        [
+            ("/portal/guest/teleconsult/status", "GetGuestTeleconsultStatus"),
+            ("/public/guest/teleconsult/status", "GetPublicGuestTeleconsultStatus"),
+            ("/guest/status", "GetGuestStatus")
+        ];
+
+        foreach (var (route, name) in statusRoutes)
+        {
+            app.MapGet(route, HandleStatusAsync)
+                .AllowAnonymous()
+                .WithName(name)
+                .WithSummary("Check zero-PHI teleconsultation guest status")
+                .WithDescription("Preflight zero-PHI status check for guest teleconsultation invite links.")
+                .WithTags("GuestTeleconsult")
+                .Produces<ApiResponse<GuestTeleconsultStatusResponse>>(StatusCodes.Status200OK)
+                .Produces<ApiResponse<GuestTeleconsultStatusResponse>>(StatusCodes.Status400BadRequest)
+                .Produces<ApiResponse<GuestTeleconsultStatusResponse>>(StatusCodes.Status404NotFound)
+                .Produces<ApiResponse<GuestTeleconsultStatusResponse>>(StatusCodes.Status410Gone)
+                .Produces<ApiResponse<GuestTeleconsultStatusResponse>>(StatusCodes.Status423Locked);
+        }
+    }
+
+    public static IResult HandleStatusAsync(
+        [FromQuery(Name = "inviteToken")] string? inviteToken,
+        IGuestVerificationService verificationService,
+        [FromQuery(Name = "token")] string? token = null)
+    {
+        var effectiveToken = string.IsNullOrWhiteSpace(inviteToken) ? token : inviteToken;
+        if (string.IsNullOrWhiteSpace(effectiveToken))
+        {
+            return Results.BadRequest(
+                ApiResponse<GuestTeleconsultStatusResponse>.Fail("Invite token is required.", [], "EMPTY_TOKEN"));
+        }
+
+        var cleanToken = effectiveToken.Trim().ToLowerInvariant();
+        if (cleanToken.StartsWith("rx-") || cleanToken.StartsWith("mc-") || cleanToken.StartsWith("ref-") || cleanToken.StartsWith("lab-") || cleanToken.StartsWith("sec-sha256-") ||
+            (cleanToken.Length == 65 && cleanToken[32] == '.') ||
+            (cleanToken.Length >= 50 && cleanToken.Length <= 60 && cleanToken.IndexOf('.') == 32))
+        {
+            return Results.BadRequest(
+                ApiResponse<GuestTeleconsultStatusResponse>.Fail("The provided token is for a clinical document, not a teleconsultation invitation.", [], "DOCUMENT_KIND_MISMATCH"));
+        }
+
+        var invite = verificationService.GetInviteByToken(effectiveToken);
+        if (invite is null)
+        {
+            return Results.NotFound(
+                ApiResponse<GuestTeleconsultStatusResponse>.Fail("No teleconsultation found for this link.", [], "GUEST_INVITE_NOT_FOUND"));
+        }
+
+        if (invite.IsRevoked)
+        {
+            return Results.Json(
+                ApiResponse<GuestTeleconsultStatusResponse>.Fail("This teleconsultation has been ended by the attending clinician.", [], "GUEST_CONSULTATION_ENDED"),
+                statusCode: StatusCodes.Status410Gone);
+        }
+
+        if (invite.IsLockedOut || invite.AttemptCount >= 5)
+        {
+            return Results.Json(
+                ApiResponse<GuestTeleconsultStatusResponse>.Fail("This link is permanently locked after 5 failed verification attempts.", [], "GUEST_INVITE_LOCKED_OUT"),
+                statusCode: StatusCodes.Status423Locked);
+        }
+
+        if (DateTime.UtcNow > invite.ExpiresAtUtc)
+        {
+            return Results.Json(
+                ApiResponse<GuestTeleconsultStatusResponse>.Fail("This teleconsultation link has expired.", [], "GUEST_INVITE_EXPIRED"),
+                statusCode: StatusCodes.Status410Gone);
+        }
+
+        var response = new GuestTeleconsultStatusResponse(
+            Status: "Active",
+            IsEnded: false,
+            IsExpired: false,
+            IsLockedOut: false,
+            ExpiresAtUtc: invite.ExpiresAtUtc,
+            ClinicName: invite.ClinicName,
+            ClinicSupportPhone: invite.ClinicSupportPhone,
+            ClinicianName: invite.ClinicianName,
+            ScheduledAtUtc: invite.ScheduledAtUtc);
+
+        return Results.Ok(ApiResponse<GuestTeleconsultStatusResponse>.Success(response));
     }
 
     public static async Task<IResult> HandleAsync(
@@ -85,7 +186,12 @@ public sealed class PublicGuestTeleconsultEndpoints : IEndpoint
                 GuestToken: result.GuestToken,
                 RemainingAttempts: result.RemainingAttempts,
                 Message: "Verification successful.",
-                ErrorCode: null);
+                ErrorCode: null,
+                GuestDisplayName: result.GuestDisplayName,
+                ClinicName: result.ClinicName,
+                ClinicSupportPhone: result.ClinicSupportPhone,
+                ClinicianName: result.ClinicianName,
+                ScheduledAtUtc: result.ScheduledAtUtc);
 
             return Results.Ok(ApiResponse<GuestTeleconsultVerifyResponse>.Success(response));
         }
@@ -101,6 +207,13 @@ public sealed class PublicGuestTeleconsultEndpoints : IEndpoint
             ErrorCode: result.ErrorCode);
 
         // Map error conditions to specific HTTP status codes per specification
+        if (result.ErrorCode == "GUEST_CONSULTATION_ENDED")
+        {
+            return Results.Json(
+                ApiResponse<GuestTeleconsultVerifyResponse>.Fail(result.ErrorMessage ?? "Consultation ended.", [], "GUEST_CONSULTATION_ENDED"),
+                statusCode: StatusCodes.Status410Gone);
+        }
+
         if (result.IsLockedOut || result.ErrorCode == "GUEST_INVITE_LOCKED_OUT")
         {
             return Results.Json(

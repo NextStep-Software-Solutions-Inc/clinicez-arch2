@@ -18,6 +18,7 @@ export interface EodReconciliationSettingsCardProps {
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
   showSkeletons?: boolean;
   onForceEodSuccess?: () => void;
+  draftEodTime?: string;
 }
 
 export default function EodReconciliationSettingsCard({
@@ -25,9 +26,14 @@ export default function EodReconciliationSettingsCard({
   onSettingsUpdated,
   showSkeletons = false,
   onForceEodSuccess,
+  draftEodTime,
 }: EodReconciliationSettingsCardProps) {
-  const [autoEodEnabled, setAutoEodEnabled] = useState<boolean>(true);
-  const [eodTime, setEodTime] = useState<string>('21:00');
+  const [autoEodEnabled, setAutoEodEnabled] = useState<boolean>(
+    settings?.autoEodEnabled ?? true
+  );
+  const [eodTime, setEodTime] = useState<string>(
+    draftEodTime !== undefined ? draftEodTime : settings?.eodReconciliationTime || '21:00'
+  );
   const eodTimeRef = useRef(eodTime);
   eodTimeRef.current = eodTime;
   const [timeError, setTimeError] = useState<string | undefined>(undefined);
@@ -97,6 +103,11 @@ export default function EodReconciliationSettingsCard({
     }
   };
 
+  const origAutoEod = settings?.autoEodEnabled ?? true;
+  const origEodTime = settings?.eodReconciliationTime || '21:00';
+  const isDirty =
+    Boolean(settings) && (autoEodEnabled !== origAutoEod || eodTime !== origEodTime);
+
   return (
     <Card>
       <CardHeader
@@ -145,16 +156,18 @@ export default function EodReconciliationSettingsCard({
                 />
               </View>
 
-              <View style={styles.saveActionCol}>
-                <Button
-                  title="Save EOD Schedule"
-                  variant="primary"
-                  icon="check"
-                  onPress={handleSaveEodSchedule}
-                  loading={saving}
-                  disabled={Boolean(timeError) || !eodTime?.trim() || saving}
-                />
-              </View>
+              {isDirty || saving ? (
+                <View style={styles.saveActionCol}>
+                  <Button
+                    title="Save EOD Schedule"
+                    variant="primary"
+                    icon="check"
+                    onPress={handleSaveEodSchedule}
+                    loading={saving}
+                    disabled={Boolean(timeError) || !eodTime?.trim() || saving}
+                  />
+                </View>
+              ) : null}
             </View>
 
             {/* Invariant & Manual Trigger Section */}

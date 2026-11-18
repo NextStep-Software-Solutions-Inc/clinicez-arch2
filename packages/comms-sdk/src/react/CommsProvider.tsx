@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SignalRConnectionManager } from '../core/connection/SignalRConnectionManager';
+import { ClientMessageQueue } from '../core/queue/ClientMessageQueue';
 import { ICommsClient } from '../core/types';
 import { CommsContext, InternalCommsContextValue } from './CommsContext';
 import { OptimisticStore } from './internal/OptimisticStore';
@@ -66,6 +67,40 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
     });
   }, [baseUrl, externalClient, ticketProvider]);
 
+  const messageQueue = useMemo<ClientMessageQueue>(() => {
+    return new ClientMessageQueue(client);
+  }, [client]);
+
+  useEffect(() => {
+    messageQueue.attach();
+    const unsubQueue = messageQueue.subscribe({
+      onMessageSent: (queued, serverMsg) => {
+        const normalized = serverMsg.clientMessageId
+          ? serverMsg
+          : { ...serverMsg, clientMessageId: queued.clientMessageId };
+        storeRef.current.appendMessage(normalized);
+        if (normalized.clientMessageId) {
+          storeRef.current.updatePendingState(
+            normalized.clientMessageId,
+            normalized.deliveryState ?? 'Waiting'
+          );
+        }
+      },
+      onMessageFailed: (queued, err) => {
+        storeRef.current.updatePendingState(queued.clientMessageId, 'NotReceived', err.message);
+        storeRef.current.updateMessageState(
+          `opt-${queued.clientMessageId}`,
+          queued.conversationId,
+          'NotReceived'
+        );
+      }
+    });
+    return () => {
+      unsubQueue();
+      messageQueue.dispose();
+    };
+  }, [messageQueue]);
+
   const connect = useCallback(async (): Promise<void> => {
     try {
       setConnectionState((prev) => ({ ...prev, status: 'connecting', error: null }));
@@ -92,15 +127,54 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
   }, [client]);
 
   const reconnect = useCallback(async (): Promise<void> => {
-    await disconnect();
-    await connect();
-  }, [connect, disconnect]);
+    try {
+      if (typeof client.reconnect === 'function') {
+        await client.reconnect();
+      } else {
+        await disconnect();
+        await connect();
+      }
+    } catch (err: any) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      setConnectionState((prev) => ({
+        ...prev,
+        status: 'failed',
+        error,
+        lastDisconnectedAt: new Date()
+      }));
+      throw error;
+    }
+  }, [client, connect, disconnect]);
 
   const refreshTicket = useCallback(async (): Promise<CommsTicketResponse> => {
     const resp = await ticketProviderRef.current();
     setActiveTicket(resp);
     return resp;
   }, []);
+
+  const autoReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef<number>(0);
+
+  const clearAutoReconnectTimer = useCallback(() => {
+    if (autoReconnectTimerRef.current) {
+      clearTimeout(autoReconnectTimerRef.current);
+      autoReconnectTimerRef.current = null;
+    }
+  }, []);
+
+  const triggerAutoReconnect = useCallback((delayMs?: number) => {
+    if (options?.autoConnect === false) return;
+    clearAutoReconnectTimer();
+
+    const attempt = reconnectAttemptRef.current;
+    const computedDelay = delayMs ?? Math.min(10000, Math.round(1500 * Math.pow(2, attempt)));
+    reconnectAttemptRef.current = attempt + 1;
+
+    autoReconnectTimerRef.current = setTimeout(() => {
+      autoReconnectTimerRef.current = null;
+      reconnect().catch(() => {});
+    }, computedDelay);
+  }, [clearAutoReconnectTimer, options?.autoConnect, reconnect]);
 
   useEffect(() => {
     const unsubState = client.events.on('connectionStateChanged', (state, error) => {
@@ -118,6 +192,19 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
         lastDisconnectedAt: state === 'Disconnected' ? new Date() : prev.lastDisconnectedAt,
         reconnectAttempt: state === 'Reconnecting' ? prev.reconnectAttempt + 1 : state === 'Connected' ? 0 : prev.reconnectAttempt
       }));
+
+      // Unified auto-recovery using the identical reconnect flow
+      if (options?.autoConnect !== false) {
+        if (state === 'Disconnected') {
+          triggerAutoReconnect();
+        } else if (state === 'Reconnecting') {
+          // If SignalR's internal reconnection doesn't resolve in 15s, trigger unified reconnect
+          triggerAutoReconnect(15000);
+        } else if (state === 'Connected') {
+          clearAutoReconnectTimer();
+          reconnectAttemptRef.current = 0;
+        }
+      }
     });
 
     const unsubTicket = client.events.on('ticketRenewed', (rawTicket) => {
@@ -136,12 +223,49 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
     });
 
     return () => {
+      clearAutoReconnectTimer();
       unsubState();
       unsubTicket();
       unsubMsg();
       unsubMsgState();
     };
-  }, [client]);
+  }, [client, clearAutoReconnectTimer, triggerAutoReconnect, options?.autoConnect]);
+
+  // Window/tab visibility and focus listener: automatically recover stalled/idle socket connections on wake
+  useEffect(() => {
+    if (options?.autoConnect === false) return;
+
+    const checkAndRecoverConnection = () => {
+      const state = client.getConnectionState();
+      if (state !== 'Connected') {
+        clearAutoReconnectTimer();
+        reconnect().catch(() => {});
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          checkAndRecoverConnection();
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      const handleFocus = () => {
+        checkAndRecoverConnection();
+      };
+      if (typeof window !== 'undefined') {
+        window.addEventListener('focus', handleFocus);
+      }
+
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        if (typeof window !== 'undefined') {
+          window.removeEventListener('focus', handleFocus);
+        }
+      };
+    }
+  }, [client, clearAutoReconnectTimer, reconnect, options?.autoConnect]);
 
   // Auto-connect
   useEffect(() => {
@@ -166,15 +290,18 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
       branchId,
       staffId,
       staffDisplayName,
+      baseUrl,
       connect,
       disconnect,
       reconnect,
       refreshTicket,
       store: storeRef.current,
-      subscriptionTracker: trackerRef.current
+      subscriptionTracker: trackerRef.current,
+      messageQueue
     }),
     [
       client,
+      messageQueue,
       connectionState,
       activeTicket,
       tenantId,
@@ -182,6 +309,7 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
       branchId,
       staffId,
       staffDisplayName,
+      baseUrl,
       connect,
       disconnect,
       reconnect,

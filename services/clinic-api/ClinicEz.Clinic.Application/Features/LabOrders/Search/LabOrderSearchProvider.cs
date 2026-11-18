@@ -40,7 +40,7 @@ public sealed class LabOrderSearchProvider : ISearchProvider
         var term = query.Trim().ToLowerInvariant();
         var boundedLimit = limit <= 0 ? 10 : Math.Min(limit, 50);
 
-        var orders = await _labOrderRepo.Query(e => !e.IsDeleted && e.ClinicId == tenantId, ignoreQueryFilters: true)
+        var orders = await _labOrderRepo.Query(e => !e.IsDeleted && e.IsSigned && e.ClinicId == tenantId, ignoreQueryFilters: true)
             .Include(o => o.Items)
             .AsNoTracking()
             .Where(o =>

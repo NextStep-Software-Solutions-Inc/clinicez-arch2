@@ -1,9 +1,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { CommsProvider } from '@clinicez/comms-sdk/react';
 import type { CommsTicketResponse } from '@clinicez/comms-sdk/react';
-import { resolveServiceApiUrl } from '@shared/safe';
 import { pharmacyApiClient } from '../services/apiClient';
-import { getPharmacyApiBaseUrl } from '../services/runtimeConfig';
 import { useAuth } from '../components/AuthGate';
 
 export interface PharmacyCommsContextValue {
@@ -27,22 +25,11 @@ const PharmacyCommsContext = createContext<PharmacyCommsContextValue>({
 export const usePharmacyComms = () => useContext(PharmacyCommsContext);
 
 export function getCommsApiBaseUrl(): string {
-  if (process.env.EXPO_PUBLIC_COMMS_API_URL) {
-    return process.env.EXPO_PUBLIC_COMMS_API_URL.replace(/\/+$/, '');
+  const commsUrl = process.env.EXPO_PUBLIC_COMMS_API_URL;
+  if (commsUrl && commsUrl.trim()) {
+    return commsUrl.trim().replace(/\/+$/, '');
   }
-  const apiBase = getPharmacyApiBaseUrl();
-  try {
-    const url = new URL(apiBase);
-    url.pathname = '';
-    if (url.port === '5245' || url.port === '5240' || url.port === '5242' || url.port === '5243' || url.port === '5310') {
-      url.port = '5247';
-      return url.origin;
-    }
-    return `${url.protocol}//comms.${url.host}`;
-  } catch {
-    // fallback
-  }
-  return resolveServiceApiUrl({ fallbackPort: 5247 });
+  throw new Error('EXPO_PUBLIC_COMMS_API_URL is required and must be configured in environment variables.');
 }
 
 export function PharmacyCommsProvider({ children }: { children: React.ReactNode }) {

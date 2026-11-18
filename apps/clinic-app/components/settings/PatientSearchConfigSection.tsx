@@ -120,19 +120,25 @@ export default function PatientSearchConfigSection({
     },
   };
 
+  const savedKeys = parseConfiguredSearchFields(settings?.patientSearchDisplayFieldsJson);
+  const isDirty =
+    Boolean(settings) && JSON.stringify(selectedKeys) !== JSON.stringify(savedKeys);
+
   return (
     <Card>
       <CardHeader
         title="Patient Search Result Display"
         subtitle="Configure which patient demographic and metadata fields appear when searching patients across the clinic workstation"
         rightAction={
-          <Button
-            title="Save Search Fields"
-            variant="primary"
-            size="sm"
-            loading={saving}
-            onPress={handleSaveConfig}
-          />
+          isDirty || saving ? (
+            <Button
+              title="Save Search Fields"
+              variant="primary"
+              size="sm"
+              loading={saving}
+              onPress={handleSaveConfig}
+            />
+          ) : undefined
         }
       />
       <CardContent>

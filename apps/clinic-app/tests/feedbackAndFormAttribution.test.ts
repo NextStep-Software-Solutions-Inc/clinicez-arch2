@@ -77,7 +77,11 @@ const {
   subscribeFeedback,
 } = await import('../utils/feedback');
 
-const { default: FeedbackHost } = await import('../components/ui/FeedbackHost');
+const { default: FeedbackHost, Toast: ReExportedToast, getToastStyle: reExportedGetToastStyle } = await import('../components/ui/FeedbackHost');
+const { default: Toast, getToastStyle } = await import('../components/ui/Toast');
+const { Toast: BarrelToast, getToastStyle: barrelGetToastStyle } = await import('../components/ui');
+const { theme, syncActiveTheme } = await import('../constants/theme');
+const { DEFAULT_CLINIC_BRAND_COLOR, deriveBrandPalette } = await import('../constants/color');
 const { ApiError } = await import('@shared/safe');
 const { EditPatientModal } = await import('../components/patient/EditPatientModal');
 const { clinicService } = await import('../services/clinicService');
@@ -306,5 +310,69 @@ describe('Task 3 & 4: Form Field Error Attribution with ApiError', () => {
     expect(state.toasts).toHaveLength(2);
     expect(state.toasts[1].kind).toBe('success');
     expect(state.toasts[1].message).toContain('Encounter signed by Dr. Jose Rizal');
+  });
+});
+
+describe('Task 5: Unified Brand-Responsive <Toast /> & FeedbackHost Live Theme Cohesion', () => {
+  beforeEach(() => {
+    resetFeedbackState();
+    syncActiveTheme({
+      brandColorHex: DEFAULT_CLINIC_BRAND_COLOR,
+      userBrandColorHex: null,
+      scheme: 'light',
+    });
+  });
+
+  test('5.1 Toast and getToastStyle are exported from components/ui/Toast, FeedbackHost, and components/ui barrel', () => {
+    expect(Toast).toBeDefined();
+    expect(ReExportedToast).toBe(Toast);
+    expect(BarrelToast).toBe(Toast);
+    expect(reExportedGetToastStyle).toBe(getToastStyle);
+    expect(barrelGetToastStyle).toBe(getToastStyle);
+  });
+
+  test('5.2 success and info toasts dynamically respond to Clinic Brand Color, Personal Accent Color, and Dark Mode while warning/error keep clinical semantics', () => {
+    // 1. Clinic Brand Color: Rose (#E11D48)
+    syncActiveTheme({ brandColorHex: '#E11D48', scheme: 'light' });
+    const roseLight = deriveBrandPalette('#E11D48', 'light');
+
+    const successRose = getToastStyle('success');
+    expect(successRose.icon).toBe('checkCircle');
+    expect(successRose.color).toBe(roseLight.primaryDark);
+    expect(successRose.accent).toBe(roseLight.primary);
+    expect(successRose.bg).toBe(roseLight.primaryLight);
+    expect(successRose.border).toBe(roseLight.primaryBorder);
+    expect(successRose.shadow).toEqual(theme.shadows.brandMd);
+
+    const infoRose = getToastStyle('info');
+    expect(infoRose.icon).toBe('info');
+    expect(infoRose.color).toBe(roseLight.primaryDark);
+    expect(infoRose.accent).toBe(roseLight.primary);
+    expect(infoRose.bg).toBe(roseLight.primaryLight);
+    expect(infoRose.border).toBe(roseLight.primaryBorder);
+    expect(infoRose.shadow).toEqual(theme.shadows.brandMd);
+
+    // 2. Personal Accent Color Override: Purple (#7C3AED)
+    syncActiveTheme({ userBrandColorHex: '#7C3AED', scheme: 'light' });
+    const purpleLight = deriveBrandPalette('#7C3AED', 'light');
+    expect(getToastStyle('success').accent).toBe('#7C3AED');
+    expect(getToastStyle('success').bg).toBe(purpleLight.primaryLight);
+    expect(getToastStyle('info').accent).toBe('#7C3AED');
+    expect(getToastStyle('info').shadow.shadowColor).toBe('rgba(124, 58, 237, 0.46)');
+
+    // 3. Dark Mode updates brand palette & shadow while preserving semantic warning/error
+    syncActiveTheme({ scheme: 'dark' });
+    const purpleDark = deriveBrandPalette('#7C3AED', 'dark');
+    expect(getToastStyle('success').bg).toBe(purpleDark.primaryLight);
+    expect(getToastStyle('warning').accent).toBe(theme.colors.warning);
+    expect(getToastStyle('warning').shadow).toEqual(theme.shadows.md);
+    expect(getToastStyle('error').accent).toBe(theme.colors.emergency);
+    expect(getToastStyle('error').shadow).toEqual(theme.shadows.dangerMd);
+
+    syncActiveTheme({
+      brandColorHex: DEFAULT_CLINIC_BRAND_COLOR,
+      userBrandColorHex: null,
+      scheme: 'light',
+    });
   });
 });

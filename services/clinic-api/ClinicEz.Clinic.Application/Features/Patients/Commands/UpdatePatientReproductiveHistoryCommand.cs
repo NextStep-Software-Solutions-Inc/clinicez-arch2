@@ -159,6 +159,7 @@ public sealed class UpdatePatientReproductiveHistoryCommandHandler : IRequestHan
             entry.DeliveryType,
             entry.HadPreEclampsiaHypertension,
             entry.ReceivedFamilyPlanningCounseling,
-            entry.Remarks);
+            entry.Remarks,
+            entry.UpdatedAt ?? entry.CreatedAt);
     }
 }

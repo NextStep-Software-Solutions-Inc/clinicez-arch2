@@ -7,6 +7,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Alert, notify } from '@utils/feedback';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import {
   ThemedText,
   Badge,
@@ -19,10 +20,12 @@ import {
   EmptyState,
   ErrorState,
   SkeletonList,
+  formatPhilHealthPin,
 } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useClinic } from '../../context/ClinicContext';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   clinicService,
   GamotBeneficiaryLedger,
@@ -46,11 +49,31 @@ function formatPeso(value: number): string {
   return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function YakapScreen() {
+export default function YakapScreen({
+  route: routeProp,
+}: { route?: { params?: { tab?: string } } } = {}) {
+  const navigation = useNavigation<any>();
+  let hookRoute: any = null;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    hookRoute = useRoute<any>();
+  } catch {
+    // ignore
+  }
+  const routeParams = routeProp?.params ?? hookRoute?.params;
   const { accreditationNumber } = useClinic();
 
   // Active point-of-care tab
-  const [activeTab, setActiveTab] = useState<YakapTab>('pin-checker');
+  const [activeTab, setActiveTab] = usePersistedTab<YakapTab>({
+    storageKey: 'clinicez_yakap_active_tab',
+    allowedValues: ['pin-checker', 'gamot', 'masterlist'],
+    defaultValue: 'pin-checker',
+    routeParam: routeParams?.tab,
+    queryParam: 'tab',
+    queryParamAliases: ['section'],
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('yakap'),
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // GAMOT Ledger Tab State
@@ -235,9 +258,11 @@ export default function YakapScreen() {
             placeholder="XX-XXXXXXXXX-X"
             value={pinToCheck}
             onChangeText={(val) => {
-              setPinToCheck(val);
+              setPinToCheck(formatPhilHealthPin(val));
               setPinValidationResult(null);
             }}
+            keyboardType="numeric"
+            maxLength={14}
             autoCapitalize="none"
           />
         </View>
@@ -285,9 +310,11 @@ export default function YakapScreen() {
         <View style={styles.inputRow}>
           <View style={styles.flexFill}>
             <Input
-              placeholder="Enter 12-digit PhilHealth PIN"
+              placeholder="XX-XXXXXXXXX-X"
               value={searchPin}
-              onChangeText={setSearchPin}
+              onChangeText={(val) => setSearchPin(formatPhilHealthPin(val))}
+              keyboardType="numeric"
+              maxLength={14}
               onSubmitEditing={handleSearchLedger}
             />
           </View>
@@ -659,6 +686,7 @@ const styles = StyleSheet.create({
   },
   tabButtonActive: {
     borderBottomColor: theme.colors.primary,
+    ...theme.shadows.brandSubtle,
   },
   tabBody: {
     gap: theme.spacing.lg,

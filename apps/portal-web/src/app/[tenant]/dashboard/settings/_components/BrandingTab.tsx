@@ -13,7 +13,7 @@ import { HEX_COLOR, bestTextContrast, isUsableAccent, readableForeground, MIN_AC
 
 const PRESETS = [
     { color: "#0D6963", label: "Teal (default)" },
-    { color: "#0284C7", label: "Sky Blue" },
+    { color: "#0284C8", label: "Sky Blue" },
     { color: "#059669", label: "Emerald" },
     { color: "#4F46E5", label: "Indigo" },
     { color: "#E11D48", label: "Rose" },
@@ -156,7 +156,7 @@ export function BrandingTab({ tenantSlug, workspaceName, branding, onSaved }: Br
                                     </button>
                                 )}
                             </div>
-                            {!accentValidShape && <p className="text-[11px] text-rose-600">Use a hex color like #0284C7.</p>}
+                            {!accentValidShape && <p className="text-[11px] text-rose-600">Use a hex color like #0284C8.</p>}
                             {accentValidShape && !accentUsable && (
                                 <p className="text-[11px] text-rose-600">
                                     This color is too light to keep button text readable (contrast {bestTextContrast(accentTrimmed).toFixed(1)}:1, needs at least {MIN_ACCENT_CONTRAST}:1). Pick a stronger color.

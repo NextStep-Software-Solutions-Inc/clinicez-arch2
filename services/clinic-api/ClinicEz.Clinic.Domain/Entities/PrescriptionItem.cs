@@ -1,5 +1,6 @@
 using System;
 using ClinicEz.Clinic.Domain.Common;
+using ClinicEz.Clinic.Domain.Enums;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
@@ -57,4 +58,11 @@ public sealed class PrescriptionItem : ClinicScopedEntity
     // Preserved for pharmacy interoperability
     public bool IsGamotCovered { get; set; } = false;
     public string? UniquePrescriptionSecurityCode { get; set; }
+
+    // Non-pharmacy in-clinic starter stock dispensing tracking (separate from external pharmacy dispense)
+    public bool IsClinicDispensed { get; set; } = false;
+    public int? ClinicDispensedQuantity { get; set; }
+    public DateTime? ClinicDispensedAt { get; set; }
+    public string? ClinicDispensedBy { get; set; }
+    public RosSystem? RosCategory { get; set; }
 }

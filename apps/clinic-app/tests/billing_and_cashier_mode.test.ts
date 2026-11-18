@@ -108,10 +108,11 @@ describe('Billing & Cashier Station Feature Suite', () => {
       expect(CASHIER_MODE_OPTIONS.map((o) => o.id)).toEqual(['ClinicDesk', 'CashierCounter']);
     });
 
-    test('1.2 Renders "Billing & Cashier Station" card with mode selection radios', () => {
-      const html = renderToStaticMarkup(
+    test('1.2 Renders "Billing & Cashier Station" card with mode selection radios and dirty-only Save button', () => {
+      const cleanHtml = renderToStaticMarkup(
         React.createElement(CashierStationSettingsCard, {
           cashierMode: 'ClinicDesk',
+          savedCashierMode: 'ClinicDesk',
           onChangeCashierMode: () => {},
           onSave: async () => {},
           saving: false,
@@ -119,12 +120,24 @@ describe('Billing & Cashier Station Feature Suite', () => {
         })
       );
 
-      expect(html).toContain('Billing &amp; Cashier Station');
-      expect(html).toContain('Clinic Desk Collection');
-      expect(html).toContain('Centralized Cashier Counter');
-      expect(html).toContain('Standalone / In-Clinic');
-      expect(html).toContain('Hospital / Multi-Department');
-      expect(html).toContain('Save billing station preferences');
+      expect(cleanHtml).toContain('Billing &amp; Cashier Station');
+      expect(cleanHtml).toContain('Clinic Desk Collection');
+      expect(cleanHtml).toContain('Centralized Cashier Counter');
+      expect(cleanHtml).toContain('Standalone / In-Clinic');
+      expect(cleanHtml).toContain('Hospital / Multi-Department');
+      expect(cleanHtml).not.toContain('Save billing station preferences');
+
+      const dirtyHtml = renderToStaticMarkup(
+        React.createElement(CashierStationSettingsCard, {
+          cashierMode: 'CashierCounter',
+          savedCashierMode: 'ClinicDesk',
+          onChangeCashierMode: () => {},
+          onSave: async () => {},
+          saving: false,
+          showSkeletons: false,
+        })
+      );
+      expect(dirtyHtml).toContain('Save billing station preferences');
     });
 
     test('1.3 Highlights CashierCounter when configured', () => {

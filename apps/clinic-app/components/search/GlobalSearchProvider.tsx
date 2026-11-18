@@ -167,6 +167,16 @@ export const SETTINGS_NAV_ITEMS: SearchItem[] = [
     targetRoute: 'Settings',
     routeParams: { tab: 'license' },
   },
+  {
+    id: 'setting-teleconsultation',
+    category: 'Settings',
+    title: 'Teleconsultation & Media Vault',
+    subtitle: 'Virtual video consultations, payment policy, consultation fee, recording retention, and consent',
+    badgeText: 'Teleconsult',
+    badgeVariant: 'routine',
+    targetRoute: 'Settings',
+    routeParams: { tab: 'teleconsultation' },
+  },
 ];
 
 export interface SearchNavigationResolution {

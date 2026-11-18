@@ -118,8 +118,11 @@ const {
   STATUTORY_MANAGEMENT_CODES,
 } = await import('../components/chart/NursingProceduresTab');
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 const {
-  PHILHEALTH_STATUTORY_VACCINES,
+  resolveCohortCategoryLabel,
 } = await import('../components/chart/StatutoryImmunizationsTab');
 
 const {
@@ -321,11 +324,30 @@ describe('Adversarial Critic & Stress Suite — Milestone M3 (Features 14, 15, 1
       expect(lookupStatutoryManagementCode('Nebulization Therapy with Salbutamol').code).toBe('X');
     });
 
-    test('All 4 PhilHealth statutory vaccine libraries are complete and non-empty', () => {
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immchild.length).toBe(13);
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immyoungw.length).toBe(2);
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immpregw.length).toBe(5);
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immelderly.length).toBe(2);
+    test('All 4 PhilHealth statutory vaccine seed libraries on backend are complete and non-empty', () => {
+      const loadSeedActiveVaccines = (lib: string) => {
+        const seedPath = join(
+          import.meta.dir,
+          '..',
+          '..',
+          '..',
+          'services',
+          'clinic-api',
+          'ClinicEz.Clinic.Infrastructure',
+          'PhilHealth',
+          'Catalog',
+          'Seed',
+          `${lib}.json`
+        );
+        const parsed = JSON.parse(readFileSync(seedPath, 'utf8'));
+        return parsed.items.filter((i: { code: string; isActive: boolean }) => i.isActive && i.code !== '999');
+      };
+
+      expect(loadSeedActiveVaccines('lib_immchild').length).toBe(13);
+      expect(loadSeedActiveVaccines('lib_immyoungw').length).toBe(2);
+      expect(loadSeedActiveVaccines('lib_immpregw').length).toBe(1);
+      expect(loadSeedActiveVaccines('lib_immelderly').length).toBe(2);
+      expect(resolveCohortCategoryLabel('OtherImm')).toBe('Adult / Other');
     });
 
     test('Chest X-ray statutory findings and observations tables are populated', () => {

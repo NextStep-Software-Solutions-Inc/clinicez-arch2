@@ -96,7 +96,16 @@ export default function PrescriptionSlipModal({
   const clinicContact = slip.clinicContact || letterhead.contact;
   const prescriberName = slip.doctorName || currentName;
 
+  const isDraftSlip = slip.dispenseStatus === 'Draft' || (!slip.consultationId && slip.prescriptionNumber === 'Draft');
+
   const handlePrint = async () => {
+    if (isDraftSlip) {
+      Alert.alert(
+        'Encounter not yet signed',
+        'Sign the consultation encounter first to generate and download the official prescription PDF.',
+      );
+      return;
+    }
     try {
       const isWetMode = printMode === 'wet';
       const url = slip.consultationId
@@ -115,28 +124,48 @@ export default function PrescriptionSlipModal({
     <Modal
       visible={visible}
       onClose={onClose}
-      title="Prescription slip"
+      title={isDraftSlip ? 'Prescription slip (Draft)' : 'Prescription slip'}
       maxWidth={640}
       maxHeight="95%"
       footer={
         <View style={styles.footerBar}>
-          <Button
-            title={printMode === 'wet' ? 'Download / print PDF (Wet)' : 'Download / print PDF'}
-            icon="print"
-            variant="outline"
-            onPress={handlePrint}
-          />
+          {isDraftSlip ? (
+            <Badge label="Sign consultation encounter to unlock official PDF" variant="warning" />
+          ) : (
+            <Button
+              title={printMode === 'wet' ? 'Download / print PDF (Wet)' : 'Download / print PDF'}
+              icon="print"
+              variant="outline"
+              onPress={handlePrint}
+            />
+          )}
           <Button title="Close" onPress={onClose} />
         </View>
       }
     >
+      {isDraftSlip ? (
+        <View style={styles.pdeaWarningBox} testID="prescription-slip-draft-banner">
+          <View style={styles.pdeaWarningHeader}>
+            <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+            <ThemedText variant="captionBold" color={theme.colors.warningText}>
+              Pending consultation encounter sign-off
+            </ThemedText>
+          </View>
+          <ThemedText variant="caption" color={theme.colors.warningText}>
+            This electronic prescription is still a draft and is not valid for dispensing until the physician signs the consultation encounter.
+          </ThemedText>
+        </View>
+      ) : null}
+
       {/* Print & Signing Mode Selector */}
       <View style={styles.printModeCard}>
         <View style={styles.printModeHeader}>
           <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
             Signature & Print Mode
           </ThemedText>
-          {printMode === 'wet' ? (
+          {isDraftSlip ? (
+            <Badge label="Draft — Unsigned" variant="warning" icon="clock" />
+          ) : printMode === 'wet' ? (
             <Badge label="Wet Signature (Pen)" variant="neutral" icon="pencil" />
           ) : (
             <Badge label="E-Signed PDF" variant="success" icon="check" />
@@ -302,57 +331,87 @@ export default function PrescriptionSlipModal({
         </View>
 
         {slip.items && slip.items.length > 0 ? (
-          slip.items.map((item, idx) => (
-            <View key={item.itemId || idx} style={styles.rxItemCard}>
-              <View style={styles.rxItemHeader}>
-                <View style={styles.flex}>
-                  <ThemedText variant="bodyBold">{item.genericName}</ThemedText>
-                  {item.brandName ? (
+          slip.items.map((item, idx) => {
+            const rawClinicQty = item.clinicDispensedQuantity ?? 0;
+            const dispensedInClinic =
+              rawClinicQty > 0 && item.isClinicDispensed !== false
+                ? Math.min(item.quantity, rawClinicQty)
+                : 0;
+            const remainingForPurchase = Math.max(0, item.quantity - dispensedInClinic);
+
+            return (
+              <View key={item.itemId || idx} style={styles.rxItemCard}>
+                <View style={styles.rxItemHeader}>
+                  <View style={styles.flex}>
+                    <ThemedText variant="bodyBold">{item.genericName}</ThemedText>
+                    {item.brandName ? (
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        ({item.brandName})
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  <Badge label={`Qty: ${item.quantity}`} variant="neutral" />
+                </View>
+
+                <ThemedText variant="small" color={theme.colors.textSecondary}>
+                  {item.dosage} · {item.form}
+                </ThemedText>
+
+                {dispensedInClinic > 0 ? (
+                  <View style={styles.clinicDispenseBox} testID={`rx-clinic-dispense-${item.itemId || idx}`}>
+                    <View style={styles.clinicDispenseBadgesRow}>
+                      <Badge label={`Dispensed in clinic: ${dispensedInClinic}`} variant="success" />
+                      <Badge
+                        label={
+                          remainingForPurchase > 0
+                            ? `Remaining for external purchase: ${remainingForPurchase}`
+                            : 'Remaining for external purchase: 0'
+                        }
+                        variant={remainingForPurchase > 0 ? 'warning' : 'neutral'}
+                      />
+                    </View>
                     <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      ({item.brandName})
+                      {isDraftSlip
+                        ? `Starter stock on sign-off: ${dispensedInClinic} of ${item.quantity} dispensed in clinic · ${remainingForPurchase} remaining for external pharmacy purchase.`
+                        : `${dispensedInClinic} of ${item.quantity} dispensed from clinic stock · ${remainingForPurchase} remaining for external pharmacy purchase.`}
                     </ThemedText>
-                  ) : null}
-                </View>
-                <Badge label={`Qty: ${item.quantity}`} variant="neutral" />
-              </View>
+                  </View>
+                ) : null}
 
-              <ThemedText variant="small" color={theme.colors.textSecondary}>
-                {item.dosage} · {item.form}
-              </ThemedText>
-
-              <View style={styles.sigBox}>
-                <ThemedText variant="captionBold" color={theme.colors.textMuted}>
-                  Directions (Sig)
-                </ThemedText>
-                <ThemedText variant="smallBold">{item.sig}</ThemedText>
-              </View>
-
-              <View style={styles.rxFooterRow}>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Refills allowed: {item.refills}
-                  {item.durationDays ? ` · Duration: ${item.durationDays} days` : ''}
-                </ThemedText>
-                {item.isDangerousDrug ? <Badge label="Dangerous drug (PDEA)" variant="emergency" /> : null}
-              </View>
-
-              {item.remarks ? (
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Note: {item.remarks}
-                </ThemedText>
-              ) : null}
-
-              {item.uniquePrescriptionSecurityCode ? (
-                <View style={styles.upscBox}>
-                  <ThemedText variant="captionBold" color={theme.colors.infoText}>
-                    PhilHealth GAMOT security code (UPSC)
+                <View style={styles.sigBox}>
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                    Directions (Sig)
                   </ThemedText>
-                  <ThemedText variant="code" color={theme.colors.infoText}>
-                    {item.uniquePrescriptionSecurityCode}
-                  </ThemedText>
+                  <ThemedText variant="smallBold">{item.sig}</ThemedText>
                 </View>
-              ) : null}
-            </View>
-          ))
+
+                <View style={styles.rxFooterRow}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Refills allowed: {item.refills}
+                    {item.durationDays ? ` · Duration: ${item.durationDays} days` : ''}
+                  </ThemedText>
+                  {item.isDangerousDrug ? <Badge label="Dangerous drug (PDEA)" variant="emergency" /> : null}
+                </View>
+
+                {item.remarks ? (
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Note: {item.remarks}
+                  </ThemedText>
+                ) : null}
+
+                {item.uniquePrescriptionSecurityCode ? (
+                  <View style={styles.upscBox}>
+                    <ThemedText variant="captionBold" color={theme.colors.infoText}>
+                      PhilHealth GAMOT security code (UPSC)
+                    </ThemedText>
+                    <ThemedText variant="code" color={theme.colors.infoText}>
+                      {item.uniquePrescriptionSecurityCode}
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })
         ) : (
           <ThemedText variant="small" color={theme.colors.textMuted}>
             No medications entered for this prescription.
@@ -565,6 +624,20 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
     borderLeftWidth: 3,
     borderLeftColor: theme.colors.primary,
+  },
+  clinicDispenseBox: {
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  clinicDispenseBadgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   rxFooterRow: {
     flexDirection: 'row',

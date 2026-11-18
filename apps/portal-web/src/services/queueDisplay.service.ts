@@ -32,6 +32,7 @@ export const queueDisplayService = {
       if (params.clinicId) searchParams.set("clinicId", params.clinicId);
     }
 
+    searchParams.set("_t", Date.now().toString());
     const queryStr = searchParams.toString();
     if (queryStr) {
       endpoint = `${endpoint}?${queryStr}`;
@@ -41,7 +42,11 @@ export const queueDisplayService = {
     const targetUrl = joinApiUrl(portalApiUrl, endpoint);
 
     try {
-      const headers: Record<string, string> = { Accept: "application/json" };
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      };
       if (params.pin) {
         headers["X-Queue-Pin"] = params.pin;
       }

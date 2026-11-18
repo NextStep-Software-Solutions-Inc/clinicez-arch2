@@ -125,7 +125,7 @@ internal static class TestSupport
                 [EntitlementKeys.PoolStaff] = 40,
                 [EntitlementKeys.PoolStorageGb] = 20,
                 [EntitlementKeys.PoolTerminals] = 8
-            }, features: [.. EntitlementKeys.Features])
+            }, features: [.. EntitlementKeys.Features.Where(f => f != EntitlementKeys.FeatureTeleconsultation)])
         ]
     };
 

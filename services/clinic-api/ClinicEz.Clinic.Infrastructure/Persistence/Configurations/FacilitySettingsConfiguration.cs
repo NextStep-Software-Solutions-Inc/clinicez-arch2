@@ -56,6 +56,9 @@ public sealed class FacilitySettingsConfiguration : IEntityTypeConfiguration<Fac
             entity.Property(e => e.AutoEodEnabled).HasDefaultValue(true);
             entity.Property(e => e.TvDisplayMaskPatientNames).HasDefaultValue(true);
             entity.Property(e => e.TvDisplayPin).HasMaxLength(50);
+            entity.Property(e => e.TvDisplaySoundTheme).HasMaxLength(50).HasDefaultValue("classicChime");
+            entity.Property(e => e.TvDisplayVoiceEnabled).HasDefaultValue(false);
+            entity.Property(e => e.TvDisplayShowPhysicianName).HasDefaultValue(true);
             entity.Property(e => e.EnableQueuePushNotifications).HasDefaultValue(true);
             entity.Property(e => e.QueuePushNotificationThreshold).HasDefaultValue(2);
             entity.Property(e => e.EnableChipLevelQueueCalling).HasDefaultValue(false);
@@ -77,6 +80,7 @@ public sealed class FacilitySettingsConfiguration : IEntityTypeConfiguration<Fac
             entity.Property(e => e.AppointmentReminder24hEnabled).HasDefaultValue(true);
             entity.Property(e => e.AppointmentReminder2hEnabled).HasDefaultValue(true);
             entity.Property(e => e.EnableStaffAppointmentNotifications).HasDefaultValue(true);
+            entity.Property(e => e.EnableTeleconsultation).HasDefaultValue(false);
 
             entity.Property(e => e.TimeZoneId).HasMaxLength(100);
             entity.Property(e => e.DateFormat).HasMaxLength(50);

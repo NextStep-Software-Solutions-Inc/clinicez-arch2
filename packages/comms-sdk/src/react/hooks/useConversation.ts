@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConversationDto, MessageDto, ParticipantDto } from '../../core/types';
 import { useCommsContext } from '../CommsContext';
+import { resolveCommsAuthHeaders } from '../internal/authHeaders';
 import { TypingParticipant, UseConversationOptions, UseConversationResult } from '../types';
 
 export function useConversation(
   conversationId: string | null,
   options?: UseConversationOptions
 ): UseConversationResult {
-  const { client, store, subscriptionTracker } = useCommsContext();
+  const {
+    client,
+    store,
+    subscriptionTracker,
+    connectionState,
+    baseUrl,
+    activeTicket,
+    refreshTicket,
+    staffId
+  } = useCommsContext();
 
   const [conversation, setConversation] = useState<ConversationDto | null>(null);
   const [messages, setMessages] = useState<MessageDto[]>(() =>
@@ -15,14 +25,144 @@ export function useConversation(
   );
   const [participants, setParticipants] = useState<ParticipantDto[]>([]);
   const [typingParticipants, setTypingParticipants] = useState<TypingParticipant[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() =>
+    Boolean(conversationId && store.getMessages(conversationId).length === 0)
+  );
   const [isLoadingEarlier, setIsLoadingEarlier] = useState<boolean>(false);
   const [hasEarlierMessages, setHasEarlierMessages] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
 
   const typingTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  // Room subscription retain/release
+  const refresh = useCallback(async (): Promise<void> => {
+    if (!conversationId) return;
+    try {
+      const current = store.getMessages(conversationId);
+      const maxSeq = current.reduce((max, m) => Math.max(max, m.seq), 0);
+      const missed = await client.getMessagesAfterSeq(conversationId, maxSeq);
+      if (Array.isArray(missed) && missed.length > 0) {
+        for (const m of missed) {
+          store.appendMessage(m);
+        }
+      }
+      setError(null);
+    } catch (err: any) {
+      console.warn('refresh messages error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [client, conversationId, store]);
+
+  const refreshRef = useRef(refresh);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
+
+  // Fetch conversation metadata from server if baseUrl is present
+  useEffect(() => {
+    if (!conversationId) {
+      setConversation(null);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchConversationDetails = async () => {
+      if (!baseUrl) return;
+      try {
+        const cleanBase = baseUrl.replace(/\/$/, '');
+        const headers = await resolveCommsAuthHeaders(activeTicket, refreshTicket);
+        const url = `${cleanBase}/api/v1/comms/conversations/${conversationId}`;
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller ? setTimeout(() => controller.abort(), 4000) : null;
+        try {
+          const res = await fetch(url, {
+            method: 'GET',
+            headers,
+            ...(controller ? { signal: controller.signal } : {})
+          });
+          if (res.ok) {
+            const data: ConversationDto = await res.json();
+            if (isMounted) {
+              setConversation(data);
+              if (data.participants && Array.isArray(data.participants)) {
+                setParticipants(data.participants);
+              }
+            }
+          }
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      } catch (err) {
+        // Non-blocking metadata fetch failure
+      }
+    };
+
+    fetchConversationDetails();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTicket?.ticket, baseUrl, conversationId, refreshTicket]);
+
+  const markAsRead = useCallback(
+    async (overrideLastReadMessageId?: string): Promise<void> => {
+      if (!conversationId) return;
+
+      const currentMessages = store.getMessages(conversationId);
+      const latestServerMsg = [...currentMessages]
+        .reverse()
+        .find((m) => !m.messageId.startsWith('opt-'));
+      const explicitMsgId =
+        typeof overrideLastReadMessageId === 'string' && overrideLastReadMessageId.length > 0
+          ? overrideLastReadMessageId
+          : undefined;
+      const lastReadMessageId = explicitMsgId ?? latestServerMsg?.messageId ?? null;
+
+      setConversation((prev) => (prev ? { ...prev, unreadCount: 0 } : prev));
+      client.events.emit('conversationUpdated', {
+        id: conversationId,
+        unreadCount: 0
+      } as ConversationDto);
+
+      if (!baseUrl) {
+        Promise.resolve().then(() => {
+          client.events.emit('conversationUpdated', {
+            id: conversationId,
+            unreadCount: 0
+          } as ConversationDto);
+        });
+        return;
+      }
+
+      try {
+        const cleanBase = baseUrl.replace(/\/$/, '');
+        const headers = await resolveCommsAuthHeaders(activeTicket, refreshTicket);
+        const res = await fetch(
+          `${cleanBase}/api/v1/comms/conversations/${conversationId}/read`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ lastReadMessageId })
+          }
+        );
+        if (res.ok) {
+          client.events.emit('conversationUpdated', {
+            id: conversationId,
+            unreadCount: 0
+          } as ConversationDto);
+        }
+      } catch {
+        // Non-blocking read-receipt persistence
+      }
+    },
+    [activeTicket, baseUrl, client, conversationId, refreshTicket, store]
+  );
+
+  const markAsReadRef = useRef(markAsRead);
+  useEffect(() => {
+    markAsReadRef.current = markAsRead;
+  }, [markAsRead]);
+
+  // Room subscription retain/release, initial message load, and mark-as-read on mount
   useEffect(() => {
     if (!conversationId) {
       setMessages([]);
@@ -30,20 +170,54 @@ export function useConversation(
       return;
     }
 
-    setIsLoading(true);
     subscriptionTracker.retainRoom(client, conversationId).catch((err) => {
       console.warn('retainRoom error:', err);
     });
 
-    setMessages(store.getMessages(conversationId));
-    setIsLoading(false);
+    refreshRef.current().catch(() => {});
+
+    if (options?.markAsReadOnMount !== false) {
+      markAsReadRef.current().catch(() => {});
+    }
 
     return () => {
       subscriptionTracker.releaseRoom(client, conversationId).catch((err) => {
         console.warn('releaseRoom error:', err);
       });
     };
-  }, [client, conversationId, subscriptionTracker, store]);
+  }, [client, conversationId, options?.markAsReadOnMount, subscriptionTracker]);
+
+  // Mark incoming messages as read automatically while conversation is open
+  useEffect(() => {
+    if (!conversationId || options?.markAsReadOnMount === false) return;
+
+    const unsub = client.events.on('messageReceived', (msg) => {
+      if (msg.conversationId !== conversationId) return;
+      const isOwn = Boolean(msg.senderId && staffId && msg.senderId === staffId);
+      if (!isOwn) {
+        markAsReadRef.current(msg.messageId).catch(() => {});
+      }
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [client, conversationId, options?.markAsReadOnMount, staffId]);
+
+  // Sync when connection reconnects
+  useEffect(() => {
+    if (!conversationId) return;
+
+    const unsub = client.events.on('connectionStateChanged', (state) => {
+      if (state === 'Connected') {
+        refreshRef.current().catch(() => {});
+      }
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [client, conversationId]);
 
   // Sync with OptimisticStore
   useEffect(() => {
@@ -116,11 +290,6 @@ export function useConversation(
     []
   );
 
-  const markAsRead = useCallback(async (): Promise<void> => {
-    if (!conversationId) return;
-    // Mark read locally / server
-  }, [conversationId]);
-
   const acknowledgeMessage = useCallback(
     async (messageId: string): Promise<boolean> => {
       if (!conversationId) return false;
@@ -158,20 +327,6 @@ export function useConversation(
     },
     [client, conversationId]
   );
-
-  const refresh = useCallback(async (): Promise<void> => {
-    if (!conversationId) return;
-    try {
-      const current = store.getMessages(conversationId);
-      const maxSeq = current.reduce((max, m) => Math.max(max, m.seq), 0);
-      const missed = await client.getMessagesAfterSeq(conversationId, maxSeq);
-      for (const m of missed) {
-        store.appendMessage(m);
-      }
-    } catch (err: any) {
-      setError(err instanceof Error ? err : new Error(String(err)));
-    }
-  }, [client, conversationId, store]);
 
   return {
     conversation,

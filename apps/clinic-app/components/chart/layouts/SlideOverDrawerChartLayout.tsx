@@ -9,6 +9,7 @@ import {
   ThemedText,
   Icon,
   SegmentedControl,
+  Button,
 } from '../../ui';
 import { useBreakpoint } from '../../../utils/useBreakpoint';
 import PatientSummarySpine from '../PatientSummarySpine';
@@ -62,15 +63,14 @@ export default function SlideOverDrawerChartLayout(props: ChartLayoutProps) {
         {/* ========================================================================= */}
         <View style={styles.drawerHeader}>
           <View style={styles.headerLeft}>
-            <Pressable
-              onPress={onClose}
-              hitSlop={8}
-              style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
-              accessibilityRole="button"
+            <Button
+              variant="subtle"
+              size="sm"
+              icon="close"
+              iconOnly
               accessibilityLabel="Close Drawer"
-            >
-              <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+              onPress={onClose}
+            />
 
             <View style={styles.titleBlock}>
               <ThemedText variant="title">Patient Chart</ThemedText>
@@ -89,32 +89,26 @@ export default function SlideOverDrawerChartLayout(props: ChartLayoutProps) {
               onSwitchLayout={onSwitchLayout}
             />
 
-            <Pressable
-              onPress={onEditDemographics}
-              hitSlop={8}
-              style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-              accessibilityRole="button"
+            <Button
+              variant="subtle"
+              size="sm"
+              icon="edit"
+              iconOnly
               accessibilityLabel="Edit Demographics"
-            >
-              <Icon name="edit" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+              onPress={onEditDemographics}
+            />
 
             {onRefreshChart ? (
-              <Pressable
-                onPress={onRefreshChart}
-                hitSlop={8}
-                style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-                accessibilityRole="button"
+              <Button
+                variant="subtle"
+                size="sm"
+                icon="refresh"
+                iconOnly
                 accessibilityLabel="Refresh patient chart"
+                loading={loadingChart}
                 disabled={loadingChart}
-              >
-                <Icon
-                  name="refresh"
-                  size={theme.sizes.iconMd}
-                  color={loadingChart ? theme.colors.primary : theme.colors.textSecondary}
-                  spin={loadingChart}
-                />
-              </Pressable>
+                onPress={onRefreshChart}
+              />
             ) : null}
           </View>
         </View>
@@ -138,11 +132,27 @@ export default function SlideOverDrawerChartLayout(props: ChartLayoutProps) {
         {/* TAB BAR                                                                   */}
         {/* ========================================================================= */}
         <View style={styles.tabBarContainer}>
-          <SegmentedControl
-            options={props.availableTabs || CHART_TABS}
-            value={activeTab}
-            onChange={onTabChange}
-          />
+          {props.canGoBackTab && props.onBackTab ? (
+            <Button
+              variant="subtle"
+              size="sm"
+              icon="arrowLeft"
+              iconOnly
+              accessibilityLabel={
+                props.previousTabLabel
+                  ? `Back to ${props.previousTabLabel}`
+                  : 'Back to previous section'
+              }
+              onPress={props.onBackTab}
+            />
+          ) : null}
+          <View style={styles.tabBarScrollWrap}>
+            <SegmentedControl
+              options={props.availableTabs || CHART_TABS}
+              value={activeTab}
+              onChange={onTabChange}
+            />
+          </View>
         </View>
 
         {/* ========================================================================= */}
@@ -218,19 +228,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: theme.spacing.md,
   },
-  closeBtn: {
-    padding: theme.spacing.xs,
-    borderRadius: theme.radii.md,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-    backgroundColor: theme.colors.surfaceHighlight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeBtnPressed: {
-    backgroundColor: theme.colors.borderLight,
-    opacity: 0.8,
-  },
   titleBlock: {
     flex: 1,
   },
@@ -238,19 +235,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-  },
-  actionBtn: {
-    padding: theme.spacing.xs,
-    borderRadius: theme.radii.md,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-    backgroundColor: theme.colors.surfaceHighlight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionBtnPressed: {
-    backgroundColor: theme.colors.borderLight,
-    opacity: 0.8,
   },
   spineWrapper: {
     paddingHorizontal: theme.spacing.xl,
@@ -261,11 +245,18 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
   },
   tabBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.sm,
-    borderBottomWidth: 1,
+    borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
     backgroundColor: theme.colors.surface,
+  },
+  tabBarScrollWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   viewport: {
     flex: 1,

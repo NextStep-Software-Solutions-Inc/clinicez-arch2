@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -26,12 +27,20 @@ public sealed record StoredGuestInvite(
     string InviteTokenHash,
     string ExpectedDobHash,
     string OtpHash,
-    DateTime ExpiresAtUtc)
+    DateTime ExpiresAtUtc,
+    string? ClinicName = null,
+    string? ClinicSupportPhone = null,
+    string? ClinicianName = null,
+    DateTime? ScheduledAtUtc = null,
+    string? EncryptedGuestContext = null)
 {
     public int AttemptCount { get; set; } = 0;
     public bool IsLockedOut { get; set; } = false;
     public bool IsVerified { get; set; } = false;
     public DateTime? VerifiedAtUtc { get; set; }
+    public bool IsRevoked { get; set; } = false;
+    public string? RevokedReason { get; set; }
+    public DateTime? RevokedAtUtc { get; set; }
 }
 
 public sealed partial class GuestVerificationService : IGuestVerificationService
@@ -78,6 +87,115 @@ public sealed partial class GuestVerificationService : IGuestVerificationService
         InvitesById[inviteId] = stored;
         return stored;
     }
+
+    /// <summary>
+    /// Provisions or registers a pre-hashed guest invite in the verification store
+    /// received from clinic-api via the GuestTeleconsultInviteIssued interop message.
+    /// </summary>
+    public static StoredGuestInvite RegisterPreHashedInvite(
+        Guid inviteId,
+        string tenantId,
+        string facilityId,
+        Guid callId,
+        string inviteTokenHash,
+        string expectedDobHash,
+        string otpHash,
+        DateTime expiresAtUtc,
+        string? clinicName = null,
+        string? clinicSupportPhone = null,
+        string? clinicianName = null,
+        DateTime? scheduledAtUtc = null,
+        string? encryptedGuestContext = null)
+    {
+        var stored = new StoredGuestInvite(
+            inviteId,
+            tenantId,
+            facilityId,
+            callId,
+            inviteTokenHash.Trim().ToLowerInvariant(),
+            expectedDobHash.Trim().ToLowerInvariant(),
+            otpHash.Trim().ToLowerInvariant(),
+            expiresAtUtc,
+            clinicName,
+            clinicSupportPhone,
+            clinicianName,
+            scheduledAtUtc,
+            encryptedGuestContext);
+
+        if (InvitesById.TryGetValue(inviteId, out var previous) &&
+            !string.Equals(previous.InviteTokenHash, stored.InviteTokenHash, StringComparison.OrdinalIgnoreCase))
+        {
+            InvitesByTokenHash.TryRemove(previous.InviteTokenHash, out _);
+        }
+
+        InvitesByTokenHash[stored.InviteTokenHash] = stored;
+        InvitesById[inviteId] = stored;
+        return stored;
+    }
+
+    /// <inheritdoc />
+    StoredGuestInvite IGuestVerificationService.RegisterPreHashedInvite(
+        Guid inviteId,
+        string tenantId,
+        string facilityId,
+        Guid callId,
+        string inviteTokenHash,
+        string expectedDobHash,
+        string otpHash,
+        DateTime expiresAtUtc,
+        string? clinicName,
+        string? clinicSupportPhone,
+        string? clinicianName,
+        DateTime? scheduledAtUtc,
+        string? encryptedGuestContext) =>
+        RegisterPreHashedInvite(
+            inviteId,
+            tenantId,
+            facilityId,
+            callId,
+            inviteTokenHash,
+            expectedDobHash,
+            otpHash,
+            expiresAtUtc,
+            clinicName,
+            clinicSupportPhone,
+            clinicianName,
+            scheduledAtUtc,
+            encryptedGuestContext);
+
+    /// <summary>
+    /// Revokes active guest invites associated with a call session upon explicit call termination.
+    /// </summary>
+    public static bool RevokeInviteByCall(Guid callId, string? reason = null, DateTime? revokedAtUtc = null)
+    {
+        var found = false;
+        foreach (var invite in InvitesById.Values.Where(i => i.CallId == callId))
+        {
+            invite.IsRevoked = true;
+            invite.RevokedReason = reason ?? "Ended by clinician";
+            invite.RevokedAtUtc = revokedAtUtc ?? DateTime.UtcNow;
+            found = true;
+        }
+        return found;
+    }
+
+    /// <inheritdoc />
+    bool IGuestVerificationService.RevokeInviteByCall(Guid callId, string? reason, DateTime? revokedAtUtc) =>
+        RevokeInviteByCall(callId, reason, revokedAtUtc);
+
+    /// <summary>
+    /// Resolves a stored invite by raw invite token for zero-PHI preflight status checks.
+    /// </summary>
+    public static StoredGuestInvite? GetInviteByToken(string inviteToken)
+    {
+        if (string.IsNullOrWhiteSpace(inviteToken)) return null;
+        var tokenHash = ComputeHash(inviteToken.Trim());
+        return InvitesByTokenHash.TryGetValue(tokenHash, out var invite) ? invite : null;
+    }
+
+    /// <inheritdoc />
+    StoredGuestInvite? IGuestVerificationService.GetInviteByToken(string inviteToken) =>
+        GetInviteByToken(inviteToken);
 
     public static void ClearStore()
     {
@@ -145,6 +263,15 @@ public sealed partial class GuestVerificationService : IGuestVerificationService
 
         var now = DateTime.UtcNow;
 
+        // Check revoked status (consultation explicitly ended by clinician)
+        if (invite.IsRevoked)
+        {
+            _logger.LogWarning("[GuestVerificationService] Invite {InviteId} is revoked.", invite.InviteId);
+            return new GuestVerificationResult(
+                Success: false, invite.CallId, null, null, null, 0, false, false,
+                "GUEST_CONSULTATION_ENDED", "This teleconsultation has been ended by the attending clinician.");
+        }
+
         // Check permanent lockout
         if (invite.IsLockedOut || invite.AttemptCount >= 5)
         {
@@ -199,9 +326,42 @@ public sealed partial class GuestVerificationService : IGuestVerificationService
         invite.IsVerified = true;
         invite.VerifiedAtUtc = now;
 
+        string? guestDisplayName = null;
+        if (!string.IsNullOrWhiteSpace(invite.EncryptedGuestContext))
+        {
+            try
+            {
+                var aesKey = SHA256.HashData(Encoding.UTF8.GetBytes($"{invite.InviteId:N}:{dateOfBirth.Trim()}:{otp.Trim()}"));
+                var blob = Convert.FromBase64String(invite.EncryptedGuestContext);
+                if (blob.Length >= 28)
+                {
+                    var nonce = blob.AsSpan(0, 12);
+                    var tag = blob.AsSpan(12, 16);
+                    var cipher = blob.AsSpan(28);
+                    var plain = new byte[cipher.Length];
+                    using var aesGcm = new AesGcm(aesKey, 16);
+                    aesGcm.Decrypt(nonce, cipher, tag, plain);
+                    var json = Encoding.UTF8.GetString(plain);
+                    using var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("patientDisplayName", out var nameProp))
+                    {
+                        guestDisplayName = nameProp.GetString();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[GuestVerificationService] Decryption of guest context failed for invite {InviteId}", invite.InviteId);
+            }
+        }
+
         var roomName = $"call-{invite.CallId:N}";
         var guestIdentity = $"guest:otp-{invite.InviteId:N}";
-        var relayUrl = _configuration["Media:RelayUrl"] ?? "wss://media.clinicez.internal";
+        var relayUrl = FirstNonEmpty(
+            _configuration["Media:RelayUrl"],
+            _configuration["LiveKit:RelayUrl"],
+            _configuration["LiveKit:Url"],
+            _configuration["LIVEKIT_URL"]) ?? "wss://media.clinicez.internal";
         var guestToken = MintLiveKitGuestToken(roomName, guestIdentity);
 
         // Enqueue comms.guest.call.join.requested on Interop Hub for comms-api audit and media session tracking
@@ -238,13 +398,24 @@ public sealed partial class GuestVerificationService : IGuestVerificationService
             IsLockedOut: false,
             IsExpired: false,
             ErrorCode: null,
-            ErrorMessage: null);
+            ErrorMessage: null,
+            GuestDisplayName: guestDisplayName,
+            ClinicName: invite.ClinicName,
+            ClinicSupportPhone: invite.ClinicSupportPhone,
+            ClinicianName: invite.ClinicianName,
+            ScheduledAtUtc: invite.ScheduledAtUtc);
     }
 
     private string MintLiveKitGuestToken(string roomName, string guestIdentity)
     {
-        var apiKey = _configuration["Media:ApiKey"] ?? "clinicez-guest-key";
-        var apiSecret = _configuration["Media:ApiSecret"] ?? "clinicez-production-secret-key-32bytes-minimum!!";
+        var apiKey = FirstNonEmpty(
+            _configuration["Media:ApiKey"],
+            _configuration["LiveKit:ApiKey"],
+            _configuration["LIVEKIT_API_KEY"]) ?? "clinicez-guest-key";
+        var apiSecret = FirstNonEmpty(
+            _configuration["Media:ApiSecret"],
+            _configuration["LiveKit:ApiSecret"],
+            _configuration["LIVEKIT_API_SECRET"]) ?? "clinicez-production-secret-key-32bytes-minimum!!";
 
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(apiSecret));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
@@ -274,6 +445,9 @@ public sealed partial class GuestVerificationService : IGuestVerificationService
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
     private static string ComputeHash(string input)
     {

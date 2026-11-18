@@ -311,37 +311,37 @@ public class CheckInPatientCommandHandlerTests
         // Act & Assert: Senior Consultation (SQ)
         var pat1 = Guid.NewGuid();
         var res1 = await handler.Handle(new CheckInPatientCommand(
-            pat1, "Senior Patient 1", SeriesPrefix: "SQ", VisitType: VisitType.Consultation), CancellationToken.None);
+            pat1, "Senior Patient 1", SeriesPrefix: "SQ", VisitType: VisitType.RoutineCheckup), CancellationToken.None);
         res1.QueueNumber.Should().Be("SQ-001");
 
         // Act & Assert: Regular Consultation (Q)
         var pat2 = Guid.NewGuid();
         var res2 = await handler.Handle(new CheckInPatientCommand(
-            pat2, "Regular Patient 1", SeriesPrefix: "Q", VisitType: VisitType.Consultation), CancellationToken.None);
+            pat2, "Regular Patient 1", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup), CancellationToken.None);
         res2.QueueNumber.Should().Be("Q-001");
 
         // Act & Assert: Second Senior Consultation (SQ) -> SQ-002
         var pat3 = Guid.NewGuid();
         var res3 = await handler.Handle(new CheckInPatientCommand(
-            pat3, "Senior Patient 2", SeriesPrefix: "SQ", VisitType: VisitType.Consultation), CancellationToken.None);
+            pat3, "Senior Patient 2", SeriesPrefix: "SQ", VisitType: VisitType.RoutineCheckup), CancellationToken.None);
         res3.QueueNumber.Should().Be("SQ-002");
 
         // Act & Assert: Vitals Check (V) -> V-001
         var pat4 = Guid.NewGuid();
         var res4 = await handler.Handle(new CheckInPatientCommand(
-            pat4, "Triage Patient", SeriesPrefix: "V", VisitType: VisitType.VitalsCheckOnly), CancellationToken.None);
+            pat4, "Triage Patient", SeriesPrefix: "V", VisitType: VisitType.PreventiveHealthAssessment), CancellationToken.None);
         res4.QueueNumber.Should().Be("V-001");
 
         // Act & Assert: Clinical Procedure (P) -> P-001
         var pat5 = Guid.NewGuid();
         var res5 = await handler.Handle(new CheckInPatientCommand(
-            pat5, "Procedure Patient", SeriesPrefix: "P", VisitType: VisitType.StandaloneProcedure), CancellationToken.None);
+            pat5, "Procedure Patient", SeriesPrefix: "P", VisitType: VisitType.PreventiveHealthAssessment), CancellationToken.None);
         res5.QueueNumber.Should().Be("P-001");
 
         // Act & Assert: Administrative (A) -> A-001
         var pat6 = Guid.NewGuid();
         var res6 = await handler.Handle(new CheckInPatientCommand(
-            pat6, "Admin Patient", SeriesPrefix: "A", VisitType: VisitType.AdministrativeDocument), CancellationToken.None);
+            pat6, "Admin Patient", SeriesPrefix: "A", VisitType: VisitType.PreventiveHealthAssessment), CancellationToken.None);
         res6.QueueNumber.Should().Be("A-001");
     }
 
@@ -367,5 +367,161 @@ public class CheckInPatientCommandHandlerTests
 
         command.Should().NotBeNull();
         command!.SeriesPrefix.Should().Be("SQ");
+    }
+
+    [Fact]
+    public async Task Handle_CheckInWithoutSeriesPrefix_ForSeniorPatient_AutomaticallyResolvesSQ()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_checkin_senior";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var senior = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            PatientCode = "PAT-SR-01",
+            FirstName = "Eduardo",
+            LastName = "Dela Cruz",
+            DateOfBirth = today.AddYears(-72),
+            SeniorCitizenId = "OSCA-12345",
+            ContactNumber = "09170001111"
+        };
+        await patientRepo.AddAsync(senior);
+        await uow.SaveChangesAsync();
+
+        var handler = new CheckInPatientCommandHandler(
+            queueRepo,
+            apptRepo,
+            uow,
+            clinicContext,
+            IdentityOf(clinicId, tenantId),
+            Substitute.For<IPatientAppointmentPublisher>(),
+            patientRepository: patientRepo);
+
+        // Act: seriesPrefix is null
+        var result = await handler.Handle(new CheckInPatientCommand(
+            senior.Id,
+            "Eduardo Dela Cruz",
+            SeriesPrefix: null,
+            VisitType: VisitType.RoutineCheckup,
+            QueueDate: today), CancellationToken.None);
+
+        // Assert
+        result.QueueNumber.Should().Be("SQ-001");
+        result.SequenceNumber.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_CheckInWithoutSeriesPrefix_ForRegularYoungPatient_ResolvesQ()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_checkin_regular";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var youngPatient = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            PatientCode = "PAT-YG-01",
+            FirstName = "Juan",
+            LastName = "Tamad",
+            DateOfBirth = today.AddYears(-25),
+            ContactNumber = "09170002222"
+        };
+        await patientRepo.AddAsync(youngPatient);
+        await uow.SaveChangesAsync();
+
+        var handler = new CheckInPatientCommandHandler(
+            queueRepo,
+            apptRepo,
+            uow,
+            clinicContext,
+            IdentityOf(clinicId, tenantId),
+            Substitute.For<IPatientAppointmentPublisher>(),
+            patientRepository: patientRepo);
+
+        // Act: seriesPrefix is null
+        var result = await handler.Handle(new CheckInPatientCommand(
+            youngPatient.Id,
+            "Juan Tamad",
+            SeriesPrefix: null,
+            VisitType: VisitType.RoutineCheckup,
+            QueueDate: today), CancellationToken.None);
+
+        // Assert
+        result.QueueNumber.Should().Be("Q-001");
+        result.SequenceNumber.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_CheckInWithoutSeriesPrefix_ForSeniorVitalsCheck_ResolvesSQFallback()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_checkin_sv";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var senior = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            PatientCode = "PAT-SR-02",
+            FirstName = "Corazon",
+            LastName = "Aquino",
+            DateOfBirth = today.AddYears(-68),
+            ContactNumber = "09170003333"
+        };
+        await patientRepo.AddAsync(senior);
+        await uow.SaveChangesAsync();
+
+        var handler = new CheckInPatientCommandHandler(
+            queueRepo,
+            apptRepo,
+            uow,
+            clinicContext,
+            IdentityOf(clinicId, tenantId),
+            Substitute.For<IPatientAppointmentPublisher>(),
+            patientRepository: patientRepo);
+
+        // Act: seriesPrefix is null, visitType is VitalsCheckOnly -> fallback is SQ for senior
+        var result = await handler.Handle(new CheckInPatientCommand(
+            senior.Id,
+            "Corazon Aquino",
+            SeriesPrefix: null,
+            VisitType: VisitType.PreventiveHealthAssessment,
+            QueueDate: today), CancellationToken.None);
+
+        // Assert
+        result.QueueNumber.Should().Be("SQ-001");
     }
 }

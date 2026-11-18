@@ -1,121 +1,114 @@
-# Milestone 1 Challenger Report: QuestPDF Document Generation Engine & Image Decoding
+# E2E-M1 Adversarial Challenge Handoff Report
 
-## Verdict: REQUEST_CHANGES
+**Milestone**: E2E-M1 Adversarial Challenge of `TEST_INFRA.md`  
+**Challenger Role**: `challenger_m1_1` (E2E Test Architecture Challenger)  
+**Deliverable Challenged**: `/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/TEST_INFRA.md`  
+**Handoff Type**: Hard Handoff (Complete Assessment)  
+**Verdict**: **REQUEST_CHANGES**
 
 ---
 
 ## 1. Observation
 
-### 1.1 Empirical Test Execution Results
-An empirical test harness was authored and executed in `services/clinic-api/ClinicEz.Clinic.Application.Tests/EmpiricalAdversarialDocumentTests.cs` covering all 4 boundary conditions required by the dispatch:
-- Corrupted/invalid base64 image strings for logo and signature
-- Extremely large signatures or edge-case dimensions
-- Compact A5 paper size with multi-item prescription
-- Missing doctor or credentials
+Direct empirical observations from executing commands specified in `TEST_INFRA.md` Section 5:
 
-**Command**:
-```bash
-~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~EmpiricalAdversarialDocumentTests"
-```
-
-**Result**:
-```
-Failed!  - Failed: 3, Passed: 33, Skipped: 0, Total: 36, Duration: 865 ms - ClinicEz.Clinic.Application.Tests.dll (net10.0)
-```
-
-### 1.2 Verbatim Failure Traces
-
-#### Failure 1: Corrupted / Non-Image Base64 Signature Specimen
-- **Test**: `ClinicEz.Clinic.Application.Tests.EmpiricalAdversarialDocumentTests.Valid_Base64_Of_NonImage_Bytes_As_Signature_Should_Not_Crash_Document_Generation`
-- **Error**:
+### 1.1 Backend Compilation Breakage in `portal-api`
+- **Command executed**:
+  ```bash
+  /Users/macuser/.dotnet/dotnet test services/portal-api/ClinicEz.Portal.Tests/ClinicEz.Portal.Tests.csproj
   ```
-  QuestPDF.Drawing.Exceptions.DocumentComposeException : Cannot decode the provided image.
-     at QuestPDF.Infrastructure.StaticImageCache.DecodeImage(SkData imageData, Boolean isShared)
-     at QuestPDF.Infrastructure.Image.FromBinaryData(Byte[] imageBytes)
-     at QuestPDF.Fluent.ImageExtensions.Image(IContainer parent, Byte[] imageData)
-     at ClinicEz.Clinic.Infrastructure.Services.ClinicDocumentPdfService.<>c__DisplayClass13_0.<RenderDoctorSignatureStamp>b__0(ColumnDescriptor stamp) in services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService.cs:line 953
-     at ClinicEz.Clinic.Infrastructure.Services.ClinicDocumentPdfService.RenderDoctorSignatureStamp(...) in services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService.cs:line 949
-     at ClinicEz.Clinic.Infrastructure.Services.ClinicDocumentPdfService.GenerateMedicalCertificatePdf(...) in services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService.cs:line 205
+- **Result**: Command exited with code 1.
+- **Verbatim compiler error**:
+  ```text
+  /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/services/portal-api/ClinicEz.Portal.Application/Features/Licensing/EntitlementsPublisher.cs(42,33): 
+  error CS1061: 'EntitlementSnapshot' does not contain a definition for 'HasFeature' and no accessible extension method 'HasFeature' accepting a first argument of type 'EntitlementSnapshot' could be found (are you missing a using directive or an assembly reference?) [/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/services/portal-api/ClinicEz.Portal.Application/ClinicEz.Portal.Application.csproj]
   ```
+- **Code inspection**:
+  - `services/portal-api/ClinicEz.Portal.Application/Features/Entitlements/EntitlementSnapshot.cs:28`:
+    ```csharp
+    public bool Has(string featureKey) => Features.Contains(featureKey);
+    ```
+  - `services/portal-api/ClinicEz.Portal.Application/Features/Licensing/EntitlementsPublisher.cs:42`:
+    ```csharp
+    var isActive = snapshot.HasFeature(EntitlementKeys.FeatureTeleconsultation) && snapshot.IsActive;
+    ```
+    Method `HasFeature` does not exist; the correct method is `Has`.
 
-#### Failure 2: Corrupted / Non-Image Base64 Primary Clinic Logo
-- **Test**: `ClinicEz.Clinic.Application.Tests.EmpiricalAdversarialDocumentTests.Valid_Base64_Of_NonImage_Bytes_As_PrimaryLogo_Should_Not_Crash_Document_Generation`
-- **Error**:
+### 1.2 Test Regression in `packages/comms-sdk`
+- **Command executed**:
+  ```bash
+  cd packages/comms-sdk && bun test tests && bun run typecheck
   ```
-  QuestPDF.Drawing.Exceptions.DocumentComposeException : Cannot decode the provided image.
-     at QuestPDF.Infrastructure.StaticImageCache.DecodeImage(SkData imageData, Boolean isShared)
-     at QuestPDF.Infrastructure.Image.FromBinaryData(Byte[] imageBytes)
-     at QuestPDF.Fluent.ImageExtensions.Image(IContainer parent, Byte[] imageData)
-     at ClinicEz.Shared.Documents.Components.TenantLetterheadComponent.<Compose>b__2_1(RowDescriptor row) in packages/shared-dotnet/Documents/Components/TenantLetterheadComponent.cs:line 26
+- **Result**: `bun test tests` exited with code 1 (481 passed, 2 failed).
+- **Verbatim test failures**:
+  ```text
+  2 tests failed:
+  ✗ Feature F18: CallStage Video Surface & In-Call Controls (Native & Web) > Tier 5: Milestone 8 Adaptations: Dock, PiP, and Orientation > Native & Web: renders icon-only Copy Invite button at top-left with hover tooltip and omits center Message Patient button [0.63ms]
+  ✗ Feature F18: CallStage Video Surface & In-Call Controls (Native & Web) > Tier 5: Milestone 8 Adaptations: Dock, PiP, and Orientation > Native & Web: active stage pills, invite CTAs, and end button apply brand and semantic drop shadows [0.38ms]
   ```
+- **Code inspection**:
+  - `packages/comms-sdk/tests/ui/call-stage.test.ts:611-619` asserts that `btn-stage-copy-invite` is rendered at top-left.
+  - Requirement R1 and `TEST_INFRA.md` `TC-T1.1.1` mandate that `btn-stage-copy-invite` is removed from `CallStage.tsx`.
+  - The component removed the button, but `call-stage.test.ts` was not updated to reflect this change.
 
-#### Failure 3: Truncated PNG Stream Header in Signature Specimen
-- **Test**: `ClinicEz.Clinic.Application.Tests.EmpiricalAdversarialDocumentTests.Truncated_Png_Header_In_Signature_Should_Not_Crash_Document_Generation`
-- **Payload**: `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA` (Valid PNG signature and partial IHDR chunk, truncated before dimensions/scanlines)
-- **Error**:
+### 1.3 Design Token Guard Failure in `comms-sdk`
+- **Command executed**:
+  ```bash
+  bun run lint:comms
   ```
-  QuestPDF.Drawing.Exceptions.DocumentComposeException : Cannot decode the provided image.
-     at QuestPDF.Infrastructure.StaticImageCache.DecodeImage(SkData imageData, Boolean isShared)
-     at QuestPDF.Infrastructure.Image.FromBinaryData(Byte[] imageBytes)
-     at QuestPDF.Fluent.ImageExtensions.Image(IContainer parent, Byte[] imageData)
-     at ClinicEz.Clinic.Infrastructure.Services.ClinicDocumentPdfService.<>c__DisplayClass13_0.<RenderDoctorSignatureStamp>b__0(ColumnDescriptor stamp) in services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService.cs:line 953
+- **Result**: Exited with code 1.
+- **Verbatim output**:
+  ```text
+  $ bun packages/comms-sdk/scripts/check-tokens.mjs --strict && bun packages/comms-sdk/scripts/check-no-external-hosts.mjs
+      3  src/web-ui/OverlayTooltip.tsx  (color:3)
+      1  src/native-ui/OverlayTooltip.tsx  (color:1)
+  Comms SDK token guard: 4 violation(s) across 49 source file(s).
+  error: script "lint:comms" exited with code 1
   ```
+- **Code inspection**:
+  - `packages/comms-sdk/src/web-ui/OverlayTooltip.tsx:62-64`: hardcoded `#0F172A`, `#FFFFFF`, `#334155`.
+  - `packages/comms-sdk/src/native-ui/OverlayTooltip.tsx:81`: hardcoded `rgba(15, 23, 42, 0.38)`.
 
-### 1.3 Inspection of Code Artifacts
-1. `services/clinic-api/ClinicEz.Clinic.Infrastructure/Common/ImageDecoderHelper.cs: lines 34-40`:
-   ```csharp
-   if (string.IsNullOrWhiteSpace(trimmed))
-       return null;
+### 1.4 Missing Invite State Cache in Modals
+- **Code inspection**:
+  - `apps/clinic-app/components/calendar/AppointmentInspectionModal.tsx:668`:
+    Calls `clinicService.createTeleconsultGuestInvite(currentAppointment.id)` directly on every press of `btn-copy-patient-link` with no caching.
+  - `apps/clinic-app/components/teleconsult/TeleconsultWaitingRoomModal.tsx:903`:
+    Calls `clinicService.createTeleconsultGuestInvite(appointmentId)` directly on every press of `handleSharePatientLink` with no caching.
+  - Both violate R1 ("store { inviteUrl, otp, expiresAtUtc } in state to reuse the active invite across copy actions without regenerating PINs") and invalidate `TEST_INFRA.md` `TC-T2.1.1`.
 
-   return Convert.FromBase64String(trimmed);
-   ```
-   `ImageDecoderHelper.TryDecode` only tests whether the string is valid Base64 syntax. It performs **no validation** that the decoded bytes correspond to a valid image format (PNG, JPEG, WEBP, etc.) or that Skia can decode them.
-
-2. `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService.cs: line 953`:
-   ```csharp
-   if (mode == SignatureMode.ESignatureSpecimen && signatureBytes != null && signatureBytes.Length > 0)
-   {
-       stamp.Item().Height(38).AlignCenter().Image(signatureBytes).FitArea();
-   }
-   ```
-   If `signatureBytes` is non-null and length > 0, it is directly passed to QuestPDF's `.Image(signatureBytes)`. When Skia encounters corrupted bytes, `Image.FromBinaryData` throws an unhandled `DocumentComposeException`.
-
-3. `packages/shared-dotnet/Documents/Components/TenantLetterheadComponent.cs: lines 24-27`:
-   ```csharp
-   if (_config.PrimaryLogoBytes != null && _config.PrimaryLogoBytes.Length > 0)
-   {
-       row.ConstantItem(55).Height(50).Image(_config.PrimaryLogoBytes);
-   }
-   ```
-   Identical vulnerability: corrupt primary or secondary logo bytes are passed directly to `.Image()`.
+### 1.5 Passing Test Commands
+- `dotnet test services/media-broker/ClinicEz.MediaBroker.Tests`: PASS (42/42)
+- `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests --filter ...`: PASS (617/617)
+- `dotnet test services/interop-hub/ClinicEz.Interop.Tests`: PASS (190/190)
+- `dotnet test services/patient-api/ClinicEz.Patient.Application.Tests --filter ...`: PASS (7/7)
+- `apps/clinic-app` tests (5 suites): PASS (168/168)
+- `apps/clinic-app` isolated issue #139: PASS (12/12)
+- `apps/portal-web` tests (4 suites): PASS (58/58)
+- `apps/admin-web` tests (2 suites): PASS (14/14)
+- `bun run typecheck:comms`, `typecheck:clinic`, `typecheck:portal`, `typecheck:admin`: PASS
+- `bun run lint:tokens`, `bun run lint:clinic`: PASS
+- `curl -I http://localhost:8081`: PASS (HTTP 200 OK)
 
 ---
 
 ## 2. Logic Chain
 
-1. **Mission Requirement**:
-   The dispatch explicitly instructs:
-   *"1. Test extreme boundary cases: Corrupted or invalid base64 image strings for logo and signature (must not throw 500 or crash)."*
-
-2. **Empirical Findings on Boundary Cases**:
-   - **Case 1 (Invalid/Corrupted Base64 Images)**: **FAILED**.
-     When `PrimaryLogoUrl` or `SignatureSpecimen` contains valid base64 strings of non-image data (e.g. `data:image/png;base64,SGVsbG8gV29ybGQ=` ["Hello World"], HTML errors, SVGs, or truncated PNGs), `ImageDecoderHelper.TryDecode` returns the raw bytes. When QuestPDF renders the document, Skia fails to decode the image and throws `DocumentComposeException: Cannot decode the provided image.` This unhandled exception bubbles up through `ClinicDocumentPdfService` and causes an unhandled HTTP 500 error on any document download (`/pdf`, `/slip-pdf`, `/sample-document-pdf`).
-   - **Case 2 (Extremely Large Signatures / Edge Dimensions)**: **PASSED**.
-     Tested using a real 3.5MB PNG image file (`apps/portal-web/public/og-image.png`). `RenderDoctorSignatureStamp` uses `.Height(38).AlignCenter().Image(signatureBytes).FitArea()`, which correctly scales down the 3.5MB image into the 230pt column without memory exhaustion or layout failure (<200ms render time).
-   - **Case 3 (Compact A5 Paper Size with Multi-Item Prescription)**: **PASSED**.
-     Tested `DocumentPaperSize.A5` across 1, 3, 6, 10, 15, and 25 items on `PrescriptionSlipDto`, as well as 20 items on `LabOrderSlipDto`. QuestPDF cleanly paginated across 5 pages with repeated headers, running footers (`Page X of Y`), verification hashes, and doctor signature stamps without layout loops or exceptions.
-   - **Case 4 (Missing Doctor or Credentials)**: **PASSED**.
-     Tested `doctor = null`, `doctor != null` with all license fields null (`Title = null`, `PrcLicenseNumber = null`, `PtrNumber = null`, `S2LicenseNumber = null`), `doctorName = ""`, `referral` with null doctor and null patient, and clinic settings with null letterhead headers, sub-headers, addresses, and contacts. All rendered valid PDFs without `NullReferenceException`.
-
-3. **Blast Radius of Case 1 Failure**:
-   If an administrator or clinician saves a broken data URI, a non-PNG image, or a corrupted image upload, EVERY subsequent request to generate or download a Medical Certificate, Prescription Slip, Lab Slip, Referral Letter, or Sample PDF for that clinic or doctor will fail with a 500 Internal Server Error.
+1. **Step 1 (Executable Commands Contract)**: `TEST_INFRA.md` Section 5.2 defines the authoritative commands to verify the teleconsultation finalization work product. A test infrastructure specification is invalid if its documented commands fail on the system.
+2. **Step 2 (Compiler Failure)**: By Observation 1.1, `EntitlementsPublisher.cs` fails to compile because it references a non-existent method `HasFeature` on `EntitlementSnapshot`. This breaks the backend test runner for `portal-api`, the consolidated backend command (5.2.2), and the full-stack one-liner (5.2.5).
+3. **Step 3 (Test Suite Failure)**: By Observation 1.2, running `bun test tests` in `packages/comms-sdk` as specified in Section 5.2.3 fails due to outdated assertions in `call-stage.test.ts` that contradict Requirement R1.
+4. **Step 4 (Token Invariant Failure)**: By Observation 1.3, `OverlayTooltip.tsx` introduces 4 raw color literals, causing `bun run lint:comms` to exit with error code 1. This directly contradicts Section 5.1's claim of "0 Violations".
+5. **Step 5 (Behavioral Assertion Discrepancy)**: By Observation 1.4, `AppointmentInspectionModal.tsx` and `TeleconsultWaitingRoomModal.tsx` lack the cached invite state required by Requirement R1. Therefore, `TC-T2.1.1` in `TEST_INFRA.md` cannot pass against the current codebase.
+6. **Step 6 (Test Matrix Omissions)**: The test matrix omits negative coverage for 5-attempt guest lockout (HTTP 423), expired invite vs revoked invite distinction, negative billing rate inputs, cross-tenant isolation, and background tab wall-clock throttling.
+7. **Step 7 (Deductive Conclusion)**: Because critical commands documented in Section 5 fail compilation, test execution, and lint checks, and key test cases are contradicted by the actual codebase, `TEST_INFRA.md` must NOT be approved in its current state. The verdict is `REQUEST_CHANGES`.
 
 ---
 
 ## 3. Caveats
 
-- Tests for Case 1 were conducted with raw byte payloads and truncated PNG headers. Real-world uploads may also include corrupted JPEG streams or SVGs masquerading as PNGs, which will produce the identical `DocumentComposeException`.
-- The remaining 3 dimensions (Extreme Large Signatures, Compact A5 Multi-Item Pagination, and Null/Missing Doctor & Credentials) are robust and verified clean.
+- We did not modify any source code or test implementations directly, adhering strictly to the constraint: "Review-only — do NOT modify implementation code (report findings; tests written to project test suite for verification or run via test runner)".
+- We verified that the Expo dev server on port `8081` remained active and was not terminated.
+- Other verification agents who issued `APPROVE` verdicts appear to have performed static document reviews rather than executing the verification commands in Section 5.
 
 ---
 
@@ -123,42 +116,39 @@ Failed!  - Failed: 3, Passed: 33, Skipped: 0, Total: 36, Duration: 865 ms - Clin
 
 **Verdict: REQUEST_CHANGES**
 
-The QuestPDF document generation engine is solidly structured for layout scaling, A5 pagination, and null credentials, but **fails the explicit non-crash requirement for corrupted and invalid base64 image strings**. 
+`TEST_INFRA.md` must be updated and the underlying blockers resolved before entering Milestone 2 execution:
 
-### Actionable Remediation:
-1. In `services/clinic-api/ClinicEz.Clinic.Infrastructure/Common/ImageDecoderHelper.cs`:
-   Update `TryDecode` so that after `Convert.FromBase64String(trimmed)`, it verifies that the bytes represent an image that QuestPDF's image engine can decode. For example:
-   ```csharp
-   var bytes = Convert.FromBase64String(trimmed);
-   try
-   {
-       // Verify that QuestPDF / Skia can decode the bytes before returning
-       QuestPDF.Infrastructure.Image.FromBinaryData(bytes);
-       return bytes;
-   }
-   catch
-   {
-       return null;
-   }
-   ```
-2. Returning `null` on decodability failure ensures:
-   - Corrupt clinic logos gracefully evaluate to `null`, omitting the logo without crashing `TenantLetterheadComponent`.
-   - Corrupt doctor signatures gracefully evaluate to `null`, falling back to a clean signature line or digital seal without crashing `RenderDoctorSignatureStamp`.
-   - All document generation endpoints produce valid PDFs without throwing 500.
+1. **Fix `EntitlementsPublisher.cs:42`**: Replace `snapshot.HasFeature(...)` with `snapshot.Has(...)` so `ClinicEz.Portal.Tests` compiles and runs cleanly.
+2. **Update `call-stage.test.ts` in `packages/comms-sdk`**: Align legacy assertions with Requirement R1 (`btn-stage-copy-invite` must be null), allowing `bun test tests` to pass.
+3. **Resolve Token Violations in `OverlayTooltip.tsx`**: Replace raw hex and rgba literals in `packages/comms-sdk/src/web-ui/OverlayTooltip.tsx` and `native-ui/OverlayTooltip.tsx` with design tokens so `bun run lint:comms` exits with 0 violations.
+4. **Implement Invite State Caching**: Add `{ inviteUrl, otp, expiresAtUtc }` state to `AppointmentInspectionModal.tsx` and `TeleconsultWaitingRoomModal.tsx` to prevent PIN rotation on repeated clicks as asserted by `TC-T2.1.1`.
+5. **Expand Test Matrix**: Incorporate negative test cases for 5-attempt guest lockout (HTTP 423), 60-minute expired invite status (HTTP 410), invalid billing parameters, and background tab delta-based timer calculations.
 
 ---
 
 ## 5. Verification Method
 
-1. Run the empirical adversarial test suite to observe the 3 failing tests:
-   ```bash
-   ~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~EmpiricalAdversarialDocumentTests"
-   ```
-   *Current Result*: 3 Failed, 33 Passed.
-   *Target Result after remediation*: 36 Passed, 0 Failed.
+To independently verify all findings in this report, execute the following commands in order:
 
-2. Verify that existing hardened tests still pass:
-   ```bash
-   ~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~HardenedDocumentGenerationTests"
-   ```
-   *Expected*: 58 Passed, 0 Failed.
+```bash
+# 1. Verify portal-api compiler failure:
+/Users/macuser/.dotnet/dotnet test services/portal-api/ClinicEz.Portal.Tests/ClinicEz.Portal.Tests.csproj
+# Expected: Exit code 1 with CS1061 error on EntitlementsPublisher.cs:42
+
+# 2. Verify comms-sdk test failure:
+cd packages/comms-sdk && bun test tests
+# Expected: Exit code 1 with 2 failing tests in call-stage.test.ts
+
+# 3. Verify token lint failure:
+cd ../.. && bun run lint:comms
+# Expected: Exit code 1 with 4 token violations in OverlayTooltip.tsx
+
+# 4. Verify lack of invite state caching in AppointmentInspectionModal:
+git grep -n "createTeleconsultGuestInvite" apps/clinic-app/components/calendar/AppointmentInspectionModal.tsx
+# Expected: Observe direct API call on button press without caching guard
+```
+
+**Invalidation Conditions**:
+- If `EntitlementsPublisher.cs` line 42 is updated to `snapshot.Has(...)`, `ClinicEz.Portal.Tests` passes (invalidating Finding 1).
+- If `call-stage.test.ts` is updated to assert `btn-stage-copy-invite` is null, `bun test tests` passes (invalidating Finding 2).
+- If `OverlayTooltip.tsx` is refactored to use design tokens, `bun run lint:comms` passes (invalidating Finding 3).

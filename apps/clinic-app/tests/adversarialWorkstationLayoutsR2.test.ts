@@ -445,8 +445,8 @@ describe('Adversarial Review Round 2: Medical Chart Workstation Layouts Robustne
 
           // Zero duplicate plus strings allowed in any tab across any layout
           expect(markup).not.toContain('+ +');
-          expect(markup).not.toContain('+ Administer Vaccine');
-          expect(markup).not.toContain('+ Add Historical Vaccine');
+          expect(markup).not.toContain('+ Administer Vax');
+          expect(markup).not.toContain('+ Log Vax History');
 
           // Specific tab presence verification
           if (tab === 'summary') {
@@ -458,12 +458,12 @@ describe('Adversarial Review Round 2: Medical Chart Workstation Layouts Robustne
           } else if (tab === 'procedures') {
             expect(markup).toContain('Ordered / Scheduled');
           } else if (tab === 'immunizations') {
-            expect(markup).toContain('Administer Vaccine');
-            expect(markup).toContain('Add Historical Vaccine');
+            expect(markup).toContain('Administer Vax');
+            expect(markup).toContain('Log Vax History');
           } else if (tab === 'profiles') {
             expect(markup).toContain('Health Profiles');
           } else if (tab === 'vault') {
-            expect(markup).toContain('All Records');
+            expect(markup).toContain('Attach External Document');
           }
         });
       }
@@ -485,8 +485,8 @@ describe('Adversarial Review Round 2: Medical Chart Workstation Layouts Robustne
       );
 
       // Verify clean action button titles
-      expect(markup).toContain('Administer Vaccine');
-      expect(markup).toContain('Add Historical Vaccine');
+      expect(markup).toContain('Administer Vax');
+      expect(markup).toContain('Log Vax History');
       expect(markup).not.toContain('+ +');
 
       // Verify clinical immunization documentation status banner is intact

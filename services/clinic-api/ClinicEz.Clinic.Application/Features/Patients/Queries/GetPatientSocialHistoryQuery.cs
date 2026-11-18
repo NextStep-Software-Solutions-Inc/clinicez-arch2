@@ -52,7 +52,8 @@ public sealed class GetPatientSocialHistoryQueryHandler : IRequestHandler<GetPat
             entry.DietaryHabits,
             entry.Remarks,
             entry.SmokingStatus,
-            entry.AlcoholStatus);
+            entry.AlcoholStatus,
+            entry.UpdatedAt ?? entry.CreatedAt);
     }
 }
 

@@ -827,4 +827,89 @@ public sealed class YakapWireBuildersTests
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(e => e.Contains("Guardian information is required", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void YakapConsultationWireBuilder_EmitsStructuredManagementPayload_ForYakap20()
+    {
+        var builder = new YakapConsultationWireBuilder();
+        var facility = CreateFacility();
+        var patient = CreatePatient();
+
+        var encounter = new ConsultationEncounter
+        {
+            Id = Guid.NewGuid(),
+            TenantId = patient.TenantId,
+            ClinicId = patient.ClinicId,
+            PatientId = patient.Id,
+            PatientName = "Juan Dela Cruz",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Jose Rizal",
+            DoctorPrcLicense = "1234567",
+            DoctorPhilHealthPan = "PAN-001",
+            EncounterDate = new DateTime(2026, 11, 3, 10, 30, 0, DateTimeKind.Utc),
+            Subjective = "Routine consultation and blood pressure follow-up",
+            Objective = "BP 128/82",
+            Assessment = "Essential hypertension",
+            Plan = "Continue maintenance medication and lifestyle counseling",
+            PhilHealthCaseNo = "C00921202600001",
+            CounselingCodes = "5;7;16",
+            RoutineVaccineName = "Influenza Quadrivalent",
+            RoutineVaccineDate = new DateOnly(2026, 11, 3),
+            AdultsRoutineScreeningCode = "4,7,18",
+            PediatricRoutineScreeningCode = "0",
+            PrenatalScreeningServicesCode = "0",
+            PhilHealthManagementCodes = "15",
+            DiagnosticServicesOption = "Y",
+            HasMedicationPrescription = true,
+            HasReferral = false,
+            OtherMedicalAdviceSpec = "Maintain low-sodium diet",
+            HasFollowUp = true,
+            FollowUpDate = new DateOnly(2026, 11, 17),
+            FollowUpReason = "Review FBS and HbA1c results",
+            FollowUpVaccineName = "Pneumococcal PCV20",
+            FollowUpVaccineNextDate = new DateOnly(2026, 12, 3)
+        };
+
+        var diagnoses = new List<EncounterDiagnosis>
+        {
+            new()
+            {
+                ConsultationEncounterId = encounter.Id,
+                TenantId = encounter.TenantId,
+                ClinicId = encounter.ClinicId,
+                Icd10Code = "I10",
+                Description = "Essential (primary) hypertension",
+                IsPrimary = true
+            }
+        };
+
+        var result = builder.BuildWirePayload(new YakapConsultationContext
+        {
+            Facility = facility,
+            Patient = patient,
+            Encounter = encounter,
+            Diagnoses = diagnoses
+        });
+
+        result.IsSuccess.Should().BeTrue();
+        using var doc = JsonDocument.Parse(result.Value!);
+        var mgmt = doc.RootElement.GetProperty("management");
+        mgmt.GetProperty("counseling_health_education").GetString().Should().Be("5;7;16");
+        mgmt.GetProperty("routine_vaccine_name").GetString().Should().Be("Influenza Quadrivalent");
+        mgmt.GetProperty("routine_vaccine_date").GetString().Should().Be("11/03/2026");
+        mgmt.GetProperty("adults_routine_screening").GetString().Should().Be("4,7,18");
+        mgmt.GetProperty("pediatric_routine_screening").GetString().Should().Be("0");
+        mgmt.GetProperty("prenatal_screening_services").GetString().Should().Be("0");
+        mgmt.GetProperty("cancer_screening_flag").GetString().Should().Be("Y");
+        mgmt.GetProperty("cancer_screening_selected").GetString().Should().Be("15");
+        mgmt.GetProperty("diagnostic_services_flag").GetString().Should().Be("Y");
+        mgmt.GetProperty("medication_prescription_flag").GetString().Should().Be("Y");
+        mgmt.GetProperty("referral_flag").GetString().Should().Be("N");
+        mgmt.GetProperty("other_medical_advice_spec").GetString().Should().Be("Maintain low-sodium diet");
+        mgmt.GetProperty("follow_up_flag").GetString().Should().Be("Y");
+        mgmt.GetProperty("follow_up_on").GetString().Should().Be("11/17/2026");
+        mgmt.GetProperty("follow_up_reason").GetString().Should().Be("Review FBS and HbA1c results");
+        mgmt.GetProperty("follow_up_vaccine_name").GetString().Should().Be("Pneumococcal PCV20");
+        mgmt.GetProperty("follow_up_next_vaccine_date").GetString().Should().Be("12/03/2026");
+    }
 }

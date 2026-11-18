@@ -142,6 +142,13 @@ public sealed class OptionsAndPsgcAdversarialTests
     [InlineData("valid_id_type")]
     [InlineData("medicine_route")]
     [InlineData("medicine_frequency")]
+    [InlineData("immunization_cohort")]
+    [InlineData("adult_other_vaccine")]
+    [InlineData("vaccine_route")]
+    [InlineData("vaccine_injection_site")]
+    [InlineData("physical_activity")]
+    [InlineData("dietary_intake")]
+    [InlineData("sleep_pattern")]
     public void GetOptionSet_ForStandardSets_Returns200WithETag(string optionSet)
     {
         var (controller, httpContext, _, _) = CreateTestHarness();
@@ -197,6 +204,41 @@ public sealed class OptionsAndPsgcAdversarialTests
         var apiResponse = okResult.Value.Should().BeOfType<ApiResponse<IReadOnlyDictionary<string, IReadOnlyList<EhrOptionDescriptor>>>>().Subject;
         apiResponse.Succeeded.Should().BeTrue();
         apiResponse.Data!.Count.Should().BeGreaterThanOrEqualTo(10);
+    }
+
+    [Fact]
+    public void GetImmunizationOptionSets_ReturnsBackendDrivenCohortsAdultVaccinesRoutesAndSites()
+    {
+        var cohorts = EhrStaticOptions.GetOptions("immunization_cohort");
+        cohorts.Select(c => c.Code).Should().Equal(
+            "lib_immchild",
+            "lib_immyoungw",
+            "lib_immpregw",
+            "lib_immelderly",
+            "OtherImm");
+
+        var adultVaccines = EhrStaticOptions.GetOptions("adult_other_vaccine");
+        adultVaccines.Should().Contain(v => v.Code == "O01" && v.PhilHealthLibrary == "OtherImm");
+        adultVaccines.Should().Contain(v => v.Code == "O02" && v.Label.Contains("Anti-Rabies"));
+        adultVaccines.Should().Contain(v => v.Code == "O05" && v.Label.Contains("COVID-19"));
+        adultVaccines.Should().Contain(v => v.Code == "OTH" && v.RequiresSpecifyText);
+
+        var routes = EhrStaticOptions.GetOptions("vaccine_route");
+        routes.Select(r => r.Label).Should().ContainInOrder(
+            "Intramuscular (IM)",
+            "Subcutaneous (SC)",
+            "Intradermal (ID)",
+            "Oral (PO)");
+        routes.Single(r => r.Code == "ORAL").Metadata!["requiresInjectionSite"].Should().Be("false");
+        routes.Single(r => r.Code == "INTRAMUSCULAR").Metadata!["requiresInjectionSite"].Should().Be("true");
+
+        var sites = EhrStaticOptions.GetOptions("vaccine_injection_site");
+        sites.Select(s => s.Label).Should().Equal(
+            "Left Deltoid",
+            "Right Deltoid",
+            "Left Anterolateral Thigh",
+            "Right Anterolateral Thigh");
+        sites.Select(s => s.Label).Should().NotContain("Oral");
     }
 
     [Fact]

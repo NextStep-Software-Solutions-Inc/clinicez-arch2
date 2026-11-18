@@ -3,6 +3,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Exceptions;
+using ClinicEz.Clinic.Application.Features.Appointments;
+using ClinicEz.Clinic.Application.Features.Billing.Commands;
 using ClinicEz.Clinic.Application.Features.Teleconsult.Commands;
 using ClinicEz.Clinic.Application.Features.Teleconsult.Queries;
 using ClinicEz.Clinic.Domain.Constants;
@@ -86,7 +88,7 @@ public sealed class TeleconsultPaymentGateTests
     }
 
     [Fact]
-    public async Task AdmitPatient_WhenPatientHasActiveYakapEnlistment_AutoExemptsAndAdmits()
+    public async Task AdmitPatient_WhenPatientHasActiveYakapEnlistment_DoesNotAutoExempt_ThrowsTeleconsultPaymentRequiredException()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -147,20 +149,12 @@ public sealed class TeleconsultPaymentGateTests
             appointmentRepo, patientRepo, auditRepo, uow, _clinicContext, publisher,
             NullLogger<AdmitTeleconsultPatientCommandHandler>.Instance);
 
-        // Act
-        var result = await handler.Handle(new AdmitTeleconsultPatientCommand(appointmentId), CancellationToken.None);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Exempt);
-        result.IsEmergencyOverride.Should().BeFalse();
-        result.RoomName.Should().StartWith("call-");
-
-        // Verify appointment was updated to Exempt
-        appointment.PaymentPolicy.Should().Be(TeleconsultPaymentPolicy.Exempt);
-        appointment.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Exempt);
-        appointment.PaymentMethod.Should().Be("PhilHealthKonsulta");
-        appointment.Status.Should().Be(AppointmentStatus.InConsultation);
+        // Act & Assert per F6:
+        // Active Yakap is informational and must not auto-exempt prepaid appointments.
+        var act = () => handler.Handle(new AdmitTeleconsultPatientCommand(appointmentId), CancellationToken.None);
+        var ex = await act.Should().ThrowAsync<TeleconsultPaymentRequiredException>();
+        ex.Which.AppointmentId.Should().Be(appointmentId);
+        appointment.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Pending);
     }
 
     [Fact]
@@ -362,6 +356,7 @@ public sealed class TeleconsultPaymentGateTests
         unauthorizedContext.StaffId.Returns(Guid.NewGuid());
         unauthorizedContext.StaffName.Returns("Receptionist Staff");
         unauthorizedContext.HasPermission(ClinicPermissions.ConsultationsSign).Returns(false);
+        unauthorizedContext.HasPermission(ClinicPermissions.ConsultationsWrite).Returns(false);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(unauthorizedContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
@@ -497,7 +492,7 @@ public sealed class TeleconsultPaymentGateTests
     }
 
     [Fact]
-    public async Task AdmitPatient_WhenEmergencyOverrideReasonCodeIsUnrecognized_ThrowsBadRequestException()
+    public async Task AdmitPatient_WhenEmergencyOverrideReasonCodeIsUnrecognized_DefaultsToStaffOverrideAndAdmits()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -533,12 +528,366 @@ public sealed class TeleconsultPaymentGateTests
             ReasonNote: "Valid clinical note with sufficient length"
         );
 
-        // Act & Assert: Must throw BadRequestException for unrecognized statutory reason code
-        var act = () => handler.Handle(
-            new AdmitTeleconsultPatientCommand(appointmentId, overrideDto),
-            CancellationToken.None);
+        // Act & Assert per F7: Unrecognized reason codes default to STAFF-OVERRIDE.
+        var result = await handler.Handle(new AdmitTeleconsultPatientCommand(appointmentId, overrideDto), CancellationToken.None);
+        result.Should().NotBeNull();
+        result.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Overridden);
+        result.IsEmergencyOverride.Should().BeTrue();
+        appointment.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Overridden);
+        appointment.EmergencyOverrideReasonCode.Should().Be("STAFF-OVERRIDE");
+    }
 
-        await act.Should().ThrowAsync<BadRequestException>()
-            .WithMessage("*not a recognized statutory reason code*");
+    [Fact]
+    public async Task RecordPaymentCommand_WhenTeleconsultInvoiceSettled_UpdatesAppointmentAndEmitsPaymentCleared()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
+        var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
+        var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var publisher = Substitute.For<IInteropPublisher>();
+
+        var appointmentId = Guid.NewGuid();
+        var invoiceId = Guid.NewGuid();
+        var callId = Guid.NewGuid();
+
+        var appointment = new Appointment
+        {
+            Id = appointmentId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Emilio Jacinto",
+            ScheduledAt = DateTime.UtcNow,
+            DurationMinutes = 30,
+            AppointmentType = AppointmentType.Teleconsult,
+            PaymentPolicy = TeleconsultPaymentPolicy.Prepaid,
+            PaymentStatus = TeleconsultPaymentStatus.Pending,
+            CallId = callId,
+            InvoiceId = invoiceId
+        };
+        context.Appointments.Add(appointment);
+
+        var invoice = new Invoice
+        {
+            Id = invoiceId,
+            InvoiceNumber = "INV-20261113-REC01",
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            AppointmentId = appointmentId,
+            PatientId = appointment.PatientId,
+            PatientName = appointment.PatientName,
+            GrossAmount = 400.00m,
+            NetAmount = 400.00m,
+            BalanceDue = 400.00m,
+            AmountPaid = 0m,
+            Status = InvoiceStatus.Draft,
+            InvoiceDate = DateTime.UtcNow
+        };
+        context.Invoices.Add(invoice);
+        await context.SaveChangesAsync();
+
+        var handler = new RecordPaymentCommandHandler(
+            invoiceRepo, paymentRepo, appointmentRepo, uow, _clinicContext, publisher);
+
+        var command = new RecordPaymentCommand(
+            InvoiceId: invoiceId,
+            Amount: 400.00m,
+            Method: PaymentMethod.Cash,
+            ReferenceNumber: "REC-998811",
+            Notes: "Full payment at clinic cashier desk");
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.Status.Should().Be(InvoiceStatus.Paid);
+        result.BalanceDue.Should().Be(0m);
+
+        var updatedAppointment = await context.Appointments.FindAsync(appointmentId);
+        updatedAppointment!.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Paid);
+        updatedAppointment.PaidAmount.Should().Be(400.00m);
+        updatedAppointment.PaymentReceiptNumber.Should().NotBeNullOrWhiteSpace();
+        updatedAppointment.PaymentMethod.Should().Be("Cash");
+
+        publisher.Received(1).Enqueue(
+            InteropTypes.CommsCallPaymentCleared,
+            Arg.Any<Party>(),
+            Arg.Any<Party>(),
+            callId,
+            Arg.Is<CommsCallPaymentClearedPayload>(p =>
+                p.CallId == callId &&
+                p.InvoiceId == invoiceId &&
+                p.PaymentMethod == "Cash" &&
+                !p.IsEmergencyOverride));
+    }
+
+    [Fact]
+    public async Task AdmitPatient_WithEmergencyOverride_AuthorizedByStaffWithConsultationsWrite_Succeeds()
+    {
+        // Arrange: staff has ConsultationsWrite but lacks ConsultationsSign
+        var staffContext = Substitute.For<IClinicContext>();
+        staffContext.ClinicId.Returns(_clinicId);
+        staffContext.TenantId.Returns(_tenantId);
+        staffContext.StaffId.Returns(Guid.NewGuid());
+        staffContext.StaffName.Returns("Nurse Teresa");
+        staffContext.HasPermission(ClinicPermissions.ConsultationsSign).Returns(false);
+        staffContext.HasPermission(ClinicPermissions.ConsultationsWrite).Returns(true);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(staffContext);
+        var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
+        var publisher = Substitute.For<IInteropPublisher>();
+
+        var appointmentId = Guid.NewGuid();
+        var appointment = new Appointment
+        {
+            Id = appointmentId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Patient Write Authority",
+            ScheduledAt = DateTime.UtcNow,
+            DurationMinutes = 30,
+            AppointmentType = AppointmentType.Teleconsult,
+            PaymentPolicy = TeleconsultPaymentPolicy.Prepaid,
+            PaymentStatus = TeleconsultPaymentStatus.Pending
+        };
+        context.Appointments.Add(appointment);
+        await context.SaveChangesAsync();
+
+        var handler = new AdmitTeleconsultPatientCommandHandler(
+            appointmentRepo, patientRepo, auditRepo, uow, staffContext, publisher,
+            NullLogger<AdmitTeleconsultPatientCommandHandler>.Instance);
+
+        var overrideDto = new EmergencyOverrideDto(
+            ReasonCode: null,
+            ReasonNote: "Urgent teleconsultation required for acute asthma flareup"
+        );
+
+        // Act
+        var result = await handler.Handle(new AdmitTeleconsultPatientCommand(appointmentId, overrideDto), CancellationToken.None);
+
+        // Assert
+        result.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Overridden);
+        result.IsEmergencyOverride.Should().BeTrue();
+        appointment.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Overridden);
+        appointment.EmergencyOverrideReasonCode.Should().Be("STAFF-OVERRIDE");
+    }
+
+    [Fact]
+    public async Task GetTeleconsultStatus_WhenPrepaidAndUnpaidWithYakap_ReturnsCanAdmitFalseAndInformationalYakap()
+    {
+        // Arrange
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
+
+        var patientId = Guid.NewGuid();
+        var appointmentId = Guid.NewGuid();
+        var invoiceId = Guid.NewGuid();
+
+        var patient = new Patient
+        {
+            Id = patientId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-YAKAP-INFO",
+            FirstName = "Leona",
+            LastName = "Florentino",
+            DateOfBirth = new DateOnly(1985, 4, 19),
+            ContactNumber = "09170001122"
+        };
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
+        {
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            EffectiveYear = 2026,
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
+            Status = YakapEnlistmentStatus.Active
+        });
+        context.Patients.Add(patient);
+
+        var appointment = new Appointment
+        {
+            Id = appointmentId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            PatientName = $"{patient.FirstName} {patient.LastName}",
+            ScheduledAt = new DateTime(2026, 11, 13, 10, 0, 0, DateTimeKind.Utc),
+            DurationMinutes = 30,
+            AppointmentType = AppointmentType.Teleconsult,
+            PaymentPolicy = TeleconsultPaymentPolicy.Prepaid,
+            PaymentStatus = TeleconsultPaymentStatus.Pending,
+            InvoiceId = invoiceId,
+            CallId = Guid.NewGuid()
+        };
+        context.Appointments.Add(appointment);
+
+        var settings = new FacilitySettings
+        {
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            ClinicName = "Yakap Test Facility",
+            TeleconsultRecordingPolicy = "WorkspaceVaultOnly",
+            TeleconsultRecordingConsentRequired = true
+        };
+        context.Settings.Add(settings);
+        await context.SaveChangesAsync();
+
+        var handler = new GetTeleconsultStatusQueryHandler(
+            appointmentRepo, patientRepo, _clinicContext, settingsRepo, null, invoiceRepo);
+
+        // Act
+        var result = await handler.Handle(new GetTeleconsultStatusQuery(appointmentId), CancellationToken.None);
+
+        // Assert
+        result.CanAdmit.Should().BeFalse();
+        result.HasActiveYakapEnlistment.Should().BeTrue();
+        result.IsYakapExempt.Should().BeTrue(); // alias property
+        result.PaymentPolicy.Should().Be(TeleconsultPaymentPolicy.Prepaid);
+        result.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Pending);
+        result.InvoiceId.Should().Be(invoiceId);
+        result.RecordingPolicy.Should().Be("WorkspaceVaultOnly");
+        result.RecordingConsentRequired.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CreateAppointment_WhenTeleconsultation_InfersModality_AssignsCallId_CreatesLinkedInvoice()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
+        var publisher = Substitute.For<IInteropPublisher>();
+
+        var settings = new FacilitySettings
+        {
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            ClinicName = "Teleconsultation Inference Clinic",
+            TeleconsultPaymentPolicy = "Prepaid",
+            TeleconsultDefaultFee = 450.00m,
+            CashierMode = "CashierCounter"
+        };
+        context.Settings.Add(settings);
+        await context.SaveChangesAsync();
+
+        var handler = new CreateAppointmentCommandHandler(
+            appointmentRepo, uow, _clinicContext, null, publisher, settingsRepo, invoiceRepo);
+
+        var command = new CreateAppointmentCommand(
+            PatientId: Guid.NewGuid(),
+            PatientName: "Graciano Lopez Jaena",
+            DoctorId: null,
+            DoctorName: null,
+            ScheduledAt: DateTime.UtcNow.AddDays(1),
+            DurationMinutes: 30,
+            ServiceType: "Teleconsultation"
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.AppointmentType.Should().Be(AppointmentType.Teleconsult);
+        result.IsTeleconsult.Should().BeTrue();
+        result.PaymentPolicy.Should().Be(TeleconsultPaymentPolicy.Prepaid);
+        result.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Pending);
+        result.CallId.Should().NotBeNull();
+        result.InvoiceId.Should().NotBeNull();
+
+        var appointmentInDb = await context.Appointments.FindAsync(result.Id);
+        appointmentInDb!.IsTeleconsult.Should().BeTrue();
+        appointmentInDb.CallId.Should().NotBeNull();
+        appointmentInDb.InvoiceId.Should().NotBeNull();
+
+        var invoiceInDb = await context.Invoices.FindAsync(appointmentInDb.InvoiceId!.Value);
+        invoiceInDb.Should().NotBeNull();
+        invoiceInDb!.GrossAmount.Should().Be(450.00m);
+        invoiceInDb.Status.Should().Be(InvoiceStatus.Draft);
+
+        publisher.Received(1).Enqueue(
+            InteropTypes.BillingInvoiceRequested,
+            Arg.Any<Party>(),
+            Arg.Any<Party>(),
+            invoiceInDb.Id,
+            Arg.Any<BillingInvoiceRequestedPayload>());
+    }
+
+    [Fact]
+    public async Task AppointmentBookedHandler_WhenTeleconsult_AssignsCallId_CreatesLinkedInvoice_AndEnqueuesBillingRequest()
+    {
+        // Arrange
+        using var db = MessagingTestKit.CreateDbContext();
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant-booked-teleconsult";
+        var settings = MessagingTestKit.SeedClinic(db, clinicId, tenantId);
+        settings.TeleconsultPaymentPolicy = "Prepaid";
+        settings.TeleconsultDefaultFee = 450.00m;
+        settings.CashierMode = "CashierCounter";
+        await db.SaveChangesAsync();
+
+        var publisher = Substitute.For<IInteropPublisher>();
+        var recipient = new ClinicRecipientResolver(db, NullLogger<ClinicRecipientResolver>.Instance);
+        var handler = new AppointmentBookedHandler(db, recipient, publisher, NullLogger<AppointmentBookedHandler>.Instance);
+
+        var patientId = Guid.NewGuid();
+        var draftId = Guid.NewGuid();
+
+        var booked = new AppointmentBookedEvent
+        {
+            Id = Guid.NewGuid(),
+            DraftId = draftId,
+            PatientId = patientId,
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            AppointmentType = "Teleconsult",
+            PreferredDate = new DateOnly(2026, 11, 20),
+            PreferredTime = "14:00",
+            Reason = "Teleconsultation follow-up",
+            Notes = "Virtual consult requested",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var context = MessagingTestKit.Delivered(
+            InteropTypes.PatientAppointmentBooked,
+            Party.ForPatient(patientId.ToString()),
+            MessagingTestKit.ClinicParty(tenantId, clinicId),
+            draftId,
+            booked);
+
+        // Act
+        await handler.HandleAsync(booked, context, CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        // Assert
+        var appt = await db.Appointments.IgnoreQueryFilters().FirstOrDefaultAsync(a => a.DraftId == draftId);
+        appt.Should().NotBeNull();
+        appt!.AppointmentType.Should().Be(AppointmentType.Teleconsult);
+        appt.IsTeleconsult.Should().BeTrue();
+        appt.CallId.Should().NotBeNull();
+        appt.PaymentPolicy.Should().Be(TeleconsultPaymentPolicy.Prepaid);
+        appt.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Pending);
+        appt.InvoiceId.Should().NotBeNull();
+
+        var invoice = await db.Invoices.IgnoreQueryFilters().FirstOrDefaultAsync(i => i.Id == appt.InvoiceId!.Value);
+        invoice.Should().NotBeNull();
+        invoice!.GrossAmount.Should().Be(450.00m);
+        invoice.Status.Should().Be(InvoiceStatus.Draft);
+
+        publisher.Received().Enqueue(
+            InteropTypes.BillingInvoiceRequested,
+            Arg.Any<Party>(),
+            Arg.Any<Party>(),
+            invoice.Id,
+            Arg.Any<BillingInvoiceRequestedPayload>());
     }
 }

@@ -477,5 +477,30 @@ describe('Cardiometabolic Risk Assessment - Explicit Answering, Skip Logic & Cli
     expect(content).toContain('Diabetes & Metabolic Assessment');
     expect(content).toContain('Cardiovascular & Cerebrovascular Symptoms');
     expect(content).toContain('10-Year Cardiovascular Disease Risk Stratification');
+
+    // Section 6 risk stratification should use scaled-down workstation typography (not oversized 'display')
+    expect(content).not.toContain('variant="display"');
+    expect(content).toContain('All changes saved');
+    expect(content).toContain('Saving changes…');
+
+    // Lifestyle pediatric notice uses PhilHealth YAKAP guidelines & auto-save (no manual save button)
+    const lifestyleContent = fs.readFileSync(
+      path.resolve(__dirname, '../components/chart/LifestyleSocialTab.tsx'),
+      'utf-8'
+    );
+    expect(lifestyleContent).toContain('per PhilHealth YAKAP guidelines.');
+    expect(lifestyleContent).not.toContain('per PhilHealth Konsulta guidelines.');
+    expect(lifestyleContent).not.toContain('Save Lifestyle Profile');
+    expect(lifestyleContent).toContain('Last saved');
+
+    // Reproductive male guard omits PhilHealth Yakap statutory schemas mention & uses auto-save
+    const reproductiveContent = fs.readFileSync(
+      path.resolve(__dirname, '../components/chart/ReproductiveHealthTab.tsx'),
+      'utf-8'
+    );
+    expect(reproductiveContent).toContain('are restricted to female patients.');
+    expect(reproductiveContent).not.toContain('PhilHealth Yakap statutory schemas');
+    expect(reproductiveContent).not.toContain("Save Women's Health Profile");
+    expect(reproductiveContent).toContain('Last saved');
   });
 });

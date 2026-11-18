@@ -377,4 +377,77 @@ describe('Adversarial Demographic Stress Suite', () => {
     expect(element.props.patient.sex).toBe('Intersex');
     expect(element.props.patient.civilStatus).toBe('Separated');
   });
+
+  test('ADV-7: Structured allergies and explicit alert/allergy clearing are preserved in update payload', async () => {
+    const structuredUpdatePayload: RegisterPatientPayload = {
+      firstName: 'Clarisse',
+      lastName: 'Alvarado',
+      dateOfBirth: '1977-06-04',
+      sex: 'Female',
+      contactNumber: '0917-123-4567',
+      allergies: 'Amoxicillin (Medication - STAT)',
+      structuredAllergies: [
+        {
+          category: 'Medication',
+          allergen: 'Amoxicillin',
+          allergenDrugCode: 'AMX500',
+          severity: 'LifeThreatening',
+          reactionManifestation: 'Airway edema',
+          isAnaphylactic: true,
+        },
+      ],
+      alerts: '',
+      medicalHistories: [],
+    };
+
+    const [, err] = await clinicService.updatePatient('pat-structured-01', structuredUpdatePayload);
+    expect(err).toBeNull();
+    expect(lastPutPayload.structuredAllergies).toHaveLength(1);
+    expect(lastPutPayload.structuredAllergies[0].allergen).toBe('Amoxicillin');
+    expect(lastPutPayload.structuredAllergies[0].isAnaphylactic).toBe(true);
+    expect(lastPutPayload.alerts).toBe('');
+    expect(lastPutPayload.medicalHistories).toEqual([]);
+  });
+
+  test('ADV-8: reconcileChartWithPatient syncs structuredAllergies and cleared alerts onto PatientChart', async () => {
+    const { reconcileChartWithPatient } = await import('../components/chart/PatientSummarySpine');
+    const staleChart: any = {
+      patientId: 'pat-1',
+      patientName: 'Alvarado, Clarisse',
+      allergies: [
+        {
+          id: 'old-allergy',
+          clinicId: 'c1',
+          patientId: 'pat-1',
+          category: 'Medication',
+          allergen: 'Penicillin',
+          severity: 'Moderate',
+          isAnaphylactic: false,
+          status: 'Active',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+      demographics: {
+        patientName: 'Alvarado, Clarisse',
+        patientCode: 'PAT-2026-01047',
+        age: 49,
+        dob: '1977-06-04',
+        sex: 'Female',
+        contactNumber: '09171234567',
+        alerts: 'Fall Risk',
+      },
+    };
+
+    const updatedPatient: ClinicPatient = {
+      ...basePatient,
+      id: 'pat-1',
+      alerts: undefined,
+      structuredAllergies: [],
+    };
+    (updatedPatient as any).alerts = null;
+
+    const reconciled = reconcileChartWithPatient(staleChart, updatedPatient);
+    expect(reconciled.allergies).toEqual([]);
+    expect(reconciled.demographics?.alerts).toBeUndefined();
+  });
 });

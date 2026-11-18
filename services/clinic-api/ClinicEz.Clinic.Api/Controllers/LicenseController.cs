@@ -148,7 +148,11 @@ public sealed class LicenseController : ControllerBase
                 {
                     settings = await _settingsRepo.IgnoreQueryFilters()
                         .FirstOrDefaultAsync(s => !s.IsDeleted && s.ClinicId == clinicIdHeader &&
-                            (s.TenantId.ToLower() == tenantGuidStr || s.TenantId.ToLower() == tenantSlugStr || s.TenantId.ToLower() == rawTenantStr), ct);
+                            (s.TenantId.ToLower() == tenantGuidStr ||
+                             s.TenantId.ToLower() == tenantSlugStr ||
+                             s.TenantId.ToLower() == rawTenantStr ||
+                             (s.TenantSlug != null && (s.TenantSlug.ToLower() == tenantSlugStr || s.TenantSlug.ToLower() == rawTenantStr)) ||
+                             (s.FacilitySlug != null && (s.FacilitySlug.ToLower() == tenantSlugStr || s.FacilitySlug.ToLower() == rawTenantStr))), ct);
                 }
 
                 if (settings == null)
@@ -157,7 +161,9 @@ public sealed class LicenseController : ControllerBase
                         .Where(s => !s.IsDeleted && (
                             s.TenantId.ToLower() == tenantGuidStr ||
                             s.TenantId.ToLower() == tenantSlugStr ||
-                            s.TenantId.ToLower() == rawTenantStr
+                            s.TenantId.ToLower() == rawTenantStr ||
+                            (s.TenantSlug != null && (s.TenantSlug.ToLower() == tenantSlugStr || s.TenantSlug.ToLower() == rawTenantStr)) ||
+                            (s.FacilitySlug != null && (s.FacilitySlug.ToLower() == tenantSlugStr || s.FacilitySlug.ToLower() == rawTenantStr))
                         ))
                         .Take(2)
                         .ToListAsync(ct);
@@ -383,6 +389,13 @@ public sealed class LicenseController : ControllerBase
             settings.MaxStaffLimit = payload?.Limits?.MaxStaff ?? 5;
             settings.LicenseExpiresAt = payload?.ExpiresAtUtc;
             settings.EntitlementVersion = payload?.EntitlementVersion ?? 0;
+        }
+
+        var hasTeleconsult = payload?.EnabledFeatures != null &&
+            payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+        if (!hasTeleconsult)
+        {
+            settings.EnableTeleconsultation = false;
         }
 
         await _unitOfWork.SaveChangesAsync(ct);

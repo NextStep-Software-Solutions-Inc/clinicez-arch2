@@ -32,7 +32,7 @@ public sealed record CheckInPatientCommand(
     string? RoomOrStation = null,
     Guid? RoomId = null,
     DateOnly? QueueDate = null,
-    VisitType VisitType = VisitType.Consultation,
+    VisitType VisitType = VisitType.RoutineCheckup,
     string? SeriesPrefix = null,
     bool AllowDuplicateActive = false) : IRequest<QueueItemDto>;
 
@@ -65,6 +65,7 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
     private readonly IRepository<StaffMember>? _staffRepository;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
     private readonly IRepository<FacilitySettings>? _settingsRepository;
+    private readonly IRepository<Patient>? _patientRepository;
 
     public CheckInPatientCommandHandler(
         IRepository<QueueItem> queueRepository,
@@ -76,7 +77,8 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         IRepository<Room>? roomRepository = null,
         IRepository<StaffMember>? staffRepository = null,
         IWorkspaceProfileProvider? workspaceProfiles = null,
-        IRepository<FacilitySettings>? settingsRepository = null)
+        IRepository<FacilitySettings>? settingsRepository = null,
+        IRepository<Patient>? patientRepository = null)
     {
         _queueRepository = queueRepository;
         _appointmentRepository = appointmentRepository;
@@ -88,6 +90,7 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         _staffRepository = staffRepository;
         _workspaceProfiles = workspaceProfiles;
         _settingsRepository = settingsRepository;
+        _patientRepository = patientRepository;
     }
 
     public async Task<QueueItemDto> Handle(CheckInPatientCommand request, CancellationToken cancellationToken)
@@ -95,14 +98,9 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         var today = request.QueueDate
             ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, cancellationToken, _settingsRepository);
 
-        // Enforce active queue day uniqueness: prevent duplicate active tickets today across clinical services unless explicitly allowed by staff.
+        // Enforce active queue day uniqueness: prevent duplicate active tickets today across clinical visits unless explicitly allowed by staff.
         // Terminal tickets (Completed, Cancelled, NoShow, DischargedNonDoctor, Diverted) do not conflict.
-        // Pure retail purchases, cashier settlements, and lab drop-offs (non-clinical) do not conflict.
-        bool isNonClinicalVisit = request.VisitType == VisitType.RetailPurchase ||
-                                  request.VisitType == VisitType.CashierSettlement ||
-                                  request.VisitType == VisitType.LaboratorySpecimen;
-
-        if (!isNonClinicalVisit && !request.AllowDuplicateActive)
+        if (!request.AllowDuplicateActive)
         {
             QueueStatus[] activeStatuses =
             [
@@ -114,16 +112,15 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
                 QueueStatus.OnHold
             ];
 
-            var activeTicket = await _queueRepository.Query(q =>
+            var activeCandidates = await _queueRepository.Query(q =>
                 q.ClinicId == _clinicContext.ClinicId &&
                 q.QueueDate == today &&
                 q.PatientId == request.PatientId &&
-                q.VisitType != VisitType.RetailPurchase &&
-                q.VisitType != VisitType.CashierSettlement &&
-                q.VisitType != VisitType.LaboratorySpecimen &&
                 activeStatuses.Contains(q.Status))
                 .OrderByDescending(q => q.CheckInTime)
-                .FirstOrDefaultAsync(cancellationToken);
+                .ToListAsync(cancellationToken);
+
+            var activeTicket = activeCandidates.FirstOrDefault(q => Enum.IsDefined(q.VisitType));
 
             if (activeTicket != null)
             {
@@ -136,34 +133,37 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         }
 
         // Sequence number generation for today in this clinic matching SeriesPrefix
-        var rawSeriesPrefix = string.IsNullOrWhiteSpace(request.SeriesPrefix)
-            ? "Q"
-            : request.SeriesPrefix.Trim().TrimEnd('-').ToUpperInvariant();
-        var seriesPrefix = string.IsNullOrWhiteSpace(rawSeriesPrefix) ? "Q" : rawSeriesPrefix;
-        var seriesPattern = $"{seriesPrefix}-";
-
-        var matchingQueueNumbers = await _queueRepository.Query(q => 
-            q.ClinicId == _clinicContext.ClinicId && 
-            q.QueueDate == today &&
-            q.QueueNumber.StartsWith(seriesPattern))
-            .Select(q => q.QueueNumber)
-            .ToListAsync(cancellationToken);
-
-        int maxSeriesSequence = 0;
-        foreach (var qNum in matchingQueueNumbers)
+        string seriesPrefix;
+        if (!string.IsNullOrWhiteSpace(request.SeriesPrefix))
         {
-            if (qNum.StartsWith(seriesPattern, StringComparison.OrdinalIgnoreCase))
+            var rawSeriesPrefix = request.SeriesPrefix.Trim().TrimEnd('-').ToUpperInvariant();
+            seriesPrefix = string.IsNullOrWhiteSpace(rawSeriesPrefix) ? "Q" : rawSeriesPrefix;
+        }
+        else
+        {
+            var isSeniorOrPwd = false;
+            if (_patientRepository != null)
             {
-                var suffix = qNum[seriesPattern.Length..];
-                if (int.TryParse(suffix, out var parsedSeq) && parsedSeq > maxSeriesSequence)
+                var patient = await _patientRepository.Query(p =>
+                    p.Id == request.PatientId &&
+                    p.ClinicId == _clinicContext.ClinicId)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (patient != null)
                 {
-                    maxSeriesSequence = parsedSeq;
+                    isSeniorOrPwd = PatientPriorityHelper.IsSeniorOrPwd(patient, today);
                 }
             }
+
+            seriesPrefix = isSeniorOrPwd ? "SQ" : "Q";
         }
 
-        var nextSequence = maxSeriesSequence + 1;
-        var queueNumber = $"{seriesPrefix}-{nextSequence:D3}";
+        var (nextSequence, queueNumber) = await QueueSeriesHelper.GetNextQueueSequenceAsync(
+            _queueRepository,
+            _clinicContext.ClinicId,
+            today,
+            seriesPrefix,
+            cancellationToken);
 
         Appointment? appointment = null;
         if (request.AppointmentId.HasValue)
@@ -332,7 +332,7 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             null,
             queueItem.RoomOrStation,
             queueItem.RoomId,
-            queueItem.VisitType,
+            Enum.IsDefined(queueItem.VisitType) ? queueItem.VisitType : null,
             queueItem.DischargeNotes,
             queueItem.DischargedAt,
             queueItem.DischargedByStaffId);

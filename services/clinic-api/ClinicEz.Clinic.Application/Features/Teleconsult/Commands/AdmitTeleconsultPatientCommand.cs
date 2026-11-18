@@ -12,6 +12,7 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Shared.Licensing;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -19,8 +20,8 @@ using Microsoft.Extensions.Logging;
 namespace ClinicEz.Clinic.Application.Features.Teleconsult.Commands;
 
 public sealed record EmergencyOverrideDto(
-    string ReasonCode,
-    string ReasonNote);
+    string? ReasonCode = null,
+    string? ReasonNote = null);
 
 public sealed record AdmitTeleconsultPatientCommand(
     Guid AppointmentId,
@@ -43,6 +44,8 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
     private readonly IClinicContext _clinicContext;
     private readonly IInteropPublisher _publisher;
     private readonly ILogger<AdmitTeleconsultPatientCommandHandler> _logger;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
+    private readonly IFacilityLicenseValidator? _licenseValidator;
 
     public AdmitTeleconsultPatientCommandHandler(
         IRepository<Appointment> appointmentRepo,
@@ -51,7 +54,9 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IInteropPublisher publisher,
-        ILogger<AdmitTeleconsultPatientCommandHandler> logger)
+        ILogger<AdmitTeleconsultPatientCommandHandler> logger,
+        IRepository<FacilitySettings>? settingsRepo = null,
+        IFacilityLicenseValidator? licenseValidator = null)
     {
         _appointmentRepo = appointmentRepo;
         _patientRepo = patientRepo;
@@ -60,6 +65,8 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
         _clinicContext = clinicContext;
         _publisher = publisher;
         _logger = logger;
+        _settingsRepo = settingsRepo;
+        _licenseValidator = licenseValidator;
     }
 
     public async Task<TeleconsultAdmissionResultDto> Handle(AdmitTeleconsultPatientCommand request, CancellationToken ct)
@@ -73,27 +80,28 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
             throw new BadRequestException("Appointment is not a teleconsultation; teleconsult admission gate does not apply.");
         }
 
-        // 1. Evaluate PhilHealth Konsulta YAKAP Auto-Exemption
-        if (appointment.PaymentStatus == TeleconsultPaymentStatus.Pending)
+        if (_settingsRepo != null)
         {
-            var patient = await _patientRepo.Query()
-                .Include(p => p.YakapEnlistments)
-                .FirstOrDefaultAsync(p => p.Id == appointment.PatientId && p.ClinicId == _clinicContext.ClinicId, ct);
-            if (patient != null)
+            var settings = await _settingsRepo.Query(s => s.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(ct);
+
+            if (settings != null && !string.IsNullOrWhiteSpace(settings.LicenseToken))
             {
-                var activeEnlistment = patient.GetActiveYakapEnlistment(appointment.ScheduledAt);
-                if (activeEnlistment != null)
+                var validator = _licenseValidator ?? new FacilityLicenseValidator();
+                var validation = validator.Validate(settings.LicenseToken, _clinicContext.ClinicId, _clinicContext.TenantId);
+                var isWorkspaceEntitled = validation.IsValid &&
+                    validation.Payload?.EnabledFeatures != null &&
+                    validation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+
+                var effectiveEnabled = isWorkspaceEntitled && settings.EnableTeleconsultation;
+                if (!effectiveEnabled)
                 {
-                    appointment.PaymentPolicy = TeleconsultPaymentPolicy.Exempt;
-                    appointment.PaymentStatus = TeleconsultPaymentStatus.Exempt;
-                    appointment.PaymentMethod = "PhilHealthKonsulta";
-                    _logger.LogInformation("[TeleconsultAdmission] Patient {PatientId} auto-exempted under PhilHealth Konsulta benefit year {Year}.",
-                        patient.Id, activeEnlistment.EffectiveYear);
+                    throw new ForbiddenException("Teleconsultation is not enabled for this clinic.");
                 }
             }
         }
 
-        // 2. Prepayment Gate Enforcement
+        // 1. Prepayment Gate Enforcement (Active YAKAP is informational only and does not auto-mutate policy)
         if (appointment.PaymentPolicy == TeleconsultPaymentPolicy.Prepaid &&
             appointment.PaymentStatus != TeleconsultPaymentStatus.Paid &&
             appointment.PaymentStatus != TeleconsultPaymentStatus.Exempt &&
@@ -102,33 +110,32 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
             // Check for Emergency Clinical Override
             if (request.EmergencyOverride != null)
             {
-                // Validate clinician authority
-                if (!_clinicContext.HasPermission(ClinicPermissions.ConsultationsSign))
+                // Validate staff authority: allow ConsultationsSign OR ConsultationsWrite
+                if (!_clinicContext.HasPermission(ClinicPermissions.ConsultationsSign) &&
+                    !_clinicContext.HasPermission(ClinicPermissions.ConsultationsWrite))
                 {
-                    throw new ForbiddenException("Only attending clinicians or doctors with signing authority can authorize emergency clinical overrides.");
+                    throw new ForbiddenException("Only attending clinicians or staff with consultation authority can authorize emergency clinical overrides.");
                 }
 
-                if (string.IsNullOrWhiteSpace(request.EmergencyOverride.ReasonCode))
-                {
-                    throw new BadRequestException("Emergency override reason code is mandatory.");
-                }
-
-                if (!EmergencyOverrideReasonCodes.Descriptions.ContainsKey(request.EmergencyOverride.ReasonCode.Trim()))
-                {
-                    throw new BadRequestException($"Emergency override reason code '{request.EmergencyOverride.ReasonCode}' is not a recognized statutory reason code.");
-                }
-
-                if (string.IsNullOrWhiteSpace(request.EmergencyOverride.ReasonNote) || request.EmergencyOverride.ReasonNote.Trim().Length < 5)
+                var reasonNote = request.EmergencyOverride.ReasonNote?.Trim();
+                if (string.IsNullOrWhiteSpace(reasonNote) || reasonNote.Length < 5)
                 {
                     throw new BadRequestException("Clinical reason note must provide substantive clinical justification (minimum 5 characters).");
                 }
+
+                // Default missing, empty, or unrecognized reason code to STAFF-OVERRIDE
+                var rawCode = request.EmergencyOverride.ReasonCode?.Trim();
+                var reasonCode = string.IsNullOrWhiteSpace(rawCode) ||
+                                 (!EmergencyOverrideReasonCodes.Descriptions.ContainsKey(rawCode) && rawCode != "STAFF-OVERRIDE")
+                    ? "STAFF-OVERRIDE"
+                    : rawCode;
 
                 var now = DateTime.UtcNow;
                 var previousStatus = appointment.PaymentStatus;
                 appointment.PaymentStatus = TeleconsultPaymentStatus.Overridden;
                 appointment.IsEmergencyOverride = true;
-                appointment.EmergencyOverrideReasonCode = request.EmergencyOverride.ReasonCode.Trim();
-                appointment.EmergencyOverrideReasonNote = request.EmergencyOverride.ReasonNote.Trim();
+                appointment.EmergencyOverrideReasonCode = reasonCode;
+                appointment.EmergencyOverrideReasonNote = reasonNote;
                 appointment.EmergencyOverrideDoctorId = _clinicContext.StaffId;
                 appointment.EmergencyOverrideDoctorName = _clinicContext.StaffName ?? "Attending Clinician";
                 appointment.EmergencyOverrideAtUtc = now;
@@ -136,7 +143,7 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
                 var callIdForOverride = appointment.CallId ?? Guid.NewGuid();
                 appointment.CallId = callIdForOverride;
 
-                // 3. Write Immutable WORM Audit Entry in ClinicAuditEntries
+                // 2. Write Immutable WORM Audit Entry in ClinicAuditEntries
                 var audit = new AuditEntry
                 {
                     Id = Guid.NewGuid(),
@@ -154,13 +161,13 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
                     PatientId = appointment.PatientId,
                     PatientNameMasked = MaskName(appointment.PatientName),
                     Outcome = ClinicAuditOutcomes.Success,
-                    Description = $"Emergency teleconsultation prepayment override authorized by {_clinicContext.StaffName}. Reason: [{request.EmergencyOverride.ReasonCode}] {request.EmergencyOverride.ReasonNote.Trim()}",
+                    Description = $"Emergency teleconsultation prepayment override authorized by {_clinicContext.StaffName}. Reason: [{reasonCode}] {reasonNote}",
                     MetadataJson = JsonSerializer.Serialize(new
                     {
                         AppointmentId = appointment.Id,
                         CallId = callIdForOverride,
-                        ReasonCode = request.EmergencyOverride.ReasonCode.Trim(),
-                        ReasonNote = request.EmergencyOverride.ReasonNote.Trim(),
+                        ReasonCode = reasonCode,
+                        ReasonNote = reasonNote,
                         PreviousPaymentStatus = previousStatus.ToString(),
                         PaymentPolicy = appointment.PaymentPolicy.ToString(),
                         AuthorizedByStaffId = _clinicContext.StaffId,
@@ -184,11 +191,11 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
                         "EmergencyOverride",
                         now,
                         IsEmergencyOverride: true,
-                        OverrideReason: $"{request.EmergencyOverride.ReasonCode}: {request.EmergencyOverride.ReasonNote.Trim()}"
+                        OverrideReason: $"{reasonCode}: {reasonNote}"
                     ));
 
                 _logger.LogWarning("[TeleconsultAdmission] Emergency override authorized for appointment {AppointmentId} by {DoctorName}. Reason: {ReasonCode}",
-                    appointment.Id, _clinicContext.StaffName, request.EmergencyOverride.ReasonCode);
+                    appointment.Id, _clinicContext.StaffName, reasonCode);
             }
             else
             {

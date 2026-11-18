@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Features.Queue.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
@@ -112,16 +113,20 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
                 PatientsWaitingCount: 0,
                 LogoUrl: clinic.PrimaryLogoUrl,
                 IsPinRequired: true,
-                IsPinValid: false
+                IsPinValid: false,
+                TvDisplaySoundTheme: clinic.TvDisplaySoundTheme ?? "classicChime",
+                TvDisplayVoiceEnabled: clinic.TvDisplayVoiceEnabled,
+                TvDisplayShowPhysicianName: clinic.TvDisplayShowPhysicianName
             );
         }
 
-        var targetDate = request.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var tz = ClinicTimeZoneResolver.ResolveTimeZone(clinic.TimeZoneId);
+        var targetDate = request.Date ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
 
         // 2. Fetch queue items for this clinic on the target date
         var queueItems = await _queueRepo.IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(q => !q.IsDeleted && q.ClinicId == clinic.ClinicId && q.QueueDate == targetDate)
+            .Where(q => !q.IsDeleted && q.ClinicId == clinic.ClinicId && q.QueueDate == targetDate && !q.IsDirectVisit)
             .OrderByDescending(q => q.Priority)
             .ThenBy(q => q.SequenceNumber)
             .ToListAsync(ct);
@@ -147,7 +152,7 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
         var upNext = queueItems
             .Where(q => q.Status != QueueStatus.Diverted &&
                         q.Status != QueueStatus.DischargedNonDoctor &&
-                        ((q.VisitType == VisitType.Consultation &&
+                        ((q.VisitType.IsPhysicianConsultation() &&
                           (q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Triaged || q.Status == QueueStatus.OnHold))
                          || q.Status == QueueStatus.PendingProcedure
                          || q.Status == QueueStatus.ReEvaluation))
@@ -176,7 +181,10 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
             PatientsWaitingCount: upNext.Count,
             LogoUrl: clinic.PrimaryLogoUrl,
             IsPinRequired: isPinRequired,
-            IsPinValid: true
+            IsPinValid: true,
+            TvDisplaySoundTheme: clinic.TvDisplaySoundTheme ?? "classicChime",
+            TvDisplayVoiceEnabled: clinic.TvDisplayVoiceEnabled,
+            TvDisplayShowPhysicianName: clinic.TvDisplayShowPhysicianName
         );
     }
 

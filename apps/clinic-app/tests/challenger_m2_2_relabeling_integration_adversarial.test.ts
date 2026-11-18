@@ -375,7 +375,7 @@ describe('Challenger 2: Milestone 2 Relabeling & Screen Integration Adversarial 
       expect(navigationCalled).toBe(false);
     });
 
-    test('4.2: ScheduleVisitModal mounts in-place with preselected patient identity banner', () => {
+    test('4.2: ScheduleVisitModal mounts in-place with preselected patient subtitle and omits demographic detail banner', () => {
       const markup = renderToStaticMarkup(
         React.createElement(ScheduleVisitModal, {
           visible: true,
@@ -384,11 +384,11 @@ describe('Challenger 2: Milestone 2 Relabeling & Screen Integration Adversarial 
         })
       );
 
-      // Modal is visible
+      // Modal is visible with patient name subtitle and no demographic banner
       expect(markup).toContain('Schedule visit');
       expect(markup).toContain('Silang, Gabriela');
-      expect(markup).toContain('PAT-20261031-CHALLENGE2');
-      expect(markup).toContain('PhilHealth PIN 12-998877665-4');
+      expect(markup).not.toContain('PAT-20261031-CHALLENGE2');
+      expect(markup).not.toContain('PhilHealth PIN 12-998877665-4');
       expect(markup).toContain('Confirm and schedule');
     });
 

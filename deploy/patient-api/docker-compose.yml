@@ -71,6 +71,8 @@ services:
       - Sharing__SigningKey=${SHARING_SIGNING_KEY:?SHARING_SIGNING_KEY must be set (at least 32 characters)}
       # Shared HMAC-SHA256 signing key (at least 32 characters) for progressive patient intake claim tokens (must match portal-api).
       - ClaimToken__SigningKey=${CLAIM_TOKEN_SIGNING_KEY:?CLAIM_TOKEN_SIGNING_KEY must be set (at least 32 characters)}
+      # LiveKit Teleconsultation Relay URL
+      - LIVEKIT_URL=${LIVEKIT_URL:-wss://media.clinicez.internal}
     restart: unless-stopped
 
 networks:

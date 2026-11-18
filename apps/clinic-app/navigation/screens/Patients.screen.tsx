@@ -16,8 +16,10 @@ import { ThemedText, Badge, Button, Input, Card, Icon, IconSlot, EmptyState, Err
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
 import * as DocumentPicker from 'expo-document-picker';
 import { pickLabResultDocument, type PickedDocumentResult } from '../../utils/documentPickerHelper';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   PatientSummarySpine,
+  reconcileChartWithPatient,
   PatientChartModal,
   CHART_TABS,
   type ChartTab,
@@ -40,7 +42,10 @@ import { notify } from '@utils/feedback';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { PERMISSIONS } from '@constants/permissions';
-import { usePermission } from '@context/AuthContext';
+import { useAuth, usePermission } from '@context/AuthContext';
+import AttachExternalDocumentModal, {
+  normalizeAttachmentStaffAttribution,
+} from '../../components/chart/AttachExternalDocumentModal';
 import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
@@ -71,7 +76,6 @@ import PatientDirectoryCard, {
   PatientDirectoryTableHeader,
   type PatientDirectoryViewMode,
   hasKnownAllergies,
-  type ClinicalServiceType,
 } from '../../components/patient/PatientDirectoryCard';
 import ScheduleVisitModal from '../../components/patient/ScheduleVisitModal';
 import ServiceCheckInModal, {
@@ -80,7 +84,8 @@ import ServiceCheckInModal, {
 } from '../../components/patient/ServiceCheckInModal';
 import ConsultationTypeModal from '../../components/patient/ConsultationTypeModal';
 import QueueTicketPickerModal from '../../components/patient/QueueTicketPickerModal';
-import { RecordVitalsModal } from '../../components/consultation';
+import IssueMedicalCertificateModal from '../../components/patient/IssueMedicalCertificateModal';
+import { RecordVitalsModal, parseBooleanRouteParam } from '../../components/consultation';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../../components/custom-fields';
@@ -100,6 +105,7 @@ import {
   getManilaTodayStr,
   ClinicPatient,
   PatientQueueItem,
+  PatientActiveQueueTicket,
   PatientDirectoryCounts,
   StaffMember,
   RegisterPatientPayload,
@@ -121,13 +127,11 @@ import { getSetting } from '../../services/runtimeConfig';
 import { shouldQueueOffline } from '../../services/outboxPolicy';
 
 const VISIT_TYPE_OPTIONS: Array<{ key: VisitType; label: string }> = [
-  { key: 'Consultation', label: 'Consultation' },
-  { key: 'VitalsCheckOnly', label: 'Vitals Check' },
-  { key: 'RetailPurchase', label: 'Retail OTC' },
-  { key: 'StandaloneProcedure', label: 'Procedure' },
-  { key: 'LaboratorySpecimen', label: 'Specimen Drop-Off' },
-  { key: 'AdministrativeDocument', label: 'Administrative' },
-  { key: 'CashierSettlement', label: 'Cashier' },
+  { key: 'RoutineCheckup', label: 'Routine Checkup' },
+  { key: 'AcuteIllnessConsultation', label: 'Acute Illness Consultation' },
+  { key: 'ChronicDiseaseFollowUp', label: 'Chronic Disease Follow-Up' },
+  { key: 'PreventiveHealthAssessment', label: 'Preventive Health Assessment' },
+  { key: 'UrgentCareVisit', label: 'Urgent Care Visit' },
 ];
 
 const humanizeKey = (key: string) => {
@@ -147,8 +151,10 @@ export const isMyPatient = (p: ClinicPatient, currentStaff: StaffMember | null |
     return (
       p.customFields?.assigned_doctor_id === staffId ||
       p.customFields?.doctor_id === staffId ||
+      p.customFields?.activeQueueDoctorId === staffId ||
       (p as any).activeQueueDoctorId === staffId ||
-      (p as any).doctorId === staffId
+      (p as any).doctorId === staffId ||
+      Boolean(p.activeQueueTickets?.some((t) => t.doctorId === staffId))
     );
   }
 
@@ -156,13 +162,15 @@ export const isMyPatient = (p: ClinicPatient, currentStaff: StaffMember | null |
     const nurseRooms = currentStaff.assignedRoomIds ?? (currentStaff.assignedRoomId ? [currentStaff.assignedRoomId] : []);
     const patientRoomId = (p as any).roomId || (p as any).activeQueueRoomId || p.customFields?.room_id || p.customFields?.assigned_room_id;
     const roomMatch = !!patientRoomId && nurseRooms.includes(patientRoomId);
+    const ticketRoomMatch = Boolean(p.activeQueueTickets?.some((t) => !!t.roomId && nurseRooms.includes(t.roomId)));
 
     return (
       p.customFields?.nurse_id === staffId ||
       p.customFields?.assigned_nurse_id === staffId ||
       p.customFields?.vitals_recorded_by_nurse_id === staffId ||
       p.customFields?.recorded_by_nurse_id === staffId ||
-      roomMatch
+      roomMatch ||
+      ticketRoomMatch
     );
   }
 
@@ -172,8 +180,10 @@ export const isMyPatient = (p: ClinicPatient, currentStaff: StaffMember | null |
     p.customFields?.nurse_id === staffId ||
     p.customFields?.assigned_nurse_id === staffId ||
     p.customFields?.staff_id === staffId ||
+    p.customFields?.activeQueueDoctorId === staffId ||
     (p as any).activeQueueDoctorId === staffId ||
-    (p as any).doctorId === staffId
+    (p as any).doctorId === staffId ||
+    Boolean(p.activeQueueTickets?.some((t) => t.doctorId === staffId))
   );
 };
 
@@ -194,8 +204,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const { isWorkstation, isDesktop } = useBreakpoint();
   const canImportPatient = usePermission(PERMISSIONS.patientsWrite);
   const routeParams = route?.params;
-  const openPatientId = routeParams?.openPatientId || routeParams?.patientId;
-  const openRegister = routeParams?.openRegister;
+  const openRegister = parseBooleanRouteParam(routeParams?.openRegister);
+  const rawOpenPatientId = routeParams?.openPatientId || routeParams?.patientId;
+  const openPatientId =
+    openRegister || rawOpenPatientId === 'quick-action-register'
+      ? undefined
+      : rawOpenPatientId;
   const routeTab = routeParams?.tab as ChartTab | undefined;
   const rawRouteTooth = routeParams?.toothNumber ?? routeParams?.tooth;
   const routeToothNumber = useMemo(() => {
@@ -206,6 +220,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const { letterhead, rooms = [], accreditationNumber } = useClinic();
   const hasPhilHealthAccreditation = Boolean(accreditationNumber && accreditationNumber.trim());
   const { currentName, staff: staffList, current: currentStaff } = useStaff();
+  const { user: authUser } = useAuth();
+  const actorStaffName = (currentName || authUser?.name || authUser?.email || '').trim();
+  const rawActorStaffId = currentStaff?.id || authUser?.id || '';
+  const actorStaffId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawActorStaffId)
+    ? rawActorStaffId
+    : undefined;
   const [patients, setPatients] = useState<ClinicPatient[] | null>(null);
   const [totalCounts, setTotalCounts] = useState<PatientDirectoryCounts | null>(null);
   const [patientsError, setPatientsError] = useState<string | null>(null);
@@ -213,20 +233,36 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [filterMode, setFilterMode] = useState<PatientFilter>(() => {
-    const saved = getSessionItem('clinicez_patients_filter_mode') as PatientFilter | null;
-    if (saved && ['ALL', 'MY_PATIENTS', 'STUDENTS', 'EMPLOYEES', 'ALERTS', 'SENIOR_PWD'].includes(saved)) {
-      return saved;
-    }
-    return 'ALL';
+  const [filterMode, setFilterMode] = usePersistedTab<PatientFilter>({
+    storageKey: 'clinicez_patients_filter_mode',
+    allowedValues: ['ALL', 'MY_PATIENTS', 'STUDENTS', 'EMPLOYEES', 'ALERTS', 'SENIOR_PWD'],
+    defaultValue: 'ALL',
+    routeParam: (route?.params as any)?.filter,
+    queryParam: 'filter',
+    queryParamAliases: ['filterMode', 'category'],
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('patients'),
+    onPersist: (mode, prev) => {
+      setPatientsError(null);
+      if (mode !== prev) {
+        setPatients(null);
+        setLoading(true);
+        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+      }
+    },
   });
 
-  const [viewMode, setViewMode] = useState<PatientDirectoryViewMode>(() => {
-    const saved = getSessionItem('clinicez_patients_view_mode') as PatientDirectoryViewMode | null;
-    if (saved === 'cards' || saved === 'table') {
-      return saved;
-    }
-    return 'cards';
+  const [viewMode, setViewMode] = usePersistedTab<PatientDirectoryViewMode>({
+    storageKey: 'clinicez_patients_view_mode',
+    allowedValues: ['cards', 'table'],
+    defaultValue: 'cards',
+    routeParam: (route?.params as any)?.view,
+    queryParam: 'view',
+    queryParamAliases: ['viewMode'],
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('patients'),
   });
 
   useEffect(() => {
@@ -238,12 +274,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
   const handleFilterModeChange = (mode: PatientFilter) => {
     setFilterMode(mode);
-    setSessionItem('clinicez_patients_filter_mode', mode);
   };
 
   const handleViewModeChange = (mode: PatientDirectoryViewMode) => {
     setViewMode(mode);
-    setSessionItem('clinicez_patients_view_mode', mode);
   };
 
   const effectiveViewMode: PatientDirectoryViewMode = isWorkstation ? viewMode : 'cards';
@@ -448,28 +482,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [loadingChart, setLoadingChart] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
 
-  const getInitialChartTab = (): ChartTab => {
-    if (routeTab && (CHART_TABS.some((t) => t.value === routeTab) || routeTab === 'dental')) {
-      return routeTab;
-    }
-    if (routeToothNumber) {
-      return 'dental';
-    }
-    if (typeof window !== 'undefined' && window.location?.search) {
-      try {
-        const sp = new URLSearchParams(window.location.search);
-        const tabParam = sp.get('tab') as ChartTab;
-        if (tabParam && (CHART_TABS.some((t) => t.value === tabParam) || tabParam === 'dental')) {
-          return tabParam;
-        }
-      } catch {}
-    }
-    const saved = getSessionItem('clinicez_active_chart_tab') as ChartTab | null;
-    if (saved && (CHART_TABS.some((t) => t.value === saved) || saved === 'dental')) {
-      return saved;
-    }
-    return 'summary';
-  };
+  const [activeChartTab, setActiveChartTab] = usePersistedTab<ChartTab>({
+    storageKey: 'clinicez_active_chart_tab',
+    allowedValues: [...CHART_TABS.map((t) => t.value), 'dental'],
+    defaultValue: routeToothNumber ? 'dental' : 'summary',
+    routeParam: routeTab,
+    queryParam: 'chartTab',
+    queryParamAliases: ['tab'],
+    syncUrl: chartVisible,
+    clearUrlOnInactive: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('patients'),
+  });
 
   const getInitialFocusTooth = (): number | undefined => {
     if (routeToothNumber !== undefined) {
@@ -488,19 +512,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     return undefined;
   };
 
-  const [activeChartTab, setActiveChartTab] = useState<ChartTab>(getInitialChartTab);
   const [focusToothNumber, setFocusToothNumber] = useState<number | undefined>(getInitialFocusTooth);
 
   const handleChartTabChange = (tab: ChartTab) => {
     setActiveChartTab(tab);
-    setSessionItem('clinicez_active_chart_tab', tab);
-    if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
-      try {
-        const url = new URL(window.location.href);
-        url.searchParams.set('tab', tab);
-        window.history.replaceState(null, '', url.toString());
-      } catch {}
-    }
   };
 
   // Queue Check-In Anti-Spam & Concurrency Guard states
@@ -509,24 +524,30 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const isFirstFocusRef = useRef(true);
   const [checkingInPatientId, setCheckingInPatientId] = useState<string | null>(null);
   const [serviceModalPatient, setServiceModalPatient] = useState<ClinicPatient | null>(null);
-  const [selectedServiceIntent, setSelectedServiceIntent] = useState<ClinicalServiceType>('Doctor Consultation');
+  const [selectedVisitTypeIntent, setSelectedVisitTypeIntent] = useState<VisitType>('RoutineCheckup');
   const [checkInModalPatient, setCheckInModalPatient] = useState<ClinicPatient | null>(null);
   const [checkInDoctorId, setCheckInDoctorId] = useState<string>('');
   const [checkInRoomId, setCheckInRoomId] = useState<string>('');
   const [checkInPriority, setCheckInPriority] = useState<'Routine' | 'Urgent' | 'Emergency'>('Routine');
-  const [checkInVisitType, setCheckInVisitType] = useState<VisitType>('Consultation');
+  const [checkInVisitType, setCheckInVisitType] = useState<VisitType>('RoutineCheckup');
   const [checkInComplaint, setCheckInComplaint] = useState<string>('');
   const [conflictModal, setConflictModal] = useState<{
     visible: boolean;
     error?: any;
     patientName?: string;
   } | null>(null);
+  const [chartQueueItemId, setChartQueueItemId] = useState<string | null>(null);
+  const [chartForceSeparateVisit, setChartForceSeparateVisit] = useState(false);
+  const [medCertModalVisible, setMedCertModalVisible] = useState(false);
+  const [medCertPatient, setMedCertPatient] = useState<ClinicPatient | null>(null);
+  const [medCertQueueItemId, setMedCertQueueItemId] = useState<string | null>(null);
+  const [medCertForceSeparateVisit, setMedCertForceSeparateVisit] = useState(false);
   const [ticketPickerState, setTicketPickerState] = useState<{
     visible: boolean;
     patient: ClinicPatient;
-    tickets: PatientQueueItem[];
+    tickets: Array<PatientQueueItem | PatientActiveQueueTicket>;
     serviceTitle: string;
-    onSelect: (ticket: PatientQueueItem) => void;
+    onSelect: (ticket: PatientQueueItem | PatientActiveQueueTicket) => void;
     onCreateNew?: () => void;
   } | null>(null);
 
@@ -557,6 +578,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [vitalsModalVisible, setVitalsModalVisible] = useState(false);
   const [vitalsPatient, setVitalsPatient] = useState<ClinicPatient | null>(null);
   const [vitalsQueueItemId, setVitalsQueueItemId] = useState<string | null>(null);
+  const [vitalsForceSeparateVisit, setVitalsForceSeparateVisit] = useState(false);
 
   // Lab Slip & External Results Interoperability state
   const [selectedSlip, setSelectedSlip] = useState<LabOrderSlipData | null>(null);
@@ -574,19 +596,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [patientAttachments, setPatientAttachments] = useState<ClinicRecordAttachmentRecord[]>([]);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
   const [uploadDocModalVisible, setUploadDocModalVisible] = useState(false);
-  const [docTitle, setDocTitle] = useState('');
-  const [docRecordType, setDocRecordType] = useState('OutsideChestXRay');
-  const [docFileType, setDocFileType] = useState<'PDF' | 'Photo'>('PDF');
-  const [docNotes, setDocNotes] = useState('');
-  const [docDate, setDocDate] = useState(new Date().toISOString().split('T')[0]);
-  const [pickedDocFile, setPickedDocFile] = useState<{
-    name: string;
-    size?: number;
-    uri: string;
-    mimeType?: string;
-    file?: any;
-  } | null>(null);
-  const [uploadingDoc, setUploadingDoc] = useState(false);
   const [verifyingAttachmentId, setVerifyingAttachmentId] = useState<string | null>(null);
 
   // Prescription Slip & External Dispense (Path B) state
@@ -613,20 +622,29 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const lastScrollYRef = useRef(0);
   const viewportHeightRef = useRef(800);
   const scrollViewRef = useRef<ScrollView>(null);
+  const fetchRequestIdRef = useRef(0);
 
   const fetchPatients = useCallback(async (termOverride?: string, filterOverride?: PatientFilter) => {
+    const requestId = ++fetchRequestIdRef.current;
     const activeSearch = termOverride !== undefined ? termOverride : debouncedSearchTerm;
     const activeFilter = filterOverride !== undefined ? filterOverride : filterMode;
     const hasAlertsFilter = activeFilter === 'ALERTS' ? true : undefined;
     const serverFilterMode = activeFilter !== 'ALL' ? activeFilter : undefined;
-    const staffId = currentStaff?.id;
-    const doctorId = currentStaff?.role === 'Doctor' ? currentStaff?.id : undefined;
+    const staffId = currentStaff?.id || actorStaffId;
+    const doctorId =
+      currentStaff?.role === 'Doctor'
+        ? currentStaff?.id
+        : authUser?.role === 'Doctor'
+          ? actorStaffId
+          : undefined;
+    const roomIds = currentStaff?.assignedRoomIds ?? (currentStaff?.assignedRoomId ? [currentStaff.assignedRoomId] : undefined);
 
+    setPatientsError(null);
     setPage(1);
     setScrollY(0);
     lastScrollYRef.current = 0;
-    clinicService.getPatientCounts(activeSearch || undefined, staffId, doctorId).then(([countsData]) => {
-      if (countsData) {
+    clinicService.getPatientCounts(activeSearch || undefined, staffId, doctorId, roomIds).then(([countsData]) => {
+      if (requestId === fetchRequestIdRef.current && countsData) {
         setTotalCounts(countsData);
       }
     });
@@ -638,9 +656,16 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       PAGE_SIZE,
       serverFilterMode,
       staffId,
-      doctorId
+      doctorId,
+      undefined,
+      roomIds
     );
+    if (requestId !== fetchRequestIdRef.current) {
+      return;
+    }
     if (err) {
+      setPatients(null);
+      setHasMore(false);
       setPatientsError(err.message || 'Unable to load patients.');
       return;
     }
@@ -648,7 +673,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const items = data ?? [];
     setPatients(items);
     setHasMore(items.length === PAGE_SIZE);
-  }, [debouncedSearchTerm, filterMode, currentStaff]);
+  }, [debouncedSearchTerm, filterMode, currentStaff, actorStaffId, authUser?.role]);
 
   const loadMorePatients = useCallback(async () => {
     if (isLoadingMoreRef.current || loadingMore || loading || !hasMore) return;
@@ -659,8 +684,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const activeSearch = debouncedSearchTerm;
     const hasAlertsFilter = filterMode === 'ALERTS' ? true : undefined;
     const serverFilterMode = filterMode !== 'ALL' ? filterMode : undefined;
-    const staffId = currentStaff?.id;
-    const doctorId = currentStaff?.role === 'Doctor' ? currentStaff?.id : undefined;
+    const staffId = currentStaff?.id || actorStaffId;
+    const doctorId =
+      currentStaff?.role === 'Doctor'
+        ? currentStaff?.id
+        : authUser?.role === 'Doctor'
+          ? actorStaffId
+          : undefined;
+    const roomIds = currentStaff?.assignedRoomIds ?? (currentStaff?.assignedRoomId ? [currentStaff.assignedRoomId] : undefined);
 
     const [data, err] = await clinicService.getPatients(
       activeSearch || undefined,
@@ -669,7 +700,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       PAGE_SIZE,
       serverFilterMode,
       staffId,
-      doctorId
+      doctorId,
+      undefined,
+      roomIds
     );
 
 
@@ -694,7 +727,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     if (newItems.length < PAGE_SIZE) {
       setHasMore(false);
     }
-  }, [page, hasMore, loadingMore, loading, debouncedSearchTerm, filterMode]);
+  }, [page, hasMore, loadingMore, loading, debouncedSearchTerm, filterMode, currentStaff, actorStaffId, authUser?.role]);
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -721,8 +754,20 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   );
 
   useEffect(() => {
+    let active = true;
+    setPatientsError(null);
     setLoading(true);
-    fetchPatients().finally(() => setLoading(false));
+    fetchPatients().finally(() => {
+      if (active) {
+        setLoading(false);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [fetchPatients]);
+
+  useEffect(() => {
     clinicService.getCustomFields('ClinicPatient').then(([fields]) => {
       if (fields && fields.length > 0) {
         setTenantCustomFields(fields);
@@ -734,7 +779,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       setOfflineFailedCount(offlineSyncService.getFailedCount());
     });
     return unsub;
-  }, [fetchPatients]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -868,6 +913,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       ? structuredAllergies.map((a) => `${a.allergen} (${a.category}${a.isAnaphylactic ? ' - STAT' : ''})`).join(', ')
       : formAllergies.trim() || undefined;
 
+    const isPrioritySeries = isSeniorOrPwdEligible({
+      dateOfBirth: formDob.trim(),
+      seniorCitizenId: formSeniorId.trim(),
+      pwdId: formPwdId.trim(),
+      customFields,
+    });
+    const seriesPrefix = isPrioritySeries ? 'SQ' : 'Q';
+
     const payload: RegisterPatientPayload = {
       firstName: formFirstName.trim(),
       lastName: formLastName.trim(),
@@ -903,6 +956,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       barangayPsgc: formAddress.barangayPsgc || undefined,
       zipCode: formAddress.zipCode || undefined,
       sendToTriage,
+      seriesPrefix: sendToTriage ? seriesPrefix : undefined,
       priority: sendToTriage ? formTriagePriority : 'Routine',
       chiefComplaint: sendToTriage && formChiefComplaint.trim() ? formChiefComplaint.trim() : undefined,
       doctorId: sendToTriage && formTriageDoctorId ? formTriageDoctorId : undefined,
@@ -919,7 +973,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           ? activeRooms.find((r) => r.id === formTriageRoomId)?.name
           : undefined,
       queueDate: sendToTriage ? getManilaTodayStr() : undefined,
-      ...(formPatientCode.trim() ? ({ patientCode: formPatientCode.trim() } as any) : {}),
+      patientCode: formPatientCode.trim() || undefined,
     };
 
     const [newPat, err] = await clinicService.registerPatient(payload);
@@ -951,7 +1005,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           Object.assign(fieldErrorsMap, err.getFieldErrorsMap());
         }
         const pcErr = err.getFieldError?.('patientCode');
-        if (pcErr) fieldErrorsMap.patientCode = pcErr;
+        if (formPatientCode.trim()) {
+          if (pcErr) fieldErrorsMap.patientCode = pcErr;
+        } else {
+          delete fieldErrorsMap.patientCode;
+        }
 
         const fnErr = err.getFieldError?.('firstName');
         if (fnErr) fieldErrorsMap.firstName = fnErr;
@@ -1114,9 +1172,17 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
   };
 
-  const handleOpenChart = async (patient: ClinicPatient, tabToOpen?: ChartTab, toothToFocus?: number) => {
+  const handleOpenChart = async (
+    patient: ClinicPatient,
+    tabToOpen?: ChartTab,
+    toothToFocus?: number,
+    queueItemId?: string | null,
+    forceSeparateVisit: boolean = false
+  ) => {
+    setChartQueueItemId(queueItemId ?? null);
+    setChartForceSeparateVisit(forceSeparateVisit);
     setSelectedPatient(patient);
-    const targetTab = tabToOpen ?? activeChartTab ?? getInitialChartTab();
+    const targetTab = tabToOpen ?? activeChartTab ?? 'summary';
     setActiveChartTab(targetTab);
     if (toothToFocus !== undefined) {
       setFocusToothNumber(toothToFocus);
@@ -1141,7 +1207,19 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       setPatientChart(null);
       setPatientAttachments([]);
     }
-    const [chartData, chartErr] = await clinicService.getPatientChart(patient.id);
+    const [[chartData, chartErr], [freshPatient]] = await Promise.all([
+      clinicService.getPatientChart(patient.id),
+      typeof clinicService.getPatientById === 'function'
+        ? clinicService.getPatientById(patient.id)
+        : Promise.resolve([null, null] as const),
+    ]);
+    const authoritativePatient = freshPatient || patient;
+    if (freshPatient) {
+      setSelectedPatient(freshPatient);
+      setPatients((prev) =>
+        prev ? prev.map((p) => (p.id === freshPatient.id ? freshPatient : p)) : prev,
+      );
+    }
     if (chartData) {
       if (!chartData.dentalTeeth || chartData.dentalTeeth.length === 0) {
         const [dentalData] = await clinicService.getPatientDentalChart(patient.id);
@@ -1150,9 +1228,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           chartData.dentalChart = dentalData;
         }
       }
-      setPatientChart(chartData);
+      setPatientChart(reconcileChartWithPatient(chartData, authoritativePatient));
       setChartError(null);
-      if (chartData.attachments && chartData.attachments.length > 0) {
+      if (chartData.attachments) {
         setPatientAttachments(chartData.attachments);
         setLoadingAttachments(false);
       }
@@ -1176,8 +1254,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const handleCloseChart = () => {
     setChartVisible(false);
     setSelectedPatient(null);
+    setChartQueueItemId(null);
     setFocusToothNumber(undefined);
+    setActiveChartTab('summary');
     setSessionItem('clinicez_active_patient_id', null);
+    setSessionItem('clinicez_active_chart_tab', null);
     if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
       try {
         const url = new URL(window.location.href);
@@ -1210,7 +1291,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     (async () => {
       const [patient] = await clinicService.getPatientById(targetPatientId!);
       if (cancelled || !patient) return;
-      const initialTab = getInitialChartTab();
+      const initialTab = activeChartTab;
       const initialTooth = getInitialFocusTooth();
       handleOpenChart(patient, initialTab, initialTooth);
     })();
@@ -1312,6 +1393,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     if (selectedPatient?.id === updated.id) {
       setSelectedPatient(updated);
     }
+    setPatientChart((prev) =>
+      prev && prev.patientId === updated.id
+        ? reconcileChartWithPatient(prev, updated)
+        : prev
+    );
   };
 
   const handleVerifyAttachment = async (
@@ -1323,7 +1409,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const rejectionReason = !isApproved
       ? (userRejectionReason?.trim() || 'Document illegible or missing official physician signature/stamp.')
       : undefined;
-    const [, verifyErr] = await clinicService.verifyRecordAttachment(attachmentId, isApproved, rejectionReason);
+    const [, verifyErr] = await clinicService.verifyRecordAttachment(
+      attachmentId,
+      isApproved,
+      rejectionReason,
+      actorStaffName || undefined,
+      actorStaffId
+    );
     setVerifyingAttachmentId(null);
     if (verifyErr) {
       notify.error(verifyErr.message || 'Could not update the document.');
@@ -1338,10 +1430,31 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               verificationStatus: isApproved ? 'Verified' : 'Rejected',
               rejectionReason,
               verifiedAt: new Date().toISOString(),
-              verifiedByStaffName: currentName || undefined,
+              verifiedByStaffId: actorStaffId || att.verifiedByStaffId,
+              verifiedByStaffName: actorStaffName || att.verifiedByStaffName || undefined,
             }
           : att
       )
+    );
+
+    setPatientChart((prev) =>
+      prev
+        ? {
+            ...prev,
+            attachments: (prev.attachments || []).map((att) =>
+              att.id === attachmentId
+                ? {
+                    ...att,
+                    verificationStatus: isApproved ? 'Verified' : 'Rejected',
+                    rejectionReason,
+                    verifiedAt: new Date().toISOString(),
+                    verifiedByStaffId: actorStaffId || att.verifiedByStaffId,
+                    verifiedByStaffName: actorStaffName || att.verifiedByStaffName || undefined,
+                  }
+                : att
+            ),
+          }
+        : prev
     );
 
     notify.success(isApproved ? 'Document verified.' : 'Document rejected.');
@@ -1353,135 +1466,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       if (!(await openDocument(url))) throw new Error('Could not open the document');
     } catch (e: any) {
       Alert.alert('Unable to open document', e.message || 'Network error');
-    }
-  };
-
-  const handlePickDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/jpeg', 'image/png'],
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-      const asset = result.assets[0];
-      setPickedDocFile({
-        name: asset.name,
-        size: asset.size,
-        uri: asset.uri,
-        mimeType: asset.mimeType || (asset.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
-        file: (asset as any).file,
-      });
-      if (!docTitle.trim()) {
-        const cleanName = asset.name.replace(/\.[^/.]+$/, '');
-        setDocTitle(cleanName);
-      }
-      if (asset.name.toLowerCase().endsWith('.pdf')) {
-        setDocFileType('PDF');
-      } else {
-        setDocFileType('Photo');
-      }
-    } catch (err: any) {
-      Alert.alert('File Selection Error', err?.message || 'Could not pick file.');
-    }
-  };
-
-  const handleUploadDocument = async () => {
-    if (!selectedPatient) return;
-    if (!docTitle.trim()) {
-      Alert.alert('Title required', 'Enter a document title.');
-      return;
-    }
-
-    const docDateValidation = validateDateString(docDate, { boundaryMode: 'pastOrToday' });
-    if (!docDateValidation.isValid) {
-      Alert.alert('Invalid Document Date', docDateValidation.errorMessage || 'Please enter a valid document date not in the future.');
-      return;
-    }
-
-    const strictlyFormattedDocDate = (docDateValidation.formattedDate || new Date().toISOString().split('T')[0]).split('T')[0];
-
-    setUploadingDoc(true);
-
-    if (pickedDocFile) {
-      try {
-        const formData = new FormData();
-        formData.append('PatientId', selectedPatient.id);
-        formData.append('RecordType', docRecordType);
-        formData.append('Title', docTitle.trim());
-        if (docNotes.trim()) formData.append('Notes', docNotes.trim());
-        formData.append('DocumentDate', strictlyFormattedDocDate);
-
-        if (pickedDocFile.file) {
-          formData.append('File', pickedDocFile.file);
-        } else {
-          formData.append('File', {
-            uri: pickedDocFile.uri,
-            name: pickedDocFile.name,
-            type: pickedDocFile.mimeType || 'application/octet-stream',
-          } as any);
-        }
-
-        const [newAtt, err] = await clinicService.uploadRecordAttachmentFile(formData);
-        setUploadingDoc(false);
-
-        if (newAtt) {
-          setPatientAttachments((prev) => [newAtt, ...prev]);
-          setUploadDocModalVisible(false);
-          setPickedDocFile(null);
-          setDocTitle('');
-          setDocNotes('');
-          setDocDate(new Date().toISOString().split('T')[0]);
-          notify.success('Document attached to the patient record.');
-          return;
-        } else if (err) {
-          notify.error(err.message || 'The server rejected this document upload.');
-          return;
-        }
-      } catch (uploadErr: any) {
-        setUploadingDoc(false);
-        notify.error(uploadErr?.message || 'Failed to upload document file.');
-        return;
-      }
-    }
-
-    const payload = {
-      patientId: selectedPatient.id,
-      recordType: docRecordType,
-      title: docTitle.trim(),
-      fileName: `${docTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}`,
-      contentType: docFileType === 'PDF' ? 'application/pdf' : 'image/jpeg',
-      fileSizeBytes: 1024 * 450,
-      storageUri: `tenants/${selectedPatient.tenantId}/clinics/${selectedPatient.clinicId}/records/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}.cez`,
-      documentDate: strictlyFormattedDocDate,
-      notes: docNotes.trim() || undefined,
-      uploadedByStaffName: currentName || undefined,
-      encryptionAlgorithm: 'AES-256-GCM',
-      encryptionKeyId: 'cmk-v1',
-    };
-
-    const [newAtt, err] = await clinicService.uploadRecordAttachment(payload);
-    setUploadingDoc(false);
-
-    if (newAtt) {
-      setPatientAttachments((prev) => [newAtt, ...prev]);
-      setUploadDocModalVisible(false);
-      setPickedDocFile(null);
-      setDocTitle('');
-      setDocNotes('');
-      setDocDate(new Date().toISOString().split('T')[0]);
-      notify.success('Document attached to the patient record.');
-    } else if (!shouldQueueOffline(err?.status ?? 0)) {
-      notify.error(err?.message || 'The server rejected this document.');
-    } else {
-      const queuedAtt = await offlineSyncService.enqueueAttachment(payload, currentName || undefined);
-      setPatientAttachments((prev) => [queuedAtt, ...prev]);
-      setUploadDocModalVisible(false);
-      setPickedDocFile(null);
-      setDocTitle('');
-      setDocNotes('');
-      setDocDate(new Date().toISOString().split('T')[0]);
-      Alert.alert('Saved on this device', 'The document is queued and will upload automatically once the connection is back.');
     }
   };
 
@@ -1593,16 +1577,16 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setSelectedRxSlip(updatedSlip);
   };
 
-  const handleQueueCheckIn = (patient: ClinicPatient, serviceType?: ClinicalServiceType) => {
+  const handleQueueCheckIn = (patient: ClinicPatient, visitType?: VisitType) => {
     if (isCheckingInRef.current || checkingInPatientId) return;
     setServiceModalPatient(patient);
-    setSelectedServiceIntent(serviceType || 'Doctor Consultation');
+    setSelectedVisitTypeIntent(visitType || 'RoutineCheckup');
   };
 
-  const handleSelectService = (patient: ClinicPatient, serviceType: ClinicalServiceType) => {
+  const handleSelectService = (patient: ClinicPatient, visitType: VisitType) => {
     if (isCheckingInRef.current || checkingInPatientId) return;
     setServiceModalPatient(patient);
-    setSelectedServiceIntent(serviceType);
+    setSelectedVisitTypeIntent(visitType);
   };
 
   const handleConfirmServiceCheckIn = async (payload: ServiceCheckInPayload) => {
@@ -1626,140 +1610,43 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
   };
 
-  const ensureEncounterQueueItem = async (
+  const resolveActiveVisitForAction = (
     patient: ClinicPatient,
-    service: {
-      visitType: VisitType;
-      chiefComplaint: string;
-      seriesPrefix?: string;
-    },
-    forceNew: boolean = false
-  ): Promise<{ queueItem: PatientQueueItem; isExisting: boolean; multipleOptions?: PatientQueueItem[] } | null> => {
-    try {
-      const todayStr = getManilaTodayStr();
-      const [queueRes] = await clinicService.getQueue({ date: todayStr });
-      const activeItems = (queueRes || []).filter(
-        (item) =>
-          item.patientId === patient.id &&
-          !['Completed', 'Cancelled', 'NoShow', 'DischargedNonDoctor'].includes(item.status)
-      );
-
-      // Check matching active items for this specific service visitType
-      const matchingItems = activeItems.filter(
-        (item) =>
-          item.visitType === service.visitType ||
-          (service.visitType === 'Consultation' && item.status === 'InConsultation')
-      );
-
-      if (!forceNew && matchingItems.length >= 2) {
-        return { queueItem: matchingItems[0], isExisting: true, multipleOptions: matchingItems };
-      }
-
-      if (!forceNew && matchingItems.length === 1) {
-        return { queueItem: matchingItems[0], isExisting: true };
-      }
-
-      const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-      const prefix = service.seriesPrefix || (isSeniorOrPwd ? 'SQ' : 'Q');
-
-      const [newQueueItem, err] = await clinicService.checkInPatient({
-        patientId: patient.id,
-        patientName: patient.fullName,
-        doctorId: currentStaff?.role === 'Doctor' ? currentStaff.id : undefined,
-        doctorName: currentStaff?.role === 'Doctor' ? currentName : undefined,
-        priority: 'Routine',
-        visitType: service.visitType,
-        chiefComplaint: service.chiefComplaint,
-        seriesPrefix: prefix,
-        queueDate: todayStr,
-        allowDuplicateActive: true,
-      });
-
-      if (err || !newQueueItem) {
-        throw err || new Error((err as any)?.message || 'Failed to create encounter queue ticket');
-      }
-
-      setPatients((prev) =>
-        (prev || []).map((p) =>
-          p.id === patient.id ? { ...p, activeQueueTicket: newQueueItem.queueNumber } : p
-        )
-      );
-
-      return { queueItem: newQueueItem, isExisting: false };
-    } catch (e: any) {
-      notify.error(e?.message || 'Failed to initialize encounter ticket');
-      return null;
-    }
-  };
-
-  const startConsultationWithQueueItem = async (
-    patient: ClinicPatient,
-    queueItem: PatientQueueItem,
-    isExisting: boolean
+    serviceTitle: string,
+    onProceed: (queueItemId: string | null, forceSeparateVisit?: boolean) => void
   ) => {
-    const currentDoctorId = currentStaff?.role === 'Doctor' ? currentStaff.id : undefined;
-    const currentDoctorName = currentStaff?.role === 'Doctor' ? currentName : undefined;
-    const currentRoom = currentStaff?.assignedRoomName || (rooms.length > 0 ? rooms[0].name : undefined);
-    const currentRoomId = currentStaff?.assignedRoomId || (rooms.length > 0 ? rooms[0].id : undefined);
+    const activeTickets = (patient.activeQueueTickets || []).filter(
+      (t) => !['Completed', 'Cancelled', 'NoShow', 'DischargedNonDoctor', 'Diverted'].includes(t.status)
+    );
 
-    if (isExisting && queueItem.status === 'InConsultation') {
-      if (queueItem.doctorId && currentDoctorId && queueItem.doctorId !== currentDoctorId) {
-        Alert.alert(
-          'Active Consultation in Progress',
-          `${patient.fullName} is currently in consultation with ${queueItem.doctorName || 'another doctor'}. Would you like to take over this session?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Take Over',
-              onPress: async () => {
-                await clinicService.callQueueItem(
-                  queueItem.id,
-                  currentDoctorId,
-                  currentDoctorName,
-                  currentRoom,
-                  currentRoomId
-                );
-                navigation.navigate('Consultations', {
-                  queueId: queueItem.id,
-                  queueItemId: queueItem.id,
-                  patientId: patient.id,
-                  patientName: patient.fullName,
-                });
-                notify.success(`Consultation resumed (${queueItem.queueNumber})`);
-              },
-            },
-          ]
-        );
-        return;
-      }
-      navigation.navigate('Consultations', {
-        queueId: queueItem.id,
-        queueItemId: queueItem.id,
-        patientId: patient.id,
-        patientName: patient.fullName,
-      });
-      notify.info(`Resuming active consultation (${queueItem.queueNumber})`);
+    if (activeTickets.length === 0) {
+      onProceed(null, false);
       return;
     }
 
-    await clinicService.callQueueItem(
-      queueItem.id,
-      currentDoctorId,
-      currentDoctorName,
-      currentRoom,
-      currentRoomId
-    );
+    if (activeTickets.length === 1) {
+      onProceed(activeTickets[0].id, false);
+      return;
+    }
 
-    navigation.navigate('Consultations', {
-      queueId: queueItem.id,
-      queueItemId: queueItem.id,
-      patientId: patient.id,
-      patientName: patient.fullName,
+    // >= 2 active tickets
+    setTicketPickerState({
+      visible: true,
+      patient,
+      tickets: activeTickets,
+      serviceTitle,
+      onSelect: (chosenTicket) => {
+        setTicketPickerState(null);
+        onProceed(chosenTicket.id, false);
+      },
+      onCreateNew: () => {
+        setTicketPickerState(null);
+        onProceed(null, true);
+      },
     });
-    notify.success(`Consultation started (${queueItem.queueNumber})`);
   };
 
-  const handleStartConsultationAction = async (
+  const handleStartConsultationAction = (
     patient: ClinicPatient,
     forcedProgram?: 'regular' | 'yakap'
   ) => {
@@ -1770,278 +1657,84 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setConsultationChoicePatient(null);
 
     const isYakap = forcedProgram === 'yakap';
-    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-    const seriesPrefix = isSeniorOrPwd ? 'SQ' : 'Q';
-    const visitType: VisitType = 'Consultation';
-    const chiefComplaint = isYakap ? 'PhilHealth Yakap Consultation' : 'General Consultation';
-
-    const encounter = await ensureEncounterQueueItem(patient, {
-      visitType,
-      chiefComplaint,
-      seriesPrefix,
-    });
-    if (!encounter) return;
-
-    if (encounter.multipleOptions && encounter.multipleOptions.length >= 2) {
-      setTicketPickerState({
-        visible: true,
-        patient,
-        tickets: encounter.multipleOptions,
-        serviceTitle: 'Doctor Consultation',
-        onSelect: (chosenTicket) => {
-          setTicketPickerState(null);
-          startConsultationWithQueueItem(patient, chosenTicket, true);
-        },
-        onCreateNew: async () => {
-          setTicketPickerState(null);
-          const newEncounter = await ensureEncounterQueueItem(
-            patient,
-            { visitType, chiefComplaint, seriesPrefix },
-            true
-          );
-          if (newEncounter) {
-            startConsultationWithQueueItem(patient, newEncounter.queueItem, false);
-          }
-        },
+    resolveActiveVisitForAction(patient, 'Doctor Consultation', (queueItemId, forceSeparateVisit) => {
+      const shouldForceSeparate = parseBooleanRouteParam(forceSeparateVisit);
+      navigation.navigate('Consultations', {
+        queueId: queueItemId || undefined,
+        queueItemId: queueItemId || undefined,
+        patientId: patient.id,
+        patientName: patient.fullName,
+        directVisitMode: isYakap ? 'yakap' : 'regular',
+        ...(shouldForceSeparate ? { forceSeparateVisit: true } : {}),
       });
-      return;
-    }
-
-    await startConsultationWithQueueItem(patient, encounter.queueItem, encounter.isExisting);
+      if (queueItemId) {
+        notify.info('Resuming encounter in consultation workstation');
+      }
+    });
   };
 
-  const handleStartProfilingAction = async (patient: ClinicPatient) => {
-    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-    const seriesPrefix = isSeniorOrPwd ? 'SQ' : 'Q';
-    await ensureEncounterQueueItem(patient, {
-      visitType: 'Consultation',
-      chiefComplaint: 'Patient Profiling (Yakap FPE)',
-      seriesPrefix,
-    });
+  const handleStartProfilingAction = (patient: ClinicPatient) => {
+    // Health screening (profiling / Yakap FPE) is purely longitudinal profiling and NEVER creates a visit on click.
     handleOpenPhilHealthProfile(patient);
   };
 
-  const handleRecordVitalsAction = async (patient: ClinicPatient) => {
-    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-    const seriesPrefix = isSeniorOrPwd ? 'SV' : 'V';
-    const encounter = await ensureEncounterQueueItem(patient, {
-      visitType: 'VitalsCheckOnly',
-      chiefComplaint: 'Vitals Check',
-      seriesPrefix,
+  const handleRecordVitalsAction = (patient: ClinicPatient) => {
+    resolveActiveVisitForAction(patient, 'Vitals Check', (queueItemId, forceSeparateVisit) => {
+      setVitalsPatient(patient);
+      setVitalsQueueItemId(queueItemId);
+      setVitalsForceSeparateVisit(Boolean(forceSeparateVisit));
+      setVitalsModalVisible(true);
     });
-    if (!encounter) return;
-
-    if (encounter.multipleOptions && encounter.multipleOptions.length >= 2) {
-      setTicketPickerState({
-        visible: true,
-        patient,
-        tickets: encounter.multipleOptions,
-        serviceTitle: 'Vitals Check',
-        onSelect: (chosenTicket) => {
-          setTicketPickerState(null);
-          setVitalsPatient(patient);
-          setVitalsQueueItemId(chosenTicket.id);
-          setVitalsModalVisible(true);
-        },
-        onCreateNew: async () => {
-          setTicketPickerState(null);
-          const newEncounter = await ensureEncounterQueueItem(
-            patient,
-            { visitType: 'VitalsCheckOnly', chiefComplaint: 'Vitals Check', seriesPrefix },
-            true
-          );
-          if (newEncounter) {
-            setVitalsPatient(patient);
-            setVitalsQueueItemId(newEncounter.queueItem.id);
-            setVitalsModalVisible(true);
-          }
-        },
-      });
-      return;
-    }
-
-    setVitalsPatient(patient);
-    setVitalsQueueItemId(encounter.queueItem.id);
-    setVitalsModalVisible(true);
   };
 
-  const handlePerformProcedureAction = async (patient: ClinicPatient) => {
-    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-    const seriesPrefix = isSeniorOrPwd ? 'SP' : 'P';
-    const encounter = await ensureEncounterQueueItem(patient, {
-      visitType: 'StandaloneProcedure',
-      chiefComplaint: 'Clinical Procedure',
-      seriesPrefix,
+  const handlePerformProcedureAction = (patient: ClinicPatient) => {
+    resolveActiveVisitForAction(patient, 'Clinical Procedure', (queueItemId, forceSeparateVisit) => {
+      handleOpenChart(patient, 'procedures', undefined, queueItemId, Boolean(forceSeparateVisit));
     });
-    if (!encounter) return;
-
-    if (encounter.multipleOptions && encounter.multipleOptions.length >= 2) {
-      setTicketPickerState({
-        visible: true,
-        patient,
-        tickets: encounter.multipleOptions,
-        serviceTitle: 'Clinical Procedure',
-        onSelect: (chosenTicket) => {
-          setTicketPickerState(null);
-          notify.success(`Procedure encounter selected (${chosenTicket.queueNumber})`);
-          handleOpenChart(patient, 'procedures');
-        },
-        onCreateNew: async () => {
-          setTicketPickerState(null);
-          const newEncounter = await ensureEncounterQueueItem(
-            patient,
-            { visitType: 'StandaloneProcedure', chiefComplaint: 'Clinical Procedure', seriesPrefix },
-            true
-          );
-          if (newEncounter?.queueItem?.queueNumber) {
-            notify.success(`Procedure encounter logged (${newEncounter.queueItem.queueNumber})`);
-          }
-          handleOpenChart(patient, 'procedures');
-        },
-      });
-      return;
-    }
-
-    if (encounter?.queueItem?.queueNumber) {
-      notify.success(`Procedure encounter logged (${encounter.queueItem.queueNumber})`);
-    }
-    handleOpenChart(patient, 'procedures');
   };
 
-  const handleIssueClearanceAction = async (patient: ClinicPatient) => {
-    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-    const seriesPrefix = isSeniorOrPwd ? 'SA' : 'A';
-    const encounter = await ensureEncounterQueueItem(patient, {
-      visitType: 'AdministrativeDocument',
-      chiefComplaint: 'Administrative & Clearance',
-      seriesPrefix,
+  const handleIssueClearanceAction = (patient: ClinicPatient) => {
+    resolveActiveVisitForAction(patient, 'Medical Certificate', (queueItemId, forceSeparateVisit) => {
+      setMedCertPatient(patient);
+      setMedCertQueueItemId(queueItemId);
+      setMedCertForceSeparateVisit(Boolean(forceSeparateVisit));
+      setMedCertModalVisible(true);
     });
-    if (!encounter) return;
-
-    if (encounter.multipleOptions && encounter.multipleOptions.length >= 2) {
-      setTicketPickerState({
-        visible: true,
-        patient,
-        tickets: encounter.multipleOptions,
-        serviceTitle: 'Administrative Document',
-        onSelect: (chosenTicket) => {
-          setTicketPickerState(null);
-          notify.success(`Administrative encounter selected (${chosenTicket.queueNumber})`);
-          handleOpenChart(patient, 'documents');
-        },
-        onCreateNew: async () => {
-          setTicketPickerState(null);
-          const newEncounter = await ensureEncounterQueueItem(
-            patient,
-            { visitType: 'AdministrativeDocument', chiefComplaint: 'Administrative & Clearance', seriesPrefix },
-            true
-          );
-          if (newEncounter?.queueItem?.queueNumber) {
-            notify.success(`Administrative encounter logged (${newEncounter.queueItem.queueNumber})`);
-          }
-          handleOpenChart(patient, 'documents');
-        },
-      });
-      return;
-    }
-
-    if (encounter?.queueItem?.queueNumber) {
-      notify.success(`Administrative encounter logged (${encounter.queueItem.queueNumber})`);
-    }
-    handleOpenChart(patient, 'documents');
   };
 
   const handleVitalsRecorded = () => {
     setVitalsModalVisible(false);
     setVitalsPatient(null);
     setVitalsQueueItemId(null);
+    setVitalsForceSeparateVisit(false);
     notify.success('Vitals recorded successfully');
     fetchPatients();
   };
 
-  const filterCounts = useMemo(() => {
-    if (!patients) return null;
-    let myPatients = 0;
-    let students = 0;
-    let employees = 0;
-    let alerts = 0;
-    let seniorPwd = 0;
-    for (const p of patients) {
-      if (isMyPatient(p, currentStaff)) {
-        myPatients++;
-      }
-      if (
-        p.customFields?.classification === 'Student' ||
-        p.customFields?.category === 'Student' ||
-        !!p.customFields?.student_id
-      ) {
-        students++;
-      }
-      if (
-        p.customFields?.classification === 'Employee' ||
-        p.customFields?.category === 'Employee' ||
-        !!p.customFields?.employee_id
-      ) {
-        employees++;
-      }
-      if (hasKnownAllergies(p.allergies) || (p.alerts && p.alerts.trim().length > 0)) {
-        alerts++;
-      }
-      if (!!p.seniorCitizenId || !!p.pwdId || p.age >= 60) {
-        seniorPwd++;
-      }
+  const activeTotal = useMemo(() => {
+    if (!totalCounts) return undefined;
+    switch (filterMode) {
+      case 'MY_PATIENTS':
+        return totalCounts.myPatients;
+      case 'STUDENTS':
+        return totalCounts.students;
+      case 'EMPLOYEES':
+        return totalCounts.employees;
+      case 'ALERTS':
+        return totalCounts.alerts;
+      case 'SENIOR_PWD':
+        return totalCounts.seniorPwd;
+      case 'ALL':
+      default:
+        return totalCounts.all;
     }
-    return {
-      all: patients.length,
-      myPatients,
-      students,
-      employees,
-      alerts,
-      seniorPwd,
-    };
-  }, [patients, currentStaff]);
+  }, [totalCounts, filterMode]);
 
-  const filteredPatients = (patients ?? []).filter((p) => {
-    if (filterMode === 'MY_PATIENTS') {
-      return isMyPatient(p, currentStaff);
-    }
-    if (filterMode === 'ALERTS') {
-      return hasKnownAllergies(p.allergies) || !!(p.alerts && p.alerts.trim().length > 0);
-    }
-    if (filterMode === 'SENIOR_PWD') {
-      return !!p.seniorCitizenId || !!p.pwdId || p.age >= 60;
-    }
-    if (filterMode === 'STUDENTS') {
-      return (
-        p.customFields?.classification === 'Student' ||
-        p.customFields?.category === 'Student' ||
-        !!p.customFields?.student_id
-      );
-    }
-    if (filterMode === 'EMPLOYEES') {
-      return (
-        p.customFields?.classification === 'Employee' ||
-        p.customFields?.category === 'Employee' ||
-        !!p.customFields?.employee_id
-      );
-    }
-    return true;
-  });
+  const filteredPatients = useMemo(() => patients ?? [], [patients]);
 
-
-  const formatTabCount = useCallback(
-    (loaded: number | undefined, total: number | undefined): string | number | undefined => {
-      if (loaded === undefined) return undefined;
-      if (total !== undefined && total !== null) {
-        return `${loaded}/${total}`;
-      }
-      if (!hasMore && patients !== null) {
-        return `${loaded}/${loaded}`;
-      }
-      return loaded;
-    },
-    [hasMore, patients]
-  );
+  const formatTabCount = useCallback((total: number | undefined): number | undefined => {
+    return total;
+  }, []);
 
   const isTable = effectiveViewMode === 'table';
   const itemHeight = isTable ? 64 : 270;
@@ -2095,6 +1788,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   };
 
   const retryPatients = () => {
+    setPatientsError(null);
     setLoading(true);
     fetchPatients().finally(() => setLoading(false));
   };
@@ -2105,22 +1799,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     <ResponsiveLayout
       headerTitle="Patients"
       actions={[
-        ...(canImportPatient
-          ? [
-              {
-                id: 'scan',
-                label: 'Scan patient QR',
-                shortLabel: 'Scan QR',
-                icon: 'scan' as const,
-                variant: 'outline' as const,
-                onPress: () => navigation.navigate('ShareImport'),
-              },
-            ]
-          : []),
         {
           id: 'register',
-          label: 'Register patient',
-          shortLabel: 'Register',
+          label: 'New Patient',
+          shortLabel: 'New Patient',
           icon: 'plus' as const,
           variant: 'primary' as const,
           primary: true,
@@ -2201,24 +1883,25 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
       {/* Filters & Workstation View Switcher Toolbar */}
       <View style={styles.toolbarRow}>
-        <SegmentedControl<PatientFilter>
-          value={filterMode}
-          onChange={handleFilterModeChange}
-          options={[
-            { value: 'ALL', label: 'All patients', count: formatTabCount(filterCounts?.all, totalCounts?.all) },
-            { value: 'MY_PATIENTS', label: 'My patients', count: formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients) },
-            { value: 'STUDENTS', label: 'Students', count: formatTabCount(filterCounts?.students, totalCounts?.students) },
-            { value: 'EMPLOYEES', label: 'Employees', count: formatTabCount(filterCounts?.employees, totalCounts?.employees) },
-            {
-              value: 'ALERTS',
-              label: 'Alerts & allergies',
-              count: formatTabCount(filterCounts?.alerts, totalCounts?.alerts),
-              badgeVariant: (filterCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined,
-            },
-            { value: 'SENIOR_PWD', label: 'Senior & PWD', count: formatTabCount(filterCounts?.seniorPwd, totalCounts?.seniorPwd) },
-          ]}
-        />
-
+        <View style={styles.toolbarTabs}>
+          <SegmentedControl<PatientFilter>
+            value={filterMode}
+            onChange={handleFilterModeChange}
+            options={[
+              { value: 'ALL', label: 'All patients', count: totalCounts?.all },
+              { value: 'MY_PATIENTS', label: 'My patients', count: totalCounts?.myPatients },
+              { value: 'STUDENTS', label: 'Students', count: totalCounts?.students },
+              { value: 'EMPLOYEES', label: 'Employees', count: totalCounts?.employees },
+              {
+                value: 'ALERTS',
+                label: 'Alerts & allergies',
+                count: totalCounts?.alerts,
+                badgeVariant: (totalCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined,
+              },
+              { value: 'SENIOR_PWD', label: 'Senior & PWD', count: totalCounts?.seniorPwd },
+            ]}
+          />
+        </View>
 
         {isWorkstation ? (
           <View style={styles.toolbarRight}>
@@ -2226,8 +1909,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               value={viewMode}
               onChange={handleViewModeChange}
               options={[
-                { value: 'cards', label: 'Cards' },
-                { value: 'table', label: 'Compact Table' },
+                { value: 'cards', label: 'Cards view', icon: 'grid', iconOnly: true },
+                { value: 'table', label: 'Compact table view', icon: 'list', iconOnly: true },
               ]}
             />
           </View>
@@ -2260,7 +1943,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         <Card style={styles.tableCard}>
           <ScrollView
             horizontal
-            showsHorizontalScrollIndicator={false}
+            showsHorizontalScrollIndicator
             contentContainerStyle={styles.tableScrollContent}
           >
             <View
@@ -2369,13 +2052,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               </ThemedText>
             </View>
           ) : hasMore ? (
-            <Button
-              title="Load more patients"
-              variant="ghost"
-              size="sm"
-              icon="chevronDown"
-              onPress={loadMorePatients}
-            />
+            <View style={{ alignItems: 'center', gap: 8 }}>
+              <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.endOfListText}>
+                Showing {patients.length} of {activeTotal ?? patients.length} {activeTotal === 1 ? 'patient' : 'patients'}
+              </ThemedText>
+              <Button
+                title="Load more patients"
+                variant="ghost"
+                size="sm"
+                icon="chevronDown"
+                onPress={loadMorePatients}
+              />
+            </View>
           ) : (
             <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.endOfListText}>
               All {filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'} loaded
@@ -2390,9 +2078,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <ThemedText style={styles.modalTitle}>Register Walk-In Patient</ThemedText>
-              <Pressable onPress={() => setRegisterVisible(false)}>
-                <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-              </Pressable>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon="close"
+                iconOnly
+                accessibilityLabel="Close"
+                onPress={() => setRegisterVisible(false)}
+              />
             </View>
 
             <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 12 }}>
@@ -2717,7 +2410,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                       <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
                         Principal Member Details
                       </ThemedText>
-                      <Badge label="Dependent Coverage" variant="info" size="sm" />
                     </View>
                     <Button
                       title={formGuardianSponsor ? formGuardianSponsor.buttonLabel : 'Use Legal Guardian'}
@@ -2727,9 +2419,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                       onPress={handleApplyFormGuardianAsSponsor}
                     />
                   </View>
-                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    Required when claiming PhilHealth benefits under a principal member.
-                  </ThemedText>
 
                   <Input
                     label="Principal Member Full Name *"
@@ -2974,29 +2663,26 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               {/* Dual Submission Action Buttons */}
               <View style={styles.dualActionRow}>
                 {/* Secondary: Save & Register Patient */}
-                <Pressable
-                  style={[styles.secondaryRegisterBtn, savingPatient && styles.disabledBtn]}
-                  onPress={() => handleRegisterPatient({ sendToTriage: false })}
+                <Button
+                  title="Save & Register Patient"
+                  variant="secondary"
+                  size="md"
                   disabled={savingPatient}
-                >
-                  <ThemedText style={styles.secondaryRegisterBtnText}>Save & Register Patient</ThemedText>
-                </Pressable>
+                  onPress={() => handleRegisterPatient({ sendToTriage: false })}
+                  style={styles.dualActionBtn}
+                />
 
                 {/* Primary Teal: Register & Send to Triage */}
-                <Pressable
-                  style={[styles.primaryTriageBtn, savingPatient && styles.disabledBtn]}
-                  onPress={() => handleRegisterPatient({ sendToTriage: true })}
+                <Button
+                  title="Register & Send to Triage"
+                  variant="primary"
+                  size="md"
+                  icon="arrowRight"
+                  loading={savingPatient}
                   disabled={savingPatient}
-                >
-                  {savingPatient ? (
-                    <ActivityIndicator color={theme.colors.onPrimary} />
-                  ) : (
-                    <View style={styles.triageBtnContent}>
-                      <Icon name="arrowRight" size={theme.sizes.iconSm} color={theme.colors.onPrimary} />
-                      <ThemedText style={styles.primaryTriageBtnText}>Register & Send to Triage</ThemedText>
-                    </View>
-                  )}
-                </Pressable>
+                  onPress={() => handleRegisterPatient({ sendToTriage: true })}
+                  style={styles.dualActionBtn}
+                />
               </View>
             </ScrollView>
           </View>
@@ -3033,6 +2719,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       <PatientChartModal
         visible={chartVisible}
         patient={selectedPatient}
+        queueItemId={chartQueueItemId}
+        allowDuplicateActive={chartForceSeparateVisit}
         patientChart={patientChart}
         loadingChart={loadingChart}
         chartError={chartError}
@@ -3042,7 +2730,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         focusToothNumber={focusToothNumber}
         onTabChange={handleChartTabChange}
         onClose={handleCloseChart}
-        onRefreshChart={() => (selectedPatient ? handleOpenChart(selectedPatient, activeChartTab) : Promise.resolve())}
+        onRefreshChart={() =>
+          selectedPatient
+            ? handleOpenChart(selectedPatient, activeChartTab, undefined, chartQueueItemId, chartForceSeparateVisit)
+            : Promise.resolve()
+        }
         onViewPrescriptionSlip={handleViewPrescriptionSlip}
         onOpenExternalDispense={handleOpenExternalDispense}
         onViewLabSlip={handleViewSlip}
@@ -3159,8 +2851,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
               {selectedSlip?.orderId && (
-                <Pressable
-                  style={[styles.closeSlipBtn, { backgroundColor: theme.colors.successText }]}
+                <Button
+                  title="Download Official Requisition PDF"
+                  variant="success"
+                  size="md"
+                  icon="download"
                   onPress={async () => {
                     const url = clinicService.getLabOrderSlipPdfUrl(selectedSlip.orderId);
                     try {
@@ -3169,16 +2864,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                       Alert.alert('Download Error', 'Could not open requisition slip PDF. Please check connection and try again.');
                     }
                   }}
-                >
-                  <ThemedText style={styles.closeSlipBtnText}>Download Official Requisition PDF</ThemedText>
-                </Pressable>
+                />
               )}
-              <Pressable
-                style={styles.closeSlipBtn}
+              <Button
+                title="Close"
+                variant="secondary"
+                size="md"
                 onPress={() => setSlipModalVisible(false)}
-              >
-                <ThemedText style={styles.closeSlipBtnText}>Close</ThemedText>
-              </Pressable>
+              />
             </View>
           </View>
         </View>
@@ -3190,9 +2883,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           <View style={[styles.modalContent, { maxWidth: 480 }]}>
             <View style={styles.modalHeader}>
               <ThemedText style={styles.modalTitle}>Attach External Lab Result (Path B)</ThemedText>
-              <Pressable onPress={() => setAttachModalVisible(false)} hitSlop={theme.spacing.sm}>
-                <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-              </Pressable>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon="close"
+                iconOnly
+                accessibilityLabel="Close"
+                onPress={() => setAttachModalVisible(false)}
+              />
             </View>
             <ThemedText style={styles.modalSub}>
               Attach test reports from outside diagnostic centers to complete the electronic health record.
@@ -3236,20 +2934,20 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                         </View>
                       </View>
                       <View style={{ flexDirection: 'row', gap: 6 }}>
-                        <Pressable
-                          style={styles.changeFileBtn}
+                        <Button
+                          title="Change"
+                          variant="outline"
+                          size="xs"
                           onPress={handlePickExternalFile}
                           disabled={pickingExternalFile || attaching}
-                        >
-                          <ThemedText variant="captionBold" color={theme.colors.primary}>Change</ThemedText>
-                        </Pressable>
-                        <Pressable
-                          style={styles.removeFileBtn}
+                        />
+                        <Button
+                          title="Clear"
+                          variant="dangerOutline"
+                          size="xs"
                           onPress={() => setPickedExternalFile(null)}
                           disabled={attaching}
-                        >
-                          <ThemedText variant="captionBold" color={theme.colors.emergencyText}>Clear</ThemedText>
-                        </Pressable>
+                        />
                       </View>
                     </View>
 
@@ -3280,16 +2978,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     </View>
                   </View>
                 ) : (
-                  <Pressable
-                    style={styles.pickFileBtn}
+                  <Button
+                    title={pickingExternalFile ? 'Opening File Browser...' : 'Select Result Document (PDF / Photo)'}
+                    variant="outline"
+                    size="md"
+                    icon="upload"
                     onPress={handlePickExternalFile}
                     disabled={pickingExternalFile || attaching}
-                  >
-                    <Icon name="upload" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                    <ThemedText variant="captionBold" color={theme.colors.primary}>
-                      {pickingExternalFile ? 'Opening File Browser...' : 'Select Result Document (PDF / Photo)'}
-                    </ThemedText>
-                  </Pressable>
+                  />
                 )}
               </View>
 
@@ -3305,25 +3001,22 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             </ScrollView>
 
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 16 }}>
-              <Pressable
-                style={styles.cancelModalBtn}
+              <Button
+                title="Cancel"
+                variant="secondary"
+                size="md"
                 onPress={() => setAttachModalVisible(false)}
                 disabled={attaching}
-              >
-                <ThemedText style={styles.cancelModalText}>Cancel</ThemedText>
-              </Pressable>
+              />
 
-              <Pressable
-                style={styles.confirmAttachBtn}
-                onPress={handleConfirmAttach}
+              <Button
+                title="Confirm & Mark Completed"
+                variant="primary"
+                size="md"
+                loading={attaching}
                 disabled={attaching}
-              >
-                {attaching ? (
-                  <ActivityIndicator color={theme.colors.textInverted} />
-                ) : (
-                  <ThemedText style={styles.confirmAttachText}>Confirm & Mark Completed</ThemedText>
-                )}
-              </Pressable>
+                onPress={handleConfirmAttach}
+              />
             </View>
           </View>
         </View>
@@ -3349,160 +3042,39 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         onSuccess={handleExternalDispenseSuccess}
       />
 
-      {/* Attach External Physical Document Modal (School Clinic / 80/20) */}
-      <Modal raw visible={uploadDocModalVisible} transparent animationType="slide" onClose={() => setUploadDocModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 500 }]}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Attach External Physical Document</ThemedText>
-              <Pressable onPress={() => setUploadDocModalVisible(false)} hitSlop={theme.spacing.sm}>
-                <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-              </Pressable>
-            </View>
-            <ThemedText style={styles.modalSub}>
-              Ingest scanned physical documents (paper COR, outside Chest X-Ray films, lab sheets, or med certs) directly into {selectedPatient?.fullName}'s profile.
-            </ThemedText>
-
-            <ScrollView
-              style={{ flexShrink: 1 }}
-              contentContainerStyle={{ gap: 12, paddingVertical: 4 }}
-              showsVerticalScrollIndicator={true}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View>
-                <ThemedText style={styles.inputLabel}>Document Title *</ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g. Chest X-ray (outside clinic)"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={docTitle}
-                  onChangeText={setDocTitle}
-                />
-              </View>
-
-              <ValidatedDateInput
-                label="Document Date (YYYY-MM-DD)"
-                required
-                value={docDate}
-                onChangeText={setDocDate}
-                boundaryMode="pastOrToday"
-                placeholder="YYYY-MM-DD"
-              />
-
-              <View>
-                <ThemedText style={styles.inputLabel}>Document / Record Classification</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                  {[
-                    { key: 'OutsideChestXRay', label: 'Chest X-Ray' },
-                    { key: 'CertificateOfRegistration', label: 'Paper COR' },
-                    { key: 'MedicalCertificate', label: 'Outside MedCert' },
-                    { key: 'LabResult', label: 'Lab Sheet' },
-                    { key: 'Other', label: 'Other' },
-                  ].map((t) => (
-                    <Pressable
-                      key={t.key}
-                      style={[styles.formatChip, docRecordType === t.key && styles.formatChipActive]}
-                      onPress={() => setDocRecordType(t.key)}
-                    >
-                      <ThemedText style={[styles.formatChipText, docRecordType === t.key && styles.formatChipTextActive]}>
-                        {t.label}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View>
-                <ThemedText style={styles.inputLabel}>Ingestion Source / Format</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  {(['PDF', 'Photo'] as const).map((fmt) => (
-                    <Pressable
-                      key={fmt}
-                      style={[styles.formatChip, docFileType === fmt && styles.formatChipActive]}
-                      onPress={() => setDocFileType(fmt)}
-                    >
-                      <ThemedText style={[styles.formatChipText, docFileType === fmt && styles.formatChipTextActive]}>
-                        {fmt === 'PDF' ? 'Scanned PDF' : 'Flatbed / Camera Scan'}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View>
-                <ThemedText style={styles.inputLabel}>File Attachment (PDF, JPEG, PNG)</ThemedText>
-                {pickedDocFile ? (
-                  <View style={styles.pickedFileBox}>
-                    <View style={styles.pickedFileInfo}>
-                      <Icon
-                        name={pickedDocFile.name.toLowerCase().endsWith('.pdf') ? 'file' : 'paperclip'}
-                        size={theme.sizes.iconMd}
-                        color={theme.colors.primary}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
-                          {pickedDocFile.name}
-                        </ThemedText>
-                        <ThemedText variant="caption" color={theme.colors.textMuted}>
-                          {pickedDocFile.size ? `${(pickedDocFile.size / 1024).toFixed(1)} KB` : 'Ready to upload'}
-                        </ThemedText>
-                      </View>
-                    </View>
-                    <View style={{ flexDirection: 'row', gap: 6 }}>
-                      <Pressable style={styles.changeFileBtn} onPress={handlePickDocument}>
-                        <ThemedText variant="captionBold" color={theme.colors.primary}>Change</ThemedText>
-                      </Pressable>
-                      <Pressable style={styles.removeFileBtn} onPress={() => setPickedDocFile(null)}>
-                        <ThemedText variant="captionBold" color={theme.colors.emergencyText}>Clear</ThemedText>
-                      </Pressable>
-                    </View>
-                  </View>
-                ) : (
-                  <Pressable style={styles.pickFileBtn} onPress={handlePickDocument}>
-                    <Icon name="upload" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                    <ThemedText variant="captionBold" color={theme.colors.primary}>
-                      Select Document File (PDF, JPEG, PNG)
-                    </ThemedText>
-                  </Pressable>
-                )}
-              </View>
-
-              <View>
-                <ThemedText style={styles.inputLabel}>Clinical Review Findings & Notes</ThemedText>
-                <TextInput
-                  style={[styles.textInput, { height: 60 }]}
-                  multiline
-                  placeholder="e.g. Clean chest PA film, no active pulmonary disease seen."
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={docNotes}
-                  onChangeText={setDocNotes}
-                />
-              </View>
-            </ScrollView>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 14 }}>
-              <Pressable
-                style={styles.cancelModalBtn}
-                onPress={() => setUploadDocModalVisible(false)}
-                disabled={uploadingDoc}
-              >
-                <ThemedText style={styles.cancelModalText}>Cancel</ThemedText>
-              </Pressable>
-              <Pressable
-                style={styles.confirmAttachBtn}
-                onPress={handleUploadDocument}
-                disabled={uploadingDoc}
-              >
-                {uploadingDoc ? (
-                  <ActivityIndicator color={theme.colors.textInverted} />
-                ) : (
-                  <ThemedText style={styles.confirmAttachText}>Save & Attach to Profile</ThemedText>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Attach External Physical Document Modal */}
+      <AttachExternalDocumentModal
+        visible={uploadDocModalVisible}
+        patient={selectedPatient}
+        patientId={selectedPatient?.id}
+        onClose={() => setUploadDocModalVisible(false)}
+        onAttachmentUploaded={async (attributedAtt) => {
+          setPatientAttachments((prev) => [
+            attributedAtt,
+            ...prev.filter((a) => a.id !== attributedAtt.id),
+          ]);
+          setPatientChart((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  attachments: [
+                    attributedAtt,
+                    ...(prev.attachments || []).filter((a) => a.id !== attributedAtt.id),
+                  ],
+                }
+              : prev
+          );
+          if (selectedPatient) {
+            void handleOpenChart(
+              selectedPatient,
+              activeChartTab,
+              undefined,
+              chartQueueItemId,
+              chartForceSeparateVisit
+            );
+          }
+        }}
+      />
 
       {/* Standalone PhilHealth Patient Profile Modal (Offline & Walk-In Capable) */}
       <PhilHealthProfileModal
@@ -3535,19 +3107,42 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           setVitalsModalVisible(false);
           setVitalsPatient(null);
           setVitalsQueueItemId(null);
+          setVitalsForceSeparateVisit(false);
         }}
         patient={vitalsPatient}
         queueItemId={vitalsQueueItemId}
+        allowDuplicateActive={vitalsForceSeparateVisit}
         currentStaffId={currentStaff?.id}
         currentStaffName={currentStaff ? formatStaffName(currentStaff) : currentName}
         onSuccess={handleVitalsRecorded}
       />
 
-      {/* Multi-Service Queueing Modal */}
+      {/* Issue Medical Certificate Modal */}
+      <IssueMedicalCertificateModal
+        visible={medCertModalVisible}
+        patient={medCertPatient}
+        queueItemId={medCertQueueItemId}
+        allowDuplicateActive={medCertForceSeparateVisit}
+        onClose={() => {
+          setMedCertModalVisible(false);
+          setMedCertPatient(null);
+          setMedCertQueueItemId(null);
+          setMedCertForceSeparateVisit(false);
+        }}
+        onSuccess={() => {
+          setMedCertModalVisible(false);
+          setMedCertPatient(null);
+          setMedCertQueueItemId(null);
+          setMedCertForceSeparateVisit(false);
+          fetchPatients();
+        }}
+      />
+
+      {/* Visit Purpose Queueing Modal */}
       <ServiceCheckInModal
         visible={!!serviceModalPatient}
         patient={serviceModalPatient}
-        initialService={selectedServiceIntent}
+        initialVisitType={selectedVisitTypeIntent}
         activeDoctors={activeDoctors}
         activeRooms={activeRooms}
         onClose={() => setServiceModalPatient(null)}
@@ -3588,7 +3183,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         patient={ticketPickerState?.patient || null}
         tickets={ticketPickerState?.tickets || []}
         serviceTitle={ticketPickerState?.serviceTitle}
-        onSelectTicket={(t) => ticketPickerState?.onSelect(t as PatientQueueItem)}
+        onSelectTicket={(t) => ticketPickerState?.onSelect(t)}
         onCreateNewTicket={ticketPickerState?.onCreateNew}
         onClose={() => setTicketPickerState(null)}
       />
@@ -3658,14 +3253,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     gap: theme.spacing.md,
+    width: '100%',
+    minWidth: 0,
+  },
+  toolbarTabs: {
+    flexDirection: 'row',
+    flex: 1,
+    minWidth: 0,
   },
   toolbarRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
+    flexShrink: 0,
+    gap: theme.spacing.sm,
   },
   infiniteScrollFooter: {
     paddingVertical: theme.spacing.xl,
@@ -3718,10 +3320,12 @@ const styles = StyleSheet.create({
   },
   tableScrollContent: {
     flexGrow: 1,
+    minWidth: '100%',
   },
   tableInner: {
+    flex: 1,
     width: '100%',
-    minWidth: 920,
+    minWidth: 1080,
   },
   modalOverlay: {
     flex: 1,
@@ -3791,19 +3395,6 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     fontSize: theme.fontSizes.md,
     color: theme.colors.text,
-  },
-  saveBtn: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radii.md,
-    minHeight: theme.sizes.controlLg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: theme.spacing.sm,
-  },
-  saveBtnText: {
-    color: theme.colors.textInverted,
-    fontSize: theme.fontSizes.md,
-    fontWeight: '700',
   },
   chartSummaryBar: {
     flexDirection: 'row',
@@ -3936,28 +3527,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
   },
-  viewSlipBtn: {
-    backgroundColor: theme.colors.surfaceSubtle,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: theme.radii.sm,
-  },
-  viewSlipBtnText: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-  },
-  attachResultBtn: {
-    backgroundColor: theme.colors.infoBg,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: theme.radii.sm,
-  },
-  attachResultBtnText: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '700',
-    color: theme.colors.infoText,
-  },
   slipHeader: {
     alignItems: 'center',
     gap: 2,
@@ -4063,17 +3632,6 @@ const styles = StyleSheet.create({
     color: theme.colors.info,
     textAlign: 'center',
   },
-  closeSlipBtn: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: theme.radii.md,
-  },
-  closeSlipBtnText: {
-    color: theme.colors.textInverted,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
-  },
   formatChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -4094,28 +3652,6 @@ const styles = StyleSheet.create({
   formatChipTextActive: {
     color: theme.colors.infoText,
   },
-  cancelModalBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surfaceSubtle,
-  },
-  cancelModalText: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-  },
-  confirmAttachBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.primary,
-  },
-  confirmAttachText: {
-    color: theme.colors.textInverted,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
-  },
   pickedFileBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -4132,33 +3668,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
     flex: 1,
-  },
-  changeFileBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-  },
-  removeFileBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.emergencyBg,
-    borderWidth: 1,
-    borderColor: theme.colors.emergencyBorder,
-  },
-  pickFileBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: theme.spacing.xs,
-    padding: theme.spacing.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-    borderRadius: theme.radii.md,
   },
   categoryRow: {
     flexDirection: 'row',
@@ -4265,19 +3774,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.text,
   },
-  addDocBtn: {
-    backgroundColor: theme.colors.primaryLight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.radii.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-  },
-  addDocBtnText: {
-    color: theme.colors.primary,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
-  },
   attachmentCard: {
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
@@ -4350,42 +3846,6 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 4,
   },
-  verifyBtn: {
-    backgroundColor: theme.colors.success,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.radii.sm,
-  },
-  verifyBtnText: {
-    color: theme.colors.textInverted,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
-  },
-  rejectBtn: {
-    backgroundColor: theme.colors.emergency,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.radii.sm,
-  },
-  rejectBtnText: {
-    color: theme.colors.textInverted,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
-  },
-  viewDocBtn: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.radii.sm,
-    alignSelf: 'flex-start',
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  viewDocBtnText: {
-    color: theme.colors.textInverted,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
-  },
   allergySectionCard: {
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
@@ -4426,41 +3886,8 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.xs,
     paddingBottom: theme.spacing.md,
   },
-  secondaryRegisterBtn: {
+  dualActionBtn: {
     flex: 1,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderDark,
-    paddingVertical: theme.spacing.sm + 4,
-    borderRadius: theme.radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryRegisterBtnText: {
-    color: theme.colors.text,
-    fontSize: theme.fontSizes.sm,
-    fontWeight: '600',
-  },
-  primaryTriageBtn: {
-    flex: 1,
-    backgroundColor: theme.colors.primary,
-    paddingVertical: theme.spacing.sm + 4,
-    borderRadius: theme.radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  triageBtnContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  primaryTriageBtnText: {
-    color: theme.colors.onPrimary,
-    fontSize: theme.fontSizes.sm,
-    fontWeight: '700',
-  },
-  disabledBtn: {
-    opacity: 0.6,
   },
   formSectionBox: {
     gap: theme.spacing.xs,

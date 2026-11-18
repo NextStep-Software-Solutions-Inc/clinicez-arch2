@@ -13,6 +13,7 @@ using ClinicEz.Shared.Interop.Contracts;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace ClinicEz.Comms.Api.Controllers;
 
@@ -36,6 +37,7 @@ public class ConversationsController : ControllerBase
         var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? request.TenantId;
         var facilityId = User.FindFirstValue("facility_id") ?? User.FindFirstValue("FacilityId") ?? request.FacilityId;
         var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? "system";
+        var staffName = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue("name") ?? "Staff Member";
 
         var command = new CreateConversationCommand(
             tenantId,
@@ -50,7 +52,8 @@ public class ConversationsController : ControllerBase
             request.IsEmergencyConfirmed,
             request.IsLocalOnly,
             staffId,
-            request.Participants);
+            request.Participants,
+            staffName);
 
         var result = await _mediator.Send(command, ct);
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
@@ -75,7 +78,8 @@ public class ConversationsController : ControllerBase
     public async Task<ActionResult<ConversationDto>> GetById(Guid id, CancellationToken ct)
     {
         var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
-        var query = new GetConversationByIdQuery(id, tenantId);
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        var query = new GetConversationByIdQuery(id, tenantId, staffId);
         var result = await _mediator.Send(query, ct);
         if (result == null) return NotFound();
         return Ok(result);
@@ -167,7 +171,7 @@ public class ConversationsController : ControllerBase
         [FromBody] CloseConversationApiRequest? request,
         CancellationToken ct)
     {
-        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? request?.TenantId ?? string.Empty;
         var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? "system";
         var staffName = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue("name") ?? "Staff Member";
 
@@ -181,9 +185,125 @@ public class ConversationsController : ControllerBase
         var result = await _mediator.Send(command, ct);
         return Ok(result);
     }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? "system";
+
+        var command = new DeleteConversationCommand(id, tenantId, staffId);
+        var deleted = await _mediator.Send(command, ct);
+        if (!deleted)
+        {
+            return NotFound();
+        }
+        return NoContent();
+    }
+
+    [HttpPost("{id:guid}/participants")]
+    public async Task<ActionResult<ParticipantDto>> AddParticipant(
+        Guid id,
+        [FromBody] AddParticipantApiRequest request,
+        CancellationToken ct)
+    {
+        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var command = new AddParticipantCommand(
+            id,
+            tenantId,
+            request.ParticipantId,
+            request.ParticipantType ?? "Staff",
+            request.DisplayName ?? "Staff Member",
+            request.Role ?? "Member");
+
+        var result = await _mediator.Send(command, ct);
+        return Ok(result);
+    }
+
+    [HttpDelete("{id:guid}/participants/{participantId}")]
+    public async Task<IActionResult> RemoveParticipant(
+        Guid id,
+        string participantId,
+        CancellationToken ct)
+    {
+        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var command = new RemoveParticipantCommand(id, tenantId, participantId);
+        var removed = await _mediator.Send(command, ct);
+        if (!removed)
+        {
+            return NotFound();
+        }
+        return NoContent();
+    }
+
+    [HttpPatch("{id:guid}/title")]
+    public async Task<ActionResult<ConversationDto>> UpdateTitle(
+        Guid id,
+        [FromBody] UpdateConversationTitleApiRequest request,
+        CancellationToken ct)
+    {
+        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var command = new UpdateConversationTitleCommand(id, tenantId, request.Title);
+        var result = await _mediator.Send(command, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/read")]
+    public async Task<ActionResult<MarkConversationReadResult>> MarkRead(
+        Guid id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] MarkConversationReadApiRequest? request,
+        CancellationToken ct)
+    {
+        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? string.Empty;
+        var staffName = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue("name") ?? "Staff Member";
+
+        var command = new MarkConversationReadCommand(
+            id,
+            tenantId,
+            staffId,
+            staffName,
+            request?.LastReadMessageId);
+
+        var result = await _mediator.Send(command, ct);
+        return Ok(result);
+    }
+
+    [HttpPatch("{id:guid}/mute")]
+    public async Task<ActionResult<ParticipantDto>> SetMuted(
+        Guid id,
+        [FromBody] SetConversationMuteApiRequest request,
+        CancellationToken ct)
+    {
+        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? string.Empty;
+        var staffName = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue("name") ?? "Staff Member";
+
+        var command = new SetConversationMuteCommand(
+            id,
+            tenantId,
+            staffId,
+            staffName,
+            request.IsMuted);
+
+        var result = await _mediator.Send(command, ct);
+        return Ok(result);
+    }
 }
 
-public sealed record CloseConversationApiRequest(string? Notes = null);
+public sealed record MarkConversationReadApiRequest(Guid? LastReadMessageId = null);
+
+public sealed record SetConversationMuteApiRequest(bool IsMuted);
+
+public sealed record UpdateConversationTitleApiRequest(string? Title);
+
+public sealed record AddParticipantApiRequest(
+    string ParticipantId,
+    string? ParticipantType = "Staff",
+    string? DisplayName = null,
+    string? Role = "Member");
+
+public sealed record CloseConversationApiRequest(string? Notes = null, string? TenantId = null);
 
 public sealed record CreateConversationRequest(
     string TenantId,
@@ -191,7 +311,7 @@ public sealed record CreateConversationRequest(
     string? BranchId,
     ConversationScope Scope,
     ConversationKind Kind,
-    string Title,
+    string? Title,
     string? ContextType,
     string? ContextId,
     MessageCategory? Category,

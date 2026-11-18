@@ -4,13 +4,13 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  ActivityIndicator,
 } from 'react-native';
 import { TextInput } from '../ui/Text';
 import { Alert, notify } from '../../utils/feedback';
-import { ThemedText, Icon, ValidatedDateInput, validateDateString, Modal } from '../ui';
+import { ThemedText, Icon, ValidatedDateInput, validateDateString, Modal, Button } from '../ui';
 import { theme } from '../../constants/theme';
 import { useStaff } from '../../context/StaffContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   clinicService,
   type ClinicPatient,
@@ -18,6 +18,41 @@ import {
 } from '../../services/clinicService';
 import { offlineSyncService } from '../../services/offlineSyncService';
 import { shouldQueueOffline } from '../../services/outboxPolicy';
+
+const GUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isPlaceholderStaffName(name?: string | null): boolean {
+  if (!name || !name.trim()) return true;
+  const normalized = name.trim().toLowerCase();
+  return normalized === 'clinic staff' || normalized === 'clinicstaff';
+}
+
+export function normalizeAttachmentStaffAttribution(
+  att: ClinicRecordAttachmentRecord,
+  actorName?: string | null,
+  actorId?: string | null
+): ClinicRecordAttachmentRecord {
+  const cleanActorName = actorName?.trim();
+  const cleanActorId = actorId && GUID_REGEX.test(actorId) ? actorId : undefined;
+  if (!cleanActorName) return att;
+
+  const uploadedByStaffName = isPlaceholderStaffName(att.uploadedByStaffName)
+    ? cleanActorName
+    : att.uploadedByStaffName;
+  const isVerified = att.verificationStatus === 'Verified';
+  const verifiedByStaffName =
+    isVerified && isPlaceholderStaffName(att.verifiedByStaffName)
+      ? cleanActorName
+      : att.verifiedByStaffName;
+
+  return {
+    ...att,
+    uploadedByStaffId: att.uploadedByStaffId || cleanActorId || undefined,
+    uploadedByStaffName,
+    verifiedByStaffId: isVerified ? (att.verifiedByStaffId || cleanActorId || undefined) : att.verifiedByStaffId,
+    verifiedByStaffName,
+  };
+}
 
 export interface AttachExternalDocumentModalProps {
   visible: boolean;
@@ -34,7 +69,11 @@ export default function AttachExternalDocumentModal({
   onClose,
   onAttachmentUploaded,
 }: AttachExternalDocumentModalProps) {
-  const { currentName } = useStaff();
+  const { current: currentStaff, currentName } = useStaff();
+  const { user: authUser } = useAuth();
+  const actorStaffName = (currentName || authUser?.name || authUser?.email || '').trim();
+  const rawActorStaffId = currentStaff?.id || authUser?.id || '';
+  const actorStaffId = GUID_REGEX.test(rawActorStaffId) ? rawActorStaffId : undefined;
 
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [docTitle, setDocTitle] = useState('');
@@ -42,6 +81,8 @@ export default function AttachExternalDocumentModal({
   const [docRecordType, setDocRecordType] = useState('OutsideChestXRay');
   const [docFileType, setDocFileType] = useState<'PDF' | 'Photo'>('PDF');
   const [docNotes, setDocNotes] = useState('');
+  const [customFileName, setCustomFileName] = useState('');
+  const [fileExtension, setFileExtension] = useState('');
   const [pickedDocFile, setPickedDocFile] = useState<{
     uri: string;
     name: string;
@@ -57,6 +98,8 @@ export default function AttachExternalDocumentModal({
       setDocRecordType('OutsideChestXRay');
       setDocFileType('PDF');
       setDocNotes('');
+      setCustomFileName('');
+      setFileExtension('');
       setPickedDocFile(null);
       setUploadingDoc(false);
     }
@@ -72,16 +115,23 @@ export default function AttachExternalDocumentModal({
       });
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
+      const originalName = asset.name;
+      const lastDotIndex = originalName.lastIndexOf('.');
+      const baseName = lastDotIndex !== -1 ? originalName.substring(0, lastDotIndex) : originalName;
+      const ext = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : '';
+
       setPickedDocFile({
-        name: asset.name,
+        name: originalName,
         size: asset.size,
         uri: asset.uri,
-        mimeType: asset.mimeType || (asset.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
+        mimeType: asset.mimeType || (originalName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
         file: (asset as any).file,
       });
+      setCustomFileName(baseName);
+      setFileExtension(ext);
+
       if (!docTitle.trim()) {
-        const cleanName = asset.name.replace(/\.[^/.]+$/, '');
-        setDocTitle(cleanName);
+        setDocTitle(baseName);
       }
       if (asset.name.toLowerCase().endsWith('.pdf')) {
         setDocFileType('PDF');
@@ -114,21 +164,31 @@ export default function AttachExternalDocumentModal({
 
     setUploadingDoc(true);
 
+    const trimmedCustom = customFileName.trim();
+    let finalFileName = pickedDocFile?.name || `${docTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}`;
+    if (pickedDocFile && trimmedCustom) {
+      const hasExt = fileExtension && trimmedCustom.toLowerCase().endsWith(fileExtension.toLowerCase());
+      finalFileName = hasExt ? trimmedCustom : `${trimmedCustom}${fileExtension}`;
+    }
+
     if (pickedDocFile) {
       try {
         const formData = new FormData();
         formData.append('PatientId', targetPatientId);
         formData.append('RecordType', docRecordType);
         formData.append('Title', docTitle.trim());
+        formData.append('FileName', finalFileName);
         if (docNotes.trim()) formData.append('Notes', docNotes.trim());
         formData.append('DocumentDate', strictlyFormattedDocDate);
+        if (actorStaffId) formData.append('UploadedByStaffId', actorStaffId);
+        if (actorStaffName) formData.append('UploadedByStaffName', actorStaffName);
 
         if (pickedDocFile.file) {
-          formData.append('File', pickedDocFile.file);
+          formData.append('File', pickedDocFile.file, finalFileName);
         } else {
           formData.append('File', {
             uri: pickedDocFile.uri,
-            name: pickedDocFile.name,
+            name: finalFileName,
             type: pickedDocFile.mimeType || 'application/octet-stream',
           } as any);
         }
@@ -137,8 +197,9 @@ export default function AttachExternalDocumentModal({
         setUploadingDoc(false);
 
         if (newAtt) {
+          const attributedAtt = normalizeAttachmentStaffAttribution(newAtt, actorStaffName, actorStaffId);
           notify.success('Document attached to the patient record.');
-          onAttachmentUploaded?.(newAtt);
+          onAttachmentUploaded?.(attributedAtt);
           onClose();
           return;
         } else if (err) {
@@ -159,13 +220,14 @@ export default function AttachExternalDocumentModal({
       patientId: targetPatientId,
       recordType: docRecordType,
       title: docTitle.trim(),
-      fileName: `${docTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}`,
+      fileName: finalFileName,
       contentType: docFileType === 'PDF' ? 'application/pdf' : 'image/jpeg',
       fileSizeBytes: 1024 * 450,
       storageUri: `tenants/${tenantId}/clinics/${clinicId}/records/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}.cez`,
       documentDate: strictlyFormattedDocDate,
       notes: docNotes.trim() || undefined,
-      uploadedByStaffName: currentName || undefined,
+      uploadedByStaffId: actorStaffId,
+      uploadedByStaffName: actorStaffName || undefined,
       encryptionAlgorithm: 'AES-256-GCM',
       encryptionKeyId: 'cmk-v1',
     };
@@ -174,13 +236,14 @@ export default function AttachExternalDocumentModal({
     setUploadingDoc(false);
 
     if (newAtt) {
+      const attributedAtt = normalizeAttachmentStaffAttribution(newAtt, actorStaffName, actorStaffId);
       notify.success('Document attached to the patient record.');
-      onAttachmentUploaded?.(newAtt);
+      onAttachmentUploaded?.(attributedAtt);
       onClose();
     } else if (!shouldQueueOffline(err?.status ?? 0)) {
       notify.error(err?.message || 'The server rejected this document.');
     } else {
-      const queuedAtt = await offlineSyncService.enqueueAttachment(payload, currentName || undefined);
+      const queuedAtt = await offlineSyncService.enqueueAttachment(payload, actorStaffName || undefined);
       notify.success('Document queued offline.');
       Alert.alert('Saved on this device', 'The document is queued and will upload automatically once the connection is back.');
       onAttachmentUploaded?.(queuedAtt as any);
@@ -196,12 +259,17 @@ export default function AttachExternalDocumentModal({
         <View style={[styles.modalContent, { maxWidth: 500 }]}>
           <View style={styles.modalHeader}>
             <ThemedText style={styles.modalTitle}>Attach External Physical Document</ThemedText>
-            <Pressable onPress={onClose} hitSlop={theme.spacing.sm}>
-              <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+            <Button
+              variant="ghost"
+              size="xs"
+              icon="close"
+              iconOnly
+              accessibilityLabel="Close"
+              onPress={onClose}
+            />
           </View>
           <ThemedText style={styles.modalSub}>
-            Ingest scanned physical documents (paper COR, outside Chest X-Ray films, lab sheets, or med certs) directly into {patientDisplayName}&apos;s profile.
+            Ingest scanned physical documents (outside Chest X-Ray films, lab sheets, or med certs) directly into {patientDisplayName}&apos;s profile.
           </ThemedText>
 
           <ScrollView
@@ -235,7 +303,6 @@ export default function AttachExternalDocumentModal({
               <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
                 {[
                   { key: 'OutsideChestXRay', label: 'Chest X-Ray' },
-                  { key: 'CertificateOfRegistration', label: 'Paper COR' },
                   { key: 'MedicalCertificate', label: 'Outside MedCert' },
                   { key: 'LabResult', label: 'Lab Sheet' },
                   { key: 'Other', label: 'Other' },
@@ -273,38 +340,75 @@ export default function AttachExternalDocumentModal({
             <View>
               <ThemedText style={styles.inputLabel}>File Attachment (PDF, JPEG, PNG)</ThemedText>
               {pickedDocFile ? (
-                <View style={styles.pickedFileBox}>
-                  <View style={styles.pickedFileInfo}>
-                    <Icon
-                      name={pickedDocFile.name.toLowerCase().endsWith('.pdf') ? 'file' : 'paperclip'}
-                      size={theme.sizes.iconMd}
-                      color={theme.colors.primary}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
-                        {pickedDocFile.name}
-                      </ThemedText>
-                      <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        {pickedDocFile.size ? `${(pickedDocFile.size / 1024).toFixed(1)} KB` : 'Ready to upload'}
-                      </ThemedText>
+                <View style={styles.pickedFileContainer}>
+                  <View style={styles.pickedFileBox}>
+                    <View style={styles.pickedFileInfo}>
+                      <Icon
+                        name={pickedDocFile.name.toLowerCase().endsWith('.pdf') ? 'file' : 'paperclip'}
+                        size={theme.sizes.iconMd}
+                        color={theme.colors.primary}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
+                          {pickedDocFile.name}
+                        </ThemedText>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          {pickedDocFile.size ? `${(pickedDocFile.size / 1024).toFixed(1)} KB` : 'Ready to upload'}
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        title="Change"
+                        onPress={handlePickDocument}
+                      />
+                      <Button
+                        variant="dangerOutline"
+                        size="xs"
+                        title="Clear"
+                        onPress={() => {
+                          setPickedDocFile(null);
+                          setCustomFileName('');
+                          setFileExtension('');
+                        }}
+                      />
                     </View>
                   </View>
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
-                    <Pressable style={styles.changeFileBtn} onPress={handlePickDocument}>
-                      <ThemedText variant="captionBold" color={theme.colors.primary}>Change</ThemedText>
-                    </Pressable>
-                    <Pressable style={styles.removeFileBtn} onPress={() => setPickedDocFile(null)}>
-                      <ThemedText variant="captionBold" color={theme.colors.emergencyText}>Clear</ThemedText>
-                    </Pressable>
+
+                  <View style={styles.renameFieldWrap}>
+                    <ThemedText style={styles.inputLabel}>Attachment Display Name (Renaming)</ThemedText>
+                    <View style={styles.renameInputRow}>
+                      <TextInput
+                        style={[styles.textInput, styles.renameInput]}
+                        placeholder="e.g. Chest_XRay_Nov2026"
+                        placeholderTextColor={theme.colors.textMuted}
+                        value={customFileName}
+                        onChangeText={setCustomFileName}
+                        accessibilityLabel="Attachment Display Name"
+                      />
+                      {fileExtension ? (
+                        <View style={styles.extensionBadge}>
+                          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                            {fileExtension}
+                          </ThemedText>
+                        </View>
+                      ) : null}
+                    </View>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      Preserves file extension and underlying content. The customized name will be saved in Doc Vault.
+                    </ThemedText>
                   </View>
                 </View>
               ) : (
-                <Pressable style={styles.pickFileBtn} onPress={handlePickDocument}>
-                  <Icon name="upload" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                  <ThemedText variant="captionBold" color={theme.colors.primary}>
-                    Select Document File (PDF, JPEG, PNG)
-                  </ThemedText>
-                </Pressable>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon="upload"
+                  title="Select Document File (PDF, JPEG, PNG)"
+                  onPress={handlePickDocument}
+                />
               )}
             </View>
 
@@ -322,24 +426,21 @@ export default function AttachExternalDocumentModal({
           </ScrollView>
 
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 14 }}>
-            <Pressable
-              style={styles.cancelModalBtn}
+            <Button
+              variant="subtle"
+              size="sm"
+              title="Cancel"
+              disabled={uploadingDoc}
               onPress={onClose}
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              title="Save & Attach to Profile"
+              loading={uploadingDoc}
               disabled={uploadingDoc}
-            >
-              <ThemedText style={styles.cancelModalText}>Cancel</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.confirmAttachBtn}
               onPress={handleUploadDocument}
-              disabled={uploadingDoc}
-            >
-              {uploadingDoc ? (
-                <ActivityIndicator color={theme.colors.textInverted} />
-              ) : (
-                <ThemedText style={styles.confirmAttachText}>Save & Attach to Profile</ThemedText>
-              )}
-            </Pressable>
+            />
           </View>
         </View>
       </View>
@@ -439,53 +540,28 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     flex: 1,
   },
-  changeFileBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
+  pickedFileContainer: {
+    gap: theme.spacing.sm,
   },
-  removeFileBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.emergencyBg,
-    borderWidth: 1,
-    borderColor: theme.colors.emergencyBorder,
+  renameFieldWrap: {
+    gap: 4,
   },
-  pickFileBtn: {
+  renameInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: theme.spacing.xs,
-    padding: theme.spacing.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-    borderRadius: theme.radii.md,
+    gap: 6,
   },
-  cancelModalBtn: {
-    paddingHorizontal: 14,
+  renameInput: {
+    flex: 1,
+  },
+  extensionBadge: {
+    paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: theme.radii.md,
     backgroundColor: theme.colors.surfaceSubtle,
-  },
-  cancelModalText: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-  },
-  confirmAttachBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.primary,
-  },
-  confirmAttachText: {
-    color: theme.colors.textInverted,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

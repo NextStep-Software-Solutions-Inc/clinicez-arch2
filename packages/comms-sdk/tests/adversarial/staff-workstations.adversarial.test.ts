@@ -24,6 +24,7 @@ function createMockContext(client = new MockCommsClient(), store = new Optimisti
     facilityId: 'facility-clinic-1',
     staffId: 'staff-doc-1',
     staffDisplayName: 'Dr. Maria Santos',
+    baseUrl: '',
     connect: async () => {},
     disconnect: async () => {},
     reconnect: async () => {},
@@ -365,33 +366,31 @@ describe('Adversarial Staff Workstations Suite (Challenger 1)', () => {
   // =========================================================================
   // 4. Teleconsultation Waiting Room Prepayment Gate & Emergency Override
   // =========================================================================
-  describe('Scenario 4: Teleconsultation Prepayment Gate, PhilHealth Yakap Auto-Exemption & Emergency Override', () => {
+  describe('Scenario 4: Teleconsultation Prepayment Gate & Emergency Override (Zero YAKAP per R7.3)', () => {
     const isPrepaidBlocked = (
       policy: 'Prepaid' | 'Postpaid' | 'Exempt',
-      status: 'Unpaid' | 'Paid' | 'Exempt' | 'Overridden',
-      isYakapExempt?: boolean
+      status: 'Unpaid' | 'Paid' | 'Exempt' | 'Overridden'
     ): boolean => {
-      return policy === 'Prepaid' && status === 'Unpaid' && !isYakapExempt;
+      return policy === 'Prepaid' && status === 'Unpaid';
     };
 
-    it('strictly blocks admission when paymentPolicy is Prepaid and paymentStatus is Unpaid without Yakap', () => {
-      expect(isPrepaidBlocked('Prepaid', 'Unpaid', false)).toBe(true);
-      expect(isPrepaidBlocked('Prepaid', 'Unpaid', undefined)).toBe(true);
+    it('strictly blocks admission when paymentPolicy is Prepaid and paymentStatus is Unpaid', () => {
+      expect(isPrepaidBlocked('Prepaid', 'Unpaid')).toBe(true);
     });
 
-    it('PhilHealth Yakap auto-exemption (isYakapExempt === true) unblocks admission gate', () => {
-      // YAKAP auto-exemption bypasses Prepaid Unpaid block
-      expect(isPrepaidBlocked('Prepaid', 'Unpaid', true)).toBe(false);
+    it('PhilHealth Yakap does not bypass admission gate (Prepaid Unpaid remains strictly blocked)', () => {
+      // YAKAP removal invariant per R7.3
+      expect(isPrepaidBlocked('Prepaid', 'Unpaid')).toBe(true);
     });
 
     it('Postpaid and Exempt payment policies bypass admission gate', () => {
-      expect(isPrepaidBlocked('Postpaid', 'Unpaid', false)).toBe(false);
-      expect(isPrepaidBlocked('Exempt', 'Unpaid', false)).toBe(false);
+      expect(isPrepaidBlocked('Postpaid', 'Unpaid')).toBe(false);
+      expect(isPrepaidBlocked('Exempt', 'Unpaid')).toBe(false);
     });
 
     it('Paid and Overridden payment statuses unlock admission gate', () => {
-      expect(isPrepaidBlocked('Prepaid', 'Paid', false)).toBe(false);
-      expect(isPrepaidBlocked('Prepaid', 'Overridden', false)).toBe(false);
+      expect(isPrepaidBlocked('Prepaid', 'Paid')).toBe(false);
+      expect(isPrepaidBlocked('Prepaid', 'Overridden')).toBe(false);
     });
 
     it('Emergency clinical override requires non-empty, non-whitespace clinical rationale', async () => {

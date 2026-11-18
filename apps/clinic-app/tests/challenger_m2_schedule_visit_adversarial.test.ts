@@ -543,10 +543,10 @@ describe('Adversarial Challenge: ScheduleVisitModal Stress Harness', () => {
   });
 
   // =========================================================================
-  // 7. Identity Banner & Clinical Safety Badges
+  // 7. Concise Header Subtitle & Zero Demographic Detail Clutter
   // =========================================================================
-  describe('Group 7: Identity Banner & Clinical Safety Badges', () => {
-    test('7.1: Identity banner highlights STAT allergy with emergency styling', () => {
+  describe('Group 7: Concise Header Subtitle & Zero Demographic Clutter', () => {
+    test('7.1: ScheduleVisitModal shows patient name in header subtitle and omits bulky demographic banner', () => {
       const patientWithStatAllergy: ClinicPatient = {
         ...baseTestPatient,
         allergies: 'Amoxicillin (STAT: Anaphylaxis)',
@@ -560,12 +560,13 @@ describe('Adversarial Challenge: ScheduleVisitModal Stress Harness', () => {
         })
       );
 
-      expect(markup).toContain('STAT Allergy: Amoxicillin (STAT: Anaphylaxis)');
-      expect(markup).toContain('PAT-20261031-001');
-      expect(markup).toContain('PhilHealth PIN 12-345678901-2');
+      expect(markup).toContain('Silang, Diego');
+      expect(markup).not.toContain('PAT-20261031-001');
+      expect(markup).not.toContain('PhilHealth PIN 12-345678901-2');
+      expect(markup).not.toContain('Direct clinic appointment setup');
     });
 
-    test('7.2: Identity banner gracefully omits optional badges when absent', () => {
+    test('7.2: Plain patient renders cleanly without demographic badges in dialog', () => {
       const plainPatient: ClinicPatient = {
         ...baseTestPatient,
         philHealthNumber: undefined,

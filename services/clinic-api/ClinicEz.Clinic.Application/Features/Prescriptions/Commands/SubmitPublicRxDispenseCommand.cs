@@ -75,6 +75,11 @@ public class SubmitPublicRxDispenseCommandHandler : IRequestHandler<SubmitPublic
             throw new NotFoundException("Invalid or expired e-prescription token.");
         }
 
+        if (!encounter.IsSigned && string.IsNullOrWhiteSpace(encounter.PrescriptionNumber))
+        {
+            throw new BadRequestException("Prescription has not been signed by the attending physician and cannot be dispensed.");
+        }
+
         if (encounter.RxDispenseStatus == PrescriptionDispenseStatus.DispensedAtPartnerPharmacy ||
             encounter.RxDispenseStatus == PrescriptionDispenseStatus.DispensedExternally)
         {

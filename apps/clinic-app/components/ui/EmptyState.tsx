@@ -12,6 +12,10 @@ export interface EmptyStateProps {
   description?: string;
   actionTitle?: string;
   onAction?: () => void;
+  actionTestID?: string;
+  secondaryActionTitle?: string;
+  onSecondaryAction?: () => void;
+  secondaryActionTestID?: string;
   style?: ViewStyle;
 }
 
@@ -21,6 +25,10 @@ export default function EmptyState({
   description,
   actionTitle,
   onAction,
+  actionTestID,
+  secondaryActionTitle,
+  onSecondaryAction,
+  secondaryActionTestID,
   style,
 }: EmptyStateProps) {
   const iconName: IconName = resolveIconName(icon) ?? 'clipboard';
@@ -37,14 +45,29 @@ export default function EmptyState({
           {description}
         </ThemedText>
       ) : null}
-      {actionTitle && onAction ? (
-        <Button
-          title={actionTitle}
-          variant="primary"
-          size="sm"
-          onPress={onAction}
-          style={styles.actionBtn}
-        />
+      {(actionTitle && onAction) || (secondaryActionTitle && onSecondaryAction) ? (
+        <View style={styles.actionGroup}>
+          {actionTitle && onAction ? (
+            <Button
+              title={actionTitle}
+              variant="primary"
+              size="sm"
+              onPress={onAction}
+              testID={actionTestID}
+              style={styles.actionBtn}
+            />
+          ) : null}
+          {secondaryActionTitle && onSecondaryAction ? (
+            <Button
+              title={secondaryActionTitle}
+              variant="outline"
+              size="sm"
+              onPress={onSecondaryAction}
+              testID={secondaryActionTestID}
+              style={styles.actionBtn}
+            />
+          ) : null}
+        </View>
       ) : null}
     </View>
   );
@@ -80,7 +103,15 @@ const styles = StyleSheet.create({
     maxWidth: 320,
     marginTop: 2,
   },
-  actionBtn: {
+  actionGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
     marginTop: theme.spacing.md,
+  },
+  actionBtn: {
+    marginTop: 0,
   },
 });

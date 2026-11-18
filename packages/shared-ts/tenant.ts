@@ -31,8 +31,9 @@ export const ROOT_HOSTNAMES = new Set([
   '::1',
 ]);
 
-const STORAGE_KEY_TENANT = 'clinicez_active_tenant';
-const STORAGE_KEY_CLINIC = 'clinicez_active_clinic';
+export const STORAGE_KEY_FACILITY = 'clinicez_active_facility';
+export const STORAGE_KEY_TENANT = 'clinicez_active_tenant';
+export const STORAGE_KEY_CLINIC = 'clinicez_active_clinic';
 
 /** Service subdomains used when no override is configured. */
 export const DEFAULT_SERVICE_SUBDOMAINS: readonly string[] = ['clinic', 'lab', 'pharmacy', 'org'];
@@ -328,12 +329,29 @@ export function resolveTenantContext(): TenantContext {
     }
   }
 
-  // 2. Query Parameters Check (?tenant=...&facilityId=...)
+  // 2. Query Parameters Check (?facility=...&facilitySlug=... or ?tenant=...&tenantSlug=...)
   if (location) {
     try {
       const searchParams = new URLSearchParams(location.search);
+      const queryFacility = searchParams.get('facility') || searchParams.get('facilitySlug');
       const queryTenant = searchParams.get('tenant') || searchParams.get('tenantSlug');
       const queryClinic = searchParams.get('facilityId') || searchParams.get('clinicId');
+
+      if (queryFacility && isValidTenantSlug(queryFacility)) {
+        const cleanFacility = queryFacility.trim().toLowerCase();
+        writeStorage(STORAGE_KEY_TENANT, cleanFacility);
+        if (queryClinic) {
+          writeStorage(`${STORAGE_KEY_CLINIC}_${cleanFacility}`, queryClinic);
+          writeStorage(STORAGE_KEY_CLINIC, queryClinic);
+        }
+        return {
+          tenantSlug: null,
+          facilitySlug: cleanFacility,
+          clinicId: queryClinic || readStorage(`${STORAGE_KEY_CLINIC}_${cleanFacility}`),
+          source: 'query',
+          isRoot,
+        };
+      }
 
       if (queryTenant && isValidTenantSlug(queryTenant)) {
         const cleanTenant = queryTenant.trim().toLowerCase();
@@ -344,6 +362,7 @@ export function resolveTenantContext(): TenantContext {
         }
         return {
           tenantSlug: cleanTenant,
+          facilitySlug: undefined,
           clinicId: queryClinic || readStorage(`${STORAGE_KEY_CLINIC}_${cleanTenant}`),
           source: 'query',
           isRoot,
@@ -354,18 +373,38 @@ export function resolveTenantContext(): TenantContext {
     }
   }
 
-  // 3. Stored Tenant Check
-  // Note: On service root domains (e.g. clinic.<baseDomain>),
-  // we do not auto-bind storedTenant without explicit user selection, so the bare root
-  // correctly displays the "Select Clinic Workspace" screen.
+  // 3. Stored Workspace Check
+  // Check resolved facility first (machine source of truth), then fall back to tenant (discovery)
+  const isLocalHost = Boolean(
+    hostname &&
+      (ROOT_HOSTNAMES.has(hostname.toLowerCase().split(':')[0]) ||
+        hostname.endsWith('.localhost') ||
+        hostname.endsWith('.lvh.me'))
+  );
+  const storedFacility = readStorage(STORAGE_KEY_FACILITY);
+  if (storedFacility && isValidTenantSlug(storedFacility)) {
+    if (!isRoot || isLocalHost) {
+      const storedClinic =
+        readStorage(`${STORAGE_KEY_CLINIC}_${storedFacility}`) || readStorage(STORAGE_KEY_CLINIC);
+      return {
+        tenantSlug: null,
+        facilitySlug: storedFacility,
+        clinicId: storedClinic,
+        source: 'storage',
+        isRoot: false,
+      };
+    }
+  }
+
   const storedTenant = readStorage(STORAGE_KEY_TENANT);
   if (storedTenant) {
     if (isValidTenantSlug(storedTenant)) {
-      if (!isRoot) {
+      if (!isRoot || isLocalHost) {
         const storedClinic =
           readStorage(`${STORAGE_KEY_CLINIC}_${storedTenant}`);
         return {
           tenantSlug: storedTenant,
+          facilitySlug: undefined,
           clinicId: storedClinic,
           source: 'storage',
           isRoot: false,
@@ -378,6 +417,23 @@ export function resolveTenantContext(): TenantContext {
   }
 
   return { tenantSlug: null, clinicId: null, source: 'none', isRoot };
+}
+
+export function setActiveFacilityContext(facilitySlug: string, clinicId?: string): void {
+  const cleanFacility = facilitySlug.trim().toLowerCase();
+  if (isValidTenantSlug(cleanFacility)) {
+    writeStorage(STORAGE_KEY_FACILITY, cleanFacility);
+    writeStorage(STORAGE_KEY_TENANT, cleanFacility);
+    if (clinicId) {
+      writeStorage(`${STORAGE_KEY_CLINIC}_${cleanFacility}`, clinicId);
+      writeStorage(STORAGE_KEY_CLINIC, clinicId);
+    }
+  }
+}
+
+export function getStoredFacilitySlug(): string | null {
+  const stored = readStorage(STORAGE_KEY_FACILITY);
+  return stored && isValidTenantSlug(stored) ? stored : null;
 }
 
 export function setActiveTenantContext(tenantSlug: string, clinicId?: string): void {
@@ -399,6 +455,7 @@ export function setActiveClinicId(clinicId: string, tenantSlug?: string): void {
 }
 
 export function clearActiveTenantContext(): void {
+  removeStorage(STORAGE_KEY_FACILITY);
   removeStorage(STORAGE_KEY_TENANT);
   removeStorage(STORAGE_KEY_CLINIC);
 }

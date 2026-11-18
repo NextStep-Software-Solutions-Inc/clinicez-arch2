@@ -72,14 +72,14 @@ export function AuditInspectionDrawer({
             <Badge variant="neutral" label={entry.category} size="sm" />
           </View>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close inspection drawer"
+        <Button
+          variant="subtle"
+          size="sm"
+          icon="close"
+          iconOnly
           onPress={onClose}
-          style={styles.closeButton}
-        >
-          <IconSlot value="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-        </Pressable>
+          accessibilityLabel="Close inspection drawer"
+        />
       </View>
 
       <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
@@ -340,11 +340,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
     marginTop: theme.spacing.xs,
-  },
-  closeButton: {
-    padding: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surfaceSubtle,
   },
   body: {
     flex: 1,

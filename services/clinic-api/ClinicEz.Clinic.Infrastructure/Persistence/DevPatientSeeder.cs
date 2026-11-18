@@ -766,8 +766,6 @@ public static class DevPatientSeeder
                 {
                     { "classification", classification },
                     { "category", classification },
-                    { "student_id", classification == "Student" ? $"STU-{now.Year}-{rng.Next(1000, 9999)}" : null },
-                    { "employee_id", classification == "Employee" ? $"EMP-{rng.Next(1000, 9999)}" : null },
                     { "workplace", loc.City },
                     { "seeded_batch", "scale_test_1000" },
                     { "primary_address_line", loc.Street },
@@ -778,6 +776,36 @@ public static class DevPatientSeeder
                     { "emergency_contact_phone", emergencyPhone },
                     { "emergency_contact_relationship", emergencyRel }
                 };
+                if (classification == "Student")
+                {
+                    var studentColleges = new[]
+                    {
+                        ("College of Information Technology and Computing", "BS Information Technology"),
+                        ("College of Engineering and Architecture", "BS Civil Engineering"),
+                        ("College of Science and Mathematics", "BS Applied Mathematics"),
+                        ("College of Technology", "Bachelor of Engineering Technology"),
+                        ("College of Science and Technology Education", "BSEd Major in Sciences")
+                    };
+                    var studentYearLevels = new[] { "1st Year", "2nd Year", "3rd Year", "4th Year" };
+                    var (col, prog) = studentColleges[rng.Next(studentColleges.Length)];
+
+                    customFields["affiliation"] = "Student";
+                    customFields["student_id"] = $"STU-{now.Year}-{rng.Next(1000, 9999)}";
+                    customFields["college"] = col;
+                    customFields["program"] = prog;
+                    customFields["year_level"] = studentYearLevels[rng.Next(studentYearLevels.Length)];
+                }
+                else if (classification == "Employee")
+                {
+                    var employeeDepartments = new[] { "Office of Student Affairs", "HRMO", "College of Engineering", "Health Services Center" };
+                    customFields["affiliation"] = "Employee/Faculty";
+                    customFields["employee_id"] = $"EMP-{rng.Next(1000, 9999)}";
+                    customFields["department"] = employeeDepartments[rng.Next(employeeDepartments.Length)];
+                }
+                else
+                {
+                    customFields["affiliation"] = "Guest";
+                }
 
                 var patientCreatedAt = now.AddDays(-rng.Next(30, 720));
 
@@ -1607,10 +1635,12 @@ public static class DevPatientSeeder
                 totalCreated, targetCount, (double)totalCreated / targetCount * 100);
         }
 
-        // 6. Update patient code sequence tracker in DB so future regular registrations don't collide
-        tracker = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.ClinicId == clinicId && t.Year == year, ct);
+        // 6. Update patient code sequence tracker(s) in DB so future regular registrations don't collide
+        var clinicTrackers = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
+            .Where(t => t.ClinicId == clinicId && t.Year == year)
+            .ToListAsync(ct);
 
+        tracker = clinicTrackers.FirstOrDefault(t => t.TenantId == tenantId);
         if (tracker == null)
         {
             dbContext.PatientCodeSequenceTrackers.Add(new PatientCodeSequenceTracker
@@ -1625,11 +1655,15 @@ public static class DevPatientSeeder
                 CreatedBy = "System:DevPatientSeeder"
             });
         }
-        else if (tracker.CurrentSequence < currentSeq)
+
+        foreach (var existingTracker in clinicTrackers)
         {
-            tracker.CurrentSequence = currentSeq;
-            tracker.LastAssignedAt = DateTime.UtcNow;
-            tracker.UpdatedAt = DateTime.UtcNow;
+            if (existingTracker.CurrentSequence < currentSeq)
+            {
+                existingTracker.CurrentSequence = currentSeq;
+                existingTracker.LastAssignedAt = DateTime.UtcNow;
+                existingTracker.UpdatedAt = DateTime.UtcNow;
+            }
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -2001,12 +2035,17 @@ public static class DevPatientSeeder
                 remainingMaxSeq = s;
         }
 
-        var tracker = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(t => t.ClinicId == clinicId && (tenantId == null || t.TenantId == tenantId) && t.Year == year, ct);
-        if (tracker != null)
+        var trackers = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
+            .Where(t => t.ClinicId == clinicId && t.Year == year)
+            .ToListAsync(ct);
+        if (trackers.Count > 0)
         {
-            tracker.CurrentSequence = remainingMaxSeq;
-            tracker.LastAssignedAt = DateTime.UtcNow;
+            foreach (var tracker in trackers)
+            {
+                tracker.CurrentSequence = remainingMaxSeq;
+                tracker.LastAssignedAt = DateTime.UtcNow;
+                tracker.UpdatedAt = DateTime.UtcNow;
+            }
             await dbContext.SaveChangesAsync(ct);
         }
 

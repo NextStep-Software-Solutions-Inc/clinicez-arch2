@@ -7,6 +7,7 @@ using ClinicEz.Pharmacy.Infrastructure.Context;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.LocalAuth;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -21,9 +22,46 @@ namespace ClinicEz.Pharmacy.Api.Controllers;
 [EnableRateLimiting(FacilityLocalAuthExtensions.AuthRateLimitPolicy)]
 public sealed class AuthController : ControllerBase
 {
+    public const string RefreshCookieName = "clinicez_pharmacy_refresh";
+    private const string RefreshCookiePath = "/api/v1/auth";
+    private const string ClientPlatformHeader = "X-Client-Platform";
+
     private readonly IPharmacyAuthService _auth;
 
     public AuthController(IPharmacyAuthService auth) => _auth = auth;
+
+    private bool IsWebClient =>
+        Request.Headers.TryGetValue(ClientPlatformHeader, out var platform) &&
+        string.Equals(platform.ToString().Trim(), "web", StringComparison.OrdinalIgnoreCase);
+
+    private CookieOptions BuildRefreshCookieOptions() => new()
+    {
+        HttpOnly = true,
+        SameSite = SameSiteMode.Lax,
+        Secure = Request.IsHttps,
+        Path = RefreshCookiePath,
+        IsEssential = true
+        // Intentionally omit Expires/MaxAge so the browser clears it when the browser session ends.
+    };
+
+    private void AppendRefreshCookie(string refreshToken) =>
+        Response.Cookies.Append(RefreshCookieName, refreshToken, BuildRefreshCookieOptions());
+
+    private void ClearRefreshCookie() =>
+        Response.Cookies.Delete(RefreshCookieName, BuildRefreshCookieOptions());
+
+    private string? ResolveRefreshToken(RefreshRequest? request)
+    {
+        if (!string.IsNullOrWhiteSpace(request?.RefreshToken))
+        {
+            return request.RefreshToken;
+        }
+        if (IsWebClient && Request.Cookies.TryGetValue(RefreshCookieName, out var cookieToken) && !string.IsNullOrWhiteSpace(cookieToken))
+        {
+            return cookieToken;
+        }
+        return null;
+    }
 
     private string? FacilityHeader =>
         Request.Headers.TryGetValue("X-Facility-Slug", out var f) && !string.IsNullOrWhiteSpace(f) ? f.ToString().Trim() : null;
@@ -52,14 +90,26 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("refresh")]
     [AllowAnonymous]
-    public async Task<IActionResult> Refresh([FromBody] RefreshRequest request, CancellationToken ct) =>
-        ToResult(await _auth.RefreshAsync(request.RefreshToken, ct));
+    public async Task<IActionResult> Refresh([FromBody] RefreshRequest? request, CancellationToken ct)
+    {
+        var outcome = await _auth.RefreshAsync(ResolveRefreshToken(request), ct);
+        if (!outcome.Ok && IsWebClient && outcome.Failure == AuthFailure.InvalidToken)
+        {
+            ClearRefreshCookie();
+        }
+        return ToResult(outcome);
+    }
 
     [HttpPost("logout")]
     [AllowAnonymous]
-    public async Task<IActionResult> Logout([FromBody] RefreshRequest request, CancellationToken ct)
+    public async Task<IActionResult> Logout([FromBody] RefreshRequest? request, CancellationToken ct)
     {
-        await _auth.LogoutAsync(request.RefreshToken, ct);
+        var token = ResolveRefreshToken(request);
+        await _auth.LogoutAsync(token, ct);
+        if (IsWebClient || Request.Cookies.ContainsKey(RefreshCookieName))
+        {
+            ClearRefreshCookie();
+        }
         return Ok(ApiResponse<object>.Success(new { }, "Signed out."));
     }
 
@@ -95,7 +145,16 @@ public sealed class AuthController : ControllerBase
     {
         if (outcome.Ok)
         {
-            return Ok(ApiResponse<AuthTokensDto>.Success(outcome.Tokens!));
+            var tokens = outcome.Tokens!;
+            if (IsWebClient)
+            {
+                if (!string.IsNullOrWhiteSpace(tokens.RefreshToken))
+                {
+                    AppendRefreshCookie(tokens.RefreshToken);
+                }
+                tokens = tokens with { RefreshToken = null };
+            }
+            return Ok(ApiResponse<AuthTokensDto>.Success(tokens));
         }
 
         var status = outcome.Failure switch

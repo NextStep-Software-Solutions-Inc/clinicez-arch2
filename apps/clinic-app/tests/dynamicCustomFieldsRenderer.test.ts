@@ -146,6 +146,7 @@ const {
   sanitizeCustomFieldsPayload,
   parseBooleanState,
   parseBooleanValue,
+  resolveCustomFieldPlaceholderPresentation,
   default: DynamicCustomFieldsRenderer,
 } = await import('../components/custom-fields/DynamicCustomFieldsRenderer');
 
@@ -1640,6 +1641,46 @@ describe('E2E Test Suite: DynamicCustomFieldsRenderer Intake & Validation Engine
       const res = validateCustomFields([hiddenDateField], { marriage_date: 'invalid-date' }, { civilStatus: 'Single' });
       expect(res.isValid).toBe(true);
       expect(res.errors).toEqual({});
+    });
+  });
+
+  describe('GitHub #162: Long Placeholder Hint Presentation (>75 chars)', () => {
+    test('expands single-line placeholders longer than 75 trimmed chars into wrapping helper guidance below input', () => {
+      const longGuidance =
+        'List all maintenance medications with exact dosage, frequency, and prescribing physician name (e.g. Losartan 50mg OD - Dr. Reyes)';
+      expect(longGuidance.length).toBeGreaterThan(75);
+
+      const presentation = resolveCustomFieldPlaceholderPresentation(longGuidance, 'Text');
+      expect(presentation).toEqual({
+        inputPlaceholder: 'Enter response (see guidance below)...',
+        helperHint: longGuidance,
+        isExpandedHint: true,
+      });
+
+      const markup = renderToStaticMarkup(
+        React.createElement(DynamicCustomFieldsRenderer, {
+          fields: [
+            {
+              id: 'cf-long-1',
+              tenantId: 't1',
+              clinicId: 'c1',
+              entityType: 'ClinicPatient',
+              fieldKey: 'maintenance_meds',
+              label: 'Maintenance Medications',
+              dataType: 'Text',
+              isRequired: false,
+              displayOrder: 1,
+              placeholder: longGuidance,
+              isActive: true,
+            },
+          ],
+          values: {},
+          onChange: () => {},
+        })
+      );
+
+      expect(markup).toContain('Enter response (see guidance below)...');
+      expect(markup).toContain(longGuidance);
     });
   });
 });

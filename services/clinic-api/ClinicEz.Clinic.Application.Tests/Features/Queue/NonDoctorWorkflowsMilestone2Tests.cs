@@ -156,7 +156,7 @@ public class NonDoctorWorkflowsMilestone2Tests
             PatientId = Guid.NewGuid(),
             PatientName = "Pedro Cruz",
             Status = QueueStatus.Triaged,
-            VisitType = VisitType.VitalsCheckOnly,
+            VisitType = VisitType.PreventiveHealthAssessment,
             CheckInTime = DateTime.UtcNow.AddMinutes(-30),
         };
         await context.Set<QueueItem>().AddAsync(queueItem);
@@ -209,7 +209,7 @@ public class NonDoctorWorkflowsMilestone2Tests
             PatientId = Guid.NewGuid(),
             PatientName = "Juan Luna",
             Status = activeStatus,
-            VisitType = VisitType.RetailPurchase,
+            VisitType = (VisitType)6,
             CheckInTime = DateTime.UtcNow.AddMinutes(-20)
         };
         await context.Set<QueueItem>().AddAsync(queueItem);
@@ -255,7 +255,7 @@ public class NonDoctorWorkflowsMilestone2Tests
             PatientId = Guid.NewGuid(),
             PatientName = "Antonio Luna",
             Status = terminalStatus,
-            VisitType = VisitType.StandaloneProcedure,
+            VisitType = VisitType.PreventiveHealthAssessment,
             CheckInTime = DateTime.UtcNow.AddMinutes(-40),
             CompletedTime = DateTime.UtcNow.AddMinutes(-5)
         };
@@ -546,7 +546,7 @@ public class NonDoctorWorkflowsMilestone2Tests
             PatientId = Guid.NewGuid(),
             PatientName = "Double Discharge Patient",
             Status = QueueStatus.Waiting,
-            VisitType = VisitType.VitalsCheckOnly,
+            VisitType = VisitType.PreventiveHealthAssessment,
             CheckInTime = DateTime.UtcNow
         };
         await context.Set<QueueItem>().AddAsync(queueItem);
@@ -624,7 +624,7 @@ public class NonDoctorWorkflowsMilestone2Tests
 
         // Step 1: Initial check-in for Consultation
         var firstVisit = await checkInHandler.Handle(
-            new CheckInPatientCommand(patientId, patientName, QueueDate: today, VisitType: VisitType.Consultation),
+            new CheckInPatientCommand(patientId, patientName, QueueDate: today, VisitType: VisitType.RoutineCheckup),
             CancellationToken.None);
 
         firstVisit.Should().NotBeNull();
@@ -635,7 +635,7 @@ public class NonDoctorWorkflowsMilestone2Tests
         // Step 2: Adversarially probe duplicate check-in while ticket is active (Waiting) -> MUST BE BLOCKED with 409 Conflict
         var conflictEx = await Assert.ThrowsAsync<ActiveQueueTicketConflictException>(() =>
             checkInHandler.Handle(
-                new CheckInPatientCommand(patientId, patientName, QueueDate: today, VisitType: VisitType.Consultation),
+                new CheckInPatientCommand(patientId, patientName, QueueDate: today, VisitType: VisitType.RoutineCheckup),
                 CancellationToken.None));
 
         conflictEx.QueueNumber.Should().Be("Q-001");
@@ -653,7 +653,7 @@ public class NonDoctorWorkflowsMilestone2Tests
 
         // Step 4: Patient returns later today and checks in AGAIN for Consultation -> MUST SUCCEED (200 OK, no 409 conflict)
         var returnVisit = await checkInHandler.Handle(
-            new CheckInPatientCommand(patientId, patientName, QueueDate: today, VisitType: VisitType.Consultation),
+            new CheckInPatientCommand(patientId, patientName, QueueDate: today, VisitType: VisitType.RoutineCheckup),
             CancellationToken.None);
 
         // Step 5: Verify new ticket is allocated cleanly
@@ -702,10 +702,10 @@ public class NonDoctorWorkflowsMilestone2Tests
 
         // Step 1: Walk-in for Vitals Check Only
         var vitalsVisit = await checkInHandler.Handle(
-            new CheckInPatientCommand(patientId, patientName, QueueDate: today, VisitType: VisitType.VitalsCheckOnly),
+            new CheckInPatientCommand(patientId, patientName, QueueDate: today, VisitType: VisitType.PreventiveHealthAssessment),
             CancellationToken.None);
 
-        vitalsVisit.VisitType.Should().Be(VisitType.VitalsCheckOnly);
+        vitalsVisit.VisitType.Should().Be(VisitType.PreventiveHealthAssessment);
         vitalsVisit.QueueNumber.Should().Be("Q-001");
 
         // Step 2: Nurse discharges patient
@@ -715,11 +715,11 @@ public class NonDoctorWorkflowsMilestone2Tests
 
         // Step 3: Patient returns in afternoon for Consultation -> succeeds without conflict
         var consultVisit = await checkInHandler.Handle(
-            new CheckInPatientCommand(patientId, patientName, QueueDate: today, VisitType: VisitType.Consultation),
+            new CheckInPatientCommand(patientId, patientName, QueueDate: today, VisitType: VisitType.RoutineCheckup),
             CancellationToken.None);
 
         consultVisit.Should().NotBeNull();
-        consultVisit.VisitType.Should().Be(VisitType.Consultation);
+        consultVisit.VisitType.Should().Be(VisitType.RoutineCheckup);
         consultVisit.QueueNumber.Should().Be("Q-002");
         consultVisit.SequenceNumber.Should().Be(2);
         consultVisit.Status.Should().Be(QueueStatus.Waiting);

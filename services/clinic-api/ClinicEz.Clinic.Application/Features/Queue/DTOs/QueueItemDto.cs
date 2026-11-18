@@ -27,7 +27,7 @@ public sealed record QueueItemDto(
     string? VitalsSummary,
     string? RoomOrStation = null,
     Guid? RoomId = null,
-    VisitType VisitType = VisitType.Consultation,
+    VisitType? VisitType = null,
     string? DischargeNotes = null,
     DateTime? DischargedAt = null,
     Guid? DischargedByStaffId = null,
@@ -36,7 +36,8 @@ public sealed record QueueItemDto(
     string? ParamedicOrEscortName = null,
     string? HandoverSummary = null,
     DateTime? DivertedAt = null,
-    Guid? DivertedByStaffId = null);
+    Guid? DivertedByStaffId = null,
+    bool IsDirectVisit = false);
 
 public static class QueueItemMappingExtensions
 {
@@ -99,7 +100,7 @@ public static class QueueItemMappingExtensions
             vitalsSummary,
             item.RoomOrStation,
             item.RoomId,
-            item.VisitType,
+            Enum.IsDefined(item.VisitType) ? item.VisitType : null,
             item.DischargeNotes,
             item.DischargedAt,
             item.DischargedByStaffId,
@@ -108,7 +109,8 @@ public static class QueueItemMappingExtensions
             item.ParamedicOrEscortName,
             item.HandoverSummary,
             item.DivertedAt,
-            item.DivertedByStaffId);
+            item.DivertedByStaffId,
+            item.IsDirectVisit);
     }
 }
 

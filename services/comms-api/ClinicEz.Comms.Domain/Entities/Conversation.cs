@@ -24,7 +24,7 @@ public class Conversation
     public string? ContextType { get; set; }
     public string? ContextId { get; set; }
 
-    public string Title { get; set; } = string.Empty;
+    public string? Title { get; set; }
     public MessageCategory? Category { get; set; }
 
     public RequestStatus Status { get; set; } = RequestStatus.Submitted;

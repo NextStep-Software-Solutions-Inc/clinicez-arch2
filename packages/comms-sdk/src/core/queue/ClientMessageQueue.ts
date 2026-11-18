@@ -1,3 +1,4 @@
+import { ConnectionError } from '../errors';
 import {
   CommsAttachmentReference,
   DeliveryState,
@@ -7,6 +8,11 @@ import {
   SendMessageRequest
 } from '../types';
 import { DeliveryStateTracker } from './DeliveryStateTracker';
+
+export interface ClientMessageQueueListener {
+  onMessageSent?: (queued: QueuedMessage, serverMessage: MessageDto) => void;
+  onMessageFailed?: (queued: QueuedMessage, error: Error) => void;
+}
 
 export interface QueuedMessage {
   clientMessageId: string;
@@ -39,15 +45,43 @@ export class InMemoryQueueStorageAdapter implements IQueueStorageAdapter {
 
 export class ClientMessageQueue {
   private readonly queue: Map<string, QueuedMessage> = new Map();
+  private readonly listeners: Set<ClientMessageQueueListener> = new Set();
+  private readonly eventUnsubs: Array<() => void> = [];
+  private isHooked: boolean = false;
   private isProcessing: boolean = false;
   private isInitialized: boolean = false;
 
   constructor(
     private readonly client: ICommsClient,
-    private readonly storageAdapter: IQueueStorageAdapter = new InMemoryQueueStorageAdapter()
+    private readonly storageAdapter: IQueueStorageAdapter = new InMemoryQueueStorageAdapter(),
+    callbacks?: ClientMessageQueueListener
   ) {
+    if (callbacks) {
+      this.listeners.add(callbacks);
+    }
     this.initStorage();
+    this.attach();
+  }
+
+  public attach(): void {
+    if (this.isHooked) return;
+    this.isHooked = true;
     this.hookClientEvents();
+  }
+
+  public subscribe(listener: ClientMessageQueueListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  public dispose(): void {
+    for (const unsub of this.eventUnsubs) {
+      unsub();
+    }
+    this.eventUnsubs.length = 0;
+    this.isHooked = false;
   }
 
   private async initStorage(): Promise<void> {
@@ -64,13 +98,13 @@ export class ClientMessageQueue {
   }
 
   private hookClientEvents(): void {
-    this.client.events.on('connectionStateChanged', (state) => {
+    const unsubConn = this.client.events.on('connectionStateChanged', (state) => {
       if (state === 'Connected') {
         this.processQueue();
       }
     });
 
-    this.client.events.on('messageStateChanged', ({ messageId, state }) => {
+    const unsubState = this.client.events.on('messageStateChanged', ({ messageId, state }) => {
       for (const item of this.queue.values()) {
         if (item.serverMessage?.messageId === messageId) {
           if (DeliveryStateTracker.canTransition(item.state, state)) {
@@ -81,6 +115,8 @@ export class ClientMessageQueue {
         }
       }
     });
+
+    this.eventUnsubs.push(unsubConn, unsubState);
   }
 
   /**
@@ -88,7 +124,8 @@ export class ClientMessageQueue {
    * Optimistically returns the queued message with state = "Sending".
    */
   public async enqueue(
-    params: Omit<SendMessageRequest, 'clientMessageId'> & { clientMessageId?: string }
+    params: Omit<SendMessageRequest, 'clientMessageId'> & { clientMessageId?: string },
+    options?: { skipAutoProcess?: boolean }
   ): Promise<QueuedMessage> {
     const clientMessageId = params.clientMessageId ?? this.generateUUID();
     const queuedMessage: QueuedMessage = {
@@ -106,7 +143,7 @@ export class ClientMessageQueue {
     await this.persist();
 
     // Trigger asynchronous dispatch if connected
-    if (this.client.getConnectionState() === 'Connected') {
+    if (!options?.skipAutoProcess && this.client.getConnectionState() === 'Connected') {
       this.processQueue();
     }
 
@@ -188,11 +225,25 @@ export class ClientMessageQueue {
           item.serverMessage = serverMessage;
           item.state = serverMessage.deliveryState ?? 'Waiting';
           item.error = undefined;
+          await this.persist();
+          for (const listener of Array.from(this.listeners)) {
+            listener.onMessageSent?.(item, serverMessage);
+          }
         } catch (err: any) {
-          item.error = err?.message ?? 'Transmission error';
+          const error = err instanceof Error ? err : new Error(String(err));
+          if (err instanceof ConnectionError || err?.name === 'ConnectionError' || this.client.getConnectionState() !== 'Connected') {
+            item.error = error.message;
+            item.state = 'Sending';
+            await this.persist();
+            break;
+          }
+          item.error = error.message || 'Transmission error';
           item.state = 'NotReceived';
+          await this.persist();
+          for (const listener of Array.from(this.listeners)) {
+            listener.onMessageFailed?.(item, error);
+          }
         }
-        await this.persist();
       }
     } finally {
       this.isProcessing = false;

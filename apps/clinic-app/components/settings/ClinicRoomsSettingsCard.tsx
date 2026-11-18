@@ -546,21 +546,14 @@ export function ClinicRoomsSettingsCard() {
                           variant="outline"
                           onPress={() => openEditModal(room)}
                         />
-                        <Pressable
+                        <Button
+                          variant="dangerOutline"
+                          size="sm"
+                          icon="trash"
+                          iconOnly
                           onPress={() => setDeletingRoom(room)}
-                          accessibilityRole="button"
                           accessibilityLabel={`Delete ${room.name}`}
-                          style={({ pressed }) => [
-                            styles.deleteButton,
-                            pressed && styles.pressed,
-                          ]}
-                        >
-                          <Icon
-                            name="trash"
-                            size={theme.sizes.iconSm}
-                            color={theme.colors.emergencyText}
-                          />
-                        </Pressable>
+                        />
                       </View>
                     </View>
                   );
@@ -819,13 +812,6 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xs,
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
-  },
-  deleteButton: {
-    padding: theme.spacing.sm,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.emergencySubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.emergencyBorder,
   },
   pressed: {
     opacity: 0.75,

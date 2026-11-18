@@ -548,6 +548,7 @@ describe('Adversarial Empirical Stress Test Suite: Milestone 1 Frontend Workstat
         autoEodEnabled: true,
       };
 
+      // Clean render hides Save EOD Schedule when unchanged
       renderToStaticMarkup(
         React.createElement(EodReconciliationSettingsCard, {
           settings: {
@@ -558,6 +559,23 @@ describe('Adversarial Empirical Stress Test Suite: Milestone 1 Frontend Workstat
             autoEodEnabled: true,
             eodReconciliationTime: '21:00',
           } as any,
+        })
+      );
+      expect(capturedButtons.find(b => b.title === 'Save EOD Schedule')).toBeUndefined();
+
+      // Dirty render (user cleared cutoff time) reveals Save EOD Schedule and blocks invalid submission
+      capturedButtons = [];
+      renderToStaticMarkup(
+        React.createElement(EodReconciliationSettingsCard, {
+          settings: {
+            id: 'settings-1',
+            tenantId: 'tenant-1',
+            clinicId: 'clinic-1',
+            clinicName: 'Test Clinic',
+            autoEodEnabled: true,
+            eodReconciliationTime: '21:00',
+          } as any,
+          draftEodTime: '',
         })
       );
 
@@ -630,7 +648,7 @@ describe('Adversarial Empirical Stress Test Suite: Milestone 1 Frontend Workstat
       expect(html).toContain('End-of-Day (EOD) Reconciliation &amp; Day Closure');
       expect(html).toContain('Automated End-of-Day Reconciliation');
       expect(html).toContain('Daily EOD Cutoff Time (24h HH:MM)');
-      expect(html).toContain('Save EOD Schedule');
+      expect(html).not.toContain('Save EOD Schedule');
       expect(html).toContain('Force EOD / Close Clinic Day');
       expect(html).toContain('Auto-EOD Active');
     });

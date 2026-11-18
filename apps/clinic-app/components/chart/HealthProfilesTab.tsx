@@ -59,27 +59,65 @@ export default function HealthProfilesTab({
   const isUnmountedTestHarness = state === 'booting' && !user && permissions.length === 0;
   const canWritePatients = readOnly !== undefined ? !readOnly : isUnmountedTestHarness ? true : hasPatientsWrite;
 
+  const surg = surgicalHistories || initialSurgicalHistories;
+  const soc = socialHistory || initialSocialHistory;
+  const rep = reproductiveHistory || initialReproductiveHistory;
+  const ncd = latestNcdAssessment || initialLatestAssessment;
+
+  const isMale = Boolean(patient?.sex && patient.sex.trim().toLowerCase().startsWith('m'));
+  const hasReproductiveHistory = Boolean(
+    rep && (
+      rep.isApplicable ||
+      rep.menarcheAge != null ||
+      Boolean(rep.lastMenstrualPeriod) ||
+      rep.periodDurationDays != null ||
+      rep.cycleIntervalDays != null ||
+      rep.padsPerDay != null ||
+      rep.isMenopausal ||
+      rep.menopauseAge != null ||
+      Boolean(rep.contraceptiveMethod) ||
+      rep.gravidity != null ||
+      rep.parity != null ||
+      rep.termBirths != null ||
+      rep.pretermBirths != null ||
+      rep.abortions != null ||
+      rep.livingChildren != null ||
+      Boolean(rep.deliveryType) ||
+      rep.hadPreEclampsiaHypertension ||
+      Boolean(rep.remarks?.trim())
+    )
+  );
+  const showReproductiveTab = !isMale || hasReproductiveHistory;
+
   const [activeSubTab, setActiveSubTab] = useState<ProfileSubTab>(() => {
-    if (initialSubTab && ['surgical', 'lifestyle', 'reproductive', 'cardiometabolic'].includes(initialSubTab)) {
-      return initialSubTab;
-    }
-    if (typeof window !== 'undefined' && window.location?.search) {
-      try {
-        const sp = new URLSearchParams(window.location.search);
-        const sub = sp.get('subTab') as ProfileSubTab;
-        if (sub && ['surgical', 'lifestyle', 'reproductive', 'cardiometabolic'].includes(sub)) {
-          return sub;
-        }
-      } catch {}
-    }
-    const saved = getSessionItem('clinicez_health_profiles_active_subtab') as ProfileSubTab | null;
-    if (saved && ['surgical', 'lifestyle', 'reproductive', 'cardiometabolic'].includes(saved)) {
-      return saved;
-    }
-    return 'surgical';
+    const resolveInitial = (): ProfileSubTab => {
+      if (initialSubTab && ['surgical', 'lifestyle', 'reproductive', 'cardiometabolic'].includes(initialSubTab)) {
+        return initialSubTab;
+      }
+      if (typeof window !== 'undefined' && window.location?.search) {
+        try {
+          const sp = new URLSearchParams(window.location.search);
+          const sub = sp.get('subTab') as ProfileSubTab;
+          if (sub && ['surgical', 'lifestyle', 'reproductive', 'cardiometabolic'].includes(sub)) {
+            return sub;
+          }
+        } catch {}
+      }
+      const saved = getSessionItem('clinicez_health_profiles_active_subtab') as ProfileSubTab | null;
+      if (saved && ['surgical', 'lifestyle', 'reproductive', 'cardiometabolic'].includes(saved)) {
+        return saved;
+      }
+      return 'surgical';
+    };
+    const candidate = resolveInitial();
+    return candidate === 'reproductive' && !showReproductiveTab ? 'surgical' : candidate;
   });
 
+  const effectiveSubTab: ProfileSubTab =
+    activeSubTab === 'reproductive' && !showReproductiveTab ? 'surgical' : activeSubTab;
+
   const handleSubTabChange = (sub: ProfileSubTab) => {
+    if (sub === 'reproductive' && !showReproductiveTab) return;
     setActiveSubTab(sub);
     setSessionItem('clinicez_health_profiles_active_subtab', sub);
     if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
@@ -90,11 +128,6 @@ export default function HealthProfilesTab({
       } catch {}
     }
   };
-
-  const surg = surgicalHistories || initialSurgicalHistories;
-  const soc = socialHistory || initialSocialHistory;
-  const rep = reproductiveHistory || initialReproductiveHistory;
-  const ncd = latestNcdAssessment || initialLatestAssessment;
 
   return (
     <View style={styles.container}>
@@ -108,17 +141,17 @@ export default function HealthProfilesTab({
         <Pressable
           onPress={() => handleSubTabChange('surgical')}
           accessibilityRole="tab"
-          accessibilityState={{ selected: activeSubTab === 'surgical' }}
-          style={[styles.subTabBtn, activeSubTab === 'surgical' && styles.subTabBtn_active]}
+          accessibilityState={{ selected: effectiveSubTab === 'surgical' }}
+          style={[styles.subTabBtn, effectiveSubTab === 'surgical' && styles.subTabBtn_active]}
         >
           <Icon
             name="activity"
             size={14}
-            color={activeSubTab === 'surgical' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            color={effectiveSubTab === 'surgical' ? theme.colors.primaryDark : theme.colors.textSecondary}
           />
           <ThemedText
             variant="captionBold"
-            color={activeSubTab === 'surgical' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            color={effectiveSubTab === 'surgical' ? theme.colors.primaryDark : theme.colors.textSecondary}
           >
             Surgical & Clinical
           </ThemedText>
@@ -127,55 +160,57 @@ export default function HealthProfilesTab({
         <Pressable
           onPress={() => handleSubTabChange('lifestyle')}
           accessibilityRole="tab"
-          accessibilityState={{ selected: activeSubTab === 'lifestyle' }}
-          style={[styles.subTabBtn, activeSubTab === 'lifestyle' && styles.subTabBtn_active]}
+          accessibilityState={{ selected: effectiveSubTab === 'lifestyle' }}
+          style={[styles.subTabBtn, effectiveSubTab === 'lifestyle' && styles.subTabBtn_active]}
         >
           <Icon
             name="heartPulse"
             size={14}
-            color={activeSubTab === 'lifestyle' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            color={effectiveSubTab === 'lifestyle' ? theme.colors.primaryDark : theme.colors.textSecondary}
           />
           <ThemedText
             variant="captionBold"
-            color={activeSubTab === 'lifestyle' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            color={effectiveSubTab === 'lifestyle' ? theme.colors.primaryDark : theme.colors.textSecondary}
           >
             Lifestyle & Social
           </ThemedText>
         </Pressable>
 
-        <Pressable
-          onPress={() => handleSubTabChange('reproductive')}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: activeSubTab === 'reproductive' }}
-          style={[styles.subTabBtn, activeSubTab === 'reproductive' && styles.subTabBtn_active]}
-        >
-          <Icon
-            name="baby"
-            size={14}
-            color={activeSubTab === 'reproductive' ? theme.colors.primaryDark : theme.colors.textSecondary}
-          />
-          <ThemedText
-            variant="captionBold"
-            color={activeSubTab === 'reproductive' ? theme.colors.primaryDark : theme.colors.textSecondary}
+        {showReproductiveTab ? (
+          <Pressable
+            onPress={() => handleSubTabChange('reproductive')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: effectiveSubTab === 'reproductive' }}
+            style={[styles.subTabBtn, effectiveSubTab === 'reproductive' && styles.subTabBtn_active]}
           >
-            Reproductive / OB-GYN
-          </ThemedText>
-        </Pressable>
+            <Icon
+              name="baby"
+              size={14}
+              color={effectiveSubTab === 'reproductive' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            />
+            <ThemedText
+              variant="captionBold"
+              color={effectiveSubTab === 'reproductive' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            >
+              Reproductive / OB-GYN
+            </ThemedText>
+          </Pressable>
+        ) : null}
 
         <Pressable
           onPress={() => handleSubTabChange('cardiometabolic')}
           accessibilityRole="tab"
-          accessibilityState={{ selected: activeSubTab === 'cardiometabolic' }}
-          style={[styles.subTabBtn, activeSubTab === 'cardiometabolic' && styles.subTabBtn_active]}
+          accessibilityState={{ selected: effectiveSubTab === 'cardiometabolic' }}
+          style={[styles.subTabBtn, effectiveSubTab === 'cardiometabolic' && styles.subTabBtn_active]}
         >
           <Icon
             name="yakap"
             size={14}
-            color={activeSubTab === 'cardiometabolic' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            color={effectiveSubTab === 'cardiometabolic' ? theme.colors.primaryDark : theme.colors.textSecondary}
           />
           <ThemedText
             variant="captionBold"
-            color={activeSubTab === 'cardiometabolic' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            color={effectiveSubTab === 'cardiometabolic' ? theme.colors.primaryDark : theme.colors.textSecondary}
           >
             Cardiometabolic & NCD
           </ThemedText>
@@ -199,7 +234,7 @@ export default function HealthProfilesTab({
 
       {/* Sub-Tab Content View */}
       <View style={styles.subTabContent}>
-        {activeSubTab === 'surgical' && (
+        {effectiveSubTab === 'surgical' && (
           <ClinicalHistoryTab
             patient={patient}
             initialSurgicalHistories={surg}
@@ -208,7 +243,7 @@ export default function HealthProfilesTab({
             readOnly={!canWritePatients}
           />
         )}
-        {activeSubTab === 'lifestyle' && (
+        {effectiveSubTab === 'lifestyle' && (
           <LifestyleSocialTab
             patient={patient}
             initialSocialHistory={soc}
@@ -216,7 +251,7 @@ export default function HealthProfilesTab({
             readOnly={!canWritePatients}
           />
         )}
-        {activeSubTab === 'reproductive' && (
+        {effectiveSubTab === 'reproductive' && showReproductiveTab && (
           <ReproductiveHealthTab
             patient={patient}
             initialReproductiveHistory={rep}
@@ -224,7 +259,7 @@ export default function HealthProfilesTab({
             readOnly={!canWritePatients}
           />
         )}
-        {activeSubTab === 'cardiometabolic' && (
+        {effectiveSubTab === 'cardiometabolic' && (
           <CardiometabolicRiskTab
             patient={patient}
             initialLatestAssessment={ncd}

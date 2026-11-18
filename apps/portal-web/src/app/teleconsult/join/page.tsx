@@ -1,41 +1,30 @@
-"use client";
-
-import React, { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import React from "react";
 import { TeleconsultGuestFlow } from "@/components/teleconsult/TeleconsultGuestFlow";
+import { preflightInviteOnServer } from "@/components/teleconsult/serverPreflight";
 
-function TeleconsultJoinContent() {
-  const searchParams = useSearchParams();
-  const token = searchParams.get("token") || searchParams.get("inviteToken") || "";
+export default async function TeleconsultJoinPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ token?: string; inviteToken?: string }>;
+}) {
+  const params = (await searchParams) ?? {};
+  const cleanToken = (params.token || params.inviteToken || "").trim();
+  const initialPreflight = await preflightInviteOnServer(cleanToken);
 
   return (
     <TeleconsultGuestFlow
-      inviteToken={token}
-      clinicName="ClinicEZ Healthcare"
-      clinicSupportPhone="(02) 8123-4567"
-    />
-  );
-}
-
-export default function TeleconsultJoinPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
-          <div className="w-full max-w-md p-8 rounded-2xl bg-card border border-border text-center space-y-3">
-            <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
-            <p className="text-sm font-semibold text-foreground">
-              Preparing secure teleconsultation session...
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Verifying cryptographic environment and establishing zero-PHI channel.
-            </p>
-          </div>
-        </div>
+      inviteToken={cleanToken}
+      initialPreflight={initialPreflight}
+      clinicName={
+        initialPreflight.outcome === "valid" && initialPreflight.clinicName
+          ? initialPreflight.clinicName
+          : "ClinicEZ Healthcare"
       }
-    >
-      <TeleconsultJoinContent />
-    </Suspense>
+      clinicSupportPhone={
+        initialPreflight.outcome === "valid" && initialPreflight.clinicSupportPhone
+          ? initialPreflight.clinicSupportPhone
+          : "(02) 8123-4567"
+      }
+    />
   );
 }

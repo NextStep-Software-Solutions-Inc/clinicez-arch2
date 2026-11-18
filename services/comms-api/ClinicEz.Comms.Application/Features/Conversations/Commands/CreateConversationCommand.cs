@@ -25,14 +25,15 @@ public sealed record CreateConversationCommand(
     string? BranchId,
     ConversationScope Scope,
     ConversationKind Kind,
-    string Title,
+    string? Title,
     string? ContextType,
     string? ContextId,
     MessageCategory? Category,
     bool IsEmergencyConfirmed,
     bool IsLocalOnly,
     string CreatedBy,
-    IReadOnlyList<ParticipantInput>? Participants) : IRequest<ConversationDto>;
+    IReadOnlyList<ParticipantInput>? Participants,
+    string? CreatedByDisplayName = null) : IRequest<ConversationDto>;
 
 public sealed class CreateConversationCommandHandler : IRequestHandler<CreateConversationCommand, ConversationDto>
 {
@@ -54,8 +55,8 @@ public sealed class CreateConversationCommandHandler : IRequestHandler<CreateCon
             throw new ValidationException("TenantId is required.");
         if (string.IsNullOrWhiteSpace(request.FacilityId))
             throw new ValidationException("FacilityId is required.");
-        if (string.IsNullOrWhiteSpace(request.Title))
-            throw new ValidationException("Title is required.");
+        if (request.Scope != ConversationScope.Direct && string.IsNullOrWhiteSpace(request.Title))
+            throw new ValidationException("Title is required for non-direct conversations.");
 
         var conversation = new Conversation
         {
@@ -65,7 +66,7 @@ public sealed class CreateConversationCommandHandler : IRequestHandler<CreateCon
             BranchId = request.BranchId,
             Scope = request.Scope,
             Kind = request.Kind,
-            Title = request.Title.Trim(),
+            Title = string.IsNullOrWhiteSpace(request.Title) ? null : request.Title.Trim(),
             ContextType = request.ContextType,
             ContextId = request.ContextId,
             Category = request.Category,
@@ -90,6 +91,36 @@ public sealed class CreateConversationCommandHandler : IRequestHandler<CreateCon
                     ParticipantId = p.ParticipantId,
                     DisplayName = p.DisplayName,
                     Role = p.Role,
+                    JoinedAtUtc = DateTime.UtcNow
+                });
+            }
+        }
+
+        // Defensive backend guarantee:
+        // Ensure authenticated creator is enrolled as an active participant (Role = "Owner")
+        // if not already included by the client. This prevents 1-participant orphaned threads.
+        if (!string.IsNullOrWhiteSpace(request.CreatedBy) &&
+            !string.Equals(request.CreatedBy, "system", StringComparison.OrdinalIgnoreCase))
+        {
+            var alreadyEnrolled = conversation.Participants.Any(p =>
+                string.Equals(p.ParticipantId, request.CreatedBy, StringComparison.OrdinalIgnoreCase) &&
+                p.LeftAtUtc == null);
+
+            if (!alreadyEnrolled)
+            {
+                var creatorDisplayName = !string.IsNullOrWhiteSpace(request.CreatedByDisplayName)
+                    ? request.CreatedByDisplayName
+                    : "Staff Member";
+
+                conversation.Participants.Add(new Participant
+                {
+                    Id = Guid.NewGuid(),
+                    ConversationId = conversation.Id,
+                    TenantId = request.TenantId,
+                    ParticipantType = "Staff",
+                    ParticipantId = request.CreatedBy,
+                    DisplayName = creatorDisplayName,
+                    Role = "Owner",
                     JoinedAtUtc = DateTime.UtcNow
                 });
             }

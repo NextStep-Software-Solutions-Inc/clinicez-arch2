@@ -2,8 +2,93 @@
 import { describe, expect, test, mock } from 'bun:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { EhrOptionDescriptor } from '@shared/safe';
 
 (globalThis as any).__DEV__ = true;
+
+function loadBackendSeedCatalog(library: string): Array<{ code: string; description: string; isActive: boolean }> {
+  const seedPath = join(
+    import.meta.dir,
+    '..',
+    '..',
+    '..',
+    'services',
+    'clinic-api',
+    'ClinicEz.Clinic.Infrastructure',
+    'PhilHealth',
+    'Catalog',
+    'Seed',
+    `${library}.json`
+  );
+  return JSON.parse(readFileSync(seedPath, 'utf8')).items;
+}
+
+const BACKEND_STATUTORY_SEEDS: Record<string, Array<{ code: string; description: string; isActive: boolean }>> = {
+  lib_immchild: loadBackendSeedCatalog('lib_immchild'),
+  lib_immyoungw: loadBackendSeedCatalog('lib_immyoungw'),
+  lib_immpregw: loadBackendSeedCatalog('lib_immpregw'),
+  lib_immelderly: loadBackendSeedCatalog('lib_immelderly'),
+};
+
+const BACKEND_ROUTES = [
+  'Intramuscular (IM)',
+  'Subcutaneous (SC)',
+  'Intradermal (ID)',
+  'Oral (PO)',
+] as const;
+
+const BACKEND_SITES = [
+  'Left Deltoid',
+  'Right Deltoid',
+  'Left Anterolateral Thigh',
+  'Right Anterolateral Thigh',
+] as const;
+
+const BACKEND_EHR_OPTIONS: Record<string, EhrOptionDescriptor[]> = {
+  immunization_cohort: [
+    {
+      code: 'lib_immchild',
+      label: 'Child Schedule (0–17y)',
+      philHealthLibrary: 'lib_immchild',
+      metadata: { modalLabel: 'Child (0–17y)', badgeLabel: 'Childhood' },
+    },
+    {
+      code: 'lib_immyoungw',
+      label: 'Young Women (HPV)',
+      philHealthLibrary: 'lib_immyoungw',
+      metadata: { modalLabel: 'Young Women', badgeLabel: 'Young Women' },
+    },
+    {
+      code: 'lib_immpregw',
+      label: 'Maternal (Td / Tdap)',
+      philHealthLibrary: 'lib_immpregw',
+      metadata: { modalLabel: 'Maternal (Td)', badgeLabel: 'Maternal' },
+    },
+    {
+      code: 'lib_immelderly',
+      label: 'Senior Citizens (60+)',
+      philHealthLibrary: 'lib_immelderly',
+      metadata: { modalLabel: 'Senior (60+)', badgeLabel: 'Senior Citizen' },
+    },
+    {
+      code: 'OtherImm',
+      label: 'Adult / Other',
+      philHealthLibrary: 'OtherImm',
+      metadata: { modalLabel: 'Adult / Other', badgeLabel: 'Adult / Other', optionSet: 'adult_other_vaccine' },
+    },
+  ],
+  adult_other_vaccine: [
+    { code: 'O01', label: 'Tetanus Toxoid / Td / Tdap Booster', philHealthCode: 'O01', philHealthLibrary: 'OtherImm' },
+    { code: 'O02', label: 'Anti-Rabies Vaccine (PVRV / PCECV)', philHealthCode: 'O02', philHealthLibrary: 'OtherImm' },
+    { code: 'O03', label: 'Seasonal Influenza Vaccine (Adult)', philHealthCode: 'O03', philHealthLibrary: 'OtherImm' },
+    { code: 'O04', label: 'Hepatitis B Vaccine (Adult)', philHealthCode: 'O04', philHealthLibrary: 'OtherImm' },
+    { code: 'O05', label: 'COVID-19 Vaccine', philHealthCode: 'O05', philHealthLibrary: 'OtherImm' },
+  ],
+  vaccine_route: BACKEND_ROUTES.map((label, idx) => ({ code: `R${idx + 1}`, label })),
+  vaccine_injection_site: BACKEND_SITES.map((label, idx) => ({ code: `S${idx + 1}`, label })),
+};
 
 // Mock React Native modules for Bun environment
 const createMockComponent = (name: string) => {
@@ -60,7 +145,7 @@ mock.module('react-native', () => ({
     },
     timing: () => ({ start: (cb?: any) => cb && cb() }),
     sequence: () => ({ start: (cb?: any) => cb && cb() }),
-    loop: () => ({ start: (cb?: any) => cb && cb() }),
+    loop: () => ({ start: (cb?: any) => cb && cb(), stop: () => {} }),
     spring: () => ({ start: (cb?: any) => cb && cb() }),
     View: createMockComponent('Animated.View'),
     Text: createMockComponent('Animated.Text'),
@@ -92,16 +177,38 @@ mock.module('../constants/fonts', () => ({
   fontAssets: {},
 }));
 
+mock.module('../utils/usePhilHealthCatalog', () => ({
+  usePhilHealthCatalog: (library: string, enabled = true) => ({
+    items: enabled ? (BACKEND_STATUTORY_SEEDS[library] ?? []) : [],
+    loading: false,
+    error: null,
+    reload: () => {},
+  }),
+}));
+
+mock.module('../hooks/useEhrOptions', () => ({
+  useEhrOptions: (optionSet: string, options?: { enabled?: boolean }) => {
+    if (options?.enabled === false) {
+      return { options: [], labels: [], loading: false, error: null, reload: async () => {} };
+    }
+    const items = BACKEND_EHR_OPTIONS[optionSet] ?? [];
+    return {
+      options: items,
+      labels: items.map((d) => d.label),
+      loading: false,
+      error: null,
+      reload: async () => {},
+    };
+  },
+}));
+
 const {
   default: StatutoryImmunizationsTab,
-  PHILHEALTH_STATUTORY_VACCINES,
 } = await import('../components/chart/StatutoryImmunizationsTab');
 
 const {
   default: AdministerVaccineModal,
-  COHORTS,
-  VACCINE_ROUTES,
-  INJECTION_SITES,
+  resolveInitialVaccineCohort,
 } = await import('../components/chart/AdministerVaccineModal');
 
 const {
@@ -110,9 +217,6 @@ const {
 
 const {
   validateDateString,
-  formatDateMask,
-  isLeapYear,
-  getDaysInMonth,
 } = await import('../components/ui/ValidatedDateInput');
 
 import type {
@@ -123,7 +227,6 @@ import type {
 } from '../services/clinicService';
 
 describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_m3_1_gen7)', () => {
-  // Today's formatted date in Asia/Manila timezone
   const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 
   const mockPatientChild: ClinicPatient = {
@@ -192,17 +295,13 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
       });
 
       test('accepts near and far future expiration dates', () => {
-        const futureNear = '2028-06-30';
-        const futureFar = '2035-12-31';
-        expect(validateDateString(futureNear, { boundaryMode: 'futureOrToday' }).isValid).toBe(true);
-        expect(validateDateString(futureFar, { boundaryMode: 'futureOrToday' }).isValid).toBe(true);
+        expect(validateDateString('2028-06-30', { boundaryMode: 'futureOrToday' }).isValid).toBe(true);
+        expect(validateDateString('2035-12-31', { boundaryMode: 'futureOrToday' }).isValid).toBe(true);
       });
 
       test('rejects past expiration date (expired vaccine)', () => {
-        const expired1 = '2020-01-01';
-        const expired2 = '2023-12-31';
-        const res1 = validateDateString(expired1, { boundaryMode: 'futureOrToday' });
-        const res2 = validateDateString(expired2, { boundaryMode: 'futureOrToday' });
+        const res1 = validateDateString('2020-01-01', { boundaryMode: 'futureOrToday' });
+        const res2 = validateDateString('2023-12-31', { boundaryMode: 'futureOrToday' });
 
         expect(res1.isValid).toBe(false);
         expect(res1.errorMessage).toContain('today or in the future');
@@ -220,16 +319,12 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
       });
 
       test('validates leap year future dates accurately', () => {
-        // 2028 is a leap year
-        const leap2028 = validateDateString('2028-02-29', { boundaryMode: 'futureOrToday' });
-        expect(leap2028.isValid).toBe(true);
+        expect(validateDateString('2028-02-29', { boundaryMode: 'futureOrToday' }).isValid).toBe(true);
 
-        // 2027 is NOT a leap year -> Feb 29 must fail with leap year specific error
         const nonLeap2027 = validateDateString('2027-02-29', { boundaryMode: 'futureOrToday' });
         expect(nonLeap2027.isValid).toBe(false);
         expect(nonLeap2027.errorMessage).toContain('February 2027 has only 28 days');
 
-        // 2100 is century year NOT divisible by 400 -> NOT leap year
         const nonLeap2100 = validateDateString('2100-02-29', { boundaryMode: 'futureOrToday' });
         expect(nonLeap2100.isValid).toBe(false);
         expect(nonLeap2100.errorMessage).toContain('February 2100 has only 28 days');
@@ -243,13 +338,11 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
       });
 
       test('rejects malformed and corrupted input strings', () => {
-        // User pasted corrupted alphanumeric string
         const corrupted = validateDateString('2028-10asaasoalkslak', { boundaryMode: 'futureOrToday' });
         expect(corrupted.isValid).toBe(false);
         expect(corrupted.isComplete).toBe(false);
-        expect(corrupted.formattedDate).toBe('2028-10'); // masked digits only
+        expect(corrupted.formattedDate).toBe('2028-10');
 
-        // Incomplete inputs
         expect(validateDateString('', { boundaryMode: 'futureOrToday' }).isValid).toBe(false);
         expect(validateDateString('2028', { boundaryMode: 'futureOrToday' }).isValid).toBe(false);
         expect(validateDateString('2028-06', { boundaryMode: 'futureOrToday' }).isValid).toBe(false);
@@ -264,18 +357,13 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
       });
 
       test('accepts valid past dates spanning historical decades', () => {
-        const past1995 = validateDateString('1995-08-20', { boundaryMode: 'pastOrToday' });
-        const past2015 = validateDateString('2015-11-04', { boundaryMode: 'pastOrToday' });
-        const past2024 = validateDateString('2024-01-15', { boundaryMode: 'pastOrToday' });
-
-        expect(past1995.isValid).toBe(true);
-        expect(past2015.isValid).toBe(true);
-        expect(past2024.isValid).toBe(true);
+        expect(validateDateString('1995-08-20', { boundaryMode: 'pastOrToday' }).isValid).toBe(true);
+        expect(validateDateString('2015-11-04', { boundaryMode: 'pastOrToday' }).isValid).toBe(true);
+        expect(validateDateString('2024-01-15', { boundaryMode: 'pastOrToday' }).isValid).toBe(true);
       });
 
       test('accepts year 1900 boundary and rejects pre-1900 dates', () => {
-        const at1900 = validateDateString('1900-01-01', { boundaryMode: 'pastOrToday' });
-        expect(at1900.isValid).toBe(true);
+        expect(validateDateString('1900-01-01', { boundaryMode: 'pastOrToday' }).isValid).toBe(true);
 
         const pre1900 = validateDateString('1899-12-31', { boundaryMode: 'pastOrToday' });
         expect(pre1900.isValid).toBe(false);
@@ -299,89 +387,70 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
   });
 
   /* -------------------------------------------------------------------------- */
-  /* SUITE 2: DEMOGRAPHIC COHORT SWITCHING & CATALOG CODE INTEGRITY             */
+  /* SUITE 2: DEMOGRAPHIC COHORT SWITCHING & BACKEND CATALOG CODE INTEGRITY     */
   /* -------------------------------------------------------------------------- */
-  describe('Suite 2: Demographic Cohort Switching & Catalog Completeness', () => {
-    test('statutory catalog libraries conform strictly to PhilHealth DTD specifications', () => {
-      // lib_immchild: 13 vaccines
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immchild.length).toBe(13);
-      const childCodes = PHILHEALTH_STATUTORY_VACCINES.lib_immchild.map((v) => v.code);
-      expect(childCodes).toEqual([
-        'C01', 'C02', 'C03', 'C04', 'C05', 'C06', 'C07', 'C08', 'C09', 'C10', 'C11', 'C12', 'C13'
+  describe('Suite 2: Demographic Cohort Switching & Backend Catalog Completeness', () => {
+    test('backend statutory catalog seed libraries conform strictly to PhilHealth Kit v1.1 specifications', () => {
+      const activeNonFallback = (lib: string) =>
+        (BACKEND_STATUTORY_SEEDS[lib] ?? []).filter((v) => v.isActive && v.code !== '999');
+
+      // lib_immchild: 13 vaccines (C01..C13)
+      const childVaccines = activeNonFallback('lib_immchild');
+      expect(childVaccines.length).toBe(13);
+      expect(childVaccines.map((v) => v.code)).toEqual([
+        'C01', 'C02', 'C03', 'C04', 'C05', 'C06', 'C07', 'C08', 'C09', 'C10', 'C11', 'C12', 'C13',
       ]);
 
-      // lib_immyoungw: 2 vaccines
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immyoungw.length).toBe(2);
-      const ywCodes = PHILHEALTH_STATUTORY_VACCINES.lib_immyoungw.map((v) => v.code);
-      expect(ywCodes).toEqual(['Y01', 'Y02']);
+      // lib_immyoungw: 2 vaccines (Y01, Y02)
+      const ywVaccines = activeNonFallback('lib_immyoungw');
+      expect(ywVaccines.length).toBe(2);
+      expect(ywVaccines.map((v) => v.code)).toEqual(['Y01', 'Y02']);
 
-      // lib_immpregw: 5 vaccines
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immpregw.length).toBe(5);
-      const pregCodes = PHILHEALTH_STATUTORY_VACCINES.lib_immpregw.map((v) => v.code);
-      expect(pregCodes).toEqual(['P01', 'P02', 'P03', 'P04', 'P05']);
+      // lib_immpregw: P01 Tetanus Toxoid
+      const pregVaccines = activeNonFallback('lib_immpregw');
+      expect(pregVaccines.length).toBe(1);
+      expect(pregVaccines.map((v) => v.code)).toEqual(['P01']);
 
-      // lib_immelderly: 2 vaccines
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immelderly.length).toBe(2);
-      const eldCodes = PHILHEALTH_STATUTORY_VACCINES.lib_immelderly.map((v) => v.code);
-      expect(eldCodes).toEqual(['E01', 'E02']);
+      // lib_immelderly: 2 vaccines (E01, E02)
+      const eldVaccines = activeNonFallback('lib_immelderly');
+      expect(eldVaccines.length).toBe(2);
+      expect(eldVaccines.map((v) => v.code)).toEqual(['E01', 'E02']);
 
-      // Total count across all 4 catalogs is exactly 22 statutory vaccines
-      const allVaccines = [
-        ...PHILHEALTH_STATUTORY_VACCINES.lib_immchild,
-        ...PHILHEALTH_STATUTORY_VACCINES.lib_immyoungw,
-        ...PHILHEALTH_STATUTORY_VACCINES.lib_immpregw,
-        ...PHILHEALTH_STATUTORY_VACCINES.lib_immelderly,
-      ];
-      expect(allVaccines.length).toBe(22);
+      const allStatutory = [...childVaccines, ...ywVaccines, ...pregVaccines, ...eldVaccines];
+      const uniqueCodes = new Set(allStatutory.map((v) => v.code));
+      expect(uniqueCodes.size).toBe(allStatutory.length);
 
-      // Verify no duplicate codes across statutory catalogs
-      const uniqueCodes = new Set(allVaccines.map((v) => v.code));
-      expect(uniqueCodes.size).toBe(22);
-
-      // Verify all vaccines have non-empty names
-      for (const vac of allVaccines) {
-        expect(vac.name.trim().length).toBeGreaterThan(0);
+      for (const vac of allStatutory) {
+        expect(vac.description.trim().length).toBeGreaterThan(0);
       }
     });
 
     test('initial cohort auto-detection matrices across patient demographic spectra', () => {
-      // Helper replicating getInitialCohort in both modals
-      const computeInitialCohort = (age: number, sex: string, isSenior?: boolean) => {
-        const g = (sex || '').toLowerCase();
-        if (age < 18) return 'lib_immchild';
-        if (g === 'female' && age >= 9 && age <= 26) return 'lib_immyoungw';
-        if (age >= 60 || isSenior) return 'lib_immelderly';
-        return 'lib_immchild';
-      };
+      // Pediatric infant / child (< 18) -> lib_immchild
+      expect(resolveInitialVaccineCohort({ age: 0, sex: 'Male' } as PatientDemographics)).toBe('lib_immchild');
+      expect(resolveInitialVaccineCohort({ age: 1, sex: 'Female' } as PatientDemographics)).toBe('lib_immchild');
+      expect(resolveInitialVaccineCohort({ age: 17, sex: 'Female' } as PatientDemographics)).toBe('lib_immchild');
+      expect(resolveInitialVaccineCohort({ age: 17, sex: 'Male' } as PatientDemographics)).toBe('lib_immchild');
 
-      // Pediatric infant / child (< 18)
-      expect(computeInitialCohort(0, 'Male')).toBe('lib_immchild');
-      expect(computeInitialCohort(1, 'Female')).toBe('lib_immchild');
-      expect(computeInitialCohort(17, 'Female')).toBe('lib_immchild');
-      expect(computeInitialCohort(17, 'Male')).toBe('lib_immchild');
+      // Young women (Female, 18-49y) -> lib_immyoungw
+      expect(resolveInitialVaccineCohort({ age: 18, sex: 'Female' } as PatientDemographics)).toBe('lib_immyoungw');
+      expect(resolveInitialVaccineCohort({ age: 26, sex: 'Female' } as PatientDemographics)).toBe('lib_immyoungw');
+      expect(resolveInitialVaccineCohort({ age: 45, sex: 'Female' } as PatientDemographics)).toBe('lib_immyoungw');
 
-      // Young women (Female, 18-26y)
-      expect(computeInitialCohort(18, 'Female')).toBe('lib_immyoungw');
-      expect(computeInitialCohort(22, 'Female')).toBe('lib_immyoungw');
-      expect(computeInitialCohort(26, 'Female')).toBe('lib_immyoungw');
+      // Adult Men (18-59y) and Females (50-59y) -> OtherImm (Adult / Other)
+      expect(resolveInitialVaccineCohort({ age: 18, sex: 'Male' } as PatientDemographics)).toBe('OtherImm');
+      expect(resolveInitialVaccineCohort({ age: 32, sex: 'Male' } as PatientDemographics)).toBe('OtherImm');
+      expect(resolveInitialVaccineCohort({ age: 54, sex: 'Female' } as PatientDemographics)).toBe('OtherImm');
 
-      // Male in same age band falls back to child
-      expect(computeInitialCohort(18, 'Male')).toBe('lib_immchild');
-      expect(computeInitialCohort(25, 'Male')).toBe('lib_immchild');
-
-      // Female older than 26 but not senior
-      expect(computeInitialCohort(27, 'Female')).toBe('lib_immchild');
-      expect(computeInitialCohort(45, 'Female')).toBe('lib_immchild');
-
-      // Senior citizens (>= 60 or isSenior)
-      expect(computeInitialCohort(60, 'Male')).toBe('lib_immelderly');
-      expect(computeInitialCohort(60, 'Female')).toBe('lib_immelderly');
-      expect(computeInitialCohort(85, 'Male')).toBe('lib_immelderly');
-      expect(computeInitialCohort(45, 'Male', true)).toBe('lib_immelderly');
+      // Senior citizens (>= 60 or isSenior) -> lib_immelderly
+      expect(resolveInitialVaccineCohort({ age: 60, sex: 'Male' } as PatientDemographics)).toBe('lib_immelderly');
+      expect(resolveInitialVaccineCohort({ age: 60, sex: 'Female' } as PatientDemographics)).toBe('lib_immelderly');
+      expect(resolveInitialVaccineCohort({ age: 85, sex: 'Male' } as PatientDemographics)).toBe('lib_immelderly');
+      expect(resolveInitialVaccineCohort({ age: 45, sex: 'Male', isSenior: true } as PatientDemographics)).toBe('lib_immelderly');
     });
 
-    test('cohort chip selector switches rendered vaccines and default selection', () => {
-      // Renders child modal
+    test('cohort chip selector renders backend vaccines for each patient demographic', () => {
+      // Child modal -> BE lib_immchild
       const htmlChild = renderToStaticMarkup(
         React.createElement(AdministerVaccineModal, {
           visible: true,
@@ -391,10 +460,10 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
           onAdministerVaccine: async () => {},
         })
       );
-      expect(htmlChild).toContain('BCG (Bacillus Calmette-Guérin)');
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immchild.find((v) => v.name.includes('BCG'))?.code).toBe('C01');
+      expect(htmlChild).toContain('BCG');
+      expect(BACKEND_STATUTORY_SEEDS.lib_immchild.find((v) => v.description.includes('BCG'))?.code).toBe('C01');
 
-      // Renders young women modal
+      // Young women modal -> BE lib_immyoungw
       const htmlYw = renderToStaticMarkup(
         React.createElement(AdministerVaccineModal, {
           visible: true,
@@ -404,10 +473,10 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
           onAdministerVaccine: async () => {},
         })
       );
-      expect(htmlYw).toContain('Human Papillomavirus Vaccine (HPV)');
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immyoungw.find((v) => v.name.includes('HPV'))?.code).toBe('Y01');
+      expect(htmlYw).toContain('HPV');
+      expect(BACKEND_STATUTORY_SEEDS.lib_immyoungw.find((v) => v.description.includes('HPV'))?.code).toBe('Y01');
 
-      // Renders senior modal
+      // Senior modal -> BE lib_immelderly
       const htmlSenior = renderToStaticMarkup(
         React.createElement(AdministerVaccineModal, {
           visible: true,
@@ -417,8 +486,20 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
           onAdministerVaccine: async () => {},
         })
       );
-      expect(htmlSenior).toContain('Pneumococcal Polysaccharide Vaccine');
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immelderly.find((v) => v.name.includes('Pneumococcal'))?.code).toBe('E01');
+      expect(htmlSenior).toContain('Pnuemococcal Vaccine');
+      expect(BACKEND_STATUTORY_SEEDS.lib_immelderly.find((v) => v.code === 'E01')?.code).toBe('E01');
+
+      // Adult Male modal -> BE adult_other_vaccine
+      const htmlAdultMale = renderToStaticMarkup(
+        React.createElement(AdministerVaccineModal, {
+          visible: true,
+          onClose: () => {},
+          demographics: { age: 35, sex: 'Male' } as PatientDemographics,
+          onAdministerVaccine: async () => {},
+        })
+      );
+      expect(htmlAdultMale).toContain('Tetanus Toxoid / Td / Tdap Booster');
+      expect(htmlAdultMale).toContain('Anti-Rabies Vaccine (PVRV / PCECV)');
     });
   });
 
@@ -427,7 +508,6 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
   /* -------------------------------------------------------------------------- */
   describe('Suite 3: Defensive Validation Boundaries & Required Fields', () => {
     describe('AdministerVaccineModal Input Guarding', () => {
-      // Simulation harness replicating handleAdminister validation pipeline
       const simulateAdministerValidation = (params: {
         lotBatchNumber: string;
         expirationDate: string;
@@ -482,10 +562,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
           doseSequence: '1',
         });
         expect(check.valid).toBe(true);
-
-        const rawLot = '  LOT-2026-BCG-01  ';
-        const payloadLot = rawLot.trim();
-        expect(payloadLot).toBe('LOT-2026-BCG-01');
+        expect('  LOT-2026-BCG-01  '.trim()).toBe('LOT-2026-BCG-01');
       });
 
       test('rejects dose sequences: zero, negative, empty, and non-numeric strings', () => {
@@ -581,14 +658,12 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
           injectionSite: site.trim() || undefined,
         });
 
-        // Blank/whitespace optional fields cleanly map to undefined
         const payloadEmpty = constructHistoricalPayload('   ', '   ', '', '');
         expect(payloadEmpty.historicalFacilityName).toBeUndefined();
         expect(payloadEmpty.lotBatchNumber).toBeUndefined();
         expect(payloadEmpty.route).toBeUndefined();
         expect(payloadEmpty.injectionSite).toBeUndefined();
 
-        // Populated optional fields are cleanly trimmed
         const payloadPopulated = constructHistoricalPayload(
           '  Baguio Health Center  ',
           '  LOT-HIST-001  ',
@@ -634,7 +709,6 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
 
       expect(html).toContain('Series Completed?');
       expect(html).toContain('Mark final dose in sequence');
-      // Initially false -> renders 'No'
       expect(html).toContain('No');
     });
 
@@ -680,7 +754,6 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
         })
       );
 
-      // Section titles & labels
       expect(html).toContain('1. Vaccine Category *');
       expect(html).toContain('2. Select Vaccine');
       expect(html).toContain('Lot / Batch Number *');
@@ -694,19 +767,18 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
       expect(html).toContain('PRC License Number');
       expect(html).toContain('Clinical Remarks (Optional)');
 
-      // Cohort choices
+      // All 5 BE cohort choices
       expect(html).toContain('Child (0–17y)');
       expect(html).toContain('Young Women');
       expect(html).toContain('Maternal (Td)');
       expect(html).toContain('Senior (60+)');
+      expect(html).toContain('Adult / Other');
 
-      // Injection routes
-      for (const route of VACCINE_ROUTES) {
+      // BE-supplied routes & sites
+      for (const route of BACKEND_ROUTES) {
         expect(html).toContain(route);
       }
-
-      // Injection sites
-      for (const site of INJECTION_SITES) {
+      for (const site of BACKEND_SITES) {
         expect(html).toContain(site);
       }
     });
@@ -748,8 +820,8 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
       expect(html).toContain('Immunization Documentation Status');
       expect(html).toContain('No immunizations are currently documented for this patient');
       expect(html).toContain('No immunizations recorded');
-      expect(html).toContain('Administer Vaccine');
-      expect(html).toContain('Add Historical Vaccine');
+      expect(html).toContain('Administer Vax');
+      expect(html).toContain('Log Vax History');
       expect(html).not.toContain('+ +');
       expect(html).not.toContain('PhilHealth');
       expect(html).not.toContain('Fallback Code 999');

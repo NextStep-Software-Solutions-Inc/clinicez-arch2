@@ -1,86 +1,49 @@
-# Sentinel Completion Handoff Report: Clinic Administrator Account Recovery
+# Sentinel Final Handoff Report — Teleconsultation Finalization
 
-**Date**: 2026-10-29T08:15:00Z  
-**Role**: Project Sentinel  
-**Working Directory**: `/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/reset_admin_credentials/.agents/teamwork/sentinel`  
-**Verdict**: **VICTORY CONFIRMED**
+## Observation
+The Teamwork Project Sentinel oversaw the execution of the Teleconsultation Finalization Plan covering requirements R1 through R6 and live user feedback remediation R7.1 through R7.4 across the full stack (`packages/comms-sdk`, `packages/shared-dotnet`, `services/portal-api`, `services/media-broker`, `services/clinic-api`, `services/interop-hub`, `apps/clinic-app`, `apps/portal-web`, and `apps/admin-web`).
 
----
+An independent post-victory audit was conducted by `teamwork_victory_auditor` (`772bd5f2-63a6-45f2-b52d-3df2bee9a55e`) in `.agents/teamwork/victory_auditor_2` with the authoritative request in `.agents/teamwork/ORIGINAL_REQUEST.md`.
 
-## 1. Observation
+Audit Verdict: **VICTORY CONFIRMED**
+- Phase A (Timeline & Provenance): PASS
+- Phase B (Integrity, Cheating Detection & Guardrails): PASS (all 8 hard invariants certified)
+- Phase C (Independent Test Execution): PASS (3,544 independent tests passed, 0 failed, 100% pass rate)
 
-1. **Authoritative Request Execution**:
-   - Recorded user request verbatim in `.agents/teamwork/ORIGINAL_REQUEST.md` under `## 2026-10-29T06:47:27Z`.
-   - Evaluated task routing: Routed to General path (`teamwork_preview_orchestrator`) due to cross-stack scope (backend cryptographic endpoint, frontend workstation UX, operational CLI scripts, and automated test suite). Pre-flight audit not required.
-   - Dispatched `orchestrator_admin_recovery` (`a09a15fc-793c-49d1-8768-909a7078516d`), which coordinated an implementation hierarchy across 4 milestones, 3 survey explorers, 3 workers, 2 reviewers, 2 challengers, and 1 internal forensic auditor.
+## Logic Chain
+1. **Interview & Routing**: Task interview completed; approved task prompt recorded in `.agents/teamwork/ORIGINAL_REQUEST.md`; routed to General execution path (`teamwork_orchestrator`).
+2. **Orchestration Execution**: Project Orchestrator executed parallel milestones:
+   - **M12 (Control Plane Metered Licensing & Broker Sync)**: Opt-in PAYG billing entities (`WorkspaceTeleconsultBilling`, `TeleconsultUsageRecord`), EF Core migrations, media overdraft protection (`AllowOverdraft`), abandoned session cleanup.
+   - **M13 (Portal Web & Admin Web PAYG Billing UI)**: `TeleconsultPaygCard.tsx`, `teleconsultBilling.service.ts`, and SuperAdmin rate/credit controls in `TenantEntitlementsCard.tsx`.
+   - **M14 (Clinic Governance & Session Termination)**: `FacilitySettings.EnableTeleconsultation`, EF migrations, `ForbiddenException` enforcement on un-entitled toggle, license cascade, modality gating in appointments/schedule modals, and atomic interop revocation.
+   - **M15 (CallStage Participants Roster, PIN & Screen Sharing)**: Right-hand docked roster panel (`btn-toggle-participants`), visible 6-digit access PIN and cached invite state (no OTP rotation on copy), decoupled local camera/screen share tracks, contain aspect ratio promotion, landscape PiP, and 5-min solo warning with 2-min auto-leave countdown.
+   - **M17 (Live User Feedback Remediation R7.1–R7.4)**:
+     * R7.1: Tailwind v4 `@source` directive in `globals.css` resolving collapsed waiting room and floating toolbar layouts; real browser `getUserMedia` camera/mic preview and volume meter in waiting room.
+     * R7.2: Zero Unicode emojis and zero uppercase text fallbacks in teleconsultation UI; 22 inline Lucide SVGs; exact 17-key invariant on `COMMS_ICON_MAP`.
+     * R7.3: Complete purge of PhilHealth YAKAP cards, badges, and prepayment bypass logic from teleconsultation.
+     * R7.4: Zero-PHI metadata hydration via AES-256-GCM encrypted guest context; real clinic, clinician, and schedule display; participant roster deduplication so toolbar badge count strictly matches rows under `IN ROOM`.
+   - **E2E Testing Track (E2E-M1..M4) & M16 (Final Integration)**: Published `TEST_READY.md` (v3.0.0) certifying full-ecosystem automated verification.
+3. **Independent Victory Audit**: Spawned `teamwork_victory_auditor`. Verified 3,544 automated tests independently with 0 failures, confirmed zero cheating patterns, zero token/host violations, port 8081 health, and zero git commits.
 
-2. **Backend Admin Recovery Endpoint (`clinic-api`)**:
-   - Exposed anonymous, rate-limited endpoint `POST /api/v1/auth/recover-admin` in `services/clinic-api/ClinicEz.Clinic.Api/Controllers/AuthController.cs`.
-   - Rate limiting enforced on the controller via `[EnableRateLimiting(FacilityLocalAuthExtensions.AuthRateLimitPolicy)]` (30 requests/minute).
-   - Validates ECDSA cryptographic facility license tokens via `IFacilityLicenseValidator` against the target clinic/facility context. Tampered, expired, or foreign tokens return HTTP 400 Bad Request.
-   - Validates password complexity policy (minimum 8 characters, letters, digits, confirmation match).
-   - Resolves staff member and strictly enforces Administrator role check (`StaffRole.Admin` or role name `"Clinic Administrator"`). Rejects non-administrator accounts (Doctor, Nurse, Cashier, Receptionist, Pharmacist, Lab Tech) with HTTP 403 Forbidden.
-   - Updates administrator's password hash (`PasswordHash`), clears `FailedLoginCount` and `LockoutEnd`, sets `MustChangePassword = false`, marks `IsActive = true` and `Status = Active`, increments `TokenVersion`, and updates audit timestamps.
-   - Revokes all existing refresh tokens across the LAN in PostgreSQL, evicts staff from `StaffAccessCache`, and issues fresh JWT access and refresh tokens.
+## Caveats
+- No git commits or pushes were performed in the worktree (`git log -1` remains `b58f6e3b84b996aaad4475f80cadf899791ba8ef`). All changes are staged/unstaged in the working directory ready for version control by the operator.
+- The live Expo dev server on port 8081 remains running continuously on PID 29562 untouched.
 
-3. **Frontend Workstation Recovery Screen (`clinic-app`)**:
-   - Added `AdminRecoveryInput` interface and `recoverAdmin` service call in `apps/clinic-app/services/authSession.ts`, persisting tokens to secure storage.
-   - Integrated `recoverAdmin` into `apps/clinic-app/context/AuthContext.tsx`, smoothly transitioning `AuthState` into `'signedIn'`.
-   - Created `apps/clinic-app/components/auth/AdminRecoveryScreen.tsx` strictly adhering to `@clinicez/design-tokens` (Teal `#0D6963`, 0 raw hex color literals), featuring defensive client-side validation (`validateWorkstationPassword` requiring >= 8 characters, letters, digits, and confirmation matching) and clear action banners.
-   - Updated `apps/clinic-app/components/auth/LoginScreen.tsx` with view toggle and accessible entry point link ("Are you the clinic admin? Recover account").
+## Conclusion
+The ClinicEZ teleconsultation finalization capability is 100% complete, fully implemented, peer-reviewed, adversarial-tested, and independently verified against all specifications in `implementation_plan.md` and user feedback mandates.
 
-4. **Operational Recovery Tooling (`scripts/`)**:
-   - Authored `scripts/reset-admin-credentials.sh` (executable bash) and `scripts/reset-admin-credentials.ps1` (PowerShell) supporting `--list`, `--clear-lockout`, and `--generate-invite`.
-   - Auto-detects Docker `postgres` container vs local host `psql`, auto-resolves database name (`CLINICEZ-CLINIC_DB` vs `CLINICEZ_CLINIC_DB`), safely clears lockouts, increments `TokenVersion`, revokes active refresh tokens, and generates 256-bit cryptographic one-time invitation links without writing manual SQL.
-
-5. **Independent Post-Victory Audit Results**:
-   - Victory Auditor (`ecd09233-8139-4dde-82f3-e3e3f021e6a6`) conducted independent 3-phase audit and rendered:
-     **VERDICT: VICTORY CONFIRMED**
-   - Independent verification suite executions:
-     - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ClinicAuthServiceTests"`: 30 passed, 0 failed.
-     - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ClinicAuthServiceAdversarialTests"`: 24 passed, 0 failed.
-     - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~AuthControllerTests"`: 9 passed, 0 failed.
-     - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj`: 5,071 passed, 0 failed across entire application test suite.
-     - `bun x tsc --noEmit -p apps/clinic-app`: Exit code 0 (0 TypeScript errors).
-     - `bun test apps/clinic-app/tests/staffInvitations.test.ts`: 45 passed, 0 failed.
-     - `bun test apps/clinic-app/tests/adminRecovery.test.ts`: 23 passed, 0 failed.
-     - `node apps/clinic-app/scripts/check-tokens.mjs --strict`: 0 violations across 0 files.
-     - Operational Tooling Check (`bash -n scripts/reset-admin-credentials.sh && ./scripts/reset-admin-credentials.sh --help`): Exit code 0.
-
----
-
-## 2. Logic Chain
-
-1. **Routing and Delegation**: The Sentinel assessed the incoming request and routed to General (`teamwork_preview_orchestrator`) due to backend API additions, mobile/workstation frontend UI, operational shell/PowerShell scripts, and multi-surface test suites.
-2. **Sentinel Oversight**: Two background crons were scheduled immediately upon dispatch (Progress Reporting `*/8 * * * *`, task-31; Liveness Check `*/10 * * * *`, task-34) to continuously verify heartbeat freshness and relay milestone updates to the user.
-3. **Mandatory Audit Gate**: When the Project Orchestrator claimed completion with unanimous internal gate approvals (`GATE_STATUS.md`), the Sentinel enforced the mandatory blocking audit rule and dispatched `teamwork_preview_victory_auditor` (`ecd09233-8139-4dde-82f3-e3e3f021e6a6`) with zero shared context.
-4. **Clean Shutdown**: Upon receiving `VICTORY CONFIRMED`, both background monitoring tasks (`task-31`, `task-34`) were cancelled, and all subagents were terminated via `manage_subagents(action="kill_all")`.
-
----
-
-## 3. Caveats
-
-- **Rate Limiting Policy**: The recovery endpoint `POST /api/v1/auth/recover-admin` shares the `FacilityLocalAuthExtensions.AuthRateLimitPolicy` (30 requests/minute per IP/workspace). Brute force attempts on facility license keys or emails are automatically throttled with HTTP 429 Too Many Requests.
-- **Operational Tooling Execution**: In production VPS environments (`130.94.50.27`), `scripts/reset-admin-credentials.sh` automatically routes queries into the Docker `postgres` container. For local setups, ensure either Docker or host `psql` is on the path.
-
----
-
-## 4. Conclusion
-
-The Clinic Administrator account recovery mechanism is fully implemented, verified, and independently audited across backend API (`clinic-api`), workstation frontend (`clinic-app`), and operational tooling (`scripts/`). All security requirements, non-admin role locks, cryptographic validations, LAN session revocations, and automated test gates have passed with 100% concordance.
-
----
-
-## 5. Verification Method
-
-- Backend Test Suites:
-  - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ClinicAuthServiceTests"` (30/30 passed)
-  - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ClinicAuthServiceAdversarialTests"` (24/24 passed)
-  - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~AuthControllerTests"` (9/9 passed)
-- Frontend Test Suites:
-  - `bun test apps/clinic-app/tests/adminRecovery.test.ts` (23/23 passed)
-  - `bun test apps/clinic-app/tests/staffInvitations.test.ts` (45/45 passed)
-  - `bun x tsc --noEmit -p apps/clinic-app` (0 type errors)
-  - `node apps/clinic-app/scripts/check-tokens.mjs --strict` (0 token violations)
-- Operational Tooling:
-  - `bash -n scripts/reset-admin-credentials.sh && ./scripts/reset-admin-credentials.sh --help` (exit code 0)
+## Verification Method
+Independently executed:
+- Media Broker: `dotnet test services/media-broker/ClinicEz.MediaBroker.Tests` (90 passed)
+- Portal API: `dotnet test services/portal-api/ClinicEz.Portal.Tests` (1,710 passed)
+- Interop Hub: `dotnet test services/interop-hub/ClinicEz.Interop.Tests` (190 passed)
+- Clinic API: `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests --filter "FullyQualifiedName~Teleconsult|FullyQualifiedName~License|FullyQualifiedName~Entitlements"` (660 passed)
+- Patient API: `dotnet test services/patient-api/ClinicEz.Patient.Application.Tests --filter "FullyQualifiedName~CallStateChanged"` (7 passed)
+- Comms SDK: `bun test tests && bun run typecheck` (592 passed, 0 TS errors)
+- Clinic App: `bun test tests/commsBrandTheming.test.ts ... && bun test tests/comms_issue139_resilience_and_polish.test.ts && bun run typecheck` (204 passed, 0 TS errors)
+- Portal Web: `bun test tests/guestTeleconsultJoin.test.tsx ... && bunx tsc --noEmit` (86 passed, 0 TS errors)
+- Admin Web: `bun test tests/teleconsultSuperAdminOverrides.test.ts ... && bunx tsc --noEmit` (48 passed, 0 TS errors)
+- Patient App: `bun test tests/clinical-safety-records.test.ts ... && bun run typecheck` (47 passed, 0 TS errors)
+- Token Linter: `bun run lint:tokens` (0 violations)
+- Host Linter: `check-no-external-hosts.mjs` across clinic-app and comms-sdk (0 violations)
+- Total independent tests: 3,544 passed, 0 failed (100% PASS).

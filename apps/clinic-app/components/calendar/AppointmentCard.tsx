@@ -34,6 +34,14 @@ export function AppointmentCard({
   const urgency = resolveAppointmentUrgency(appointment);
   const urgencyTokens = resolveUrgencyTokens(urgency);
   const statusTokens = resolveStatusTokens(appointment.status);
+  const hasLegacyTeleconsultService =
+    appointment.appointmentType === undefined &&
+    appointment.isTeleconsult === undefined &&
+    /^teleconsult(ation)?$/i.test((appointment.serviceType || '').trim());
+  const isTeleconsult =
+    appointment.appointmentType === 'Teleconsult' ||
+    appointment.isTeleconsult === true ||
+    hasLegacyTeleconsultService;
 
   const { formattedTime } = getAppointmentLocalDateTime(appointment.scheduledAt);
 
@@ -73,6 +81,12 @@ export function AppointmentCard({
             {formattedTime ? `${formattedTime} ` : ''}
             {appointment.patientName}
           </ThemedText>
+          {isTeleconsult ? (
+            <View data-testid="card-teleconsult-badge" testID="card-teleconsult-badge">
+              <Icon name="video" size={10} color={urgencyTokens.badgeText} />
+            </View>
+          ) : null}
+
           {appointment.lastReminderSentAt ? (
             <View data-testid="card-reminder-badge" testID="card-reminder-badge">
               <Icon name="bell" size={10} color={urgencyTokens.badgeText} />
@@ -152,6 +166,16 @@ export function AppointmentCard({
               {statusTokens.label}
             </ThemedText>
           </View>
+          {isTeleconsult ? (
+            <View
+              data-testid="card-teleconsult-badge"
+              testID="card-teleconsult-badge"
+              style={styles.timelineTeleconsultBadge}
+            >
+              <Icon name="video" size={12} color={theme.colors.infoText} />
+            </View>
+          ) : null}
+
           {appointment.lastReminderSentAt ? (
             <View
               data-testid="card-reminder-badge"
@@ -251,6 +275,23 @@ export function AppointmentCard({
             {statusTokens.label}
           </ThemedText>
         </View>
+
+        {isTeleconsult ? (
+          <View
+            data-testid="card-teleconsult-badge"
+            testID="card-teleconsult-badge"
+            style={styles.teleconsultBadge}
+          >
+            <Icon name="video" size={theme.sizes.iconSm} color={theme.colors.infoText} />
+            <ThemedText
+              variant="caption"
+              color={theme.colors.infoText}
+              style={{ fontWeight: '600' }}
+            >
+              Teleconsult
+            </ThemedText>
+          </View>
+        ) : null}
 
         {appointment.lastReminderSentAt ? (
           <View
@@ -501,6 +542,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.primaryLight,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: theme.radii.xs,
+  },
+  teleconsultBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.colors.infoBg,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+    borderRadius: theme.radii.sm,
+  },
+  timelineTeleconsultBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.infoBg,
     paddingHorizontal: 4,
     paddingVertical: 2,
     borderRadius: theme.radii.xs,

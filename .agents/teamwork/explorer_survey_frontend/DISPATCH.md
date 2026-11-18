@@ -1,27 +1,30 @@
-## 2026-10-20T01:57:44Z
+# Survey Frontend Task Assignment
+Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api
+Target: apps/clinic-app
 
-From: f15f02a3-efcd-418a-934f-74dd68d6a346
-Priority: MESSAGE_PRIORITY_HIGH
 
-You are explorer_survey_frontend.
-Your working directory is: /Users/macuser/projects/github/nextstep/clinicez-docs-studio/.agents/teamwork/explorer_survey_frontend
-You MUST read the requirements file first: /Users/macuser/projects/github/nextstep/clinicez-docs-studio/.agents/teamwork/ORIGINAL_REQUEST.md
+## 2026-11-12T23:14:34Z
+You are a teamwork_explorer tasked with mapping the clinic workstation frontend scope for the teleconsultation feature.
 
-Mission: Survey the frontend codebase (`apps/clinic-app` and `packages/design-tokens`) for the Clinical Document Customization Studio and Tri-Mode Doctor Signing project.
-Investigate:
-1. `DocumentTemplatesSettingsTab.tsx` and settings navigation:
-   - Check where settings tabs are defined (e.g. clinic settings tabs, 'documents' tab).
-   - Check requirements for high-density two-column workstation layout:
-     * Left Column: Facility Header, Sub-Header/Tagline, Physical Address, Multi-channel Contact, DOH LTO Number, PhilHealth Accreditation, Logo upload, Accent color override, Paper Size selector (`Letter`, `A4`, `A5`), Statutory Legal Disclaimer footer.
-     * Right Column: Interactive live previewer with segmented switcher across 4 document types (Medical Certificate, e-Rx, Diagnostic Requisition Slip, Clinical Referral Letter), toggle between E-Signature Specimen and Wet Signature preview, and 'Print Sample Test PDF' button.
-     * Strict `@clinicez/design-tokens` adherence (no hardcoded colors, 4 core UI states: Skeleton, Empty, Error, Active).
-2. Clinician E-Signature Specimen Management:
-   - Inspect `Profile.screen.tsx` and `StaffManagementTab.tsx`.
-   - How signature upload (transparent PNG) and signature pad drawing are currently implemented or should be integrated.
-   - Physician Stamp Imprint with credentials (PRC, PTR, PDEA S2, PhilHealth PAN) overlaid with signature specimen.
-3. Workstation Print & Issuance Hardening:
-   - Inspect `Consultations.screen.tsx` and `PrescriptionSlipModal.tsx`.
-   - Check how print option selector `[ 🖋️ E-Signed PDF ]` | `[ 📝 Wet Signature (Pen) ]` should be placed.
-   - Check how PDEA S2 dangerous drug detection works (`isDangerousDrug == true` or PDEA S2 flag) and how it defaults to Wet Signature Mode with the regulatory warning badge.
-4. Produce a detailed report with exact file paths, component structures, state models, and design token imports.
-Save your report to `/Users/macuser/projects/github/nextstep/clinicez-docs-studio/.agents/teamwork/explorer_survey_frontend/handoff.md` and send a message to parent (me) when complete.
+Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api
+Your state folder: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/explorer_survey_frontend
+Original request: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/ORIGINAL_REQUEST.md
+Reference implementation plan: /Users/macuser/.gemini/antigravity/brain/9542d721-8b8b-46ea-9635-c34ef9a2bc0a/implementation_plan.md
+
+Task:
+1. Read ORIGINAL_REQUEST.md and the implementation_plan.md reference.
+2. Investigate apps/clinic-app:
+   - src/services/clinicService.ts (teleconsult DTOs and API methods)
+   - ClinicCommsContext.tsx and TeleconsultWaitingRoomModal.tsx (integration with @clinicez/comms-sdk, useCallSession, CallWaitingRoom, CallStage, chart docking)
+   - ScheduleVisitModal.tsx and AppointmentInspectionModal.tsx (In-Person vs Teleconsult toggle, payment policy selector, badges, waiting room launcher)
+   - GeneralSettingsTab.tsx and TeleconsultSettingsCard.tsx
+   - EncountersTimelineTab.tsx and ClinicRecordingPlayerModal.tsx (15-min ticketed playback, medico-legal hold)
+3. Run baseline checks:
+   - `cd apps/clinic-app && bun run typecheck`
+   - `cd apps/clinic-app && bun run lint:tokens`
+   - `cd apps/clinic-app && bun run lint:hosts`
+   - `cd apps/clinic-app && bun test`
+4. Document all constraints: zero token violations (check-tokens.mjs), zero external host violations (check-no-external-hosts.mjs), 44px min touch targets, semantic design tokens, responsive layout.
+5. Document what is already implemented vs what is missing or needs modification.
+6. Write your comprehensive analysis and findings to handoff.md in your state folder (/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/explorer_survey_frontend/handoff.md).
+7. Send a completion message to the parent orchestrator with the path to handoff.md.

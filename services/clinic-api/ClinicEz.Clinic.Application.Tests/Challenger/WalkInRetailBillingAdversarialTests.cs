@@ -66,7 +66,7 @@ public class WalkInRetailBillingAdversarialTests
             },
             IsWalkInRetail: true,
             WalkInCustomerName: "Ka Pedro",
-            VisitType: VisitType.RetailPurchase);
+            VisitType: null);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -108,7 +108,7 @@ public class WalkInRetailBillingAdversarialTests
             },
             IsWalkInRetail: true,
             WalkInCustomerName: "Doña Victorina",
-            VisitType: VisitType.RetailPurchase);
+            VisitType: null);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -403,7 +403,7 @@ public class WalkInRetailBillingAdversarialTests
             },
             IsWalkInRetail: true,
             WalkInCustomerName: "Retail Customer A",
-            VisitType: VisitType.RetailPurchase);
+            VisitType: null);
 
         var invoiceDto = await createHandler.Handle(command, CancellationToken.None);
 
@@ -481,7 +481,7 @@ public class WalkInRetailBillingAdversarialTests
             },
             IsWalkInRetail: true,
             WalkInCustomerName: "Patient Buying OTC",
-            VisitType: VisitType.RetailPurchase);
+            VisitType: null);
 
         var invoiceDto = await createHandler.Handle(command, CancellationToken.None);
 

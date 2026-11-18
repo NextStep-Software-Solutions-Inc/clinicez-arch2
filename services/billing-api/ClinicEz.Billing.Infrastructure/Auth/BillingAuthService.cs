@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using ClinicEz.Billing.Application.Abstractions;
 using ClinicEz.Billing.Domain.Constants;
@@ -7,6 +8,7 @@ using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.LocalAuth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 
 namespace ClinicEz.Billing.Infrastructure.Auth;
 
@@ -18,6 +20,9 @@ namespace ClinicEz.Billing.Infrastructure.Auth;
 public sealed class BillingAuthService
 {
     private static readonly Lazy<string> DummyHash = new(() => new FacilityPasswordHasher().Hash("dummy-password-for-timing-only-1"));
+    public const string RefreshTokenUseClaim = "token_use";
+    public const string RefreshTokenUseValue = "billing_refresh";
+    private const int WebShortAccessMinutes = 15;
 
     private readonly ApplicationDbContext _db;
     private readonly IBillingContext _context;
@@ -41,6 +46,91 @@ public sealed class BillingAuthService
     private FacilityJwtOptions Options => _tokens.Options;
 
     public async Task<AuthTokenDto> LoginAsync(LoginRequest request, CancellationToken ct)
+    {
+        var staff = await AuthenticateStaffAsync(request, ct);
+        var access = _tokens.CreateAccessToken(BuildBaseClaims(staff));
+        return new AuthTokenDto(access.Token, access.ExpiresAtUtc, ToUser(staff));
+    }
+
+    public async Task<(AuthTokenDto Access, string CookieSessionToken)> LoginWebAsync(LoginRequest request, CancellationToken ct)
+    {
+        var staff = await AuthenticateStaffAsync(request, ct);
+        var baseClaims = BuildBaseClaims(staff);
+        var cookieToken = _tokens.CreateAccessToken(baseClaims.Append(new Claim(RefreshTokenUseClaim, RefreshTokenUseValue)));
+        var access = _tokens.CreateAccessToken(baseClaims, WebAccessLifetime());
+        return (new AuthTokenDto(access.Token, access.ExpiresAtUtc, ToUser(staff)), cookieToken.Token);
+    }
+
+    public async Task<AuthTokenDto?> RefreshWebSessionAsync(string? cookieSessionToken, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(cookieSessionToken)) return null;
+
+        ClaimsPrincipal principal;
+        SecurityToken validatedToken;
+        try
+        {
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+            principal = handler.ValidateToken(
+                cookieSessionToken.Trim(),
+                new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidIssuer = Options.Issuer,
+                    ValidateAudience = true,
+                    ValidAudience = Options.Audience,
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = _tokens.SecurityKey,
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.FromMinutes(Options.ClockSkewMinutes),
+                    ValidAlgorithms = new[] { SecurityAlgorithms.HmacSha256 }
+                },
+                out validatedToken);
+        }
+        catch (Exception ex) when (ex is SecurityTokenException or ArgumentException)
+        {
+            return null;
+        }
+
+        if (!principal.HasClaim(RefreshTokenUseClaim, RefreshTokenUseValue)) return null;
+        if (!Guid.TryParse(principal.FindFirst(BillingClaimTypes.Subject)?.Value, out var staffId) ||
+            !int.TryParse(principal.FindFirst(BillingClaimTypes.TokenVersion)?.Value, out var version))
+        {
+            return null;
+        }
+
+        var staff = await _db.BillingStaff.IgnoreQueryFilters().AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == staffId, ct);
+        if (staff is null || !staff.IsActive || staff.TokenVersion != version ||
+            principal.FindFirst(BillingClaimTypes.TenantId)?.Value != staff.TenantId ||
+            principal.FindFirst(BillingClaimTypes.FacilityId)?.Value != staff.FacilityId)
+        {
+            return null;
+        }
+
+        var remaining = validatedToken.ValidTo - _clock.GetUtcNow().UtcDateTime;
+        if (remaining <= TimeSpan.Zero) return null;
+
+        var accessLifetime = TimeSpan.FromTicks(Math.Min(WebAccessLifetime().Ticks, remaining.Ticks));
+        var access = _tokens.CreateAccessToken(BuildBaseClaims(staff), accessLifetime);
+        return new AuthTokenDto(access.Token, access.ExpiresAtUtc, ToUser(staff));
+    }
+
+    private TimeSpan WebAccessLifetime() =>
+        TimeSpan.FromMinutes(Math.Min(WebShortAccessMinutes, Math.Max(1, Options.AccessTokenMinutes)));
+
+    private static IEnumerable<Claim> BuildBaseClaims(BillingStaff staff) =>
+        new[]
+        {
+            new Claim(BillingClaimTypes.Subject, staff.Id.ToString()),
+            new Claim(BillingClaimTypes.TenantId, staff.TenantId),
+            new Claim(BillingClaimTypes.FacilityId, staff.FacilityId),
+            new Claim(BillingClaimTypes.TokenVersion, staff.TokenVersion.ToString()),
+            new Claim(BillingClaimTypes.StaffRole, staff.Role.ToString()),
+            new Claim(BillingClaimTypes.Name, staff.FullName),
+            new Claim("jti", Guid.NewGuid().ToString("N"))
+        };
+
+    private async Task<BillingStaff> AuthenticateStaffAsync(LoginRequest request, CancellationToken ct)
     {
         var tenantId = request.TenantId?.Trim();
         var facilityId = request.FacilityId?.Trim();
@@ -77,18 +167,7 @@ public sealed class BillingAuthService
         staff.LockoutEnd = null;
         staff.LastLoginAtUtc = now;
         await _db.SaveChangesAsync(ct);
-
-        var access = _tokens.CreateAccessToken(new[]
-        {
-            new Claim(BillingClaimTypes.Subject, staff.Id.ToString()),
-            new Claim(BillingClaimTypes.TenantId, staff.TenantId),
-            new Claim(BillingClaimTypes.FacilityId, staff.FacilityId),
-            new Claim(BillingClaimTypes.TokenVersion, staff.TokenVersion.ToString()),
-            new Claim(BillingClaimTypes.StaffRole, staff.Role.ToString()),
-            new Claim(BillingClaimTypes.Name, staff.FullName),
-            new Claim("jti", Guid.NewGuid().ToString("N"))
-        });
-        return new AuthTokenDto(access.Token, access.ExpiresAtUtc, ToUser(staff));
+        return staff;
     }
 
     public async Task<AuthUserDto> CurrentUserAsync(CancellationToken ct)

@@ -11,6 +11,7 @@ import {
 import ThemedText from './ThemedText';
 import Input from './Input';
 import Badge from './Badge';
+import Button from './Button';
 import Icon from './Icon';
 import { theme } from '../../constants/theme';
 import { clinicService, type Icd10Code } from '../../services/clinicService';
@@ -129,17 +130,14 @@ export function Icd10AutocompleteInput({
               </View>
 
               {!disabled ? (
-                <Pressable
+                <Button
+                  title="Change"
+                  icon="close"
+                  variant="ghost"
+                  size="xs"
                   onPress={handleClearSelection}
-                  style={styles.changeBtn}
-                  hitSlop={theme.spacing.xs}
                   accessibilityLabel="Change or clear diagnosis"
-                >
-                  <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-                  <ThemedText variant="captionBold" color={theme.colors.primary}>
-                    Change
-                  </ThemedText>
-                </Pressable>
+                />
               ) : null}
             </View>
 

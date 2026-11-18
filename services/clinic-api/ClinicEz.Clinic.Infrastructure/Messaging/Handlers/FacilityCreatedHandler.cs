@@ -65,7 +65,8 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
             message.Name, message.ResourceId, message.TenantId);
 
         var tenantId = message.TenantId.ToLower();
-        var entitlementVersion = _licenseValidator.Validate(message.LicenseToken, message.ResourceId, message.TenantId).Payload?.EntitlementVersion ?? 0;
+        var licenseValidation = _licenseValidator.Validate(message.LicenseToken, message.ResourceId, message.TenantId);
+        var entitlementVersion = licenseValidation.Payload?.EntitlementVersion ?? 0;
 
         // Seed or update ClinicSettings with cryptographically rooted license token
         var existingSettings = await _dbContext.Settings
@@ -74,6 +75,15 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
 
         if (existingSettings != null)
         {
+            var hasTeleconsultEntitlement = licenseValidation.IsValid &&
+                licenseValidation.Payload?.EnabledFeatures != null &&
+                licenseValidation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+
+            if (!hasTeleconsultEntitlement)
+            {
+                existingSettings.EnableTeleconsultation = false;
+            }
+
             if (!string.IsNullOrWhiteSpace(message.LicenseToken))
             {
                 existingSettings.LicenseToken = message.LicenseToken;

@@ -37,6 +37,11 @@ public sealed class QueueNotificationDispatcher : IQueueNotificationDispatcher
 
     public async Task DispatchCalledAlertAsync(QueueItem item, string? doctorName, string? roomOrStation, CancellationToken ct)
     {
+        if (item.IsDirectVisit)
+        {
+            return;
+        }
+
         var settings = await _settingsRepository.Query(s => s.ClinicId == item.ClinicId)
             .FirstOrDefaultAsync(ct);
 
@@ -108,6 +113,7 @@ public sealed class QueueNotificationDispatcher : IQueueNotificationDispatcher
         var waitingLine = await _queueRepository.Query(q =>
             q.ClinicId == clinicId &&
             q.QueueDate == queueDate &&
+            !q.IsDirectVisit &&
             (q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Triaged))
             .OrderByDescending(q => q.Priority)
             .ThenBy(q => q.SequenceNumber)

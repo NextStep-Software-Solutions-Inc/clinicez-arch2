@@ -46,10 +46,11 @@ export default function AppointmentReminderSettingsCard({
   }, [settings]);
 
   const isDirty = useMemo(() => {
-    const origMaster = settings?.enableAppointmentReminders ?? true;
-    const orig24h = settings?.appointmentReminder24hEnabled ?? true;
-    const orig2h = settings?.appointmentReminder2hEnabled ?? true;
-    const origStaff = settings?.enableStaffAppointmentNotifications ?? true;
+    if (!settings) return false;
+    const origMaster = settings.enableAppointmentReminders ?? true;
+    const orig24h = settings.appointmentReminder24hEnabled ?? true;
+    const orig2h = settings.appointmentReminder2hEnabled ?? true;
+    const origStaff = settings.enableStaffAppointmentNotifications ?? true;
 
     return (
       enableAppointmentReminders !== origMaster ||
@@ -223,17 +224,19 @@ export default function AppointmentReminderSettingsCard({
             </View>
 
             {/* Save Button */}
-            <View style={styles.saveRow}>
-              <Button
-                data-testid="btn-save-reminder-settings"
-                testID="btn-save-reminder-settings"
-                title={saving ? 'Saving Preferences...' : 'Save Reminder Preferences'}
-                variant="primary"
-                onPress={handleSaveSettings}
-                disabled={!isDirty || saving}
-                loading={saving}
-              />
-            </View>
+            {isDirty || saving ? (
+              <View style={styles.saveRow}>
+                <Button
+                  data-testid="btn-save-reminder-settings"
+                  testID="btn-save-reminder-settings"
+                  title={saving ? 'Saving Preferences...' : 'Save Reminder Preferences'}
+                  variant="primary"
+                  onPress={handleSaveSettings}
+                  disabled={saving}
+                  loading={saving}
+                />
+              </View>
+            ) : null}
           </View>
         )}
       </CardContent>

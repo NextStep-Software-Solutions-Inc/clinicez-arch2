@@ -4,6 +4,8 @@
     <!-- Treat all compiler warnings as errors. To opt-out in a specific project, set
          <TreatWarningsAsErrors>false</TreatWarningsAsErrors> in that project's .csproj -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Keep NuGet package vulnerability audit warnings informational so that upstream/transitive advisory updates do not fail CI restore -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

@@ -14,7 +14,9 @@ namespace ClinicEz.Clinic.Application.Features.Records.Commands;
 public sealed record VerifyRecordAttachmentCommand(
     Guid AttachmentId,
     bool IsApproved,
-    string? RejectionReason = null) : IRequest<ClinicRecordAttachmentDto>;
+    string? RejectionReason = null,
+    Guid? VerifiedByStaffId = null,
+    string? VerifiedByStaffName = null) : IRequest<ClinicRecordAttachmentDto>;
 
 public sealed class VerifyRecordAttachmentCommandHandler : IRequestHandler<VerifyRecordAttachmentCommand, ClinicRecordAttachmentDto>
 {
@@ -45,11 +47,18 @@ public sealed class VerifyRecordAttachmentCommandHandler : IRequestHandler<Verif
             throw new KeyNotFoundException($"Attachment '{request.AttachmentId}' not found.");
         }
 
+        var resolvedVerifierId = request.VerifiedByStaffId.HasValue && request.VerifiedByStaffId.Value != Guid.Empty
+            ? request.VerifiedByStaffId
+            : _clinicContext.StaffId;
+        var resolvedVerifierName = UploadAndEncryptRecordAttachmentCommandHandler.ResolveActorStaffName(
+            request.VerifiedByStaffName,
+            _clinicContext.StaffName);
+
         attachment.VerificationStatus = request.IsApproved ? "Verified" : "Rejected";
         attachment.RejectionReason = request.IsApproved ? null : request.RejectionReason?.Trim();
         attachment.VerifiedAt = DateTime.UtcNow;
-        attachment.VerifiedByStaffId = _clinicContext.StaffId;
-        attachment.VerifiedByStaffName = "ClinicStaff";
+        attachment.VerifiedByStaffId = resolvedVerifierId;
+        attachment.VerifiedByStaffName = resolvedVerifierName;
         attachment.UpdatedAt = DateTime.UtcNow;
 
         await _eventPublisher.PublishRecordVerifiedAsync(new ClinicRecordVerifiedEvent

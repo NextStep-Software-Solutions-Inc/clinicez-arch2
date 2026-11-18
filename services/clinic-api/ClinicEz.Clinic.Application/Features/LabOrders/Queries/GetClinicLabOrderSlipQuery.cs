@@ -40,7 +40,8 @@ public record LabOrderSlipDto(
     string PublicUploadUrl,
     string QrPayload,
     string? ClaimToken = null,
-    DateOnly? PatientDateOfBirth = null
+    DateOnly? PatientDateOfBirth = null,
+    Guid? DoctorId = null
 );
 
 /// <summary>
@@ -85,6 +86,11 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
             throw new NotFoundException($"Clinic lab order with ID '{request.OrderId}' was not found.");
         }
 
+        if (!order.IsSigned)
+        {
+            throw new BadRequestException("Laboratory requisition is pending consultation sign-off and is not valid until the consultation encounter is signed.");
+        }
+
         var patient = await _patientRepo.GetByIdAsync(order.PatientId, cancellationToken);
         var settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
         var doctor = order.OrderedByDoctorId is { } doctorId
@@ -120,7 +126,8 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
             upload.Url,
             qrPayload,
             order.ClaimToken,
-            patient?.DateOfBirth
+            patient?.DateOfBirth,
+            order.OrderedByDoctorId
         );
     }
 }

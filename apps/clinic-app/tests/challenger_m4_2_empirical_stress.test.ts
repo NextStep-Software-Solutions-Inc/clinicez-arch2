@@ -394,6 +394,25 @@ describe('Empirical Adversarial Stress Suite — Features 19, 20 & 21 (challenge
       const resultAppended = importPostProcedureVitals(existingObjective, completedProc);
       expect(resultAppended).toContain('Chest: Tachypneic with diffuse expiratory wheezes');
       expect(resultAppended).toContain('\nPost-Nebulization Vitals: BP 118/78 • HR 74 bpm • SpO2 99%.');
+
+      // Sub-case 3: Multiple clicks are idempotent and append once only
+      const importIdempotent = (
+        currentObjective: string,
+        proc: { procedureName: string; postProcedureVitalsJson?: string; clinicalNotes?: string; complications?: string }
+      ) => {
+        const marker = `Post-${proc.procedureName} Vitals:`;
+        if (currentObjective.includes(marker)) return currentObjective;
+        return importPostProcedureVitals(currentObjective, proc);
+      };
+
+      const once = importIdempotent(existingObjective, completedProc);
+      const twice = importIdempotent(once, completedProc);
+      const thrice = importIdempotent(twice, completedProc);
+      expect(twice).toBe(once);
+      expect(thrice).toBe(once);
+      // Count occurrences of Post-Nebulization Vitals
+      const occurrences = thrice.split('Post-Nebulization Vitals:').length - 1;
+      expect(occurrences).toBe(1);
     });
 
     test('2.5 Doctor Re-Evaluation Banner Trigger Logic', () => {

@@ -28,6 +28,7 @@ public sealed class PublicQueueController : ControllerBase
     /// Excludes all Protected Health Information (PHI).
     /// </summary>
     [HttpGet("display")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<ActionResult<ApiResponse<PublicQueueDisplayDto>>> GetPublicQueueDisplay(
         [FromQuery] Guid? clinicId,
         [FromQuery] string? tenantSlug,

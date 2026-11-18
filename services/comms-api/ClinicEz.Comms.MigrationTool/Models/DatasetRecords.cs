@@ -21,7 +21,7 @@ public sealed class ConversationRecord
     public DateTime? GrantWindowEndUtc { get; set; }
     public string? ContextType { get; set; }
     public string? ContextId { get; set; }
-    public string Title { get; set; } = string.Empty;
+    public string? Title { get; set; }
     public MessageCategory? Category { get; set; }
     public RequestStatus Status { get; set; }
     public TriageDisposition? TriageDisposition { get; set; }

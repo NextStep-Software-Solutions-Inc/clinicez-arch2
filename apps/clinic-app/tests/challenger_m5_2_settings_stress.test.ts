@@ -228,9 +228,9 @@ describe('Challenger M5-2: Empirical Stress-Tests for AppointmentReminderSetting
       expect(html).toContain('data-testid="switch-reminder-24h"');
       expect(html).toContain('data-testid="switch-reminder-2h"');
       expect(html).toContain('data-testid="switch-staff-notifications"');
-      // Save button rendered with persistent identifier
-      expect(html).toContain('data-testid="btn-save-reminder-settings"');
-      expect(html).toContain('Save Reminder Preferences');
+      // Save button is NOT rendered when reminder switches match saved settings (!isDirty && !saving)
+      expect(html).not.toContain('data-testid="btn-save-reminder-settings"');
+      expect(html).not.toContain('Save Reminder Preferences');
     });
 
     test('1.2 Renders all 4 toggles inactive with neutral badge when settings are all false', () => {
@@ -343,7 +343,7 @@ describe('Challenger M5-2: Empirical Stress-Tests for AppointmentReminderSetting
       expect(sub24hIdx).toBeGreaterThan(-1);
       expect(sub2hIdx).toBeGreaterThan(-1);
       expect(staffIdx).toBeGreaterThan(-1);
-      expect(saveIdx).toBeGreaterThan(-1);
+      expect(saveIdx).toBe(-1);
 
       // The 24h chunk after its testid
       const sub24hChunk = html.substring(sub24hIdx, sub2hIdx);
@@ -354,7 +354,7 @@ describe('Challenger M5-2: Empirical Stress-Tests for AppointmentReminderSetting
       expect(sub2hChunk).toContain('data-disabled="true"');
 
       // The staff notification toggle is OUTSIDE subGroup and should NOT be disabled
-      const staffChunk = html.substring(staffIdx, saveIdx);
+      const staffChunk = html.substring(staffIdx);
       expect(staffChunk).toContain('data-disabled="false"');
       expect(staffChunk).not.toContain('data-disabled="true"');
     });
@@ -639,6 +639,43 @@ describe('Challenger M5-2: Empirical Stress-Tests for AppointmentReminderSetting
 
       // In skeleton mode, switches are not rendered
       expect(html).not.toContain('data-testid="switch-master-reminders"');
+    });
+
+    test('5.3 GeneralSettingsTab activeSection="notifications" isolates alerts & appointment reminders cleanly', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(GeneralSettingsTab, {
+          activeSection: 'notifications',
+          clinicName: 'St. Jude Family Care',
+          setClinicName: () => {},
+          accreditationNumber: 'ACC-1234',
+          setAccreditationNumber: () => {},
+          operatingHours: '08:00 - 17:00',
+          setOperatingHours: () => {},
+          slotDuration: '30',
+          setSlotDuration: () => {},
+          consultationFee: '500',
+          setConsultationFee: () => {},
+          letterheadHeader: 'Header',
+          setLetterheadHeader: () => {},
+          letterheadAddress: 'Address',
+          setLetterheadAddress: () => {},
+          letterheadContact: 'Contact',
+          setLetterheadContact: () => {},
+          savingSettings: false,
+          onSavePreferences: async () => {},
+          showSkeletons: false,
+          settingsLoadError: null,
+          settings: baseMockSettings,
+          eodReport: dummyEod as any,
+          eodLoadError: null,
+          onRefreshEod: async () => {},
+          formatPeso: (v: number) => `₱${v}`,
+        })
+      );
+
+      expect(html).toContain('data-testid="appointment-reminder-settings-card"');
+      expect(html).not.toContain('data-testid="facility-identity-card"');
+      expect(html).not.toContain("Today's collections");
     });
   });
 

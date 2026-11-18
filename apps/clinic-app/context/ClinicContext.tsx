@@ -15,12 +15,13 @@ import {
 } from '../services/clinicService';
 import { useFacilityLicense } from '../components/FacilityActivationGate';
 import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
-import { theme } from '../constants/theme';
+import { syncActiveTheme } from '../constants/theme';
 import {
   resolveClinicBrandColor,
   DEFAULT_CLINIC_BRAND_COLOR,
   HEX_COLOR,
   LEGACY_UNSET_ACCENT,
+  isUnsetAccent,
 } from '../constants/color';
 
 export const CLINIC_LOGO_STORAGE_KEY = 'clinicez_clinic_logo';
@@ -81,8 +82,8 @@ export interface ClinicContextValue {
   isRegionalOverridden: boolean;
   /** True if the clinic facility has an active custom color override. */
   isColorOverridden: boolean;
-  /** Color source: 'clinic_override' | 'workspace_inherited' | 'default_fallback'. */
-  colorSource: 'clinic_override' | 'workspace_inherited' | 'default_fallback';
+  /** Color source: 'user_override' | 'clinic_override' | 'workspace_inherited' | 'default_fallback'. */
+  colorSource: 'user_override' | 'clinic_override' | 'workspace_inherited' | 'default_fallback';
   /** Set clinic brand color override (pass null to revert to inheriting from workspace). */
   setPrimaryColorHex: (colorHex: string | null) => Promise<boolean>;
   /** Set clinic regional overrides for timezone, date format, and time format (pass null values to inherit from workspace). */
@@ -96,6 +97,8 @@ export interface ClinicContextValue {
   error: string | null;
   refresh: () => Promise<void>;
   refreshRooms: () => Promise<void>;
+  /** Synchronously update in-memory clinic settings across all subscribed workstations. */
+  updateSettings: (settings: ClinicSettingsRecord) => void;
 }
 
 const EMPTY_LETTERHEAD: Letterhead = { header: '', subHeader: '', address: '', contact: '', footer: '' };
@@ -132,6 +135,7 @@ export const ClinicContext = createContext<ClinicContextValue>({
   error: null,
   refresh: async () => {},
   refreshRooms: async () => {},
+  updateSettings: () => {},
 });
 
 export const useClinic = (): ClinicContextValue => {
@@ -182,6 +186,10 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const updateSettings = useCallback((updated: ClinicSettingsRecord) => {
+    setSettings(updated);
+  }, []);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     const [[data, err], [roomsData], profileRes] = await Promise.all([
@@ -202,14 +210,16 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
         setDeviceItem(CLINIC_LOGO_STORAGE_KEY, null);
       }
 
-      if (data?.primaryColorHex && data.primaryColorHex.toUpperCase() !== LEGACY_UNSET_ACCENT.toUpperCase()) {
-        setDeviceItem(CLINIC_PRIMARY_COLOR_OVERRIDE_KEY, data.primaryColorHex);
-        setLocalOverrideColor(data.primaryColorHex);
-      } else if (
-        data &&
-        (!data.primaryColorHex ||
-          data.primaryColorHex?.toUpperCase() === LEGACY_UNSET_ACCENT.toUpperCase())
+      const cleanServerColor = data?.primaryColorHex?.trim();
+      if (
+        cleanServerColor &&
+        !isUnsetAccent(cleanServerColor) &&
+        HEX_COLOR.test(cleanServerColor)
       ) {
+        const normalizedServerColor = cleanServerColor.toUpperCase();
+        setDeviceItem(CLINIC_PRIMARY_COLOR_OVERRIDE_KEY, normalizedServerColor);
+        setLocalOverrideColor(normalizedServerColor);
+      } else if (data) {
         setDeviceItem(CLINIC_PRIMARY_COLOR_OVERRIDE_KEY, null);
         setLocalOverrideColor(null);
       }
@@ -288,11 +298,14 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setPrimaryColorHex = useCallback(async (colorHex: string | null): Promise<boolean> => {
-    const isReset = !colorHex || !colorHex.trim() || colorHex === 'inherit';
+    const isReset = !colorHex || isUnsetAccent(colorHex);
     const targetHex = isReset ? null : colorHex.trim().toUpperCase();
 
     setLocalOverrideColor(targetHex);
     setDeviceItem(CLINIC_PRIMARY_COLOR_OVERRIDE_KEY, targetHex);
+    setSettings((prev) =>
+      prev ? { ...prev, primaryColorHex: targetHex ?? '' } : prev
+    );
 
     try {
       const [updated, err] = await clinicService.updateSettings({
@@ -396,15 +409,10 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     [localOverrideColor, settings?.primaryColorHex, activeWorkspaceAccent],
   );
 
-  // Synchronize active brand color across theme and web CSS variables
+  // Synchronize full derived brand color palette across theme tokens and web CSS variables
   useEffect(() => {
     if (resolvedBrand.color) {
-      (theme.colors as any).primary = resolvedBrand.color;
-      if (Platform.OS === 'web' && typeof document !== 'undefined') {
-        const root = document.documentElement;
-        root.style.setProperty('--primary', resolvedBrand.color);
-        root.style.setProperty('--primary-color', resolvedBrand.color);
-      }
+      syncActiveTheme({ brandColorHex: resolvedBrand.color });
     }
   }, [resolvedBrand.color]);
 
@@ -447,6 +455,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       error,
       refresh,
       refreshRooms,
+      updateSettings,
     }),
     [
       settings,
@@ -470,6 +479,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       error,
       refresh,
       refreshRooms,
+      updateSettings,
     ],
   );
 

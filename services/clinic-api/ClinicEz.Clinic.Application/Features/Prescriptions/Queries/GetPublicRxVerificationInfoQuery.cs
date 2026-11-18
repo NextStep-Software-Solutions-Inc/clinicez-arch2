@@ -60,6 +60,11 @@ public class GetPublicRxVerificationInfoQueryHandler : IRequestHandler<GetPublic
             throw new NotFoundException("Invalid or expired e-prescription verification token.");
         }
 
+        if (!encounter.IsSigned)
+        {
+            throw new BadRequestException("Prescription has not been signed by the attending physician and is not valid.");
+        }
+
         var patient = await _patientRepo.GetByIdAsync(encounter.PatientId, cancellationToken);
         var staffDoctor = await _staffRepo.Query(s => s.Id == encounter.DoctorId).FirstOrDefaultAsync(cancellationToken);
         var settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
@@ -102,7 +107,9 @@ public class GetPublicRxVerificationInfoQueryHandler : IRequestHandler<GetPublic
                 p.DurationDays,
                 p.Refills,
                 p.IsDangerousDrug,
-                p.Remarks
+                p.Remarks,
+                p.IsClinicDispensed,
+                p.ClinicDispensedQuantity
             )).ToList(),
             encounter.RxDispenseStatus.ToString(),
             IsValid: encounter.IsSigned,

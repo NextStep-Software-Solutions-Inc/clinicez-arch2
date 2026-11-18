@@ -64,7 +64,8 @@ public sealed class Appointment : ClinicScopedEntity
     /// </summary>
     public bool IsTeleconsult =>
         AppointmentType == AppointmentType.Teleconsult ||
-        string.Equals(ServiceType, "Teleconsult", StringComparison.OrdinalIgnoreCase);
+        string.Equals(ServiceType, "Teleconsult", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(ServiceType, "Teleconsultation", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Payment policy governing this teleconsultation: Prepaid (default), Postpaid, Exempt.

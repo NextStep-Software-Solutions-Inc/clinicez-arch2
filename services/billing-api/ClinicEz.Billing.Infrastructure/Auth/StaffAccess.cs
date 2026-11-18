@@ -71,6 +71,12 @@ public static class BillingTokenEvents
             return;
         }
 
+        if (principal.HasClaim(BillingAuthService.RefreshTokenUseClaim, BillingAuthService.RefreshTokenUseValue))
+        {
+            context.Fail("Refresh session token cannot be used as a bearer token.");
+            return;
+        }
+
         if (!Guid.TryParse(principal.FindFirst(BillingClaimTypes.Subject)?.Value, out var staffId) ||
             !int.TryParse(principal.FindFirst(BillingClaimTypes.TokenVersion)?.Value, out var version))
         {

@@ -14,6 +14,7 @@ public sealed class ReferralLetter : ClinicScopedEntity
     public Patient? Patient { get; set; }
     public required string PatientName { get; set; }
     public Guid? ConsultationId { get; set; }
+    public Guid? QueueItemId { get; set; }
 
     public Guid ReferringDoctorId { get; set; }
     public required string ReferringDoctorName { get; set; }

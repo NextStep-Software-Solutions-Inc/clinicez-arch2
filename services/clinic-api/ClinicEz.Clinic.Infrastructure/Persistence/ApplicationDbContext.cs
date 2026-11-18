@@ -44,6 +44,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<ConsultationEncounter> Consultations { get; set; } = null!;
     public DbSet<EncounterDiagnosis> Diagnoses { get; set; } = null!;
     public DbSet<PrescriptionItem> Prescriptions { get; set; } = null!;
+    public DbSet<ClinicDispensingLog> ClinicDispensingLogs { get; set; } = null!;
     public DbSet<ServiceItem> ServiceItems { get; set; } = null!;
     public DbSet<Invoice> Invoices { get; set; } = null!;
     public DbSet<InvoiceLineItem> InvoiceLineItems { get; set; } = null!;
@@ -133,10 +134,20 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var isPostgres = Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ?? true;
+        var isSqlite = Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) ?? false;
         var schemaName = _configuration["DbSchema"] ?? "public";
-        modelBuilder.HasDefaultSchema(schemaName);
-        modelBuilder.HasPostgresExtension("btree_gist");
-        modelBuilder.HasPostgresExtension("pg_trgm");
+
+        if (isPostgres)
+        {
+            modelBuilder.HasDefaultSchema(schemaName);
+            modelBuilder.HasPostgresExtension("btree_gist");
+            modelBuilder.HasPostgresExtension("pg_trgm");
+        }
+        else if (!isSqlite)
+        {
+            modelBuilder.HasDefaultSchema(schemaName);
+        }
 
         // Auto Primary Keys & Defaults
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
@@ -146,7 +157,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
             if (entity.FindPrimaryKey() == null)
             {
-                if (idProperty.ClrType == typeof(Guid))
+                if (idProperty.ClrType == typeof(Guid) && isPostgres)
                 {
                     idProperty.SetDefaultValueSql("gen_random_uuid()");
                 }
@@ -169,6 +180,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<ConsultationEncounter>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ClinicDispensingLog>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<Product>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ServiceItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<Invoice>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
@@ -353,6 +365,26 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
                 {
                     rxItem.ClinicId = ce.ClinicId;
                     rxItem.TenantId = ce.TenantId;
+                }
+            }
+            else if (entry.Entity is ClinicDispensingLog dispLog && dispLog.ClinicId == Guid.Empty)
+            {
+                if (dispLog.ConsultationEncounter != null && dispLog.ConsultationEncounter.ClinicId != Guid.Empty)
+                {
+                    dispLog.ClinicId = dispLog.ConsultationEncounter.ClinicId;
+                    dispLog.TenantId = dispLog.ConsultationEncounter.TenantId;
+                }
+                else if (dispLog.ConsultationEncounterId.HasValue &&
+                         Consultations.Local.FirstOrDefault(c => c.Id == dispLog.ConsultationEncounterId.Value) is { } ce &&
+                         ce.ClinicId != Guid.Empty)
+                {
+                    dispLog.ClinicId = ce.ClinicId;
+                    dispLog.TenantId = ce.TenantId;
+                }
+                else if (QueueItems.Local.FirstOrDefault(q => q.Id == dispLog.QueueItemId) is { } qi && qi.ClinicId != Guid.Empty)
+                {
+                    dispLog.ClinicId = qi.ClinicId;
+                    dispLog.TenantId = qi.TenantId;
                 }
             }
             else if (entry.Entity is PatientPhysicalExamFinding finding && finding.ClinicId == Guid.Empty)

@@ -30,4 +30,7 @@ export interface PublicQueueDisplayData {
   patientsWaitingCount: number;
   isPinRequired?: boolean;
   isPinValid?: boolean;
+  tvDisplaySoundTheme?: string;
+  tvDisplayVoiceEnabled?: boolean;
+  tvDisplayShowPhysicianName?: boolean;
 }

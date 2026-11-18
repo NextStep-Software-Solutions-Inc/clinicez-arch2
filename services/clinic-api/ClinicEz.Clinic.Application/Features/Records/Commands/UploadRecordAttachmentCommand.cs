@@ -49,6 +49,19 @@ public sealed class UploadRecordAttachmentCommandHandler : IRequestHandler<Uploa
 
     public async Task<ClinicRecordAttachmentDto> Handle(UploadRecordAttachmentCommand request, CancellationToken ct)
     {
+        var normalizedStatus = string.IsNullOrWhiteSpace(request.VerificationStatus) ? "Verified" : request.VerificationStatus.Trim();
+        var isAutoVerified = string.Equals(normalizedStatus, "Verified", StringComparison.OrdinalIgnoreCase);
+
+        var resolvedStaffId = request.UploadedByStaffId.HasValue && request.UploadedByStaffId.Value != Guid.Empty
+            ? request.UploadedByStaffId
+            : (isAutoVerified ? _clinicContext.StaffId : null);
+
+        var resolvedStaffName = !string.IsNullOrWhiteSpace(request.UploadedByStaffName)
+            ? request.UploadedByStaffName.Trim()
+            : (!string.IsNullOrWhiteSpace(_clinicContext.StaffName)
+                ? _clinicContext.StaffName.Trim()
+                : (isAutoVerified ? "Clinic Staff" : null));
+
         var attachment = new RecordAttachment
         {
             Id = Guid.NewGuid(),
@@ -64,9 +77,12 @@ public sealed class UploadRecordAttachmentCommandHandler : IRequestHandler<Uploa
             StorageUri = request.StorageUri.Trim(),
             DocumentDate = request.DocumentDate,
             Notes = request.Notes?.Trim(),
-            UploadedByStaffId = request.UploadedByStaffId,
-            UploadedByStaffName = request.UploadedByStaffName?.Trim(),
-            VerificationStatus = string.IsNullOrWhiteSpace(request.VerificationStatus) ? "Verified" : request.VerificationStatus,
+            UploadedByStaffId = resolvedStaffId,
+            UploadedByStaffName = resolvedStaffName,
+            VerificationStatus = normalizedStatus,
+            VerifiedAt = isAutoVerified ? DateTime.UtcNow : null,
+            VerifiedByStaffId = isAutoVerified ? resolvedStaffId : null,
+            VerifiedByStaffName = isAutoVerified ? resolvedStaffName : null,
             EncryptionAlgorithm = string.IsNullOrWhiteSpace(request.EncryptionAlgorithm) ? "AES-256-GCM" : request.EncryptionAlgorithm,
             EncryptionKeyId = request.EncryptionKeyId,
             EncryptionIvBase64 = request.EncryptionIvBase64,
@@ -75,7 +91,7 @@ public sealed class UploadRecordAttachmentCommandHandler : IRequestHandler<Uploa
             EncryptedHash = request.EncryptedHash,
             WrappedKeyJson = request.WrappedKeyJson,
             CreatedAt = DateTime.UtcNow,
-            CreatedBy = request.UploadedByStaffName ?? "ClinicStaff"
+            CreatedBy = resolvedStaffName ?? "ClinicStaff"
         };
 
         await _attachmentRepo.AddAsync(attachment, ct);

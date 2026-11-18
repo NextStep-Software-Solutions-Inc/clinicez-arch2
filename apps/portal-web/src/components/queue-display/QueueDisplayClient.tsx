@@ -21,6 +21,7 @@ import {
   isAudioMuted,
   setAudioMuted,
   playAlertChime,
+  playQueueCallAlert,
   unlockAudio,
 } from "./audioChime";
 import { queueDisplayService } from "@/services/queueDisplay.service";
@@ -50,8 +51,9 @@ export default function QueueDisplayClient({
   const [currentTime, setCurrentTime] = useState<string>("");
   const [currentDate, setCurrentDate] = useState<string>("");
   const [lastUpdatedTime, setLastUpdatedTime] = useState<number>(Date.now());
-  const [pulseActive, setPulseActive] = useState<boolean>(false);
+  const [pulsingTicketIds, setPulsingTicketIds] = useState<string[]>([]);
   const [logoError, setLogoError] = useState<boolean>(false);
+  const alertTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Storage key for wall TV / browser pin persistence
   const storageKey = tenantSlug && facilitySlug ? `clinicez_tv_pin_${tenantSlug}_${facilitySlug}` : "clinicez_tv_pin_cloud";
@@ -79,6 +81,7 @@ export default function QueueDisplayClient({
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Tracking previously serving ticket numbers to detect call advancement
+  const isInitialMountRef = useRef<boolean>(!initialData);
   const prevServingRef = useRef<string[]>(initialData?.nowServing.map((s) => s.ticketNumber) || []);
 
   // Sync mute state on mount
@@ -122,6 +125,13 @@ export default function QueueDisplayClient({
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
 
+  // Cleanup alert timeouts on unmount
+  useEffect(() => {
+    return () => {
+      alertTimeoutsRef.current.forEach(clearTimeout);
+    };
+  }, []);
+
   // Poll function
   const fetchQueue = useCallback(async (pinOverride?: string) => {
     const activePin = pinOverride !== undefined ? pinOverride : tvPin;
@@ -146,14 +156,30 @@ export default function QueueDisplayClient({
       const newServing = res.data.nowServing.map((s) => s.ticketNumber);
       const prevServing = prevServingRef.current;
 
-      // Check if ticket advanced
-      const hasNewCall = newServing.some((t) => !prevServing.includes(t));
-      if (hasNewCall) {
-        setPulseActive(true);
-        setTimeout(() => setPulseActive(false), 3600);
-        playAlertChime();
+      // Audio & visual alerts when one or more tickets are newly called
+      const newlyCalledTickets = res.data.nowServing.filter((s) => !prevServing.includes(s.ticketNumber));
+      if (!isInitialMountRef.current && newlyCalledTickets.length > 0) {
+        newlyCalledTickets.forEach((ticket, idx) => {
+          const alertTimer = setTimeout(() => {
+            playQueueCallAlert({
+              theme: res.data?.tvDisplaySoundTheme || "classicChime",
+              voiceEnabled: res.data?.tvDisplayVoiceEnabled,
+              ticketNumber: ticket.ticketNumber,
+              roomOrStation: ticket.roomOrStation,
+              doctorName: ticket.doctorName,
+              onStart: () => {
+                setPulsingTicketIds((prev) => Array.from(new Set([...prev, ticket.queueItemId])));
+              },
+              onEnd: () => {
+                setPulsingTicketIds((prev) => prev.filter((id) => id !== ticket.queueItemId));
+              },
+            });
+          }, idx * 3600);
+          alertTimeoutsRef.current.push(alertTimer);
+        });
       }
 
+      isInitialMountRef.current = false;
       prevServingRef.current = newServing;
       setData(res.data);
       setLoading(false);
@@ -272,7 +298,7 @@ export default function QueueDisplayClient({
     setMuted(nextMuted);
     setAudioMuted(nextMuted);
     if (!nextMuted) {
-      playAlertChime();
+      playAlertChime((data as any)?.tvDisplaySoundTheme || 'classicChime');
     }
   };
 
@@ -359,16 +385,17 @@ export default function QueueDisplayClient({
   const primaryServing = data?.nowServing?.[0];
   const otherServing = data?.nowServing?.slice(1) || [];
   const upNextList = data?.upNext || [];
+  const pulseActive = primaryServing ? pulsingTicketIds.includes(primaryServing.queueItemId) : false;
 
   return (
     <div
       onClick={handleUserInteraction}
-      className="min-h-screen w-full flex flex-col font-sans select-none overflow-x-hidden"
+      className="h-screen w-full flex flex-col font-sans select-none overflow-hidden"
       style={{ backgroundColor: darkColors.background, color: darkColors.text }}
     >
       {/* Top Header Bar */}
       <header
-        className="px-6 py-4 sm:px-10 sm:py-6 flex flex-wrap justify-between items-center border-b shadow-md"
+        className="px-4 py-3 sm:px-8 sm:py-4 flex flex-nowrap justify-between items-center border-b shadow-md shrink-0"
         style={{ backgroundColor: darkColors.surface, borderColor: darkColors.border }}
       >
         {/* Left: Facility Brand & Live Pill */}
@@ -396,35 +423,24 @@ export default function QueueDisplayClient({
               className="w-12 h-12 rounded-xl shrink-0 shadow-inner"
             />
           )}
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              {data?.clinicName || "Clinic EZ Healthcare"}
+          <div className="flex flex-col justify-center">
+            <h1 className="text-2xl sm:text-3xl font-extrabold uppercase tracking-tight leading-none">
+              Now Serving
             </h1>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span
-                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider"
-                style={{
-                  backgroundColor: isLocked
-                    ? darkColors.warningBg
-                    : isStale
-                    ? darkColors.warningBg
-                    : darkColors.primaryLight,
-                  color: isLocked
-                    ? darkColors.warningText
-                    : isStale
-                    ? darkColors.warningText
-                    : darkColors.primary,
-                }}
-              >
-                <span className="w-2 h-2 rounded-full bg-current animate-ping" />
-                {isLocked ? "Locked (PIN Required)" : isStale ? "Syncing..." : "Live Queue Board"}
-              </span>
-              {!isLocked && (
-                <span className="text-xs" style={{ color: darkColors.textMuted }}>
-                  {data?.patientsWaitingCount || 0} waiting in line
+            {(isLocked || isStale) && (
+              <div className="flex items-center gap-2 mt-1">
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider"
+                  style={{
+                    backgroundColor: darkColors.warningBg,
+                    color: darkColors.warningText,
+                  }}
+                >
+                  <span className="w-2 h-2 rounded-full bg-current animate-ping" />
+                  {isLocked ? "Locked (Passcode Required)" : "Syncing..."}
                 </span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -668,137 +684,11 @@ export default function QueueDisplayClient({
           </div>
         </main>
       ) : (
-        <main className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8 p-6 sm:p-10">
-        {/* Left Column (Flex 3 / 60%): NOW SERVING */}
-        <section className="lg:col-span-3 flex flex-col gap-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-[clamp(1.75rem,2.8vw,3.25rem)] font-extrabold uppercase tracking-tight">
-                Now Serving
-              </h2>
-              <p className="text-sm sm:text-base font-medium" style={{ color: darkColors.textMuted }}>
-                Kasalukuyang Tinatawag
-              </p>
-            </div>
-            {primaryServing && (
-              <span
-                className="px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold uppercase tracking-wider border shadow-sm"
-                style={{
-                  backgroundColor: darkColors.primaryLight,
-                  color: darkColors.primary,
-                  borderColor: darkColors.primaryBorder,
-                }}
-              >
-                In Consultation
-              </span>
-            )}
-          </div>
-
-          {primaryServing ? (
-            <div
-              className={`flex-1 rounded-3xl border-2 p-8 sm:p-12 flex flex-col justify-between transition-all duration-300 shadow-2xl ${
-                pulseActive ? "animate-serving-pulse" : ""
-              }`}
-              style={{
-                backgroundColor: darkColors.surface,
-                borderColor: pulseActive ? darkColors.primary : darkColors.border,
-              }}
-            >
-              {/* Ticket Number */}
-              <div className="text-center my-auto py-6">
-                <span
-                  className="text-xs sm:text-sm uppercase font-bold tracking-widest block mb-2"
-                  style={{ color: darkColors.textMuted }}
-                >
-                  Ticket Number / Numero ng Tiket
-                </span>
-                <div
-                  className="text-[clamp(5.5rem,11vw,11.5rem)] font-black tracking-tight leading-none drop-shadow-md font-mono"
-                  style={{ color: darkColors.primary }}
-                >
-                  {primaryServing.ticketNumber}
-                </div>
-              </div>
-
-              {/* Attribution Details: Doctor & Room */}
-              <div
-                className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 sm:p-8 rounded-2xl border"
-                style={{
-                  backgroundColor: darkColors.surfaceHighlight,
-                  borderColor: darkColors.border,
-                }}
-              >
-                {/* Room / Station */}
-                <div className="flex items-center gap-4">
-                  <div
-                    className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border"
-                    style={{
-                      backgroundColor: darkColors.surface,
-                      borderColor: darkColors.border,
-                      color: darkColors.primary,
-                    }}
-                  >
-                    <MapPin className="w-8 h-8" />
-                  </div>
-                  <div>
-                    <span className="text-xs uppercase font-bold tracking-wider" style={{ color: darkColors.textMuted }}>
-                      Station / Room
-                    </span>
-                    <div className="text-[clamp(1.25rem,2vw,2rem)] font-extrabold leading-snug">
-                      {primaryServing.roomOrStation || "Consultation Room 1"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Doctor */}
-                <div className="flex items-center gap-4">
-                  <div
-                    className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border"
-                    style={{
-                      backgroundColor: darkColors.surface,
-                      borderColor: darkColors.border,
-                      color: darkColors.primary,
-                    }}
-                  >
-                    <Stethoscope className="w-8 h-8" />
-                  </div>
-                  <div>
-                    <span className="text-xs uppercase font-bold tracking-wider" style={{ color: darkColors.textMuted }}>
-                      Attending Physician
-                    </span>
-                    <div className="text-[clamp(1.25rem,2vw,2rem)] font-extrabold leading-snug">
-                      {primaryServing.doctorName || "Attending Doctor"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Other concurrently serving stations */}
-              {otherServing.length > 0 && (
-                <div className="mt-6 pt-6 border-t" style={{ borderColor: darkColors.border }}>
-                  <span className="text-xs uppercase font-bold tracking-wider mb-3 block" style={{ color: darkColors.textMuted }}>
-                    Also Serving at Other Stations:
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {otherServing.map((item) => (
-                      <div
-                        key={item.queueItemId}
-                        className="p-3.5 rounded-xl border flex items-center justify-between"
-                        style={{ backgroundColor: darkColors.surfaceHighlight, borderColor: darkColors.border }}
-                      >
-                        <span className="text-2xl font-mono font-bold" style={{ color: darkColors.primary }}>
-                          {item.ticketNumber}
-                        </span>
-                        <span className="text-sm font-semibold truncate ml-2">
-                          {item.roomOrStation || "Exam Room"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
+        <main className="flex-1 min-h-0 flex items-center justify-center p-6 sm:p-8 lg:p-10 overflow-hidden">
+          <div className="w-full h-full max-h-[82vh] lg:max-h-[640px] flex flex-col lg:flex-row gap-6 sm:gap-8 min-h-0">
+            {/* Left Column (65% on wide screens): NOW SERVING Active Stations */}
+            <section className="w-full lg:w-[65%] flex flex-col h-full min-h-0 overflow-hidden">
+          {!primaryServing ? (
             /* Empty serving state */
             <div
               className="flex-1 rounded-3xl border-2 border-dashed p-12 flex flex-col items-center justify-center text-center"
@@ -815,38 +705,172 @@ export default function QueueDisplayClient({
                 Please wait for your ticket number to be called.
               </p>
             </div>
+          ) : data?.nowServing && data.nowServing.length > 1 ? (
+            /* Multi-Station Equal Prominence Flexbox (Responsive, Zero-Scroll) */
+            <div className="flex-1 h-full min-h-0 flex flex-wrap gap-4 sm:gap-6 overflow-hidden">
+              {data.nowServing.map((item) => {
+                const isItemPulsing = pulsingTicketIds.includes(item.queueItemId);
+                const count = data.nowServing.length;
+                return (
+                  <div
+                    key={item.queueItemId}
+                    className={`flex-1 rounded-3xl border-2 p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 shadow-xl min-h-0 overflow-hidden ${
+                      isItemPulsing ? "animate-serving-pulse" : ""
+                    }`}
+                    style={{
+                      flexBasis:
+                        count === 2
+                          ? "calc(50% - 1rem)"
+                          : count === 3
+                          ? "calc(33.333% - 1rem)"
+                          : count === 4
+                          ? "calc(50% - 1rem)"
+                          : "calc(33.333% - 1rem)",
+                      height: count <= 3 ? "100%" : "calc(50% - 0.75rem)",
+                      minWidth: "240px",
+                      backgroundColor: darkColors.surface,
+                      borderColor: isItemPulsing ? darkColors.primary : darkColors.border,
+                    }}
+                  >
+                    {/* Header: Station & Status */}
+                    <div className="flex items-center justify-between pb-3 border-b shrink-0" style={{ borderColor: darkColors.border }}>
+                      <div className="min-w-0 pr-2">
+                        <span className="text-[10px] sm:text-xs uppercase font-bold tracking-wider block" style={{ color: darkColors.textMuted }}>
+                          Station / Room
+                        </span>
+                        <div className="text-base sm:text-lg font-black truncate" style={{ color: darkColors.text }}>
+                          {item.roomOrStation || "—"}
+                        </div>
+                      </div>
+                      {isItemPulsing && (
+                        <span
+                          className="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider shrink-0"
+                          style={{
+                            backgroundColor: darkColors.primaryLight,
+                            color: darkColors.primary,
+                          }}
+                        >
+                          Just Called
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Center: Ticket Number */}
+                    <div className="text-center my-auto py-2 sm:py-4">
+                      <span
+                        className="text-[10px] sm:text-xs uppercase font-bold tracking-widest block mb-1"
+                        style={{ color: darkColors.textMuted }}
+                      >
+                        Ticket Number
+                      </span>
+                      <div
+                        className={`font-black tracking-tight leading-none drop-shadow-md font-mono whitespace-nowrap ${
+                          count === 2
+                            ? "text-[clamp(2.75rem,4.5vw,4.5rem)]"
+                            : count === 3
+                            ? "text-[clamp(2rem,3vw,3.25rem)]"
+                            : "text-[clamp(1.5rem,2.2vw,2.5rem)]"
+                        }`}
+                        style={{ color: darkColors.primary }}
+                      >
+                        {item.ticketNumber}
+                      </div>
+                    </div>
+
+                    {/* Footer: Attending Physician (if enabled) */}
+                    {data?.tvDisplayShowPhysicianName !== false && (
+                      <div className="pt-2 sm:pt-3 border-t flex flex-col shrink-0" style={{ borderColor: darkColors.border }}>
+                        <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: darkColors.textMuted }}>
+                          Attending Physician
+                        </span>
+                        <div className="text-sm sm:text-base font-bold truncate" style={{ color: darkColors.textSecondary }}>
+                          {item.doctorName || "—"}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Single Station Clean Display */
+            <div
+              className={`flex-1 rounded-3xl border-2 p-6 sm:p-10 flex flex-col justify-between transition-all duration-300 shadow-2xl min-h-0 overflow-hidden ${
+                pulseActive ? "animate-serving-pulse" : ""
+              }`}
+              style={{
+                backgroundColor: darkColors.surface,
+                borderColor: pulseActive ? darkColors.primary : darkColors.border,
+              }}
+            >
+              {/* Header: Station & Status */}
+              <div className="flex items-center justify-between pb-4 border-b shrink-0" style={{ borderColor: darkColors.border }}>
+                <div>
+                  <span className="text-xs uppercase font-bold tracking-wider block mb-0.5" style={{ color: darkColors.textMuted }}>
+                    Station / Room
+                  </span>
+                  <div className="text-xl sm:text-2xl font-black" style={{ color: darkColors.text }}>
+                    {primaryServing.roomOrStation || "—"}
+                  </div>
+                </div>
+                {pulseActive && (
+                  <span
+                    className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"
+                    style={{
+                      backgroundColor: darkColors.primaryLight,
+                      color: darkColors.primary,
+                    }}
+                  >
+                    Just Called
+                  </span>
+                )}
+              </div>
+
+              {/* Center: Ticket Number */}
+              <div className="flex-1 flex flex-col items-center justify-center text-center py-4 sm:py-6">
+                <span
+                  className="text-xs sm:text-sm uppercase font-bold tracking-widest block mb-2"
+                  style={{ color: darkColors.textMuted }}
+                >
+                  Ticket Number
+                </span>
+                <div
+                  className="text-[clamp(4.5rem,8.5vw,8.5rem)] font-black tracking-tight leading-none drop-shadow-md font-mono whitespace-nowrap"
+                  style={{ color: darkColors.primary }}
+                >
+                  {primaryServing.ticketNumber}
+                </div>
+              </div>
+
+              {/* Footer: Attending Physician (if enabled) */}
+              {data?.tvDisplayShowPhysicianName !== false && (
+                <div className="pt-4 border-t flex flex-col shrink-0" style={{ borderColor: darkColors.border }}>
+                  <span className="text-xs uppercase font-bold tracking-wider mb-0.5" style={{ color: darkColors.textMuted }}>
+                    Attending Physician
+                  </span>
+                  <div className="text-lg sm:text-xl font-bold truncate" style={{ color: darkColors.textSecondary }}>
+                    {primaryServing.doctorName || "—"}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </section>
 
-        {/* Right Column (Flex 2 / 40%): UP NEXT */}
-        <section className="lg:col-span-2 flex flex-col gap-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-[clamp(1.75rem,2.8vw,3.25rem)] font-extrabold uppercase tracking-tight">
-                Up Next
-              </h2>
-              <p className="text-sm sm:text-base font-medium" style={{ color: darkColors.textMuted }}>
-                Susunod Na Tiket
-              </p>
-            </div>
-            <span
-              className="px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border"
-              style={{
-                backgroundColor: darkColors.surfaceHighlight,
-                borderColor: darkColors.border,
-                color: darkColors.textSecondary,
-              }}
-            >
-              Queue Order
-            </span>
-          </div>
-
+        {/* Right Column (35% on wide screens): UP NEXT */}
+        <section className="hidden lg:flex lg:w-[35%] flex-col h-full min-h-0 overflow-hidden">
           <div
-            className="flex-1 rounded-3xl border-2 p-6 sm:p-8 flex flex-col shadow-xl overflow-hidden"
+            className="flex-1 h-full rounded-3xl border-2 p-6 sm:p-8 flex flex-col shadow-xl overflow-hidden"
             style={{ backgroundColor: darkColors.surface, borderColor: darkColors.border }}
           >
+            <div className="pb-4 mb-4 border-b shrink-0" style={{ borderColor: darkColors.border }}>
+              <h2 className="text-xl sm:text-2xl font-extrabold uppercase tracking-tight">
+                Up Next
+              </h2>
+            </div>
+
             {upNextList.length > 0 ? (
-              <div className="flex flex-col gap-4 overflow-y-auto no-scrollbar max-h-[calc(100vh-280px)]">
+              <div className="flex flex-col gap-4 sm:gap-5 overflow-y-auto no-scrollbar max-h-[calc(100vh-280px)]">
                 {upNextList.slice(0, 8).map((ticket, idx) => {
                   const isUrgent = ticket.priority.toLowerCase() === "urgent";
                   const isEmergency = ticket.priority.toLowerCase() === "emergency";
@@ -855,7 +879,7 @@ export default function QueueDisplayClient({
                   return (
                     <div
                       key={ticket.queueItemId}
-                      className="p-5 rounded-2xl border transition-all duration-150 flex items-center justify-between shadow-sm"
+                      className="p-4 sm:p-5 rounded-2xl border transition-all duration-150 flex items-center justify-between shadow-sm"
                       style={{
                         backgroundColor: idx === 0 ? darkColors.surfaceHighlight : darkColors.surface,
                         borderColor: isEmergency
@@ -877,7 +901,7 @@ export default function QueueDisplayClient({
                         </div>
                         <div>
                           <div
-                            className="text-[clamp(1.75rem,2.6vw,2.75rem)] font-black font-mono leading-none tracking-tight"
+                            className="text-[clamp(1.5rem,2.2vw,2.25rem)] font-black font-mono leading-none tracking-tight whitespace-nowrap"
                             style={{
                               color: isEmergency
                                 ? darkColors.emergency
@@ -942,12 +966,13 @@ export default function QueueDisplayClient({
             )}
           </div>
         </section>
-      </main>
+          </div>
+        </main>
       )}
 
       {/* Footer Ticker Bar */}
       <footer
-        className="px-6 py-4 sm:px-10 flex flex-wrap justify-between items-center border-t text-xs sm:text-sm font-medium"
+        className="px-6 py-3.5 sm:px-10 flex flex-wrap justify-between items-center border-t text-xs sm:text-sm font-medium shrink-0"
         style={{
           backgroundColor: darkColors.surface,
           borderColor: darkColors.border,
@@ -955,14 +980,12 @@ export default function QueueDisplayClient({
         }}
       >
         <div className="flex items-center gap-3">
-          <span className="font-bold text-white uppercase tracking-wider">Instructions:</span>
-          <span>Please prepare your PhilHealth ID or QR pass and wait for your ticket to be called.</span>
+          <span>Please wait for your ticket number to be called.</span>
         </div>
-        <div className="flex items-center gap-6 mt-2 sm:mt-0 font-mono">
-          <span>Display Mode: 1080p / 4K UHD</span>
-          <span className="flex items-center gap-1.5">
+        <div className="flex items-center gap-6 mt-2 sm:mt-0">
+          <span className="flex items-center gap-1.5 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            Auto-refresh: 4s
+            Live
           </span>
         </div>
       </footer>

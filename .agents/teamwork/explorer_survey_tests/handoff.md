@@ -1,350 +1,310 @@
-# Test Infrastructure Survey & Hardening Plan
+# Handoff Report: Survey of Design Tokens, Linting, Jargon, & Test Baselines
 
-**Target Workspace**: `/Users/macuser/projects/github/nextstep/clinicez-docs-studio`  
-**Milestone**: Clinical Document Customization Studio & Tri-Mode Doctor Signing (Acceptance Verification)  
-**Surveyor**: `explorer_survey_tests`  
+**Explorer**: Explorer 3  
+**Working Directory**: `/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/triage_desk_documentation/.agents/teamwork/explorer_survey_tests/`  
+**Date**: 2026-11-06  
+**Status**: Completed (Hard Handoff)
 
 ---
 
 ## 1. Observation
 
-### 1.1 Workspace Architecture & Toolchain Runtimes
-- **OS & Architecture**: macOS (Darwin 24.6.0 arm64).
-- **.NET SDK**: `10.0.402` at `~/.dotnet/dotnet`.
-- **Bun Runtime**: `1.4.3 (c6da4a4d3)` at `~/.bun/bin/bun`.
-- **Node Binary**: Located at `/Users/macuser/.bun/bin/node` (symlinked/managed by Bun).
-- **Git Worktree Status**:
-  `/Users/macuser/projects/github/nextstep/clinicez-docs-studio` is a git worktree on branch `feature/clinical-document-customization-studio` linked to base repository `/Users/macuser/projects/github/nextstep/clinicez-arch2`.
-- **Dependency Prerequisites & Resolution**:
-  - Because `clinicez-docs-studio` is a fresh worktree, `node_modules` was initially absent at both root and `apps/clinic-app/node_modules`.
-  - Running `~/.bun/bin/bun test apps/clinic-app/tests/` initially produced:
-    ```text
-    error: Cannot find package 'react' from '/Users/macuser/projects/github/nextstep/clinicez-docs-studio/apps/clinic-app/tests/auditWorkstation.test.ts'
-    ...
-    102 fail, 96 errors
-    ```
-  - Parity check with sibling worktree `/Users/macuser/projects/github/nextstep/clinicez-dental-fix` revealed established symlinks:
-    ```text
-    /Users/macuser/projects/github/nextstep/clinicez-dental-fix/node_modules -> /Users/macuser/projects/github/nextstep/clinicez-arch2/node_modules
-    /Users/macuser/projects/github/nextstep/clinicez-dental-fix/apps/clinic-app/node_modules -> /Users/macuser/projects/github/nextstep/clinicez-arch2/apps/clinic-app/node_modules
-    ```
-  - Replicating these symlinks in `clinicez-docs-studio` resolved package resolution immediately.
-  - Furthermore, `apps/clinic-app/tests/auditWorkstation.test.ts:1198` executes child process `execSync('node "${scriptPath}" --strict')`. Because non-interactive subshells (`/bin/sh`) do not inherit `~/.bun/bin` by default, prepending `PATH="$HOME/.bun/bin:$PATH"` is required for child node execution.
+### 1.1 Token Linting & Guardrails (`apps/clinic-app`)
+Execution of `cd apps/clinic-app && bun run lint:tokens`:
+```bash
+$ bun scripts/check-tokens.mjs
+
+Token guard: 0 violation(s) in 0 file(s).
+Token guard OK (no regressions vs baseline).
+```
+
+When evaluated with `--report` (`bun scripts/check-tokens.mjs --report`):
+- Scanned: 537 source files (`.ts`, `.tsx`, `.js`, `.jsx` excluding `node_modules`, `dist`, `.expo`, `constants`, `scripts`, `assets`).
+- Violations detected: `0 violation(s) in 0 file(s)`.
+- Baseline reference (`apps/clinic-app/scripts/token-baseline.json`):
+  ```json
+  {
+    "components/CameraQrScannerModal.tsx": 14
+  }
+  ```
+  Note: `components/CameraQrScannerModal.tsx` was previously refactored and now has 0 violations; thus the current repo is completely clean of token violations relative to the baseline.
+
+#### Rules Enforced by `check-tokens.mjs`:
+In `apps/clinic-app/scripts/check-tokens.mjs` (lines 44–49):
+```javascript
+const RULES = {
+  color: /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b|\brgba?\(/g,
+  fontSize: /\bfontSize:\s*\d+/g,
+  radius: /\b(?!shadow)\w*[rR]adius:\s*[1-9]\d*/g,
+  emoji: /[\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF]|[\u2B00-\u2BFF]/g,
+};
+```
+- **Colors**: Hex or raw `rgba()` literals are forbidden. Theme colors must be imported from `constants/theme.ts` (e.g. `theme.colors.primary`).
+- **Font Sizes**: Numeric literals for `fontSize:` are forbidden. Text must be wrapped in `ThemedText` with a semantic `variant` (`display`, `h1`, `h2`, `title`, `h3`, `bodyLarge`, `body`, `bodyBold`, `small`, `smallBold`, `caption`, `captionBold`, `badge`, `code`).
+- **Border Radii**: Numeric literals for `*Radius:` (excluding `shadowRadius`) are forbidden. Must use `theme.radii.*` (`xs`, `sm`, `md`, `lg`, `xl`, `2xl`, `full`).
+- **Emojis**: Raw Unicode emoji/pictographs are forbidden in UI markup. Icons must use `<Icon name="..." />` backed by Lucide (`apps/clinic-app/components/ui/Icon.tsx`).
+
+### 1.2 Sub-12px Font Sizes, Hardcoded Hex, and Emojis Across Codebases
+
+#### `apps/clinic-app`:
+- **Hardcoded Hex in Comms**: Zero occurrences in `apps/clinic-app/components/comms/ClinicChatDrawerHost.tsx`.
+- **Raw Palette Imports in Components**: Zero occurrences in `components/` (all palette usage is confined to `constants/theme.ts`).
+- **Sub-12px Font Sizes**: Zero occurrences in production components. `theme.typography` uses `fontSizeScale.xs` (12px) for `caption`, `captionBold`, `badge`, and `code`. The only sub-12px occurrences in `apps/clinic-app` are in mock fixtures (`tests/calendarE2E.test.ts:695` and `tests/e2e/analyticsReportsE2E.test.ts:1073`).
+- **Emojis in Components**: Zero occurrences in JSX text across `components/` and `navigation/`. `apps/clinic-app/components/ui/Icon.tsx` has `token-guard:ignore-file` to host the icon registry.
+
+#### `packages/comms-sdk`:
+Execution of `cd packages/comms-sdk && bun scripts/check-tokens.mjs`:
+```bash
+Comms SDK token guard: 0 violation(s) across 38 source file(s).
+```
+However, AST and regex scans revealed a **critical finding** in `packages/comms-sdk/src/web-ui`:
+Because `scripts/check-tokens.mjs` only searches for React Native style `fontSize:\s*\d+`, it does not check Tailwind CSS arbitrary font classes.
+We discovered **15 occurrences of sub-12px micro-text (`text-[10px]` and `text-[11px]`) in `packages/comms-sdk/src/web-ui`**:
+1. `packages/comms-sdk/src/web-ui/ChatDrawer.tsx`:
+   - Line 196: `text-[10px]` (`<span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100...`)
+   - Line 201: `text-[10px]` (`<span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100...`)
+   - Line 206: `text-[10px]` (`<span className="ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold...`)
+2. `packages/comms-sdk/src/web-ui/MessageThread.tsx`:
+   - Line 45: `text-[11px]` (`<span className="flex items-center gap-1 text-[11px] text-white/80"...`)
+   - Line 52: `text-[11px]` (`<span className="flex items-center gap-1 text-[11px] text-white/80"...`)
+   - Line 59: `text-[11px]` (`<span className="flex items-center gap-1 text-[11px] text-white font-semibold"...`)
+   - Line 66: `text-[11px]` (`<span className="flex items-center gap-1.5 text-[11px] text-red-200 font-bold"...`)
+   - Line 72: `text-[10px]` (`className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold...`)
+   - Line 152: `text-[11px]` (`<div className="text-[11px] text-amber-700 dark:text-amber-400 mt-2">`)
+   - Line 234: `text-[11px]` (`<span className={`text-[11px] ${isMe ? 'text-white/80' : 'text-slate-400'}`}>`)
+3. `packages/comms-sdk/src/web-ui/CallWaitingRoom.tsx`:
+   - Line 143: `text-[11px]` (`<p className="text-[11px] text-teal-800 dark:text-teal-400 mt-0.5">`)
+   - Line 155: `text-[11px]` (`<p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">`)
+   - Line 176: `text-[11px]` (`<p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">`)
+   - Line 189: `text-[11px]` (`<p className="text-[11px] text-slate-500 leading-relaxed">`)
+4. `packages/comms-sdk/src/web-ui/GuestJoinPage.tsx`:
+   - Line 232: `text-[11px]` (`<p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-300">`)
+
+- **Emojis in `packages/comms-sdk`**:
+  - `packages/comms-sdk/src/core/reactions.ts`: Contains `ALLOWED_STAFF_REACTIONS = ['👍', '❤️', '🙏', '✅', '👀', '⚠️']`. The file has `// token-guard:ignore-file` because it defines the backend protocol reaction constants.
+  - Zero raw emojis are embedded in `packages/comms-sdk/src/native-ui/` or `web-ui/` JSX.
 
 ---
 
-### 1.2 Mandatory Suite 1: Backend .NET Suite
-- **File**: `services/clinic-api/ClinicEz.Clinic.Application.Tests/HardenedDocumentGenerationTests.cs` (392 lines).
-- **Project File**: `services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj`.
-  - Framework: `net10.0`
-  - Packages: `xunit (2.9.3)`, `FluentAssertions (8.10.0)`, `NSubstitute (5.3.0)`, `Microsoft.NET.Test.Sdk (17.14.1)`, `Microsoft.EntityFrameworkCore.InMemory (10.0.12)`.
-- **Command Executed**:
-  ```bash
-  ~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~HardenedDocumentGenerationTests"
-  ```
-- **Execution Result**:
-  ```text
-  Passed! - Failed: 0, Passed: 9, Skipped: 0, Total: 9, Duration: 1 s - ClinicEz.Clinic.Application.Tests.dll (net10.0)
-  ```
-- **Existing Test Cases in `HardenedDocumentGenerationTests.cs`**:
-  1. `ClinicDocumentPdfService_Should_Generate_Valid_MedicalCertificate_PDF_With_Security_Seal` (Line 24): Single Letter test with `IsSigned = true`.
-  2. `ClinicDocumentPdfService_Should_Generate_Valid_Lab_Requisition_Slip_PDF_With_Dropzone_QR` (Line 92): Single Letter test.
-  3. `ClinicDocumentPdfService_Should_Generate_Valid_Prescription_PDF_Generics_Act_Compliant` (Line 143): Single A5 test.
-  4. `IssueMedicalCertificateCommand_Should_Generate_Sequential_Numbers_Safely` (Line 228): Sequential numbering test.
-  5. `ClinicDocumentPdfService_Should_Generate_Valid_Referral_Letter_PDF_With_Security_Seal` (Line 273): Single A4 test.
-  6. `DocumentVerificationResultDto_MaskName_Should_Protect_Patient_Privacy` (Line 351): `[Theory]` with 3 `[InlineData]` cases.
-  7. `ClinicDocumentPdfService_Should_Generate_Valid_Reception_Placard_PDF` (Line 361): Placard generation.
+### 1.3 Clinical & Developer Jargon Audit
+
+Every occurrence of the 6 targeted jargon terms across both codebases was surveyed and verified:
+
+#### Term 1: `STAT` -> must be `Emergency`
+- `packages/comms-sdk/src/web-ui/ChatDrawer.tsx`: Line 197 (`STAT`)
+- `packages/comms-sdk/src/web-ui/TriageQueueView.tsx`: Line 184 (`{filter === 'Emergency' ? 'STAT' : ...}`), Line 310 (`STAT`)
+- `packages/comms-sdk/src/native-ui/ChatDrawer.tsx`: Line 202 (`<Text style={styles.statBadgeText}>STAT</Text>`)
+- `packages/comms-sdk/src/native-ui/TriageQueueView.tsx`: Line 197 (`{filter === 'Emergency' ? 'STAT' : ...}`), Line 301 (`<Text style={styles.statBadgeText}>STAT</Text>`)
+- `packages/comms-sdk/tests/empirical_state_machine_sla.test.ts`: Lines 372, 403, 458
+- `packages/comms-sdk/tests/adversarial/triage-queue-states.adversarial.test.ts`: Lines 411, 465
+
+#### Term 2: `SLA Breached` -> must be `Response Overdue`
+- `packages/comms-sdk/src/web-ui/TriageQueueView.tsx`: Line 21 (`return 'SLA Breached';`), Line 39 (`return 'SLA Breached';`)
+- `packages/comms-sdk/src/native-ui/TriageQueueView.tsx`: Line 37 (`return 'SLA Breached';`), Line 55 (`return 'SLA Breached';`)
+- `apps/clinic-app/components/comms/ClinicChatDrawerHost.tsx`: Line 218 (`slaBreached: i.isSlaBreached`), Line 219 (`slaTimeRemainingSeconds: i.slaTimeRemainingSeconds`)
+- `apps/clinic-app/tests/challenger_m2_side_sheet_consolidation.test.ts`: Line 311 (`isSlaBreached: false`)
+- `packages/comms-sdk/tests/empirical_state_machine_sla.test.ts`: Lines 515, 537, 540, 543, 544, 600, 614, 643, 646, 663, 669
+- `packages/comms-sdk/tests/adversarial/triage-queue-states.adversarial.test.ts`: Lines 551, 553, 582, 587, 623, 625, 628, 659, 671, 690
+
+#### Term 3: `Disposition` -> must be `Clinical Decision` or `Action`
+- **UI Text in `apps/clinic-app`**:
+  - `components/comms/ClinicChatDrawerHost.tsx`:
+    - Line 234: `notify.success('Inquiry disposition recorded: Answered.');`
+    - Line 240: `notify.success('Inquiry disposition recorded: In-Clinic Visit Requested.');`
+    - Line 247: `notify.success('Inquiry disposition recorded: Declined.');`
+    - Line 259: `notify.error(err?.message || 'Failed to record triage disposition.');`
+  - `navigation/screens/Triage.screen.tsx`:
+    - Line 38: `notify.success('Inquiry disposition recorded: Answered.');`
+    - Line 44: `notify.success('Inquiry disposition recorded: In-Clinic Visit Requested.');`
+    - Line 51: `notify.success('Inquiry disposition recorded: Declined.');`
+    - Line 63: `notify.error(err?.message || 'Failed to record triage disposition.');`
+    - Line 93: `headerSubtitle="Real-time patient triage queue with 1-click clinical dispositions"`
+- **UI Text in `packages/comms-sdk`**:
+  - `src/native-ui/TriageQueueView.tsx`: Line 476 (`{isSubmitting ? 'Submitting...' : 'Confirm Disposition'}`)
+  - `src/web-ui/TriageQueueView.tsx`: Line 474 (`{isSubmitting ? 'Submitting...' : 'Confirm Disposition'}`)
+- **Code & Type Identifiers (Payloads, Handlers, Hooks)**:
+  - `packages/comms-sdk/src/native-ui/types.ts`: Line 6, 21, 60 (`TriageDispositionPayload`, `onExecuteDisposition`)
+  - `packages/comms-sdk/src/react/hooks/useTriageQueue.ts`: Lines 5, 19, 72, 94, 95 (`recordDisposition`, `isSubmittingDisposition`)
+  - `apps/clinic-app/components/comms/ClinicChatDrawerHost.tsx`: Line 20, 226, 396 (`handleExecuteDisposition`)
+  - `apps/clinic-app/tests/challenger_m2_side_sheet_consolidation.test.ts`: Lines 651–677
+
+#### Term 4: `INTERNAL NOTE — NEVER DELIVERED TO PATIENT` / `NEVER VISIBLE TO PATIENT` -> must be `Private Staff Note (Care Team Only)`
+- `packages/comms-sdk/src/native-ui/MessageThread.tsx`:
+  - Line 168: `INTERNAL NOTE — NEVER VISIBLE TO PATIENT`
+  - Line 246: `{isInternal ? 'Internal Note: ACTIVE' : 'Note'}`
+  - Line 256: `placeholder={isInternal ? 'Type internal note for care team...' : 'Type message...'}`
+- `packages/comms-sdk/src/web-ui/MessageThread.tsx`:
+  - Line 262: `{isInternal ? 'Internal Note Mode: ACTIVE' : 'Internal Note'}`
+  - Line 271: `placeholder={isInternal ? 'Type internal note for care team...' : 'Type message...'}`
+- `packages/comms-sdk/tests/adversarial/privacy-mode.adversarial.test.ts`: Lines 106, 212
+
+#### Term 5: `ACK` -> must be `Read Confirmation`
+- `packages/comms-sdk/src/native-ui/MessageThread.tsx`: Line 79 (`<Text style={styles.deliveryIconTeal}>ACK</Text>`)
+- `packages/comms-sdk/src/web-ui/MessageThread.tsx`: Line 52 (`title="Delivered to hub, awaiting recipient storage ACK"`), Line 60 (`<span>ACK</span>`)
+- `packages/comms-sdk/tests/adversarial/delivery-invariants.test.ts`: Line 6 (`// A message cannot jump directly from Sending (client in-flight) to Received (recipient storage ACK)`)
+
+#### Term 6: `Scope` -> clean titles (`Patient Request`, `Direct`, `Care Team`, `Facility Channel`)
+- `packages/comms-sdk/src/native-ui/MessageThread.tsx`: Line 109 (`<Text style={styles.headerSubtitle}>Scope: {conversationScope}</Text>`)
+- `packages/comms-sdk/src/web-ui/MessageThread.tsx`: Line 87 (`<p className="text-xs text-slate-500">Scope: {conversationScope}</p>`)
+- `packages/comms-sdk/src/native-ui/ChatDrawer.tsx`: Lines 134–139 (currently maps `'PatientFacility' -> 'Triage'`, `'StaffContext' -> 'Care Team'`, and passes raw `scope` for `'Facility'` instead of `'Facility Channel'`)
+- `packages/comms-sdk/src/web-ui/ChatDrawer.tsx`: Lines 111–115 (same mapping)
+- `apps/clinic-app/components/comms/ClinicChatDrawerHost.tsx`: Line 107 (`conversationScope={conversation?.scope || 'Facility'}`)
 
 ---
 
-### 1.3 Mandatory Suite 2: Design Tokens Suite
-- **File**: `packages/design-tokens/src/tokens.test.ts` (63 lines).
-- **Package**: `packages/design-tokens/package.json`.
-- **Command Executed**:
-  ```bash
-  ~/.bun/bin/bun test packages/design-tokens/src/tokens.test.ts
+### 1.4 Test Baseline Execution & Results
+
+#### Baseline 1: `cd packages/comms-sdk && bun test`
+- **Command Output**:
   ```
-- **Execution Result**:
-  ```text
-  27 pass
+  104 pass
   0 fail
-  167 expect() calls
-  Ran 27 tests across 1 file. [50.00ms]
+  16730 expect() calls
+  Ran 104 tests across 22 files. [189.00ms]
   ```
-- **Linter Script Check**:
-  ```bash
-  PATH="$HOME/.bun/bin:$PATH" node apps/clinic-app/scripts/check-tokens.mjs --strict
-  ```
-- **Execution Result**:
-  ```text
-  Token guard: 0 violation(s) in 0 file(s).
-  ```
+- **Test Files Passing (22/22)**:
+  - `tests/empirical_state_machine_sla.test.ts` (12 tests)
+  - `tests/core/delivery-state.test.ts` (3 tests)
+  - `tests/core/attachment-helpers.test.ts` (7 tests)
+  - `tests/core/deduplication.test.ts` (3 tests)
+  - `tests/core/connection.test.ts` (2 tests)
+  - `tests/core/retry-policy.test.ts` (3 tests)
+  - `tests/core/ticket-renewal.test.ts` (3 tests)
+  - `tests/adversarial/triage-queue-states.adversarial.test.ts` (24 tests)
+  - `tests/adversarial/guest-lockout.adversarial.test.ts` (4 tests)
+  - `tests/adversarial/ticket-concurrency.test.ts` (3 tests)
+  - `tests/adversarial/jitter-bounds.test.ts` (3 tests)
+  - `tests/adversarial/queue-fifo-dedup.test.ts` (3 tests)
+  - `tests/adversarial/delivery-invariants.test.ts` (4 tests)
+  - `tests/adversarial/attachment-spoofing.adversarial.test.ts` (5 tests)
+  - `tests/adversarial/staff-workstations.adversarial.test.ts` (11 tests)
+  - `tests/adversarial/privacy-mode.adversarial.test.ts` (5 tests)
+  - `tests/react/useCallSession.test.ts` (1 test)
+  - `tests/react/useComms.test.ts` (1 test)
+  - `tests/react/useTriageQueue.test.ts` (1 test)
+  - `tests/react/optimistic-store.test.ts` (2 tests)
+  - `tests/react/useSendMessage.test.ts` (2 tests)
+  - `tests/react/useConversation.test.ts` (2 tests)
 
----
-
-### 1.4 Mandatory Suite 3: Clinic App Suite
-- **Directory**: `apps/clinic-app/tests/` (129 files).
-- **Test Framework**: Bun test runner (`bun:test`), React 19.2.3, `react-dom/server` (`renderToStaticMarkup`), custom RN component mocks (`data-component`, `aria-label`, `role`).
-- **Command Executed**:
-  ```bash
-  PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/
+#### Baseline 2: `cd apps/clinic-app && bun test tests/challenger_m2_side_sheet_consolidation.test.ts tests/challenger_m2_2_a11y_tokens_visual.test.ts`
+- **Command Output**:
   ```
-- **Execution Result**:
-  ```text
-  2342 pass
+  44 pass
   0 fail
-  269984 expect() calls
-  Ran 2342 tests across 129 files. [21.36s]
+  149 expect() calls
+  Ran 44 tests across 2 files. [119.00ms]
   ```
-- **Typecheck Status**:
-  ```bash
-  PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun run typecheck:clinic
-  ```
-  Exited with code 0 in 3.1s (`tsc --noEmit -p apps/clinic-app`).
-
----
-
-### 1.5 Codebase Inventory & Current Implementation Gaps
-
-| Requirement / Component | Current State in Codebase | What is Missing |
-|---|---|---|
-| **R1. DocumentTemplatesSettingsTab** | Does not exist in `apps/clinic-app/components/settings/`. `types.ts` does not include `'documents'` in `SettingsTabKey`. | New tab component `DocumentTemplatesSettingsTab.tsx`, route registration, two-column workstation layout (form controls on left, live canvas preview on right), document switcher, sample test PDF button. |
-| **R2. Clinician E-Signature Specimen** | `StaffMember.cs` has PRC, PTR, S2, PAN, but NO `SignatureSpecimen` or `DefaultSignatureMode`. | Entity properties in `StaffMember.cs`, `UpdateMyProfileCommand`, `UpdateStaffMemberCommand`, signature pad / file upload in `Profile.screen.tsx` and `StaffManagementTab.tsx`, Physician Stamp Imprint preview. |
-| **R3. Tri-Mode PDF Engine & Logo** | `ClinicDocumentPdfService.cs` hardcodes "✓ Digitally Certified & Locked" in `stamp.Item()` (line 179). Signature height is empty `Height(35)` (line 172). Logo bytes are not rendered. Controllers lack `?wet=` query param. | Extension of `TenantPrintoutConfig` with `SignatureMode`, `SignatureSpecimenBytes`, `PrimaryLogoBytes`. Logic in `ClinicDocumentPdfService.cs` to render signature image or blank line, suppress certification text in wet mode, and render custom logo bytes. `?wet=` query param on `DocumentsController`, `PrescriptionsController`, and `LabOrdersController`. |
-| **R4. PDEA S2 Print Hardening** | `PrescriptionSlipModal.tsx` and `Consultations.screen.tsx` do not provide `[🖋️ E-Signed PDF]` vs `[📝 Wet Signature (Pen)]` selector. | Mode selector, auto-default to Wet Signature when `isDangerousDrug == true`, statutory warning badge rendering. |
+- **Test Files Passing (2/2)**:
+  - `tests/challenger_m2_side_sheet_consolidation.test.ts` (15 tests)
+  - `tests/challenger_m2_2_a11y_tokens_visual.test.ts` (29 tests)
 
 ---
 
 ## 2. Logic Chain
 
-```
-[Observation 1.1: Worktree missing node_modules & non-interactive PATH lacking node]
-        │
-        ▼
-[Step 1: Environment Baseline Setup]
-Establish symlinks to base worktree node_modules and prepend ~/.bun/bin to PATH.
-Verifies all 2,342 existing clinic-app tests and 27 design-token tests pass with 0 regressions.
-        │
-        ▼
-[Observation 1.2: HardenedDocumentGenerationTests currently only tests 1 mode and partial paper sizes]
-        │
-        ▼
-[Step 2: Acceptance Criteria Gap Analysis for Backend]
-Acceptance criteria requires testing all 4 document types (MedCert, e-Rx, Lab Slip, Referral)
-across all 3 signature modes (ESignatureSpecimen, DigitalSealOnly, WetSignature)
-and all 3 paper sizes (Letter, A4, A5) = 36-combination matrix.
-Current suite only runs 9 tests covering single fixed combinations.
-        │
-        ▼
-[Observation 1.4 & 1.5: Frontend lacks DocumentTemplates tab, signature upload, and PDEA modal selector]
-        │
-        ▼
-[Step 3: Frontend Test Suite Construction]
-Three dedicated Bun test suites must be created to verify R1, R2, and R4:
-1. documentTemplatesSettingsTab.test.ts (2-column layout, 4 doc switchers, 4 UI states, token compliance)
-2. staffSignatureSpecimen.test.ts (specimen upload, stamp preview, mode preference)
-3. pdeaPrescriptionHardening.test.ts (dangerous drug detection, forced wet default, statutory badge)
-        │
-        ▼
-[Step 4: End-to-End Regression & Regulatory Integrity]
-Synthesize 4-tier edge cases into executable assertions:
-Tier 1: Domain/Entities -> Tier 2: QuestPDF & Controllers -> Tier 3: Workstation UI -> Tier 4: Regulatory Issuance.
-```
+1. **Token Compliance Status (apps/clinic-app)**:
+   - Observation 1.1 shows `bun run lint:tokens` exits code 0 with 0 violations in 0 files.
+   - Observation 1.2 shows `apps/clinic-app/components/ui/ThemedText.tsx` enforces `theme.typography.*`, whose smallest font size is `fontSizeScale.xs` (12px).
+   - Therefore, `apps/clinic-app` currently fulfills the design tokens baseline, but any new UI added for R2, R3, R4, R5 must strictly maintain this discipline: no raw hex colors, no raw palette imports, no sub-12px text, and no raw emojis (all glyphs must come from `<Icon name="..." />`).
+
+2. **Hidden Sub-12px Violation in SDK Web UI**:
+   - Observation 1.2 reveals 15 explicit instances of `text-[10px]` and `text-[11px]` in `packages/comms-sdk/src/web-ui`.
+   - Acceptance Criteria R1 explicitly dictates: *"No font size in the UI is smaller than 12px (`text-xs`)"*.
+   - Because `packages/comms-sdk/scripts/check-tokens.mjs` only matches React Native `fontSize:\s*\d+`, these web violations went undetected.
+   - Therefore, these classes must be upgraded to `text-xs` (12px) during implementation.
+
+3. **Jargon Decoupling Requirement**:
+   - Observation 1.3 documents that `STAT`, `SLA Breached`, `Disposition`, `INTERNAL NOTE`, `ACK`, and `Scope` are embedded across UI components and tests.
+   - Specifically, `TriageQueueView.tsx` (both Native and Web) displays `'STAT'` (lines 184/197, 301/310) and returns `'SLA Breached'` (lines 21/37, 39/55).
+   - In `apps/clinic-app`, `ClinicChatDrawerHost.tsx` (lines 234–259) displays toasts referring to "disposition".
+   - Furthermore, `packages/comms-sdk/tests/empirical_state_machine_sla.test.ts` and `triage-queue-states.adversarial.test.ts` explicitly assert `'STAT'` and `'SLA Breached'`.
+   - Therefore, replacing these terms with `Emergency`, `Response Overdue`, `Clinical Decision / Action`, `Private Staff Note (Care Team Only)`, `Read Confirmation`, and clean category titles requires coordinating both the component text AND the corresponding test assertions so tests continue passing.
+
+4. **Missing Production Functionality & Test Coverage (R2–R5)**:
+   - In `ClinicActiveThread` (`apps/clinic-app/components/comms/ClinicChatDrawerHost.tsx` lines 85–102):
+     - Back button currently has text: `<ThemedText variant="smallBold">Conversations</ThemedText>` (violates R2 icon-only requirement).
+     - Center title lacks tap-to-rename pencil icon (`✏️` / `edit`).
+     - Right controls (Members counter `👥`, Medical Privacy Blur `👁️`, Action Menu `•••` with 7 actions) are entirely missing.
+     - Top drawer header lacks the manual reconnect button (`🔄`) beside the `• Connected` status pill.
+   - `NewConversationModal.tsx` does not exist (currently `handleNewConversation` creates a stub channel).
+   - In-thread clinical productivity tools (pinned orders banner, 1-tap quick replies, 1-click patient chart link, in-thread search, shift handoff summary) are not implemented.
+   - `useTriageQueue.ts` in `packages/comms-sdk` currently stubs `refresh()` (empty try-catch) and localizes `recordDisposition` rather than issuing HTTP requests to backend endpoints `GET /api/v1/comms/conversations?scope=PatientFacility&facilityId={facilityId}` and `POST /api/v1/comms/triage/{id}/disposition`.
+   - Neither of the existing test suites (`challenger_m2` or `challenger_m2_2`) test the R2 header controls, R3 modal, R4 tools, or R5 card-to-thread navigation.
 
 ---
 
-## 3. Detailed Survey: Existing Tests vs. New Tests Needed
+## 3. Caveats
 
-### 3.1 Backend: `services/clinic-api/ClinicEz.Clinic.Application.Tests`
-
-#### Existing Tests (in `HardenedDocumentGenerationTests.cs`):
-1. `ClinicDocumentPdfService_Should_Generate_Valid_MedicalCertificate_PDF_With_Security_Seal`: Verifies MedCert PDF bytes > 1000, begins with `%PDF-` and ends with `%%EOF`.
-2. `ClinicDocumentPdfService_Should_Generate_Valid_Lab_Requisition_Slip_PDF_With_Dropzone_QR`: Verifies Lab Requisition PDF generation.
-3. `ClinicDocumentPdfService_Should_Generate_Valid_Prescription_PDF_Generics_Act_Compliant`: Verifies Prescription PDF generation with generic and brand names on A5.
-4. `IssueMedicalCertificateCommand_Should_Generate_Sequential_Numbers_Safely`: Verifies sequential certificate numbering.
-5. `ClinicDocumentPdfService_Should_Generate_Valid_Referral_Letter_PDF_With_Security_Seal`: Verifies Referral Letter PDF generation on A4.
-6. `DocumentVerificationResultDto_MaskName_Should_Protect_Patient_Privacy`: Verifies privacy masking on names.
-7. `ClinicDocumentPdfService_Should_Generate_Valid_Reception_Placard_PDF`: Verifies reception placard PDF.
-
-#### New Tests Required in `HardenedDocumentGenerationTests.cs`:
-1. **Full 4x3x3 Matrix Parameterized Theory**:
-   ```csharp
-   [Theory]
-   [MemberData(nameof(DocumentGenerationMatrixData))]
-   public void GeneratePdf_Across_All_DocumentTypes_SignatureModes_And_PaperSizes_Should_Produce_Valid_Pdf(
-       DocumentType docType,
-       DocumentSignatureMode mode,
-       DocumentPaperSize paperSize)
-   ```
-   Generates all 36 combinations (4 document types × 3 signature modes × 3 paper sizes: Letter, A4, A5), asserting valid PDF headers, non-empty content, and correct size definitions.
-
-2. **Wet Signature Regulatory Suppression & Hash Preservation Test**:
-   - Asserts that when `mode == DocumentSignatureMode.WetSignature`:
-     - Text "✓ Digitally Certified & Locked" is **NOT** present in the rendered document.
-     - No electronic signature specimen image is embedded.
-     - Document footer **still contains** valid cryptographic digest and verification QR code.
-     - Signature area contains an empty physical pen signing line.
-
-3. **E-Signature Specimen Embedding & Stamp Verification Test**:
-   - Asserts that when `mode == DocumentSignatureMode.ESignatureSpecimen` with transparent PNG bytes provided:
-     - Signature image is rendered above the signature line.
-     - "✓ Digitally Certified & Locked" green badge text is present.
-     - Physician credentials (PRC, PTR, S2, PAN) are rendered.
-
-4. **Digital Verification Seal Mode Test**:
-   - Asserts that when `mode == DocumentSignatureMode.DigitalSealOnly`:
-     - No signature image bytes are embedded.
-     - Printed credentials + "✓ Digitally Certified & Locked" text are present.
-
-5. **Custom Clinic Logo Rendering Test**:
-   - When `PrimaryLogoBytes` (sample PNG bytes) is provided in `TenantPrintoutConfig` / `ClinicSettings`, PDF successfully embeds the logo without throwing, falling back gracefully to text when bytes are null.
-
-6. **Controller `?wet=true|false` Query Parameter Integration Tests**:
-   - `DocumentsController_DownloadMedicalCertificatePdf_With_Wet_Param`: Verifies `?wet=true` passes `WetSignature` mode to `_pdfService`.
-   - `DocumentsController_DownloadReferralLetterPdf_With_Wet_Param`: Verifies `?wet=true` passes `WetSignature` mode.
-   - `PrescriptionsController_DownloadPrescriptionPdf_With_Wet_Param`: Verifies `?wet=true` passes `WetSignature` mode.
-   - `LabOrdersController_DownloadLabOrderSlipPdf_With_Wet_Param`: Verifies `?wet=true` passes `WetSignature` mode.
-
-7. **Staff Entity & Command Tests**:
-   - Unit tests verifying `StaffMember.SignatureSpecimen` and `StaffMember.DefaultSignatureMode` persistence via `UpdateMyProfileCommand` and `UpdateStaffMemberCommand`.
+1. **Non-Comms Codebase Occurrences**:
+   - The term `STAT` appears in `apps/clinic-app/navigation/screens/Consultations.screen.tsx` and various lab order / diagnostic test suites. These are clinical statutory / lab order codes outside the Communications Sheet & Triage Desk domain and should not be modified.
+2. **Backend Protocol vs UI Jargon**:
+   - The SignalR hub event is named `OnThreadStateChanged` with parameter `disposition?: TriageDisposition`, and database fields/REST payloads use `disposition`. The requirement is to replace developer and clinical jargon in *human-facing everyday language* (`Clinical Decision` or `Action`), while wire protocol identifiers in DTOs can remain compatible with backend API schemas.
+3. **Reactions Allowlist**:
+   - `packages/comms-sdk/src/core/reactions.ts` contains literal Unicode emojis (`['👍', '❤️', '🙏', '✅', '👀', '⚠️']`). This is permitted via its `token-guard:ignore-file` comment to match the backend `CommsReactionValidator`. UI controls must continue using design-token icons (`<Icon name="..." />`).
 
 ---
 
-### 3.2 Frontend: `apps/clinic-app/tests/`
+## 4. Conclusion
 
-#### Existing Tests:
-- 129 test files, 2,342 passing tests covering OPD queue, audit workstation, patient directory, consultations, dental chart, etc.
-- No tests currently cover `DocumentTemplatesSettingsTab.tsx`, staff signature specimen management, or PDEA S2 prescription print modal controls.
-
-#### New Frontend Test Files Required:
-
-| New Test File | Key Test Scenarios |
-|---|---|
-| `tests/documentTemplatesSettingsTab.test.ts` | 1. **High-Density Two-Column Layout**: Left column renders form inputs (Facility Header, Sub-Header, Physical Address, Contact, DOH LTO, PhilHealth Accreditation, Accent Color, Paper Size, Legal Disclaimer). Right column renders canvas preview.<br>2. **Document Type Switcher**: Switching tabs between `Medical Certificate`, `Prescription`, `Lab Order`, and `Referral Letter` updates preview model.<br>3. **Live Interactive Preview**: Updating form input fields reactively updates preview text.<br>4. **Signature Mode Toggle**: Toggling between E-Signature and Wet Signature updates preview stamp and badge.<br>5. **Sample Test PDF**: "Print Sample Test PDF" button triggers mock PDF generation / download.<br>6. **4 UI States**: Skeleton (loading settings), Empty (no facility profile), Error (API failure with Retry), Active (interactive studio).<br>7. **Design Token Guard**: Zero hardcoded hex colors, strict consumption of `theme.colors`. |
-| `tests/staffSignatureSpecimen.test.ts` | 1. **Profile Signature Management**: Doctor profile allows uploading PNG or drawing on signature pad.<br>2. **Default Signing Mode Selector**: Selector for `ESignatureSpecimen`, `DigitalSealOnly`, `WetSignature`.<br>3. **Physician Stamp Imprint**: Real-time preview rendering doctor name, PRC Lic. No., PTR No., PDEA S2 No., and PhilHealth PAN overlaid with signature image.<br>4. **Staff Management Tab Gating**: Admin can inspect / configure doctor signature mode in `StaffManagementTab.tsx`. |
-| `tests/pdeaPrescriptionHardening.test.ts` | 1. **Instant Print Options Selector**: Renders `[🖋️ E-Signed PDF]` and `[📝 Wet Signature (Pen)]` in `PrescriptionSlipModal.tsx` and `Consultations.screen.tsx`.<br>2. **Doctor Default Mode**: Preselects attending doctor's configured `DefaultSignatureMode`.<br>3. **PDEA S2 Automatic Default**: If prescription contains any dangerous drug (`isDangerousDrug === true` or PDEA S2), automatically overrides to **Wet Signature Mode**.<br>4. **PDEA S2 Statutory Warning Badge**: Renders regulatory alert: *"⚠️ PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations."*<br>5. **Non-Regulated Fallback**: Clean prescriptions without dangerous drugs allow free selection of E-Signature mode without forced restriction. |
+1. **Linting & Tokens**: `apps/clinic-app` has **0 token violations** currently. The token guard passes cleanly. However, `packages/comms-sdk/src/web-ui` has **15 sub-12px font violations** (`text-[10px]` and `text-[11px]`) that must be normalized to `text-xs` (12px).
+2. **Jargon Elimination**: All 6 required jargon terms are precisely mapped. Key UI changes needed:
+   - `STAT` -> `Emergency` in `ChatDrawer` and `TriageQueueView` (Native & Web)
+   - `SLA Breached` -> `Response Overdue` in `formatSlaCountdown` and `isItemSlaBreached`
+   - `Inquiry disposition recorded` -> `Clinical decision recorded` in `ClinicChatDrawerHost.tsx` and `Triage.screen.tsx`
+   - `INTERNAL NOTE — NEVER VISIBLE TO PATIENT` -> `Private Staff Note (Care Team Only)` in `MessageThread.tsx`
+   - `ACK` -> `Read Confirmation` in `MessageThread.tsx` delivery receipts
+   - `Scope: {scope}` -> Clean category badges (`Patient Request`, `Direct`, `Care Team`, `Facility Channel`)
+3. **Test Baselines**: Both baseline suites pass 100% (104 tests in SDK, 44 tests in Clinic App). New tests must be added to cover R2 (Header & Reconnect), R3 (`NewConversationModal`), R4 (Productivity Tools), and R5 (Triage Subsystem), and existing SDK tests expecting `'STAT'` and `'SLA Breached'` must be aligned.
 
 ---
 
-### 3.3 Design Tokens: `packages/design-tokens`
+## 5. Verification Method
 
-#### Existing Tests:
-- `tokens.test.ts` runs 27 tests checking key parity, valid formats, contrast ratios, and minimum typography (>= 12px).
-- Linter script `apps/clinic-app/scripts/check-tokens.mjs --strict` scans AST/regex across all clinic-app components.
-
-#### Verification Protocol for New UI:
-- No new token definitions needed in `packages/design-tokens/src` unless accent color override requires a specific token interface.
-- Any new component created must be verified with:
-  `PATH="$HOME/.bun/bin:$PATH" node apps/clinic-app/scripts/check-tokens.mjs --strict`
-  to guarantee zero regressions.
-
----
-
-## 4. 4-Tier Edge Cases, Boundary Cases, and PDEA S2 Scenarios
-
-```
-   ┌────────────────────────────────────────────────────────┐
-   │ TIER 1: DOMAIN & ENTITY VALIDATION                     │
-   │ - StaffMember.DefaultSignatureMode enum parse          │
-   │ - SignatureSpecimen PNG base64 validation              │
-   │ - PaperSize enum ("Letter", "A4", "A5") mapping        │
-   └──────────────────────────┬─────────────────────────────┘
-                              │
-   ┌──────────────────────────▼─────────────────────────────┐
-   │ TIER 2: BACKEND QUESTPDF GENERATION & APIS             │
-   │ - 36-combination matrix (4 types x 3 modes x 3 sizes)  │
-   │ - Wet mode suppresses "Digitally Certified" badge      │
-   │ - Blank pen line spacing & verification hash preserved │
-   │ - Custom clinic logo bytes rendering & aspect ratio    │
-   │ - Controllers ?wet=true|false query parameter binding  │
-   └──────────────────────────┬─────────────────────────────┘
-                              │
-   ┌──────────────────────────▼─────────────────────────────┐
-   │ TIER 3: FRONTEND WORKSTATION & STUDIO COMPONENTS       │
-   │ - DocumentTemplatesSettingsTab 2-column layout (>=1024)│
-   │ - Reactive debounced canvas live preview               │
-   │ - 4 core UI states (Skeleton, Empty, Error, Active)    │
-   │ - Doctor Physician Stamp Imprint with S2 & PhilHealth   │
-   └──────────────────────────┬─────────────────────────────┘
-                              │
-   ┌──────────────────────────▼─────────────────────────────┐
-   │ TIER 4: REGULATORY & PDEA S2 CLINICAL ISSUANCE FLOW    │
-   │ - Dangerous drug detection (isDangerousDrug == true)   │
-   │ - Automatic enforcement of Wet Signature Mode          │
-   │ - Prominent PDEA S2 statutory warning banner           │
-   │ - Tamper-evident QR code resolution to /verify/<digest>│
-   └────────────────────────────────────────────────────────┘
-```
-
-### Detailed Edge Case Specification Matrix
-
-| ID | Tier | Category | Scenario / Boundary Case | Expected Behavior |
-|---|---|---|---|---|
-| **E1** | Tier 1 | Domain | `SignatureSpecimen` exceeds maximum size (e.g. > 500KB raw base64) or is non-PNG MIME type | Rejection with clean 400 validation error; only transparent PNG accepted. |
-| **E2** | Tier 1 | Domain | `DefaultSignatureMode` missing or null in database for legacy doctor record | Graceful fallback default to `ESignatureSpecimen` if signature exists, or `DigitalSealOnly` if no signature uploaded. |
-| **E3** | Tier 2 | PDF Engine | `PaperSize == "A5"` compact canvas (148 × 210 mm) with multi-item prescription (6+ drugs) | Flow cleanly across pages or tighten vertical margins without text overlapping footer or barcode. |
-| **E4** | Tier 2 | PDF Engine | `PrimaryLogoBytes` is corrupted / invalid image header | Catch decoder exception gracefully; suppress logo and render text facility header without crashing document generation. |
-| **E5** | Tier 2 | PDF Engine | `AccentColorHex` has missing `#` or is 3-digit shorthand (e.g. `0D6` or `0D6963`) | `TenantPrintoutConfig.GetSafePrimaryColorHex()` normalizes to 6-digit `#RRGGBB` or falls back to `#0284C7`. |
-| **E6** | Tier 2 | Regulatory | `WetSignature` mode on MedCert / Referral / Rx / Lab Slip | **Suppresses** "✓ Digitally Certified & Locked" green text; renders blank signature underline for physical pen signing; **preserves** cryptographic SHA-256 digest and QR code in footer. |
-| **E7** | Tier 2 | API Binding | Controller receives `?wet=true` vs `?wet=false` vs omitted query string | Defaults `wet` to `false` when omitted; when `true`, instructs `_pdfService` to render in `WetSignature` mode. |
-| **E8** | Tier 3 | Frontend UI | Viewport width is mobile (< 1024px) vs desktop workstation (>= 1024px) | Adapts from side-by-side two-column workstation to stacked editor/preview tab switcher without horizontal scroll blowout. |
-| **E9** | Tier 3 | UI States | Initial settings fetch is loading vs network disconnected | Displays high-density Skeleton loader; on error displays error banner with "Retry" action; never flashes unstyled content. |
-| **E10** | Tier 4 | PDEA S2 | Prescription contains 1 PDEA S2 dangerous drug (e.g. Morphine, Fentanyl, Methylphenidate) and 2 generic drugs | Modal automatically locks/defaults print option to **Wet Signature Mode**; renders statutory yellow/amber warning banner citing DOH-PDEA regulations. |
-| **E11** | Tier 4 | PDEA S2 | Doctor attempts to override PDEA S2 prescription to E-Signature | UI displays alert dialog explaining physical wet ink signature on special DOH prescription pad is statutory under RA 9165 / PDEA regulations; blocks or requires explicit confirmation. |
-| **E12** | Tier 4 | Verification | Scanning QR code on printed document (even wet-signed) | URL directs to public verification portal `/verify/<digest>`, verifying facility authenticity, document issue date, and doctor PRC without revealing private clinical prose (DPA RA 10173 compliance). |
-
----
-
-## 5. Caveats
-1. **Worktree Environment Dependency**: In git worktrees within this monorepo, `node_modules` must be symlinked to the primary worktree (`/Users/macuser/projects/github/nextstep/clinicez-arch2/node_modules`) because npm/bun dependencies are gitignored and not copied into new worktrees. The symlinks have now been established in `clinicez-docs-studio`.
-2. **Subshell PATH for Bun/Node**: In non-interactive test runs that invoke node scripts (such as AST design-token verification inside `auditWorkstation.test.ts`), `PATH="$HOME/.bun/bin:$PATH"` must be present in the execution environment so child processes can resolve `node`.
-3. **No Direct Modifications**: In accordance with the Explorer archetype rules, no production source code was modified during this survey. Only the required metadata (`DISPATCH.md`, `BRIEFING.md`, `progress.md`, `handoff.md`) and the gitignored `node_modules` symlink were touched.
-
----
-
-## 6. Conclusion
-- The test harness across `clinicez-docs-studio` is fully operational and healthy:
-  - **.NET**: Passes 9/9 tests in 1s.
-  - **Design Tokens**: Passes 27/27 tests in 50ms, with 0 token violations in strict mode.
-  - **Clinic App**: Passes all 2,342 existing tests across 129 files in 21s with 0 regressions.
-- The existing codebase currently implements only baseline document generation. To satisfy the acceptance criteria of `ORIGINAL_REQUEST.md`, four distinct implementation and test efforts are required:
-  1. **Backend Matrix Tests (`HardenedDocumentGenerationTests.cs`)**: Expand to 36-test parameterized matrix (4 doc types × 3 signature modes × 3 paper sizes), plus custom logo tests, `?wet=` controller tests, and wet signature text suppression checks.
-  2. **Document Templates Studio Tab (`DocumentTemplatesSettingsTab.tsx` & test)**: Implement two-column workstation layout under `'documents'` tab with live preview and 4 UI states.
-  3. **Doctor Profile E-Signature Specimen (`Profile.screen.tsx`, `StaffManagementTab.tsx` & test)**: Add specimen upload/draw, default signing mode picker, and real-time stamp imprint preview.
-  4. **PDEA S2 Print Safeguard (`PrescriptionSlipModal.tsx`, `Consultations.screen.tsx` & test)**: Add instant `[🖋️ E-Signed]` / `[📝 Wet Signature]` selector with automatic wet default and statutory warning badge for dangerous drugs.
-
----
-
-## 7. Verification Method
-
-To independently verify the test infrastructure and findings reported herein, execute the following commands from `/Users/macuser/projects/github/nextstep/clinicez-docs-studio`:
-
-### Verify Suite 1: .NET HardenedDocumentGenerationTests
+### 5.1 Token Linting Verification
+Run from workspace root:
 ```bash
-~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~HardenedDocumentGenerationTests"
-```
-*Expected*: Build succeeds and passes 9 tests in ~1s.
+# 1. Clinic App token guard
+cd apps/clinic-app && bun run lint:tokens
+cd apps/clinic-app && bun scripts/check-tokens.mjs --strict
 
-### Verify Suite 2: Design Tokens & Token Guard
+# 2. Comms SDK token guard
+cd packages/comms-sdk && bun scripts/check-tokens.mjs
+```
+*Pass condition*: Exits with code 0, reporting 0 violations in 0 files.
+
+### 5.2 Sub-12px Font Verification
+Run from workspace root:
 ```bash
-~/.bun/bin/bun test packages/design-tokens/src/tokens.test.ts
-PATH="$HOME/.bun/bin:$PATH" node apps/clinic-app/scripts/check-tokens.mjs --strict
+bun -e "
+import fs from 'node:fs';
+import path from 'node:path';
+const files = fs.readdirSync('packages/comms-sdk/src/web-ui').filter(f => f.endsWith('.tsx')).map(f => path.join('packages/comms-sdk/src/web-ui', f));
+let count = 0;
+for (const file of files) {
+  const content = fs.readFileSync(file, 'utf8');
+  const matches = content.match(/text-\[(\d+)px\]/g) || [];
+  matches.forEach(m => {
+    const px = parseInt(m.match(/\d+/)[0], 10);
+    if (px < 12) { console.error('Violation in ' + file + ': ' + m); count++; }
+  });
+}
+if (count === 0) console.log('Zero sub-12px violations in comms-sdk web-ui.');
+process.exit(count === 0 ? 0 : 1);
+"
 ```
-*Expected*: `tokens.test.ts` passes 27 tests in <100ms; `check-tokens.mjs` reports 0 violations.
+*Pass condition*: Exits with code 0.
 
-### Verify Suite 3: Full Clinic App Test Suite
+### 5.3 Automated Test Suites Baseline Verification
 ```bash
-PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/
-```
-*Expected*: Passes 2,342 tests across 129 files in ~21s with 0 failures.
+# 1. Comms SDK comprehensive test suite
+cd packages/comms-sdk && bun test
 
-### Verify TypeScript Strict Typechecking
-```bash
-PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun run typecheck:clinic
+# 2. Clinic App Challenger M2 & M2.2 test suites
+cd apps/clinic-app && bun test tests/challenger_m2_side_sheet_consolidation.test.ts tests/challenger_m2_2_a11y_tokens_visual.test.ts
 ```
-*Expected*: Clean exit with code 0 in ~3s.
+*Pass condition*: 100% of tests pass with 0 failures.
 
-### Invalidation Conditions
-- Any changes that introduce raw hex color literals, un-tokenized font sizes, or unapproved icons into `apps/clinic-app` will trigger failure in `check-tokens.mjs --strict`.
-- Generating a wet-signed PDF that inadvertently leaves "✓ Digitally Certified & Locked" in the canvas invalidates DOH-PDEA wet signature compliance.
-- Omitting the `node_modules` symlinks or running without `~/.bun/bin` on `PATH` will fail package resolution or child process execution.
+### 5.4 Invalidation Conditions
+- Any occurrence of raw hex color (`#[0-9a-fA-F]{3,8}`), raw palette import, or sub-12px font in UI code.
+- Any raw emoji character in UI JSX outside of the approved `reactions.ts` constant allowlist.
+- Any regression in test pass counts (SDK must remain >= 104 tests, Clinic App must remain >= 44 tests).

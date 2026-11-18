@@ -118,6 +118,7 @@ public sealed class PublicStudentSelfEnrollCommandHandler
             : new Dictionary<string, object?>();
 
         customFields["classification"] = "Student";
+        customFields["affiliation"] = "Student";
         customFields["student_id"] = request.StudentId.Trim();
         if (!string.IsNullOrWhiteSpace(request.College)) customFields["college"] = request.College.Trim();
         if (!string.IsNullOrWhiteSpace(request.Program)) customFields["program"] = request.Program.Trim();
@@ -157,7 +158,7 @@ public sealed class PublicStudentSelfEnrollCommandHandler
             Sex = RegisterClinicPatientCommandHandler.ParseBiologicalSex(request.Sex),
             ContactNumber = request.ContactNumber.Trim(),
             Email = request.Email?.Trim(),
-            BloodType = Enum.TryParse<BloodType>(request.BloodType, true, out var bt) ? bt : null,
+            BloodType = BloodTypeParser.TryParse(request.BloodType, out var bt) ? bt : null,
             CustomFields = customFields,
             VerificationStatus = PatientVerificationStatus.PendingVerification,
             CreatedAt = DateTime.UtcNow,
@@ -210,6 +211,8 @@ public sealed class PublicStudentSelfEnrollCommandHandler
                 {
                     throw new InvalidOperationException("Failed to self-enroll student after multiple sequence allocation attempts.", ex);
                 }
+
+                await _codeGenerator.SynchronizeTrackerWithMaxExistingAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
 
                 var newReservation = await _codeGenerator.ReserveNextAsync(
                     _clinicContext.TenantId,

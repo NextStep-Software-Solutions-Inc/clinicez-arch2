@@ -415,4 +415,74 @@ public class PublicQueueDisplayTests
         retrieved.TenantSlug.Should().Be("pin-clinic");
         retrieved.FacilitySlug.Should().Be("main");
     }
+
+    [Fact]
+    public async Task Handle_ResolvesTargetDateInClinicTimeZone_NotRawUtc()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+
+        var clinicSettings = new FacilitySettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            ClinicName = "Manila Midnight Clinic",
+            TenantSlug = "manila-clinic",
+            FacilitySlug = "main",
+            TimeZoneId = "Asia/Manila"
+        };
+        await settingsRepo.AddAsync(clinicSettings, CancellationToken.None);
+
+        var tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
+        var todayManila = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
+        var yesterdayManila = todayManila.AddDays(-1);
+
+        // Stale ticket from yesterday
+        var staleYesterdayTicket = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Stale Patient",
+            QueueDate = yesterdayManila,
+            QueueNumber = "Q-015",
+            Status = QueueStatus.InConsultation,
+            CalledTime = DateTime.UtcNow.AddHours(-10),
+            SequenceNumber = 15
+        };
+        await queueRepo.AddAsync(staleYesterdayTicket, CancellationToken.None);
+
+        // Fresh ticket from today Manila
+        var freshTodayTicket = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Fresh Patient",
+            QueueDate = todayManila,
+            QueueNumber = "Q-001",
+            Status = QueueStatus.InConsultation,
+            CalledTime = DateTime.UtcNow,
+            SequenceNumber = 1
+        };
+        await queueRepo.AddAsync(freshTodayTicket, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new GetPublicQueueDisplayQueryHandler(queueRepo, settingsRepo, _clinicContext);
+
+        // Act: Fetch without specifying Date parameter
+        var result = await handler.Handle(new GetPublicQueueDisplayQuery(
+            ClinicId: _clinicId
+        ), CancellationToken.None);
+
+        // Assert: Should display today's fresh ticket, and strictly omit yesterday's stale ticket
+        result.Should().NotBeNull();
+        result!.NowServing.Should().ContainSingle(s => s.TicketNumber == "Q-001");
+        result.NowServing.Should().NotContain(s => s.TicketNumber == "Q-015");
+    }
 }

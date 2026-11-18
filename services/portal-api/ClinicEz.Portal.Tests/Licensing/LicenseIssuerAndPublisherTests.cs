@@ -64,7 +64,8 @@ public class LicenseIssuerAndPublisherTests : IDisposable
         Assert.Equal(snapshot.Version, payload.EntitlementVersion);
         Assert.Equal("Active", payload.WorkspaceStatus);
         Assert.Equal(_tenant.Id, payload.PoolId);
-        Assert.Contains(FacilityFeatureKeys.Teleconsultation, payload.EnabledFeatures);
+        Assert.DoesNotContain(FacilityFeatureKeys.Teleconsultation, payload.EnabledFeatures);
+        Assert.Contains(FacilityFeatureKeys.ElectronicPrescriptions, payload.EnabledFeatures);
         Assert.False(string.IsNullOrWhiteSpace(license.Token));
     }
 

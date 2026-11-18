@@ -42,6 +42,16 @@ public sealed class AppointmentsController : ControllerBase
         return Ok(ApiResponse<IReadOnlyList<AppointmentDto>>.Success(result));
     }
 
+    [HttpGet("{id:guid}")]
+    [HasPermission(ClinicPermissions.AppointmentsRead)]
+    public async Task<ActionResult<ApiResponse<AppointmentDto>>> GetAppointmentById(
+        Guid id,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new GetAppointmentByIdQuery(id), ct);
+        return Ok(ApiResponse<AppointmentDto>.Success(result));
+    }
+
     [HttpPost]
     [HasPermission(ClinicPermissions.AppointmentsManage)]
     public async Task<ActionResult<ApiResponse<AppointmentDto>>> CreateAppointment(

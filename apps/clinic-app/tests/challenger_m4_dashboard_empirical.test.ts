@@ -565,18 +565,18 @@ describe('Milestone 4 Challenger Empirical Suite — Dashboard.screen.tsx', () =
       expect(dashboardContent).toContain('gap: theme.spacing.sm');
     });
 
-    test('5.2 Dashboard.screen.tsx defines actionCluster with semantic tokens', () => {
+    test('5.2 Dashboard.screen.tsx defines unboxed actionCluster and vertical actionClusterSeparator with semantic tokens', () => {
       expect(dashboardContent).toContain('actionCluster: {');
-      expect(dashboardContent).toContain('backgroundColor: theme.colors.surfaceSubtle');
-      expect(dashboardContent).toContain('borderColor: theme.colors.border');
-      expect(dashboardContent).toContain('borderRadius: theme.radii.sm');
-      expect(dashboardContent).toContain('borderWidth: theme.sizes.borderWidth');
+      expect(dashboardContent).toContain('gap: theme.spacing.xs');
+      expect(dashboardContent).toContain('actionClusterSeparator: {');
+      expect(dashboardContent).toContain('width: theme.sizes.borderWidth');
+      expect(dashboardContent).toContain('backgroundColor: theme.colors.border');
     });
 
-    test('5.3 Dashboard.screen.tsx defines emergencyCluster with emergency tokens', () => {
+    test('5.3 Dashboard.screen.tsx groups clusters via separators without boxed parent sub-cards', () => {
       expect(dashboardContent).toContain('emergencyCluster: {');
-      expect(dashboardContent).toContain('backgroundColor: theme.colors.emergencyBg');
-      expect(dashboardContent).toContain('borderColor: theme.colors.emergencyBorder');
+      expect(dashboardContent).toContain('testID="care-flow-separator"');
+      expect(dashboardContent).toContain('testID="exceptions-emergency-separator"');
     });
 
     test('5.4 Zero raw hex colors present in Dashboard.screen.tsx styles', () => {
@@ -601,6 +601,17 @@ describe('Milestone 4 Challenger Empirical Suite — Dashboard.screen.tsx', () =
       for (const regex of forbiddenTerms) {
         expect(regex.test(dashboardContent)).toBe(false);
       }
+    });
+
+    test('5.6 Queue card header, badges, and action groups wrap and constrain width for mobile viewports', () => {
+      expect(dashboardContent).toContain('styles.queueIdentityRow');
+      expect(dashboardContent).toMatch(/queueHeader:\s*\{[^}]*flexWrap:\s*'wrap'/s);
+      expect(dashboardContent).toMatch(/queueIdentityRow:\s*\{[^}]*minWidth:\s*200/s);
+      expect(dashboardContent).toMatch(/queueTitle:\s*\{[^}]*minWidth:\s*0/s);
+      expect(dashboardContent).toMatch(/badgeRow:\s*\{[^}]*flexWrap:\s*'wrap'[^}]*maxWidth:\s*'100%'/s);
+      expect(dashboardContent).toMatch(/primaryActionGroup:\s*\{[^}]*maxWidth:\s*'100%'[^}]*flexShrink:\s*1/s);
+      expect(dashboardContent).toMatch(/trailingActionGroup:\s*\{[^}]*maxWidth:\s*'100%'[^}]*flexShrink:\s*1/s);
+      expect(dashboardContent).toMatch(/actionCluster:\s*\{[^}]*maxWidth:\s*'100%'[^}]*flexShrink:\s*1/s);
     });
   });
 });

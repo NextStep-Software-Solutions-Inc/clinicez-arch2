@@ -154,6 +154,9 @@ public static class DependencyInjection
             .Handle<FacilityVerificationRequestedPayload, FacilityVerificationRequestedHandler>(InteropTypes.FacilityVerificationRequested)
             .Handle<FacilityVerificationWithdrawnPayload, FacilityVerificationWithdrawnHandler>(InteropTypes.FacilityVerificationWithdrawn)
             .Handle<PractitionerVerificationRequestedPayload, PractitionerVerificationRequestedHandler>(InteropTypes.PractitionerVerificationRequested)
+            .Handle<GuestTeleconsultInviteIssuedPayload, GuestTeleconsultInviteIssuedHandler>(InteropTypes.GuestTeleconsultInviteIssued)
+            .Handle<GuestTeleconsultInviteRevokedPayload, GuestTeleconsultInviteRevokedHandler>(InteropTypes.GuestTeleconsultInviteRevoked)
+            .Handle<MediaUsageRecordedPayload, MediaUsageRecordedHandler>(InteropTypes.MediaUsageRecorded)
             .Respond<PhilHealthConfigRequestedPayload, PhilHealthConfigRespondedPayload, PhilHealthConfigRequestedResponder>(
                 InteropTypes.PhilHealthConfigRequested, InteropTypes.PhilHealthConfigResponded)
             .Respond<PhilHealthConfigPayload, PhilHealthConfigUpsertRespondedPayload, PhilHealthConfigUpsertRequestedResponder>(

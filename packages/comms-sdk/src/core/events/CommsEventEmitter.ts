@@ -11,6 +11,39 @@ import {
   ThreadStateChangedPayload
 } from '../types';
 
+export interface CallStateChangedPayload {
+  callId: string;
+  conversationId?: string | null;
+  status: string;
+  roomName?: string | null;
+  joinToken?: string | null;
+  stateVersion?: number;
+  changedAtUtc?: string;
+}
+
+export interface CallPaymentClearedPayload {
+  callId: string;
+  tenantId?: string;
+  facilityId?: string;
+  invoiceId?: string | null;
+  paymentMethod?: string;
+  clearedAtUtc?: string;
+  isEmergencyOverride?: boolean;
+  overrideReason?: string | null;
+}
+
+export interface RecordingConsentLoggedPayload {
+  consentId?: string;
+  callId: string;
+  tenantId?: string;
+  facilityId?: string;
+  patientId?: string;
+  targetPolicy?: string;
+  decision: 'approved' | 'declined' | 'revoked' | string;
+  version?: number;
+  loggedAtUtc?: string;
+}
+
 export interface CommsEventMap {
   connectionStateChanged: (state: ConnectionState, error?: Error) => void;
   ticketRenewed: (ticket: string, claims?: CommsTicketClaims) => void;
@@ -23,6 +56,9 @@ export interface CommsEventMap {
   threadStateChanged: (payload: ThreadStateChangedPayload) => void;
   conversationCreated: (conversation: ConversationDto) => void;
   conversationUpdated: (conversation: ConversationDto) => void;
+  callStateChanged: (payload: CallStateChangedPayload) => void;
+  callPaymentCleared: (payload: CallPaymentClearedPayload) => void;
+  recordingConsentLogged: (payload: RecordingConsentLoggedPayload) => void;
   error: (error: Error) => void;
 }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
@@ -10,6 +11,8 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Shared.Interoperability;
+using ClinicEz.Shared.Licensing;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,7 +27,9 @@ public sealed record CreateAppointmentCommand(
     int DurationMinutes = 30,
     string? ServiceType = "Consultation",
     string? Reason = null,
-    string? Notes = null) : IRequest<AppointmentDto>;
+    string? Notes = null,
+    AppointmentType? AppointmentType = null,
+    TeleconsultPaymentPolicy? PaymentPolicy = null) : IRequest<AppointmentDto>;
 
 public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppointmentCommand, AppointmentDto>
 {
@@ -33,19 +38,31 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
     private readonly IClinicContext _clinicContext;
     private readonly IAppointmentNotificationDispatcher? _dispatcher;
     private readonly IInteropPublisher? _publisher;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
+    private readonly IRepository<Invoice>? _invoiceRepo;
+    private readonly IBillingRequestPublisher? _billingPublisher;
+    private readonly IFacilityLicenseValidator? _licenseValidator;
 
     public CreateAppointmentCommandHandler(
         IRepository<Appointment> appointmentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IAppointmentNotificationDispatcher? dispatcher = null,
-        IInteropPublisher? publisher = null)
+        IInteropPublisher? publisher = null,
+        IRepository<FacilitySettings>? settingsRepo = null,
+        IRepository<Invoice>? invoiceRepo = null,
+        IBillingRequestPublisher? billingPublisher = null,
+        IFacilityLicenseValidator? licenseValidator = null)
     {
         _appointmentRepo = appointmentRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _dispatcher = dispatcher;
         _publisher = publisher;
+        _settingsRepo = settingsRepo;
+        _invoiceRepo = invoiceRepo;
+        _billingPublisher = billingPublisher;
+        _licenseValidator = licenseValidator;
     }
 
     public async Task<AppointmentDto> Handle(CreateAppointmentCommand request, CancellationToken ct)
@@ -71,9 +88,143 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
             }
         }
 
+        var isTeleconsultService =
+            string.Equals(request.ServiceType, "Teleconsult", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(request.ServiceType, "Teleconsultation", StringComparison.OrdinalIgnoreCase);
+
+        var resolvedAppointmentType = request.AppointmentType
+            ?? (isTeleconsultService ? AppointmentType.Teleconsult : AppointmentType.InPerson);
+
+        var isTeleconsult = resolvedAppointmentType == AppointmentType.Teleconsult || isTeleconsultService;
+
+        var appointmentId = Guid.NewGuid();
+        Guid? callId = isTeleconsult ? Guid.NewGuid() : null;
+
+        FacilitySettings? settings = null;
+        if (isTeleconsult && _settingsRepo != null)
+        {
+            settings = await _settingsRepo.Query(s => s.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (isTeleconsult && settings != null && !string.IsNullOrWhiteSpace(settings.LicenseToken))
+        {
+            var validator = _licenseValidator ?? new FacilityLicenseValidator();
+            var validation = validator.Validate(settings.LicenseToken, _clinicContext.ClinicId, _clinicContext.TenantId);
+            var isWorkspaceEntitled = validation.IsValid &&
+                validation.Payload?.EnabledFeatures != null &&
+                validation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+
+            var effectiveEnabled = isWorkspaceEntitled && settings.EnableTeleconsultation;
+            if (!effectiveEnabled)
+            {
+                throw new ForbiddenException("Teleconsultation is not enabled for this clinic.");
+            }
+        }
+
+        var defaultPolicyStr = settings?.TeleconsultPaymentPolicy ?? "Prepaid";
+        var defaultPolicy = Enum.TryParse<TeleconsultPaymentPolicy>(defaultPolicyStr, true, out var pol)
+            ? pol
+            : TeleconsultPaymentPolicy.Prepaid;
+
+        var paymentPolicy = request.PaymentPolicy ?? defaultPolicy;
+        var paymentStatus = isTeleconsult
+            ? (paymentPolicy == TeleconsultPaymentPolicy.Exempt ? TeleconsultPaymentStatus.Exempt : TeleconsultPaymentStatus.Pending)
+            : TeleconsultPaymentStatus.Pending;
+
+        Guid? invoiceId = null;
+        Guid? invoiceRequestId = null;
+
+        if (isTeleconsult && paymentPolicy == TeleconsultPaymentPolicy.Prepaid && _invoiceRepo != null)
+        {
+            var fee = settings?.TeleconsultDefaultFee ?? 400.00m;
+            invoiceId = Guid.NewGuid();
+            invoiceRequestId = invoiceId;
+
+            var now = DateTime.UtcNow;
+            var invoice = new Invoice
+            {
+                Id = invoiceId.Value,
+                InvoiceNumber = $"INV-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
+                TenantId = _clinicContext.TenantId,
+                ClinicId = _clinicContext.ClinicId,
+                AppointmentId = appointmentId,
+                PatientId = request.PatientId,
+                PatientName = request.PatientName.Trim(),
+                GrossAmount = fee,
+                NetAmount = fee,
+                BalanceDue = fee,
+                AmountPaid = 0m,
+                Status = InvoiceStatus.Draft,
+                InvoiceDate = now,
+                BilledByStaffId = _clinicContext.StaffId,
+                BilledByStaffName = _clinicContext.StaffName,
+                LineItems = new List<InvoiceLineItem>
+                {
+                    new InvoiceLineItem
+                    {
+                        Id = Guid.NewGuid(),
+                        InvoiceId = invoiceId.Value,
+                        TenantId = _clinicContext.TenantId,
+                        ClinicId = _clinicContext.ClinicId,
+                        Description = "Teleconsultation Consultation Fee",
+                        Category = "Teleconsultation",
+                        UnitPrice = fee,
+                        Quantity = 1,
+                        TotalPrice = fee
+                    }
+                }
+            };
+
+            await _invoiceRepo.AddAsync(invoice, ct);
+
+            if (string.Equals(settings?.CashierMode, "CashierCounter", StringComparison.OrdinalIgnoreCase))
+            {
+                invoice.BillingRequestedAt = now;
+                var billingPayload = new BillingInvoiceRequestedPayload
+                {
+                    InvoiceRequestId = invoice.Id,
+                    TenantId = _clinicContext.TenantId,
+                    FacilityId = _clinicContext.ClinicId.ToString(),
+                    FacilityType = FacilityType.Clinic,
+                    BranchId = _clinicContext.BranchId?.ToString(),
+                    PatientId = request.PatientId,
+                    PatientName = request.PatientName.Trim(),
+                    VisitKey = appointmentId.ToString(),
+                    SourceType = "Teleconsult",
+                    SourceId = appointmentId,
+                    Lines = new List<BillingLineDto>
+                    {
+                        new BillingLineDto
+                        {
+                            Code = "TELECONSULT",
+                            Description = "Teleconsultation Fee",
+                            Quantity = 1,
+                            UnitPrice = fee
+                        }
+                    }
+                };
+
+                if (_billingPublisher != null)
+                {
+                    await _billingPublisher.PublishInvoiceRequestedAsync(billingPayload, ct);
+                }
+                else if (_publisher != null && !string.IsNullOrWhiteSpace(_clinicContext.TenantId))
+                {
+                    var facilityId = _clinicContext.ClinicId.ToString();
+                    _publisher.Enqueue(
+                        InteropTypes.BillingInvoiceRequested,
+                        Party.ForFacility(_clinicContext.TenantId, facilityId, FacilityType.Clinic),
+                        Party.ForFacility(_clinicContext.TenantId, facilityId, FacilityType.Clinic, InteropServices.Billing),
+                        invoice.Id,
+                        billingPayload);
+                }
+            }
+        }
+
         var appointment = new Appointment
         {
-            Id = Guid.NewGuid(),
+            Id = appointmentId,
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,
             PatientId = request.PatientId,
@@ -84,7 +235,13 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
             DurationMinutes = duration,
             EndTimeUtc = scheduledEndUtc,
             Status = AppointmentStatus.Confirmed,
-            ServiceType = request.ServiceType?.Trim(),
+            AppointmentType = resolvedAppointmentType,
+            ServiceType = request.ServiceType?.Trim() ?? (isTeleconsult ? "Teleconsult" : null),
+            PaymentPolicy = paymentPolicy,
+            PaymentStatus = paymentStatus,
+            InvoiceId = invoiceId,
+            InvoiceRequestId = invoiceRequestId,
+            CallId = callId,
             Reason = request.Reason?.Trim(),
             Notes = request.Notes?.Trim(),
             CreatedAt = DateTime.UtcNow,

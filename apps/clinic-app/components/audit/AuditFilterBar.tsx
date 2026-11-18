@@ -162,29 +162,14 @@ export function AuditFilterBar({
 
         {/* Mobile "More Filters" Trigger Button */}
         {isCompact && onOpenMoreFilters && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Filter options, ${activeFiltersCount} active`}
+          <Button
+            title={`Filters${activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ''}`}
+            variant={activeFiltersCount > 0 ? 'outline' : 'secondary'}
+            size="md"
+            icon="settings"
             onPress={onOpenMoreFilters}
-            style={[
-              styles.moreFiltersBtn,
-              activeFiltersCount > 0 ? styles.moreFiltersBtnActive : styles.moreFiltersBtnInactive,
-            ]}
-          >
-            <IconSlot
-              value="settings"
-              size={theme.sizes.iconSm}
-              color={activeFiltersCount > 0 ? theme.colors.primary : theme.colors.textSecondary}
-            />
-            <ThemedText
-              style={[
-                styles.moreFiltersBtnText,
-                activeFiltersCount > 0 ? styles.moreFiltersBtnTextActive : styles.moreFiltersBtnTextInactive,
-              ]}
-            >
-              Filters{activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ''}
-            </ThemedText>
-          </Pressable>
+            accessibilityLabel={`Filter options, ${activeFiltersCount} active`}
+          />
         )}
 
         {/* Desktop Severities Picker */}
@@ -302,15 +287,15 @@ export function AuditFilterBar({
 
         {/* On Mobile: Reset Quick Chip if filters active */}
         {isCompact && activeFiltersCount > 0 && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Reset all filters"
+          <Button
+            title="Clear"
+            variant="dangerOutline"
+            size="xs"
+            icon="close"
             onPress={onResetFilters}
+            accessibilityLabel="Reset all filters"
             style={styles.mobileResetChip}
-          >
-            <IconSlot value="close" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-            <ThemedText style={styles.mobileResetChipText}>Clear</ThemedText>
-          </Pressable>
+          />
         )}
       </ScrollView>
 
@@ -482,20 +467,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
   mobileResetChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
     borderRadius: theme.radii.full,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.emergencyBorder,
-    backgroundColor: theme.colors.emergencyBg,
-    minHeight: theme.sizes.controlSm,
-  },
-  mobileResetChipText: {
-    ...theme.typography.captionBold,
-    color: theme.colors.emergencyText,
   },
   searchRow: {
     flexDirection: 'row',
@@ -525,32 +497,6 @@ const styles = StyleSheet.create({
   },
   clearSearchButton: {
     padding: theme.spacing.xs,
-  },
-  moreFiltersBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    height: theme.sizes.controlMd,
-    paddingHorizontal: theme.spacing.sm,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-  },
-  moreFiltersBtnActive: {
-    backgroundColor: theme.colors.primaryLight,
-    borderColor: theme.colors.primary,
-  },
-  moreFiltersBtnInactive: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.borderDark,
-  },
-  moreFiltersBtnText: {
-    ...theme.typography.captionBold,
-  },
-  moreFiltersBtnTextActive: {
-    color: theme.colors.primary,
-  },
-  moreFiltersBtnTextInactive: {
-    color: theme.colors.textSecondary,
   },
   severityContainer: {
     flexDirection: 'row',

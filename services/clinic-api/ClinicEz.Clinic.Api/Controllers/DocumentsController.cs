@@ -60,6 +60,7 @@ public sealed class DocumentsController : ControllerBase
     {
         var cert = await _medCertRepo.GetByIdAsync(id, ct);
         if (cert == null) return NotFound($"Medical certificate '{id}' was not found.");
+        if (!cert.IsSigned) return BadRequest("Medical certificate is pending consultation sign-off and is not valid until the consultation encounter is signed.");
 
         var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
@@ -95,6 +96,7 @@ public sealed class DocumentsController : ControllerBase
     {
         var referral = await _referralRepo.GetByIdAsync(id, ct);
         if (referral == null) return NotFound($"Referral letter '{id}' was not found.");
+        if (!referral.IsSigned) return BadRequest("Referral letter is pending consultation sign-off and is not valid until the consultation encounter is signed.");
 
         var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
@@ -137,9 +139,10 @@ public sealed class DocumentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<IReadOnlyList<MedicalCertificateDto>>>> GetMedicalCertificates(
         [FromQuery] Guid? patientId,
         [FromQuery] Guid? doctorId,
-        CancellationToken ct)
+        [FromQuery] bool includeUnsigned = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetMedicalCertificatesQuery(patientId, doctorId), ct);
+        var result = await _sender.Send(new GetMedicalCertificatesQuery(patientId, doctorId, includeUnsigned), ct);
         return Ok(ApiResponse<IReadOnlyList<MedicalCertificateDto>>.Success(result));
     }
 
@@ -158,9 +161,10 @@ public sealed class DocumentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<IReadOnlyList<ReferralLetterDto>>>> GetReferralLetters(
         [FromQuery] Guid? patientId,
         [FromQuery] Guid? doctorId,
-        CancellationToken ct)
+        [FromQuery] bool includeUnsigned = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetReferralLettersQuery(patientId, doctorId), ct);
+        var result = await _sender.Send(new GetReferralLettersQuery(patientId, doctorId, includeUnsigned), ct);
         return Ok(ApiResponse<IReadOnlyList<ReferralLetterDto>>.Success(result));
     }
 }

@@ -21,6 +21,7 @@ import {
 import { Chip } from './common';
 import AddEditFieldModal from './AddEditFieldModal';
 import SortableCustomFieldsList, { ReorderControlsMode } from './SortableCustomFieldsList';
+import { resolveCustomFieldPlaceholderPresentation } from '../custom-fields/DynamicCustomFieldsRenderer';
 
 const FIELD_TYPE_BADGE: Record<ClinicCustomFieldDefinition['dataType'], BadgeVariant> = {
   Text: 'neutral',
@@ -91,30 +92,30 @@ export interface TemplateBundlePreset {
 const TEMPLATE_BUNDLES: TemplateBundlePreset[] = [
   {
     key: 'intake',
-    title: 'Patient Intake: Secondary Address & Emergency Contacts',
-    subtitle: '13 Fields · Secondary Address + Primary & Secondary Emergency Contacts',
-    badge: '13 Fields · Intake Standard',
+    title: 'Emergency Contacts & Secondary Address',
+    subtitle: '13 Questions · Secondary address plus primary and secondary emergency contacts',
+    badge: '13 Questions',
     icon: 'emergency',
   },
   {
     key: 'university',
     title: 'University / School Clinic',
-    subtitle: '8 Fields · Affiliation, Student/Employee IDs, cascading College & Program dropdowns',
-    badge: '8 Fields · Cascading',
+    subtitle: '8 Questions · Student or employee ID, college, and degree program choices',
+    badge: '8 Questions',
     icon: 'graduation',
   },
   {
     key: 'workplace',
     title: 'Workplace / Corporate Health',
-    subtitle: '4 Fields · Employment Type, Department, Corporate Employee ID, HMO Provider',
-    badge: '4 Fields · Corporate',
+    subtitle: '4 Questions · Employment type, department, employee ID, and HMO provider',
+    badge: '4 Questions',
     icon: 'briefcase',
   },
   {
     key: 'demographics',
-    title: 'General Clinical Demographics',
-    subtitle: '3 Fields · Religion, Mother’s Maiden Name, conditional Spouse Name',
-    badge: '3 Fields · Conditional',
+    title: 'Additional Patient Details',
+    subtitle: '3 Questions · Religion, mother’s maiden name, and spouse name when married',
+    badge: '3 Questions',
     icon: 'patients',
   },
 ];
@@ -363,14 +364,14 @@ export default function CustomFieldsTab({
 
   return (
     <View style={styles.container}>
-      {/* Suggested Common Templates Library Toolbar Card */}
+      {/* Ready-Made Question Sets Card */}
       <Card>
         <CardHeader
-          title="Intake Template Library"
-          subtitle="Adopt standard clinic setups with 1-click installable bundles"
+          title="Ready-Made Question Sets"
+          subtitle="Add common registration questions for schools, workplaces, or general clinics in one click"
           rightAction={
             <Button
-              title={showTemplatesSection ? 'Hide Templates' : 'Browse Templates'}
+              title={showTemplatesSection ? 'Hide Question Sets' : 'Browse Question Sets'}
               variant="outline"
               size="sm"
               icon="scroll"
@@ -396,7 +397,7 @@ export default function CustomFieldsTab({
                       {bundle.subtitle}
                     </ThemedText>
                     <Button
-                      title={isInstalling ? 'Installing...' : '1-Click Install'}
+                      title={isInstalling ? 'Adding...' : 'Add Question Set'}
                       variant="primary"
                       size="sm"
                       loading={isInstalling}
@@ -410,131 +411,138 @@ export default function CustomFieldsTab({
         )}
       </Card>
 
-      {/* Patient Intake Custom Fields Card */}
+      {/* Registration Questions Card */}
       <Card>
         <CardHeader
-          title="Patient Intake & Custom Fields"
-          subtitle="Configure questions, arrange display sequence, and mark required fields"
+          title="Registration Questions"
+          subtitle="Extra questions asked when registering a patient, arranged in the order they appear"
           rightAction={
-            <Button title="Add intake field" icon="plus" onPress={handleOpenAdd} />
+            <Button
+              title="Add Question"
+              icon="plus"
+              onPress={handleOpenAdd}
+              disabled={showSkeletons}
+            />
           }
         />
         <CardContent>
-          {/* Category Filter Chips */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipScroll}
-            contentContainerStyle={styles.chipRow}
-          >
-            {(
-              [
-                'All',
-                'Demographics',
-                'Academic',
-                'Employment',
-                'Clinical',
-                'Insurance',
-                'MedicalHistory',
-              ] as const
-            ).map((cat) => {
-              const count =
-                cat === 'All'
-                  ? fields.length
-                  : fields.filter((f) => f.category?.toLowerCase() === cat.toLowerCase()).length;
-              return (
-                <Chip
-                  key={cat}
-                  label={`${cat} (${count})`}
-                  active={selectedCategory === cat}
-                  onPress={() => setSelectedCategory(cat)}
-                />
-              );
-            })}
-          </ScrollView>
-
-          {/* Reorder Mode Selector Toolbar */}
-          <View style={styles.reorderControlsToolbar}>
-            <View style={styles.reorderModeLabelRow}>
-              <Icon name="gripVertical" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                Reorder controls:
-              </ThemedText>
-            </View>
-            <View style={styles.modeSegmentGroup}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Show both drag handle and subtle arrows"
-                accessibilityState={{ selected: reorderMode === 'both' }}
-                style={[styles.modeSegmentBtn, reorderMode === 'both' && styles.modeSegmentBtnActive]}
-                onPress={() => handleSetReorderMode('both')}
-              >
-                <ThemedText
-                  variant="captionBold"
-                  color={reorderMode === 'both' ? theme.colors.onPrimary : theme.colors.textSecondary}
-                >
-                  Both
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Show drag and drop handle only"
-                accessibilityState={{ selected: reorderMode === 'dnd' }}
-                style={[styles.modeSegmentBtn, reorderMode === 'dnd' && styles.modeSegmentBtnActive]}
-                onPress={() => handleSetReorderMode('dnd')}
-              >
-                <ThemedText
-                  variant="captionBold"
-                  color={reorderMode === 'dnd' ? theme.colors.onPrimary : theme.colors.textSecondary}
-                >
-                  Drag & Drop
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Show subtle arrow buttons only"
-                accessibilityState={{ selected: reorderMode === 'arrows' }}
-                style={[styles.modeSegmentBtn, reorderMode === 'arrows' && styles.modeSegmentBtnActive]}
-                onPress={() => handleSetReorderMode('arrows')}
-              >
-                <ThemedText
-                  variant="captionBold"
-                  color={reorderMode === 'arrows' ? theme.colors.onPrimary : theme.colors.textSecondary}
-                >
-                  Arrows only
-                </ThemedText>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Category Filter Guidance Banner */}
-          {selectedCategory !== 'All' && reorderMode !== 'arrows' && (
-            <View style={styles.filteredCategoryBanner}>
-              <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.info} />
-              <ThemedText variant="caption" color={theme.colors.infoText} style={styles.flex1}>
-                {reorderMode === 'dnd'
-                  ? `Filtered by category "${selectedCategory}". Switch to "All" to drag and drop across all intake fields.`
-                  : `Filtered by category "${selectedCategory}". Switch to "All" to drag and drop across all intake fields, or use the subtle Up/Down arrows.`}
-              </ThemedText>
-            </View>
-          )}
-
-          {/* 4 Core UX States */}
           {showSkeletons ? (
             <SkeletonList rows={4} />
-          ) : fieldsLoadError ? (
+          ) : (
+            <>
+              {/* Category Filter Chips */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.chipScroll}
+                contentContainerStyle={styles.chipRow}
+              >
+                {(
+                  [
+                    'All',
+                    'Demographics',
+                    'Academic',
+                    'Employment',
+                    'Clinical',
+                    'Insurance',
+                    'MedicalHistory',
+                  ] as const
+                ).map((cat) => {
+                  const count =
+                    cat === 'All'
+                      ? fields.length
+                      : fields.filter((f) => f.category?.toLowerCase() === cat.toLowerCase()).length;
+                  return (
+                    <Chip
+                      key={cat}
+                      label={`${cat} (${count})`}
+                      active={selectedCategory === cat}
+                      onPress={() => setSelectedCategory(cat)}
+                    />
+                  );
+                })}
+              </ScrollView>
+
+              {/* Reorder Mode Selector Toolbar */}
+              <View style={styles.reorderControlsToolbar}>
+                <View style={styles.reorderModeLabelRow}>
+                  <Icon name="gripVertical" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                    Reorder controls:
+                  </ThemedText>
+                </View>
+                <View style={styles.modeSegmentGroup}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Show both drag handle and subtle arrows"
+                    accessibilityState={{ selected: reorderMode === 'both' }}
+                    style={[styles.modeSegmentBtn, reorderMode === 'both' && styles.modeSegmentBtnActive]}
+                    onPress={() => handleSetReorderMode('both')}
+                  >
+                    <ThemedText
+                      variant="captionBold"
+                      color={reorderMode === 'both' ? theme.colors.onPrimary : theme.colors.textSecondary}
+                    >
+                      Both
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Show drag and drop handle only"
+                    accessibilityState={{ selected: reorderMode === 'dnd' }}
+                    style={[styles.modeSegmentBtn, reorderMode === 'dnd' && styles.modeSegmentBtnActive]}
+                    onPress={() => handleSetReorderMode('dnd')}
+                  >
+                    <ThemedText
+                      variant="captionBold"
+                      color={reorderMode === 'dnd' ? theme.colors.onPrimary : theme.colors.textSecondary}
+                    >
+                      Drag & Drop
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Show subtle arrow buttons only"
+                    accessibilityState={{ selected: reorderMode === 'arrows' }}
+                    style={[styles.modeSegmentBtn, reorderMode === 'arrows' && styles.modeSegmentBtnActive]}
+                    onPress={() => handleSetReorderMode('arrows')}
+                  >
+                    <ThemedText
+                      variant="captionBold"
+                      color={reorderMode === 'arrows' ? theme.colors.onPrimary : theme.colors.textSecondary}
+                    >
+                      Arrows only
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+
+              {/* Category Filter Guidance Banner */}
+              {selectedCategory !== 'All' && reorderMode !== 'arrows' && (
+                <View style={styles.filteredCategoryBanner}>
+                  <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.info} />
+                  <ThemedText variant="caption" color={theme.colors.infoText} style={styles.flex1}>
+                    {reorderMode === 'dnd'
+                      ? `Showing "${selectedCategory}" questions only. Switch to "All" to drag and reorder across all questions.`
+                      : `Showing "${selectedCategory}" questions only. Switch to "All" to drag and reorder across all questions, or use the Up/Down arrows.`}
+                  </ThemedText>
+                </View>
+              )}
+
+              {/* Error / Empty / Active States */}
+              {fieldsLoadError ? (
             <ErrorState
               compact
-              title="Could not load custom fields"
+              title="Could not load registration questions"
               message={fieldsLoadError}
               onRetry={onRefreshFields}
             />
           ) : visibleFields.length === 0 ? (
             <EmptyState
               icon="clipboard"
-              title="No custom fields defined"
-              description="Add custom intake questions or install a 1-click template bundle."
-              actionTitle="Browse Templates"
+              title="No extra registration questions yet"
+              description="Add your own registration questions or choose a ready-made question set."
+              actionTitle="Browse Question Sets"
               onAction={() => setShowTemplatesSection(true)}
             />
           ) : (
@@ -578,6 +586,14 @@ export default function CustomFieldsTab({
                   }
                 }
 
+                const isSingleLineField =
+                  field.dataType === 'Text' ||
+                  field.dataType === 'Number' ||
+                  field.dataType === 'Date';
+                const placeholderPresentation = isSingleLineField
+                  ? resolveCustomFieldPlaceholderPresentation(field.placeholder, field.dataType)
+                  : null;
+
                 return (
                   <>
                     {/* Field Info & Semantic Badges */}
@@ -594,6 +610,13 @@ export default function CustomFieldsTab({
                           variant={field.isRequired ? 'emergency' : 'neutral'}
                           size="sm"
                         />
+                        {placeholderPresentation?.isExpandedHint ? (
+                          <Badge
+                            label="Expanded Guidance"
+                            variant="primary"
+                            size="sm"
+                          />
+                        ) : null}
                         {visibilityRule ? (
                           <Badge
                             label={formatRuleBadgeLabel(visibilityRule, fields)}
@@ -603,7 +626,7 @@ export default function CustomFieldsTab({
                         ) : null}
                         {conditionalOptions ? (
                           <Badge
-                            label={`Cascades on ${conditionalOptions.parentField}`}
+                            label={`Depends on ${conditionalOptions.parentField}`}
                             variant="purple"
                             size="sm"
                           />
@@ -611,8 +634,8 @@ export default function CustomFieldsTab({
                       </View>
 
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        Key: {field.fieldKey} · Category: {field.category || 'General'}
-                        {field.placeholder ? ` · Hint: "${field.placeholder}"` : ''}
+                        Field ID: {field.fieldKey} · Group: {field.category || 'General'}
+                        {field.placeholder ? ` · Help text: "${field.placeholder}"` : ''}
                       </ThemedText>
 
                       {options.length > 0 && (
@@ -634,7 +657,7 @@ export default function CustomFieldsTab({
                       />
                       <Button
                         title="Delete"
-                        variant="ghost"
+                        variant="dangerGhost"
                         size="sm"
                         icon="trash"
                         style={isCompact ? styles.flexBtn : undefined}
@@ -645,6 +668,8 @@ export default function CustomFieldsTab({
                 );
               }}
             />
+          )}
+            </>
           )}
         </CardContent>
       </Card>

@@ -158,9 +158,14 @@ mock.module('../context/StaffContext', staffContextMockFactory);
 mock.module('../../context/StaffContext', staffContextMockFactory);
 mock.module('@context/StaffContext', staffContextMockFactory);
 
-const { default: NursingProceduresTab, ProcedureExecutionModal, OrderProcedureModal } =
-  await import('../components/chart/NursingProceduresTab');
-import type { ClinicalProcedureRecord } from '../services/clinicService';
+const nursingProceduresModule = await import('../components/chart/NursingProceduresTab');
+const { default: NursingProceduresTab, ProcedureExecutionModal } = nursingProceduresModule;
+const { OrderCatalogSearchModal } = await import('../components/consultation/OrderCatalogSearchModal');
+const { default: AdministrativeDocumentsTab } = await import('../components/chart/AdministrativeDocumentsTab');
+const { default: EncountersTimelineTab } = await import('../components/chart/EncountersTimelineTab');
+const { default: ExecutiveSummaryTab } = await import('../components/chart/ExecutiveSummaryTab');
+const { default: PatientSummarySpine } = await import('../components/chart/PatientSummarySpine');
+import type { ClinicalProcedureRecord, ClinicServiceItem } from '../services/clinicService';
 
 describe('Consultation Chart, Lab Reports & Dialog Fixes Verification Suite', () => {
   beforeEach(() => {
@@ -328,19 +333,306 @@ describe('Consultation Chart, Lab Reports & Dialog Fixes Verification Suite', ()
       expect(markup).toContain('Complete &amp; Discharge Patient');
     });
 
-    test('3.2 OrderProcedureModal renders structured catalog selection, room selection, and confirm button', () => {
+    test('3.2 Legacy OrderProcedureModal is deleted and replaced by permission-aware OrderCatalogSearchModal ("Add Test or Procedure")', () => {
+      expect((nursingProceduresModule as any).OrderProcedureModal).toBeUndefined();
+
+      mockAuthUser = { id: 'nurse-1', role: 'Nurse', permissions: ['procedures:write'] };
+      const catalog: ClinicServiceItem[] = [
+        {
+          id: 'svc-neb',
+          code: 'PROC-NEB',
+          name: 'Nebulization Therapy',
+          category: 'Procedure',
+          standardPrice: 250,
+          isActive: true,
+          isNurseOrderable: true,
+        } as any,
+        {
+          id: 'svc-excise',
+          code: 'PROC-EXCISE',
+          name: 'Minor Cyst Excision',
+          category: 'Procedure',
+          standardPrice: 1200,
+          isActive: true,
+          isNurseOrderable: false,
+        } as any,
+        {
+          id: 'svc-cbc',
+          code: 'LAB-CBC',
+          name: 'Complete Blood Count',
+          category: 'Diagnostic',
+          standardPrice: 300,
+          isActive: true,
+          isNurseOrderable: false,
+        } as any,
+      ];
+
       const markup = renderToStaticMarkup(
-        React.createElement(OrderProcedureModal, {
+        React.createElement(OrderCatalogSearchModal, {
           visible: true,
-          patientId: 'pat-1',
+          catalog,
+          initialCategory: 'Procedure',
+          initialSelectedItem: catalog[1], // non-nurse-orderable procedure selected by Nurse
           onClose: () => {},
+          onSelectOrder: () => {},
         })
       );
 
-      expect(markup).toContain('Order Clinical Procedure');
-      expect(markup).toContain('PROCEDURE CATALOG SELECTION');
-      expect(markup).toContain('data-testid="confirm-order-procedure-button"');
-      expect(markup).toContain('Confirm Order');
+      expect(markup).toContain('Add Test or Procedure');
+      expect(markup).not.toContain('Order Clinical Procedure');
+      expect(markup).toContain('Nurse-Orderable');
+      // Nurse without laborders:write should not see non-nurse-orderable Diagnostic category tab
+      expect(markup).not.toContain('Complete Blood Count');
+      // Non-nurse-orderable procedure requires attending physician selection
+      expect(markup).toContain('Attending Physician (Doctor Order) *');
+      expect(markup).toContain('Doctor order required');
+    });
+  });
+
+  describe('4. Ordering Attribution & Cancel Order Authorization (Admin or Ordering User Only)', () => {
+    const orderedByDoctorProc: ClinicalProcedureRecord = {
+      id: 'proc-doc-1',
+      tenantId: 't1',
+      clinicId: 'c1',
+      patientId: 'pat-1',
+      patientName: 'Clarisse Alvarado',
+      procedureName: 'Nebulization Therapy',
+      category: 'Procedure',
+      status: 'Ordered',
+      orderedByDoctorId: 'doc-1',
+      orderedByDoctorName: 'Dr. Wave Ambray',
+      createdBy: 'doc-1',
+      scheduledAt: '2026-11-03T02:11:00.000Z',
+    };
+
+    test('4.1 Displays who ordered the procedure on the procedure card', () => {
+      mockAuthUser = { id: 'admin-1', role: 'Admin', permissions: ['procedures:write'] };
+      const markup = renderToStaticMarkup(
+        React.createElement(NursingProceduresTab, {
+          procedures: [orderedByDoctorProc],
+          patientId: 'pat-1',
+        })
+      );
+      expect(markup).toContain('Ordered by Dr. Wave Ambray');
+      expect(markup).toContain('data-testid="cancel-procedure-action"');
+    });
+
+    test('4.2 Hides Cancel Order when authenticated non-admin user did NOT order the procedure', () => {
+      mockAuthUser = { id: 'nurse-1', name: 'Joy Nurse', role: 'Nurse', permissions: ['procedures:write'] };
+      (globalThis as any).__mockStaffContext = {
+        current: { id: 'nurse-1', firstName: 'Joy', lastName: 'Nurse', role: 'Nurse', isActive: true },
+        staff: mockStaffList,
+        currentName: 'Joy Nurse',
+      };
+      const markup = renderToStaticMarkup(
+        React.createElement(NursingProceduresTab, {
+          procedures: [orderedByDoctorProc],
+          patientId: 'pat-1',
+        })
+      );
+      expect(markup).toContain('Ordered by Dr. Wave Ambray');
+      expect(markup).toContain('data-testid="execute-procedure-action"');
+      expect(markup).not.toContain('data-testid="cancel-procedure-action"');
+    });
+
+    test('4.3 Shows Cancel Order when authenticated user IS the ordering clinician', () => {
+      mockAuthUser = { id: 'doc-1', name: 'Dr. Wave Ambray', role: 'Doctor', permissions: ['procedures:write'] };
+      (globalThis as any).__mockStaffContext = {
+        current: { id: 'doc-1', firstName: 'Wave', lastName: 'Ambray', role: 'Doctor', prcLicenseNumber: '12345', isActive: true },
+        staff: mockStaffList,
+        currentName: 'Dr. Wave Ambray',
+      };
+      const markup = renderToStaticMarkup(
+        React.createElement(NursingProceduresTab, {
+          procedures: [orderedByDoctorProc],
+          patientId: 'pat-1',
+        })
+      );
+      expect(markup).toContain('data-testid="cancel-procedure-action"');
+    });
+  });
+
+  describe('5. Patient Chart Clinic Date Formatting, YAKAP Labeling, and Jargon-Free Highlighted Diagnoses', () => {
+    test('5.1 AdministrativeDocumentsTab formats issueDate and referralDate using clinic dateFormat setting', () => {
+      (globalThis as any).__mockClinicContext = {
+        facilityName: 'Metro Health Center',
+        dateFormat: 'MM/dd/yyyy',
+        timeFormat: '12h',
+        timeZoneId: 'Asia/Manila',
+      };
+
+      const markup = renderToStaticMarkup(
+        React.createElement(AdministrativeDocumentsTab, {
+          medicalCertificates: [
+            {
+              id: 'mc-1',
+              certificateNumber: 'MC-20260613-00692-F2DC',
+              patientId: 'pat-1',
+              patientName: 'Clarisse Alvarado',
+              doctorName: 'Dr. Jose Rizal',
+              prcLicenseNumber: '0098765',
+              issueDate: '2026-06-13',
+              diagnosis: 'Tension-type headache',
+              fitnessStatus: 'FitToWork',
+              isSigned: true,
+              createdAt: '2026-06-13T09:00:00Z',
+            } as any,
+          ],
+          referralLetters: [
+            {
+              id: 'ref-1',
+              referralNumber: 'REF-20260614-001',
+              patientId: 'pat-1',
+              patientName: 'Clarisse Alvarado',
+              referringDoctorName: 'Dr. Jose Rizal',
+              referralDate: '2026-06-14',
+              referredToFacility: 'PGH',
+              referredDepartment: 'Neurology',
+              provisionalDiagnosis: 'Tension-type headache',
+              reasonForReferral: 'Further evaluation',
+              isSigned: true,
+              createdAt: '2026-06-14T09:00:00Z',
+            } as any,
+          ],
+        })
+      );
+
+      expect(markup).toContain('Issued on 06/13/2026');
+      expect(markup).not.toContain('Issued on 2026-06-13');
+      expect(markup).toContain('Referred on 06/14/2026');
+      expect(markup).not.toContain('Referred on 2026-06-14');
+    });
+
+    test('5.2 EncountersTimelineTab renders YAKAP badge and highlighted diagnosis descriptions without ICD-10 code jargon', () => {
+      (globalThis as any).__mockClinicContext = {
+        facilityName: 'Metro Health Center',
+        dateFormat: 'MMM d, yyyy',
+        timeFormat: '12h',
+        timeZoneId: 'Asia/Manila',
+      };
+
+      const markup = renderToStaticMarkup(
+        React.createElement(EncountersTimelineTab, {
+          consultations: [
+            {
+              id: 'enc-yakap-1',
+              encounterDate: '2026-11-03T09:13:00Z',
+              doctorId: 'doc-1',
+              doctorName: 'Dr. Justine Mae Tabasan',
+              doctorPrcLicense: '12345',
+              isSigned: true,
+              isYakapEligible: true,
+              subjective: 'Patient presents with headache and loose stools.',
+              objective: 'Awake, alert.',
+              assessment: 'No narrative assessment documented.',
+              plan: 'Hydration and rest.',
+              diagnoses: [
+                { id: 'd1', icd10Code: 'G44.2', description: 'Tension-type headache', isPrimary: true },
+                { id: 'd2', icd10Code: 'A09.9', description: 'Diarrhea', isPrimary: false },
+              ],
+              prescriptions: [],
+            } as any,
+          ],
+        })
+      );
+
+      expect(markup).toContain('YAKAP');
+      expect(markup).not.toContain('PhilHealth Konsulta');
+      expect(markup).toContain('Tension-type headache');
+      expect(markup).toContain('Diarrhea');
+      expect(markup).not.toContain('G44.2');
+      expect(markup).not.toContain('A09.9');
+    });
+
+    test('5.3 ExecutiveSummaryTab and PatientSummarySpine omit ICD-10 codes and format problem onsetDate per clinic settings', () => {
+      (globalThis as any).__mockClinicContext = {
+        facilityName: 'Metro Health Center',
+        dateFormat: 'MM/dd/yyyy',
+        timeFormat: '12h',
+        timeZoneId: 'Asia/Manila',
+      };
+
+      const problems = [
+        {
+          id: 'prob-1',
+          clinicId: 'c1',
+          patientId: 'pat-1',
+          icd10Code: 'A09.9',
+          problemTitle: 'Diarrhea',
+          status: 'Active',
+          severity: 'Moderate',
+          isChronicNcd: false,
+          onsetDate: '2026-11-03',
+          recordedByDoctorId: 'doc-1',
+          recordedByDoctorName: 'Dr. Tabasan',
+          createdAt: '2026-11-03T00:00:00Z',
+        },
+        {
+          id: 'prob-2',
+          clinicId: 'c1',
+          patientId: 'pat-1',
+          icd10Code: 'M10.9',
+          problemTitle: 'Gout, unspecified',
+          status: 'Active',
+          severity: 'Moderate',
+          isChronicNcd: true,
+          onsetDate: '2021-01-01',
+          recordedByDoctorId: 'doc-1',
+          recordedByDoctorName: 'Dr. Tabasan',
+          createdAt: '2021-01-01T00:00:00Z',
+        },
+      ] as any;
+
+      const summaryMarkup = renderToStaticMarkup(
+        React.createElement(ExecutiveSummaryTab, {
+          patient: { id: 'pat-1', firstName: 'Clarisse', lastName: 'Alvarado' } as any,
+          chart: {
+            patientId: 'pat-1',
+            totalVisits: 2,
+            consultations: [],
+            vitalsHistory: [],
+            proceduresHistory: [],
+            labOrdersHistory: [],
+            invoicesHistory: [],
+            problems,
+            allergies: [],
+          } as any,
+          onNavigateTab: () => {},
+        })
+      );
+
+      expect(summaryMarkup).toContain('Diarrhea');
+      expect(summaryMarkup).toContain('Gout, unspecified');
+      expect(summaryMarkup).not.toContain('A09.9');
+      expect(summaryMarkup).not.toContain('M10.9');
+      expect(summaryMarkup).toContain('Onset: 11/03/2026');
+      expect(summaryMarkup).toContain('Onset: 01/01/2021');
+      expect(summaryMarkup).not.toContain('Onset: 2026-11-03');
+
+      const spineMarkup = renderToStaticMarkup(
+        React.createElement(PatientSummarySpine, {
+          patient: {
+            id: 'pat-1',
+            patientCode: 'PAT-2026-01047',
+            firstName: 'Clarisse',
+            lastName: 'Alvarado',
+            sex: 'Female',
+            dateOfBirth: '1977-06-04',
+          } as any,
+          problems,
+          allergies: [],
+          consultations: [],
+          vitalsHistory: [],
+          defaultExpanded: true,
+        })
+      );
+
+      expect(spineMarkup).toContain('Active Chronic Problems');
+      expect(spineMarkup).not.toContain('Active Chronic Problems (ICD-10)');
+      expect(spineMarkup).toContain('Diarrhea');
+      expect(spineMarkup).toContain('Gout, unspecified');
+      expect(spineMarkup).not.toContain('A09.9');
+      expect(spineMarkup).not.toContain('M10.9');
     });
   });
 });

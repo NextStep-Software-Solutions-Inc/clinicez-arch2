@@ -23,6 +23,7 @@ import {
   Calendar,
   CalendarDays,
   Camera,
+  CameraOff,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -30,6 +31,7 @@ import {
   ChevronRight,
   ChevronUp,
   Circle,
+  CircleDot,
   ClipboardList,
   Clock,
   Cloud,
@@ -39,6 +41,7 @@ import {
   Download,
   Droplet,
   Eye,
+  EyeOff,
   FileText,
   FlaskConical,
   Folder,
@@ -46,12 +49,15 @@ import {
   GraduationCap,
   GripVertical,
   HeartPulse,
+  HelpCircle,
   Hourglass,
   Info,
   KeyRound,
   Landmark,
   LayoutDashboard,
+  LayoutGrid,
   Lightbulb,
+  List,
   Lock,
   LogOut,
   Mail,
@@ -59,18 +65,25 @@ import {
   Maximize2,
   Menu,
   MessageSquare,
+  Mic,
+  MicOff,
   Microscope,
   Minimize2,
   Minus,
   Monitor,
+  MonitorOff,
+  MonitorUp,
+  Moon,
   MoreHorizontal,
   MoreVertical,
   PanelLeft,
   PanelRight,
+  PanelTop,
   Paperclip,
   Palette,
   Pencil,
   Phone,
+  PhoneOff,
   Pill,
   Plus,
   Printer,
@@ -81,6 +94,7 @@ import {
   ScanLine,
   ScrollText,
   Search,
+  Send,
   Settings,
   Shield,
   ShieldCheck,
@@ -88,7 +102,10 @@ import {
   Smartphone,
   Star,
   Stethoscope,
+  Sun,
+  SwitchCamera,
   Syringe,
+  Table2,
   Tag,
   Ticket,
   Timer,
@@ -98,6 +115,8 @@ import {
   User,
   UserCheck,
   Users,
+  Video,
+  VideoOff,
   Volume2,
   VolumeX,
   Wifi,
@@ -121,12 +140,14 @@ export const ICONS = {
   patient: User,
   patientVerified: UserCheck,
   staff: Users,
+  users: Users,
   appointments: CalendarDays,
   calendar: Calendar,
   consultations: Stethoscope,
   billing: CreditCard,
   yakap: ShieldCheck,
   shield: Shield,
+  shieldCheck: ShieldCheck,
   settings: Settings,
   chart: BarChart3,
   clinic: Building2,
@@ -140,6 +161,7 @@ export const ICONS = {
   checkCircle: CheckCircle2,
   edit: Pencil,
   save: Save,
+  send: Send,
   copy: Copy,
   trash: Trash2,
   print: Printer,
@@ -165,9 +187,14 @@ export const ICONS = {
   lock: Lock,
   key: KeyRound,
   eye: Eye,
+  eyeOff: EyeOff,
   layoutModal: AppWindow,
   layoutSplit: PanelLeft,
   layoutDrawer: PanelRight,
+  panelTop: PanelTop,
+  grid: LayoutGrid,
+  list: List,
+  table: Table2,
 
   // Direction
   arrowRight: ArrowRight,
@@ -183,6 +210,8 @@ export const ICONS = {
   // Status / feedback
   alert: AlertTriangle,
   alertCircle: AlertCircle,
+  help: HelpCircle,
+  helpCircle: HelpCircle,
   info: Info,
   emergency: Siren,
   bell: Bell,
@@ -221,7 +250,17 @@ export const ICONS = {
   paperclip: Paperclip,
   folder: Folder,
   camera: Camera,
+  cameraOff: CameraOff,
+  video: Video,
+  videoOff: VideoOff,
+  mic: Mic,
+  micOff: MicOff,
   phone: Phone,
+  phoneOff: PhoneOff,
+  screenShare: MonitorUp,
+  screenShareOff: MonitorOff,
+  switchCamera: SwitchCamera,
+  recordDot: CircleDot,
   mail: Mail,
   globe: Globe,
   wifi: Wifi,
@@ -232,6 +271,8 @@ export const ICONS = {
   message: MessageSquare,
   messageSquare: MessageSquare,
   monitor: Monitor,
+  sun: Sun,
+  moon: Moon,
   cloud: Cloud,
   volume2: Volume2,
   volumeX: VolumeX,
@@ -344,15 +385,17 @@ function SpinningIconGlyph({
 
   useEffect(() => {
     if (isWeb && typeof document !== 'undefined') {
-      if (!document.getElementById('clinicez-spin-style')) {
+      const styleId = 'clinicez-spin-style-v2';
+      if (!document.getElementById(styleId)) {
         const styleEl = document.createElement('style');
-        styleEl.id = 'clinicez-spin-style';
+        styleEl.id = styleId;
         styleEl.textContent = `
           @keyframes clinicez-spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
           }
-          .clinicez-spin-glyph {
+          .clinicez-spin-glyph,
+          [data-clinicez-spin="true"] {
             animation: clinicez-spin 0.85s linear infinite !important;
             transform-origin: center center !important;
             display: inline-flex !important;
@@ -368,7 +411,9 @@ function SpinningIconGlyph({
   return (
     <Animated.View
       accessibilityRole="image"
-      // @ts-ignore React Native Web supports className
+      // @ts-ignore React Native Web forwards dataSet to data-* DOM attributes
+      dataSet={isWeb ? { clinicezSpin: 'true' } : undefined}
+      // @ts-ignore React Native Web className fallback
       className={isWeb ? 'clinicez-spin-glyph' : undefined}
       style={[
         {
@@ -379,10 +424,7 @@ function SpinningIconGlyph({
           transform: isWeb ? undefined : [{ rotate: rotation }],
         },
         isWeb && ({
-          animationKeyframes: {
-            '0%': { transform: [{ rotate: '0deg' }] },
-            '100%': { transform: [{ rotate: '360deg' }] },
-          },
+          animationName: 'clinicez-spin',
           animationDuration: '0.85s',
           animationIterationCount: 'infinite',
           animationTimingFunction: 'linear',

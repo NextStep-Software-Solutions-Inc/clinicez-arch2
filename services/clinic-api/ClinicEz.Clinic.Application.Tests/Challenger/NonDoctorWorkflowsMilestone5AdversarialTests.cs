@@ -385,7 +385,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Waiting Patient",
             QueueNumber = "Q-WAIT",
             QueueDate = today,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Waiting,
             CheckInTime = DateTime.UtcNow.AddMinutes(-30),
             SequenceNumber = 1
@@ -401,7 +401,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Serving Patient",
             QueueNumber = "Q-SERV",
             QueueDate = today,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.InConsultation,
             CalledTime = DateTime.UtcNow.AddMinutes(-10),
             SequenceNumber = 2
@@ -417,7 +417,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Diverted ER Patient",
             QueueNumber = "Q-DIV-ER",
             QueueDate = today,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Diverted,
             DivertedToFacility = "City ER",
             SequenceNumber = 3
@@ -433,7 +433,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Diverted Procedure Patient",
             QueueNumber = "Q-DIV-PROC",
             QueueDate = today,
-            VisitType = VisitType.StandaloneProcedure,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Status = QueueStatus.Diverted,
             SequenceNumber = 4
         };
@@ -448,7 +448,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Discharged Patient",
             QueueNumber = "Q-DIS-NONDOC",
             QueueDate = today,
-            VisitType = VisitType.VitalsCheckOnly,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Status = QueueStatus.DischargedNonDoctor,
             SequenceNumber = 5
         };
@@ -463,7 +463,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Retail Walk-In Guest",
             QueueNumber = "Q-RETAIL",
             QueueDate = today,
-            VisitType = VisitType.RetailPurchase,
+            VisitType = (VisitType)6,
             Status = QueueStatus.Waiting,
             SequenceNumber = 6
         };
@@ -529,7 +529,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Consultation No-Show Candidate",
             QueueNumber = "Q-NOSHOW-1",
             QueueDate = today,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Waiting
         };
 
@@ -543,7 +543,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Emergency Trauma Divert",
             QueueNumber = "Q-DIVERTED-SECURE",
             QueueDate = today,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Diverted,
             DivertedToFacility = "East Avenue Medical Center Trauma Center",
             TransportMode = "Emergency Helicopter",
@@ -564,7 +564,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Procedure Divert",
             QueueNumber = "Q-PROC-DIVERT",
             QueueDate = today,
-            VisitType = VisitType.StandaloneProcedure,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Status = QueueStatus.Diverted,
             DivertedToFacility = "St. Luke's ER",
             TransportMode = "Ambulance",
@@ -585,7 +585,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Discharged Vaccine Visit",
             QueueNumber = "Q-DISCHARGED",
             QueueDate = today,
-            VisitType = VisitType.StandaloneProcedure,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Status = QueueStatus.DischargedNonDoctor,
             CompletedTime = divertTime
         };
@@ -600,7 +600,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Retail Guest",
             QueueNumber = "Q-RETAIL-CANCEL",
             QueueDate = today,
-            VisitType = VisitType.RetailPurchase,
+            VisitType = (VisitType)6,
             Status = QueueStatus.Waiting
         };
 

@@ -24,8 +24,12 @@ export default function QueuePushNotificationSettingsCard({
   onSettingsUpdated,
   showSkeletons = false,
 }: QueuePushNotificationSettingsCardProps) {
-  const [enablePush, setEnablePush] = useState<boolean>(true);
-  const [threshold, setThreshold] = useState<number>(2);
+  const [enablePush, setEnablePush] = useState<boolean>(
+    settings?.enableQueuePushNotifications ?? true
+  );
+  const [threshold, setThreshold] = useState<number>(() =>
+    Math.max(1, Math.min(5, settings?.queuePushNotificationThreshold ?? 2))
+  );
   const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
@@ -37,8 +41,9 @@ export default function QueuePushNotificationSettingsCard({
   }, [settings]);
 
   const isDirty = useMemo(() => {
-    const origEnable = settings?.enableQueuePushNotifications ?? true;
-    const origThreshold = settings?.queuePushNotificationThreshold ?? 2;
+    if (!settings) return false;
+    const origEnable = settings.enableQueuePushNotifications ?? true;
+    const origThreshold = Math.max(1, Math.min(5, settings.queuePushNotificationThreshold ?? 2));
     return enablePush !== origEnable || threshold !== origThreshold;
   }, [settings, enablePush, threshold]);
 
@@ -177,24 +182,15 @@ export default function QueuePushNotificationSettingsCard({
               {/* Stepper Controls Row */}
               <View style={styles.stepperContainer}>
                 <View style={styles.stepperGroup}>
-                  <Pressable
+                  <Button
+                    title="-"
+                    variant="secondary"
+                    size="sm"
                     onPress={handleDecrement}
                     disabled={!enablePush || threshold <= 1 || saving}
-                    style={({ pressed }) => [
-                      styles.stepperButton,
-                      (!enablePush || threshold <= 1) && styles.stepperButtonDisabled,
-                      pressed && styles.stepperButtonPressed,
-                    ]}
-                    accessibilityRole="button"
                     accessibilityLabel="Decrease Threshold"
-                  >
-                    <ThemedText
-                      variant="bodyBold"
-                      color={!enablePush || threshold <= 1 ? theme.colors.textMuted : theme.colors.text}
-                    >
-                      -
-                    </ThemedText>
-                  </Pressable>
+                    style={styles.stepperButton}
+                  />
 
                   <View style={styles.stepperValueBadge}>
                     <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
@@ -202,24 +198,15 @@ export default function QueuePushNotificationSettingsCard({
                     </ThemedText>
                   </View>
 
-                  <Pressable
+                  <Button
+                    title="+"
+                    variant="secondary"
+                    size="sm"
                     onPress={handleIncrement}
                     disabled={!enablePush || threshold >= 5 || saving}
-                    style={({ pressed }) => [
-                      styles.stepperButton,
-                      (!enablePush || threshold >= 5) && styles.stepperButtonDisabled,
-                      pressed && styles.stepperButtonPressed,
-                    ]}
-                    accessibilityRole="button"
                     accessibilityLabel="Increase Threshold"
-                  >
-                    <ThemedText
-                      variant="bodyBold"
-                      color={!enablePush || threshold >= 5 ? theme.colors.textMuted : theme.colors.text}
-                    >
-                      +
-                    </ThemedText>
-                  </Pressable>
+                    style={styles.stepperButton}
+                  />
                 </View>
 
                 {/* Quick Selection Chips (1 to 5) */}
@@ -260,16 +247,18 @@ export default function QueuePushNotificationSettingsCard({
               </View>
 
               {/* Save / Apply Button */}
-              <View style={styles.actionRow}>
-                <Button
-                  title="Save Notification Settings"
-                  variant="primary"
-                  icon="check"
-                  onPress={handleSaveSettings}
-                  loading={saving}
-                  disabled={!enablePush || saving || !isDirty}
-                />
-              </View>
+              {isDirty || saving ? (
+                <View style={styles.actionRow}>
+                  <Button
+                    title="Save Notification Settings"
+                    variant="primary"
+                    icon="check"
+                    onPress={handleSaveSettings}
+                    loading={saving}
+                    disabled={!enablePush || saving}
+                  />
+                </View>
+              ) : null}
             </View>
           </View>
         )}
@@ -342,20 +331,9 @@ const styles = StyleSheet.create({
   },
   stepperButton: {
     width: theme.sizes.controlSm,
+    minHeight: theme.sizes.controlSm,
     height: theme.sizes.controlSm,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperButtonDisabled: {
-    opacity: 0.5,
-    backgroundColor: theme.colors.surfaceMuted,
-  },
-  stepperButtonPressed: {
-    backgroundColor: theme.colors.primaryLight,
+    paddingHorizontal: 0,
   },
   stepperValueBadge: {
     minWidth: theme.sizes.headerHeight,

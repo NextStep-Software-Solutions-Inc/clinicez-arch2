@@ -97,6 +97,8 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
         <NursingProceduresTab
           patient={patient}
           patientId={patient?.id}
+          queueItemId={props.queueItemId ?? undefined}
+          allowDuplicateActive={props.allowDuplicateActive}
           procedures={patientChart?.proceduresHistory || []}
           onOrderProcedure={onOrderProcedure}
           onRefreshChart={onRefreshChart}
@@ -129,7 +131,11 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
         <ExternalDocumentVaultTab
           patient={patient}
           patientId={patient?.id}
-          attachments={patientChart?.attachments || patientAttachments}
+          attachments={
+            patientAttachments && patientAttachments.length > 0
+              ? patientAttachments
+              : (patientChart?.attachments || [])
+          }
           onUploadDocument={onUploadDocument}
           onVerifyAttachment={onVerifyAttachment}
           onDownloadAttachment={onDownloadAttachment}
@@ -142,6 +148,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           patientId={patient?.id}
           medicalCertificates={patientChart?.medicalCertificates || []}
           referralLetters={patientChart?.referralLetters || []}
+          queueItemId={props.queueItemId}
           onRefreshChart={onRefreshChart}
         />
       )}

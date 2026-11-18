@@ -74,10 +74,21 @@ jobs:
       distribution: simulator
       fingerprint_hash: ${{ needs.fingerprint.outputs.ios_fingerprint_hash }}
 
+  approve_android_build:
+    name: Approve Standalone Android APK Build
+    needs: [get_android_build]
+    if: ${{ !needs.get_android_build.outputs.build_id || inputs.force_build || contains(github.commit_message || github.event.head_commit.message || '', '[build]') || contains(github.commit_message || github.event.head_commit.message || '', '[rebuild]') }}
+    type: require-approval
+
+  approve_ios_build:
+    name: Approve Standalone iOS Simulator Build
+    needs: [get_ios_build]
+    if: ${{ !needs.get_ios_build.outputs.build_id || inputs.force_build || contains(github.commit_message || github.event.head_commit.message || '', '[build]') || contains(github.commit_message || github.event.head_commit.message || '', '[rebuild]') }}
+    type: require-approval
+
   build_android:
     name: Build Standalone Android APK (Native Changed)
-    needs: [get_android_build]
-    if: ${{ !needs.get_android_build.outputs.build_id || inputs.force_build || contains(github.event.head_commit.message, '[build]') || contains(github.event.head_commit.message, '[rebuild]') }}
+    needs: [get_android_build, approve_android_build]
     type: build
     params:
       platform: android
@@ -87,8 +98,7 @@ jobs:
 
   build_ios:
     name: Build Standalone iOS Simulator (Native Changed)
-    needs: [get_ios_build]
-    if: ${{ !needs.get_ios_build.outputs.build_id || inputs.force_build || contains(github.event.head_commit.message, '[build]') || contains(github.event.head_commit.message, '[rebuild]') }}
+    needs: [get_ios_build, approve_ios_build]
     type: build
     params:
       platform: ios

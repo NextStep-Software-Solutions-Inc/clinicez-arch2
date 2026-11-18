@@ -209,15 +209,14 @@ export default function DiagnosticLabTab({
                   ) : null}
                 </View>
               </View>
-              <Pressable
+              <Button
+                variant="danger"
+                size="xs"
+                icon="checkCircle"
+                title="Acknowledge & Document Verbal Readback"
                 onPress={() => handleOpenPanicModal(pOrder)}
                 style={styles.acknowledgeBtn}
-              >
-                <Icon name="checkCircle" size={14} color={theme.colors.onPrimary} />
-                <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-                  Acknowledge & Document Verbal Readback
-                </ThemedText>
-              </Pressable>
+              />
             </View>
           ))}
         </View>
@@ -227,85 +226,102 @@ export default function DiagnosticLabTab({
       {/* FILTER BUTTONS & ACTION BAR                                               */}
       {/* ========================================================================= */}
       <View style={styles.topBar}>
-        <View style={styles.filterRow}>
-          <Pressable
-            onPress={() => setSelectedFilter('ALL')}
-            style={[styles.filterBtn, selectedFilter === 'ALL' && styles.filterBtn_active]}
+        <View style={styles.filterScrollWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterRow}
           >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            <Pressable
+              onPress={() => setSelectedFilter('ALL')}
+              style={[styles.filterBtn, selectedFilter === 'ALL' && styles.filterBtn_active]}
             >
-              All Orders ({labOrders.length})
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => setSelectedFilter('PENDING')}
-            style={[styles.filterBtn, selectedFilter === 'PENDING' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'PENDING' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                All Orders ({labOrders.length})
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('PENDING')}
+              style={[styles.filterBtn, selectedFilter === 'PENDING' && styles.filterBtn_active]}
             >
-              Pending
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => setSelectedFilter('COMPLETED')}
-            style={[styles.filterBtn, selectedFilter === 'COMPLETED' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'COMPLETED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'PENDING' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Pending
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('COMPLETED')}
+              style={[styles.filterBtn, selectedFilter === 'COMPLETED' && styles.filterBtn_active]}
             >
-              Completed
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => setSelectedFilter('EXTERNAL')}
-            style={[styles.filterBtn, selectedFilter === 'EXTERNAL' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'EXTERNAL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'COMPLETED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Completed
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('EXTERNAL')}
+              style={[styles.filterBtn, selectedFilter === 'EXTERNAL' && styles.filterBtn_active]}
             >
-              External Reports
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => setSelectedFilter('PANIC')}
-            style={[styles.filterBtn, selectedFilter === 'PANIC' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'PANIC' ? theme.colors.emergencyText : theme.colors.textSecondary}
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'EXTERNAL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                External Reports
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('PANIC')}
+              style={[styles.filterBtn, selectedFilter === 'PANIC' && styles.filterBtn_active]}
             >
-              Critical / Panic ({activePanicOrders.length})
-            </ThemedText>
-          </Pressable>
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'PANIC' ? theme.colors.emergencyText : theme.colors.textSecondary}
+              >
+                Critical / Panic ({activePanicOrders.length})
+              </ThemedText>
+            </Pressable>
+          </ScrollView>
         </View>
 
         {canOrderDiagnostic ? (
-          <Pressable
+          <Button
             testID="order-diagnostic-button"
+            variant="primary"
+            size="sm"
+            icon="plus"
+            title="Order Diagnostic"
+            numberOfLines={1}
             onPress={() => onOrderDiagnostic?.()}
             style={styles.orderDiagnosticBtn}
-          >
-            <Icon name="plus" size={14} color={theme.colors.onPrimary} />
-            <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-              Order Diagnostic
-            </ThemedText>
-          </Pressable>
+          />
         ) : isDoctor && (user ? hasLabOrdersWrite : true) && !hasPrcLicense ? (
-          <View
+          <Pressable
             testID="order-diagnostic-prc-required"
-            style={[styles.orderDiagnosticBtn, styles.orderDiagnosticBtn_disabled]}
+            accessibilityRole="button"
+            accessibilityLabel="PRC License Required to order diagnostics"
+            onPress={() => {
+              notify.warning('Physicians must have a registered PRC license number on file to issue diagnostic orders.');
+            }}
+            style={styles.orderDiagnosticBtn_disabled}
           >
-            <Icon name="alert" size={14} color={theme.colors.emergencyText} />
-            <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
+            <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+            <ThemedText variant="captionBold" numberOfLines={1} color={theme.colors.emergencyText}>
               PRC License Required
             </ThemedText>
-          </View>
+          </Pressable>
         ) : null}
       </View>
 
@@ -403,52 +419,44 @@ export default function DiagnosticLabTab({
 
                 {/* Actions */}
                 <View style={styles.orderFooter}>
-                  <Pressable
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    icon="file"
+                    title="View Lab Slip & QR"
                     onPress={() => handleSlipAction(order)}
-                    style={styles.actionBtn}
-                  >
-                    <Icon name="file" size={14} color={theme.colors.primaryDark} />
-                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                      View Lab Slip & QR
-                    </ThemedText>
-                  </Pressable>
+                  />
 
                   {!isCompleted && order.status !== 'Cancelled' ? (
-                    <Pressable
+                    <Button
                       testID={`attach-external-result-${order.id}`}
+                      variant="outline"
+                      size="xs"
+                      icon="upload"
+                      title="Attach External Result"
                       onPress={() => handleAttachAction(order.id)}
-                      style={styles.actionBtn}
-                    >
-                      <Icon name="upload" size={14} color={theme.colors.primaryDark} />
-                      <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                        Attach External Result
-                      </ThemedText>
-                    </Pressable>
+                    />
                   ) : null}
 
                   {!isCompleted && order.status === 'Ordered' ? (
-                    <Pressable
+                    <Button
                       testID={`cancel-lab-order-${order.id}`}
+                      variant="dangerOutline"
+                      size="xs"
+                      icon="close"
+                      title="Cancel Requisition"
                       onPress={() => handleCancelLabOrder(order)}
-                      style={[styles.actionBtn, styles.actionBtn_emergency]}
-                    >
-                      <Icon name="close" size={14} color={theme.colors.emergencyText} />
-                      <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                        Cancel Requisition
-                      </ThemedText>
-                    </Pressable>
+                    />
                   ) : null}
 
                   {isPanic && !order.isPanicAcknowledged ? (
-                    <Pressable
+                    <Button
+                      variant="dangerOutline"
+                      size="xs"
+                      icon="checkCircle"
+                      title="Document Readback"
                       onPress={() => handleOpenPanicModal(order)}
-                      style={[styles.actionBtn, styles.actionBtn_emergency]}
-                    >
-                      <Icon name="checkCircle" size={14} color={theme.colors.emergencyText} />
-                      <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                        Document Readback
-                      </ThemedText>
-                    </Pressable>
+                    />
                   ) : null}
                 </View>
               </View>
@@ -557,28 +565,32 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   acknowledgeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: theme.colors.emergency,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: theme.radii.sm,
     alignSelf: 'flex-start',
+  },
+  filterScrollWrap: {
+    flexDirection: 'row',
+    flex: 1,
+    minWidth: 0,
+  },
+  filterScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
   },
   filterRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
     gap: theme.spacing.xs,
-    marginBottom: theme.spacing.md,
   },
   filterBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    flexShrink: 0,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
   },
   filterBtn_active: {
@@ -662,25 +674,11 @@ const styles = StyleSheet.create({
   orderFooter: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.sm,
     paddingTop: 6,
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-  },
-  actionBtn_emergency: {
-    backgroundColor: theme.colors.emergencyBg,
-    borderColor: theme.colors.emergencyBorder,
   },
   modalOverlay: {
     flex: 1,
@@ -724,32 +722,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
+    flexWrap: 'nowrap',
+    gap: theme.spacing.sm,
     marginBottom: theme.spacing.md,
+    width: '100%',
+    minWidth: 0,
   },
   orderDiagnosticBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: theme.radii.sm,
+    flexShrink: 0,
   },
   orderDiagnosticBtn_disabled: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.sm,
+    minHeight: theme.sizes.controlSm,
     backgroundColor: theme.colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: theme.colors.emergencyBorder,
-  },
-  intakeSpecimenBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: theme.radii.sm,
   },
   modalContent: {
     padding: theme.spacing.md,
@@ -811,22 +804,6 @@ const styles = StyleSheet.create({
   pickedFileActions: {
     flexDirection: 'row',
     gap: 6,
-  },
-  changeFileBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-  },
-  clearFileBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.emergencyBg,
-    borderWidth: 1,
-    borderColor: theme.colors.emergencyBorder,
   },
   pickFileBtn: {
     alignItems: 'center',
@@ -1057,24 +1034,20 @@ export function AttachExternalLabModal({
                   </View>
                 </View>
                 <View style={styles.pickedFileActions}>
-                  <Pressable
-                    style={styles.changeFileBtn}
-                    onPress={handlePick}
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    title="Change"
                     disabled={picking || saving}
-                  >
-                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                      Change
-                    </ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={styles.clearFileBtn}
-                    onPress={() => setPickedFile(null)}
+                    onPress={handlePick}
+                  />
+                  <Button
+                    variant="dangerOutline"
+                    size="xs"
+                    title="Remove"
                     disabled={saving}
-                  >
-                    <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                      Remove
-                    </ThemedText>
-                  </Pressable>
+                    onPress={() => setPickedFile(null)}
+                  />
                 </View>
               </View>
 

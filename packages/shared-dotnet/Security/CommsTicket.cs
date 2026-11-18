@@ -316,7 +316,16 @@ public static class CommsTicketValidator
             return CommsTicketValidationResult.Failure($"Failed to parse ticket payload: {ex.Message}");
         }
 
-        var signerKey = await keyClient.GetSignerKeyAsync(issuer, ct);
+        HubSignerKey? signerKey;
+        try
+        {
+            signerKey = await keyClient.GetSignerKeyAsync(issuer, ct);
+        }
+        catch (Exception ex)
+        {
+            return CommsTicketValidationResult.Failure($"Failed to retrieve signer key for client '{issuer}' from hub: {ex.Message}");
+        }
+
         if (signerKey is null)
             return CommsTicketValidationResult.Failure($"Signer client '{issuer}' is unknown to the hub.");
 

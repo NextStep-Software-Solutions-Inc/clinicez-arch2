@@ -730,4 +730,84 @@ public sealed class MyPatientsAdversarialChallengeTests
 
         await Task.WhenAll(tasks);
     }
+
+    [Fact]
+    public async Task Handle_Issue170_ProjectsAlertsAllergiesAndActiveQueueRoomId()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var handler = new GetClinicPatientsQueryHandler(patientRepo, queueRepo);
+
+        var doctorId = Guid.NewGuid();
+        var roomId = Guid.NewGuid();
+        var tz = ClinicEz.Clinic.Application.Common.Helpers.ClinicTimeZoneResolver.ResolveTimeZone("Asia/Manila");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
+
+        var patient = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-PROJ-01",
+            FirstName = "Juan",
+            LastName = "Projection",
+            DateOfBirth = new DateOnly(1990, 5, 20),
+            ContactNumber = "09170000999",
+            HasActiveSafetyAlert = false
+        };
+
+        patient.Alerts.Add(new PatientAlert
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            Category = PatientAlertCategory.FallRisk,
+            Code = "FALL",
+            Title = "High Fall Risk",
+            Status = PatientAlertStatus.Active
+        });
+
+        patient.Allergies = new List<PatientAllergy>
+        {
+            new PatientAllergy
+            {
+                TenantId = _testTenantId,
+                ClinicId = _testClinicId,
+                Allergen = "Amoxicillin",
+                Status = AllergyStatus.Active
+            }
+        };
+
+        var qItem = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientId = patient.Id,
+            PatientName = $"{patient.LastName}, {patient.FirstName}",
+            QueueNumber = "Q-100",
+            QueueDate = today,
+            DoctorId = doctorId,
+            RoomId = roomId,
+            Status = QueueStatus.Waiting
+        };
+
+        context.Patients.Add(patient);
+        context.QueueItems.Add(qItem);
+        await context.SaveChangesAsync();
+
+        var result = await handler.Handle(new GetClinicPatientsQuery(
+            FilterMode: "MY_PATIENTS",
+            DoctorId: doctorId), CancellationToken.None);
+
+        result.Should().HaveCount(1);
+        var dto = result[0];
+        dto.Alerts.Should().Be("High Fall Risk");
+        dto.Allergies.Should().Be("Amoxicillin");
+        dto.ActiveQueueTickets.Should().NotBeNull();
+        dto.ActiveQueueTickets!.Should().HaveCount(1);
+        dto.ActiveQueueTickets![0].RoomId.Should().Be(roomId);
+        dto.CustomFields.Should().NotBeNull();
+        dto.CustomFields!["activeQueueRoomId"]?.ToString().Should().Be(roomId.ToString());
+    }
 }

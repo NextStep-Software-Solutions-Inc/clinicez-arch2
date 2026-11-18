@@ -76,6 +76,11 @@ public sealed class RecordHistoricalImmunizationCommandHandler : IRequestHandler
 
         var administeredDateTime = request.AdministeredDate.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc);
 
+        var normalizedRoute = !string.IsNullOrWhiteSpace(request.Route) ? request.Route.Trim() : "Not Specified";
+        var normalizedSite = !string.IsNullOrWhiteSpace(request.Route) && !AdministerVaccineValidator.RequiresInjectionSite(request.Route)
+            ? null
+            : (!string.IsNullOrWhiteSpace(request.InjectionSite) ? request.InjectionSite.Trim() : "Not Specified");
+
         var immunization = new PatientImmunization
         {
             Id = Guid.NewGuid(),
@@ -91,8 +96,8 @@ public sealed class RecordHistoricalImmunizationCommandHandler : IRequestHandler
             ExpirationDate = request.AdministeredDate,
             DoseSequence = request.DoseSequence,
             IsSeriesCompleted = request.IsSeriesCompleted,
-            Route = !string.IsNullOrWhiteSpace(request.Route) ? request.Route : "Not Specified",
-            InjectionSite = !string.IsNullOrWhiteSpace(request.InjectionSite) ? request.InjectionSite : "Not Specified",
+            Route = normalizedRoute,
+            InjectionSite = normalizedSite,
             AdministeredAtUtc = administeredDateTime,
             AdministeredByStaffId = Guid.Empty,
             AdministeredByStaffName = !string.IsNullOrWhiteSpace(request.HistoricalFacilityName) ? request.HistoricalFacilityName : "Historical Provider",

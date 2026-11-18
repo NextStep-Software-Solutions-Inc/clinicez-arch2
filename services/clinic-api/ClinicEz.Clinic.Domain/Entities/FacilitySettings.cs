@@ -136,10 +136,27 @@ public sealed class FacilitySettings : ClinicScopedEntity
     public bool TvDisplayMaskPatientNames { get; set; } = true;
 
     /// <summary>
+    /// Controls whether attending physician and staff names are displayed on public waiting area TV displays.
+    /// When false, only the Station / Room and Ticket Number are displayed to protect staff privacy.
+    /// </summary>
+    public bool TvDisplayShowPhysicianName { get; set; } = true;
+
+    /// <summary>
     /// Optional PIN / passcode required to view the waiting area TV display (both LAN and Cloud).
     /// If set, visitors opening the TV link must supply this PIN to unlock the live queue display.
     /// </summary>
     public string? TvDisplayPin { get; set; }
+
+    /// <summary>
+    /// Selected audio chime theme for the public waiting area TV display.
+    /// Options: "classicChime", "doorbell", "marimba", "bell", "elevator", "silent".
+    /// </summary>
+    public string TvDisplaySoundTheme { get; set; } = "classicChime";
+
+    /// <summary>
+    /// Controls whether newly called queuing tickets are read aloud via Text-to-Speech in English.
+    /// </summary>
+    public bool TvDisplayVoiceEnabled { get; set; } = false;
 
     /// <summary>
     /// Controls whether mobile patient app push notifications are dispatched for queue events.
@@ -226,6 +243,7 @@ public sealed class FacilitySettings : ClinicScopedEntity
     public string? TimeFormat { get; set; }
 
     // ── Teleconsultation Recording & Payment Policies ─────────
+    public bool EnableTeleconsultation { get; set; } = false;
     public string TeleconsultRecordingPolicy { get; set; } = "Disabled";
     public int TeleconsultRecordingRetentionDays { get; set; } = 90;
     public bool TeleconsultRecordingConsentRequired { get; set; } = true;

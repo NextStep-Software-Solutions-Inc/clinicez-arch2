@@ -315,6 +315,7 @@ public sealed class PatientJoinRequestedHandler : IInteropHandler<PatientJoinReq
                     throw new InvalidOperationException($"Failed to ingest patient join request after {maxAttempts} sequence allocation attempts.", ex);
                 }
 
+                await _codeGenerator.SynchronizeTrackerWithMaxExistingAsync(clinic.TenantId, clinic.ClinicId, year, ct);
                 var nextCode = await _codeGenerator.GenerateNextCodeAsync(clinic.TenantId, clinic.ClinicId, year, ct);
                 clinicPatient.PatientCode = nextCode;
             }

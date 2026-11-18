@@ -3,7 +3,6 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import { Modal, ThemedText, Badge, Button, Icon } from '@ui';
 import { theme } from '@constants/theme';
 import type { ClinicPatient, PatientActiveQueueTicket, PatientQueueItem } from '../../services/clinicService';
-import { getPatientInitials, formatPatientDemographicsLine } from './PatientDirectoryCard';
 import {
   formatQueueStatusMeta,
   formatVisitTypeMeta,
@@ -16,6 +15,7 @@ export interface QueueTicketPickerModalProps {
   patient: ClinicPatient | null;
   tickets: Array<PatientQueueItem | PatientActiveQueueTicket>;
   serviceTitle?: string;
+  createNewTitle?: string;
   onSelectTicket: (ticket: PatientQueueItem | PatientActiveQueueTicket) => void;
   onCreateNewTicket?: () => void;
 }
@@ -26,13 +26,11 @@ export default function QueueTicketPickerModal({
   patient,
   tickets,
   serviceTitle = 'Encounter',
+  createNewTitle = '+ Start Separate Direct Visit',
   onSelectTicket,
   onCreateNewTicket,
 }: QueueTicketPickerModalProps) {
   if (!patient || !visible) return null;
-
-  const initials = getPatientInitials(patient);
-  const demographics = formatPatientDemographicsLine(patient);
 
   const footerContent = (
     <View style={styles.footerRow}>
@@ -44,7 +42,7 @@ export default function QueueTicketPickerModal({
       />
       {onCreateNewTicket ? (
         <Button
-          title="Issue new ticket instead"
+          title={createNewTitle}
           variant="outline"
           icon="plus"
           onPress={onCreateNewTicket}
@@ -59,40 +57,15 @@ export default function QueueTicketPickerModal({
       visible={visible}
       onClose={onClose}
       title="Select Queue Ticket"
-      subtitle={`${patient.fullName} has ${tickets.length} active tickets`}
-      maxWidth={520}
+      subtitle={patient.fullName}
+      maxWidth={500}
       footer={footerContent}
       testID="queue-ticket-picker-modal"
     >
       <View style={styles.container}>
-        {/* Patient Identity Banner */}
-        <View style={styles.patientBanner}>
-          <View style={styles.avatarCircle}>
-            <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-              {initials}
-            </ThemedText>
-          </View>
-          <View style={styles.patientInfo}>
-            <View style={styles.patientHeaderRow}>
-              <ThemedText variant="bodyBold" color={theme.colors.text}>
-                {patient.fullName}
-              </ThemedText>
-              <Badge label={patient.patientCode} variant="outline" size="sm" />
-            </View>
-            <ThemedText variant="caption" color={theme.colors.textMuted} numberOfLines={1}>
-              {demographics}
-            </ThemedText>
-          </View>
-        </View>
-
-        <View style={styles.sectionHeaderRow}>
-          <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionTitle}>
-            ACTIVE TICKETS AVAILABLE ({tickets.length})
-          </ThemedText>
-          <ThemedText variant="caption" color={theme.colors.textMuted}>
-            Tap a ticket to attend
-          </ThemedText>
-        </View>
+        <ThemedText variant="bodyBold" color={theme.colors.text}>
+          {`This patient has ${tickets.length} active tickets. Which ticket would you like to use?`}
+        </ThemedText>
 
         <View style={styles.ticketList}>
           {tickets.map((t, idx) => {
@@ -147,12 +120,7 @@ export default function QueueTicketPickerModal({
                   </ThemedText>
                 </View>
 
-                <View style={styles.selectBtnBadge}>
-                  <ThemedText variant="captionBold" color={theme.colors.primary}>
-                    Select
-                  </ThemedText>
-                  <Icon name="chevronRight" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                </View>
+                <Icon name="chevronRight" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
               </Pressable>
             );
           })}
@@ -164,45 +132,7 @@ export default function QueueTicketPickerModal({
 
 const styles = StyleSheet.create({
   container: {
-    gap: theme.spacing.lg,
-  },
-  patientBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: theme.spacing.md,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
     gap: theme.spacing.md,
-  },
-  avatarCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  patientInfo: {
-    flex: 1,
-    gap: theme.spacing.xs,
-  },
-  patientHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.sm,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.sm,
-  },
-  sectionTitle: {
-    letterSpacing: 0.5,
   },
   ticketList: {
     gap: theme.spacing.sm,
@@ -244,15 +174,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: theme.spacing.sm,
-  },
-  selectBtnBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surfaceSubtle,
   },
   footerRow: {
     flexDirection: 'row',

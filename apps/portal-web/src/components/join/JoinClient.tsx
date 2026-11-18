@@ -1140,6 +1140,7 @@ export default function JoinClient({
                         value={customFieldValues[field.fieldKey] || ""}
                         onChange={(e) => handleCustomFieldChange(field.fieldKey, e.target.value)}
                         placeholder={field.placeholder}
+                        title={field.placeholder || undefined}
                         className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
                       />
                     )}

@@ -17,13 +17,16 @@ public sealed class GetConsultationRecordingQueryHandler : IRequestHandler<GetCo
 {
     private readonly IRepository<TeleconsultRecordingSession> _sessionRepo;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<ConsultationEncounter>? _consultRepo;
 
     public GetConsultationRecordingQueryHandler(
         IRepository<TeleconsultRecordingSession> sessionRepo,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<ConsultationEncounter>? consultRepo = null)
     {
         _sessionRepo = sessionRepo;
         _clinicContext = clinicContext;
+        _consultRepo = consultRepo;
     }
 
     public async Task<RecordingSessionDto?> Handle(GetConsultationRecordingQuery request, CancellationToken ct)
@@ -35,6 +38,18 @@ public sealed class GetConsultationRecordingQueryHandler : IRequestHandler<GetCo
 
         var session = await _sessionRepo.Query()
             .FirstOrDefaultAsync(s => s.ConsultationId == request.ConsultationId && s.ClinicId == _clinicContext.ClinicId, ct);
+
+        if (session == null && _consultRepo != null)
+        {
+            var encounter = await _consultRepo.Query()
+                .FirstOrDefaultAsync(e => e.Id == request.ConsultationId && e.ClinicId == _clinicContext.ClinicId, ct);
+
+            if (encounter?.AppointmentId != null)
+            {
+                session = await _sessionRepo.Query()
+                    .FirstOrDefaultAsync(s => s.AppointmentId == encounter.AppointmentId.Value && s.ClinicId == _clinicContext.ClinicId, ct);
+            }
+        }
 
         if (session == null) return null;
 

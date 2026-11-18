@@ -10,3 +10,5 @@ export * from './hooks/useConversation';
 export * from './hooks/useSendMessage';
 export * from './hooks/useTriageQueue';
 export * from './hooks/useCallSession';
+export * from './hooks/useAutoVideoOrientation';
+export { resolveConversationDisplayTitle } from '../core/conversationTitle';

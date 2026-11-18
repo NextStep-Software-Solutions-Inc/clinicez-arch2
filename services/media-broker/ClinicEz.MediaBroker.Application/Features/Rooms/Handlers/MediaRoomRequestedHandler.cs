@@ -98,39 +98,85 @@ public sealed partial class MediaRoomRequestedHandler : IInteropResponder<MediaR
                 ErrorMessage: $"Token minting rejected: {ex.Message}");
         }
 
-        // 4. Generate 256-bit cryptographically secure room key hash for E2EE auditing
-        var roomKeyBytes = RandomNumberGenerator.GetBytes(32);
-        var keyHash = Convert.ToHexString(SHA256.HashData(roomKeyBytes));
+        // 4. Create or reactivate MediaCallSession idempotently by CallId
+        var now = DateTime.UtcNow;
+        var existingSession = await _db.CallSessions.FirstOrDefaultAsync(s => s.CallId == request.CallId, ct);
 
-        // 5. Create MediaCallSession and audit log
-        var session = new MediaCallSession
+        if (existingSession is not null)
         {
-            CallId = request.CallId,
-            TenantId = request.TenantId,
-            FacilityId = context.From.FacilityId ?? string.Empty,
-            RoomName = request.RoomName,
-            Status = "Active",
-            IsE2ee = true,
-            E2eeKeyHash = keyHash,
-            IsOverdraft = decision.IsOverdraft,
-            RequestedAtUtc = DateTime.UtcNow,
-            StartedAtUtc = DateTime.UtcNow
-        };
+            if (!string.Equals(existingSession.TenantId, request.TenantId, StringComparison.Ordinal))
+            {
+                _logger.LogWarning(
+                    "[MediaBroker] Rejected media.room.requested for CallId {CallId}: belongs to tenant {OwnerTenant}, requested by {RequestTenant}.",
+                    request.CallId, existingSession.TenantId, request.TenantId);
+                return new MediaRoomRespondedPayload(
+                    CallId: request.CallId,
+                    RoomName: request.RoomName,
+                    RelayUrl: string.Empty,
+                    ParticipantTokens: new Dictionary<string, string>(),
+                    Success: false,
+                    ErrorMessage: "Call session belongs to another tenant.");
+            }
 
-        _db.CallSessions.Add(session);
+            var keyHash = string.IsNullOrWhiteSpace(existingSession.E2eeKeyHash)
+                ? Convert.ToHexString(SHA256.HashData(RandomNumberGenerator.GetBytes(32)))
+                : existingSession.E2eeKeyHash;
 
-        _db.AuditLogs.Add(new MediaAuditLog
+            existingSession.RoomName = request.RoomName;
+            if (!string.IsNullOrWhiteSpace(context.From.FacilityId))
+            {
+                existingSession.FacilityId = context.From.FacilityId;
+            }
+            existingSession.Status = "Active";
+            existingSession.E2eeKeyHash = keyHash;
+            existingSession.IsOverdraft = decision.IsOverdraft;
+            existingSession.StartedAtUtc ??= now;
+            existingSession.EndedAtUtc = null;
+
+            _db.AuditLogs.Add(new MediaAuditLog
+            {
+                TenantId = request.TenantId,
+                CallId = request.CallId,
+                EventType = "RoomRejoined",
+                Details = $"Room {request.RoomName} rejoined with {tokens.Count} participant tokens. E2eeKeyHash: {keyHash}. Overdraft: {decision.IsOverdraft}",
+                TimestampUtc = now
+            });
+        }
+        else
         {
-            TenantId = request.TenantId,
-            CallId = request.CallId,
-            EventType = "RoomCreated",
-            Details = $"Room {request.RoomName} created with {tokens.Count} participant tokens. E2eeKeyHash: {keyHash}. Overdraft: {decision.IsOverdraft}",
-            TimestampUtc = DateTime.UtcNow
-        });
+            // Generate 256-bit cryptographically secure room key hash for E2EE auditing
+            var roomKeyBytes = RandomNumberGenerator.GetBytes(32);
+            var keyHash = Convert.ToHexString(SHA256.HashData(roomKeyBytes));
+
+            var session = new MediaCallSession
+            {
+                CallId = request.CallId,
+                TenantId = request.TenantId,
+                FacilityId = context.From.FacilityId ?? string.Empty,
+                RoomName = request.RoomName,
+                Status = "Active",
+                IsE2ee = true,
+                E2eeKeyHash = keyHash,
+                IsOverdraft = decision.IsOverdraft,
+                RequestedAtUtc = now,
+                StartedAtUtc = now
+            };
+
+            _db.CallSessions.Add(session);
+
+            _db.AuditLogs.Add(new MediaAuditLog
+            {
+                TenantId = request.TenantId,
+                CallId = request.CallId,
+                EventType = "RoomCreated",
+                Details = $"Room {request.RoomName} created with {tokens.Count} participant tokens. E2eeKeyHash: {keyHash}. Overdraft: {decision.IsOverdraft}",
+                TimestampUtc = now
+            });
+        }
 
         await _db.SaveChangesAsync(ct);
 
-        _logger.LogInformation("[MediaBroker] Room {RoomName} successfully created for CallId {CallId}. Returning tokens.",
+        _logger.LogInformation("[MediaBroker] Room {RoomName} ready for CallId {CallId}. Returning tokens.",
             request.RoomName, request.CallId);
 
         return new MediaRoomRespondedPayload(

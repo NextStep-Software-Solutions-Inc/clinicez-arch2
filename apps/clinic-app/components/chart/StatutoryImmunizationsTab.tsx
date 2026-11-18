@@ -4,9 +4,20 @@ import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState, Button, Modal } from '../ui';
 import AdministerVaccineModal from './AdministerVaccineModal';
 import HistoricalVaccineModal from './HistoricalVaccineModal';
-import { clinicService } from '../../services/clinicService';
+import {
+  useImmunizationCohorts,
+  resolveCohortCategoryLabel,
+  resolvePatientAgeYears,
+  isValidVaccineCohortKey,
+  shouldDisplayImmunizationInjectionSite,
+  type VaccineCohortKey,
+} from './immunizationCatalog';
+import { clinicService, formatClinicDate } from '../../services/clinicService';
+import { useClinic } from '../../context/ClinicContext';
 import { useEhrOptions } from '../../hooks/useEhrOptions';
 import { notify } from '../../utils/feedback';
+
+export { resolveCohortCategoryLabel };
 import type {
   ClinicPatient,
   PatientDemographics,
@@ -28,46 +39,6 @@ export interface StatutoryImmunizationsTabProps {
   queueItemId?: string | null;
 }
 
-export const PHILHEALTH_STATUTORY_VACCINES = {
-  lib_immchild: [
-    { code: 'C01', name: 'BCG (Bacillus Calmette-Guérin)' },
-    { code: 'C02', name: 'OPV 1 (Oral Polio Vaccine 1)' },
-    { code: 'C03', name: 'OPV 2 (Oral Polio Vaccine 2)' },
-    { code: 'C04', name: 'OPV 3 (Oral Polio Vaccine 3)' },
-    { code: 'C05', name: 'DPT-HepB-Hib 1 (Pentavalent 1)' },
-    { code: 'C06', name: 'DPT-HepB-Hib 2 (Pentavalent 2)' },
-    { code: 'C07', name: 'DPT-HepB-Hib 3 (Pentavalent 3)' },
-    { code: 'C08', name: 'Measles Vaccine (MCV1)' },
-    { code: 'C09', name: 'Hepatitis B (Birth Dose)' },
-    { code: 'C10', name: 'Rotavirus Vaccine 1' },
-    { code: 'C11', name: 'Rotavirus Vaccine 2' },
-    { code: 'C12', name: 'Inactivated Polio Vaccine (IPV)' },
-    { code: 'C13', name: 'MMR 1 (Measles, Mumps, Rubella)' },
-  ],
-  lib_immyoungw: [
-    { code: 'Y01', name: 'Human Papillomavirus Vaccine (HPV)' },
-    { code: 'Y02', name: 'MMR Booster (Young Women)' },
-  ],
-  lib_immpregw: [
-    { code: 'P01', name: 'Tetanus Toxoid / Td 1' },
-    { code: 'P02', name: 'Tetanus Toxoid / Td 2' },
-    { code: 'P03', name: 'Tetanus Toxoid / Td 3' },
-    { code: 'P04', name: 'Tetanus Toxoid / Td 4' },
-    { code: 'P05', name: 'Tetanus Toxoid / Td 5' },
-  ],
-  lib_immelderly: [
-    { code: 'E01', name: 'Pneumococcal Polysaccharide Vaccine (PPSV23 / PCV13)' },
-    { code: 'E02', name: 'Seasonal Influenza Vaccine (Quadrivalent)' },
-  ],
-};
-
-export const COHORT_CATEGORY_NAMES: Record<string, string> = {
-  lib_immchild: 'Childhood',
-  lib_immyoungw: 'Young Women',
-  lib_immpregw: 'Maternal',
-  lib_immelderly: 'Senior Citizen',
-};
-
 export default function StatutoryImmunizationsTab({
   patient,
   patientId,
@@ -79,6 +50,8 @@ export default function StatutoryImmunizationsTab({
   onRefreshChart,
   queueItemId,
 }: StatutoryImmunizationsTabProps) {
+  const { dateFormat, timeZoneId } = useClinic();
+  const { cohorts } = useImmunizationCohorts();
   const { options: severityOptions } = useEhrOptions('allergy_severity');
   const availableSeverities = useMemo(() => severityOptions.map((s) => s.label), [severityOptions]);
 
@@ -92,16 +65,32 @@ export default function StatutoryImmunizationsTab({
   const [submittingAefi, setSubmittingAefi] = useState(false);
 
   // Determine patient age and cohort suitability
-  const age = demoProp?.age ?? patient?.age ?? 0;
+  const resolvedAge = resolvePatientAgeYears(demoProp, patient);
+  const age = resolvedAge ?? 0;
   const sex = (demoProp?.sex || patient?.sex || '').toLowerCase();
 
   const isChild = age < 18;
   const isYoungWoman = sex === 'female' && age >= 9 && age <= 49;
-  const isSenior = age >= 60 || demoProp?.isSenior;
+  const isSenior = age >= 60 || Boolean(demoProp?.isSenior);
+  const isAdultGeneral = age >= 18 && !isYoungWoman && !isSenior;
+  const modalPreferredCohort: VaccineCohortKey | undefined = isValidVaccineCohortKey(selectedCohort, cohorts)
+    ? selectedCohort
+    : undefined;
+
+  const isCohortRecommended = (cohortKey: VaccineCohortKey): boolean => {
+    if (cohortKey === 'lib_immchild') return isChild;
+    if (cohortKey === 'lib_immyoungw') return isYoungWoman;
+    if (cohortKey === 'lib_immelderly') return isSenior;
+    if (cohortKey === 'OtherImm') return isAdultGeneral;
+    return false;
+  };
 
   const filteredImmunizations = useMemo(() => {
     return immunizations.filter((imm) => {
       if (selectedCohort === 'ALL') return true;
+      if (selectedCohort === 'OtherImm') {
+        return !imm.philHealthLibrary || !imm.philHealthLibrary.startsWith('lib_imm');
+      }
       return imm.philHealthLibrary === selectedCohort;
     });
   }, [immunizations, selectedCohort]);
@@ -152,19 +141,62 @@ export default function StatutoryImmunizationsTab({
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* ========================================================================= */}
-      {/* HEADER ACTION CONTROLS (+ Administer Vaccine, + Add Historical Vaccine)   */}
+      {/* INLINE COHORT TABS (LEFT, HORIZONTAL SCROLL) + ACTION BUTTONS (RIGHT)     */}
       {/* ========================================================================= */}
       <View style={styles.headerActionBar}>
+        <View style={styles.filterScrollWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterScrollView}
+            contentContainerStyle={styles.cohortFilterRow}
+          >
+            <Pressable
+              onPress={() => setSelectedCohort('ALL')}
+              style={[styles.cohortPill, selectedCohort === 'ALL' && styles.cohortPill_active]}
+            >
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedCohort === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                All Recorded ({immunizations.length})
+              </ThemedText>
+            </Pressable>
+
+            {cohorts.map((cohort) => {
+              const isActive = selectedCohort === cohort.key;
+              const recommended = isCohortRecommended(cohort.key);
+              return (
+                <Pressable
+                  key={cohort.key}
+                  onPress={() => setSelectedCohort(cohort.key)}
+                  style={[styles.cohortPill, isActive && styles.cohortPill_active]}
+                >
+                  <ThemedText
+                    variant="captionBold"
+                    numberOfLines={1}
+                    color={isActive ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  >
+                    {cohort.tabLabel}
+                    {recommended ? ' • Recommended' : ''}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+
         <View style={styles.actionButtonsRow}>
           <Button
-            title="Administer Vaccine"
+            title="Administer Vax"
             variant="primary"
             icon="plus"
             size="sm"
             onPress={() => setAdministerModalVisible(true)}
           />
           <Button
-            title="Add Historical Vaccine"
+            title="Log Vax History"
             variant="outline"
             icon="plus"
             size="sm"
@@ -185,77 +217,12 @@ export default function StatutoryImmunizationsTab({
                 Immunization Documentation Status
               </ThemedText>
               <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginTop: 2 }}>
-                No immunizations are currently documented for this patient. Review the recommended vaccination schedule for their cohort, record any previously administered doses under &quot;Add Historical Vaccine&quot;, or administer new vaccines during this encounter.
+                No immunizations are currently documented for this patient. Review the recommended vaccination schedule for their cohort, record any previously administered doses under &quot;Log Vax History&quot;, or administer new vaccines during this encounter.
               </ThemedText>
             </View>
           </View>
         </View>
       ) : null}
-
-      {/* ========================================================================= */}
-      {/* COHORT FILTERS                                                            */}
-      {/* ========================================================================= */}
-      <View style={styles.cohortFilterRow}>
-        <Pressable
-          onPress={() => setSelectedCohort('ALL')}
-          style={[styles.cohortPill, selectedCohort === 'ALL' && styles.cohortPill_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedCohort === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
-          >
-            All Recorded ({immunizations.length})
-          </ThemedText>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setSelectedCohort('lib_immchild')}
-          style={[styles.cohortPill, selectedCohort === 'lib_immchild' && styles.cohortPill_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedCohort === 'lib_immchild' ? theme.colors.primaryDark : theme.colors.textSecondary}
-          >
-            Child Schedule (0–17y) {isChild ? '• Recommended' : ''}
-          </ThemedText>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setSelectedCohort('lib_immyoungw')}
-          style={[styles.cohortPill, selectedCohort === 'lib_immyoungw' && styles.cohortPill_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedCohort === 'lib_immyoungw' ? theme.colors.primaryDark : theme.colors.textSecondary}
-          >
-            Young Women (HPV) {isYoungWoman ? '• Recommended' : ''}
-          </ThemedText>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setSelectedCohort('lib_immpregw')}
-          style={[styles.cohortPill, selectedCohort === 'lib_immpregw' && styles.cohortPill_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedCohort === 'lib_immpregw' ? theme.colors.primaryDark : theme.colors.textSecondary}
-          >
-            Maternal (Td / Tdap)
-          </ThemedText>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setSelectedCohort('lib_immelderly')}
-          style={[styles.cohortPill, selectedCohort === 'lib_immelderly' && styles.cohortPill_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedCohort === 'lib_immelderly' ? theme.colors.primaryDark : theme.colors.textSecondary}
-          >
-            Senior Citizens (60+) {isSenior ? '• Recommended' : ''}
-          </ThemedText>
-        </Pressable>
-      </View>
 
       {/* ========================================================================= */}
       {/* IMMUNIZATION RECORDS LIST                                                 */}
@@ -279,7 +246,7 @@ export default function StatutoryImmunizationsTab({
                   </View>
                   <View style={styles.libraryRow}>
                     <Badge
-                      label={COHORT_CATEGORY_NAMES[imm.philHealthLibrary] || 'Routine'}
+                      label={resolveCohortCategoryLabel(imm.philHealthLibrary, cohorts)}
                       variant="purple"
                       size="sm"
                     />
@@ -314,7 +281,9 @@ export default function StatutoryImmunizationsTab({
                 {imm.expirationDate ? (
                   <View style={styles.immMetaItem}>
                     <ThemedText variant="caption" color={theme.colors.textSecondary}>Exp Date:</ThemedText>
-                    <ThemedText variant="captionBold" color={theme.colors.text}>{imm.expirationDate}</ThemedText>
+                    <ThemedText variant="captionBold" color={theme.colors.text}>
+                      {formatClinicDate(imm.expirationDate, { dateFormat, timeZoneId })}
+                    </ThemedText>
                   </View>
                 ) : null}
                 {imm.route ? (
@@ -323,7 +292,7 @@ export default function StatutoryImmunizationsTab({
                     <ThemedText variant="captionBold" color={theme.colors.text}>{imm.route}</ThemedText>
                   </View>
                 ) : null}
-                {imm.injectionSite ? (
+                {shouldDisplayImmunizationInjectionSite(imm.route, imm.injectionSite) ? (
                   <View style={styles.immMetaItem}>
                     <ThemedText variant="caption" color={theme.colors.textSecondary}>Injection Site:</ThemedText>
                     <ThemedText variant="captionBold" color={theme.colors.text}>{imm.injectionSite}</ThemedText>
@@ -335,8 +304,8 @@ export default function StatutoryImmunizationsTab({
               <View style={styles.providerRow}>
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
                   {imm.isHistorical
-                    ? `Historical Facility: ${imm.historicalFacilityName || 'Previous Clinic'}`
-                    : `Administered by: ${imm.administeredByStaffName}${imm.administeredByPrcLicense ? ` (PRC: ${imm.administeredByPrcLicense})` : ''} on ${new Date(imm.administeredAtUtc).toLocaleDateString()}`}
+                    ? `Historical Facility: ${imm.historicalFacilityName || 'Previous Clinic'}${imm.administeredAtUtc ? ` • ${formatClinicDate(imm.administeredAtUtc, { dateFormat, timeZoneId })}` : ''}`
+                    : `Administered by: ${imm.administeredByStaffName}${imm.administeredByPrcLicense ? ` (PRC: ${imm.administeredByPrcLicense})` : ''} on ${formatClinicDate(imm.administeredAtUtc, { dateFormat, timeZoneId })}`}
                 </ThemedText>
               </View>
 
@@ -377,8 +346,8 @@ export default function StatutoryImmunizationsTab({
           title="No immunizations recorded"
           description={
             hasAnyRecorded
-              ? `No vaccines recorded for ${COHORT_CATEGORY_NAMES[selectedCohort] || 'this category'}.`
-              : 'No vaccination records found for this patient. Click "Administer Vaccine" to record a dose given today or "Add Historical Vaccine" to document past immunizations.'
+              ? `No vaccines recorded for ${cohorts.find((c) => c.key === selectedCohort)?.tabLabel || 'this category'}.`
+              : 'No vaccination records found for this patient. Click "Administer Vax" to record a dose given today or "Log Vax History" to document past immunizations.'
           }
         />
       )}
@@ -386,70 +355,65 @@ export default function StatutoryImmunizationsTab({
       {/* ========================================================================= */}
       {/* AEFI REPORTING MODAL                                                      */}
       {/* ========================================================================= */}
-      <Modal raw visible={aefiModalVisible} transparent animationType="fade" onClose={() => setAefiModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <View style={styles.modalHeader}>
-              <Icon name="alert" size={theme.sizes.iconMd} color={theme.colors.warningText} />
-              <ThemedText variant="h3" color={theme.colors.text}>
-                Report Adverse Event (AEFI)
-              </ThemedText>
-            </View>
-
-            <ThemedText variant="body" color={theme.colors.textSecondary}>
-              Vaccine: {targetAefiImm?.vaccineName}
-            </ThemedText>
-
-            <View style={styles.severityPickerRow}>
-              <ThemedText variant="captionBold" color={theme.colors.text}>
-                Reaction Severity:
-              </ThemedText>
-              <View style={styles.severityButtons}>
-                {availableSeverities.map((sev) => (
-                  <Pressable
-                    key={sev}
-                    onPress={() => setAefiSeverity(sev as any)}
-                    style={[styles.sevBtn, aefiSeverity === sev && styles.sevBtn_active]}
-                  >
-                    <ThemedText
-                      variant="captionBold"
-                      color={aefiSeverity === sev ? theme.colors.onPrimary : theme.colors.textSecondary}
-                    >
-                      {sev}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            <ThemedText variant="captionBold" color={theme.colors.text} style={{ marginBottom: 4 }}>
-              Adverse Reaction Remarks / Clinical Symptoms:
-            </ThemedText>
-            <TextInput
-              style={styles.aefiInput}
-              multiline
-              numberOfLines={3}
-              value={aefiRemarks}
-              onChangeText={setAefiRemarks}
-              placeholder="Describe adverse reaction, onset duration, fever, swelling, or systemic reactions..."
-              placeholderTextColor={theme.colors.textMuted}
+      <Modal
+        visible={aefiModalVisible}
+        onClose={() => setAefiModalVisible(false)}
+        title="Report Adverse Event (AEFI)"
+        subtitle={targetAefiImm?.vaccineName ? `Vaccine: ${targetAefiImm.vaccineName}` : 'Document post-vaccination adverse reaction'}
+        maxWidth={540}
+        maxHeight="90%"
+        footer={
+          <View style={styles.modalActions}>
+            <Button
+              title="Cancel"
+              variant="ghost"
+              onPress={() => setAefiModalVisible(false)}
+              disabled={submittingAefi}
             />
-
-            <View style={styles.modalActions}>
-              <Button
-                title="Cancel"
-                variant="ghost"
-                onPress={() => setAefiModalVisible(false)}
-                disabled={submittingAefi}
-              />
-              <Button
-                title={submittingAefi ? 'Recording...' : 'Save AEFI Report'}
-                variant="primary"
-                onPress={handleSaveAefi}
-                loading={submittingAefi}
-              />
-            </View>
+            <Button
+              title={submittingAefi ? 'Recording...' : 'Save AEFI Report'}
+              variant="primary"
+              onPress={handleSaveAefi}
+              loading={submittingAefi}
+            />
           </View>
+        }
+      >
+        <View style={styles.severityPickerRow}>
+          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+            Reaction Severity *
+          </ThemedText>
+          <View style={styles.severityButtons}>
+            {availableSeverities.map((sev) => (
+              <Pressable
+                key={sev}
+                onPress={() => setAefiSeverity(sev as any)}
+                style={[styles.sevBtn, aefiSeverity === sev && styles.sevBtn_active]}
+              >
+                <ThemedText
+                  variant="captionBold"
+                  color={aefiSeverity === sev ? theme.colors.onPrimary : theme.colors.textSecondary}
+                >
+                  {sev}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.severityPickerRow}>
+          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+            Adverse Reaction Remarks / Clinical Symptoms
+          </ThemedText>
+          <TextInput
+            style={styles.aefiInput}
+            multiline
+            numberOfLines={3}
+            value={aefiRemarks}
+            onChangeText={setAefiRemarks}
+            placeholder="Describe adverse reaction, onset duration, fever, swelling, or systemic reactions..."
+            placeholderTextColor={theme.colors.textMuted}
+          />
         </View>
       </Modal>
 
@@ -462,6 +426,7 @@ export default function StatutoryImmunizationsTab({
         patient={patient}
         patientId={patientId || patient?.id}
         demographics={demoProp}
+        preferredCohort={modalPreferredCohort}
         queueItemId={queueItemId}
         onAdministerVaccine={async (payload) => {
           if (onAdministerVaccine) {
@@ -494,6 +459,7 @@ export default function StatutoryImmunizationsTab({
         patient={patient}
         patientId={patientId || patient?.id}
         demographics={demoProp}
+        preferredCohort={modalPreferredCohort}
         onRecordHistoricalVaccine={async (payload) => {
           if (onRecordHistoricalVaccine) {
             await onRecordHistoricalVaccine(payload);
@@ -529,25 +495,38 @@ export const styles = StyleSheet.create({
   },
   headerActionBar: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.md,
+    flexWrap: 'nowrap',
+    gap: theme.spacing.sm,
+    width: '100%',
+    minWidth: 0,
+  },
+  filterScrollWrap: {
+    flexDirection: 'row',
+    flex: 1,
+    minWidth: 0,
+  },
+  filterScrollView: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
   },
   actionButtonsRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    flexWrap: 'wrap',
-    maxWidth: '100%',
+    gap: theme.spacing.xs,
+    flexWrap: 'nowrap',
+    flexShrink: 0,
   },
   documentationStatusCard: {
     backgroundColor: theme.colors.primarySubtle,
     borderColor: theme.colors.primaryBorder,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderRadius: theme.radii.md,
     padding: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
   },
   documentationStatusTopRow: {
     flexDirection: 'row',
@@ -557,10 +536,9 @@ export const styles = StyleSheet.create({
   fallbackNoticeCard: {
     backgroundColor: theme.colors.primarySubtle,
     borderColor: theme.colors.primaryBorder,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderRadius: theme.radii.md,
     padding: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
   },
   fallbackTopRow: {
     flexDirection: 'row',
@@ -569,16 +547,17 @@ export const styles = StyleSheet.create({
   },
   cohortFilterRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
     gap: theme.spacing.xs,
-    marginBottom: theme.spacing.md,
   },
   cohortPill: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    flexShrink: 0,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
   },
   cohortPill_active: {
@@ -670,41 +649,20 @@ export const styles = StyleSheet.create({
     paddingVertical: 2,
     paddingHorizontal: 6,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: theme.colors.overlay,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: theme.spacing.md,
-  },
-  modalBox: {
-    width: '100%',
-    maxWidth: 480,
-    maxHeight: '95%',
-    overflow: 'hidden',
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.md,
-    gap: theme.spacing.sm,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
   severityPickerRow: {
-    gap: 4,
+    gap: theme.spacing.xs,
   },
   severityButtons: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: theme.spacing.xs,
   },
   sevBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: theme.radii.sm,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.md,
     backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
   },
   sevBtn_active: {
@@ -712,11 +670,11 @@ export const styles = StyleSheet.create({
     borderColor: theme.colors.primary,
   },
   aefiInput: {
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderColor: theme.colors.border,
-    borderWidth: 1,
-    borderRadius: theme.radii.sm,
-    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.borderDark,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
     color: theme.colors.text,
     minHeight: 80,
     textAlignVertical: 'top',
@@ -724,7 +682,7 @@ export const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    alignItems: 'center',
     gap: theme.spacing.sm,
-    marginTop: theme.spacing.xs,
   },
 });

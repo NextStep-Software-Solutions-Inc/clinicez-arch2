@@ -29,6 +29,43 @@ export interface DynamicCustomFieldsRendererProps {
   disabled?: boolean;
 }
 
+export const LONG_PLACEHOLDER_CHAR_LIMIT = 75;
+export const EXPANDED_PLACEHOLDER_INPUT_TEXT = 'Enter response (see guidance below)...';
+
+export interface CustomFieldPlaceholderPresentation {
+  inputPlaceholder: string | null | undefined;
+  helperHint: string | undefined;
+  isExpandedHint: boolean;
+}
+
+/**
+ * Resolves single-line vs multi-line placeholder presentation (Issue 162).
+ * Single-line inputs clip hints > 75 chars on desktop/tablet, so long hints
+ * display a short cue inside the input and wrap 100% of the prompt below it.
+ */
+export function resolveCustomFieldPlaceholderPresentation(
+  placeholder?: string | null,
+  fieldType?: string
+): CustomFieldPlaceholderPresentation {
+  const normalizedType = (fieldType ?? '').trim().toLowerCase();
+  const isMultiline = normalizedType === 'textarea' || normalizedType === 'multiline';
+  const trimmedLength = placeholder?.trim().length ?? 0;
+
+  if (!isMultiline && placeholder && trimmedLength > LONG_PLACEHOLDER_CHAR_LIMIT) {
+    return {
+      inputPlaceholder: EXPANDED_PLACEHOLDER_INPUT_TEXT,
+      helperHint: placeholder.trim(),
+      isExpandedHint: true,
+    };
+  }
+
+  return {
+    inputPlaceholder: placeholder,
+    helperHint: undefined,
+    isExpandedHint: false,
+  };
+}
+
 /**
  * Resolves the effective boundary mode for a custom Date field:
  * - If field.boundaryMode is configured, uses it.
@@ -329,7 +366,11 @@ export function validateCustomFields(
   definitions: ClinicCustomFieldDefinition[],
   values: Record<string, any>,
   staticValues: StaticPatientValues = {},
-  options?: { now?: Date }
+  options?: {
+    now?: Date;
+    isUpdate?: boolean;
+    initialValues?: Record<string, any>;
+  }
 ): { isValid: boolean; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   let isValid = true;
@@ -347,6 +388,19 @@ export function validateCustomFields(
       (typeof val === 'boolean' && val === false && def.dataType !== 'Boolean');
 
     if (def.isRequired && isEmpty) {
+      // In update mode, grandfather required fields that were never populated on pre-existing records
+      if (options?.isUpdate) {
+        const initialVal = options.initialValues?.[def.fieldKey];
+        const hadInitial =
+          initialVal !== null &&
+          initialVal !== undefined &&
+          (typeof initialVal === 'string' ? initialVal.trim() !== '' : true);
+
+        if (!hadInitial) {
+          continue;
+        }
+      }
+
       errors[def.fieldKey] = `${def.label} is required.`;
       isValid = false;
       continue;
@@ -475,22 +529,51 @@ export default function DynamicCustomFieldsRenderer({
         const val = values[field.fieldKey];
 
         switch (field.dataType) {
-          case 'Text':
+          case 'Text': {
+            const placeholderPresentation = resolveCustomFieldPlaceholderPresentation(
+              field.placeholder,
+              field.dataType
+            );
             return (
               <View key={field.id || field.fieldKey} style={styles.fieldWrapper}>
                 <Input
                   label={field.label}
                   required={field.isRequired}
-                  placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+                  placeholder={
+                    placeholderPresentation.inputPlaceholder ||
+                    `Enter ${field.label.toLowerCase()}`
+                  }
                   value={val !== undefined && val !== null ? String(val) : ''}
                   onChangeText={(text) => handleFieldChange(field.fieldKey, text)}
                   error={error}
                   editable={!disabled}
+                  accessibilityHint={field.placeholder || undefined}
+                  title={field.placeholder || undefined}
                 />
+                {placeholderPresentation.isExpandedHint && placeholderPresentation.helperHint ? (
+                  <View
+                    style={styles.expandedHintContainer}
+                    accessibilityLabel={`Guidance: ${placeholderPresentation.helperHint}`}
+                  >
+                    <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                    <ThemedText
+                      variant="caption"
+                      color={theme.colors.textSecondary}
+                      style={styles.expandedHintText}
+                    >
+                      {placeholderPresentation.helperHint}
+                    </ThemedText>
+                  </View>
+                ) : null}
               </View>
             );
+          }
 
           case 'Number': {
+            const placeholderPresentation = resolveCustomFieldPlaceholderPresentation(
+              field.placeholder,
+              field.dataType
+            );
             const handleNumberChange = (text: string) => {
               const sanitized = sanitizeNumericInput(text);
               if (localErrors[field.fieldKey]) {
@@ -529,31 +612,72 @@ export default function DynamicCustomFieldsRenderer({
                   required={field.isRequired}
                   keyboardType="numeric"
                   inputMode="decimal"
-                  placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+                  placeholder={
+                    placeholderPresentation.inputPlaceholder ||
+                    `Enter ${field.label.toLowerCase()}`
+                  }
                   value={val !== undefined && val !== null ? String(val) : ''}
                   onChangeText={handleNumberChange}
                   onBlur={handleNumberBlur}
                   error={error}
                   editable={!disabled}
+                  accessibilityHint={field.placeholder || undefined}
+                  title={field.placeholder || undefined}
                 />
+                {placeholderPresentation.isExpandedHint && placeholderPresentation.helperHint ? (
+                  <View
+                    style={styles.expandedHintContainer}
+                    accessibilityLabel={`Guidance: ${placeholderPresentation.helperHint}`}
+                  >
+                    <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                    <ThemedText
+                      variant="caption"
+                      color={theme.colors.textSecondary}
+                      style={styles.expandedHintText}
+                    >
+                      {placeholderPresentation.helperHint}
+                    </ThemedText>
+                  </View>
+                ) : null}
               </View>
             );
           }
 
           case 'Date': {
             const effectiveBoundaryMode = resolveEffectiveBoundaryMode(field);
+            const placeholderPresentation = resolveCustomFieldPlaceholderPresentation(
+              field.placeholder,
+              field.dataType
+            );
             return (
               <View key={field.id || field.fieldKey} style={styles.fieldWrapper}>
                 <ValidatedDateInput
                   label={field.label}
                   required={field.isRequired}
-                  placeholder={field.placeholder || 'YYYY-MM-DD'}
+                  placeholder={placeholderPresentation.inputPlaceholder || 'YYYY-MM-DD'}
                   value={val !== undefined && val !== null ? String(val) : ''}
                   onChangeText={(text) => handleFieldChange(field.fieldKey, text)}
                   error={error}
                   boundaryMode={effectiveBoundaryMode}
                   disabled={disabled}
+                  accessibilityHint={field.placeholder || undefined}
+                  title={field.placeholder || undefined}
                 />
+                {placeholderPresentation.isExpandedHint && placeholderPresentation.helperHint ? (
+                  <View
+                    style={styles.expandedHintContainer}
+                    accessibilityLabel={`Guidance: ${placeholderPresentation.helperHint}`}
+                  >
+                    <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                    <ThemedText
+                      variant="caption"
+                      color={theme.colors.textSecondary}
+                      style={styles.expandedHintText}
+                    >
+                      {placeholderPresentation.helperHint}
+                    </ThemedText>
+                  </View>
+                ) : null}
               </View>
             );
           }
@@ -737,5 +861,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
     marginTop: theme.spacing.xs,
+  },
+  expandedHintContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+  },
+  expandedHintText: {
+    flex: 1,
+    flexShrink: 1,
   },
 });

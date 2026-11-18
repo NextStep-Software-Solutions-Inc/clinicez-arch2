@@ -34,5 +34,8 @@ public sealed record PublicQueueDisplayDto(
     int PatientsWaitingCount,
     string? LogoUrl = null,
     bool IsPinRequired = false,
-    bool IsPinValid = true
+    bool IsPinValid = true,
+    string TvDisplaySoundTheme = "classicChime",
+    bool TvDisplayVoiceEnabled = false,
+    bool TvDisplayShowPhysicianName = true
 );

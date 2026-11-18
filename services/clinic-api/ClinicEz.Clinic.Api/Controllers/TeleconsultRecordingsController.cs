@@ -30,6 +30,7 @@ public sealed class TeleconsultRecordingsController : ControllerBase
     private readonly ISender _sender;
     private readonly IClinicContext _clinicContext;
     private readonly IClinicStorageService _storage;
+    private readonly IClinicEncryptionService _encryptionService;
     private readonly IConfiguration _configuration;
     private readonly ApplicationDbContext _db;
     private readonly ILogger<TeleconsultRecordingsController> _logger;
@@ -38,6 +39,7 @@ public sealed class TeleconsultRecordingsController : ControllerBase
         ISender sender,
         IClinicContext clinicContext,
         IClinicStorageService storage,
+        IClinicEncryptionService encryptionService,
         IConfiguration configuration,
         ApplicationDbContext db,
         ILogger<TeleconsultRecordingsController> logger)
@@ -45,6 +47,7 @@ public sealed class TeleconsultRecordingsController : ControllerBase
         _sender = sender;
         _clinicContext = clinicContext;
         _storage = storage;
+        _encryptionService = encryptionService;
         _configuration = configuration;
         _db = db;
         _logger = logger;
@@ -132,22 +135,57 @@ public sealed class TeleconsultRecordingsController : ControllerBase
             return BadRequest(ApiResponse<RecordingSegmentDto>.Fail("Missing or invalid X-Segment-Duration-Ms header."));
         }
 
-        var iv = Request.Headers["X-Encryption-Iv"].ToString();
-        var tag = Request.Headers["X-Encryption-Tag"].ToString();
-
-        if (string.IsNullOrWhiteSpace(iv) || string.IsNullOrWhiteSpace(tag))
-        {
-            return BadRequest(ApiResponse<RecordingSegmentDto>.Fail("Missing mandatory X-Encryption-Iv or X-Encryption-Tag headers."));
-        }
+        var clientIv = Request.Headers["X-Encryption-Iv"].ToString();
+        var clientTag = Request.Headers["X-Encryption-Tag"].ToString();
 
         var tenantId = _clinicContext.TenantId ?? "default";
-        var storageKey = $"{tenantId}/{_clinicContext.ClinicId}/{id}/seg_{segmentIndex:D5}.cez";
+        var clinicId = _clinicContext.ClinicId;
+        var storageKey = $"{tenantId}/{clinicId}/{id}/seg_{segmentIndex:D5}.cez";
 
-        using var hashingStream = new HashingReadStream(Request.Body);
-        await _storage.SaveEncryptedStreamAsync(storageKey, hashingStream, ct);
+        Stream inputStream;
+        if (Request.HasFormContentType && Request.Form.Files.Count > 0)
+        {
+            inputStream = Request.Form.Files[0].OpenReadStream();
+        }
+        else
+        {
+            inputStream = Request.Body;
+        }
 
-        var sha256 = hashingStream.GetSha256Hex();
-        var sizeBytes = hashingStream.TotalBytesRead;
+        string iv;
+        string tag;
+        string sha256;
+        long sizeBytes;
+
+        if (!string.IsNullOrWhiteSpace(clientIv) && !string.IsNullOrWhiteSpace(clientTag))
+        {
+            // Client-side pre-encrypted segment chunk (legacy / test harness compatibility)
+            iv = clientIv;
+            tag = clientTag;
+
+            using var hashingStream = new HashingReadStream(inputStream);
+            await _storage.SaveEncryptedStreamAsync(storageKey, hashingStream, ct);
+
+            sha256 = hashingStream.GetSha256Hex();
+            sizeBytes = hashingStream.TotalBytesRead;
+        }
+        else
+        {
+            // Server-side CMK AES-256-GCM Envelope Encryption
+            var encrypted = await _encryptionService.EncryptAsync(inputStream, tenantId, clinicId, ct);
+
+            iv = encrypted.IvBase64;
+            tag = encrypted.TagBase64;
+            sha256 = encrypted.EncryptedHash;
+            sizeBytes = encrypted.EncryptedSizeBytes;
+
+            // 1. Save ciphertext segment file
+            await _storage.SaveEncryptedFileAsync(storageKey, encrypted.Ciphertext, ct);
+
+            // 2. Save wrapped DEK sidecar file ({storageKey}.key) containing WrappedKeyJson
+            var sidecarKey = $"{storageKey}.key";
+            await _storage.SaveEncryptedFileAsync(sidecarKey, Encoding.UTF8.GetBytes(encrypted.WrappedKeyJson), ct);
+        }
 
         var command = new UploadRecordingSegmentCommand(
             id,
@@ -272,6 +310,7 @@ public sealed class TeleconsultRecordingsController : ControllerBase
         }
 
         var session = await _db.TeleconsultRecordingSessions
+            .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == id, ct);
 
         if (session == null || session.IsPurged)
@@ -279,9 +318,14 @@ public sealed class TeleconsultRecordingsController : ControllerBase
             return NotFound("Recording session not found or already purged.");
         }
 
+        var containerFormat = !string.IsNullOrWhiteSpace(session.ContainerFormat)
+            ? session.ContainerFormat
+            : "video/webm";
+
         if (segmentIndex.HasValue)
         {
             var segment = await _db.TeleconsultRecordingSegments
+                .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.SessionId == id && s.SegmentIndex == segmentIndex.Value, ct);
 
             if (segment == null || string.IsNullOrWhiteSpace(segment.StorageKey))
@@ -289,8 +333,28 @@ public sealed class TeleconsultRecordingsController : ControllerBase
                 return NotFound($"Segment {segmentIndex.Value} not found.");
             }
 
+            var sidecarKey = segment.StorageKey + ".key";
+            if (await _storage.FileExistsAsync(sidecarKey, ct))
+            {
+                var wrappedKeyBytes = await _storage.ReadEncryptedFileAsync(sidecarKey, ct);
+                var wrappedKeyJson = Encoding.UTF8.GetString(wrappedKeyBytes);
+
+                await using var cipherStream = await _storage.OpenReadEncryptedStreamAsync(segment.StorageKey, ct);
+                var decryptedStream = await _encryptionService.DecryptToStreamAsync(
+                    cipherStream,
+                    segment.IvBase64,
+                    segment.TagBase64,
+                    wrappedKeyJson,
+                    session.TenantId,
+                    session.ClinicId,
+                    ct);
+
+                decryptedStream.Position = 0;
+                return File(decryptedStream, containerFormat, enableRangeProcessing: true);
+            }
+
             var stream = await _storage.OpenReadEncryptedStreamAsync(segment.StorageKey, ct);
-            return File(stream, session.ContainerFormat, enableRangeProcessing: true);
+            return File(stream, containerFormat, enableRangeProcessing: true);
         }
 
         if (string.IsNullOrWhiteSpace(session.ManifestStorageKey))
@@ -313,6 +377,98 @@ public sealed class TeleconsultRecordingsController : ControllerBase
     {
         var result = await _sender.Send(new GetConsultationRecordingQuery(consultationId), ct);
         return Ok(ApiResponse<RecordingSessionDto?>.Success(result));
+    }
+
+    /// <summary>
+    /// Retrieves all active or completed recording sessions associated with an appointment.
+    /// Guarded by consultations:read permission.
+    /// </summary>
+    [HttpGet("appointments/{appointmentId:guid}")]
+    [HasPermission(ClinicPermissions.ConsultationsRead)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<RecordingSessionDto>>>> GetAppointmentRecordings(
+        Guid appointmentId,
+        CancellationToken ct)
+    {
+        var sessions = await _db.TeleconsultRecordingSessions
+            .AsNoTracking()
+            .Where(s => s.AppointmentId == appointmentId && s.ClinicId == _clinicContext.ClinicId)
+            .OrderByDescending(s => s.CreatedAt)
+            .Select(s => new RecordingSessionDto(
+                s.Id,
+                s.ClinicId,
+                s.CallId,
+                s.AppointmentId,
+                s.ConsultationId,
+                s.PatientId,
+                s.PatientName,
+                s.DoctorId,
+                s.DoctorName,
+                s.ConsentStatus,
+                s.RecordingState,
+                s.StoragePolicy,
+                s.TotalDurationSeconds,
+                s.SegmentCount,
+                s.TotalSizeBytes,
+                s.ContainerFormat,
+                s.ManifestStorageKey,
+                s.HasGaps,
+                s.RetentionPolicyDays,
+                s.ExpiresAtUtc,
+                s.IsLegalHold,
+                s.LegalHoldReason,
+                s.IsPurged
+            ))
+            .ToListAsync(ct);
+
+        return Ok(ApiResponse<IReadOnlyList<RecordingSessionDto>>.Success(sessions));
+    }
+
+    /// <summary>
+    /// Retrieves detailed recording session metadata by session ID.
+    /// Guarded by consultations:read permission.
+    /// </summary>
+    [HttpGet("sessions/{id:guid}")]
+    [HasPermission(ClinicPermissions.ConsultationsRead)]
+    public async Task<ActionResult<ApiResponse<RecordingSessionDto>>> GetRecordingSession(
+        Guid id,
+        CancellationToken ct)
+    {
+        var session = await _db.TeleconsultRecordingSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == id && s.ClinicId == _clinicContext.ClinicId, ct);
+
+        if (session == null)
+        {
+            return NotFound(ApiResponse<RecordingSessionDto>.Fail("Recording session not found."));
+        }
+
+        var dto = new RecordingSessionDto(
+            session.Id,
+            session.ClinicId,
+            session.CallId,
+            session.AppointmentId,
+            session.ConsultationId,
+            session.PatientId,
+            session.PatientName,
+            session.DoctorId,
+            session.DoctorName,
+            session.ConsentStatus,
+            session.RecordingState,
+            session.StoragePolicy,
+            session.TotalDurationSeconds,
+            session.SegmentCount,
+            session.TotalSizeBytes,
+            session.ContainerFormat,
+            session.ManifestStorageKey,
+            session.HasGaps,
+            session.RetentionPolicyDays,
+            session.ExpiresAtUtc,
+            session.IsLegalHold,
+            session.LegalHoldReason,
+            session.IsPurged
+        );
+
+        return Ok(ApiResponse<RecordingSessionDto>.Success(dto));
     }
 
     private sealed class HashingReadStream : Stream

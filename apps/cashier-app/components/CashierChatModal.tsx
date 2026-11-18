@@ -6,6 +6,7 @@ import {
   useConversation,
   useSendMessage,
 } from '@clinicez/comms-sdk/react';
+import { resolveConversationDisplayTitle } from '@clinicez/comms-sdk/core';
 import {
   ChatDrawer,
   MessageThread,
@@ -88,6 +89,7 @@ function ActiveThreadView({ conversationId, onBack, currentUserId }: ActiveThrea
         }}
         privacyBlurEnabled={privacyBlur}
         onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
+        showHeader={false}
         canWriteInternalNotes={true}
         isLoading={isLoading}
         error={error ? error.message : null}
@@ -117,9 +119,11 @@ export default function CashierChatModal() {
         if (selectedScope !== 'All' && c.scope !== selectedScope) return false;
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
+          const displayTitle = resolveConversationDisplayTitle(c).toLowerCase();
           return (
-            c.title.toLowerCase().includes(q) ||
-            (c.lastMessageSnippet && c.lastMessageSnippet.toLowerCase().includes(q))
+            displayTitle.includes(q) ||
+            Boolean(c.title?.toLowerCase().includes(q)) ||
+            Boolean(c.lastMessageSnippet?.toLowerCase().includes(q))
           );
         }
         return true;
@@ -127,7 +131,7 @@ export default function CashierChatModal() {
       .map((c) => ({
         id: c.id,
         scope: c.scope as ChatDrawerItem['scope'],
-        title: c.title,
+        title: resolveConversationDisplayTitle(c),
         lastMessageSnippet: c.lastMessageSnippet ?? undefined,
         lastMessageAtUtc: c.lastMessageAtUtc ?? undefined,
         unreadCount: (c as any).unreadCount ?? 0,

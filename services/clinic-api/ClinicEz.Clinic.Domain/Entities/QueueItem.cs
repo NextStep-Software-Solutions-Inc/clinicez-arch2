@@ -62,14 +62,20 @@ public sealed class QueueItem : ClinicScopedEntity
     public bool ApproachingNotificationSent { get; set; } = false;
 
     /// <summary>
+    /// Indicates whether this visit was created directly at a clinical workstation/modal
+    /// without a front-desk check-in ticket (e.g. "DV-001"), bypassing lobby TV and pure lobby call queues.
+    /// </summary>
+    public bool IsDirectVisit { get; set; } = false;
+
+    /// <summary>
     /// Indicates whether a called-to-room alert notification has already been sent to the patient.
     /// </summary>
     public bool CalledNotificationSent { get; set; } = false;
 
     /// <summary>
-    /// Outpatient visit intent classification: Consultation, VitalsCheckOnly, RetailPurchase, StandaloneProcedure, LaboratorySpecimen, AdministrativeDocument, CashierSettlement
+    /// Outpatient visit purpose classification: RoutineCheckup, AcuteIllnessConsultation, ChronicDiseaseFollowUp, PreventiveHealthAssessment, UrgentCareVisit
     /// </summary>
-    public VisitType VisitType { get; set; } = VisitType.Consultation;
+    public VisitType VisitType { get; set; } = VisitType.RoutineCheckup;
 
     /// <summary>
     /// Optional clinical or administrative remarks upon non-doctor discharge or cancellation

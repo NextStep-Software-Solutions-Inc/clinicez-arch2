@@ -1,5 +1,8 @@
 using ClinicEz.MediaBroker.Application;
 using ClinicEz.MediaBroker.Infrastructure;
+using ClinicEz.MediaBroker.Infrastructure.Persistence;
+using ClinicEz.Shared.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -32,8 +35,32 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MediaBrokerDbContext>();
+        dbContext.EnsureDevelopmentDatabaseCreatedAndMigrated(app.Environment);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[DB_INIT_NOTE] {ex.Message}");
+    }
+
     app.MapOpenApi().AllowAnonymous();
     app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Media Broker API")).AllowAnonymous();
+}
+else if (app.Configuration.GetValue("MediaBroker:AutoMigrate", true))
+{
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MediaBrokerDbContext>();
+        dbContext.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[DB_MIGRATE_NOTE] {ex.Message}");
+    }
 }
 
 app.UseCors();

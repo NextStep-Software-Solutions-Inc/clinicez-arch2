@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, EmptyState } from '../ui';
+import { ThemedText, Badge, Icon, EmptyState, Button } from '../ui';
+import { useClinic } from '../../context/ClinicContext';
+import ClinicRecordingPlayerModal from '../teleconsult/ClinicRecordingPlayerModal';
 import {
   type ClinicPatient,
   type ConsultationRecord,
@@ -19,6 +21,13 @@ export interface EncountersTimelineTabProps {
   onRefreshChart?: () => void;
 }
 
+function formatDuration(totalSeconds?: number): string {
+  if (!totalSeconds || totalSeconds < 0) return '00:00';
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = Math.floor(totalSeconds % 60);
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
 export default function EncountersTimelineTab({
   patient,
   patientId,
@@ -27,28 +36,38 @@ export default function EncountersTimelineTab({
   onOpenExternalDispense,
   onRefreshChart,
 }: EncountersTimelineTabProps) {
+  const { dateFormat, timeFormat, timeZoneId } = useClinic();
   const [selectedDoctorFilter, setSelectedDoctorFilter] = useState<string>('ALL');
   const [encounterTypeFilter, setEncounterTypeFilter] = useState<'ALL' | 'YAKAP' | 'STANDARD'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const signedConsultations = useMemo(
+    () => consultations.filter((c) => c.isSigned !== false),
+    [consultations],
+  );
+
   const [expandedEncounterIds, setExpandedEncounterIds] = useState<Record<string, boolean>>({
-    // Auto-expand the latest encounter by default
-    ...(consultations.length > 0 ? { [consultations[0].id]: true } : {}),
+    // Auto-expand the latest signed encounter by default
+    ...(signedConsultations.length > 0 ? { [signedConsultations[0].id]: true } : {}),
   });
+  const [selectedRecordingSession, setSelectedRecordingSession] = useState<{
+    sessionId: string;
+    consultationId?: string;
+  } | null>(null);
 
   // Extract unique doctors
   const doctorsList = useMemo(() => {
     const map = new Map<string, string>();
-    consultations.forEach((c) => {
+    signedConsultations.forEach((c) => {
       if (c.doctorId && c.doctorName) {
         map.set(c.doctorId, c.doctorName);
       }
     });
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [consultations]);
+  }, [signedConsultations]);
 
   // Filter consultations
   const filteredConsultations = useMemo(() => {
-    return consultations.filter((c) => {
+    return signedConsultations.filter((c) => {
       // Doctor filter
       if (selectedDoctorFilter !== 'ALL' && c.doctorId !== selectedDoctorFilter) {
         return false;
@@ -81,7 +100,7 @@ export default function EncountersTimelineTab({
       }
       return true;
     });
-  }, [consultations, selectedDoctorFilter, encounterTypeFilter, searchQuery]);
+  }, [signedConsultations, selectedDoctorFilter, encounterTypeFilter, searchQuery]);
 
   const toggleExpand = (id: string) => {
     setExpandedEncounterIds((prev) => ({
@@ -123,7 +142,7 @@ export default function EncountersTimelineTab({
               variant="captionBold"
               color={selectedDoctorFilter === 'ALL' ? theme.colors.onPrimary : theme.colors.textSecondary}
             >
-              All Doctors ({consultations.length})
+              All Doctors ({signedConsultations.length})
             </ThemedText>
           </Pressable>
           {doctorsList.map((doc) => (
@@ -165,7 +184,7 @@ export default function EncountersTimelineTab({
               color={encounterTypeFilter === 'YAKAP' ? theme.colors.primaryDark : theme.colors.textSecondary}
               style={{ fontWeight: encounterTypeFilter === 'YAKAP' ? '700' : '500' }}
             >
-              PhilHealth Konsulta Only
+              YAKAP
             </ThemedText>
           </Pressable>
           <Pressable
@@ -177,7 +196,7 @@ export default function EncountersTimelineTab({
               color={encounterTypeFilter === 'STANDARD' ? theme.colors.primaryDark : theme.colors.textSecondary}
               style={{ fontWeight: encounterTypeFilter === 'STANDARD' ? '700' : '500' }}
             >
-              Private / Cash
+              Standard
             </ThemedText>
           </Pressable>
         </View>
@@ -190,7 +209,9 @@ export default function EncountersTimelineTab({
         <View style={styles.timelineList}>
           {filteredConsultations.map((enc, idx) => {
             const isExpanded = Boolean(expandedEncounterIds[enc.id]);
-            const primaryDiag = (enc.diagnoses || []).find((d) => d.isPrimary) || (enc.diagnoses || [])[0];
+            const orderedDiagnoses = [...(enc.diagnoses || [])]
+              .filter((d) => Boolean(d.description?.trim()))
+              .sort((a, b) => Number(Boolean(b.isPrimary)) - Number(Boolean(a.isPrimary)));
 
             return (
               <View key={enc.id} style={styles.timelineItem}>
@@ -212,7 +233,8 @@ export default function EncountersTimelineTab({
                     <View style={styles.cardHeaderLeft}>
                       <View style={styles.dateAndDoctorRow}>
                         <ThemedText variant="captionBold" color={theme.colors.text}>
-                          {formatClinicDate(enc.encounterDate)} • {formatClinicTime(enc.encounterDate)}
+                          {formatClinicDate(enc.encounterDate, { dateFormat, timeZoneId })} •{' '}
+                          {formatClinicTime(enc.encounterDate, { timeFormat, timeZoneId })}
                         </ThemedText>
                         <ThemedText variant="caption" color={theme.colors.textSecondary}>
                           {enc.doctorName}
@@ -222,21 +244,64 @@ export default function EncountersTimelineTab({
                         ) : null}
                       </View>
 
-                      {primaryDiag ? (
+                      {orderedDiagnoses.length > 0 ? (
                         <View style={styles.diagRow}>
-                          <Badge label={primaryDiag.icd10Code} variant="routine" size="sm" />
-                          <ThemedText variant="bodyBold" color={theme.colors.text} numberOfLines={1}>
-                            {primaryDiag.description}
-                          </ThemedText>
+                          {orderedDiagnoses.map((diag, diagIdx) => {
+                            const isPrimaryPill = Boolean(diag.isPrimary) || diagIdx === 0;
+                            return (
+                              <View
+                                key={diag.id || `${enc.id}-hdr-diag-${diagIdx}`}
+                                style={[
+                                  styles.headerDiagPill,
+                                  !isPrimaryPill && styles.headerDiagPill_secondary,
+                                ]}
+                              >
+                                <ThemedText
+                                  variant="captionBold"
+                                  color={isPrimaryPill ? theme.colors.primaryDark : theme.colors.infoText}
+                                  numberOfLines={1}
+                                >
+                                  {diag.description}
+                                </ThemedText>
+                              </View>
+                            );
+                          })}
                         </View>
                       ) : null}
                     </View>
 
                     <View style={styles.cardHeaderRight}>
+                      {(enc as any).recordingStatus || (enc as any).isLegalHold || (enc as any).hasRecording ? (
+                        <Badge
+                          label={
+                            (enc as any).recordingStatus === 'LegalHold' || (enc as any).isLegalHold
+                              ? 'Medico-Legal Hold'
+                              : (enc as any).recordingStatus === 'Purged'
+                                ? 'Purged'
+                                : `Recorded • ${formatDuration((enc as any).recordingDurationSeconds ?? 930)}`
+                          }
+                          variant={
+                            (enc as any).recordingStatus === 'LegalHold' || (enc as any).isLegalHold
+                              ? 'emergency'
+                              : (enc as any).recordingStatus === 'Purged'
+                                ? 'neutral'
+                                : 'purple'
+                          }
+                          size="sm"
+                          icon="consultations"
+                        />
+                      ) : null}
+                      {enc.rosCategoryLabel || enc.rosCategory ? (
+                        <Badge
+                          label={`ROS: ${enc.rosCategoryLabel || enc.rosCategory}`}
+                          variant="info"
+                          size="sm"
+                        />
+                      ) : null}
                       {enc.isYakapEligible ? (
-                        <Badge label="PhilHealth Konsulta" variant="purple" size="sm" icon="yakap" />
+                        <Badge label="YAKAP" variant="purple" size="sm" />
                       ) : (
-                        <Badge label="Standard Encounter" variant="neutral" size="sm" />
+                        <Badge label="Standard" variant="neutral" size="sm" />
                       )}
                       {enc.isSigned ? (
                         <Badge label="Signed" variant="success" size="sm" icon="checkCircle" />
@@ -283,10 +348,9 @@ export default function EncountersTimelineTab({
                         <ThemedText variant="body" color={theme.colors.text}>
                           {enc.subjective || 'No subjective narrative documented.'}
                         </ThemedText>
-                        {enc.philHealthSignSympCode ? (
+                        {enc.philHealthPainSite ? (
                           <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                            PhilHealth Symptom Code: {enc.philHealthSignSympCode}
-                            {enc.philHealthPainSite ? ` • Pain Site: ${enc.philHealthPainSite}` : ''}
+                            Pain Site: {enc.philHealthPainSite}
                           </ThemedText>
                         ) : null}
                       </View>
@@ -309,16 +373,24 @@ export default function EncountersTimelineTab({
                         <ThemedText variant="body" color={theme.colors.text}>
                           {enc.assessment || 'No narrative assessment documented.'}
                         </ThemedText>
-                        {(enc.diagnoses || []).length > 0 ? (
+                        {orderedDiagnoses.length > 0 ? (
                           <View style={styles.diagPillsRow}>
-                            {enc.diagnoses.map((d) => (
-                              <View key={d.id || d.icd10Code} style={styles.diagPill}>
-                                <Badge label={d.icd10Code} variant={d.isPrimary ? 'routine' : 'neutral'} size="sm" />
-                                <ThemedText variant="caption" color={theme.colors.text}>
-                                  {d.description}
-                                </ThemedText>
-                              </View>
-                            ))}
+                            {orderedDiagnoses.map((d, diagIdx) => {
+                              const isPrimaryPill = Boolean(d.isPrimary) || diagIdx === 0;
+                              return (
+                                <View
+                                  key={d.id || `${enc.id}-soap-diag-${diagIdx}`}
+                                  style={[styles.diagPill, isPrimaryPill && styles.diagPill_primary]}
+                                >
+                                  <ThemedText
+                                    variant="captionBold"
+                                    color={isPrimaryPill ? theme.colors.primaryDark : theme.colors.infoText}
+                                  >
+                                    {d.description}
+                                  </ThemedText>
+                                </View>
+                              );
+                            })}
                           </View>
                         ) : null}
                       </View>
@@ -350,6 +422,21 @@ export default function EncountersTimelineTab({
                                   Qty: {rx.quantity} • Sig: {rx.sig}
                                 </ThemedText>
                               </View>
+                              {enc.isSigned && rx.isClinicDispensed && rx.clinicDispensedQuantity ? (() => {
+                                const dispensedQty = Math.min(rx.quantity, Math.max(0, rx.clinicDispensedQuantity));
+                                const remainingQty = Math.max(0, rx.quantity - dispensedQty);
+                                return (
+                                  <Badge
+                                    label={
+                                      remainingQty > 0
+                                        ? `Clinic stock: ${dispensedQty}/${rx.quantity} (${remainingQty} ext.)`
+                                        : `Clinic stock: all ${rx.quantity} pcs`
+                                    }
+                                    variant="routine"
+                                    size="xs"
+                                  />
+                                );
+                              })() : null}
                             </View>
                           ))}
                         </View>
@@ -411,27 +498,33 @@ export default function EncountersTimelineTab({
 
                       {/* Action Bar */}
                       <View style={styles.actionBar}>
-                        {onViewPrescriptionSlip ? (
-                          <Pressable
-                            onPress={() => onViewPrescriptionSlip(enc)}
-                            style={styles.actionBtn}
-                          >
-                            <Icon name="file" size={14} color={theme.colors.primaryDark} />
-                            <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                              View E-Rx Slip
-                            </ThemedText>
-                          </Pressable>
-                        ) : null}
-                        {onOpenExternalDispense ? (
-                          <Pressable
-                            onPress={() => onOpenExternalDispense(enc)}
-                            style={styles.actionBtn}
-                          >
-                            <Icon name="check" size={14} color={theme.colors.primaryDark} />
-                            <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                              Log External Dispense
-                            </ThemedText>
-                          </Pressable>
+                        {enc.isSigned ? (
+                          <>
+                            {onViewPrescriptionSlip ? (
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                icon="file"
+                                title="View E-Rx Slip"
+                                onPress={() => onViewPrescriptionSlip(enc)}
+                              />
+                            ) : null}
+                            {onOpenExternalDispense ? (
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                icon="check"
+                                title="Log External Dispense"
+                                onPress={() => onOpenExternalDispense(enc)}
+                              />
+                            ) : null}
+                          </>
+                        ) : (enc.prescriptions || []).length > 0 ? (
+                          <Badge
+                            label="Draft — Sign encounter to validate Rx"
+                            variant="warning"
+                            size="sm"
+                          />
                         ) : null}
                       </View>
 
@@ -445,10 +538,27 @@ export default function EncountersTimelineTab({
                         </ThemedText>
                         {enc.signedAt ? (
                           <ThemedText variant="caption" color={theme.colors.textMuted}>
-                            Signed at: {formatClinicDateTime(enc.signedAt)}
+                            Signed at: {formatClinicDateTime(enc.signedAt, { dateFormat, timeFormat, timeZoneId })}
                           </ThemedText>
                         ) : null}
                       </View>
+
+                      {/* Teleconsultation Recording Action */}
+                      {((enc as any).recordingSessionId || (enc as any).recordingStatus || (enc as any).hasRecording || (enc as any).isTeleconsult) ? (
+                        <View style={styles.recordingActionRow}>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon="consultations"
+                            title="Play Recording"
+                            onPress={() => setSelectedRecordingSession({
+                              sessionId: (enc as any).recordingSessionId || enc.id,
+                              consultationId: enc.id,
+                            })}
+                            style={styles.touchableMinSize}
+                          />
+                        </View>
+                      ) : null}
                     </View>
                   ) : null}
                 </View>
@@ -467,6 +577,11 @@ export default function EncountersTimelineTab({
           }
         />
       )}
+      <ClinicRecordingPlayerModal
+        visible={!!selectedRecordingSession}
+        sessionId={selectedRecordingSession?.sessionId}
+        onClose={() => setSelectedRecordingSession(null)}
+      />
     </ScrollView>
   );
 }
@@ -604,7 +719,23 @@ const styles = StyleSheet.create({
   diagRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 6,
+  },
+  headerDiagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+  },
+  headerDiagPill_secondary: {
+    backgroundColor: theme.colors.infoBg,
+    borderColor: theme.colors.infoBorder,
   },
   statutoryStrip: {
     flexDirection: 'row',
@@ -633,13 +764,17 @@ const styles = StyleSheet.create({
   diagPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: theme.colors.surfaceSubtle,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: theme.radii.xs,
+    gap: 5,
+    backgroundColor: theme.colors.infoBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.radii.sm,
     borderWidth: 1,
-    borderColor: theme.colors.borderLight,
+    borderColor: theme.colors.infoBorder,
+  },
+  diagPill_primary: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
   },
   prescriptionsBlock: {
     padding: theme.spacing.sm,
@@ -661,17 +796,6 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xs,
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
   },
   signingFooter: {
     paddingTop: theme.spacing.xs,
@@ -707,5 +831,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
     flexWrap: 'wrap',
+  },
+  recordingActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: theme.spacing.sm,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
+  touchableMinSize: {
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
   },
 });

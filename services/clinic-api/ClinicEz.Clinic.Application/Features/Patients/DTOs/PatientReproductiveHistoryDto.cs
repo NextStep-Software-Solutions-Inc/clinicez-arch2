@@ -23,7 +23,8 @@ public sealed record PatientReproductiveHistoryDto(
     string? DeliveryType,
     bool HadPreEclampsiaHypertension,
     bool ReceivedFamilyPlanningCounseling,
-    string? Remarks);
+    string? Remarks,
+    DateTime? UpdatedAt = null);
 
 public sealed record UpdatePatientReproductiveHistoryRequest(
     bool IsApplicable = true,

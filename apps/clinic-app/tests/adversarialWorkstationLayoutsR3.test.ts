@@ -317,7 +317,8 @@ describe('Adversarial Review Round 3: Workstation Layouts Asynchronous Edge Case
 
       expect(markup).toContain('aria-label="Clinical Workstation for Corazon Aquino-Santos"');
       expect(markup).toContain('General medical examination');
-      expect(markup).toContain('Z00.0');
+      expect(markup).toContain('YAKAP');
+      expect(markup).not.toContain('Z00.0');
     });
 
     test('R3-ASYNC-2: Async vaccine administration completion updates chart with zero duplicate pluses', () => {
@@ -352,10 +353,10 @@ describe('Adversarial Review Round 3: Workstation Layouts Asynchronous Edge Case
       expect(markup).toContain('aria-label="Medical Chart Drawer for Corazon Aquino-Santos"');
       expect(markup).toContain('Pneumococcal Polysaccharide Vaccine');
       expect(markup).toContain('LOT-PN-2026');
-      expect(markup).toContain('Administer Vaccine');
-      expect(markup).toContain('Add Historical Vaccine');
+      expect(markup).toContain('Administer Vax');
+      expect(markup).toContain('Log Vax History');
       expect(markup).not.toContain('+ +');
-      expect(markup).not.toContain('+ Administer Vaccine');
+      expect(markup).not.toContain('+ Administer Vax');
     });
 
     test('R3-ASYNC-3: Document vault upload completion reflects new attachment cleanly', () => {
@@ -473,9 +474,9 @@ describe('Adversarial Review Round 3: Workstation Layouts Asynchronous Edge Case
           if (tab === 'encounters') expect(markup).toContain('Encounters');
           if (tab === 'diagnostics') expect(markup).toContain('All Orders');
           if (tab === 'procedures') expect(markup).toContain('Ordered / Scheduled');
-          if (tab === 'immunizations') expect(markup).toContain('Administer Vaccine');
+          if (tab === 'immunizations') expect(markup).toContain('Administer Vax');
           if (tab === 'profiles') expect(markup).toContain('Health Profiles');
-          if (tab === 'vault') expect(markup).toContain('All Records');
+          if (tab === 'vault') expect(markup).toContain('Attach External Document');
         }
       }
     }, 30000);
@@ -522,8 +523,8 @@ describe('Adversarial Review Round 3: Workstation Layouts Asynchronous Edge Case
       // Verify that it renders cleanly and contains clinical documentation status banner
       expect(markup).toContain('Immunization Documentation Status');
       expect(markup).toContain('No immunizations are currently documented for this patient');
-      expect(markup).toContain('Administer Vaccine');
-      expect(markup).toContain('Add Historical Vaccine');
+      expect(markup).toContain('Administer Vax');
+      expect(markup).toContain('Log Vax History');
       expect(markup).not.toContain('+ +');
       expect(markup).not.toContain('PhilHealth');
       expect(markup).not.toContain('Fallback Code 999');

@@ -5,6 +5,8 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Shared.Licensing;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,15 +19,18 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
     private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IFacilityLicenseValidator? _licenseValidator;
 
     public GetClinicSettingsQueryHandler(
         IRepository<FacilitySettings> settingsRepo,
         IClinicContext clinicContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IFacilityLicenseValidator? licenseValidator = null)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
+        _licenseValidator = licenseValidator;
     }
 
     public async Task<ClinicSettingsDto> Handle(GetClinicSettingsQuery request, CancellationToken ct)
@@ -53,6 +58,11 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
                 LetterheadAddress = null,
                 LetterheadContact = null,
                 LetterheadFooter = null,
+                TeleconsultRecordingPolicy = "Disabled",
+                TeleconsultRecordingRetentionDays = 90,
+                TeleconsultRecordingConsentRequired = true,
+                TeleconsultPaymentPolicy = "Prepaid",
+                TeleconsultDefaultFee = 400.00m,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "System"
             };
@@ -61,6 +71,15 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             await _unitOfWork.SaveChangesAsync(ct);
         }
 
-        return ClinicSettingsDto.FromEntity(settings);
+        var isWorkspaceTeleconsultEntitled = false;
+        if (!string.IsNullOrWhiteSpace(settings.LicenseToken))
+        {
+            var validation = (_licenseValidator ?? new FacilityLicenseValidator()).Validate(settings.LicenseToken, settings.ClinicId, settings.TenantId);
+            isWorkspaceTeleconsultEntitled = validation.IsValid &&
+                validation.Payload?.EnabledFeatures != null &&
+                validation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+        }
+
+        return ClinicSettingsDto.FromEntity(settings, isWorkspaceTeleconsultEntitled);
     }
 }

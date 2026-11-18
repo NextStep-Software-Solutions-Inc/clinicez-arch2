@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interoperability;
 using Microsoft.EntityFrameworkCore;
@@ -323,9 +324,117 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
             patientDisplayName = $"Patient-{message.PatientId.ToString()[..8]}";
         }
 
+        var isTeleconsultModality =
+            string.Equals(message.AppointmentType, "Teleconsult", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(message.Reason, "Teleconsult", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(message.Reason, "Teleconsultation", StringComparison.OrdinalIgnoreCase);
+
+        var appointmentType = isTeleconsultModality ? AppointmentType.Teleconsult : AppointmentType.InPerson;
+
+        var appointmentId = Guid.NewGuid();
+        Guid? callId = isTeleconsultModality ? Guid.NewGuid() : null;
+
+        FacilitySettings? facilitySettings = null;
+        if (isTeleconsultModality)
+        {
+            facilitySettings = await _dbContext.Settings
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.ClinicId == clinic.ClinicId, ct);
+        }
+
+        var defaultPolicyStr = facilitySettings?.TeleconsultPaymentPolicy ?? "Prepaid";
+        var paymentPolicy = Enum.TryParse<TeleconsultPaymentPolicy>(defaultPolicyStr, true, out var pol)
+            ? pol
+            : TeleconsultPaymentPolicy.Prepaid;
+
+        var paymentStatus = isTeleconsultModality
+            ? (paymentPolicy == TeleconsultPaymentPolicy.Exempt ? TeleconsultPaymentStatus.Exempt : TeleconsultPaymentStatus.Pending)
+            : TeleconsultPaymentStatus.Pending;
+
+        Guid? invoiceId = null;
+        Guid? invoiceRequestId = null;
+
+        if (isTeleconsultModality && paymentPolicy == TeleconsultPaymentPolicy.Prepaid)
+        {
+            var fee = facilitySettings?.TeleconsultDefaultFee ?? 400.00m;
+            invoiceId = Guid.NewGuid();
+            invoiceRequestId = invoiceId;
+
+            var now = DateTime.UtcNow;
+            var invoice = new Invoice
+            {
+                Id = invoiceId.Value,
+                InvoiceNumber = $"INV-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
+                TenantId = tenantId,
+                ClinicId = message.ClinicId,
+                AppointmentId = appointmentId,
+                PatientId = clinicPatient.Id,
+                PatientName = patientDisplayName,
+                GrossAmount = fee,
+                NetAmount = fee,
+                BalanceDue = fee,
+                AmountPaid = 0m,
+                Status = InvoiceStatus.Draft,
+                InvoiceDate = now,
+                CreatedBy = "System:AppointmentBookedHandler",
+                LineItems = new List<InvoiceLineItem>
+                {
+                    new InvoiceLineItem
+                    {
+                        Id = Guid.NewGuid(),
+                        InvoiceId = invoiceId.Value,
+                        TenantId = tenantId,
+                        ClinicId = message.ClinicId,
+                        Description = "Teleconsultation Consultation Fee",
+                        Category = "Teleconsultation",
+                        UnitPrice = fee,
+                        Quantity = 1,
+                        TotalPrice = fee
+                    }
+                }
+            };
+
+            await _dbContext.Invoices.AddAsync(invoice, ct);
+
+            if (string.Equals(facilitySettings?.CashierMode, "CashierCounter", StringComparison.OrdinalIgnoreCase))
+            {
+                invoice.BillingRequestedAt = now;
+                var facilityIdStr = clinic.ClinicId.ToString();
+                var billingPayload = new BillingInvoiceRequestedPayload
+                {
+                    InvoiceRequestId = invoice.Id,
+                    TenantId = tenantId,
+                    FacilityId = facilityIdStr,
+                    FacilityType = FacilityType.Clinic,
+                    PatientId = clinicPatient.Id,
+                    PatientName = patientDisplayName,
+                    VisitKey = appointmentId.ToString(),
+                    SourceType = "Teleconsult",
+                    SourceId = appointmentId,
+                    Lines = new List<BillingLineDto>
+                    {
+                        new BillingLineDto
+                        {
+                            Code = "TELECONSULT",
+                            Description = "Teleconsultation Fee",
+                            Quantity = 1,
+                            UnitPrice = fee
+                        }
+                    }
+                };
+
+                _publisher.Enqueue(
+                    InteropTypes.BillingInvoiceRequested,
+                    Party.ForFacility(tenantId, facilityIdStr, FacilityType.Clinic),
+                    Party.ForFacility(tenantId, facilityIdStr, FacilityType.Clinic, InteropServices.Billing),
+                    invoice.Id,
+                    billingPayload);
+            }
+        }
+
         var appointment = new Appointment
         {
-            Id = Guid.NewGuid(),
+            Id = appointmentId,
             DraftId = message.DraftId,
             TenantId = tenantId,
             ClinicId = message.ClinicId,
@@ -334,6 +443,13 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
             ScheduledAt = scheduledAt,
             DurationMinutes = 30,
             Status = AppointmentStatus.Confirmed,
+            AppointmentType = appointmentType,
+            ServiceType = isTeleconsultModality ? "Teleconsult" : null,
+            PaymentPolicy = paymentPolicy,
+            PaymentStatus = paymentStatus,
+            InvoiceId = invoiceId,
+            InvoiceRequestId = invoiceRequestId,
+            CallId = callId,
             Reason = message.Reason ?? "General Consultation",
             Notes = message.Notes,
             ShareFieldsJson = message.ShareFieldsJson,

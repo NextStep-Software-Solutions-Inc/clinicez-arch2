@@ -14,7 +14,8 @@ public record ClinicLabOrderItemDto(
     string? LoincCode = null,
     bool IsPhysicianRecommended = false,
     string? PatientComplianceCode = null,
-    decimal? DiagnosticFee = null
+    decimal? DiagnosticFee = null,
+    bool IsDoneOutsideFacility = false
 );
 
 public record ClinicLabResultSummaryDto(
@@ -58,7 +59,9 @@ public record ClinicLabOrderDto(
     string? LaboratoryName = null,
     string? ClaimToken = null,
     List<ClinicLabResultSummaryDto>? Results = null,
-    List<LabObservationDto>? Observations = null
+    List<LabObservationDto>? Observations = null,
+    Guid? QueueItemId = null,
+    bool IsSigned = true
 );
 
 public record AcknowledgePanicAlertRequest(
@@ -69,7 +72,10 @@ public record AcknowledgePanicAlertRequest(
 public record CreateLabOrderItemRequest(
     string TestName,
     string Category,
-    string? Instructions
+    string? Instructions,
+    bool? IsDoneOutsideFacility = null,
+    decimal? DiagnosticFee = null,
+    string? TestCode = null
 );
 
 public record CreateClinicLabOrderRequest(
@@ -82,7 +88,8 @@ public record CreateClinicLabOrderRequest(
     string? Notes,
     List<CreateLabOrderItemRequest> Items,
     string? TargetFacilityId = null,
-    string? TargetTenantId = null
+    string? TargetTenantId = null,
+    Guid? QueueItemId = null
 );
 
 public record AttachExternalLabResultRequest(

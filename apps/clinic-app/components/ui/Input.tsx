@@ -15,9 +15,13 @@ import { useUiDensity } from '../../context/UiDensityContext';
 
 export interface InputProps extends TextInputProps {
   label?: string;
+  labelTooltip?: string;
+  labelTooltipAlign?: 'left' | 'right';
   error?: string;
   helperText?: string;
   disabled?: boolean;
+  /** Web-native tooltip displayed on hover */
+  title?: string;
   /** IconName (e.g. "search"). Legacy emoji glyphs are still resolved for old call sites. */
   leftIcon?: string;
   rightIcon?: string;
@@ -30,6 +34,8 @@ export interface InputProps extends TextInputProps {
 
 export default function Input({
   label,
+  labelTooltip,
+  labelTooltipAlign = 'left',
   error,
   helperText,
   disabled,
@@ -43,10 +49,13 @@ export default function Input({
   onFocus,
   onBlur,
   editable,
+  title,
   ...rest
 }: InputProps) {
   const { multiplier } = useUiDensity();
   const [isFocused, setIsFocused] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
   const isEditable = disabled !== undefined ? !disabled : (editable ?? true);
 
   const densityWrapperStyle =
@@ -68,18 +77,71 @@ export default function Input({
       : null;
 
   return (
-    <View style={[styles.container, containerStyle]}>
+    <View style={[styles.container, showTooltip ? styles.containerTooltipActive : null, containerStyle]}>
       {label ? (
-        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
-          {label}
-          {required ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
-        </ThemedText>
+        labelTooltip ? (
+          <View style={styles.labelRow}>
+            <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.labelInline}>
+              {label}
+              {required ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
+            </ThemedText>
+            <View style={styles.tooltipAnchor}>
+              <Pressable
+                testID="input-label-tooltip-trigger"
+                accessibilityRole="button"
+                accessibilityLabel={labelTooltip}
+                hitSlop={theme.spacing.xs}
+                onPress={() => setShowTooltip((prev) => !prev)}
+                onFocus={() => setShowTooltip(true)}
+                onBlur={() => setShowTooltip(false)}
+                {...({
+                  onHoverIn: () => setShowTooltip(true),
+                  onHoverOut: () => setShowTooltip(false),
+                  onMouseEnter: () => setShowTooltip(true),
+                  onMouseLeave: () => setShowTooltip(false),
+                } as Record<string, unknown>)}
+                style={styles.tooltipTrigger}
+              >
+                <IconSlot
+                  value="helpCircle"
+                  size={theme.fontSizes.sm}
+                  color={showTooltip ? theme.colors.primary : theme.colors.textMuted}
+                />
+              </Pressable>
+              {showTooltip ? (
+                <View
+                  testID="input-label-tooltip-popover"
+                  pointerEvents="none"
+                  style={[
+                    styles.tooltipPopover,
+                    labelTooltipAlign === 'right' ? styles.tooltipPopoverRight : styles.tooltipPopoverLeft,
+                  ]}
+                >
+                  <ThemedText variant="caption" color={theme.colors.textInverted}>
+                    {labelTooltip}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        ) : (
+          <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
+            {label}
+            {required ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
+          </ThemedText>
+        )
       ) : null}
 
       <View
+        {...({
+          onMouseEnter: () => setIsHovered(true),
+          onMouseLeave: () => setIsHovered(false),
+          ...(title ? { title } : {}),
+        } as any)}
         style={[
           styles.inputWrapper,
           densityWrapperStyle,
+          isHovered && !isFocused && !disabled && !error ? styles.inputHovered : null,
           isFocused && styles.inputFocused,
           disabled ? styles.inputDisabled : null,
           error ? styles.inputError : null,
@@ -88,7 +150,11 @@ export default function Input({
       >
         {resolveIconName(leftIcon) ? (
           <View style={styles.leftIcon}>
-            <IconSlot value={leftIcon} size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+            <IconSlot
+              value={leftIcon}
+              size={theme.sizes.iconSm}
+              color={isFocused && !error ? theme.colors.primary : theme.colors.textMuted}
+            />
           </View>
         ) : null}
 
@@ -105,6 +171,7 @@ export default function Input({
             setIsFocused(false);
             onBlur?.(e);
           }}
+          {...(title ? { title } : {})}
           {...rest}
         />
 
@@ -135,8 +202,49 @@ const styles = StyleSheet.create({
   container: {
     gap: theme.spacing.xs,
   },
+  containerTooltipActive: {
+    zIndex: 60,
+  },
   label: {
     marginBottom: 2,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    marginBottom: 2,
+    zIndex: 60,
+  },
+  labelInline: {
+    flexShrink: 1,
+  },
+  tooltipAnchor: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tooltipTrigger: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 1,
+  },
+  tooltipPopover: {
+    position: 'absolute',
+    bottom: '100%',
+    marginBottom: theme.spacing.xs,
+    width: 248,
+    backgroundColor: theme.colors.surfaceInverse,
+    borderRadius: theme.radii.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    zIndex: 100,
+    ...theme.shadows.md,
+  },
+  tooltipPopoverLeft: {
+    left: 0,
+  },
+  tooltipPopoverRight: {
+    right: 0,
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -152,6 +260,9 @@ const styles = StyleSheet.create({
     minHeight: theme.sizes.controlLg + theme.sizes.controlMd,
     alignItems: 'flex-start',
     paddingVertical: theme.spacing.sm,
+  },
+  inputHovered: {
+    borderColor: theme.colors.primaryBorder,
   },
   inputFocused: {
     borderColor: theme.colors.primary,

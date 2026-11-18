@@ -145,17 +145,16 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
 
         if (affectedClinicsForQueue.Count > 0)
         {
-            var tz = ClinicTimeZoneResolver.ResolveTimeZone("Asia/Manila");
-            var todayManila = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
-
             foreach (var (tenantId, clinicId) in affectedClinicsForQueue)
             {
                 var settings = await GetClinicSettingsAsync(db, clinicId, clinicSettingsCache, cancellationToken);
                 var isAcceptingWalkIns = settings == null || !settings.IsOnlineBookingPaused;
+                var tz = ClinicTimeZoneResolver.ResolveTimeZone(settings?.TimeZoneId);
+                var todayClinic = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
 
-                // Load existing persisted tickets for today Manila
+                // Load existing persisted tickets for today
                 var dbTickets = await db.QueueItems.IgnoreQueryFilters().AsNoTracking()
-                    .Where(q => q.ClinicId == clinicId && q.QueueDate == todayManila && !q.IsDeleted)
+                    .Where(q => q.ClinicId == clinicId && q.QueueDate == todayClinic && !q.IsDeleted && !q.IsDirectVisit)
                     .ToListAsync(cancellationToken);
 
                 // Overlay change tracker modifications
@@ -163,11 +162,11 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
 
                 foreach (var qEntry in queueEntries.Where(e => e.Entity.ClinicId == clinicId))
                 {
-                    if (qEntry.State == EntityState.Deleted || qEntry.Entity.IsDeleted)
+                    if (qEntry.State == EntityState.Deleted || qEntry.Entity.IsDeleted || qEntry.Entity.IsDirectVisit)
                     {
                         activeTickets.Remove(qEntry.Entity.Id);
                     }
-                    else if (qEntry.Entity.QueueDate == todayManila)
+                    else if (qEntry.Entity.QueueDate == todayClinic)
                     {
                         activeTickets[qEntry.Entity.Id] = qEntry.Entity;
                     }
@@ -193,7 +192,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
                 var upNext = allTickets
                     .Where(q => q.Status != QueueStatus.Diverted &&
                                 q.Status != QueueStatus.DischargedNonDoctor &&
-                                ((q.VisitType == VisitType.Consultation &&
+                                ((q.VisitType.IsPhysicianConsultation() &&
                                   (q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Triaged || q.Status == QueueStatus.OnHold))
                                  || q.Status == QueueStatus.PendingProcedure
                                  || q.Status == QueueStatus.ReEvaluation))
@@ -215,11 +214,14 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
                 {
                     TenantId = tenantId,
                     FacilityId = clinicId,
-                    QueueDate = todayManila,
+                    QueueDate = todayClinic,
                     GeneratedAtUtc = DateTime.UtcNow,
                     IsAcceptingWalkIns = isAcceptingWalkIns,
                     PatientsWaitingCount = upNext.Count,
                     TvDisplayPin = settings?.TvDisplayPin,
+                    TvDisplaySoundTheme = settings?.TvDisplaySoundTheme ?? "classicChime",
+                    TvDisplayVoiceEnabled = settings?.TvDisplayVoiceEnabled ?? false,
+                    TvDisplayShowPhysicianName = settings?.TvDisplayShowPhysicianName ?? true,
                     NowServing = nowServing,
                     UpNext = upNext
                 };
@@ -237,7 +239,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
         foreach (var entry in medCertEntries)
         {
             var cert = entry.Entity;
-            if (!cert.IsSigned && !cert.IsDeleted) continue;
+            if (!WasEverSigned(entry, cert.IsSigned)) continue;
 
             if (alreadyStaged.Contains((InteropTypes.DocumentAttestationPublished, cert.Id))) continue;
 
@@ -293,7 +295,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
         foreach (var entry in referralEntries)
         {
             var referral = entry.Entity;
-            if (!referral.IsSigned && !referral.IsDeleted) continue;
+            if (!WasEverSigned(entry, referral.IsSigned)) continue;
 
             if (alreadyStaged.Contains((InteropTypes.DocumentAttestationPublished, referral.Id))) continue;
 
@@ -349,7 +351,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
         foreach (var entry in encounterEntries)
         {
             var encounter = entry.Entity;
-            if (!encounter.IsSigned && !encounter.IsDeleted) continue;
+            if (!WasEverSigned(entry, encounter.IsSigned)) continue;
             if (string.IsNullOrWhiteSpace(encounter.PrescriptionNumber) && encounter.Prescriptions.Count == 0) continue;
 
             if (alreadyStaged.Contains((InteropTypes.DocumentAttestationPublished, encounter.Id))) continue;
@@ -416,6 +418,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
         foreach (var entry in labOrderEntries)
         {
             var order = entry.Entity;
+            if (!WasEverSigned(entry, order.IsSigned)) continue;
             if (alreadyStaged.Contains((InteropTypes.DocumentAttestationPublished, order.Id))) continue;
 
             var settings = await GetClinicSettingsAsync(db, order.ClinicId, clinicSettingsCache, cancellationToken);
@@ -545,5 +548,16 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
 
         if (loaded != null) cache[clinicId] = loaded;
         return loaded;
+    }
+
+    private static bool WasEverSigned(EntityEntry entry, bool currentIsSigned)
+    {
+        if (currentIsSigned) return true;
+        if (entry.State == EntityState.Added) return false;
+
+        var prop = entry.Metadata.FindProperty("IsSigned");
+        if (prop == null) return false;
+
+        return entry.OriginalValues[prop] is true;
     }
 }

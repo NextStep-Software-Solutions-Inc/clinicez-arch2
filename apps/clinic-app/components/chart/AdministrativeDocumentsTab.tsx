@@ -2,18 +2,23 @@ import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState, Button } from '../ui';
+import { useClinic } from '../../context/ClinicContext';
 import {
   clinicService,
+  formatClinicDate,
   type ClinicPatient,
   type MedicalCertificateRecord,
   type ReferralLetterRecord,
 } from '../../services/clinicService';
 import { openDocument } from '../../services/documentOpener';
 import { notify } from '../../utils/feedback';
+import IssueMedicalCertificateModal from '../patient/IssueMedicalCertificateModal';
+import IssueReferralLetterModal from '../patient/IssueReferralLetterModal';
 
 export interface AdministrativeDocumentsTabProps {
   patient?: ClinicPatient | null;
   patientId?: string;
+  queueItemId?: string | null;
   medicalCertificates?: MedicalCertificateRecord[];
   referralLetters?: ReferralLetterRecord[];
   isLoading?: boolean;
@@ -22,16 +27,43 @@ export interface AdministrativeDocumentsTabProps {
 
 export type DocumentFilterType = 'ALL' | 'CERTIFICATES' | 'REFERRALS';
 
+const FITNESS_STATUS_LABELS: Record<string, string> = {
+  FitToWork: 'Fit to work',
+  UnfitToWork: 'Unfit to work',
+  FitToSchool: 'Fit to school',
+  UnfitToSchool: 'Unfit to school',
+  LightDuty: 'Light duty',
+};
+
+export function formatFitnessStatus(status?: string): string {
+  if (!status) return 'Fit to work';
+  if (FITNESS_STATUS_LABELS[status]) return FITNESS_STATUS_LABELS[status];
+  return status
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .trim();
+}
+
+function formatDoctorName(name?: string): string {
+  if (!name) return '';
+  const trimmed = name.trim();
+  return /^dr\.?\s/i.test(trimmed) ? trimmed : `Dr. ${trimmed}`;
+}
+
 export default function AdministrativeDocumentsTab({
   patient,
-  patientId,
+  patientId: _patientId,
+  queueItemId,
   medicalCertificates = [],
   referralLetters = [],
   isLoading = false,
   onRefreshChart,
 }: AdministrativeDocumentsTabProps) {
+  const { dateFormat, timeZoneId } = useClinic();
   const [filterType, setFilterType] = useState<DocumentFilterType>('ALL');
   const [actioningDocId, setActioningDocId] = useState<string | null>(null);
+  const [issueModalVisible, setIssueModalVisible] = useState(false);
+  const [referralModalVisible, setReferralModalVisible] = useState(false);
 
   const totalCerts = medicalCertificates.length;
   const totalReferrals = referralLetters.length;
@@ -82,86 +114,98 @@ export default function AdministrativeDocumentsTab({
     );
   }
 
-  if (totalDocuments === 0) {
+  const renderFilterChips = () => (
+    <View style={styles.filterScrollWrap}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
+        contentContainerStyle={styles.filterGroup}
+      >
+        <Pressable
+          style={[styles.filterPill, filterType === 'ALL' && styles.filterPillActive]}
+          onPress={() => setFilterType('ALL')}
+        >
+          <ThemedText
+            variant="captionBold"
+            numberOfLines={1}
+            color={filterType === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+          >
+            All ({totalDocuments})
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          style={[styles.filterPill, filterType === 'CERTIFICATES' && styles.filterPillActive]}
+          onPress={() => setFilterType('CERTIFICATES')}
+        >
+          <ThemedText
+            variant="captionBold"
+            numberOfLines={1}
+            color={filterType === 'CERTIFICATES' ? theme.colors.primaryDark : theme.colors.textSecondary}
+          >
+            Certificates ({totalCerts})
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          style={[styles.filterPill, filterType === 'REFERRALS' && styles.filterPillActive]}
+          onPress={() => setFilterType('REFERRALS')}
+        >
+          <ThemedText
+            variant="captionBold"
+            numberOfLines={1}
+            color={filterType === 'REFERRALS' ? theme.colors.primaryDark : theme.colors.textSecondary}
+          >
+            Referrals ({totalReferrals})
+          </ThemedText>
+        </Pressable>
+      </ScrollView>
+    </View>
+  );
+
+  const renderSections = () => {
+    if (filterType === 'REFERRALS' && filteredReferrals.length === 0) {
+      return (
+        <View style={styles.tabEmptyContainer}>
+          <EmptyState
+            icon="file"
+            title="No Referral Letters"
+            description="No referral letters have been issued for this patient yet."
+            actionTitle="Issue Referral Letter"
+            onAction={() => setReferralModalVisible(true)}
+            actionTestID="empty-filter-issue-referral-btn"
+          />
+        </View>
+      );
+    }
+
+    if (filterType === 'CERTIFICATES' && filteredCerts.length === 0) {
+      return (
+        <View style={styles.tabEmptyContainer}>
+          <EmptyState
+            icon="file"
+            title="No Medical Certificates"
+            description="No medical certificates have been issued for this patient yet."
+            actionTitle="Issue Medical Certificate"
+            onAction={() => setIssueModalVisible(true)}
+            actionTestID="empty-filter-issue-med-cert-btn"
+          />
+        </View>
+      );
+    }
+
     return (
-      <View style={styles.emptyContainer}>
-        <EmptyState
-          icon="file"
-          title="No Issued Administrative Documents"
-          description="Official signed medical certificates and formal hospital referral letters issued to this patient will appear here for 1-click reprinting."
-          actionTitle={onRefreshChart ? 'Refresh Chart' : undefined}
-          onAction={onRefreshChart}
-        />
-      </View>
-    );
-  }
-
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      {/* HEADER SUMMARY STRIP */}
-      <View style={styles.headerStrip}>
-        <View style={styles.headerInfo}>
-          <ThemedText variant="title" color={theme.colors.text}>
-            Administrative Certificate Vault
-          </ThemedText>
-          <ThemedText variant="caption" color={theme.colors.textSecondary}>
-            Secure cryptographic registry of issued medical certificates and referral letters
-          </ThemedText>
-        </View>
-
-        {/* Filter Pills */}
-        <View style={styles.filterGroup}>
-          <Pressable
-            style={[styles.filterPill, filterType === 'ALL' && styles.filterPillActive]}
-            onPress={() => setFilterType('ALL')}
-          >
-            <ThemedText
-              variant="caption"
-              color={filterType === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              style={filterType === 'ALL' ? styles.filterPillTextActive : undefined}
-            >
-              All ({totalDocuments})
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            style={[styles.filterPill, filterType === 'CERTIFICATES' && styles.filterPillActive]}
-            onPress={() => setFilterType('CERTIFICATES')}
-          >
-            <ThemedText
-              variant="caption"
-              color={filterType === 'CERTIFICATES' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              style={filterType === 'CERTIFICATES' ? styles.filterPillTextActive : undefined}
-            >
-              Certificates ({totalCerts})
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            style={[styles.filterPill, filterType === 'REFERRALS' && styles.filterPillActive]}
-            onPress={() => setFilterType('REFERRALS')}
-          >
-            <ThemedText
-              variant="caption"
-              color={filterType === 'REFERRALS' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              style={filterType === 'REFERRALS' ? styles.filterPillTextActive : undefined}
-            >
-              Referrals ({totalReferrals})
-            </ThemedText>
-          </Pressable>
-        </View>
-      </View>
-
-      {/* MEDICAL CERTIFICATES SECTION */}
+      <>
+        {/* MEDICAL CERTIFICATES SECTION */}
       {filteredCerts.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Icon name="file" size={16} color={theme.colors.primary} />
+            <Icon name="file" size={theme.sizes.iconSm} color={theme.colors.primary} />
             <ThemedText variant="small" color={theme.colors.primaryDark} style={styles.sectionTitle}>
               Medical Certificates ({filteredCerts.length})
             </ThemedText>
           </View>
 
           {filteredCerts.map((cert) => {
-            const hasDigest = Boolean(cert.securityDigest);
             const isActioning = actioningDocId === cert.id;
 
             return (
@@ -169,36 +213,31 @@ export default function AdministrativeDocumentsTab({
                 <View style={styles.cardTop}>
                   <View style={styles.cardTitleCol}>
                     <View style={styles.titleWithBadge}>
-                      <ThemedText variant="title" color={theme.colors.text}>
+                      <ThemedText variant="bodyBold" color={theme.colors.text}>
                         {cert.certificateNumber}
                       </ThemedText>
-                      {cert.isSigned ? (
-                        <Badge label="Physician Signed" variant="success" size="sm" icon="check" />
-                      ) : (
-                        <Badge label="Draft / Unsigned" variant="warning" size="sm" icon="clock" />
-                      )}
-                      {hasDigest ? (
-                        <Badge
-                          label="SHA-256 Sealed"
-                          variant="outline"
-                          size="sm"
-                          icon="shield"
-                        />
+                      {cert.isSigned === false ? (
+                        <>
+                          <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+                          <Badge label="Pending encounter sign-off" variant="neutral" size="sm" />
+                        </>
                       ) : null}
                     </View>
                     <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      Issued on {cert.issueDate} • Attending: Dr. {cert.doctorName} (PRC #{cert.prcLicenseNumber})
+                      {cert.isSigned === false ? 'Drafted on ' : 'Issued on '}
+                      {formatClinicDate(cert.issueDate, { dateFormat, timeZoneId, fallback: cert.issueDate })} • Attending: {formatDoctorName(cert.doctorName)}
+                      {cert.prcLicenseNumber ? ` (PRC #${cert.prcLicenseNumber})` : ''}
                     </ThemedText>
                   </View>
 
                   <Button
-                    title="Reprint / View PDF"
-                    variant="primary"
+                    title={cert.isSigned === false ? 'Sign encounter to print' : 'Reprint / View PDF'}
+                    variant={cert.isSigned === false ? 'outline' : 'primary'}
                     size="sm"
-                    icon="print"
+                    icon={cert.isSigned === false ? 'clock' : 'print'}
                     testID="reprint-med-cert-btn"
                     loading={isActioning}
-                    disabled={isActioning}
+                    disabled={isActioning || cert.isSigned === false}
                     onPress={() => handleReprintMedCert(cert)}
                   />
                 </View>
@@ -209,7 +248,7 @@ export default function AdministrativeDocumentsTab({
                     <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.detailLabel}>
                       Fitness Status:
                     </ThemedText>
-                    <Badge label={cert.fitnessStatus || 'FitToWork'} variant="info" size="sm" />
+                    <Badge label={formatFitnessStatus(cert.fitnessStatus)} variant="info" size="sm" />
                     {cert.recommendedRestDays ? (
                       <ThemedText variant="caption" color={theme.colors.text} style={styles.detailValue}>
                         • {cert.recommendedRestDays} rest day(s) recommended
@@ -247,15 +286,6 @@ export default function AdministrativeDocumentsTab({
                       </ThemedText>
                     </View>
                   ) : null}
-
-                  {hasDigest ? (
-                    <View style={styles.digestRow}>
-                      <Icon name="shield" size={12} color={theme.colors.successText} />
-                      <ThemedText variant="code" color={theme.colors.textMuted} style={styles.digestText}>
-                        Seal Digest: {cert.securityDigest}
-                      </ThemedText>
-                    </View>
-                  ) : null}
                 </View>
               </View>
             );
@@ -267,14 +297,13 @@ export default function AdministrativeDocumentsTab({
       {filteredReferrals.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Icon name="file" size={16} color={theme.colors.primary} />
+            <Icon name="file" size={theme.sizes.iconSm} color={theme.colors.primary} />
             <ThemedText variant="small" color={theme.colors.primaryDark} style={styles.sectionTitle}>
               Referral Letters ({filteredReferrals.length})
             </ThemedText>
           </View>
 
           {filteredReferrals.map((letter) => {
-            const hasDigest = Boolean(letter.securityDigest);
             const isActioning = actioningDocId === letter.id;
 
             return (
@@ -282,41 +311,35 @@ export default function AdministrativeDocumentsTab({
                 <View style={styles.cardTop}>
                   <View style={styles.cardTitleCol}>
                     <View style={styles.titleWithBadge}>
-                      <ThemedText variant="title" color={theme.colors.text}>
+                      <ThemedText variant="bodyBold" color={theme.colors.text}>
                         {letter.referralNumber}
                       </ThemedText>
-                      {letter.isSigned ? (
-                        <Badge label="Physician Signed" variant="success" size="sm" icon="check" />
-                      ) : (
-                        <Badge label="Draft / Unsigned" variant="warning" size="sm" icon="clock" />
-                      )}
+                      {letter.isSigned === false ? (
+                        <>
+                          <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+                          <Badge label="Pending encounter sign-off" variant="neutral" size="sm" />
+                        </>
+                      ) : null}
                       <Badge
                         label={letter.urgency || 'Routine'}
                         variant={letter.urgency === 'Emergency' ? 'emergency' : letter.urgency === 'Urgent' ? 'warning' : 'neutral'}
                         size="sm"
                       />
-                      {hasDigest ? (
-                        <Badge
-                          label="SHA-256 Sealed"
-                          variant="outline"
-                          size="sm"
-                          icon="shield"
-                        />
-                      ) : null}
                     </View>
                     <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      Referred on {letter.referralDate} • Referring: Dr. {letter.referringDoctorName}
+                      {letter.isSigned === false ? 'Drafted on ' : 'Referred on '}
+                      {formatClinicDate(letter.referralDate, { dateFormat, timeZoneId, fallback: letter.referralDate })} • Referring: {formatDoctorName(letter.referringDoctorName)}
                     </ThemedText>
                   </View>
 
                   <Button
-                    title="Reprint / View PDF"
-                    variant="primary"
+                    title={letter.isSigned === false ? 'Sign encounter to print' : 'Reprint / View PDF'}
+                    variant={letter.isSigned === false ? 'outline' : 'primary'}
                     size="sm"
-                    icon="print"
+                    icon={letter.isSigned === false ? 'clock' : 'print'}
                     testID="reprint-referral-btn"
                     loading={isActioning}
-                    disabled={isActioning}
+                    disabled={isActioning || letter.isSigned === false}
                     onPress={() => handleReprintReferral(letter)}
                   />
                 </View>
@@ -329,7 +352,7 @@ export default function AdministrativeDocumentsTab({
                     </ThemedText>
                     <ThemedText variant="body" color={theme.colors.text} style={styles.detailValue}>
                       {letter.referredToFacility} ({letter.referredDepartment})
-                      {letter.referredToDoctor ? ` • Attn: Dr. ${letter.referredToDoctor}` : ''}
+                      {letter.referredToDoctor ? ` • Attn: ${formatDoctorName(letter.referredToDoctor)}` : ''}
                     </ThemedText>
                   </View>
 
@@ -361,21 +384,100 @@ export default function AdministrativeDocumentsTab({
                       </ThemedText>
                     </View>
                   ) : null}
-
-                  {hasDigest ? (
-                    <View style={styles.digestRow}>
-                      <Icon name="shield" size={12} color={theme.colors.successText} />
-                      <ThemedText variant="code" color={theme.colors.textMuted} style={styles.digestText}>
-                        Seal Digest: {letter.securityDigest}
-                      </ThemedText>
-                    </View>
-                  ) : null}
                 </View>
               </View>
             );
           })}
         </View>
       )}
+    </>
+    );
+  };
+
+  if (totalDocuments === 0) {
+    return (
+      <View style={styles.emptyContainer}>
+        <EmptyState
+          icon="file"
+          title="No Issued Administrative Documents"
+          description="Medical certificates and referral letters issued to this patient will appear here for viewing or reprinting."
+          actionTitle="Issue Medical Certificate"
+          onAction={() => setIssueModalVisible(true)}
+          actionTestID="empty-global-issue-med-cert-btn"
+          secondaryActionTitle="Issue Referral Letter"
+          onSecondaryAction={() => setReferralModalVisible(true)}
+          secondaryActionTestID="empty-global-issue-referral-btn"
+        />
+        <IssueMedicalCertificateModal
+          visible={issueModalVisible}
+          onClose={() => setIssueModalVisible(false)}
+          patient={patient ?? null}
+          queueItemId={queueItemId}
+          onSuccess={() => onRefreshChart?.()}
+        />
+        <IssueReferralLetterModal
+          visible={referralModalVisible}
+          onClose={() => setReferralModalVisible(false)}
+          patient={patient ?? null}
+          queueItemId={queueItemId}
+          onSuccess={() => onRefreshChart?.()}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      {/* HEADER SUMMARY STRIP */}
+      <View style={styles.headerStrip}>
+        <View style={styles.headerInfo}>
+          <ThemedText variant="title" color={theme.colors.text}>
+            Administrative Certificate Vault
+          </ThemedText>
+          <ThemedText variant="caption" color={theme.colors.textSecondary}>
+            Issued medical certificates and referral letters available to view or reprint
+          </ThemedText>
+        </View>
+
+        <View style={styles.actionButtonGroup}>
+          <Button
+            title="Issue Certificate"
+            variant={filterType === 'REFERRALS' ? 'outline' : 'primary'}
+            size="sm"
+            icon="plus"
+            onPress={() => setIssueModalVisible(true)}
+            testID="open-issue-med-cert-btn"
+          />
+          <Button
+            title={filterType === 'REFERRALS' ? 'Issue Referral Letter' : 'Issue Referral'}
+            variant={filterType === 'REFERRALS' ? 'primary' : 'outline'}
+            size="sm"
+            icon="plus"
+            onPress={() => setReferralModalVisible(true)}
+            testID="open-issue-referral-btn"
+          />
+        </View>
+
+        {/* Filter Pills */}
+        {renderFilterChips()}
+      </View>
+
+      {renderSections()}
+
+      <IssueMedicalCertificateModal
+        visible={issueModalVisible}
+        onClose={() => setIssueModalVisible(false)}
+        patient={patient ?? null}
+        queueItemId={queueItemId}
+        onSuccess={() => onRefreshChart?.()}
+      />
+      <IssueReferralLetterModal
+        visible={referralModalVisible}
+        onClose={() => setReferralModalVisible(false)}
+        patient={patient ?? null}
+        queueItemId={queueItemId}
+        onSuccess={() => onRefreshChart?.()}
+      />
     </ScrollView>
   );
 }
@@ -385,7 +487,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: theme.spacing.md,
+    paddingBottom: theme.spacing.lg,
     gap: theme.spacing.lg,
   },
   loadingContainer: {
@@ -397,13 +499,16 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
   },
   emptyContainer: {
-    padding: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+  },
+  tabEmptyContainer: {
+    paddingVertical: theme.spacing.md,
   },
   headerStrip: {
     backgroundColor: theme.colors.surface,
     padding: theme.spacing.md,
     borderRadius: theme.radii.lg,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
     flexDirection: 'row',
     alignItems: 'center',
@@ -415,25 +520,42 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 200,
   },
+  actionButtonGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  filterScrollWrap: {
+    flexDirection: 'row',
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
+  },
+  filterScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
+  },
   filterGroup: {
     flexDirection: 'row',
+    flexWrap: 'nowrap',
     gap: theme.spacing.xs,
     alignItems: 'center',
   },
   filterPill: {
-    paddingHorizontal: theme.spacing.sm,
+    flexShrink: 0,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surfaceHighlight,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
   },
   filterPillActive: {
-    backgroundColor: theme.colors.primaryLight,
-    borderColor: theme.colors.primary,
-  },
-  filterPillTextActive: {
-    fontWeight: '700',
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
   },
   section: {
     gap: theme.spacing.sm,
@@ -493,17 +615,5 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     flex: 1,
-  },
-  digestRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
-    paddingTop: theme.spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  digestText: {
-    letterSpacing: 0.2,
   },
 });

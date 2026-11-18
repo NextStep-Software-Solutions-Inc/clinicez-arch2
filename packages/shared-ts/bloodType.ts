@@ -51,8 +51,50 @@ export function getBloodTypeMeta(val: string): BloodTypeMeta {
  */
 export function normalizeBloodTypeOption(option: EhrOptionDescriptor | string | null | undefined): string {
   if (!option) return 'Unknown';
-  if (typeof option === 'string') return option;
+  if (typeof option === 'string') return formatBloodTypeLabel(option) ?? option;
   return option.code || option.label || 'Unknown';
+}
+
+const BLOOD_TYPE_NORMALIZE_MAP: Record<string, string> = {
+  APOSITIVE: 'A+',
+  A_POSITIVE: 'A+',
+  ANEGATIVE: 'A-',
+  A_NEGATIVE: 'A-',
+  BPOSITIVE: 'B+',
+  B_POSITIVE: 'B+',
+  BNEGATIVE: 'B-',
+  B_NEGATIVE: 'B-',
+  ABPOSITIVE: 'AB+',
+  AB_POSITIVE: 'AB+',
+  ABNEGATIVE: 'AB-',
+  AB_NEGATIVE: 'AB-',
+  OPOSITIVE: 'O+',
+  O_POSITIVE: 'O+',
+  ONEGATIVE: 'O-',
+  O_NEGATIVE: 'O-',
+  UNKNOWN: 'Unknown',
+};
+
+/**
+ * Formats any raw blood type representation (C# enum name, static option code, or standard label)
+ * into its canonical clinical display label (e.g., "AB-", "A+", "Unknown").
+ */
+export function formatBloodTypeLabel(raw?: string | null): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const upper = trimmed.toUpperCase();
+  if (BLOOD_TYPE_NORMALIZE_MAP[upper]) {
+    return BLOOD_TYPE_NORMALIZE_MAP[upper];
+  }
+  const condensed = upper.replace(/[\s_-]+/g, '');
+  if (BLOOD_TYPE_NORMALIZE_MAP[condensed]) {
+    return BLOOD_TYPE_NORMALIZE_MAP[condensed];
+  }
+  if (isStandardBloodType(trimmed)) {
+    return trimmed;
+  }
+  return trimmed;
 }
 
 /**

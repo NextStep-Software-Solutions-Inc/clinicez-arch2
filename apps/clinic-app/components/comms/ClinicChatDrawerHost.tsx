@@ -1,207 +1,706 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { View, StyleSheet, Pressable, Platform, Modal } from 'react-native';
+import React, { useCallback, useMemo, useState, useEffect, useRef, useSyncExternalStore } from 'react';
+import { View, StyleSheet, Pressable, Platform, Modal, Animated, useWindowDimensions, type ViewStyle } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import {
   useComms,
   useConversations,
-  useConversation,
-  useSendMessage,
+  useTriageQueue,
 } from '@clinicez/comms-sdk/react';
+import { resolveConversationDisplayTitle } from '@clinicez/comms-sdk/core';
 import {
   ChatDrawer,
-  MessageThread,
+  TriageQueueView,
 } from '@clinicez/comms-sdk/native-ui';
 import type {
   ChatDrawerItem,
   ConversationScopeFilter,
-  ThreadMessage,
+  TriageDispositionPayload,
+  TriageQueueItem,
 } from '@clinicez/comms-sdk/native-ui';
+import ClinicActiveThread from './ClinicActiveThread';
+import NewConversationModal from './NewConversationModal';
 import { useClinicComms } from '../../context/ClinicCommsContext';
+import { getCommsApiBaseUrl } from '../../services/commsUrl';
 import { useAuth } from '../../context/AuthContext';
+import { useStaff, formatStaffName } from '../../context/StaffContext';
+import { useClinic } from '../../context/ClinicContext';
 import { useBreakpoint } from '../../utils/useBreakpoint';
-import { theme } from '../../constants/theme';
+import { getActiveThemeState, subscribeActiveTheme, theme } from '../../constants/theme';
+import { PERMISSIONS } from '../../constants/permissions';
+import { notify } from '../../utils/feedback';
+import { playMessageChime } from '../../utils/alertSounds';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
+import Button from '../ui/Button';
 
-interface ClinicActiveThreadProps {
-  conversationId: string;
-  onBack: () => void;
-  currentUserId: string;
-}
-
-function ClinicActiveThread({ conversationId, onBack, currentUserId }: ClinicActiveThreadProps) {
-  const { conversation, messages, isLoading, error, acknowledgeMessage } = useConversation(conversationId);
-  const { sendMessage, resendMessage } = useSendMessage();
-  const [privacyBlur, setPrivacyBlur] = useState(false);
-
-  const handleSendMessage = useCallback(
-    async (text: string, isInternal: boolean) => {
-      await sendMessage({
-        conversationId,
-        contentText: text,
-        visibility: isInternal ? 'Internal' : 'Public',
-      });
-    },
-    [conversationId, sendMessage],
-  );
-
-  const handleResend = useCallback(
-    async (messageId: string) => {
-      await resendMessage(messageId);
-    },
-    [resendMessage],
-  );
-
-  const threadMessages: ThreadMessage[] = useMemo(() => {
-    return messages.map((m) => ({
-      id: m.messageId,
-      seq: m.seq,
-      conversationId: m.conversationId,
-      senderType: (m.senderType as ThreadMessage['senderType']) || 'Staff',
-      senderId: m.senderId ?? undefined,
-      senderDisplayName: m.senderDisplayName,
-      senderRole: undefined,
-      contentText: m.contentText,
-      visibility: m.visibility as ThreadMessage['visibility'],
-      state: m.deliveryState as ThreadMessage['state'],
-      clientSentAtUtc: m.sentAtUtc,
-      serverReceivedAtUtc: undefined,
-      requiresAcknowledgement: m.requiresAcknowledgement,
-      isAcknowledged: m.isAcknowledged,
-      acknowledgedByName: m.acknowledgedByName ?? undefined,
-      acknowledgedAtUtc: m.acknowledgedAtUtc ?? undefined,
-    }));
-  }, [messages]);
-
-  return (
-    <View style={styles.threadContainer}>
-      <View style={styles.threadHeader}>
-        <Pressable
-          onPress={onBack}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="Back to conversations"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Icon name="arrowLeft" size={theme.sizes.iconSm} color={theme.colors.text} />
-          <ThemedText variant="smallBold" color={theme.colors.text}>
-            Conversations
-          </ThemedText>
-        </Pressable>
-
-        <ThemedText variant="bodyBold" numberOfLines={1} style={styles.threadTitle}>
-          {conversation?.title || 'Conversation'}
-        </ThemedText>
-      </View>
-
-      <MessageThread
-        conversationId={conversationId}
-        conversationTitle={conversation?.title || 'Conversation'}
-        conversationScope={conversation?.scope || 'Facility'}
-        messages={threadMessages}
-        currentUserId={currentUserId}
-        onSendMessage={handleSendMessage}
-        onResendMessage={handleResend}
-        onAcknowledgeMessage={async (msgId: string) => {
-          await acknowledgeMessage(msgId);
-        }}
-        privacyBlurEnabled={privacyBlur}
-        onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
-        canWriteInternalNotes={true}
-        isLoading={isLoading}
-        error={error ? error.message : null}
-      />
-    </View>
-  );
+function getActiveThemeSnapshot(): string {
+  const s = getActiveThemeState();
+  return `${s.brandColorHex}|${s.clinicBrandColorHex}|${s.userBrandColorHex ?? ''}|${s.scheme}`;
 }
 
 export default function ClinicChatDrawerHost() {
+  const themeSnapshot = useSyncExternalStore(
+    subscribeActiveTheme,
+    getActiveThemeSnapshot,
+    getActiveThemeSnapshot,
+  );
+  const resolvedCommsColors = useMemo(() => getActiveThemeState().resolvedColors, [themeSnapshot]);
+  const styles = useMemo(() => createStyles(), [themeSnapshot]);
+
   const { isChatDrawerOpen, closeChatDrawer, activeConversationId, setActiveConversationId } = useClinicComms();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  const { staff } = useStaff();
+  const { facilityName, license } = useClinic();
   const { isWorkstation } = useBreakpoint();
-  const { status } = useComms();
+  const comms = useComms();
+  const status = comms?.status || 'connected';
+  const reconnect = comms?.reconnect;
+  const isReconnecting = comms?.isReconnecting || false;
+  const navigation = useNavigation() as unknown as {
+    navigate: (screen: string, params?: Record<string, unknown>) => void;
+  };
+
+  const facilityId = license?.clinicId || user?.clinicId || '';
+  const canViewTriage = can(PERMISSIONS.triageRead) || can('messaging:triage') || user?.role === 'Admin';
+
+  const [drawerTab, setDrawerTab] = useState<'conversations' | 'triage'>('conversations');
+  const [triageFilter, setTriageFilter] = useState<'All' | 'Emergency' | 'Urgent' | 'Routine'>('All');
+  const [isManualReconnecting, setIsManualReconnecting] = useState(false);
+  const [isNewConvModalOpen, setIsNewConvModalOpen] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+  const [removedConversationIds, setRemovedConversationIds] = useState<Set<string>>(new Set());
+  const [locallyArchivedIds, setLocallyArchivedIds] = useState<Set<string>>(new Set());
+
+  // Reset tab to conversations whenever drawer is opened/closed
+  useEffect(() => {
+    if (!isChatDrawerOpen) {
+      setDrawerTab('conversations');
+      setIsMaximized(false);
+    }
+  }, [isChatDrawerOpen]);
+
+  // If user cannot view triage, ensure drawerTab stays on conversations
+  useEffect(() => {
+    if (!canViewTriage && drawerTab === 'triage') {
+      setDrawerTab('conversations');
+    }
+  }, [canViewTriage, drawerTab]);
 
   const {
     conversations,
+    unreadCount,
     isLoading,
     error,
+    refresh: refreshConversations,
     createConversation,
+    markConversationRead,
+    setConversationMuted,
   } = useConversations();
+
+  const mutedConversationIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of conversations) {
+      const selfParticipant = c.participants?.find(
+        (p) => p.participantId === user?.id || p.userId === user?.id || p.id === user?.id,
+      );
+      if (Boolean(selfParticipant?.isMuted ?? c.isMuted)) {
+        ids.add(c.id);
+      }
+    }
+    return ids;
+  }, [conversations, user?.id]);
+
+  const mutedConversationIdsRef = useRef<Set<string>>(mutedConversationIds);
+  mutedConversationIdsRef.current = mutedConversationIds;
+
+  // Play audio chime when an incoming message arrives for an unmuted conversation from another sender
+  useEffect(() => {
+    if (!comms?.client?.events) return;
+    const unsub = comms.client.events.on('messageReceived', (msg) => {
+      if (msg?.senderId && user?.id && msg.senderId === user.id) {
+        return;
+      }
+      if (msg?.conversationId && mutedConversationIdsRef.current.has(msg.conversationId)) {
+        return;
+      }
+      playMessageChime();
+    });
+    return () => {
+      unsub();
+    };
+  }, [comms?.client, user?.id]);
+
+  // Mark active conversation read whenever it becomes selected in an open drawer
+  useEffect(() => {
+    if (isChatDrawerOpen && activeConversationId && typeof markConversationRead === 'function') {
+      void Promise.resolve(markConversationRead(activeConversationId)).catch(() => {});
+    }
+  }, [isChatDrawerOpen, activeConversationId, markConversationRead]);
+
+  const {
+    items: triageItems,
+    pendingCount: pendingTriageCount,
+    urgentCount: urgentTriageCount,
+    isLoading: isTriageLoading,
+    error: triageError,
+    refresh: refreshTriage,
+    answerRequest,
+    requestVisit,
+    declineRequest,
+    routeToStaff,
+  } = useTriageQueue(facilityId);
 
   const [selectedScope, setSelectedScope] = useState<ConversationScopeFilter>('All');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const handleDeleteConversation = useCallback(
+    async (id: string) => {
+      setRemovedConversationIds((prev) => new Set(prev).add(id));
+      setActiveConversationId(undefined);
+      try {
+        const cleanBase = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
+        if (cleanBase) {
+          let ticket = comms?.activeTicket?.ticket;
+          if (!ticket && comms?.refreshTicket) {
+            try {
+              const refreshed = await comms.refreshTicket();
+              ticket = refreshed?.ticket;
+            } catch {
+              // ignore
+            }
+          }
+          const deleteRes = await fetch(`${cleanBase}/api/v1/comms/conversations/${id}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(ticket ? { Authorization: `Bearer ${ticket}` } : {}),
+            },
+          });
+          if (!deleteRes.ok) {
+            // Fallback to close if DELETE is rejected
+            await fetch(`${cleanBase}/api/v1/comms/conversations/${id}/close`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(ticket ? { Authorization: `Bearer ${ticket}` } : {}),
+              },
+              body: JSON.stringify({ notes: 'Deleted by clinician', tenantId: facilityId }),
+            });
+          }
+        }
+        await refreshConversations();
+        notify.success('Conversation deleted.');
+      } catch (err) {
+        console.warn('Failed to delete/close conversation on server:', err);
+        notify.error('Failed to delete conversation on server.');
+      }
+    },
+    [comms, facilityId, refreshConversations, setActiveConversationId],
+  );
+
+  const handleCloseAndArchive = useCallback(
+    async (id: string) => {
+      setLocallyArchivedIds((prev) => new Set(prev).add(id));
+      setActiveConversationId(undefined);
+      try {
+        const cleanBase = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
+        if (cleanBase) {
+          let ticket = comms?.activeTicket?.ticket;
+          if (!ticket && comms?.refreshTicket) {
+            try {
+              const refreshed = await comms.refreshTicket();
+              ticket = refreshed?.ticket;
+            } catch {
+              // ignore
+            }
+          }
+          const res = await fetch(`${cleanBase}/api/v1/comms/conversations/${id}/close`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(ticket ? { Authorization: `Bearer ${ticket}` } : {}),
+            },
+            body: JSON.stringify({ notes: 'Closed and archived', tenantId: facilityId }),
+          });
+          if (!res.ok) {
+            throw new Error(`Server returned HTTP ${res.status}`);
+          }
+        }
+        const existingConversation = conversations.find((c) => c.id === id);
+        if (existingConversation) {
+          comms?.client?.events?.emit?.('conversationUpdated', {
+            ...existingConversation,
+            status: 'Closed' as const,
+          });
+        }
+        await refreshConversations();
+        notify.success('Conversation closed and archived.');
+      } catch (err) {
+        setLocallyArchivedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        console.warn('Failed to archive conversation on server:', err);
+        notify.error('Failed to archive conversation on server.');
+      }
+    },
+    [comms, conversations, facilityId, refreshConversations, setActiveConversationId],
+  );
+
   const chatItems: ChatDrawerItem[] = useMemo(() => {
     return conversations
       .filter((c) => {
-        if (selectedScope !== 'All' && c.scope !== selectedScope) return false;
+        if (removedConversationIds.has(c.id)) return false;
+        if (c.scope === 'StaffContext' && c.contextType === 'TeleconsultCall') return false;
+        const isArchived = c.status === 'Closed' || locallyArchivedIds.has(c.id);
+        if (selectedScope === 'Archived') {
+          if (!isArchived) return false;
+        } else {
+          if (isArchived) return false;
+          if (selectedScope !== 'All' && c.scope !== selectedScope) return false;
+        }
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
+          const displayTitle = resolveConversationDisplayTitle(
+            c,
+            user?.id,
+            user?.name,
+            (p) => {
+              const pid = p.participantId || p.userId || p.id;
+              const match = staff.find((s) => s.id === pid);
+              return match ? formatStaffName(match) : null;
+            },
+          ).toLowerCase();
           return (
-            c.title.toLowerCase().includes(q) ||
-            (c.lastMessageSnippet && c.lastMessageSnippet.toLowerCase().includes(q))
+            displayTitle.includes(q) ||
+            Boolean(c.title && c.title.toLowerCase().includes(q)) ||
+            Boolean(c.lastMessageSnippet && c.lastMessageSnippet.toLowerCase().includes(q))
           );
         }
         return true;
       })
-      .map((c) => ({
-        id: c.id,
-        scope: c.scope as ChatDrawerItem['scope'],
-        title: c.title,
-        lastMessageSnippet: c.lastMessageSnippet ?? undefined,
-        lastMessageAtUtc: c.lastMessageAtUtc ?? undefined,
-        unreadCount: (c as any).unreadCount ?? 0,
-        urgentCount: c.priority === 'Urgent' ? 1 : 0,
-        isEmergency: c.priority === 'Critical',
-        isActive: c.id === activeConversationId,
-      }));
-  }, [conversations, selectedScope, searchQuery, activeConversationId]);
+      .map((c) => {
+        const isArchived = c.status === 'Closed' || locallyArchivedIds.has(c.id);
+        return {
+          id: c.id,
+          scope: c.scope as ChatDrawerItem['scope'],
+          title: resolveConversationDisplayTitle(
+            c,
+            user?.id,
+            user?.name,
+            (p) => {
+              const pid = p.participantId || p.userId || p.id;
+              const match = staff.find((s) => s.id === pid);
+              return match ? formatStaffName(match) : null;
+            },
+          ),
+          lastMessageSnippet: c.lastMessageSnippet ?? undefined,
+          lastMessageAtUtc: c.lastMessageAtUtc ?? undefined,
+          unreadCount: c.unreadCount ?? 0,
+          urgentCount: c.priority === 'Urgent' ? 1 : 0,
+          isEmergency: c.priority === 'Critical',
+          isActive: c.id === activeConversationId,
+          isArchived,
+          isMuted: mutedConversationIds.has(c.id),
+        };
+      });
+  }, [
+    conversations,
+    removedConversationIds,
+    locallyArchivedIds,
+    selectedScope,
+    searchQuery,
+    activeConversationId,
+    user,
+    staff,
+    mutedConversationIds,
+  ]);
+
+  const mappedTriageItems: TriageQueueItem[] = useMemo(() => {
+    return triageItems.map((i) => ({
+      conversationId: i.id,
+      requestId: i.id,
+      patientId: i.contextId || i.id,
+      patientNameMasked: i.patientFullName || i.title || 'Patient Inquiry',
+      patientDobMasked: '',
+      patientAgeGender: `${i.patientAge || 'Adult'} • ${i.patientSex || 'Patient'}`,
+      category: i.category || 'General',
+      contentText: i.lastMessageSnippet || 'Patient inquiry pending triage review.',
+      priority: (i.priority as 'Emergency' | 'Urgent' | 'Routine') || 'Routine',
+      status: (i.status as 'Submitted' | 'WithTriage' | 'Routed') || 'Submitted',
+      submittedAtUtc: i.createdAtUtc,
+      triageDueAtUtc: i.triageDueAtUtc || i.createdAtUtc,
+      isOffHours: false,
+      slaBreached: i.isSlaBreached,
+      slaTimeRemainingSeconds: i.slaTimeRemainingSeconds,
+      isEmergencyConfirmed: i.isEmergencyConfirmed ?? false,
+      assignedStaffId: i.assignedStaffId ?? undefined,
+      assignedStaffName: i.assignedStaffName ?? undefined,
+    }));
+  }, [triageItems]);
+
+  const handleExecuteDisposition = useCallback(
+    async (payload: TriageDispositionPayload) => {
+      try {
+        if (payload.disposition === 'Answered') {
+          await answerRequest(
+            payload.conversationId,
+            payload.replyText || 'Inquiry answered by clinic staff.',
+          );
+          notify.success('Inquiry disposition recorded: Answered.');
+        } else if (payload.disposition === 'NeedsVisit') {
+          await requestVisit(
+            payload.conversationId,
+            payload.replyText || 'In-clinic consultation recommended for patient evaluation.',
+          );
+          notify.success('Inquiry disposition recorded: In-Clinic Visit Requested.');
+        } else if (payload.disposition === 'Declined') {
+          await declineRequest(
+            payload.conversationId,
+            payload.declineReasonCode || 'OTHER',
+            payload.declineNotes || 'Request could not be processed.',
+          );
+          notify.success('Inquiry disposition recorded: Declined.');
+        } else if (payload.disposition === 'Routed') {
+          await routeToStaff(
+            payload.conversationId,
+            payload.routedStaffId || user?.id || 'staff',
+            'Attending Clinician',
+            payload.routedPriority || 'Routine',
+            payload.replyText,
+          );
+          notify.success('Inquiry routed to attending clinician.');
+        }
+      } catch (err) {
+        notify.error(err instanceof Error ? err.message : 'Failed to record triage disposition.');
+      }
+    },
+    [answerRequest, requestVisit, declineRequest, routeToStaff, user?.id],
+  );
+
+  const { width: windowWidth } = useWindowDimensions();
+  const [isMounted, setIsMounted] = useState(isChatDrawerOpen);
+
+  const slideAnim = useRef(new Animated.Value(isChatDrawerOpen ? 0 : 1)).current;
+  const opacityAnim = useRef(new Animated.Value(isChatDrawerOpen ? 1 : 0)).current;
+  const widthAnim = useRef(new Animated.Value(isMaximized ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (isChatDrawerOpen) {
+      setIsMounted(true);
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]).start(() => {
+        setIsMounted(false);
+      });
+    }
+  }, [isChatDrawerOpen, opacityAnim, slideAnim]);
+
+  useEffect(() => {
+    Animated.timing(widthAnim, {
+      toValue: isMaximized ? 1 : 0,
+      duration: 280,
+      useNativeDriver: false,
+    }).start();
+  }, [isMaximized, widthAnim]);
+
+  const handleClose = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+    ]).start(() => {
+      setIsMounted(false);
+      closeChatDrawer();
+    });
+  }, [closeChatDrawer, opacityAnim, slideAnim]);
+
+  const handleOpenPatientChart = useCallback(
+    (patientId: string) => {
+      handleClose();
+      navigation.navigate('Patients', {
+        patientId,
+        tab: 'chart',
+      });
+    },
+    [handleClose, navigation],
+  );
 
   const connectionStateDisplay =
     status === 'connected'
       ? 'Connected'
-      : status === 'connecting' || status === 'reconnecting' || status === 'acquiring_ticket'
+      : status === 'reconnecting'
       ? 'Reconnecting'
+      : status === 'connecting' || status === 'acquiring_ticket'
+      ? 'Connecting'
       : 'Disconnected';
 
-  const handleNewConversation = useCallback(async () => {
-    try {
-      const created = await createConversation({
-        scope: 'Facility',
-        title: 'New Clinic Channel',
-      });
-      setActiveConversationId(created.id);
-    } catch {
-      // Handled by comms store
-    }
-  }, [createConversation, setActiveConversationId]);
+  const isSpinning = isReconnecting || isManualReconnecting || status === 'connecting' || status === 'acquiring_ticket';
 
-  if (!isChatDrawerOpen) {
+  const handleManualReconnect = useCallback(async () => {
+    if (isManualReconnecting) return;
+    setIsManualReconnecting(true);
+    try {
+      if (typeof reconnect === 'function') {
+        // Enforce 8s timeout so manual reconnect never hangs indefinitely
+        await Promise.race([
+          reconnect(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Connection timed out. Please verify network connectivity.')), 8000)
+          ),
+        ]);
+      }
+      await Promise.allSettled([
+        refreshConversations?.(),
+        refreshTriage?.(),
+      ]);
+      notify.success('Reconnected to clinic communications.');
+    } catch (err) {
+      notify.error(err instanceof Error ? err.message : 'Reconnect attempt failed.');
+    } finally {
+      setIsManualReconnecting(false);
+    }
+  }, [reconnect, refreshConversations, refreshTriage, isManualReconnecting]);
+
+  const handleNewConversation = useCallback(() => {
+    setIsNewConvModalOpen(true);
+  }, []);
+
+  const handleToggleMaximize = useCallback(() => {
+    setIsMaximized((prev) => !prev);
+  }, []);
+
+  if (!isMounted && !isChatDrawerOpen) {
     return null;
   }
 
   const drawerContent = (
     <View style={styles.drawerPane}>
+      {/* Top Header Control Row */}
       <View style={styles.topControlRow}>
-        <ThemedText variant="title" color={theme.colors.text}>
-          Clinic Communications
-        </ThemedText>
-        <Pressable
-          onPress={closeChatDrawer}
-          style={styles.closeBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Close communications panel"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-        </Pressable>
+        <View style={styles.headerLeftGroup}>
+          <ThemedText variant="title" color={theme.colors.primary}>
+            Messages
+          </ThemedText>
+
+          {/* Live Connection Indicator Pill & Manual Reconnect */}
+          <View style={styles.connectionGroup}>
+            <View
+              style={[
+                styles.connectionPill,
+                status === 'connected'
+                  ? styles.connectionPillConnected
+                  : isSpinning || status === 'reconnecting'
+                  ? styles.connectionPillReconnecting
+                  : styles.connectionPillOffline,
+              ]}
+            >
+              <View
+                style={[
+                  styles.connectionDot,
+                  status === 'connected'
+                    ? styles.connectionDotConnected
+                    : isSpinning || status === 'reconnecting'
+                    ? styles.connectionDotReconnecting
+                    : styles.connectionDotOffline,
+                ]}
+              />
+              <ThemedText
+                variant="captionBold"
+                color={
+                  status === 'connected'
+                    ? theme.colors.successText
+                    : status === 'reconnecting' || isReconnecting || isManualReconnecting || status === 'connecting' || status === 'acquiring_ticket'
+                    ? theme.colors.warningText
+                    : theme.colors.textMuted
+                }
+              >
+                {status === 'connected'
+                  ? 'Connected'
+                  : status === 'reconnecting' || isReconnecting || isManualReconnecting || status === 'connecting' || status === 'acquiring_ticket'
+                  ? 'Reconnecting...'
+                  : 'Offline'}
+              </ThemedText>
+            </View>
+
+            {/* Manual Reconnect Icon Button positioned right beside connection pill */}
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="refresh"
+              iconOnly
+              spinIcon={isSpinning}
+              loading={isManualReconnecting}
+              disabled={isManualReconnecting}
+              onPress={handleManualReconnect}
+              accessibilityLabel="Manual reconnect to clinic communications"
+            >
+              <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.textSecondary} spin={isSpinning} />
+            </Button>
+          </View>
+        </View>
+
+        <View style={styles.headerActionsGroup}>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={isMaximized ? 'minimize' : 'maximize'}
+            iconOnly
+            onPress={handleToggleMaximize}
+            accessibilityLabel={isMaximized ? 'Collapse side panel' : 'Expand side panel'}
+          >
+            <Icon name={isMaximized ? 'minimize' : 'maximize'} size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="close"
+            iconOnly
+            onPress={handleClose}
+            accessibilityLabel="Close communications panel"
+          >
+            <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+          </Button>
+        </View>
       </View>
 
+      {/* Segmented Dual-Tab Bar (rendered when no active thread and staff has triage permission) */}
+      {!activeConversationId && canViewTriage && (
+        <View style={styles.tabSegmentBar}>
+          <Pressable
+            onPress={() => setDrawerTab('conversations')}
+            style={[
+              styles.tabButton,
+              drawerTab === 'conversations' && styles.tabButtonActive,
+            ]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: drawerTab === 'conversations' }}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          >
+            <View style={styles.tabBadgeRow}>
+              <ThemedText
+                variant="smallBold"
+                color={drawerTab === 'conversations' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Conversations
+              </ThemedText>
+              {unreadCount > 0 ? (
+                <View style={styles.tabUnreadBadge}>
+                  <ThemedText variant="badge" color={theme.colors.onPrimary}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setDrawerTab('triage')}
+            style={[
+              styles.tabButton,
+              drawerTab === 'triage' && styles.tabButtonActive,
+            ]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: drawerTab === 'triage' }}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          >
+            <View style={styles.tabBadgeRow}>
+              <ThemedText
+                variant="smallBold"
+                color={drawerTab === 'triage' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Triage Requests
+              </ThemedText>
+              {pendingTriageCount > 0 ? (
+                <View
+                  style={[
+                    styles.triageCountPill,
+                    urgentTriageCount > 0 && styles.triageCountPillUrgent,
+                  ]}
+                >
+                  <ThemedText variant="badge" color={theme.colors.onPrimary}>
+                    {pendingTriageCount > 99 ? '99+' : pendingTriageCount}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+          </Pressable>
+        </View>
+      )}
+
+      {/* Main Drawer Body */}
       <View style={styles.drawerBody}>
         {activeConversationId ? (
           <ClinicActiveThread
             conversationId={activeConversationId}
+            initialConversation={(() => {
+              const found = conversations.find((c) => c.id === activeConversationId);
+              if (found && locallyArchivedIds.has(found.id) && found.status !== 'Closed') {
+                return { ...found, status: 'Closed' as const };
+              }
+              return found;
+            })()}
+            isMuted={mutedConversationIds.has(activeConversationId)}
+            onToggleMute={async (nextMuted) => {
+              if (nextMuted) {
+                mutedConversationIdsRef.current = new Set(mutedConversationIdsRef.current).add(
+                  activeConversationId,
+                );
+              } else {
+                const next = new Set(mutedConversationIdsRef.current);
+                next.delete(activeConversationId);
+                mutedConversationIdsRef.current = next;
+              }
+              await setConversationMuted?.(activeConversationId, nextMuted);
+            }}
             onBack={() => setActiveConversationId(undefined)}
+            onOpenPatientChart={handleOpenPatientChart}
             currentUserId={user?.id || ''}
+            onDeleteConversation={handleDeleteConversation}
+            onCloseAndArchive={handleCloseAndArchive}
+          />
+        ) : drawerTab === 'triage' && canViewTriage ? (
+          <TriageQueueView
+            items={mappedTriageItems}
+            facilityName={facilityName || 'Clinic EZ'}
+            onExecuteDisposition={handleExecuteDisposition}
+            onRefresh={refreshTriage}
+            onSelectCard={(conversationId) => setActiveConversationId(conversationId)}
+            isLoading={isTriageLoading}
+            error={triageError ? triageError.message : null}
+            activeFilter={triageFilter}
+            onFilterChange={setTriageFilter}
+            colors={resolvedCommsColors}
           />
         ) : (
           <ChatDrawer
@@ -216,130 +715,337 @@ export default function ClinicChatDrawerHost() {
             loading={isLoading}
             error={error ? error.message : null}
             onNewConversation={handleNewConversation}
+            colors={resolvedCommsColors}
+            renderSearchIcon={() => (
+              <Icon name="search" size={16} color={theme.colors.textMuted} />
+            )}
+            renderScopeIcon={(scope) => {
+              switch (scope) {
+                case 'Direct':
+                  return null; // Monogram initials rendered by ChatDrawer
+                case 'StaffContext':
+                  return <Icon name="users" size={16} color={theme.colors.primary} />;
+                case 'Facility':
+                  return <Icon name="clinic" size={16} color={theme.colors.primary} />;
+                case 'PatientFacility':
+                  return <Icon name="heartPulse" size={16} color={theme.colors.primary} />;
+                default:
+                  return <Icon name="message" size={16} color={theme.colors.primary} />;
+              }
+            }}
+            renderEmptyState={() => (
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconBadge}>
+                  <Icon name="message" size={28} color={theme.colors.primary} />
+                </View>
+                <ThemedText variant="bodyBold" style={styles.emptyTitle}>
+                  No Conversations
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.emptySubtitle}>
+                  No messages match your selected filter.
+                </ThemedText>
+                <Button
+                  title="Start Conversation"
+                  variant="primary"
+                  onPress={handleNewConversation}
+                  style={styles.emptyButton}
+                />
+              </View>
+            )}
           />
         )}
       </View>
+
+      {/* New Conversation Modal */}
+      <NewConversationModal
+        visible={isNewConvModalOpen}
+        onClose={() => setIsNewConvModalOpen(false)}
+        onCreateConversation={async (params) => {
+          const created = await createConversation({
+            scope: params.scope,
+            title: params.title,
+            contextType:
+              params.scope === 'Facility'
+                ? params.department
+                  ? 'Department'
+                  : undefined
+                : params.scope === 'StaffContext'
+                ? params.patientId
+                  ? 'Patient'
+                  : undefined
+                : undefined,
+            contextId:
+              params.scope === 'Facility'
+                ? params.department
+                : params.scope === 'StaffContext'
+                ? params.patientId
+                : undefined,
+            department: params.department,
+            participantStaffIds: params.participantStaffIds,
+            participants: params.participants,
+          });
+          setActiveConversationId(created.id);
+          setIsNewConvModalOpen(false);
+        }}
+      />
     </View>
   );
 
-  // If workstation, render as an overlay docked to the right edge
+  const normalWidth = Math.min(460, windowWidth);
+  const targetWidth = windowWidth;
+  const animatedWidth = widthAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [normalWidth, targetWidth],
+  });
+  const slideX = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, Math.min(windowWidth, 500)],
+  });
+
+  // If workstation, render as an overlay docked to the right edge with slide and width expansion
   if (isWorkstation) {
     return (
       <View style={styles.desktopOverlay}>
-        <Pressable style={styles.backdrop} onPress={closeChatDrawer} />
-        <View style={styles.dockedPanel}>{drawerContent}</View>
+        <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.dockedPanel,
+            {
+              width: animatedWidth,
+              transform: [{ translateX: slideX }],
+            },
+          ]}
+        >
+          {drawerContent}
+        </Animated.View>
       </View>
     );
   }
 
   // Mobile / compact: use modal
   return (
-    <Modal visible={isChatDrawerOpen} animationType="slide" transparent onRequestClose={closeChatDrawer}>
+    <Modal visible={isChatDrawerOpen} animationType="slide" transparent onRequestClose={handleClose}>
       <View style={styles.mobileModalContainer}>
-        <Pressable style={styles.backdrop} onPress={closeChatDrawer} />
-        <View style={styles.mobilePanel}>{drawerContent}</View>
+        <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.mobilePanel,
+            {
+              width: animatedWidth,
+              transform: [{ translateX: slideX }],
+            },
+          ]}
+        >
+          {drawerContent}
+        </Animated.View>
       </View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
-  desktopOverlay: {
-    position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 9999,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: theme.colors.overlay,
-  },
-  dockedPanel: {
-    width: 440,
-    height: '100%',
-    backgroundColor: theme.colors.surface,
-    borderLeftWidth: theme.sizes.borderWidth,
-    borderLeftColor: theme.colors.border,
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: -4, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  mobileModalContainer: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  mobilePanel: {
-    height: '85%',
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: theme.radii.lg,
-    borderTopRightRadius: theme.radii.lg,
-    overflow: 'hidden',
-  },
-  drawerPane: {
-    flex: 1,
-    flexDirection: 'column',
-    backgroundColor: theme.colors.surface,
-  },
-  topControlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceSubtle,
-  },
-  closeBtn: {
-    minWidth: theme.sizes.touchTarget,
-    minHeight: theme.sizes.touchTarget,
-    borderRadius: theme.radii.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-  },
-  drawerBody: {
-    flex: 1,
-  },
-  threadContainer: {
-    flex: 1,
-  },
-  threadHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceMuted,
-    gap: theme.spacing.md,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: theme.sizes.touchTarget,
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-  },
-  threadTitle: {
-    flex: 1,
-  },
-});
+function createStyles() {
+  return StyleSheet.create({
+    desktopOverlay: {
+      position: Platform.OS === 'web' ? ('fixed' as 'absolute') : 'absolute',
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      zIndex: 9999,
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+    },
+    backdrop: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: theme.colors.overlay,
+    },
+    dockedPanel: {
+      width: 460,
+      height: '100%',
+      backgroundColor: theme.colors.surface,
+      borderLeftWidth: theme.sizes.borderWidth,
+      borderLeftColor: theme.colors.border,
+      ...theme.shadows.lg,
+    },
+    dockedPanelMaximized: {
+      width: '100%',
+    },
+    mobileModalContainer: {
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
+    mobilePanel: {
+      height: '85%',
+      backgroundColor: theme.colors.surface,
+      borderTopLeftRadius: theme.radii.lg,
+      borderTopRightRadius: theme.radii.lg,
+      overflow: 'hidden',
+    },
+    mobilePanelMaximized: {
+      height: '100%',
+      borderTopLeftRadius: 0,
+      borderTopRightRadius: 0,
+    },
+    drawerPane: {
+      flex: 1,
+      flexDirection: 'column',
+      backgroundColor: theme.colors.surface,
+    },
+    topControlRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
+      borderBottomWidth: theme.sizes.borderWidth,
+      borderBottomColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceSubtle,
+      gap: theme.spacing.xs,
+    },
+    headerLeftGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      flex: 1,
+      flexWrap: 'wrap',
+    },
+    connectionGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+    },
+    connectionPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderRadius: theme.radii.full,
+      borderWidth: theme.sizes.borderWidth,
+      gap: 6,
+    },
+    connectionPillConnected: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.borderLight,
+    },
+    connectionPillReconnecting: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.warningBorder,
+    },
+    connectionPillOffline: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.emergencyBorder,
+    },
+    connectionDot: {
+      width: 7,
+      height: 7,
+      borderRadius: theme.radii.full,
+    },
+    connectionDotConnected: {
+      backgroundColor: theme.colors.successText,
+    },
+    connectionDotReconnecting: {
+      backgroundColor: theme.colors.warning,
+    },
+    connectionDotOffline: {
+      backgroundColor: theme.colors.emergency,
+    },
+    headerActionsGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+    },
+    tabSegmentBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginHorizontal: theme.spacing.md,
+      marginVertical: theme.spacing.xs,
+      padding: 3,
+      backgroundColor: theme.colors.surfaceSubtle,
+      borderRadius: theme.radii.lg,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.borderLight,
+      gap: theme.spacing.xs,
+    },
+    tabButton: {
+      flex: 1,
+      paddingVertical: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.md,
+      minHeight: 38,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.transparent,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.transparent,
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as ViewStyle) : {}),
+    },
+    tabButtonActive: {
+      backgroundColor: theme.colors.primaryLight,
+      borderColor: theme.colors.primaryBorder,
+      ...theme.shadows.brandSubtle,
+    },
+    tabBadgeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+    },
+    tabUnreadBadge: {
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: 5,
+      minWidth: 16,
+      height: 16,
+      borderRadius: theme.radii.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    triageCountPill: {
+      backgroundColor: theme.colors.urgent,
+      paddingHorizontal: 5,
+      minWidth: 16,
+      height: 16,
+      borderRadius: theme.radii.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    triageCountPillUrgent: {
+      backgroundColor: theme.colors.emergency,
+    },
+    drawerBody: {
+      flex: 1,
+    },
+    emptyContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: theme.spacing.xl,
+    },
+    emptyIconBadge: {
+      width: 56,
+      height: 56,
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.primaryLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: theme.spacing.md,
+    },
+    emptyTitle: {
+      marginBottom: theme.spacing.xs,
+      textAlign: 'center',
+    },
+    emptySubtitle: {
+      textAlign: 'center',
+      marginBottom: theme.spacing.lg,
+    },
+    emptyButton: {
+      minWidth: 160,
+    },
+  });
+}

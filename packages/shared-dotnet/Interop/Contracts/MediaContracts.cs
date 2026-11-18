@@ -25,7 +25,17 @@ public sealed record MediaEntitlementUpdatedPayload(
     int CallMinutesMonthly,
     bool IsActive,
     int Version,
-    DateTime UpdatedAtUtc);
+    DateTime UpdatedAtUtc,
+    bool AllowOverdraft = true,
+    string BillingMode = "Postpaid",
+    decimal RatePerMinutePhp = 0m);
+
+/// <summary>Payload for <c>media.room.ended</c>: facility notifies media-broker that a room call session ended.</summary>
+public sealed record MediaRoomEndedPayload(
+    Guid CallId,
+    string TenantId,
+    string RoomName,
+    DateTime EndedAtUtc);
 
 /// <summary>Payload for <c>media.usage.recorded</c>: media-broker reports duration used to portal without patient PHI.</summary>
 public sealed record MediaUsageRecordedPayload(

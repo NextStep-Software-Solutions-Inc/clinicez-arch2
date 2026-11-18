@@ -136,8 +136,11 @@ const {
   STATUTORY_MANAGEMENT_CODES,
 } = await import('../components/chart/NursingProceduresTab');
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 const {
-  PHILHEALTH_STATUTORY_VACCINES,
+  resolveCohortCategoryLabel,
 } = await import('../components/chart/StatutoryImmunizationsTab');
 
 const {
@@ -601,35 +604,45 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 (Feature 16)', () 
       }
     });
 
-    test('2.4 PhilHealth statutory catalogs: lib_immchild, lib_immyoungw, lib_immpregw, lib_immelderly', () => {
-      // lib_immchild must include all 13 statutory childhood vaccines
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immchild.length).toBe(13);
-      const childCodes = PHILHEALTH_STATUTORY_VACCINES.lib_immchild.map((v) => v.code);
-      expect(childCodes).toContain('C01'); // BCG
-      expect(childCodes).toContain('C02'); // OPV 1
-      expect(childCodes).toContain('C03'); // OPV 2
-      expect(childCodes).toContain('C04'); // OPV 3
-      expect(childCodes).toContain('C05'); // Pentavalent 1
-      expect(childCodes).toContain('C06'); // Pentavalent 2
-      expect(childCodes).toContain('C07'); // Pentavalent 3
-      expect(childCodes).toContain('C08'); // Measles (MCV1)
-      expect(childCodes).toContain('C09'); // HepB Birth
-      expect(childCodes).toContain('C10'); // Rotavirus 1
-      expect(childCodes).toContain('C11'); // Rotavirus 2
-      expect(childCodes).toContain('C12'); // IPV
-      expect(childCodes).toContain('C13'); // MMR 1
+    test('2.4 Backend PhilHealth statutory seed catalogs: lib_immchild, lib_immyoungw, lib_immpregw, lib_immelderly', () => {
+      const loadSeedActiveVaccines = (lib: string): Array<{ code: string; description: string }> => {
+        const seedPath = join(
+          import.meta.dir,
+          '..',
+          '..',
+          '..',
+          'services',
+          'clinic-api',
+          'ClinicEz.Clinic.Infrastructure',
+          'PhilHealth',
+          'Catalog',
+          'Seed',
+          `${lib}.json`
+        );
+        const parsed = JSON.parse(readFileSync(seedPath, 'utf8'));
+        return parsed.items.filter((i: { code: string; isActive: boolean }) => i.isActive && i.code !== '999');
+      };
 
-      // lib_immyoungw
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immyoungw.length).toBe(2);
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immyoungw.map((v) => v.code)).toEqual(['Y01', 'Y02']);
+      const childVaccines = loadSeedActiveVaccines('lib_immchild');
+      expect(childVaccines.length).toBe(13);
+      const childCodes = childVaccines.map((v) => v.code);
+      expect(childCodes).toEqual([
+        'C01', 'C02', 'C03', 'C04', 'C05', 'C06', 'C07', 'C08', 'C09', 'C10', 'C11', 'C12', 'C13',
+      ]);
 
-      // lib_immpregw
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immpregw.length).toBe(5);
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immpregw.map((v) => v.code)).toEqual(['P01', 'P02', 'P03', 'P04', 'P05']);
+      const ywVaccines = loadSeedActiveVaccines('lib_immyoungw');
+      expect(ywVaccines.length).toBe(2);
+      expect(ywVaccines.map((v) => v.code)).toEqual(['Y01', 'Y02']);
 
-      // lib_immelderly
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immelderly.length).toBe(2);
-      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immelderly.map((v) => v.code)).toEqual(['E01', 'E02']);
+      const pregVaccines = loadSeedActiveVaccines('lib_immpregw');
+      expect(pregVaccines.length).toBe(1);
+      expect(pregVaccines.map((v) => v.code)).toEqual(['P01']);
+
+      const eldVaccines = loadSeedActiveVaccines('lib_immelderly');
+      expect(eldVaccines.length).toBe(2);
+      expect(eldVaccines.map((v) => v.code)).toEqual(['E01', 'E02']);
+
+      expect(resolveCohortCategoryLabel('OtherImm')).toBe('Adult / Other');
     });
 
     test('2.5 Statutory fallback 999: zero recorded vaccines triggers fallback notice oracle', () => {

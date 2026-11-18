@@ -28,15 +28,18 @@ public sealed class LabOrdersController : ControllerBase
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService _pdfService;
     private readonly IRepository<FacilitySettings> _settingsRepo;
+    private readonly IRepository<StaffMember>? _staffRepo;
 
     public LabOrdersController(
         ISender sender,
         IClinicDocumentPdfService pdfService,
-        IRepository<FacilitySettings> settingsRepo)
+        IRepository<FacilitySettings> settingsRepo,
+        IRepository<StaffMember>? staffRepo = null)
     {
         _sender = sender;
         _pdfService = pdfService;
         _settingsRepo = settingsRepo;
+        _staffRepo = staffRepo;
     }
 
     [HttpGet]
@@ -45,9 +48,10 @@ public sealed class LabOrdersController : ControllerBase
         [FromQuery] Guid? patientId,
         [FromQuery] LabOrderStatus? status,
         [FromQuery] DateTime? date,
-        CancellationToken ct)
+        [FromQuery] bool includeUnsigned = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetClinicLabOrdersQuery(patientId, status, date), ct);
+        var result = await _sender.Send(new GetClinicLabOrdersQuery(patientId, status, date, includeUnsigned), ct);
         return Ok(ApiResponse<List<ClinicLabOrderDto>>.Success(result));
     }
 
@@ -76,8 +80,15 @@ public sealed class LabOrdersController : ControllerBase
             ClinicName = slip.ClinicName
         };
 
-        var signatureMode = wet == true ? SignatureMode.WetSignature : SignatureMode.ESignatureSpecimen;
-        var pdfBytes = _pdfService.GenerateLabRequisitionSlipPdf(slip, settings, doctor: null, signatureMode: signatureMode);
+        var doctor = (_staffRepo != null && slip.DoctorId.HasValue)
+            ? await _staffRepo.GetByIdAsync(slip.DoctorId.Value, ct)
+            : null;
+
+        SignatureMode? signatureMode = wet == true
+            ? SignatureMode.WetSignature
+            : (wet == false ? SignatureMode.ESignatureSpecimen : null);
+
+        var pdfBytes = _pdfService.GenerateLabRequisitionSlipPdf(slip, settings, doctor: doctor, signatureMode: signatureMode);
         return File(pdfBytes, "application/pdf", $"LabRequisition-{slip.OrderNumber}.pdf");
     }
 
@@ -97,7 +108,8 @@ public sealed class LabOrdersController : ControllerBase
             request.Notes,
             request.Items,
             request.TargetFacilityId,
-            request.TargetTenantId
+            request.TargetTenantId,
+            request.QueueItemId
         );
 
         var result = await _sender.Send(command, ct);

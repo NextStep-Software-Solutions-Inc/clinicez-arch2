@@ -113,7 +113,7 @@ public sealed class ClinicPortalStartupBackfillHostedService : BackgroundService
                 var upNext = dbTickets
                     .Where(q => q.Status != QueueStatus.Diverted &&
                                 q.Status != QueueStatus.DischargedNonDoctor &&
-                                ((q.VisitType == VisitType.Consultation &&
+                                ((q.VisitType.IsPhysicianConsultation() &&
                                   (q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Triaged || q.Status == QueueStatus.OnHold))
                                  || q.Status == QueueStatus.PendingProcedure
                                  || q.Status == QueueStatus.ReEvaluation))
@@ -145,6 +145,9 @@ public sealed class ClinicPortalStartupBackfillHostedService : BackgroundService
                         IsAcceptingWalkIns = !clinic.IsOnlineBookingPaused,
                         PatientsWaitingCount = upNext.Count,
                         TvDisplayPin = clinic.TvDisplayPin,
+                        TvDisplaySoundTheme = clinic.TvDisplaySoundTheme ?? "classicChime",
+                        TvDisplayVoiceEnabled = clinic.TvDisplayVoiceEnabled,
+                        TvDisplayShowPhysicianName = clinic.TvDisplayShowPhysicianName,
                         NowServing = nowServing,
                         UpNext = upNext
                     });
@@ -302,7 +305,7 @@ public sealed class ClinicPortalStartupBackfillHostedService : BackgroundService
                 // 3d. Clinic Lab Orders
                 var labOrders = await db.LabOrders.IgnoreQueryFilters()
                     .Include(o => o.Items)
-                    .Where(o => o.ClinicId == clinic.ClinicId && !o.IsDeleted && o.OrderDate >= cutoff)
+                    .Where(o => o.ClinicId == clinic.ClinicId && !o.IsDeleted && o.IsSigned && o.OrderDate >= cutoff)
                     .OrderByDescending(o => o.OrderDate)
                     .Take(500)
                     .ToListAsync(stoppingToken);

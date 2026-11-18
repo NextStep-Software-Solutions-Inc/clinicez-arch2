@@ -3,7 +3,6 @@ import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { theme } from '../../constants/theme';
 import ThemedText from './ThemedText';
 import Button from './Button';
-import { IconSlot } from './Icon';
 import Modal from './Modal';
 import { getDaysInMonth, formatDateMask, validateDateString } from './ValidatedDateInput';
 
@@ -35,7 +34,7 @@ function getManilaTodayStr(): string {
   }
 }
 
-function computePresetRange(preset: 'today' | '7d' | '30d' | 'all'): { start: string; end: string } {
+function computePresetRange(preset: 'today' | '7d' | '30d' | 'this_month' | 'all'): { start: string; end: string } {
   const todayStr = getManilaTodayStr();
   const [ty, tm, td] = todayStr.split('-').map(Number);
   const todayDate = new Date(ty, tm - 1, td);
@@ -48,7 +47,7 @@ function computePresetRange(preset: 'today' | '7d' | '30d' | 'all'): { start: st
     const startStr = `${sevenDaysAgo.getFullYear()}-${String(sevenDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(sevenDaysAgo.getDate()).padStart(2, '0')}`;
     return { start: startStr, end: todayStr };
   }
-  if (preset === '30d') {
+  if (preset === '30d' || preset === 'this_month') {
     const startStr = `${ty}-${String(tm).padStart(2, '0')}-01`;
     return { start: startStr, end: todayStr };
   }
@@ -199,7 +198,7 @@ export default function DateRangePickerModal({
   };
 
   // Quick preset click
-  const handleApplyPreset = (preset: 'today' | '7d' | '30d' | 'all') => {
+  const handleApplyPreset = (preset: 'today' | '7d' | '30d' | 'this_month' | 'all') => {
     const { start, end } = computePresetRange(preset);
     setDraftStart(start);
     setDraftEnd(end);
@@ -306,32 +305,26 @@ export default function DateRangePickerModal({
 
         {/* Month Navigation Header */}
         <View style={styles.monthHeader}>
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            variant="ghost"
+            size="xs"
+            icon="chevronLeft"
+            iconOnly
             accessibilityLabel="Previous month"
             onPress={handlePrevMonth}
-            style={styles.navButton}
-            hitSlop={theme.spacing.sm}
-          >
-            <IconSlot value="chevronLeft" size={theme.sizes.iconMd} color={theme.colors.text} />
-          </Pressable>
+          />
 
           <ThemedText style={styles.monthTitleText}>{monthName}</ThemedText>
 
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            variant="ghost"
+            size="xs"
+            icon="chevronRight"
+            iconOnly
             accessibilityLabel="Next month"
-            onPress={handleNextMonth}
             disabled={isNextMonthDisabled}
-            style={[styles.navButton, isNextMonthDisabled && styles.navButtonDisabled]}
-            hitSlop={theme.spacing.sm}
-          >
-            <IconSlot
-              value="chevronRight"
-              size={theme.sizes.iconMd}
-              color={isNextMonthDisabled ? theme.colors.textLight : theme.colors.text}
-            />
-          </Pressable>
+            onPress={handleNextMonth}
+          />
         </View>
 
         {/* Day of Week Row */}

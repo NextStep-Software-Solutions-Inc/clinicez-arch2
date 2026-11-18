@@ -24,15 +24,11 @@ import {
   type ClinicPatient,
   type StaffMember,
   type AvailableSlotItem,
+  type TeleconsultPaymentPolicy,
 } from '../../services/clinicService';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
-import { notify, Alert } from '../../utils/feedback';
-import {
-  getPatientInitials,
-  hasKnownAllergies,
-  hasStatAllergy,
-  formatPatientDemographicsLine,
-} from './PatientDirectoryCard';
+import { useClinic } from '../../context/ClinicContext';
+import { notify } from '../../utils/feedback';
 
 export interface ScheduledVisitDetails {
   appointmentId: string;
@@ -56,6 +52,7 @@ export interface ScheduleVisitModalProps {
   initialDoctorId?: string;
   initialVisitPurpose?: string;
   onAppointmentScheduled?: (details: ScheduledVisitDetails) => void;
+  isEffectiveTeleconsultEnabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -133,9 +130,15 @@ export default function ScheduleVisitModal({
   initialDoctorId,
   initialVisitPurpose,
   onAppointmentScheduled,
+  isEffectiveTeleconsultEnabled: isEffectiveTeleconsultEnabledProp,
   style,
 }: ScheduleVisitModalProps) {
   const { staff } = useStaff();
+  const clinic = useClinic();
+
+  const effectiveTeleconsultEnabled = isEffectiveTeleconsultEnabledProp ?? Boolean(
+    clinic.settings?.isWorkspaceTeleconsultEntitled && clinic.settings?.enableTeleconsultation
+  );
 
   // Active clinic doctors pool
   const clinicDoctors = useMemo(() => {
@@ -143,7 +146,21 @@ export default function ScheduleVisitModal({
     return (staff ?? []).filter((s) => s.role === 'Doctor');
   }, [doctorsProp, staff]);
 
+  const hasYakap = Boolean(
+    (patient as any)?.hasActiveYakapEnlistment ??
+    (patient as any)?.isYakapEnrolled ??
+    (patient as any)?.isYakapEligible
+  );
+
   // Form states
+  const [modality, setModality] = useState<'InPerson' | 'Teleconsult'>('InPerson');
+
+  useEffect(() => {
+    if (!effectiveTeleconsultEnabled && modality === 'Teleconsult') {
+      setModality('InPerson');
+    }
+  }, [effectiveTeleconsultEnabled, modality]);
+  const [paymentPolicy, setPaymentPolicy] = useState<TeleconsultPaymentPolicy>('Prepaid');
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>(() => initialDoctorId ?? '');
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayIsoDate());
   const [selectedSlotTime, setSelectedSlotTime] = useState<string>('');
@@ -194,6 +211,8 @@ export default function ScheduleVisitModal({
       setClinicalNotes('');
       setScheduling(false);
       setNotifying(false);
+      setModality('InPerson');
+      setPaymentPolicy('Prepaid');
     }
   }, [visible]);
 
@@ -315,6 +334,11 @@ export default function ScheduleVisitModal({
       return;
     }
 
+    if (modality === 'Teleconsult' && !effectiveTeleconsultEnabled) {
+      notify.error('Teleconsultation is not enabled for this clinic.');
+      return;
+    }
+
     setScheduling(true);
 
     try {
@@ -328,9 +352,11 @@ export default function ScheduleVisitModal({
         doctorName: selectedDoctorId ? docName : undefined,
         scheduledAt,
         durationMinutes: 30,
-        serviceType: purpose,
+        serviceType: modality === 'Teleconsult' ? 'Teleconsult' : purpose,
         reason: clinicalNotes.trim() || purpose,
         notes: clinicalNotes.trim() || undefined,
+        appointmentType: modality === 'Teleconsult' ? 'Teleconsult' : 'InPerson',
+        paymentPolicy: modality === 'Teleconsult' ? paymentPolicy : undefined,
       };
 
       const [res, err] = await clinicService.createAppointment(payload);
@@ -408,11 +434,6 @@ export default function ScheduleVisitModal({
     return null;
   }
 
-  const initials = getPatientInitials(patient);
-  const demographicsLine = formatPatientDemographicsLine(patient);
-  const hasAllergies = hasKnownAllergies(patient.allergies);
-  const isStatAllergy = hasStatAllergy(patient.allergies);
-
   const todayIso = getTodayIsoDate();
   const tomorrowIso = getRelativeIsoDate(1);
   const nextWeekIso = getRelativeIsoDate(7);
@@ -432,63 +453,18 @@ export default function ScheduleVisitModal({
                   Schedule visit
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Direct clinic appointment setup
-                </ThemedText>
-              </View>
-            </View>
-            <Pressable
-              onPress={onClose}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityLabel="Close schedule visit dialog"
-              style={styles.closeBtn}
-            >
-              <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
-          </View>
-
-          {/* Patient Identity Banner */}
-          <View style={styles.patientBanner}>
-            <View style={styles.avatarCircle}>
-              <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
-                {initials}
-              </ThemedText>
-            </View>
-            <View style={styles.bannerInfoCol}>
-              <View style={styles.bannerNameRow}>
-                <ThemedText variant="bodyBold" color={theme.colors.text} numberOfLines={1}>
                   {patient.fullName}
                 </ThemedText>
-                <Badge label={patient.patientCode} variant="neutral" size="sm" />
-                {patient.clinicEzId ? (
-                  <Badge label={patient.clinicEzId} variant="primary" size="sm" />
-                ) : null}
-              </View>
-              <ThemedText variant="small" color={theme.colors.textSecondary}>
-                {demographicsLine || `${patient.age ?? ''} yrs • ${patient.sex ?? ''}`}
-              </ThemedText>
-              <View style={styles.bannerBadgesRow}>
-                {patient.philHealthNumber ? (
-                  <Badge
-                    label={`PhilHealth PIN ${patient.philHealthNumber}`}
-                    variant="primary"
-                    size="sm"
-                    icon="shield"
-                  />
-                ) : null}
-                {hasAllergies ? (
-                  <Badge
-                    label={isStatAllergy ? `STAT Allergy: ${patient.allergies}` : `Allergies: ${patient.allergies}`}
-                    variant="emergency"
-                    size="sm"
-                    icon="alertCircle"
-                  />
-                ) : null}
-                {patient.alerts ? (
-                  <Badge label={patient.alerts} variant="warning" size="sm" icon="alert" />
-                ) : null}
               </View>
             </View>
+            <Button
+              icon="close"
+              iconOnly
+              variant="ghost"
+              size="sm"
+              accessibilityLabel="Close schedule visit dialog"
+              onPress={onClose}
+            />
           </View>
 
           {/* Conditional View: Post-Appointment Setup Dialog vs Initial Booking Form */}
@@ -600,6 +576,115 @@ export default function ScheduleVisitModal({
               contentContainerStyle={styles.formScrollContent}
               showsVerticalScrollIndicator
             >
+              {/* Visit Modality Selector */}
+              <View style={styles.formSection}>
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionTitle}>
+                  Visit Modality
+                </ThemedText>
+                <View style={styles.modalityToggleGroup} testID="modality-toggle-group">
+                  <Pressable
+                    testID="btn-modality-in-person"
+                    accessibilityRole="button"
+                    accessibilityLabel="In-Person Consultation"
+                    onPress={() => setModality('InPerson')}
+                    style={[
+                      styles.modalityBtn,
+                      modality === 'InPerson' ? styles.chipSelected : styles.chipUnselected,
+                    ]}
+                  >
+                    <Icon
+                      name="patient"
+                      size={theme.sizes.iconSm}
+                      color={modality === 'InPerson' ? theme.colors.routineText : theme.colors.textMuted}
+                    />
+                    <ThemedText
+                      variant="smallBold"
+                      color={modality === 'InPerson' ? theme.colors.routineText : theme.colors.text}
+                    >
+                      In-Person
+                    </ThemedText>
+                  </Pressable>
+
+                  <Pressable
+                    testID="btn-modality-teleconsult"
+                    accessibilityRole="button"
+                    accessibilityLabel="Virtual Teleconsultation"
+                    accessibilityState={{ disabled: !effectiveTeleconsultEnabled }}
+                    disabled={!effectiveTeleconsultEnabled}
+                    onPress={() => {
+                      if (effectiveTeleconsultEnabled) {
+                        setModality('Teleconsult');
+                      } else {
+                        notify.warning('Teleconsultation is disabled for this clinic.');
+                      }
+                    }}
+                    style={[
+                      styles.modalityBtn,
+                      modality === 'Teleconsult' ? styles.chipSelected : styles.chipUnselected,
+                      !effectiveTeleconsultEnabled && styles.modalityBtnDisabled,
+                    ]}
+                  >
+                    <Icon
+                      name={!effectiveTeleconsultEnabled ? 'lock' : 'consultations'}
+                      size={theme.sizes.iconSm}
+                      color={
+                        !effectiveTeleconsultEnabled
+                          ? theme.colors.textMuted
+                          : modality === 'Teleconsult'
+                          ? theme.colors.routineText
+                          : theme.colors.textMuted
+                      }
+                    />
+                    <ThemedText
+                      variant="smallBold"
+                      color={
+                        !effectiveTeleconsultEnabled
+                          ? theme.colors.textMuted
+                          : modality === 'Teleconsult'
+                          ? theme.colors.routineText
+                          : theme.colors.text
+                      }
+                    >
+                      {!effectiveTeleconsultEnabled ? 'Teleconsult (Disabled)' : 'Teleconsultation'}
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+
+              {/* Teleconsultation Payment Policy Picker */}
+              {modality === 'Teleconsult' && (
+                <View style={styles.formSection}>
+                  <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionTitle}>
+                    Payment Policy
+                  </ThemedText>
+                  <View style={styles.chipsRow} testID="teleconsult-policy-picker">
+                    {(['Prepaid', 'Postpaid', 'Exempt'] as const).map((pol) => {
+                      const isSelected = paymentPolicy === pol;
+                      return (
+                        <Pressable
+                          key={pol}
+                          testID={`btn-policy-option-${pol.toLowerCase()}`}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${pol} Policy`}
+                          onPress={() => setPaymentPolicy(pol)}
+                          style={[
+                            styles.policyOptionBtn,
+                            isSelected ? styles.chipSelected : styles.chipUnselected,
+                          ]}
+                        >
+                          <ThemedText
+                            variant="smallBold"
+                            color={isSelected ? theme.colors.routineText : theme.colors.text}
+                          >
+                            {pol}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
               {/* Attending Physician Section */}
               <View style={styles.formSection}>
                 <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionTitle}>
@@ -839,11 +924,11 @@ export default function ScheduleVisitModal({
                 </View>
               </View>
 
-              {/* Clinical Notes / Reason Section */}
+              {/* Notes / Reason Section */}
               <View style={styles.formSection}>
                 <Input
-                  label="Clinical Notes / Reason for Visit"
-                  placeholder="Chief complaint or special clinical instructions..."
+                  label="Notes / Reason for visit"
+                  placeholder="Reason for visit or notes (optional)"
                   value={clinicalNotes}
                   onChangeText={setClinicalNotes}
                   multiline
@@ -860,6 +945,7 @@ export default function ScheduleVisitModal({
                   style={styles.footerBtn}
                 />
                 <Button
+                  testID="btn-confirm-booking"
                   title="Confirm and schedule"
                   variant="primary"
                   loading={scheduling}
@@ -920,45 +1006,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  closeBtn: {
-    padding: theme.spacing.xs,
-    borderRadius: theme.radii.md,
-  },
-  patientBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: theme.spacing.md,
-    backgroundColor: theme.colors.surfaceMuted,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.border,
-  },
-  avatarCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bannerInfoCol: {
-    flex: 1,
-    gap: theme.spacing.xs,
-  },
-  bannerNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  bannerBadgesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
   },
   formScroll: {
     flex: 1,
@@ -1117,5 +1164,46 @@ const styles = StyleSheet.create({
   postActionBtn: {
     flexBasis: '48%',
     flexGrow: 1,
+  },
+  modalityToggleGroup: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  modalityBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.radii.lg,
+    borderWidth: theme.sizes.borderWidth,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+  },
+  modalityBtnDisabled: {
+    opacity: 0.5,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.borderLight,
+  },
+  policyOptionBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xl,
+    borderRadius: theme.radii.lg,
+    borderWidth: theme.sizes.borderWidth,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+  },
+  yakapInfoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.infoBg,
+    borderColor: theme.colors.infoBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.xs,
   },
 });

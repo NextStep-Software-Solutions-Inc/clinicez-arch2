@@ -11,3 +11,11 @@ export { typography } from './typography';
 export type { TypographyStyle, TypographyVariant } from './typography';
 export { lightColors, darkColors, colorSchemes } from './semantic';
 export type { ColorToken, ColorScheme } from './semantic';
+export { shadows, createShadows, isLiveWebDom } from './shadows';
+export type {
+  NativeShadowToken,
+  WebShadowToken,
+  ShadowToken,
+  ShadowVariant,
+  ShadowScale,
+} from './shadows';

@@ -333,4 +333,107 @@ public class PublicGuestTeleconsultEndpointsTests : IDisposable
         // Verify ZERO patient name, zero DOB, zero clinical diagnosis in token claims
         Assert.DoesNotContain(jwt.Claims, c => c.Type == "name" || c.Type == "dob" || c.Type == "diagnosis");
     }
+
+    [Fact]
+    public async Task HandleStatusAsync_ActiveInvite_Returns200WithActiveStatus()
+    {
+        var inviteId = Guid.NewGuid();
+        var callId = Guid.NewGuid();
+        const string inviteToken = "status-test-token-active";
+        var expiresAt = DateTime.UtcNow.AddMinutes(30);
+
+        GuestVerificationService.RegisterInvite(
+            inviteId,
+            "tenant-metro",
+            "fac-clinic-1",
+            callId,
+            inviteToken,
+            "1990-01-01",
+            "123456",
+            expiresAt);
+
+        var result = PublicGuestTeleconsultEndpoints.HandleStatusAsync(
+            inviteToken,
+            _verificationService);
+
+        var okResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status200OK, okResult.StatusCode);
+
+        var valueResult = Assert.IsAssignableFrom<IValueHttpResult>(result);
+        var apiResponse = Assert.IsAssignableFrom<ApiResponse<GuestTeleconsultStatusResponse>>(valueResult.Value);
+        Assert.True(apiResponse.Succeeded);
+        Assert.NotNull(apiResponse.Data);
+        Assert.False(apiResponse.Data.IsEnded);
+        Assert.False(apiResponse.Data.IsExpired);
+        Assert.Equal("Active", apiResponse.Data.Status);
+    }
+
+    [Fact]
+    public void HandleStatusAsync_RevokedInvite_Returns410Gone()
+    {
+        var inviteId = Guid.NewGuid();
+        var callId = Guid.NewGuid();
+        const string inviteToken = "status-test-token-revoked";
+
+        GuestVerificationService.RegisterInvite(
+            inviteId,
+            "tenant-metro",
+            "fac-clinic-1",
+            callId,
+            inviteToken,
+            "1990-01-01",
+            "123456",
+            DateTime.UtcNow.AddMinutes(30));
+
+        _verificationService.RevokeInviteByCall(callId, "Consultation completed");
+
+        var result = PublicGuestTeleconsultEndpoints.HandleStatusAsync(
+            inviteToken,
+            _verificationService);
+
+        var statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status410Gone, statusResult.StatusCode);
+
+        var valueResult = Assert.IsAssignableFrom<IValueHttpResult>(result);
+        var apiResponse = Assert.IsAssignableFrom<ApiResponse<GuestTeleconsultStatusResponse>>(valueResult.Value);
+        Assert.False(apiResponse.Succeeded);
+        Assert.Equal("GUEST_CONSULTATION_ENDED", apiResponse.ErrorCode);
+    }
+
+    [Fact]
+    public async Task HandleAsync_RevokedInvite_Returns410GoneWithConsultationEnded()
+    {
+        var inviteId = Guid.NewGuid();
+        var callId = Guid.NewGuid();
+        const string inviteToken = "verify-test-token-revoked";
+        const string dob = "1990-01-01";
+        const string otp = "123456";
+
+        GuestVerificationService.RegisterInvite(
+            inviteId,
+            "tenant-metro",
+            "fac-clinic-1",
+            callId,
+            inviteToken,
+            dob,
+            otp,
+            DateTime.UtcNow.AddMinutes(30));
+
+        _verificationService.RevokeInviteByCall(callId, "Ended by practitioner");
+
+        var request = new GuestTeleconsultVerifyRequest(inviteToken, dob, otp);
+        var result = await PublicGuestTeleconsultEndpoints.HandleAsync(
+            request,
+            _verificationService,
+            NullLogger<PublicGuestTeleconsultEndpoints>.Instance,
+            CancellationToken.None);
+
+        var statusResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status410Gone, statusResult.StatusCode);
+
+        var valueResult = Assert.IsAssignableFrom<IValueHttpResult>(result);
+        var apiResponse = Assert.IsAssignableFrom<ApiResponse<GuestTeleconsultVerifyResponse>>(valueResult.Value);
+        Assert.False(apiResponse.Succeeded);
+        Assert.Equal("GUEST_CONSULTATION_ENDED", apiResponse.ErrorCode);
+    }
 }

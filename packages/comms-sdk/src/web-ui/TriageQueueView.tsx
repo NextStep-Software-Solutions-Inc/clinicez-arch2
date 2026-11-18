@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { lightColors } from '@clinicez/design-tokens';
 import {
   TriageDispositionPayload,
@@ -6,9 +6,48 @@ import {
   WebTriageQueueViewProps
 } from './types';
 
+export function isItemSlaBreached(item: TriageQueueItem): boolean {
+  if (item.slaBreached || item.isSlaBreached) return true;
+  if (typeof item.slaTimeRemainingSeconds === 'number') return item.slaTimeRemainingSeconds <= 0;
+  if (item.triageDueAtUtc) {
+    const dueTime = new Date(item.triageDueAtUtc).getTime();
+    if (!isNaN(dueTime)) return dueTime <= Date.now();
+  }
+  return false;
+}
+
+export type SlaTier = 'breached' | 'warning' | 'onSchedule';
+
+export function getSlaTier(item: TriageQueueItem): SlaTier {
+  if (isItemSlaBreached(item)) {
+    return 'breached';
+  }
+
+  let remainingSec: number | null = null;
+  if (typeof item.slaTimeRemainingSeconds === 'number' && !isNaN(item.slaTimeRemainingSeconds)) {
+    remainingSec = item.slaTimeRemainingSeconds;
+  } else if (item.triageDueAtUtc) {
+    const dueTime = new Date(item.triageDueAtUtc).getTime();
+    if (!isNaN(dueTime)) {
+      remainingSec = Math.floor((dueTime - Date.now()) / 1000);
+    }
+  }
+
+  if (remainingSec === null || remainingSec === undefined) {
+    return 'onSchedule';
+  }
+  if (remainingSec <= 0) {
+    return 'breached';
+  }
+  if (remainingSec <= 900) {
+    return 'warning';
+  }
+  return 'onSchedule';
+}
+
 function formatSlaCountdown(item: TriageQueueItem): string {
-  if (item.slaBreached) {
-    return 'SLA Breached';
+  if (isItemSlaBreached(item)) {
+    return 'Response Overdue';
   }
 
   let remainingSec: number | null = null;
@@ -26,7 +65,7 @@ function formatSlaCountdown(item: TriageQueueItem): string {
   }
 
   if (remainingSec <= 0) {
-    return 'SLA Breached';
+    return 'Response Overdue';
   }
 
   if (remainingSec < 60) {
@@ -59,12 +98,19 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
   facilityName,
   onExecuteDisposition,
   onRefresh,
+  onSelectCard,
   isLoading = false,
   error = null,
   activeFilter = 'All',
   onFilterChange,
   className = ''
 }) => {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 15000);
+    return () => clearInterval(timer);
+  }, []);
+
   const [selectedItem, setSelectedItem] = useState<TriageQueueItem | null>(null);
   const [modalMode, setModalMode] = useState<'Answer' | 'Decline' | 'Route' | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -165,7 +211,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
                   }`}
                 >
-                  {filter === 'Emergency' ? 'STAT' : filter === 'Urgent' ? 'Urgent' : filter}
+                  {filter === 'Emergency' ? 'Emergency' : filter === 'Urgent' ? 'Urgent' : filter}
                 </button>
               );
             })}
@@ -175,27 +221,106 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
 
       {/* Content States */}
       {isLoading ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400" role="status">
-          <div className="animate-spin text-3xl mb-2">...</div>
-          <p className="text-sm">Loading triage queue...</p>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 animate-pulse" role="status" aria-label="Loading triage queue">
+          {[0, 1, 2].map((key) => (
+            <div
+              key={key}
+              className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm"
+            >
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-5 w-16 bg-slate-200 dark:bg-slate-700 rounded" />
+                  <div className="h-5 w-20 bg-slate-100 dark:bg-slate-800 rounded" />
+                </div>
+                <div className="h-5 w-28 bg-slate-200 dark:bg-slate-700 rounded-full" />
+              </div>
+              <div className="mb-2">
+                <div className="h-4 w-36 bg-slate-200 dark:bg-slate-700 rounded" />
+              </div>
+              <div className="space-y-1.5 mb-4">
+                <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded" />
+                <div className="h-3 w-3/4 bg-slate-100 dark:bg-slate-800 rounded" />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <div className="flex-1 min-w-[80px] h-[44px] bg-slate-200 dark:bg-slate-700 rounded" />
+                <div className="flex-1 min-w-[80px] h-[44px] bg-slate-200 dark:bg-slate-700 rounded" />
+                <div className="flex-1 min-w-[80px] h-[44px] bg-slate-200 dark:bg-slate-700 rounded" />
+                <div className="flex-1 min-w-[80px] h-[44px] bg-slate-200 dark:bg-slate-700 rounded" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : error ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center" role="alert">
-          <div className="text-3xl mb-2">!</div>
-          <p className="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">
-            Error Loading Triage
-          </p>
-          <p className="text-xs text-slate-500">{error}</p>
+          <div className="w-full max-w-sm rounded-lg bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 p-6 flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/60 border border-red-200 dark:border-red-800 flex items-center justify-center text-red-600 dark:text-red-300 font-bold text-xl mb-3">
+              !
+            </div>
+            <h2 className="text-sm font-bold text-red-800 dark:text-red-200 mb-1">
+              Triage Connection Error
+            </h2>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 text-center">
+              {error}
+            </p>
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="min-h-[44px] px-6 rounded text-xs font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors"
+            >
+              Retry Connection
+            </button>
+          </div>
         </div>
       ) : filteredItems.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500">
-          <div className="text-3xl mb-2">OK</div>
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-            Triage Queue Clear
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          {/* Check-Shield SVG Icon */}
+          <div className="w-16 h-16 rounded-full bg-teal-50 dark:bg-teal-950/60 border-2 border-teal-200 dark:border-teal-800 flex items-center justify-center text-teal-700 dark:text-teal-300 mb-4">
+            <svg
+              className="w-8 h-8"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <path d="m9 12 2 2 4-4" />
+            </svg>
+          </div>
+
+          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">
+            Queue Clear - All caught up!
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mb-6">
+            Inbound patient inquiries from Nextstep OPD will appear here with live SLA countdowns.
           </p>
-          <p className="text-xs text-slate-400 max-w-sm">
-            No patient inquiries require triage disposition at this time.
-          </p>
+
+          {/* SLA Metric Strip */}
+          <div className="grid grid-cols-3 gap-2 w-full max-w-sm mb-6">
+            <div className="bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 flex flex-col items-center">
+              <span className="text-base font-bold text-slate-900 dark:text-slate-100">0</span>
+              <span className="text-xs text-slate-500 font-medium">Pending</span>
+            </div>
+            <div className="bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 flex flex-col items-center">
+              <span className="text-base font-bold text-emerald-700 dark:text-emerald-400">100%</span>
+              <span className="text-xs text-slate-500 font-medium">SLA Met</span>
+            </div>
+            <div className="bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 flex flex-col items-center">
+              <span className="text-base font-bold text-slate-900 dark:text-slate-100">&lt; 5m</span>
+              <span className="text-xs text-slate-500 font-medium">Avg Response</span>
+            </div>
+          </div>
+
+          {/* Refresh CTA Button */}
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="min-h-[44px] px-6 rounded text-xs font-semibold bg-teal-700 hover:bg-teal-800 text-white transition-colors"
+          >
+            Refresh Queue
+          </button>
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -206,13 +331,24 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
             return (
               <div
                 key={item.conversationId}
-                className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm"
+                onClick={() => onSelectCard?.(item.conversationId)}
+                className={`p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm ${
+                  onSelectCard ? 'cursor-pointer hover:border-teal-500/50 transition-colors' : ''
+                }`}
+                role={onSelectCard ? 'button' : undefined}
+                tabIndex={onSelectCard ? 0 : undefined}
+                onKeyDown={(e) => {
+                  if (onSelectCard && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    onSelectCard(item.conversationId);
+                  }
+                }}
               >
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2">
                     {isStat ? (
                       <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200 border border-red-300">
-                        STAT
+                        Emergency
                       </span>
                     ) : isUrgent ? (
                       <span className="px-2 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200 border border-orange-300">
@@ -231,11 +367,11 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
 
                   <span
                     className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                      item.slaBreached || (typeof item.slaTimeRemainingSeconds === 'number' && item.slaTimeRemainingSeconds <= 0)
+                      getSlaTier(item) === 'breached'
                         ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200 border border-red-300'
-                        : item.triageDueAtUtc || item.slaTimeRemainingSeconds !== undefined
+                        : getSlaTier(item) === 'warning'
                           ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200 border border-amber-300'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 border border-emerald-300'
                     }`}
                   >
                     {formatSlaCountdown(item)}
@@ -247,7 +383,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                     {item.patientNameMasked || 'Patient Inquiry'}
                   </span>
                   {item.isEmergencyConfirmed && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 border border-emerald-300">
+                    <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 border border-emerald-300">
                       Non-Emergency Confirmed
                     </span>
                   )}
@@ -260,32 +396,44 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => handleOpenAction(item, 'Answer')}
-                    className="min-h-[44px] px-3.5 rounded text-xs font-semibold bg-teal-700 text-white hover:bg-teal-800 transition-colors"
+                    onClick={(e) => {
+                      e?.stopPropagation?.();
+                      handleOpenAction(item, 'Answer');
+                    }}
+                    className="flex-1 min-w-[80px] min-h-[44px] px-3.5 rounded text-xs font-semibold bg-teal-700 text-white hover:bg-teal-800 transition-colors"
                   >
                     Answer
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => handle1ClickNeedsVisit(item)}
-                    className="min-h-[44px] px-3.5 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                    onClick={(e) => {
+                      e?.stopPropagation?.();
+                      handle1ClickNeedsVisit(item);
+                    }}
+                    className="flex-1 min-w-[80px] min-h-[44px] px-3.5 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
                   >
                     Needs Visit
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => handleOpenAction(item, 'Route')}
-                    className="min-h-[44px] px-3.5 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 transition-colors"
+                    onClick={(e) => {
+                      e?.stopPropagation?.();
+                      handleOpenAction(item, 'Route');
+                    }}
+                    className="flex-1 min-w-[80px] min-h-[44px] px-3.5 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 transition-colors"
                   >
                     Route
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => handleOpenAction(item, 'Decline')}
-                    className="min-h-[44px] px-3.5 rounded text-xs font-semibold bg-red-50 dark:bg-red-950/40 hover:bg-red-100 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 transition-colors"
+                    onClick={(e) => {
+                      e?.stopPropagation?.();
+                      handleOpenAction(item, 'Decline');
+                    }}
+                    className="flex-1 min-w-[80px] min-h-[44px] px-3.5 rounded text-xs font-semibold bg-red-50 dark:bg-red-950/40 hover:bg-red-100 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 transition-colors"
                   >
                     Decline
                   </button>
@@ -335,7 +483,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                         key={r.code}
                         type="button"
                         onClick={() => setDeclineReason(r.code)}
-                        className={`min-h-[36px] px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                        className={`min-h-[44px] px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
                           isSelected
                             ? 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-200 border-red-300'
                             : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200'
@@ -376,7 +524,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                 disabled={isSubmitting}
                 className="min-h-[44px] px-4 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50"
               >
-                {isSubmitting ? 'Submitting...' : 'Confirm Disposition'}
+                {isSubmitting ? 'Submitting...' : 'Confirm Clinical Decision'}
               </button>
             </div>
           </form>

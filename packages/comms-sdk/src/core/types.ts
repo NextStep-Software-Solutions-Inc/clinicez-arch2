@@ -90,9 +90,14 @@ export interface MessageDto {
 export interface ParticipantDto {
   id: string;
   userId: string;
+  participantId?: string;
   displayName: string;
   role: string;
   joinedAtUtc: string;
+  leftAtUtc?: string | null;
+  lastReadMessageId?: string | null;
+  lastReadAtUtc?: string | null;
+  isMuted?: boolean;
 }
 
 export interface ConversationDto {
@@ -102,7 +107,7 @@ export interface ConversationDto {
   branchId?: string | null;
   scope: ConversationScope;
   kind: ConversationKind;
-  title: string;
+  title?: string | null;
   contextType?: string | null;
   contextId?: string | null;
   category?: MessageCategory | null;
@@ -119,6 +124,8 @@ export interface ConversationDto {
   lastMessageAtUtc?: string | null;
   lastMessageSnippet?: string | null;
   messageCount: number;
+  unreadCount?: number;
+  isMuted?: boolean;
   lastSeq: number;
   createdAtUtc: string;
   createdBy: string;
@@ -212,7 +219,8 @@ export interface ThreadStateChangedPayload {
 export interface ICommsClient {
   readonly events: import('./events/CommsEventEmitter').CommsEventEmitter;
   connect(): Promise<void>;
-  disconnect(): Promise<void>;
+  disconnect(clearConversations?: boolean): Promise<void>;
+  reconnect?(): Promise<void>;
   getConnectionState(): ConnectionState;
   joinConversation(conversationId: string): Promise<void>;
   leaveConversation(conversationId: string): Promise<void>;

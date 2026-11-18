@@ -327,6 +327,10 @@ describe('CHALLENGER R1 CLINIC OPTIONS - Suite 3: Zero Static Option Arrays Inva
     'RH_POSITIVE_TYPES',
     'RH_NEGATIVE_TYPES',
     'BLOOD_TYPE_OPTIONS',
+    'PHILHEALTH_STATUTORY_VACCINES',
+    'OTHER_ADULT_VACCINES',
+    'VACCINE_ROUTES',
+    'INJECTION_SITES',
   ];
 
   function collectTsxFiles(dir: string, fileList: string[] = []): string[] {
@@ -359,8 +363,8 @@ describe('CHALLENGER R1 CLINIC OPTIONS - Suite 3: Zero Static Option Arrays Inva
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         for (const token of FORBIDDEN_ARRAY_DECLARATIONS) {
-          // Check for const TOKEN = [ or export const TOKEN = [
-          const regex = new RegExp(`(const|let|var)\\s+${token}\\s*=\\s*\\[`);
+          // Check for const TOKEN = [ or const TOKEN = { or typed variants
+          const regex = new RegExp(`(const|let|var)\\s+${token}(\\s*:[^=]+)?\\s*=\\s*[\\[{]`);
           if (regex.test(line)) {
             violations.push({ file, token, line: i + 1 });
           }
@@ -379,6 +383,7 @@ describe('CHALLENGER R1 CLINIC OPTIONS - Suite 3: Zero Static Option Arrays Inva
       'components/chart/LifestyleSocialTab.tsx',
       'components/PhilHealthProfileModal.tsx',
       'components/chart/StatutoryImmunizationsTab.tsx',
+      'components/chart/immunizationCatalog.ts',
       'components/ui/BloodTypeSelect.tsx',
     ];
 

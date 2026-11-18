@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Api.Authorization;
+using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
 using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Application.Features.Patients.Queries;
@@ -36,11 +37,12 @@ public sealed class PatientsController : ControllerBase
         [FromQuery] Guid? staffId = null,
         [FromQuery] Guid? doctorId = null,
         [FromQuery] DateOnly? queueDate = null,
+        [FromQuery] Guid[]? roomIds = null,
         CancellationToken ct = default)
     {
         var result = await _sender.Send(new GetClinicPatientsQuery(
             search, hasAlerts, verificationStatus, filterMode, page, pageSize,
-            StaffId: staffId, DoctorId: doctorId, QueueDate: queueDate), ct);
+            StaffId: staffId, DoctorId: doctorId, RoomIds: roomIds, QueueDate: queueDate), ct);
         return Ok(ApiResponse<IReadOnlyList<ClinicPatientDto>>.Success(result));
     }
 
@@ -50,9 +52,11 @@ public sealed class PatientsController : ControllerBase
         [FromQuery] string? search,
         [FromQuery] Guid? staffId = null,
         [FromQuery] Guid? doctorId = null,
+        [FromQuery] Guid[]? roomIds = null,
+        [FromQuery] DateOnly? queueDate = null,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetClinicPatientCountsQuery(search, staffId, doctorId), ct);
+        var result = await _sender.Send(new GetClinicPatientCountsQuery(search, staffId, doctorId, roomIds, queueDate), ct);
         return Ok(ApiResponse<PatientDirectoryCountsDto>.Success(result));
     }
 
@@ -162,7 +166,8 @@ public sealed class PatientsController : ControllerBase
             request.MedicalHistories,
             request.GenderIdentity,
             request.Addresses,
-            request.Guardians);
+            request.Guardians,
+            request.StructuredAllergies);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicPatientDto>.Success(result, "Patient profile updated successfully."));
@@ -624,4 +629,5 @@ public sealed record UpdatePatientRequest(
     List<MedicalHistoryEntryDto>? MedicalHistories = null,
     string? GenderIdentity = null,
     List<PatientAddressDto>? Addresses = null,
-    List<PatientGuardianDto>? Guardians = null);
+    List<PatientGuardianDto>? Guardians = null,
+    List<CreateAllergyRequest>? StructuredAllergies = null);

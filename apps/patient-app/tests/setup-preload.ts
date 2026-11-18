@@ -25,6 +25,7 @@ mock.module('react-native', () => ({
   StyleSheet: {
     create: <T>(styles: T): T => styles,
     flatten: <T>(styles: T): T => styles,
+    hairlineWidth: 1,
   },
   AppState: {
     currentState: 'active',
@@ -45,12 +46,16 @@ mock.module('react-native', () => ({
   useWindowDimensions: () => ({ width: 1280, height: 800, scale: 1, fontScale: 1 }),
   View: 'View',
   Text: 'Text',
+  TouchableOpacity: 'TouchableOpacity',
+  TouchableHighlight: 'TouchableHighlight',
   Pressable: 'Pressable',
   ScrollView: 'ScrollView',
   TextInput: 'TextInput',
   ActivityIndicator: 'ActivityIndicator',
   Modal: 'Modal',
 }));
+
+await import('react-native');
 
 mock.module('expo-sqlite', () => ({
   openDatabaseSync: () => ({}),

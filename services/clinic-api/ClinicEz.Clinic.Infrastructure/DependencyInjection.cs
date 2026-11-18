@@ -74,7 +74,9 @@ public static class DependencyInjection
         services.AddScoped<IReadDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IProductRepository, ProductRepository>();
-        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<UnitOfWork>();
+        services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<UnitOfWork>());
+        services.AddScoped<IRepositoryProvider>(sp => sp.GetRequiredService<UnitOfWork>());
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
         services.AddScoped<ITenantLookupService, TenantLookupService>();
 
@@ -221,6 +223,7 @@ public static class DependencyInjection
         services.AddScoped<ILabResultReviewedPublisher, LabResultReviewedPublisher>();
         services.AddClinicEzDocumentEngine();
         services.AddScoped<IClinicDocumentPdfService, ClinicDocumentPdfService>();
+        services.AddScoped<IClinicCensusExcelService, ClinicCensusExcelService>();
         services.AddScoped<ISampleDocumentGenerator, SampleDocumentGenerator>();
 
         // Read eagerly: a missing or too-short ClinicEncryption:MasterSecret stops the service from starting.
@@ -307,6 +310,8 @@ public static class DependencyInjection
                 InteropTypes.YakapSubmissionRequested, InteropTypes.YakapSubmissionResponded)
             .HandleReply(InteropTypes.GamotLookupResponded)
             .HandleReply(InteropTypes.PhilHealthResponse)
+            .HandleReply(InteropTypes.MediaRoomResponded)
+            .Handle<CommsRecordingConsentLoggedPayload, CommsRecordingConsentLoggedHandler>(InteropTypes.CommsRecordingConsentLogged)
             .HandleEntitlementsChanged());
 
         return services;

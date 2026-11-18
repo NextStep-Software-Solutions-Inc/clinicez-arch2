@@ -52,26 +52,27 @@ describe("Milestone M7 Challenger 2: Adversarial Portal Web Guest Teleconsult Ch
 
     test("GuestJoinPage renders locked out UI when HTTP 423 is returned", async () => {
       const html = renderToString(
-        <main className="min-h-screen flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950">
-          <div className="w-full max-w-md p-8 rounded-xl bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900 text-center shadow-lg">
-            <h1 className="text-xl font-bold text-red-600 dark:text-red-400 mb-2">
-              Teleconsultation Link Locked
+        <main className="min-h-dvh flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950">
+          <div className="w-full max-w-md p-6 sm:p-8 rounded-2xl bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900 text-center shadow-xl">
+            <h1 className="text-xl sm:text-2xl font-bold text-red-700 dark:text-red-400 mb-2">
+              Link Locked for Your Privacy
             </h1>
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
-              This teleconsultation link has been permanently locked after 5 failed verification attempts to protect patient privacy and health records.
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
+              You entered details that didn&apos;t match 5 times, so we locked this link to protect your privacy.
             </p>
-            <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 mb-6">
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300">
               Please contact <strong>Metro Health Clinic</strong> at{" "}
-              <span className="font-semibold text-teal-700">(02) 8123-4567</span> to verify your identity and receive a new invitation link.
+              <a href="tel:0281234567" className="font-semibold text-teal-700">(02) 8123-4567</a> for a new link.
             </div>
           </div>
         </main>
       );
 
-      expect(html).toContain("Teleconsultation Link Locked");
-      expect(html).toContain("5 failed verification attempts");
+      expect(html).toContain("Link Locked for Your Privacy");
+      expect(html).toContain("we locked this link to protect your privacy");
       expect(html).toContain("(02) 8123-4567");
       expect(html).toContain("Metro Health Clinic");
+      expect(html).toContain("min-h-dvh");
     });
 
     test("simulates 5 consecutive failed attempts transitioning from warning countdown to lockout", () => {
@@ -86,29 +87,30 @@ describe("Milestone M7 Challenger 2: Adversarial Portal Web Guest Teleconsult Ch
           isLockedOut = true;
           errorMessage = null;
         } else {
-          errorMessage = `Verification failed. ${5 - nextAttempts} attempts remaining.`;
+          const remaining = 5 - nextAttempts;
+          errorMessage = `Those details did not match. ${remaining} ${remaining === 1 ? "try" : "tries"} left.`;
         }
       };
 
       registerFailure();
       expect(attemptCount).toBe(1);
       expect(isLockedOut).toBe(false);
-      expect(errorMessage).toBe("Verification failed. 4 attempts remaining.");
+      expect(errorMessage).toBe("Those details did not match. 4 tries left.");
 
       registerFailure();
       expect(attemptCount).toBe(2);
       expect(isLockedOut).toBe(false);
-      expect(errorMessage).toBe("Verification failed. 3 attempts remaining.");
+      expect(errorMessage).toBe("Those details did not match. 3 tries left.");
 
       registerFailure();
       expect(attemptCount).toBe(3);
       expect(isLockedOut).toBe(false);
-      expect(errorMessage).toBe("Verification failed. 2 attempts remaining.");
+      expect(errorMessage).toBe("Those details did not match. 2 tries left.");
 
       registerFailure();
       expect(attemptCount).toBe(4);
       expect(isLockedOut).toBe(false);
-      expect(errorMessage).toBe("Verification failed. 1 attempts remaining.");
+      expect(errorMessage).toBe("Those details did not match. 1 try left.");
 
       registerFailure();
       expect(attemptCount).toBe(5);
@@ -149,21 +151,22 @@ describe("Milestone M7 Challenger 2: Adversarial Portal Web Guest Teleconsult Ch
 
     test("GuestJoinPage renders expired screen when HTTP 410 is received", () => {
       const html = renderToString(
-        <main className="min-h-screen flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950">
-          <div className="w-full max-w-md p-8 rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 text-center shadow-lg">
-            <h1 className="text-xl font-bold text-amber-800 dark:text-amber-300 mb-2">
-              Consultation Link Expired
+        <main className="min-h-dvh flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950">
+          <div className="w-full max-w-md p-6 sm:p-8 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 text-center shadow-xl">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+              Visit Link Expired
             </h1>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mb-6">
-              This appointment verification link has expired. Please contact St. Jude Medical Center for assistance.
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-4">
+              This link has expired. Please call <strong>St. Jude Medical Center</strong> for a new link.
             </p>
           </div>
         </main>
       );
 
-      expect(html).toContain("Consultation Link Expired");
-      expect(html).toContain("verification link has expired");
+      expect(html).toContain("Visit Link Expired");
+      expect(html).toContain("This link has expired");
       expect(html).toContain("St. Jude Medical Center");
+      expect(html).toContain("min-h-dvh");
     });
   });
 

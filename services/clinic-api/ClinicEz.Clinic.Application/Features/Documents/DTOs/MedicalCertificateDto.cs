@@ -26,4 +26,5 @@ public sealed record MedicalCertificateDto(
     bool IsSigned,
     DateTime? SignedAt,
     DateTime CreatedAt,
-    string? SecurityDigest = null);
+    string? SecurityDigest = null,
+    Guid? QueueItemId = null);

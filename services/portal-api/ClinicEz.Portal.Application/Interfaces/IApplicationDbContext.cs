@@ -43,6 +43,8 @@ public interface IApplicationDbContext
     DbSet<PractitionerAffiliation> PractitionerAffiliations { get; }
     DbSet<FacilityVerificationRequest> FacilityVerificationRequests { get; }
     DbSet<PractitionerVerificationRequest> PractitionerVerificationRequests { get; }
+    DbSet<WorkspaceTeleconsultBilling> WorkspaceTeleconsultBillings { get; }
+    DbSet<TeleconsultUsageRecord> TeleconsultUsageRecords { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

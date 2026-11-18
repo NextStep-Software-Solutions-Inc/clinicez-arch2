@@ -14,7 +14,9 @@ public record PrescriptionSlipItemDto(
     int? DurationDays,
     int Refills,
     bool IsDangerousDrug,
-    string? Remarks
+    string? Remarks,
+    bool IsClinicDispensed = false,
+    int? ClinicDispensedQuantity = null
 );
 
 public record PrescriptionSlipDto(
@@ -50,7 +52,8 @@ public record PrescriptionSlipDto(
     DateTime? DispensedAt,
     string? DispenseNotes,
     RxPharmacyStatusDto? PharmacyStatus = null,
-    DateOnly? PatientDateOfBirth = null
+    DateOnly? PatientDateOfBirth = null,
+    Guid? DoctorId = null
 );
 
 public record PublicRxVerificationInfoDto(

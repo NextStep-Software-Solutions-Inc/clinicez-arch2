@@ -36,6 +36,7 @@ public sealed record UpdateMyProfileCommand(
     Guid? RequestedClinicRoleId = null,
     string? SignatureSpecimen = null,
     SignatureMode? DefaultSignatureMode = null,
+    string? PreferencesJson = null,
     bool? IsDirectoryOptIn = null,
     DateOnly? PrcExpiryDate = null,
     string? PrcEvidenceObjectKey = null,
@@ -167,6 +168,10 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
         if (request.DefaultSignatureMode.HasValue)
         {
             staff.DefaultSignatureMode = request.DefaultSignatureMode.Value;
+        }
+        if (request.PreferencesJson != null)
+        {
+            staff.PreferencesJson = string.IsNullOrWhiteSpace(request.PreferencesJson) ? null : request.PreferencesJson;
         }
         staff.UpdatedAt = DateTime.UtcNow;
         staff.UpdatedBy = staff.Id.ToString();

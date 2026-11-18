@@ -119,7 +119,7 @@ mock.module('../services/apiClient', () => ({
   clinicApiUrl: (p: string) => `http://localhost:5000/api/v1${p}`,
 }));
 
-const { clinicService } = await import('../services/clinicService');
+const { clinicService, setClinicRegionalConfig } = await import('../services/clinicService');
 type ClinicPatient = import('../services/clinicService').ClinicPatient;
 type PhilHealthPatientProfile = import('../services/clinicService').PhilHealthPatientProfile;
 type PhilHealthConditionEntry = import('../services/clinicService').PhilHealthConditionEntry;
@@ -127,6 +127,13 @@ type PhilHealthConditionEntry = import('../services/clinicService').PhilHealthCo
 const {
   default: ClinicalHistoryTab,
   PHILHEALTH_MDISEASES_CONDITIONS,
+  ALLERGY_CATEGORY_OPTIONS,
+  ALLERGY_SEVERITY_OPTIONS,
+  humanizeAllergySeverity,
+  matchProblemToPersonalHistoryCondition,
+  mergeOtherConditionDescriptions,
+  reconcilePersonalHistoryWithClinicalRecords,
+  getLockedPersonalConditionCodes,
   defaultPhilHealthProfile,
 } = await import('../components/chart/ClinicalHistoryTab');
 
@@ -224,18 +231,30 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
   // 2. COMPONENT RENDERING & DESIGN TOKENS CONFORMANCE
   // =========================================================================
   describe('2. Component Structure and Markup', () => {
-    test('2.1 ClinicalHistoryTab renders personal and family medical history sections', () => {
+    test('2.1 ClinicalHistoryTab renders personal and family medical history sections with auto-save last-saved badges and no manual Save button', () => {
       const markup = renderToStaticMarkup(
         React.createElement(ClinicalHistoryTab, {
           patient: mockPatient,
-          initialProfile: sampleProfile,
+          initialProfile: {
+            ...sampleProfile,
+            lastUpdatedAt: '2026-11-04T01:20:00Z',
+          },
         })
       );
 
       // Section titles
-      expect(markup).toContain('Past Medical History (Personal)');
+      expect(markup).toContain('Personal Medical History');
       expect(markup).toContain('Family Medical History');
-      expect(markup).toContain('Save Medical &amp; Family History');
+      // Manual Save button removed in favor of auto-save
+      expect(markup).not.toContain('Save Medical &amp; Family History');
+      // Inline Last saved badges rendered on both Personal and Family Medical History
+      const lastSavedMatches = markup.match(/Last saved /g) || [];
+      expect(lastSavedMatches.length).toBeGreaterThanOrEqual(2);
+
+      // Surgical empty banner is clean of statutory transmittal jargon
+      expect(markup).toContain('No Past Surgical Procedures Documented');
+      expect(markup).not.toContain('pSurgDesc=');
+      expect(markup).not.toContain('eKAS / eSER');
 
       // Badges
       expect(markup).toContain('3 Selected');
@@ -454,6 +473,330 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
       const familyMatches = markup.match(/aria-label="Toggle family /g) || [];
       expect(personalMatches.length).toBe(19);
       expect(familyMatches.length).toBe(19);
+    });
+
+    test('5.6 Structured problem auto-syncs matching condition or toggles Others with specific description', () => {
+      // Predefined matches
+      expect(
+        matchProblemToPersonalHistoryCondition({
+          icd10Code: 'I10',
+          problemTitle: 'Essential (primary) hypertension',
+        })
+      ).toEqual({ matchedCode: '011' });
+
+      expect(
+        matchProblemToPersonalHistoryCondition({
+          icd10Code: 'E11.9',
+          problemTitle: 'Type 2 diabetes mellitus without complications',
+        })
+      ).toEqual({ matchedCode: '006' });
+
+      // Non-predefined conditions fall back to 998 Others with title
+      expect(
+        matchProblemToPersonalHistoryCondition({
+          icd10Code: 'A09.9',
+          problemTitle: 'Diarrhea',
+        })
+      ).toEqual({ matchedCode: '998', otherDescription: 'Diarrhea' });
+
+      expect(
+        matchProblemToPersonalHistoryCondition({
+          icd10Code: 'M10.9',
+          problemTitle: 'Gout, unspecified',
+        })
+      ).toEqual({ matchedCode: '998', otherDescription: 'Gout, unspecified' });
+
+      const reconciled = reconcilePersonalHistoryWithClinicalRecords({
+        selectedCodes: ['011'],
+        otherDesc: 'Gastro-esophageal reflux disease without esophagitis',
+        problems: [
+          { icd10Code: 'A09.9', problemTitle: 'Diarrhea' },
+          { icd10Code: 'M10.9', problemTitle: 'Gout, unspecified' },
+          { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus without complications' },
+        ],
+        allergies: [{ allergen: 'Peanuts' }],
+      });
+
+      expect(reconciled.changed).toBe(true);
+      expect(reconciled.codes.has('001')).toBe(true); // Allergy toggled from documented allergy
+      expect(reconciled.codes.has('011')).toBe(true); // Existing Hypertension preserved
+      expect(reconciled.codes.has('006')).toBe(true); // Diabetes Mellitus matched
+      expect(reconciled.codes.has('998')).toBe(true); // Others toggled for Diarrhea & Gout
+      expect(reconciled.otherDesc).toBe(
+        'Gastro-esophageal reflux disease without esophagitis, Diarrhea, Gout, unspecified'
+      );
+
+      // Deduplication check
+      expect(
+        mergeOtherConditionDescriptions('Diarrhea, Gout, unspecified', ['diarrhea', 'None'])
+      ).toBe('Diarrhea, Gout, unspecified');
+    });
+
+    test('5.7 None (999) entries are filtered out and surgical dates respect clinic dateFormat', () => {
+      setClinicRegionalConfig({ dateFormat: 'dd/MM/yyyy', timeZoneId: 'Asia/Manila' });
+      try {
+        const markup = renderToStaticMarkup(
+          React.createElement(ClinicalHistoryTab, {
+            patient: { ...mockPatient, chronicConditions: undefined },
+            initialProfile: {
+              ...defaultPhilHealthProfile,
+              medicalHistories: [{ code: '999', specificDesc: 'None' }],
+              familyHistories: [{ code: '999', specificDesc: 'None' }],
+            },
+            initialSurgicalHistories: [
+              {
+                id: 'surg-1',
+                clinicId: 'clinic-1',
+                patientId: mockPatient.id,
+                procedureName: 'Appendectomy',
+                surgeryDate: '2025-10-07',
+                createdAt: '2025-10-07T08:00:00Z',
+              },
+            ],
+          })
+        );
+
+        expect(markup).toContain('0 Selected');
+        expect(markup).not.toContain('Toggle personal None');
+        expect(markup).toContain('07/10/2025');
+      } finally {
+        setClinicRegionalConfig({ dateFormat: 'MMM d, yyyy', timeZoneId: 'Asia/Manila' });
+      }
+    });
+
+    test('5.8 Allergy category and severity options are dynamic and humanized', () => {
+      expect(ALLERGY_CATEGORY_OPTIONS.map((o) => o.value)).toEqual([
+        'Medication',
+        'Food',
+        'Environmental',
+        'Biologic',
+        'Other',
+      ]);
+      expect(ALLERGY_SEVERITY_OPTIONS.map((o) => o.value)).toEqual([
+        'Mild',
+        'Moderate',
+        'Severe',
+        'LifeThreatening',
+      ]);
+      expect(humanizeAllergySeverity('LifeThreatening')).toBe('Life-Threatening');
+      expect(humanizeAllergySeverity('Moderate')).toBe('Moderate');
+    });
+
+    test('5.9 StructuredAllergyIntakeModal renders structured intake dialog for ClinicalHistoryTab', async () => {
+      const { default: StructuredAllergyIntakeModal } = await import(
+        '../components/patient/StructuredAllergyIntakeModal'
+      );
+
+      const modalMarkup = renderToStaticMarkup(
+        React.createElement(StructuredAllergyIntakeModal, {
+          visible: true,
+          onClose: () => {},
+          existingAllergies: [
+            {
+              category: 'Food',
+              allergen: 'Peanuts',
+              severity: 'Moderate',
+              reactionManifestation: 'Facial Swelling',
+              isAnaphylactic: false,
+            },
+          ],
+          onAddAllergy: async () => true,
+        })
+      );
+
+      expect(modalMarkup).toContain('Structured Allergy Intake');
+      expect(modalMarkup).toContain('PATIENT ALLERGY LIST (1)');
+      expect(modalMarkup).toContain('Add New Allergy / Sensitivity');
+      expect(modalMarkup).toContain('Peanuts');
+      expect(modalMarkup).toContain('+ Add Allergy to Record');
+      expect(modalMarkup).toContain('Done &amp; Close');
+
+      const tabMarkup = renderToStaticMarkup(
+        React.createElement(ClinicalHistoryTab, {
+          patient: mockPatient,
+          initialProfile: defaultPhilHealthProfile,
+        })
+      );
+      expect(tabMarkup).not.toContain('Document Allergy / Adverse Sensitivity');
+    });
+  });
+
+  describe('6. Issue #136 & #206: Prevent Untoggling Conditions Linked to Documented Structured Problems', () => {
+    test('6.1 getLockedPersonalConditionCodes locks conditions linked to active Structured Problems', () => {
+      const locked = getLockedPersonalConditionCodes({
+        problems: [
+          { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus without complications', status: 'Active' },
+          { icd10Code: 'I10', problemTitle: 'Essential (primary) hypertension', status: 'Active' },
+          { icd10Code: 'M10.9', problemTitle: 'Gout, unspecified', status: 'Active' },
+        ],
+        allergies: [],
+      });
+
+      expect(locked.has('006')).toBe(true); // Diabetes Mellitus
+      expect(locked.get('006')).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
+      expect(locked.has('011')).toBe(true); // Hypertension
+      expect(locked.get('011')).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
+      expect(locked.has('998')).toBe(true); // Others (Gout)
+      expect(locked.get('998')).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
+      expect(locked.has('002')).toBe(false); // Asthma not documented
+    });
+
+    test('6.2 getLockedPersonalConditionCodes locks conditions for Resolved or Inactive problems (past medical history), but not Voided problems', () => {
+      const lockedResolved = getLockedPersonalConditionCodes({
+        problems: [
+          { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus without complications', status: 'Resolved' },
+          { icd10Code: 'I10', problemTitle: 'Essential (primary) hypertension', status: 'Inactive' },
+        ],
+        allergies: [],
+      });
+
+      expect(lockedResolved.has('006')).toBe(true);
+      expect(lockedResolved.get('006')).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
+      expect(lockedResolved.has('011')).toBe(true);
+      expect(lockedResolved.get('011')).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
+      expect(lockedResolved.size).toBe(2);
+
+      // Voided or EnteredInError problems do NOT lock conditions
+      const lockedVoided = getLockedPersonalConditionCodes({
+        problems: [
+          { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus', status: 'Voided' },
+          { icd10Code: 'I10', problemTitle: 'Essential hypertension', status: 'EnteredInError' },
+        ],
+        allergies: [],
+      });
+      expect(lockedVoided.size).toBe(0);
+    });
+
+    test('6.3 Active documented allergies lock condition 001', () => {
+      const lockedAllergy = getLockedPersonalConditionCodes({
+        problems: [],
+        allergies: [{ allergen: 'Amoxicillin', status: 'Active' }],
+      });
+
+      expect(lockedAllergy.has('001')).toBe(true);
+      expect(lockedAllergy.get('001')).toBe('Managed in Documented Allergies — remove allergy to remove.');
+
+      const inactiveAllergy = getLockedPersonalConditionCodes({
+        problems: [],
+        allergies: [{ allergen: 'Penicillin', status: 'Inactive' }],
+      });
+      expect(inactiveAllergy.has('001')).toBe(false);
+
+      // Precedence: If problem also maps to 001, Structured Problem List message takes precedence
+      const both = getLockedPersonalConditionCodes({
+        problems: [{ icd10Code: 'J30.9', problemTitle: 'Allergic rhinitis, unspecified', status: 'Active' }],
+        allergies: [{ allergen: 'Pollen', status: 'Active' }],
+      });
+      expect(both.has('001')).toBe(true);
+      expect(both.get('001')).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
+    });
+
+    test('6.4 reconcilePersonalHistoryWithClinicalRecords preserves Resolved problems and ignores Voided problems / Inactive allergies', () => {
+      // Patient had '006' untoggled in baseline
+      const reconciled = reconcilePersonalHistoryWithClinicalRecords({
+        selectedCodes: ['011'],
+        otherDesc: '',
+        problems: [
+          { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus', status: 'Resolved' },
+          { icd10Code: 'J45.9', problemTitle: 'Asthma, unspecified', status: 'Active' },
+          { icd10Code: 'B18.2', problemTitle: 'Chronic viral hepatitis C', status: 'Voided' },
+        ],
+        allergies: [{ allergen: 'Shellfish', status: 'Inactive' }],
+      });
+
+      expect(reconciled.codes.has('006')).toBe(true); // Resolved problem IS past medical history and auto-reconciled
+      expect(reconciled.codes.has('001')).toBe(false); // Inactive allergy does NOT auto-reselect
+      expect(reconciled.codes.has('002')).toBe(true); // Active Asthma IS auto-reconciled
+      expect(reconciled.codes.has('011')).toBe(true); // Baseline Hypertension preserved
+      expect(reconciled.codes.has('007')).toBe(false); // Voided Hepatitis C is NOT reconciled
+    });
+
+    test('6.5 Chip toggle protection prevents untoggling locked conditions (active or resolved) and allows unlocked ones', () => {
+      const lockedCodes = new Map<string, string>([
+        ['006', 'Managed in Structured Problem List — cannot be untoggled unless problem is voided.'],
+      ]);
+
+      let selected = new Set(['006', '002']); // 006 is locked, 002 is self-reported
+      let notifiedReason: string | null = null;
+
+      const simulateToggle = (code: string) => {
+        if (selected.has(code)) {
+          const reason = lockedCodes.get(code);
+          if (reason) {
+            notifiedReason = reason;
+            return; // blocked
+          }
+          selected.delete(code);
+        } else {
+          selected.add(code);
+        }
+      };
+
+      // Attempt to untoggle locked '006'
+      simulateToggle('006');
+      expect(selected.has('006')).toBe(true);
+      expect(notifiedReason).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
+
+      // Untoggle unlocked self-reported '002'
+      simulateToggle('002');
+      expect(selected.has('002')).toBe(false);
+
+      // Toggle back on
+      simulateToggle('002');
+      expect(selected.has('002')).toBe(true);
+
+      // When problem is voided/removed, code unlocks and can be untoggled
+      lockedCodes.delete('006');
+      simulateToggle('006');
+      expect(selected.has('006')).toBe(false);
+    });
+
+    test('6.6 Component renders lock icon, title tooltip, and accessibility label for active problem condition', () => {
+      const markupWithoutProblems = renderToStaticMarkup(
+        React.createElement(ClinicalHistoryTab, {
+          patient: mockPatient,
+          initialProfile: {
+            ...defaultPhilHealthProfile,
+            medicalHistories: [{ code: '006', specificDesc: 'Diabetes Mellitus' }],
+          },
+        })
+      );
+
+      // Normal rendering without active problems: toggle personal Diabetes Mellitus (unlocked)
+      expect(markupWithoutProblems).toContain('Toggle personal Diabetes Mellitus');
+      expect(markupWithoutProblems).not.toContain('Toggle personal Diabetes Mellitus (locked)');
+
+      // Rendering with active problem for Diabetes Mellitus
+      const markupWithActiveProblem = renderToStaticMarkup(
+        React.createElement(ClinicalHistoryTab, {
+          patient: mockPatient,
+          initialProfile: {
+            ...defaultPhilHealthProfile,
+            medicalHistories: [{ code: '006', specificDesc: 'Diabetes Mellitus' }],
+          },
+          initialProblems: [
+            {
+              id: 'prob-e11',
+              clinicId: 'clinic-1',
+              patientId: mockPatient.id,
+              icd10Code: 'E11.9',
+              problemTitle: 'Type 2 diabetes mellitus without complications',
+              status: 'Active',
+              severity: 'Moderate',
+              isChronicNcd: true,
+              recordedByDoctorId: 'doc-1',
+              recordedByDoctorName: 'Dr. Cruz',
+              createdAt: '2025-01-01',
+            },
+          ],
+        })
+      );
+
+      // Locked chip attributes:
+      expect(markupWithActiveProblem).toContain('Toggle personal Diabetes Mellitus (locked)');
+      expect(markupWithActiveProblem).toContain(
+        'title="Managed in Structured Problem List — cannot be untoggled unless problem is voided."'
+      );
     });
   });
 });

@@ -56,6 +56,18 @@ public sealed class ClinicExceptionHandler : IExceptionHandler
             return true;
         }
 
+        if (exception is DuplicatePatientCodeConflictException duplicateCodeEx)
+        {
+            httpContext.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            await httpContext.Response.WriteAsJsonAsync(
+                ApiResponse<object>.Fail(
+                    duplicateCodeEx.Message,
+                    [new ApiFieldError(DuplicatePatientCodeConflictException.FieldName, DuplicatePatientCodeConflictException.ErrorCode, duplicateCodeEx.Message)],
+                    DuplicatePatientCodeConflictException.ErrorCode),
+                cancellationToken);
+            return true;
+        }
+
         return false;
     }
 }

@@ -9,6 +9,8 @@
       "@clinicez/design-tokens": ["../../packages/design-tokens/src"],
       "@clinicez/comms-sdk": ["../../packages/comms-sdk/src"],
       "@clinicez/comms-sdk/*": ["../../packages/comms-sdk/src/*"],
+      "@shared/safe": ["../../packages/shared-ts/index.ts"],
+      "@shared/safe/*": ["../../packages/shared-ts/*"],
       "@ui/*": ["components/ui/*"],
       "@ui": ["components/ui"],
       "@layout/*": ["components/layout/*"],

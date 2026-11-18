@@ -11,6 +11,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import ThemedText from '../ui/ThemedText';
 import Icon, { IconName } from '../ui/Icon';
 import Badge from '../ui/Badge';
+import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import { theme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
@@ -253,15 +254,15 @@ export default function MobileBottomTabBar({
                   </ThemedText>
                 </View>
 
-                <Pressable
-                  onPress={() => setMoreOpen(false)}
-                  hitSlop={theme.spacing.sm}
-                  style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
-                  accessibilityRole="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon="close"
+                  iconOnly
                   accessibilityLabel="Close sheet"
-                >
-                  <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
-                </Pressable>
+                  tooltip="Close sheet"
+                  onPress={() => setMoreOpen(false)}
+                />
               </View>
 
               {/* Sheet Navigation Items */}
@@ -374,6 +375,7 @@ const styles = StyleSheet.create({
   },
   iconWrapperActive: {
     backgroundColor: theme.colors.primaryLight,
+    ...theme.shadows.brandSubtle,
   },
   tabLabel: applyFontFamily({
     fontSize: theme.fontSizes.xs,
@@ -449,6 +451,7 @@ const styles = StyleSheet.create({
   sheetItemActive: {
     backgroundColor: theme.colors.primaryLighter,
     borderColor: theme.colors.primaryBorder,
+    ...theme.shadows.brandSubtle,
   },
   sheetItemHovered: {
     backgroundColor: theme.colors.surfaceSubtle,

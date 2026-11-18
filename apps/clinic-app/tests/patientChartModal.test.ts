@@ -111,6 +111,8 @@ const {
   SplitPaneChartLayout,
   SlideOverDrawerChartLayout,
   CHART_LAYOUT_OPTIONS,
+  pushChartTabHistory,
+  popChartTabHistory,
 } = await import('../components/chart');
 const { default: HealthProfilesTab } = await import('../components/chart/HealthProfilesTab');
 const { getSessionItem, setSessionItem } = await import('../utils/deviceStorage');
@@ -347,7 +349,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(markup).not.toContain('Fallback Code 999');
   });
 
-  test('7. Renders External Document Vault tab with category filters and upload button', () => {
+  test('7. Renders Doc Vault tab with inline status filters and upload button (without External/Internal sub-tabs or category sub-filter chips)', () => {
     const markup = renderToStaticMarkup(
       React.createElement(PatientChartModal, {
         visible: true,
@@ -358,9 +360,17 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
       })
     );
 
-    expect(markup).toContain('All Records');
-    expect(markup).toContain('Outside Chest X-Ray');
-    expect(markup).toContain('Cert of Registration (COR)');
+    expect(markup).toContain('Doc Vault');
+    expect(markup).toContain('Admin Vault');
+    expect(markup).toContain('Pending Review');
+    expect(markup).toContain('Verified');
+    expect(markup).toContain('Rejected');
+    expect(markup).toContain('Attach External Document');
+    expect(markup).not.toContain('>External<');
+    expect(markup).not.toContain('>Internal<');
+    expect(markup).not.toContain('All Records');
+    expect(markup).not.toContain('Cert of Registration (COR)');
+    expect(markup).not.toContain('Outside Labs');
   });
 
   test('8. Handles loading state by rendering SkeletonList', () => {
@@ -428,19 +438,46 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(markup).not.toContain('>Edit Demographics<');
   });
 
-  test('12. HealthProfilesTab renders horizontally scrollable sub-tabs with all sections', () => {
-    const markup = renderToStaticMarkup(
+  test('12. HealthProfilesTab renders horizontally scrollable sub-tabs with all sections for female patients and filters for male patients', () => {
+    // 12a. Female patient renders all 4 statutory sub-tabs
+    const femaleMarkup = renderToStaticMarkup(
       React.createElement(HealthProfilesTab, {
-        patient: mockPatient,
+        patient: { ...mockPatient, sex: 'Female' },
       })
     );
 
-    // Rendered inside ScrollView
-    expect(markup).toContain('data-component="ScrollView"');
-    expect(markup).toContain('Surgical &amp; Clinical');
-    expect(markup).toContain('Lifestyle &amp; Social');
-    expect(markup).toContain('Reproductive / OB-GYN');
-    expect(markup).toContain('Cardiometabolic &amp; NCD');
+    expect(femaleMarkup).toContain('data-component="ScrollView"');
+    expect(femaleMarkup).toContain('Surgical &amp; Clinical');
+    expect(femaleMarkup).toContain('Lifestyle &amp; Social');
+    expect(femaleMarkup).toContain('Reproductive / OB-GYN');
+    expect(femaleMarkup).toContain('Cardiometabolic &amp; NCD');
+
+    // 12b. Issue #187: Male patient with no reproductive history hides Reproductive / OB-GYN
+    const maleMarkup = renderToStaticMarkup(
+      React.createElement(HealthProfilesTab, {
+        patient: mockPatient, // sex: 'Male'
+      })
+    );
+    expect(maleMarkup).toContain('Surgical &amp; Clinical');
+    expect(maleMarkup).toContain('Lifestyle &amp; Social');
+    expect(maleMarkup).not.toContain('Reproductive / OB-GYN');
+    expect(maleMarkup).toContain('Cardiometabolic &amp; NCD');
+
+    // 12c. Issue #187: Male patient with historical reproductive data preserves Reproductive / OB-GYN
+    const maleWithDataMarkup = renderToStaticMarkup(
+      React.createElement(HealthProfilesTab, {
+        patient: mockPatient,
+        reproductiveHistory: {
+          id: 'rep-001',
+          clinicId: 'cln-1',
+          patientId: mockPatient.id,
+          isApplicable: true,
+          isMenopausal: false,
+          hadPreEclampsiaHypertension: false,
+        },
+      })
+    );
+    expect(maleWithDataMarkup).toContain('Reproductive / OB-GYN');
   });
 
   test('13. Storage helpers persist and retrieve active chart tab and sub-tab', () => {
@@ -616,11 +653,11 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
       })
     );
 
-    expect(markup).toContain('Administer Vaccine');
-    expect(markup).toContain('Add Historical Vaccine');
+    expect(markup).toContain('Administer Vax');
+    expect(markup).toContain('Log Vax History');
     expect(markup).not.toContain('+ +');
-    expect(markup).not.toContain('+ Administer Vaccine');
-    expect(markup).not.toContain('+ Add Historical Vaccine');
+    expect(markup).not.toContain('+ Administer Vax');
+    expect(markup).not.toContain('+ Log Vax History');
   });
 
   test('21. PatientChartModal renders all 7 longitudinal tabs seamlessly across all 3 workstation layouts', () => {
@@ -816,5 +853,216 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(markup).toContain('aria-label="Refresh patient chart"');
     expect(markup).toContain('lucide-refresh-cw');
     expect(markup).toContain('role="image"');
+  });
+
+  test('27. Authoritative ClinicPatient PhilHealth PIN wins over stale chart demographics PIN and normalizes blood type enum', () => {
+    const updatedPatient: ClinicPatient = {
+      ...mockPatient,
+      philHealthNumber: '19-124741828-8',
+      bloodType: 'APositive',
+    };
+    const staleChart: PatientChart = {
+      ...mockChart,
+      demographics: {
+        ...mockChart.demographics,
+        philHealthNumber: '19-124741828-1',
+        bloodType: 'A+',
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientChartModal, {
+        visible: true,
+        patient: updatedPatient,
+        patientChart: staleChart,
+        preferredLayout: 'modal',
+        onClose: () => {},
+      })
+    );
+
+    expect(markup).toContain('PIN: 19-124741828-8');
+    expect(markup).not.toContain('19-124741828-1');
+    expect(markup).toContain('A+');
+    expect(markup).not.toContain('APositive');
+  });
+
+  test('28. Patient Chart tab history stack supports multi-step Back navigation and skips unavailable tabs', () => {
+    let history: string[] = [];
+    history = pushChartTabHistory(history, 'summary', 'summary');
+    expect(history).toEqual([]);
+
+    history = pushChartTabHistory(history, 'summary', 'diagnostics');
+    expect(history).toEqual(['summary']);
+
+    history = pushChartTabHistory(history, 'diagnostics', 'dental');
+    history = pushChartTabHistory(history, 'dental', 'vault');
+    expect(history).toEqual(['summary', 'diagnostics', 'dental']);
+
+    // When dental is allowed, popping returns dental first
+    const step1 = popChartTabHistory(history, ['summary', 'diagnostics', 'dental', 'vault']);
+    expect(step1.previousTab).toBe('dental');
+    expect(step1.nextHistory).toEqual(['summary', 'diagnostics']);
+
+    // When dental is disallowed, popping skips dental and returns diagnostics
+    const skipped = popChartTabHistory(history, ['summary', 'diagnostics', 'vault']);
+    expect(skipped.previousTab).toBe('diagnostics');
+    expect(skipped.nextHistory).toEqual(['summary']);
+  });
+
+  test('29. All three Patient Chart layouts render Back to previous section button when canGoBackTab is true', () => {
+    const baseProps = {
+      patient: mockPatient,
+      patientChart: mockChart,
+      activeTab: 'diagnostics' as const,
+      onTabChange: () => {},
+      onClose: () => {},
+      onEditDemographics: () => {},
+      currentLayout: 'modal' as const,
+      onSwitchLayout: () => {},
+      canGoBackTab: true,
+      previousTabLabel: 'Summary',
+      onBackTab: () => {},
+    };
+
+    const modalHtml = renderToStaticMarkup(React.createElement(CenteredModalChartLayout, baseProps));
+    expect(modalHtml).toContain('aria-label="Back to Summary"');
+    expect(modalHtml).not.toContain('>Back<');
+
+    const splitHtml = renderToStaticMarkup(
+      React.createElement(SplitPaneChartLayout, { ...baseProps, currentLayout: 'split' })
+    );
+    expect(splitHtml).toContain('aria-label="Back to Summary"');
+    expect(splitHtml).not.toContain('>Back<');
+
+    const drawerHtml = renderToStaticMarkup(
+      React.createElement(SlideOverDrawerChartLayout, { ...baseProps, currentLayout: 'drawer' })
+    );
+    expect(drawerHtml).toContain('aria-label="Back to Summary"');
+    expect(drawerHtml).not.toContain('>Back<');
+
+    const initialModalHtml = renderToStaticMarkup(
+      React.createElement(CenteredModalChartLayout, {
+        ...baseProps,
+        canGoBackTab: false,
+        onBackTab: undefined,
+      })
+    );
+    expect(initialModalHtml).not.toContain('aria-label="Back to Summary"');
+  });
+
+  test('30. Consultations workstation wires Patient Chart expand/collapse, Back button, WALKEDIN ATC default, and Vitals metadata', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const consultSource = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx'),
+      'utf8'
+    );
+
+    expect(consultSource).toContain("useState<string>('WALKEDIN')");
+    expect(consultSource).not.toContain('ICD-10 linked to PhilHealth');
+    expect(consultSource).toContain('expand-patient-chart-btn');
+    expect(consultSource).toContain('collapse-patient-chart-btn');
+    expect(consultSource).toContain('patient-chart-back-btn');
+    expect(consultSource).toContain('latestVitalsRecordedMeta');
+  });
+
+  test('31. Issue #172: Gating hides Dental Chart tab and clamps to summary when specialtyMode is Medical and patient has no dental teeth, even if initialTab or activeTab="dental" is requested', () => {
+    (globalThis as any).__mockClinicContext = {
+      settings: {
+        specialtyMode: 'Medical',
+        enableDentalModule: false,
+      },
+    };
+
+    try {
+      const markup = renderToStaticMarkup(
+        React.createElement(PatientChartModal, {
+          visible: true,
+          patient: mockPatient,
+          patientChart: mockChart,
+          activeTab: 'dental',
+          initialTab: 'dental',
+          onClose: () => {},
+        })
+      );
+
+      // Dental Chart tab should be completely hidden from the segmented control / tabs
+      expect(markup).not.toContain('value="dental"');
+      expect(markup).not.toContain('Dental Chart');
+      // Odontogram visualizer should NOT be rendered
+      expect(markup).not.toContain('Odontogram Visualizer');
+      // Clamps cleanly to summary
+      expect(markup).toContain('aria-label="Summary"');
+      expect(markup).toContain('Recent Diagnostic Lab Orders');
+    } finally {
+      delete (globalThis as any).__mockClinicContext;
+    }
+  });
+
+  test('32. Issue #172: Preserves Dental Chart tab when specialtyMode is Medical if patient has persisted longitudinal dental findings', () => {
+    (globalThis as any).__mockClinicContext = {
+      settings: {
+        specialtyMode: 'Medical',
+        enableDentalModule: false,
+      },
+    };
+
+    const dentalChartData: PatientChart = {
+      ...mockChart,
+      dentalTeeth: [
+        {
+          id: 'dt-hist-1',
+          tenantId: 'tenant-1',
+          clinicId: 'clinic-1',
+          patientId: 'pat-001',
+          toothNumber: 21,
+          status: 'Restored',
+          surface: 'M',
+          notes: 'Composite restoration',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    };
+
+    try {
+      const markup = renderToStaticMarkup(
+        React.createElement(PatientChartModal, {
+          visible: true,
+          patient: mockPatient,
+          patientChart: dentalChartData,
+          activeTab: 'dental',
+          initialTab: 'dental',
+          onClose: () => {},
+        })
+      );
+
+      // Dental Chart tab should be preserved because patient has persisted dental teeth
+      expect(markup).toContain('Dental Chart');
+      expect(markup).toContain('Odontogram Visualizer');
+      expect(markup).toContain('aria-label="Tooth 21, status Restored"');
+    } finally {
+      delete (globalThis as any).__mockClinicContext;
+    }
+  });
+
+  test('33. Issue #172: Tab clamping skips unavailable dental tab when navigating tab history in Medical mode', () => {
+    (globalThis as any).__mockClinicContext = {
+      settings: {
+        specialtyMode: 'Medical',
+        enableDentalModule: false,
+      },
+    };
+
+    try {
+      let history: string[] = ['summary', 'diagnostics', 'dental'];
+      // Pop history when dental is unavailable in Medical mode
+      const allowed = ['summary', 'diagnostics', 'vault', 'documents'];
+      const popped = popChartTabHistory(history, allowed);
+      expect(popped.previousTab).toBe('diagnostics');
+      expect(popped.nextHistory).toEqual(['summary']);
+    } finally {
+      delete (globalThis as any).__mockClinicContext;
+    }
   });
 });

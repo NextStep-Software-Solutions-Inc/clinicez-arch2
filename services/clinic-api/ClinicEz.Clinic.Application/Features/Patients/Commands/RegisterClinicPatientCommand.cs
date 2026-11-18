@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Exceptions;
 using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
@@ -11,6 +12,7 @@ using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Workspace;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -62,7 +64,9 @@ public sealed record RegisterClinicPatientCommand(
     Guid? SyncPatientId = null,
     string? GenderIdentity = null,
     List<PatientAddressDto>? Addresses = null,
-    List<PatientGuardianDto>? Guardians = null) : IRequest<ClinicPatientDto>;
+    List<PatientGuardianDto>? Guardians = null,
+    string? PatientCode = null,
+    string? SeriesPrefix = null) : IRequest<ClinicPatientDto>;
 
 public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<RegisterClinicPatientCommand, ClinicPatientDto>
 {
@@ -133,7 +137,24 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
     public async Task<ClinicPatientDto> Handle(RegisterClinicPatientCommand request, CancellationToken ct)
     {
         var year = DateTime.UtcNow.Year;
-        var patientCode = await _codeGenerator.GenerateNextCodeAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
+        var hasExplicitPatientCode = !string.IsNullOrWhiteSpace(request.PatientCode);
+        string patientCode;
+        if (hasExplicitPatientCode)
+        {
+            patientCode = request.PatientCode!.Trim();
+            var existingDuplicateCode = await _patientRepo
+                .Query(p => p.ClinicId == _clinicContext.ClinicId && p.PatientCode == patientCode)
+                .AnyAsync(ct);
+
+            if (existingDuplicateCode)
+            {
+                throw new DuplicatePatientCodeConflictException(patientCode);
+            }
+        }
+        else
+        {
+            patientCode = await _codeGenerator.GenerateNextCodeAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
+        }
 
         // Prepare custom fields dictionary and map intake address / emergency contact
         var customFields = request.CustomFields != null
@@ -142,10 +163,16 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
 
         if (_customFieldRepo != null)
         {
+            var staticContext = new PatientStaticContext(
+                Sex: request.Sex,
+                CivilStatus: request.CivilStatus,
+                DateOfBirth: request.DateOfBirth);
+
             await CustomFieldValueValidator.ValidateAndNormalizeAsync(
                 customFields,
                 _customFieldRepo,
                 "Patient",
+                staticContext,
                 ct);
         }
 
@@ -189,7 +216,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             PhilHealthNumber = request.PhilHealthNumber?.Trim(),
             SeniorCitizenId = request.SeniorCitizenId?.Trim(),
             PwdId = request.PwdId?.Trim(),
-            BloodType = Enum.TryParse<BloodType>(request.BloodType, true, out var bt) ? bt : null,
+            BloodType = BloodTypeParser.TryParse(request.BloodType, out var bt) ? bt : null,
             LandlineNumber = request.LandlineNumber?.Trim(),
             MaidenLastName = request.MaidenLastName?.Trim(),
             PreferredName = request.PreferredName?.Trim(),
@@ -300,7 +327,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
 
                 var allergy = new PatientAllergy
                 {
-                    Id = Guid.NewGuid(),
+                    Id = _allergyRepo != null ? Guid.NewGuid() : Guid.Empty,
                     TenantId = _clinicContext.TenantId,
                     ClinicId = _clinicContext.ClinicId,
                     PatientId = patient.Id,
@@ -331,7 +358,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             {
                 var allergy = new PatientAllergy
                 {
-                    Id = Guid.NewGuid(),
+                    Id = _allergyRepo != null ? Guid.NewGuid() : Guid.Empty,
                     TenantId = _clinicContext.TenantId,
                     ClinicId = _clinicContext.ClinicId,
                     PatientId = patient.Id,
@@ -358,7 +385,6 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             {
                 var alert = new PatientAlert
                 {
-                    Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,
                     ClinicId = _clinicContext.ClinicId,
                     PatientId = patient.Id,
@@ -370,9 +396,10 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                 };
                 patient.Alerts.Add(alert);
             }
+            patient.HasActiveSafetyAlert = alertTitles.Length > 0;
         }
 
-        if (!string.IsNullOrWhiteSpace(request.ChronicConditions))
+        if ((request.MedicalHistories == null || request.MedicalHistories.Count == 0) && !string.IsNullOrWhiteSpace(request.ChronicConditions))
         {
             var split = request.ChronicConditions.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             foreach (var cond in split)
@@ -381,7 +408,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                 {
                     var hist = new PatientMedicalHistory
                     {
-                        Id = Guid.NewGuid(),
+                        Id = _medicalRepo != null ? Guid.NewGuid() : Guid.Empty,
                         TenantId = _clinicContext.TenantId,
                         ClinicId = _clinicContext.ClinicId,
                         PatientId = patient.Id,
@@ -437,13 +464,18 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         {
             var today = request.QueueDate
                 ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, ct, _settingsRepo);
-            var lastSequence = await _queueRepo.Query(q =>
-                q.ClinicId == _clinicContext.ClinicId &&
-                q.QueueDate == today)
-                .MaxAsync(q => (int?)q.SequenceNumber, ct) ?? 0;
+            var isSeniorOrPwd = PatientPriorityHelper.IsSeniorOrPwd(patient, today);
+            var seriesPrefix = PatientPriorityHelper.ResolveSeriesPrefix(
+                VisitType.RoutineCheckup,
+                isSeniorOrPwd,
+                request.SeriesPrefix);
 
-            var nextSequence = lastSequence + 1;
-            var queueNumber = $"Q-{nextSequence:D3}";
+            var (nextSequence, queueNumber) = await QueueSeriesHelper.GetNextQueueSequenceAsync(
+                _queueRepo,
+                _clinicContext.ClinicId,
+                today,
+                seriesPrefix,
+                ct);
 
             var priority = QueuePriority.Routine;
             if (!string.IsNullOrWhiteSpace(request.Priority))
@@ -544,6 +576,16 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             allergiesSummary = string.Join(", ", existingItems.Concat(structuredItems));
         }
 
+        if (hasExplicitPatientCode)
+        {
+            await _unitOfWork.SaveChangesAsync(ct);
+            if (patient.PatientCode.StartsWith($"PAT-{year}-", StringComparison.OrdinalIgnoreCase))
+            {
+                await _codeGenerator.SynchronizeTrackerWithMaxExistingAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
+            }
+            return MapToDto(patient, queueItem?.QueueNumber, queueItem?.Id, allergiesSummary);
+        }
+
         const int maxAttempts = 3;
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
@@ -559,6 +601,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                     throw new InvalidOperationException("Failed to register patient after multiple sequence allocation attempts.", ex);
                 }
 
+                await _codeGenerator.SynchronizeTrackerWithMaxExistingAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
                 var nextCode = await _codeGenerator.GenerateNextCodeAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
                 patient.PatientCode = nextCode;
             }
@@ -596,6 +639,26 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                 m.ClinicalNotes,
                 m.CreatedAt)).ToList();
 
+        var structuredAllergiesDto = p.Allergies?
+            .Where(a => !a.IsDeleted && a.Status == AllergyStatus.Active)
+            .OrderByDescending(a => a.IsAnaphylactic)
+            .ThenBy(a => a.Allergen)
+            .Select(a => new PatientAllergyDto(
+                a.Id,
+                a.ClinicId,
+                a.PatientId,
+                a.Category.ToString(),
+                a.Allergen,
+                a.AllergenDrugCode,
+                a.Severity.ToString(),
+                a.ReactionManifestation,
+                a.IsAnaphylactic,
+                a.Status.ToString(),
+                a.OnsetDate,
+                a.Notes,
+                a.CreatedAt))
+            .ToList();
+
         var allergiesText = allergiesOverride ?? (p.Allergies != null && p.Allergies.Count > 0
             ? string.Join(", ", p.Allergies.Where(a => !a.IsDeleted && a.Status == AllergyStatus.Active).Select(a => a.Allergen))
             : null);
@@ -604,6 +667,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         var chronicConditions = p.MedicalHistories != null && p.MedicalHistories.Count > 0
             ? string.Join(", ", p.MedicalHistories.Where(m => !m.IsDeleted).Select(m => (!string.IsNullOrWhiteSpace(m.SpecificDescription) && (string.Equals(m.ConditionTitle, "Others", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(m.ConditionTitle))) ? m.SpecificDescription.Trim() : m.ConditionTitle.Trim()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase))
             : null;
+        if (string.IsNullOrWhiteSpace(chronicConditions)) chronicConditions = null;
 
         var alertsText = p.Alerts != null && p.Alerts.Count > 0
             ? string.Join(", ", p.Alerts.Where(a => !a.IsDeleted && a.Status == PatientAlertStatus.Active).Select(a => a.Title))
@@ -632,7 +696,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             p.PhilHealthNumber,
             p.SeniorCitizenId,
             p.PwdId,
-            p.BloodType?.ToString(),
+            BloodTypeParser.Format(p.BloodType),
             p.CreatedAt,
             p.CustomFields,
             p.VerificationStatus.ToString(),
@@ -653,7 +717,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             SyncPatientId: p.CloudPatientId,
             GenderIdentity: p.GenderIdentity,
             Addresses: addressesDto,
-            Guardians: guardiansDto);
+            Guardians: guardiansDto,
+            StructuredAllergies: structuredAllergiesDto);
     }
 
     public static List<PatientAddressDto>? MapAddresses(IEnumerable<PatientAddress>? addresses)

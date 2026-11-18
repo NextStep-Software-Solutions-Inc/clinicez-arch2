@@ -479,6 +479,58 @@ public class ChallengerM3KioskAndRoleElevationAdversarialTests
     }
 
     [Fact]
+    public async Task DomainEventDispatchSaveChangesInterceptor_DispatchesConsultationSignedDomainEvent_ViaRealMediatR_WithoutNotificationException()
+    {
+        // Arrange: Real MediatR registration
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(ConsultationSignedDomainEvent).Assembly));
+        var serviceProvider = services.BuildServiceProvider();
+
+        var interceptor = new DomainEventDispatchSaveChangesInterceptor(serviceProvider);
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(_clinicId);
+        clinicContext.TenantId.Returns(_tenantId);
+
+        var dbOptions = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase($"Test_Interceptor_RealMediatR_{Guid.NewGuid()}")
+            .AddInterceptors(interceptor)
+            .Options;
+
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new[]
+        {
+            new KeyValuePair<string, string?>("DbSchema", "public")
+        }).Build();
+
+        using var db = new ApplicationDbContext(dbOptions, config, clinicContext);
+
+        var encounter = new ConsultationEncounter
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Emilio Aguinaldo",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Antonio Luna",
+            EncounterDate = DateTime.UtcNow
+        };
+        db.Consultations.Add(encounter);
+        await db.SaveChangesAsync();
+
+        // Act: Sign and SaveChanges with real MediatR
+        encounter.Sign("PRC-9999", "PTR-8888", "S2-7777");
+        encounter.DomainEvents.Should().HaveCount(1);
+
+        // This must not throw "notification does not implement $INotification"
+        var act = async () => await db.SaveChangesAsync();
+        await act.Should().NotThrowAsync();
+
+        encounter.DomainEvents.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task DomainEventDispatchSaveChangesInterceptor_MaintainsActiveSafetyAlert_WhenPatientAlertChanges()
     {
         // Arrange

@@ -17,6 +17,7 @@ import { facilityService } from "@/services/facility.service";
 import { staffService, type StaffMemberDto } from "@/services/staff.service";
 import { AllocationEditor } from "./AllocationEditor";
 import { UsageBar } from "./UsageBar";
+import { TeleconsultPaygCard } from "../billing/components/TeleconsultPaygCard";
 
 interface LimitRow {
   key: string;
@@ -338,6 +339,9 @@ export default function PlanClient({ tenantSlug }: PlanClientProps) {
                 })}
               </CardContent>
             </Card>
+
+            {/* Pay-As-You-Go Teleconsultation Add-On */}
+            <TeleconsultPaygCard tenantSlug={tenantSlug} />
           </TabsContent>
 
           <TabsContent value="allocation">

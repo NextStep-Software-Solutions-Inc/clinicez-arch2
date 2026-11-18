@@ -2,8 +2,9 @@ import React from 'react';
 import { View, StyleSheet, Pressable, type StyleProp, type ViewStyle } from 'react-native';
 import { ThemedText, Badge, Button, Card, Icon, ActionMenu, type ActionMenuItem } from '@ui';
 import { theme } from '@constants/theme';
+import { formatBloodTypeLabel } from '../../constants/bloodTypes';
 import { formatLongAge } from '../../utils/age';
-import type { ClinicPatient, StaffMember } from '../../services/clinicService';
+import type { ClinicPatient, StaffMember, VisitType } from '../../services/clinicService';
 import { computePatientLocation } from './patientLocation';
 
 export { computePatientLocation };
@@ -24,8 +25,10 @@ export function isMyPatient(
     return (
       patient.customFields?.assigned_doctor_id === staffId ||
       patient.customFields?.doctor_id === staffId ||
+      patient.customFields?.activeQueueDoctorId === staffId ||
       (patient as any).activeQueueDoctorId === staffId ||
-      (patient as any).doctorId === staffId
+      (patient as any).doctorId === staffId ||
+      Boolean(patient.activeQueueTickets?.some((t) => t.doctorId === staffId))
     );
   }
 
@@ -33,13 +36,15 @@ export function isMyPatient(
     const nurseRooms = currentStaff.assignedRoomIds ?? (currentStaff.assignedRoomId ? [currentStaff.assignedRoomId] : []);
     const patientRoomId = (patient as any).roomId || (patient as any).activeQueueRoomId || patient.customFields?.room_id || patient.customFields?.assigned_room_id;
     const roomMatch = !!patientRoomId && nurseRooms.includes(patientRoomId);
+    const ticketRoomMatch = Boolean(patient.activeQueueTickets?.some((t) => !!t.roomId && nurseRooms.includes(t.roomId)));
 
     return (
       patient.customFields?.nurse_id === staffId ||
       patient.customFields?.assigned_nurse_id === staffId ||
       patient.customFields?.vitals_recorded_by_nurse_id === staffId ||
       patient.customFields?.recorded_by_nurse_id === staffId ||
-      roomMatch
+      roomMatch ||
+      ticketRoomMatch
     );
   }
 
@@ -49,19 +54,15 @@ export function isMyPatient(
     patient.customFields?.nurse_id === staffId ||
     patient.customFields?.assigned_nurse_id === staffId ||
     patient.customFields?.staff_id === staffId ||
+    patient.customFields?.activeQueueDoctorId === staffId ||
     (patient as any).activeQueueDoctorId === staffId ||
-    (patient as any).doctorId === staffId
+    (patient as any).doctorId === staffId ||
+    Boolean(patient.activeQueueTickets?.some((t) => t.doctorId === staffId))
   );
 }
 
 
 export type PatientDirectoryViewMode = 'cards' | 'table';
-
-export type ClinicalServiceType =
-  | 'Doctor Consultation'
-  | 'Vitals Check'
-  | 'Clinical Procedure'
-  | 'Administrative & Clearance';
 
 export interface PatientDirectoryCardProps {
   patient: ClinicPatient;
@@ -76,9 +77,9 @@ export interface PatientDirectoryCardProps {
   onOpenPhilHealth?: (patient: ClinicPatient) => void;
   onScheduleVisit?: (patient: ClinicPatient) => void;
   onBookAppointment?: (patient: ClinicPatient) => void;
-  onAddToQueue?: (patient: ClinicPatient, serviceType?: ClinicalServiceType) => void;
-  onQueuePatient?: (patient: ClinicPatient, serviceType?: ClinicalServiceType) => void;
-  onSelectService?: (patient: ClinicPatient, serviceType: ClinicalServiceType) => void;
+  onAddToQueue?: (patient: ClinicPatient, visitType?: VisitType) => void;
+  onQueuePatient?: (patient: ClinicPatient, visitType?: VisitType) => void;
+  onSelectService?: (patient: ClinicPatient, visitType: VisitType) => void;
   onStartConsultation?: (patient: ClinicPatient) => void;
   onStartProfiling?: (patient: ClinicPatient) => void;
   onRecordVitals?: (patient: ClinicPatient) => void;
@@ -143,11 +144,13 @@ export function formatPatientDemographicsLine(
     ? `${patient.age} yrs`
     : null;
 
+  const bloodTypeDisplay = formatBloodTypeLabel(patient.bloodType);
+
   return [
     ageDisplay,
     patient.sex,
     patient.civilStatus,
-    patient.bloodType ? `Blood type ${patient.bloodType}` : null,
+    bloodTypeDisplay ? `Blood type ${bloodTypeDisplay}` : null,
   ]
     .filter(Boolean)
     .join(' • ');
@@ -164,9 +167,9 @@ export function buildPatientOverflowMenuItems(
     onOpenChart?: (p: ClinicPatient) => void;
     onScheduleVisit?: (p: ClinicPatient) => void;
     onBookAppointment?: (p: ClinicPatient) => void;
-    onSelectService?: (p: ClinicPatient, serviceType: ClinicalServiceType) => void;
-    onQueuePatient?: (p: ClinicPatient, serviceType?: ClinicalServiceType) => void;
-    onAddToQueue?: (p: ClinicPatient, serviceType?: ClinicalServiceType) => void;
+    onSelectService?: (p: ClinicPatient, visitType: VisitType) => void;
+    onQueuePatient?: (p: ClinicPatient, visitType?: VisitType) => void;
+    onAddToQueue?: (p: ClinicPatient, visitType?: VisitType) => void;
     onStartConsultation?: (p: ClinicPatient) => void;
     onStartProfiling?: (p: ClinicPatient) => void;
     onRecordVitals?: (p: ClinicPatient) => void;
@@ -179,20 +182,16 @@ export function buildPatientOverflowMenuItems(
   if (handlers.onEditDemographics) {
     items.push({
       id: 'edit-demographics',
-      label: 'Edit Demographics',
+      label: 'Edit info',
       icon: 'edit',
-      hint: 'Update personal, contact, and identity details',
       onPress: () => handlers.onEditDemographics!(patient),
     });
   }
   if (handlers.onOpenPhilHealth) {
     items.push({
       id: 'philhealth-profile',
-      label: 'PhilHealth Profile',
+      label: 'PhilHealth info',
       icon: 'shield',
-      hint: patient.philHealthNumber
-        ? `PIN: ${patient.philHealthNumber}`
-        : 'Configure Konsulta PIN & membership',
       onPress: () => handlers.onOpenPhilHealth!(patient),
     });
   }
@@ -227,80 +226,77 @@ export function buildPatientOverflowMenuItems(
     if (handlers.onStartConsultation) {
       items.push({
         id: 'service-consultation',
-        label: 'Doctor Consultation',
+        label: 'Consult',
         icon: 'stethoscope',
         dividerBefore: true,
-        hint: 'Physician evaluation & care',
         onPress: () => handlers.onStartConsultation!(patient),
       });
     }
     if (handlers.onStartProfiling && (handlers.hasPhilHealthAccreditation || patient.philHealthNumber)) {
       items.push({
         id: 'start-profiling',
-        label: 'Start Patient Profiling (Yakap FPE)',
+        label: 'Health screening',
         icon: 'shield',
-        hint: 'Yakap risk profiling & health exam',
         onPress: () => handlers.onStartProfiling!(patient),
       });
     }
     if (handlers.onRecordVitals) {
       items.push({
         id: 'service-vitals',
-        label: 'Vitals Check',
+        label: 'Vitals',
         icon: 'activity',
-        hint: 'Blood pressure & triage monitoring',
         onPress: () => handlers.onRecordVitals!(patient),
       });
     }
     if (handlers.onPerformProcedure) {
       items.push({
         id: 'service-procedure',
-        label: 'Clinical Procedure',
+        label: 'Start procedure',
         icon: 'syringe',
-        hint: 'Wound care, injection, or dressing',
         onPress: () => handlers.onPerformProcedure!(patient),
       });
     }
     if (handlers.onIssueClearance) {
       items.push({
         id: 'service-administrative',
-        label: 'Administrative & Clearance',
+        label: 'Medical certificate',
         icon: 'file',
-        hint: 'Medical certificate & clearances',
         onPress: () => handlers.onIssueClearance!(patient),
       });
     }
   } else {
-    const serviceHandler = handlers.onSelectService || handlers.onQueuePatient || handlers.onAddToQueue;
-    if (serviceHandler) {
+    const queueHandler = handlers.onSelectService || handlers.onQueuePatient || handlers.onAddToQueue;
+    if (queueHandler) {
       items.push({
-        id: 'service-consultation',
-        label: 'Doctor Consultation',
+        id: 'visit-routine-checkup',
+        label: 'Routine Checkup',
         icon: 'stethoscope',
         dividerBefore: true,
-        hint: 'Physician evaluation & care',
-        onPress: () => serviceHandler(patient, 'Doctor Consultation'),
+        onPress: () => queueHandler(patient, 'RoutineCheckup'),
       });
       items.push({
-        id: 'service-vitals',
-        label: 'Vitals Check',
+        id: 'visit-acute-illness',
+        label: 'Acute Illness Consultation',
         icon: 'activity',
-        hint: 'Blood pressure & triage monitoring',
-        onPress: () => serviceHandler(patient, 'Vitals Check'),
+        onPress: () => queueHandler(patient, 'AcuteIllnessConsultation'),
       });
       items.push({
-        id: 'service-procedure',
-        label: 'Clinical Procedure',
-        icon: 'syringe',
-        hint: 'Wound care, injection, or dressing',
-        onPress: () => serviceHandler(patient, 'Clinical Procedure'),
+        id: 'visit-chronic-followup',
+        label: 'Chronic Disease Follow-Up',
+        icon: 'refresh',
+        onPress: () => queueHandler(patient, 'ChronicDiseaseFollowUp'),
       });
       items.push({
-        id: 'service-administrative',
-        label: 'Administrative & Clearance',
-        icon: 'file',
-        hint: 'Medical certificate & clearances',
-        onPress: () => serviceHandler(patient, 'Administrative & Clearance'),
+        id: 'visit-preventive-assessment',
+        label: 'Preventive Health Assessment',
+        icon: 'heartPulse',
+        onPress: () => queueHandler(patient, 'PreventiveHealthAssessment'),
+      });
+      items.push({
+        id: 'visit-urgent-care',
+        label: 'Urgent Care Visit',
+        icon: 'emergency',
+        onPress: () => queueHandler(patient, 'UrgentCareVisit'),
       });
     }
   }
@@ -369,9 +365,6 @@ function PatientDirectoryCard({
   const isQueued = Boolean(patient.activeQueueTicket);
   const activeTicketCount = patient.activeQueueTickets?.length ?? (isQueued ? 1 : 0);
   const isMultiTicket = activeTicketCount > 1;
-  const queueBadgeLabel = isMultiTicket
-    ? `In Queue • ${patient.activeQueueTicket} (+${activeTicketCount - 1})`
-    : `In Queue • ${patient.activeQueueTicket}`;
   const queuedButtonLabel = isMultiTicket
     ? `Queued (${patient.activeQueueTicket} +${activeTicketCount - 1})`
     : `Queued (${patient.activeQueueTicket})`;
@@ -420,9 +413,6 @@ function PatientDirectoryCard({
                 {patient.clinicEzId ? (
                   <Badge label={patient.clinicEzId} variant="primary" size="sm" />
                 ) : null}
-                {isQueued ? (
-                  <Badge label={queueBadgeLabel} variant="routine" size="sm" icon="ticket" />
-                ) : null}
                 {patient.verificationStatus === 'PendingVerification' ? (
                   <Badge label="Pending" variant="warning" size="sm" icon="hourglass" />
                 ) : null}
@@ -454,11 +444,11 @@ function PatientDirectoryCard({
         {/* Column 3: Contact & Statutory IDs */}
         <View style={styles.tableColContact}>
           {patient.contactNumber || location ? (
-            <View style={styles.contactInlineRow}>
+            <View style={styles.contactStack}>
               {patient.contactNumber ? (
                 <View style={styles.iconMetaItem}>
                   <Icon name="phone" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-                  <ThemedText variant="small" color={theme.colors.textSecondary}>
+                  <ThemedText variant="small" color={theme.colors.textSecondary} numberOfLines={1}>
                     {patient.contactNumber}
                   </ThemedText>
                 </View>
@@ -498,7 +488,7 @@ function PatientDirectoryCard({
                   <ThemedText
                     variant="captionBold"
                     color={theme.colors.emergencyText}
-                    style={styles.noticeText}
+                    style={styles.tableAlertText}
                     numberOfLines={2}
                   >
                     Allergies: {patient.allergies}
@@ -511,7 +501,7 @@ function PatientDirectoryCard({
                   <ThemedText
                     variant="captionBold"
                     color={theme.colors.warningText}
-                    style={styles.noticeText}
+                    style={styles.tableAlertText}
                     numberOfLines={2}
                   >
                     {patient.alerts}
@@ -534,6 +524,9 @@ function PatientDirectoryCard({
               variant="outline"
               size="sm"
               icon="clipboard"
+              numberOfLines={1}
+              style={styles.tableActionBtn}
+              textStyle={styles.actionBtnText}
               onPress={() => onOpenChart(patient)}
             />
           ) : null}
@@ -543,6 +536,9 @@ function PatientDirectoryCard({
               variant="secondary"
               size="sm"
               icon="calendar"
+              numberOfLines={1}
+              style={styles.tableActionBtn}
+              textStyle={styles.actionBtnText}
               onPress={() => handleScheduleVisit(patient)}
             />
           ) : null}
@@ -552,8 +548,11 @@ function PatientDirectoryCard({
               variant="primary"
               size="sm"
               icon={isQueued ? 'checkCircle' : 'plus'}
+              numberOfLines={1}
               loading={checkingIn}
               disabled={disableCheckIn}
+              style={styles.tableActionBtn}
+              textStyle={styles.actionBtnText}
               onPress={() => handleQueuePatient(patient)}
             />
           ) : null}
@@ -598,9 +597,6 @@ function PatientDirectoryCard({
               <Badge label={patient.patientCode} variant="neutral" />
               {patient.clinicEzId ? (
                 <Badge label={patient.clinicEzId} variant="primary" />
-              ) : null}
-              {isQueued ? (
-                <Badge label={queueBadgeLabel} variant="routine" icon="ticket" />
               ) : null}
               {patient.verificationStatus === 'PendingVerification' && (
                 <Badge label="Pending verification" variant="warning" icon="hourglass" />
@@ -900,37 +896,59 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   tableColIdentity: {
-    flex: 2.2,
-    minWidth: 180,
+    flexGrow: 2.2,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    overflow: 'hidden',
   },
   tableColDemographics: {
-    flex: 2.2,
-    minWidth: 180,
+    flexGrow: 2.1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    overflow: 'hidden',
     gap: theme.spacing.xs,
   },
   tableColContact: {
-    flex: 1.8,
-    minWidth: 150,
+    flexGrow: 2.0,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    overflow: 'hidden',
     gap: theme.spacing.xs,
   },
   tableColAlerts: {
-    flex: 1.8,
-    minWidth: 150,
+    flexGrow: 1.7,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    overflow: 'hidden',
   },
   tableColActions: {
+    width: 396,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 396,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: theme.spacing.xs,
-    minWidth: 240,
+  },
+  tableActionBtn: {
+    flexShrink: 0,
+    paddingHorizontal: theme.spacing.sm,
+    gap: theme.spacing.xs,
   },
   identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
+    minWidth: 0,
   },
   identityTextCol: {
     flex: 1,
+    minWidth: 0,
     gap: theme.spacing.xs,
   },
   inlineBadgesWrap: {
@@ -939,23 +957,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
-  contactInlineRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
+  contactStack: {
+    minWidth: 0,
+    gap: 2,
   },
   tableAlertsStack: {
+    alignItems: 'flex-start',
     gap: theme.spacing.xs,
   },
   compactAlertPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
     gap: theme.spacing.xs,
     borderWidth: theme.sizes.borderWidth,
     borderRadius: theme.radii.sm,
     paddingVertical: theme.spacing.xs,
     paddingHorizontal: theme.spacing.sm,
+  },
+  tableAlertText: {
+    flexShrink: 1,
   },
 });
 

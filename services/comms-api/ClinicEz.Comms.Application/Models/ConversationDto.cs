@@ -11,7 +11,7 @@ public sealed record ConversationDto(
     string? BranchId,
     ConversationScope Scope,
     ConversationKind Kind,
-    string Title,
+    string? Title,
     string? ContextType,
     string? ContextId,
     MessageCategory? Category,
@@ -46,4 +46,5 @@ public sealed record ConversationDto(
     string? TriagedByStaffName = null,
     DateTime? IdleDeadlineUtc = null,
     bool SlaBreached = false,
-    DateTime? SupervisorAlertedAtUtc = null);
+    DateTime? SupervisorAlertedAtUtc = null,
+    int UnreadCount = 0);

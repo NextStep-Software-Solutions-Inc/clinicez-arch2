@@ -229,7 +229,7 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
     #region 2. PhilHealth Konsulta YAKAP Exemption Integrity
 
     [Fact]
-    public async Task Attack2A_ActiveYakapEnlistment_AutoExemptsAndAdmits()
+    public async Task Attack2A_ActiveYakapEnlistment_DoesNotBypassPrepaymentGate()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -290,16 +290,11 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
             appointmentRepo, patientRepo, auditRepo, uow, _clinicContext, publisher,
             NullLogger<AdmitTeleconsultPatientCommandHandler>.Instance);
 
-        // Act
-        var result = await handler.Handle(new AdmitTeleconsultPatientCommand(appointmentId), CancellationToken.None);
-
-        // Assert
-        result.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Exempt);
-        result.IsEmergencyOverride.Should().BeFalse();
-        appointment.PaymentPolicy.Should().Be(TeleconsultPaymentPolicy.Exempt);
-        appointment.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Exempt);
-        appointment.PaymentMethod.Should().Be("PhilHealthKonsulta");
-        appointment.Status.Should().Be(AppointmentStatus.InConsultation);
+        // Act & Assert per F6: Yakap does not bypass prepayment gate.
+        var act = () => handler.Handle(new AdmitTeleconsultPatientCommand(appointmentId), CancellationToken.None);
+        var ex = await act.Should().ThrowAsync<TeleconsultPaymentRequiredException>();
+        ex.Which.AppointmentId.Should().Be(appointmentId);
+        appointment.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Pending);
     }
 
     [Fact]
@@ -557,13 +552,14 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
     [Fact]
     public async Task Attack3A_NonDoctorRole_ThrowsForbiddenException_403()
     {
-        // Arrange: Nurse or receptionist lacks ConsultationsSign permission
+        // Arrange: Nurse or receptionist lacks both ConsultationsSign and ConsultationsWrite permissions
         var unauthorizedContext = Substitute.For<IClinicContext>();
         unauthorizedContext.ClinicId.Returns(_clinicId);
         unauthorizedContext.TenantId.Returns(_tenantId);
         unauthorizedContext.StaffId.Returns(Guid.NewGuid());
         unauthorizedContext.StaffName.Returns("Nurse Joy");
         unauthorizedContext.HasPermission(ClinicPermissions.ConsultationsSign).Returns(false);
+        unauthorizedContext.HasPermission(ClinicPermissions.ConsultationsWrite).Returns(false);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(unauthorizedContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
@@ -608,7 +604,7 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public async Task Attack3B_DoctorEmptyOrNullReasonCode_ThrowsBadRequestException_400(string? emptyReasonCode)
+    public async Task Attack3B_DoctorEmptyOrNullReasonCode_DefaultsToStaffOverrideAndAdmits(string? emptyReasonCode)
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -644,10 +640,13 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
             ReasonNote: "Substantive clinical justification provided here"
         );
 
-        // Act & Assert
-        var act = () => handler.Handle(new AdmitTeleconsultPatientCommand(appointmentId, overrideDto), CancellationToken.None);
-        await act.Should().ThrowAsync<BadRequestException>()
-            .WithMessage("*Emergency override reason code is mandatory*");
+        // Act & Assert per F7: null/empty reason code defaults to STAFF-OVERRIDE when note >= 5 chars
+        var result = await handler.Handle(new AdmitTeleconsultPatientCommand(appointmentId, overrideDto), CancellationToken.None);
+        result.Should().NotBeNull();
+        result.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Overridden);
+        result.IsEmergencyOverride.Should().BeTrue();
+        appointment.PaymentStatus.Should().Be(TeleconsultPaymentStatus.Overridden);
+        appointment.EmergencyOverrideReasonCode.Should().Be("STAFF-OVERRIDE");
     }
 
     [Theory]

@@ -98,7 +98,9 @@ export default function SecuritySection() {
             ) : null}
             <View style={styles.row}>
               <Button title="Cancel" variant="secondary" onPress={() => setEditing(false)} disabled={busy} />
-              <Button title="Save" loading={busy} onPress={save} />
+              {pin.length > 0 || confirm.length > 0 || busy ? (
+                <Button title="Save" loading={busy} onPress={save} />
+              ) : null}
             </View>
           </View>
         ) : (

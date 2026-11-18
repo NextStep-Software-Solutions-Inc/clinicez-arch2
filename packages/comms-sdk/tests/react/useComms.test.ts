@@ -24,6 +24,7 @@ function createMockContext(client = new MockCommsClient()): InternalCommsContext
     facilityId: 'facility-test',
     staffId: 'staff-1',
     staffDisplayName: 'Dr. Santos',
+    baseUrl: 'https://comms.local',
     connect: async () => {},
     disconnect: async () => {
       await client.disconnect();

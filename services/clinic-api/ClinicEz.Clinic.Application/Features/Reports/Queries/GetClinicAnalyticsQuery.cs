@@ -203,7 +203,7 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
             .Select(g => new ServiceUsageDto("Procedure", g.ProcedureName, g.Quantity))
             .ToList();
 
-        var labOrders = await _labOrderRepo.Query(o => o.OrderDate >= start && o.OrderDate < end)
+        var labOrders = await _labOrderRepo.Query(o => o.OrderDate >= start && o.OrderDate < end && o.IsSigned && o.Status != LabOrderStatus.Cancelled)
             .Select(o => o.Items.Select(i => i.TestName).ToList())
             .ToListAsync(cancellationToken);
 
