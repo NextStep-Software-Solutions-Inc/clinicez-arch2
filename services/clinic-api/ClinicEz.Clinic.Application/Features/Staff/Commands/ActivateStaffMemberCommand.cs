@@ -122,33 +122,5 @@ public sealed class ActivateStaffMemberCommandHandler : IRequestHandler<Activate
     }
 
     private static StaffMemberDto MapToDto(StaffMember staff, IReadOnlyList<string>? roomNames = null) =>
-        new(
-            staff.Id,
-            staff.TenantId,
-            staff.ClinicId,
-            staff.ClinicRoleId,
-            staff.ClinicRole?.Name,
-            staff.FirstName,
-            staff.LastName,
-            staff.MiddleName,
-            staff.Title,
-            staff.Role,
-            staff.Email,
-            staff.PhoneNumber,
-            staff.PrcLicenseNumber,
-            staff.PtrNumber,
-            staff.S2LicenseNumber,
-            staff.Specialty,
-            staff.IsActive,
-            staff.CreatedAt,
-            HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-            MustChangePassword: staff.MustChangePassword,
-            PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomIds: staff.GetAssignedRoomIds(),
-            AssignedRoomNames: roomNames ?? Array.Empty<string>(),
-            Status: staff.Status,
-            InvitationToken: staff.InvitationToken,
-            InvitationExpiresAt: staff.InvitationExpiresAt,
-            InviteAcceptedAt: staff.InviteAcceptedAt
-        );
+        StaffMemberDto.FromEntity(staff, staff.ClinicRole?.Name, roomNames);
 }

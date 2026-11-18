@@ -112,7 +112,8 @@ public class ClinicPublishingGovernanceTests
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
             ClinicName = "Ready Clinic",
-            OperatingHours = "Mon-Fri 8:00 AM - 5:00 PM"
+            OperatingHours = "Mon-Fri 8:00 AM - 5:00 PM",
+            LetterheadDohLto = "DOH-LTO-2026-020"
         }, CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
@@ -169,6 +170,7 @@ public class ClinicPublishingGovernanceTests
             LastName = "Cruz",
             Role = StaffRole.Doctor,
             PrcLicenseNumber = "PRC-554433",
+            IsDirectoryOptIn = true,
             IsActive = true
         }, CancellationToken.None);
 
@@ -188,7 +190,9 @@ public class ClinicPublishingGovernanceTests
             ClinicId = _testClinicId,
             ClinicName = "Cruz Medical Clinic",
             OperatingHours = "Mon-Sat 9:00 AM - 6:00 PM",
+            LetterheadDohLto = "DOH-LTO-2026-021",
             IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
@@ -224,6 +228,7 @@ public class ClinicPublishingGovernanceTests
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
             ClinicName = "Capacity Clinic",
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             IsOnlineBookingPaused = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);

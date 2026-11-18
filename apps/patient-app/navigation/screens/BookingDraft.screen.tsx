@@ -28,12 +28,24 @@ import {
 } from '../../services/discovery/discoveryService';
 import type { ShareableFieldKey } from '../../services/discovery/types';
 import { fetchAvailableSlots } from '../../services/appointments/appointmentsService';
-import { queryPatientSearchCatalog } from '../../services/search/patientSearchService';
-import type {
-  PatientSearchClinicDto,
-  PatientSearchDoctorDto,
-  PatientSearchServiceDto,
+import {
+  applyDoctorAffiliation,
+  isDirectoryBookingPaused,
+  practitionerProfileToDoctorDto,
+  queryDirectorySearchCatalog,
+  resolveDefaultAffiliation,
+} from '../../services/search/directorySearchService';
+import {
+  getPractitionerProfile,
+  type DirectoryClinicDto,
+  type DirectoryDoctorDto,
+  type DirectoryServiceDto,
+  type PractitionerProfileDto,
 } from '../../services/api/homeApi';
+import {
+  cachePractitionerProfile,
+  getCachedPractitionerProfile,
+} from '../../services/search/networkDirectory';
 import type { AvailableSlot } from '../../services/appointments/types';
 import BookingSeamlessHeader from '../../components/booking/BookingSeamlessHeader';
 import BookingStickyFooter from '../../components/booking/BookingStickyFooter';
@@ -48,12 +60,19 @@ import BookingReviewStep from '../../components/booking/BookingReviewStep';
 import BookingConfirmationStep from '../../components/booking/BookingConfirmationStep';
 
 type BookingRouteParams =
-  | { clinicId?: string; providerId?: string; serviceId?: string; reason?: string }
+  | {
+      clinicId?: string;
+      providerId?: string;
+      practitionerId?: string;
+      providerName?: string;
+      serviceId?: string;
+      reason?: string;
+    }
   | undefined;
 
-type Props = StaticScreenProps<BookingRouteParams>;
-
 const NO_OP = () => {};
+
+type Props = StaticScreenProps<BookingRouteParams>;
 
 function formatSlotSummary(
   slot: AvailableSlot | null,
@@ -84,6 +103,7 @@ export default function BookingDraftScreen(props: Props) {
   const routeParams = (route.params ?? props.route?.params) as BookingRouteParams;
   const initialClinicId = routeParams?.clinicId;
   const initialProviderId = routeParams?.providerId;
+  const initialPractitionerId = routeParams?.practitionerId;
   const initialServiceId = routeParams?.serviceId;
   const initialReason = routeParams?.reason;
 
@@ -91,16 +111,19 @@ export default function BookingDraftScreen(props: Props) {
   const scrollRef = useRef<any>(null);
 
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(
-    initialProviderId ? 2 : 1,
+    initialProviderId || initialPractitionerId ? 2 : 1,
   );
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [doctors, setDoctors] = useState<PatientSearchDoctorDto[]>([]);
-  const [clinics, setClinics] = useState<PatientSearchClinicDto[]>([]);
-  const [services, setServices] = useState<PatientSearchServiceDto[]>([]);
+  const [doctors, setDoctors] = useState<DirectoryDoctorDto[]>([]);
+  const [clinics, setClinics] = useState<DirectoryClinicDto[]>([]);
+  const [services, setServices] = useState<DirectoryServiceDto[]>([]);
 
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | undefined>(
-    initialProviderId,
+    initialProviderId ?? initialPractitionerId,
+  );
+  const [selectedClinicId, setSelectedClinicId] = useState<string | undefined>(
+    initialClinicId,
   );
   const [selectedDate, setSelectedDate] = useState<Date>(startOfToday());
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
@@ -121,39 +144,107 @@ export default function BookingDraftScreen(props: Props) {
         if (!hasLoadedCatalogRef.current) {
           setIsLoading(true);
         }
-        const catalog = await queryPatientSearchCatalog(getTokenRef.current, patientId, {
+        const catalog = await queryDirectorySearchCatalog(getTokenRef.current, patientId, {
           q: '',
           category: 'all',
+          take: 50,
         });
         if (!active) return;
 
         hasLoadedCatalogRef.current = true;
-        const catalogDoctors = catalog.data.doctors;
-        setDoctors(catalogDoctors);
-        setClinics(catalog.data.clinics);
-        setServices(catalog.data.services);
+        let catalogDoctors = [...catalog.data.doctors];
+        const targetLookupId = initialProviderId ?? initialPractitionerId;
 
-        if (initialProviderId) {
-          const matchedDoc = catalogDoctors.find((d) => d.id === initialProviderId);
+        if (targetLookupId) {
+          let matchedDoc = catalogDoctors.find(
+            (d) =>
+              d.id === targetLookupId ||
+              d.practitionerId === targetLookupId ||
+              Boolean(d.affiliations?.some((a) => a.providerId === targetLookupId)),
+          );
+
+          if (!matchedDoc) {
+            let profile: PractitionerProfileDto | null = null;
+            try {
+              profile = await getPractitionerProfile(
+                getTokenRef.current,
+                targetLookupId,
+                patientId,
+              );
+              if (profile) {
+                await cachePractitionerProfile(profile, patientId);
+              }
+            } catch {
+              profile = await getCachedPractitionerProfile(targetLookupId, patientId);
+            }
+            if (!active) return;
+            if (profile) {
+              const converted = practitionerProfileToDoctorDto(profile, initialClinicId);
+              if (converted) {
+                matchedDoc = converted;
+                catalogDoctors = [converted, ...catalogDoctors];
+              }
+            }
+          }
+
           if (matchedDoc) {
             setSelectedDoctorId(matchedDoc.id);
+            const matchedAff =
+              (initialClinicId
+                ? matchedDoc.affiliations?.find((a) => a.clinicId === initialClinicId)
+                : undefined) ??
+              (initialProviderId
+                ? matchedDoc.affiliations?.find((a) => a.providerId === initialProviderId)
+                : undefined) ??
+              resolveDefaultAffiliation(matchedDoc, initialClinicId);
+
+            const resolvedClinicId = matchedAff?.clinicId ?? initialClinicId ?? matchedDoc.clinicId;
+            setSelectedClinicId(resolvedClinicId);
+
+            const clinicRow = catalog.data.clinics.find((c) => c.id === resolvedClinicId);
+            const targetPaused = Boolean(
+              !resolvedClinicId ||
+                (matchedAff ? !matchedAff.supportsAppointments : !matchedDoc.clinicSupportsAppointments) ||
+                (clinicRow && !clinicRow.supportsAppointments),
+            );
+            if (targetPaused) {
+              setCurrentStep(1);
+            }
           } else {
             setCurrentStep(1);
             const fallbackDoc =
               (initialClinicId
-                ? catalogDoctors.find((d) => d.clinicId === initialClinicId)
+                ? catalogDoctors.find(
+                    (d) =>
+                      d.clinicId === initialClinicId ||
+                      Boolean(d.affiliations?.some((a) => a.clinicId === initialClinicId)),
+                  )
                 : undefined) ?? catalogDoctors[0];
-            if (fallbackDoc) setSelectedDoctorId(fallbackDoc.id);
+            if (fallbackDoc) {
+              setSelectedDoctorId(fallbackDoc.id);
+              const defAff = resolveDefaultAffiliation(fallbackDoc, initialClinicId);
+              setSelectedClinicId(defAff?.clinicId ?? fallbackDoc.clinicId);
+            }
           }
         } else if (catalogDoctors.length > 0) {
-          setSelectedDoctorId((prev) => {
-            if (prev && catalogDoctors.some((d) => d.id === prev)) return prev;
-            const matchedByClinic = initialClinicId
-              ? catalogDoctors.find((d) => d.clinicId === initialClinicId)
-              : undefined;
-            return (matchedByClinic ?? catalogDoctors[0])?.id;
-          });
+          const matchedByClinic = initialClinicId
+            ? catalogDoctors.find(
+                (d) =>
+                  d.clinicId === initialClinicId ||
+                  Boolean(d.affiliations?.some((a) => a.clinicId === initialClinicId)),
+              )
+            : undefined;
+          const initialDoc = matchedByClinic ?? catalogDoctors[0];
+          if (initialDoc) {
+            setSelectedDoctorId(initialDoc.id);
+            const defAff = resolveDefaultAffiliation(initialDoc, initialClinicId);
+            setSelectedClinicId(defAff?.clinicId ?? initialDoc.clinicId);
+          }
         }
+
+        setDoctors(catalogDoctors);
+        setClinics(catalog.data.clinics);
+        setServices(catalog.data.services);
       } catch {
         // Handled cleanly with empty catalog state
       } finally {
@@ -163,17 +254,47 @@ export default function BookingDraftScreen(props: Props) {
     return () => {
       active = false;
     };
-  }, [initialClinicId, initialProviderId, patientId]);
+  }, [initialClinicId, initialPractitionerId, initialProviderId, patientId]);
 
-  const selectedDoctor = useMemo(
-    () => doctors.find((d) => d.id === selectedDoctorId) ?? doctors[0] ?? null,
+  const rawSelectedDoctor = useMemo(
+    () =>
+      doctors.find(
+        (d) =>
+          d.id === selectedDoctorId ||
+          d.practitionerId === selectedDoctorId ||
+          Boolean(d.affiliations?.some((a) => a.providerId === selectedDoctorId)),
+      ) ??
+      doctors[0] ??
+      null,
     [doctors, selectedDoctorId],
   );
 
+  const selectedAffiliation = useMemo(
+    () =>
+      rawSelectedDoctor
+        ? resolveDefaultAffiliation(rawSelectedDoctor, selectedClinicId)
+        : null,
+    [rawSelectedDoctor, selectedClinicId],
+  );
+
+  const selectedDoctor = useMemo(
+    () =>
+      rawSelectedDoctor
+        ? applyDoctorAffiliation(rawSelectedDoctor, selectedAffiliation)
+        : null,
+    [rawSelectedDoctor, selectedAffiliation],
+  );
+
   const selectedClinic = useMemo(() => {
-    if (!selectedDoctor) return clinics[0] ?? null;
-    return clinics.find((c) => c.id === selectedDoctor.clinicId) ?? clinics[0] ?? null;
-  }, [clinics, selectedDoctor]);
+    const targetClinicId = selectedDoctor?.clinicId ?? selectedClinicId;
+    if (!targetClinicId) return clinics[0] ?? null;
+    return clinics.find((c) => c.id === targetClinicId) ?? null;
+  }, [clinics, selectedClinicId, selectedDoctor]);
+
+  const isBookingPaused = useMemo(
+    () => isDirectoryBookingPaused(selectedDoctor, selectedClinic),
+    [selectedClinic, selectedDoctor],
+  );
 
   const selectedService = useMemo(() => {
     if (!selectedDoctor) return null;
@@ -210,6 +331,11 @@ export default function BookingDraftScreen(props: Props) {
   // Fetch available slots whenever doctor id or date string changes
   useEffect(() => {
     if (!slotDoctorId || !slotClinicId || !isReviewOrEarlier) return;
+    if (isBookingPaused) {
+      setAvailableSlots([]);
+      setSelectedSlot(null);
+      return;
+    }
 
     let active = true;
     (async () => {
@@ -246,7 +372,7 @@ export default function BookingDraftScreen(props: Props) {
     return () => {
       active = false;
     };
-  }, [isReviewOrEarlier, patientId, selectedDateKey, slotClinicId, slotDoctorId]);
+  }, [isBookingPaused, isReviewOrEarlier, patientId, selectedDateKey, slotClinicId, slotDoctorId]);
 
   const navigateBackToTabs = useCallback(
     (tabScreen: 'AppointmentsScreen' | 'HomeScreen') => {
@@ -273,6 +399,14 @@ export default function BookingDraftScreen(props: Props) {
 
   const handleConfirmAndBook = useCallback(async () => {
     if (!selectedDoctor || !selectedSlot) return;
+
+    if (isBookingPaused) {
+      dialog.alert(
+        'Booking Paused',
+        'Online booking is currently paused for this clinic.',
+      );
+      return;
+    }
 
     if (!isOnline) {
       dialog.alert(
@@ -318,6 +452,8 @@ export default function BookingDraftScreen(props: Props) {
       const [serverDraftId, onlineErr] = await safeAwait(
         createBookingDraftOnline(getTokenRef.current, patientId, {
           clinicId: selectedDoctor.clinicId,
+          providerId: selectedDoctor.id,
+          providerName: selectedDoctor.name,
           preferredDate: dateStr,
           preferredTime: timeStr,
           reason: effectiveReason,
@@ -341,7 +477,7 @@ export default function BookingDraftScreen(props: Props) {
       if (submitErr) {
         dialog.alert(
           'Booking Failed',
-          'Unable to submit booking request to the clinic. Please try again.',
+          submitErr?.message || 'Unable to submit booking request to the clinic. Please try again.',
         );
         return;
       }
@@ -374,6 +510,7 @@ export default function BookingDraftScreen(props: Props) {
     }
   }, [
     consultationMode,
+    isBookingPaused,
     isOnline,
     patientId,
     reasonForVisit,
@@ -453,8 +590,17 @@ export default function BookingDraftScreen(props: Props) {
             <BookingDoctorStep
               doctors={doctors}
               clinics={clinics}
-              selectedDoctorId={selectedDoctor?.id}
-              onSelectDoctor={(doc) => setSelectedDoctorId(doc.id)}
+              selectedDoctorId={rawSelectedDoctor?.id ?? selectedDoctor?.id}
+              selectedClinicId={selectedDoctor?.clinicId ?? selectedClinicId}
+              onSelectDoctor={(doc) => {
+                setSelectedDoctorId(doc.id);
+                const defAff = resolveDefaultAffiliation(doc);
+                setSelectedClinicId(defAff?.clinicId ?? doc.clinicId);
+              }}
+              onSelectClinic={(clinicId, doc) => {
+                setSelectedDoctorId(doc.id);
+                setSelectedClinicId(clinicId);
+              }}
               onViewClinicInfo={(clinicId) => {
                 navigation.navigate('ClinicDetailsScreen', {
                   clinicId,
@@ -469,6 +615,8 @@ export default function BookingDraftScreen(props: Props) {
           ) : currentStep === 2 && selectedDoctor ? (
             <BookingSlotStep
               doctor={selectedDoctor}
+              selectedClinicId={selectedDoctor.clinicId}
+              onSelectClinic={(clinicId) => setSelectedClinicId(clinicId)}
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
               selectedSlot={selectedSlot}
@@ -485,6 +633,7 @@ export default function BookingDraftScreen(props: Props) {
               doctor={selectedDoctor}
               clinic={selectedClinic}
               service={selectedService}
+              isBookingPaused={isBookingPaused}
               selectedDate={selectedDate}
               selectedSlot={selectedSlot}
               consultationMode={consultationMode}
@@ -512,15 +661,16 @@ export default function BookingDraftScreen(props: Props) {
           <BookingStickyFooter
             currentStep={currentStep as BookingStep}
             selectedDoctor={selectedDoctor}
+            isBookingPaused={isBookingPaused}
             selectedSlotSummary={selectedSlotSummary}
             formattedCopay={formattedCopay}
             isSubmitting={isSubmitting}
             bottomInset={insets.bottom}
             onProceedStep1={() => {
-              if (selectedDoctor) setCurrentStep(2);
+              if (selectedDoctor && !isBookingPaused) setCurrentStep(2);
             }}
             onProceedStep2={() => {
-              if (selectedSlot) setCurrentStep(3);
+              if (selectedSlot && !isBookingPaused) setCurrentStep(3);
             }}
             onConfirmAndBook={handleConfirmAndBook}
           />

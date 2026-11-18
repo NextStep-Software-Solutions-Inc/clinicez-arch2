@@ -2,9 +2,14 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using ClinicEz.Patient.Api.Tests.Infrastructure;
 using ClinicEz.Patient.Application.Common.DTOs;
+using ClinicEz.Patient.Application.Features.BookingDrafts.Commands.CreateBookingDraft;
+using ClinicEz.Patient.Application.Features.BookingDrafts.Commands.SubmitBookingDraft;
 using ClinicEz.Patient.Application.Features.Home;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Exceptions;
 
 namespace ClinicEz.Patient.Api.Tests.Security;
 
@@ -46,10 +51,10 @@ public sealed class PatientHomeAndSearchEndpointTests : IAsyncLifetime
 
         // 3. Owned patient -> 200 OK and dispatches MediatR query
         _host.Sender.Send(Arg.Any<SearchPatientCatalogQuery>(), Arg.Any<CancellationToken>())
-            .Returns(new PatientSearchResponseDto(
+            .Returns(new DirectorySearchResponseDto(
                 "cardio",
                 "all",
-                new PatientSearchCountsDto(0, 0, 0, 0),
+                new DirectorySearchCountsDto(0, 0, 0, 0),
                 [],
                 [],
                 []));
@@ -58,6 +63,137 @@ public sealed class PatientHomeAndSearchEndpointTests : IAsyncLifetime
         ownedSearchReq.Headers.Add(PatientApiTestHost.UserHeader, "clerk_owner");
         var okResp = await _host.Client.SendAsync(ownedSearchReq);
         okResp.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task DirectorySearch_And_PractitionerProfile_SupportAnonymousPublicQueries_AndGuardForPatientId()
+    {
+        var ownedPatientId = Guid.NewGuid();
+        var foreignPatientId = Guid.NewGuid();
+        var practitionerId = Guid.NewGuid();
+
+        _host.Patients.IsOwnedByAsync(ownedPatientId, "clerk_owner", Arg.Any<CancellationToken>())
+            .Returns(true);
+        _host.Patients.IsOwnedByAsync(foreignPatientId, "clerk_owner", Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        _host.Sender.Send(Arg.Any<SearchDirectoryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(new DirectorySearchResponseDto(
+                "cardio",
+                "all",
+                new DirectorySearchCountsDto(0, 0, 0, 0),
+                [],
+                [],
+                []));
+
+        // Anonymous public directory search -> 200 OK
+        var anonSearch = await _host.Client.GetAsync("/api/v1/directory/search?q=cardio&category=all");
+        anonSearch.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // forPatientId without auth -> 401
+        var unauthForPatient = await _host.Client.GetAsync($"/api/v1/directory/search?forPatientId={ownedPatientId}");
+        unauthForPatient.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        // forPatientId foreign -> 403
+        using var foreignForPatientReq = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/directory/search?forPatientId={foreignPatientId}");
+        foreignForPatientReq.Headers.Add(PatientApiTestHost.UserHeader, "clerk_owner");
+        (await _host.Client.SendAsync(foreignForPatientReq)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        // forPatientId owned -> 200 OK
+        using var ownedForPatientReq = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/directory/search?forPatientId={ownedPatientId}");
+        ownedForPatientReq.Headers.Add(PatientApiTestHost.UserHeader, "clerk_owner");
+        (await _host.Client.SendAsync(ownedForPatientReq)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Practitioner profile found -> 200 OK; missing -> 404 NotFound
+        _host.Sender.Send(Arg.Is<GetPractitionerProfileQuery>(q => q.Id == practitionerId), Arg.Any<CancellationToken>())
+            .Returns(new PractitionerProfileDto(
+                practitionerId,
+                practitionerId,
+                "Dr. Maria Santos",
+                "Maria",
+                "Santos",
+                "Doctor",
+                "Cardiology",
+                "Fellow",
+                null,
+                "PRC-0012345",
+                null,
+                PractitionerVerificationLevel.Verified,
+                true,
+                DateTime.UtcNow,
+                []));
+
+        var profileOk = await _host.Client.GetAsync($"/api/v1/practitioners/{practitionerId}");
+        profileOk.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var missingId = Guid.NewGuid();
+        _host.Sender.Send(Arg.Is<GetPractitionerProfileQuery>(q => q.Id == missingId), Arg.Any<CancellationToken>())
+            .Returns((PractitionerProfileDto?)null);
+        var profileNotFound = await _host.Client.GetAsync($"/api/v1/practitioners/{missingId}");
+        profileNotFound.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task BookingDraftEndpoints_BindProviderId_AndReturn409WhenBookingPaused()
+    {
+        var patientId = Guid.NewGuid();
+        var clinicId = Guid.NewGuid();
+        var providerId = Guid.NewGuid();
+        var draftId = Guid.NewGuid();
+
+        _host.Patients.IsOwnedByAsync(patientId, "clerk_owner", Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        _host.Sender.Send(
+                Arg.Is<CreateBookingDraftCommand>(c => c.ProviderId == providerId && c.ProviderName == "Dr. Maria Santos"),
+                Arg.Any<CancellationToken>())
+            .Returns(draftId);
+
+        using var createOkReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/patients/{patientId}/booking-drafts")
+        {
+            Content = JsonContent.Create(new
+            {
+                clinicId,
+                shareFieldsJson = "[]",
+                attachedFileIdsJson = "[]",
+                providerId,
+                providerName = "Dr. Maria Santos"
+            })
+        };
+        createOkReq.Headers.Add(PatientApiTestHost.UserHeader, "clerk_owner");
+        (await _host.Client.SendAsync(createOkReq)).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        // Booking paused ConflictException -> HTTP 409
+        var pausedClinicId = Guid.NewGuid();
+        _host.Sender.Send(
+                Arg.Is<CreateBookingDraftCommand>(c => c.ClinicId == pausedClinicId),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new ConflictException("Online booking is currently paused for this clinic."));
+
+        using var createPausedReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/patients/{patientId}/booking-drafts")
+        {
+            Content = JsonContent.Create(new
+            {
+                clinicId = pausedClinicId,
+                shareFieldsJson = "[]",
+                attachedFileIdsJson = "[]"
+            })
+        };
+        createPausedReq.Headers.Add(PatientApiTestHost.UserHeader, "clerk_owner");
+        var createPausedResp = await _host.Client.SendAsync(createPausedReq);
+        createPausedResp.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await createPausedResp.Content.ReadAsStringAsync()).Should().Contain("Online booking is currently paused for this clinic.");
+
+        _host.Sender.Send(
+                Arg.Is<SubmitBookingDraftCommand>(c => c.DraftId == draftId),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new ConflictException("Online booking is currently paused for this clinic."));
+
+        using var submitPausedReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/patients/{patientId}/booking-drafts/{draftId}/submit");
+        submitPausedReq.Headers.Add(PatientApiTestHost.UserHeader, "clerk_owner");
+        var submitPausedResp = await _host.Client.SendAsync(submitPausedReq);
+        submitPausedResp.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await submitPausedResp.Content.ReadAsStringAsync()).Should().Contain("Online booking is currently paused for this clinic.");
     }
 
     [Fact]

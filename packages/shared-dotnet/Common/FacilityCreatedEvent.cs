@@ -10,7 +10,18 @@ public record FacilityProviderDto(
     string Specialty,
     string? ProfessionalLicenseNo = null,
     bool IsActive = true,
-    int DisplayOrder = 0);
+    int DisplayOrder = 0,
+    string? Role = null,
+    Guid? CanonicalProviderId = null,
+    string? NormalizedLicenseNo = null,
+    DateOnly? PrcExpiryDate = null,
+    bool IsDirectoryOptIn = true,
+    PractitionerVerificationLevel VerificationStatus = PractitionerVerificationLevel.Unverified,
+    string? FirstName = null,
+    string? LastName = null,
+    string? Bio = null,
+    string? AvatarUrl = null,
+    IReadOnlyList<ProviderAvailabilityWindowDto>? Availabilities = null);
 
 public record ClinicServiceDto(
     Guid ServiceId,
@@ -56,6 +67,11 @@ public record FacilityCreatedEvent
     public bool? IsBookingPaused { get; init; }
     public bool? IsJoinGated { get; init; }
     public string? JoinCode { get; init; }
+    public bool? IsPlatformVerified { get; init; }
+    public PlatformVerificationStatus? PlatformVerificationStatus { get; init; }
+    public string? VerificationRejectionReason { get; init; }
+    public DirectorySourceKind DirectorySource { get; init; } = DirectorySourceKind.Unspecified;
+    public bool ReplaceProvidersSnapshot { get; init; } = true;
 
     // Central Workspace Branch baseline (non-secret metadata propagated from Portal)
     public Guid? BranchId { get; init; }

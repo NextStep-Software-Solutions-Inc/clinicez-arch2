@@ -8,15 +8,23 @@ import {
   hubEdgeCredentialsSchema,
   hubRotatedCredentialsSchema,
   parseWire,
+  platformVerificationStatusSchema,
   type FacilityDeploymentMode,
   type FacilityKind,
   type FacilityVisibility,
   type HubClientCredentials,
   type HubEdgeCredentials,
   type HubRotatedCredentials,
+  type PlatformVerificationStatus,
 } from "@/lib/wire";
+import {
+  verificationService,
+  type FacilityVerificationStatusDto,
+  type UploadLtoProofJsonPayload,
+  type UploadLtoProofResult,
+} from "@/services/verification.service";
 
-export type { FacilityKind, FacilityVisibility };
+export type { FacilityKind, FacilityVisibility, PlatformVerificationStatus };
 
 const optionalText = z.string().nullish().transform((v) => v ?? null);
 
@@ -48,6 +56,12 @@ const workspaceFacilitySchema = z.object({
   acceptsExternalRequests: z.boolean(),
   branchId: optionalText,
   isPatientDiscoveryEligible: z.boolean().nullish().transform((v) => v ?? false),
+  platformVerificationStatus: platformVerificationStatusSchema
+    .nullish()
+    .transform((v) => v ?? "Unverified"),
+  rejectionReason: optionalText,
+  ltoEvidenceObjectKey: optionalText,
+  verifiedAtUtc: optionalText,
 });
 export type WorkspaceFacility = z.infer<typeof workspaceFacilitySchema>;
 
@@ -149,6 +163,23 @@ export const facilityService = {
       { isEligible, tenantSlug },
     );
     return parseWire(setDiscoveryEligibilityResultSchema, res.data, "discovery eligibility");
+  },
+
+  /** Retrieves platform verification status, latest request, and bundled clinician summary. */
+  getVerificationStatus: async (
+    tenantSlug: string,
+    facilityId: string,
+  ): Promise<FacilityVerificationStatusDto> => {
+    return verificationService.getFacilityVerificationStatus(facilityId, tenantSlug);
+  },
+
+  /** Uploads a DOH LTO proof file (PDF/JPEG/PNG) or attaches an existing object key. */
+  uploadLtoProof: async (
+    tenantSlug: string,
+    facilityId: string,
+    input: File | UploadLtoProofJsonPayload,
+  ): Promise<UploadLtoProofResult> => {
+    return verificationService.uploadFacilityLtoProof(facilityId, input, tenantSlug);
   },
 };
 

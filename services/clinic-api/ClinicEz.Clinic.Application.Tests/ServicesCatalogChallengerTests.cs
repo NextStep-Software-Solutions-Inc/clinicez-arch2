@@ -447,8 +447,10 @@ public class ServicesCatalogChallengerTests
             ClinicId = _clinicId,
             ClinicName = "Active Directory Dental Care",
             OperatingHours = "Mon-Sat 8:00 AM - 6:00 PM",
+            LetterheadDohLto = "DOH-LTO-2026-040",
             SpecialtyMode = "MultiSpecialty",
             IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings);

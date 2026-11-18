@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Claims;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Api.Abstractions;
+using ClinicEz.Portal.Application.Common;
 using ClinicEz.Portal.Application.Features.Admin.Commands;
 using ClinicEz.Portal.Application.Features.Admin.Commands.RecordManualPayment;
 using ClinicEz.Portal.Application.Features.Admin.Commands.UpdateTenantOverrides;
@@ -11,6 +14,7 @@ using ClinicEz.Portal.Application.Features.Admin.Queries;
 using ClinicEz.Portal.Application.Features.Admin.Queries.GetTenantOverrides;
 using ClinicEz.Portal.Application.Features.Billing.Commands;
 using ClinicEz.Portal.Application.Features.Billing.Queries;
+using ClinicEz.Portal.Application.Features.DirectoryVerification;
 using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Constants;
@@ -193,16 +197,179 @@ public class AdminEndpoints : IEndpoint
         .WithTags("Admin");
 
         // 5c. POST /admin/hub/resync
-        group.MapPost("/hub/resync", async (HttpContext httpContext, ISender sender, IHubDirectoryResyncService resync, CancellationToken ct) =>
+        group.MapPost("/hub/resync", async (
+            HttpContext httpContext,
+            ISender sender,
+            IHubDirectoryResyncService resync,
+            IDirectoryVerificationSyncService directorySync,
+            CancellationToken ct) =>
         {
             var admin = await CheckPermissionAsync(Permissions.ManageTenants, httpContext, sender);
             if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
 
             var result = await resync.ResyncAsync(ct);
-            return Results.Ok(result);
+            var directoryResult = await directorySync.ResyncVerifiedDirectoryAsync(ct);
+            return Results.Ok(new
+            {
+                result.Cells,
+                result.Facilities,
+                result.Links,
+                directoryResult.VerifiedFacilitiesEmitted,
+                directoryResult.VerifiedPractitionerAffiliationsEmitted
+            });
         })
         .WithName("ResyncHubDirectory")
-        .WithDescription("Re-enqueues every cell, facility and link to the hub directory. Idempotent (every message is an upsert); use after the hub directory was reset or restored.")
+        .WithDescription("Re-enqueues every cell, facility, link, and verified public directory record to the hub. Idempotent (every message is an upsert); use after the hub directory was reset or restored.")
+        .WithTags("Admin");
+
+        // 5d. DIRECTORY VERIFICATION QUEUE & REVIEW
+        group.MapGet("/verification-queue", async (
+            string? kind,
+            string? status,
+            string? q,
+            string? search,
+            HttpContext httpContext,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ViewVerifications, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var result = await sender.Send(new GetVerificationQueueQuery(kind, status, q ?? search), ct);
+            return Results.Ok(result);
+        })
+        .WithName("GetVerificationQueue")
+        .WithDescription("Lists clinic and practitioner directory verification requests.")
+        .WithTags("Admin");
+
+        group.MapGet("/verification-queue/{requestId:guid}", async (
+            Guid requestId,
+            HttpContext httpContext,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ViewVerifications, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var result = await sender.Send(new GetVerificationRequestDetailQuery(requestId), ct);
+            return result is null
+                ? Results.NotFound(new { Message = "Verification request not found." })
+                : Results.Ok(result);
+        })
+        .WithName("GetVerificationRequestDetail")
+        .WithDescription("Returns verification request snapshot, child practitioner requests, PRC match candidates, name-mismatch flag, submission history, and evidence object key.")
+        .WithTags("Admin");
+
+        group.MapPost("/verification-queue/{requestId:guid}/approve", async (
+            Guid requestId,
+            HttpContext httpContext,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.VerifyDirectory, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var body = await TryReadOptionalJsonBodyAsync<ApproveVerificationHttpRequest>(httpContext, ct);
+            var adminUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? admin.Email;
+
+            try
+            {
+                var result = await sender.Send(new ApproveVerificationRequestCommand(
+                    requestId,
+                    adminUserId,
+                    admin.FullName,
+                    body?.Notes,
+                    body?.PractitionerRequestIds,
+                    body?.ApproveBundledPractitioners ?? true), ct);
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (CodedConflictException ex)
+            {
+                return Results.Conflict(new { Message = ex.Message, Code = ex.Code });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .WithName("ApproveVerificationRequest")
+        .WithDescription("Approves a clinic or practitioner directory verification request and emits Hub updates.")
+        .WithTags("Admin");
+
+        group.MapPost("/verification-queue/{requestId:guid}/reject", async (
+            Guid requestId,
+            RejectVerificationHttpRequest? body,
+            HttpContext httpContext,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.VerifyDirectory, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            if (body is null || string.IsNullOrWhiteSpace(body.Reason))
+                return Results.BadRequest(new { Message = "A rejection reason is required." });
+
+            var adminUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? admin.Email;
+
+            try
+            {
+                var result = await sender.Send(new RejectVerificationRequestCommand(
+                    requestId,
+                    adminUserId,
+                    admin.FullName,
+                    body.Reason,
+                    body.Notes), ct);
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (CodedConflictException ex)
+            {
+                return Results.Conflict(new { Message = ex.Message, Code = ex.Code });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .WithName("RejectVerificationRequest")
+        .WithDescription("Rejects a clinic or practitioner directory verification request with a mandatory reason.")
+        .WithTags("Admin");
+
+        group.MapPost("/practitioners/{id:guid}/suspend", async (
+            Guid id,
+            HttpContext httpContext,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.RevokeDirectoryVerification, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var body = await TryReadOptionalJsonBodyAsync<SuspendPractitionerHttpRequest>(httpContext, ct);
+            var adminUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? admin.Email;
+
+            try
+            {
+                var result = await sender.Send(new SuspendPractitionerCommand(
+                    id,
+                    adminUserId,
+                    admin.FullName,
+                    body?.Reason), ct);
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+        })
+        .WithName("SuspendVerifiedPractitioner")
+        .WithDescription("Suspends a verified practitioner and revokes all clinic affiliations across the Hub.")
         .WithTags("Admin");
 
         // 6. BLOG CRUD
@@ -845,7 +1012,34 @@ public class AdminEndpoints : IEndpoint
 
         return admin;
     }
+
+    private static async Task<T?> TryReadOptionalJsonBodyAsync<T>(HttpContext httpContext, CancellationToken ct)
+        where T : class
+    {
+        if (httpContext.Request.ContentLength == 0 || !httpContext.Request.HasJsonContentType())
+            return null;
+
+        try
+        {
+            return await httpContext.Request.ReadFromJsonAsync<T>(cancellationToken: ct);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 }
+
+public record ApproveVerificationHttpRequest(
+    string? Notes = null,
+    List<Guid>? PractitionerRequestIds = null,
+    bool ApproveBundledPractitioners = true);
+
+public record RejectVerificationHttpRequest(
+    string Reason,
+    string? Notes = null);
+
+public record SuspendPractitionerHttpRequest(string? Reason = null);
 
 public record InviteAdminUserRequest(
     string Email,

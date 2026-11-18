@@ -156,12 +156,69 @@ public sealed class SearchPatientCatalogEndpoint : IEndpoint
                         openNowOnly,
                         take),
                     ct);
-                return Results.Ok(ApiResponse<PatientSearchResponseDto>.Success(result));
+                return Results.Ok(ApiResponse<DirectorySearchResponseDto>.Success(result));
             })
             .WithTags("Search")
             .WithName("SearchPatientCatalog")
             .WithSummary("Search visible doctors, clinics, and services with category counts.")
-            .Produces<ApiResponse<PatientSearchResponseDto>>(StatusCodes.Status200OK)
+            .Produces<ApiResponse<DirectorySearchResponseDto>>(StatusCodes.Status200OK)
             .RequireAuthorization();
+    }
+}
+
+public sealed class SearchDirectoryEndpoint : IEndpoint
+{
+    public void MapEndpoint(IEndpointRouteBuilder app)
+    {
+        app.MapGet("/directory/search", async (
+                [FromQuery] string? q,
+                [FromQuery] string? category,
+                [FromQuery] bool availableTodayOnly = false,
+                [FromQuery] bool openNowOnly = false,
+                [FromQuery] int take = 20,
+                [FromQuery] Guid? forPatientId = null,
+                ISender sender = null!,
+                CancellationToken ct = default) =>
+            {
+                var result = await sender.Send(
+                    new SearchDirectoryQuery(
+                        q,
+                        category ?? "all",
+                        availableTodayOnly,
+                        openNowOnly,
+                        take,
+                        forPatientId),
+                    ct);
+                return Results.Ok(ApiResponse<DirectorySearchResponseDto>.Success(result));
+            })
+            .WithTags("Search")
+            .WithName("SearchDirectory")
+            .WithSummary("Search verified public directory doctors, clinics, and services with category counts.")
+            .Produces<ApiResponse<DirectorySearchResponseDto>>(StatusCodes.Status200OK)
+            .AllowAnonymous();
+    }
+}
+
+public sealed class GetPractitionerProfileEndpoint : IEndpoint
+{
+    public void MapEndpoint(IEndpointRouteBuilder app)
+    {
+        app.MapGet("/practitioners/{id:guid}", async (
+                Guid id,
+                [FromQuery] Guid? forPatientId = null,
+                ISender sender = null!,
+                CancellationToken ct = default) =>
+            {
+                var result = await sender.Send(new GetPractitionerProfileQuery(id, forPatientId), ct);
+                return result is null
+                    ? Results.NotFound(ApiResponse<object>.Fail($"Practitioner '{id}' was not found."))
+                    : Results.Ok(ApiResponse<PractitionerProfileDto>.Success(result));
+            })
+            .WithTags("Search")
+            .WithName("GetPractitionerProfile")
+            .WithSummary("Get verified practitioner profile and clinic affiliations by Practitioner.Id or ClinicHealthcareProvider.Id.")
+            .Produces<ApiResponse<PractitionerProfileDto>>(StatusCodes.Status200OK)
+            .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
+            .AllowAnonymous();
     }
 }

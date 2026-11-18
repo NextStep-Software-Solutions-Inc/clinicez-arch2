@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Patient.Application.Common.DTOs;
 using ClinicEz.Patient.Application.Features.Home;
@@ -245,11 +246,11 @@ public sealed class HomeDashboardAndSearchServiceTests
     }
 
     [Fact]
-    public async Task PatientCatalogSearch_ComputesCategoryCounts_NextSlots_AndEnforcesGatedClinicServices()
+    public async Task DirectoryCatalogSearch_ComputesCategoryCounts_NextSlots_AndEnforcesGatedClinicServices()
     {
         using var db = CreateInMemoryContext();
         var now = new DateTimeOffset(2026, 11, 3, 9, 0, 0, TimeSpan.Zero); // Tuesday
-        var search = new PatientCatalogSearchService(db, new FixedTimeProvider(now));
+        var search = new DirectoryCatalogSearchService(db, new FixedTimeProvider(now));
 
         var patient = CreatePatient();
         var publicClinic = new Clinic
@@ -259,17 +260,38 @@ public sealed class HomeDashboardAndSearchServiceTests
             TenantId = "tenant-metro",
             Address = "Suite 402, Medical Arts Wing",
             SpecialtiesJson = "[\"Cardiology\",\"Echo & Diagnostic Lab\"]",
+            IsWorkspaceEligible = true,
+            IsDirectoryPublished = true,
+            IsPlatformVerified = true,
             IsPublic = true,
             SupportsAppointments = true,
             OperatingHours = "Mon-Sat 8:00 AM - 5:00 PM"
+        };
+        var practitioner = new Practitioner
+        {
+            Id = Guid.NewGuid(),
+            ProfessionKind = "Doctor",
+            NormalizedPrcLicenseNo = "0102938",
+            DisplayPrcLicenseNo = "PRC-102938",
+            VerificationLevel = PractitionerVerificationLevel.Verified,
+            Name = "Dr. Evelyn Reed, MD",
+            FirstName = "Evelyn",
+            LastName = "Reed",
+            PrimarySpecialty = "Cardiology Specialist",
+            Bio = "Board-certified cardiologist."
         };
         var provider = new ClinicHealthcareProvider
         {
             Id = Guid.NewGuid(),
             ClinicId = publicClinic.Id,
+            PractitionerId = practitioner.Id,
             Name = "Dr. Evelyn Reed, MD",
             Specialty = "Cardiology Specialist",
+            Role = "Doctor",
             ProfessionalLicenseNo = "PRC-102938",
+            NormalizedLicenseNo = "0102938",
+            IsDirectoryOptIn = true,
+            AffiliationStatus = "Active",
             IsActive = true,
         };
         var availability = new ProviderAvailability
@@ -296,6 +318,9 @@ public sealed class HomeDashboardAndSearchServiceTests
         {
             Id = Guid.NewGuid(),
             Name = "Executive Cardiac Suite",
+            IsWorkspaceEligible = true,
+            IsDirectoryPublished = true,
+            IsPlatformVerified = true,
             IsPublic = true,
             IsGated = true,
         };
@@ -308,6 +333,7 @@ public sealed class HomeDashboardAndSearchServiceTests
         };
 
         db.Patients.Add(patient);
+        db.Practitioners.Add(practitioner);
         db.Clinics.AddRange(publicClinic, gatedPrivateClinic);
         db.ClinicHealthcareProviders.Add(provider);
         db.ProviderAvailabilities.Add(availability);
@@ -316,7 +342,11 @@ public sealed class HomeDashboardAndSearchServiceTests
 
         var result = await search.SearchAsync(patient.Id, "Cardi", "all");
 
-        result.Doctors.Should().ContainSingle(d => d.Name == "Dr. Evelyn Reed, MD" && d.NextAvailableLabel == "Tomorrow, 10:30 AM");
+        result.Doctors.Should().ContainSingle(d =>
+            d.Name == "Dr. Evelyn Reed, MD" &&
+            d.PractitionerId == practitioner.Id &&
+            d.IsVerified &&
+            d.NextAvailableLabel == "Tomorrow, 10:30 AM");
         result.Clinics.Should().HaveCount(2);
         // Gated clinic service must NOT leak until patient joins the gated clinic
         result.Services.Should().ContainSingle(s => s.Name == "Comprehensive Cardiac Panel" && s.PriceBadgeLabel == "Covered");
@@ -324,5 +354,273 @@ public sealed class HomeDashboardAndSearchServiceTests
         result.Counts.Doctors.Should().Be(1);
         result.Counts.Clinics.Should().Be(2);
         result.Counts.Services.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DirectoryCatalogSearch_EnforcesThreeGateIsPublic_BookingPausedRanking_AndClinicianFiltering()
+    {
+        using var db = CreateInMemoryContext();
+        var now = new DateTimeOffset(2026, 11, 3, 9, 0, 0, TimeSpan.Zero); // Tuesday
+        var search = new DirectoryCatalogSearchService(db, new FixedTimeProvider(now));
+
+        var bookableClinic = new Clinic
+        {
+            Id = Guid.NewGuid(),
+            Name = "Alpha Bookable Clinic",
+            TenantId = "tenant-alpha",
+            FeaturedScore = 10,
+            SupportsAppointments = true
+        };
+        bookableClinic.SetWorkspaceEligibility(true);
+        bookableClinic.SetDirectoryPublished(true);
+        bookableClinic.SetPlatformVerified(true);
+
+        var pausedClinic = new Clinic
+        {
+            Id = Guid.NewGuid(),
+            Name = "AAA Paused Clinic",
+            TenantId = "tenant-paused",
+            FeaturedScore = 9999,
+            SupportsAppointments = false
+        };
+        pausedClinic.SetWorkspaceEligibility(true);
+        pausedClinic.SetDirectoryPublished(true);
+        pausedClinic.SetPlatformVerified(true);
+
+        var unverifiedClinic = new Clinic
+        {
+            Id = Guid.NewGuid(),
+            Name = "Unverified Hidden Clinic",
+            TenantId = "tenant-unverified",
+            SupportsAppointments = true
+        };
+        unverifiedClinic.SetWorkspaceEligibility(true);
+        unverifiedClinic.SetDirectoryPublished(true);
+        // IsPlatformVerified remains false -> IsPublic == false
+
+        var verifiedNursePractitioner = new Practitioner
+        {
+            Id = Guid.NewGuid(),
+            ProfessionKind = "Nurse",
+            NormalizedPrcLicenseNo = "0777777",
+            DisplayPrcLicenseNo = "PRC-0777777",
+            VerificationLevel = PractitionerVerificationLevel.Verified,
+            Name = "RN Clara Reyes",
+            FirstName = "Clara",
+            LastName = "Reyes",
+            PrimarySpecialty = "Triage & Immunization"
+        };
+
+        var unverifiedDoctor = new Practitioner
+        {
+            Id = Guid.NewGuid(),
+            ProfessionKind = "Doctor",
+            NormalizedPrcLicenseNo = "0888888",
+            DisplayPrcLicenseNo = "PRC-0888888",
+            VerificationLevel = PractitionerVerificationLevel.PendingVerification,
+            Name = "Dr. Pending Hidden",
+            FirstName = "Pending",
+            LastName = "Hidden",
+            PrimarySpecialty = "General Practice"
+        };
+
+        var nurseProvider = new ClinicHealthcareProvider
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = bookableClinic.Id,
+            PractitionerId = verifiedNursePractitioner.Id,
+            Name = "RN Clara Reyes",
+            Specialty = "Triage & Immunization",
+            Role = "Nurse",
+            IsDirectoryOptIn = true,
+            AffiliationStatus = "Active",
+            IsActive = true
+        };
+
+        var unverifiedProvider = new ClinicHealthcareProvider
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = bookableClinic.Id,
+            PractitionerId = unverifiedDoctor.Id,
+            Name = "Dr. Pending Hidden",
+            Specialty = "General Practice",
+            Role = "Doctor",
+            IsDirectoryOptIn = true,
+            AffiliationStatus = "Active",
+            IsActive = true
+        };
+
+        var optedOutProvider = new ClinicHealthcareProvider
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = bookableClinic.Id,
+            PractitionerId = verifiedNursePractitioner.Id,
+            Name = "Opted Out Copy",
+            Specialty = "General Practice",
+            Role = "Nurse",
+            IsDirectoryOptIn = false,
+            AffiliationStatus = "Active",
+            IsActive = true
+        };
+
+        var receptionist = new ClinicHealthcareProvider
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = bookableClinic.Id,
+            PractitionerId = verifiedNursePractitioner.Id,
+            Name = "Receptionist Staff",
+            Specialty = "Front Desk",
+            Role = "Receptionist",
+            IsDirectoryOptIn = true,
+            AffiliationStatus = "Active",
+            IsActive = true
+        };
+
+        db.Practitioners.AddRange(verifiedNursePractitioner, unverifiedDoctor);
+        db.Clinics.AddRange(bookableClinic, pausedClinic, unverifiedClinic);
+        db.ClinicHealthcareProviders.AddRange(nurseProvider, unverifiedProvider, optedOutProvider, receptionist);
+        await db.SaveChangesAsync();
+
+        // Anonymous directory search (patientId == null)
+        var result = await search.SearchAsync(null, null, "all");
+
+        result.Clinics.Should().HaveCount(2);
+        result.Clinics.Select(c => c.Id).Should().NotContain(unverifiedClinic.Id);
+        result.Clinics[0].Id.Should().Be(bookableClinic.Id);
+        result.Clinics[0].SupportsAppointments.Should().BeTrue();
+        result.Clinics[1].Id.Should().Be(pausedClinic.Id);
+        result.Clinics[1].SupportsAppointments.Should().BeFalse();
+        result.Clinics[1].Tags.Should().Contain("Booking Paused");
+
+        result.Doctors.Should().ContainSingle(d => d.Id == nurseProvider.Id && d.Role == "Nurse" && d.IsVerified);
+    }
+
+    [Fact]
+    public async Task DirectoryCatalogSearch_GroupsMultiClinicClinicianByPractitionerId_AndLookupWorksByEitherId()
+    {
+        using var db = CreateInMemoryContext();
+        var now = new DateTimeOffset(2026, 11, 3, 9, 0, 0, TimeSpan.Zero); // Tuesday
+        var search = new DirectoryCatalogSearchService(db, new FixedTimeProvider(now));
+
+        var pausedClinic = new Clinic
+        {
+            Id = Guid.NewGuid(),
+            Name = "North Paused Clinic",
+            Address = "Quezon City",
+            TenantId = "tenant-north",
+            SupportsAppointments = false,
+            IsWorkspaceEligible = true,
+            IsDirectoryPublished = true,
+            IsPlatformVerified = true,
+            IsPublic = true
+        };
+        var bookableClinic = new Clinic
+        {
+            Id = Guid.NewGuid(),
+            Name = "South Bookable Clinic",
+            Address = "Makati City",
+            TenantId = "tenant-south",
+            SupportsAppointments = true,
+            IsWorkspaceEligible = true,
+            IsDirectoryPublished = true,
+            IsPlatformVerified = true,
+            IsPublic = true
+        };
+
+        var practitioner = new Practitioner
+        {
+            Id = Guid.NewGuid(),
+            ProfessionKind = "Doctor",
+            NormalizedPrcLicenseNo = "0123456",
+            DisplayPrcLicenseNo = "PRC-0123456",
+            VerificationLevel = PractitionerVerificationLevel.Verified,
+            Name = "Dr. Jose Santos",
+            FirstName = "Jose",
+            LastName = "Santos",
+            PrimarySpecialty = "Internal Medicine",
+            Bio = "Internist practicing across Metro Manila."
+        };
+
+        var affPaused = new ClinicHealthcareProvider
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = pausedClinic.Id,
+            PractitionerId = practitioner.Id,
+            Name = "Dr. Jose Santos",
+            Specialty = "General Practice",
+            Role = "Doctor",
+            IsDirectoryOptIn = true,
+            AffiliationStatus = "Active",
+            IsActive = true,
+            ProviderAvailabilities =
+            [
+                new ProviderAvailability
+                {
+                    Id = Guid.NewGuid(),
+                    DayOfWeek = DayOfWeek.Wednesday,
+                    StartTime = new TimeSpan(9, 0, 0),
+                    EndTime = new TimeSpan(12, 0, 0),
+                    IsActive = true
+                }
+            ]
+        };
+
+        var affBookable = new ClinicHealthcareProvider
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = bookableClinic.Id,
+            PractitionerId = practitioner.Id,
+            Name = "Dr. Jose Santos",
+            Specialty = "Internal Medicine",
+            Role = "Doctor",
+            IsDirectoryOptIn = true,
+            AffiliationStatus = "Active",
+            IsActive = true,
+            ProviderAvailabilities =
+            [
+                new ProviderAvailability
+                {
+                    Id = Guid.NewGuid(),
+                    DayOfWeek = DayOfWeek.Wednesday,
+                    StartTime = new TimeSpan(14, 0, 0),
+                    EndTime = new TimeSpan(18, 0, 0),
+                    IsActive = true
+                }
+            ]
+        };
+
+        db.Practitioners.Add(practitioner);
+        db.Clinics.AddRange(pausedClinic, bookableClinic);
+        db.ClinicHealthcareProviders.AddRange(affPaused, affBookable);
+        await db.SaveChangesAsync();
+
+        var searchResult = await search.SearchAsync(null, "Santos", "doctors");
+
+        searchResult.Doctors.Should().ContainSingle();
+        var doc = searchResult.Doctors[0];
+        doc.Id.Should().Be(affBookable.Id);
+        doc.PractitionerId.Should().Be(practitioner.Id);
+        doc.ClinicId.Should().Be(bookableClinic.Id);
+        doc.ClinicName.Should().Be("South Bookable Clinic");
+        doc.ClinicSupportsAppointments.Should().BeTrue();
+        doc.IsVerified.Should().BeTrue();
+        doc.Bio.Should().Be("Internist practicing across Metro Manila.");
+        doc.Affiliations.Should().HaveCount(2);
+        doc.Affiliations![0].ClinicId.Should().Be(bookableClinic.Id);
+        doc.Affiliations[0].SupportsAppointments.Should().BeTrue();
+        doc.Affiliations[0].Availabilities.Should().ContainSingle(w => w.DayOfWeek == DayOfWeek.Wednesday && w.StartTime == "14:00");
+        doc.Affiliations[1].ClinicId.Should().Be(pausedClinic.Id);
+        doc.Affiliations[1].SupportsAppointments.Should().BeFalse();
+        doc.Affiliations[1].NextAvailableLabel.Should().Be("Booking Paused");
+
+        var byPractitionerId = await search.GetPractitionerProfileAsync(practitioner.Id);
+        var byProviderId = await search.GetPractitionerProfileAsync(affPaused.Id);
+
+        byPractitionerId.Should().NotBeNull();
+        byProviderId.Should().NotBeNull();
+        byPractitionerId!.PractitionerId.Should().Be(practitioner.Id);
+        byProviderId!.PractitionerId.Should().Be(practitioner.Id);
+        byPractitionerId.Affiliations.Should().HaveCount(2);
+        byPractitionerId.IsVerified.Should().BeTrue();
     }
 }

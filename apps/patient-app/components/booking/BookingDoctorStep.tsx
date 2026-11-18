@@ -11,16 +11,23 @@ import {
 } from 'react-native';
 import { AppIcon } from '../ui/Icon';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
+import {
+  formatAvailabilitySummary,
+  resolveDefaultAffiliation,
+  resolveDoctorAffiliations,
+} from '../../services/search/directorySearchService';
 import type {
-  PatientSearchDoctorDto,
-  PatientSearchClinicDto,
+  DirectoryClinicDto,
+  DirectoryDoctorDto,
 } from '../../services/api/homeApi';
 
 export interface BookingDoctorStepProps {
-  doctors: PatientSearchDoctorDto[];
-  clinics: PatientSearchClinicDto[];
+  doctors: DirectoryDoctorDto[];
+  clinics: DirectoryClinicDto[];
   selectedDoctorId?: string;
-  onSelectDoctor: (doctor: PatientSearchDoctorDto) => void;
+  selectedClinicId?: string;
+  onSelectDoctor: (doctor: DirectoryDoctorDto) => void;
+  onSelectClinic?: (clinicId: string, doctor: DirectoryDoctorDto) => void;
   onViewClinicInfo?: (clinicId: string) => void;
   onViewAllHubs?: () => void;
   onFilterSlidersPress?: () => void;
@@ -42,7 +49,9 @@ function BookingDoctorStepComponent({
   doctors,
   clinics,
   selectedDoctorId,
+  selectedClinicId,
   onSelectDoctor,
+  onSelectClinic,
   onViewClinicInfo,
   onViewAllHubs,
   onFilterSlidersPress = NO_OP,
@@ -78,7 +87,15 @@ function BookingDoctorStepComponent({
           d.name.toLowerCase().includes(q) ||
           d.specialty.toLowerCase().includes(q) ||
           d.clinicName.toLowerCase().includes(q) ||
-          (d.clinicAddress ?? '').toLowerCase().includes(q),
+          (d.clinicAddress ?? '').toLowerCase().includes(q) ||
+          Boolean(
+            d.affiliations?.some(
+              (a) =>
+                a.clinicName.toLowerCase().includes(q) ||
+                (a.clinicAddress ?? '').toLowerCase().includes(q) ||
+                a.localSpecialty.toLowerCase().includes(q),
+            ),
+          ),
       );
     }
 
@@ -88,6 +105,10 @@ function BookingDoctorStepComponent({
 
     if (sortBy === 'availability') {
       result = [...result].sort((a, b) => {
+        if (a.isVerified !== b.isVerified) return a.isVerified ? -1 : 1;
+        if (a.clinicSupportsAppointments !== b.clinicSupportsAppointments) {
+          return a.clinicSupportsAppointments ? -1 : 1;
+        }
         if (a.nextAvailableAt && !b.nextAvailableAt) return -1;
         if (!a.nextAvailableAt && b.nextAvailableAt) return 1;
         return a.name.localeCompare(b.name);
@@ -100,14 +121,52 @@ function BookingDoctorStepComponent({
   }, [doctors, searchQuery, selectedSpecialty, sortBy]);
 
   const selectedDoctor = useMemo(
-    () => doctors.find((d) => d.id === selectedDoctorId) ?? doctors[0] ?? null,
+    () =>
+      doctors.find(
+        (d) =>
+          d.id === selectedDoctorId ||
+          d.practitionerId === selectedDoctorId ||
+          Boolean(d.affiliations?.some((a) => a.providerId === selectedDoctorId)),
+      ) ??
+      doctors[0] ??
+      null,
     [doctors, selectedDoctorId],
   );
 
+  const selectedAffiliation = useMemo(
+    () => (selectedDoctor ? resolveDefaultAffiliation(selectedDoctor, selectedClinicId) : null),
+    [selectedClinicId, selectedDoctor],
+  );
+
   const selectedClinic = useMemo(() => {
-    if (!selectedDoctor) return clinics[0] ?? null;
-    return clinics.find((c) => c.id === selectedDoctor.clinicId) ?? clinics[0] ?? null;
-  }, [clinics, selectedDoctor]);
+    const targetClinicId = selectedAffiliation?.clinicId ?? selectedDoctor?.clinicId;
+    if (!targetClinicId) return clinics[0] ?? null;
+    const matched = clinics.find((c) => c.id === targetClinicId);
+    if (matched) return matched;
+    if (selectedAffiliation) {
+      return {
+        id: selectedAffiliation.clinicId,
+        name: selectedAffiliation.clinicName,
+        primarySpecialty: selectedAffiliation.localSpecialty,
+        description: null,
+        address: selectedAffiliation.clinicAddress,
+        logoUrl: null,
+        coverImageUrl: null,
+        operatingHours: null,
+        openStatusLabel: selectedAffiliation.supportsAppointments ? 'Open Today' : 'Booking Paused',
+        isOpenNow: selectedAffiliation.supportsAppointments,
+        supportsAppointments: selectedAffiliation.supportsAppointments,
+        isPublic: true,
+        isGated: false,
+        isUnlocked: true,
+        activeMemberCount: 0,
+        nextAvailableAt: selectedAffiliation.nextAvailableAt,
+        nextAvailableLabel: selectedAffiliation.nextAvailableLabel,
+        tags: [],
+      } satisfies DirectoryClinicDto;
+    }
+    return clinics[0] ?? null;
+  }, [clinics, selectedAffiliation, selectedDoctor]);
 
   return (
     <View style={styles.container}>
@@ -353,12 +412,31 @@ function BookingDoctorStepComponent({
         <View style={{ gap: spacing.md }}>
           {filteredDoctors.map((doctor) => {
             const isSelected = doctor.id === (selectedDoctor?.id ?? selectedDoctorId);
+            const affiliations = resolveDoctorAffiliations(doctor);
+            const activeAffiliation = isSelected
+              ? resolveDefaultAffiliation(doctor, selectedClinicId)
+              : resolveDefaultAffiliation(doctor);
+            const activeClinicName = activeAffiliation?.clinicName ?? doctor.clinicName;
+            const activeClinicAddress =
+              activeAffiliation?.clinicAddress ?? doctor.clinicAddress;
+            const activeSpecialty = activeAffiliation?.localSpecialty || doctor.specialty;
+            const activeSupportsAppointments = activeAffiliation
+              ? activeAffiliation.supportsAppointments
+              : doctor.clinicSupportsAppointments;
+            const activeNextLabel =
+              activeAffiliation?.nextAvailableLabel || doctor.nextAvailableLabel;
+            const activeNextAt = activeAffiliation
+              ? activeAffiliation.nextAvailableAt
+              : doctor.nextAvailableAt;
+            const scheduleSummary = formatAvailabilitySummary(
+              activeAffiliation?.availabilities,
+            );
             const isTelehealth = doctor.tags.some((t) =>
               t.toLowerCase().includes('telehealth'),
             );
-            const locationLabel = doctor.clinicAddress
-              ? `${doctor.clinicName} • ${doctor.clinicAddress}`
-              : doctor.clinicName;
+            const locationLabel = activeClinicAddress
+              ? `${activeClinicName} • ${activeClinicAddress}`
+              : activeClinicName;
 
             return (
               <Pressable
@@ -407,9 +485,9 @@ function BookingDoctorStepComponent({
                       style={[
                         styles.onlineStatusDot,
                         {
-                          backgroundColor: doctor.clinicSupportsAppointments
+                          backgroundColor: activeSupportsAppointments
                             ? colors.emeraldDot
-                            : colors.subtleText,
+                            : colors.amberText,
                           borderColor: colors.surface,
                           borderRadius: radii.full,
                         },
@@ -445,7 +523,7 @@ function BookingDoctorStepComponent({
                       ]}
                       numberOfLines={1}
                     >
-                      {doctor.specialty}
+                      {activeSpecialty}
                     </Text>
 
                     {doctor.professionalLicenseNo ? (
@@ -494,6 +572,81 @@ function BookingDoctorStepComponent({
                   </Text>
                 </View>
 
+                {scheduleSummary ? (
+                  <Text
+                    style={[
+                      typography.bodySm,
+                      { color: colors.mutedText, marginTop: spacing.xxs },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Schedule: {scheduleSummary}
+                  </Text>
+                ) : null}
+
+                {/* Multi-clinic Selector */}
+                {affiliations.length > 1 ? (
+                  <View style={{ marginTop: spacing.sm, gap: spacing.xs }}>
+                    <Text style={[typography.labelSm, { color: colors.mutedText }]}>
+                      Clinic locations ({affiliations.length})
+                    </Text>
+                    <View style={[styles.badgesRow, { gap: spacing.xs }]}>
+                      {affiliations.map((aff) => {
+                        const isClinicChecked = activeAffiliation?.clinicId === aff.clinicId;
+                        return (
+                          <Pressable
+                            key={`${aff.clinicId}-${aff.providerId ?? 'primary'}`}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: isClinicChecked }}
+                            onPress={(e) => {
+                              e.stopPropagation?.();
+                              if (onSelectClinic) {
+                                onSelectClinic(aff.clinicId, doctor);
+                              } else {
+                                onSelectDoctor(doctor);
+                              }
+                            }}
+                            style={[
+                              styles.clinicSelectorChip,
+                              {
+                                backgroundColor: isClinicChecked
+                                  ? colors.mintBadgeBg
+                                  : colors.surfaceLow,
+                                borderColor: isClinicChecked ? colors.primary : colors.border,
+                                borderRadius: radii.lg,
+                                paddingHorizontal: spacing.sm,
+                                paddingVertical: spacing.xs,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                typography.labelSm,
+                                {
+                                  color: isClinicChecked ? colors.primary : colors.navyText,
+                                },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {aff.clinicName}
+                            </Text>
+                            {!aff.supportsAppointments ? (
+                              <Text
+                                style={[
+                                  typography.labelSm,
+                                  { color: colors.amberText, marginLeft: spacing.xs },
+                                ]}
+                              >
+                                Booking Paused
+                              </Text>
+                            ) : null}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ) : null}
+
                 <View style={[styles.badgesRow, { marginTop: spacing.sm, gap: spacing.sm }]}>
                   <View
                     style={[
@@ -528,9 +681,11 @@ function BookingDoctorStepComponent({
                     style={[
                       styles.tagBadge,
                       {
-                        backgroundColor: doctor.nextAvailableAt
-                          ? colors.mintBadgeBg
-                          : colors.surfaceLow,
+                        backgroundColor: !activeSupportsAppointments
+                          ? colors.amberSoftBg
+                          : activeNextAt
+                            ? colors.mintBadgeBg
+                            : colors.surfaceLow,
                         borderRadius: radii.full,
                         paddingHorizontal: spacing.sm + 2,
                         paddingVertical: spacing.xxs + 2,
@@ -538,17 +693,28 @@ function BookingDoctorStepComponent({
                     ]}
                   >
                     <AppIcon
-                      name={doctor.nextAvailableAt ? 'zap' : 'calendar'}
+                      name={
+                        !activeSupportsAppointments
+                          ? 'alert'
+                          : activeNextAt
+                            ? 'zap'
+                            : 'calendar'
+                      }
                       size={12}
-                      color={colors.primaryDeep}
+                      color={!activeSupportsAppointments ? colors.amberText : colors.primary}
                     />
                     <Text
                       style={[
                         typography.labelSm,
-                        { color: colors.primaryDeep, marginLeft: spacing.xxs + 2 },
+                        {
+                          color: !activeSupportsAppointments ? colors.amberText : colors.primary,
+                          marginLeft: spacing.xxs + 2,
+                        },
                       ]}
                     >
-                      {doctor.nextAvailableLabel || 'Schedule online'}
+                      {!activeSupportsAppointments
+                        ? 'Booking Paused'
+                        : activeNextLabel || 'Schedule online'}
                     </Text>
                   </View>
                 </View>
@@ -614,7 +780,7 @@ function BookingDoctorStepComponent({
                 </>
               ) : null}
 
-              <View style={styles.facilityBannerTopRow}>
+              <View style={[styles.facilityBannerTopRow, { gap: spacing.sm }]}>
                 <View
                   style={[
                     styles.openBadge,
@@ -646,6 +812,30 @@ function BookingDoctorStepComponent({
                     {selectedClinic.openStatusLabel}
                   </Text>
                 </View>
+
+                {!selectedClinic.supportsAppointments ? (
+                  <View
+                    style={[
+                      styles.openBadge,
+                      {
+                        backgroundColor: colors.amberSoftBg,
+                        borderRadius: radii.full,
+                        paddingHorizontal: spacing.sm + 2,
+                        paddingVertical: spacing.xxs + 2,
+                      },
+                    ]}
+                  >
+                    <AppIcon name="alert" size={12} color={colors.amberText} />
+                    <Text
+                      style={[
+                        typography.labelSm,
+                        { color: colors.amberText, marginLeft: spacing.xs },
+                      ]}
+                    >
+                      Booking Paused
+                    </Text>
+                  </View>
+                ) : null}
               </View>
 
               <View style={{ marginTop: spacing.lg }}>
@@ -666,6 +856,17 @@ function BookingDoctorStepComponent({
                     {selectedClinic.address}
                   </Text>
                 ) : null}
+                {selectedClinic.operatingHours ? (
+                  <Text
+                    style={[
+                      typography.bodySm,
+                      { color: colors.healthPassMuted, marginTop: spacing.xxs },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Hours: {selectedClinic.operatingHours}
+                  </Text>
+                ) : null}
               </View>
             </View>
 
@@ -677,13 +878,26 @@ function BookingDoctorStepComponent({
               ]}
             >
               <View style={styles.amenityItem}>
-                <AppIcon name="calendarCheck" size={16} color={colors.primary} />
+                <AppIcon
+                  name={selectedClinic.supportsAppointments ? 'calendarCheck' : 'alert'}
+                  size={16}
+                  color={selectedClinic.supportsAppointments ? colors.primary : colors.amberText}
+                />
                 <View style={{ marginLeft: spacing.xs }}>
                   <Text style={[typography.labelSm, { color: colors.navyText }]}>
-                    {selectedClinic.supportsAppointments ? 'Online' : 'By'}
+                    {selectedClinic.supportsAppointments ? 'Online' : 'Booking'}
                   </Text>
-                  <Text style={[typography.bodySm, { color: colors.mutedText }]}>
-                    {selectedClinic.supportsAppointments ? 'Booking' : 'Inquiry'}
+                  <Text
+                    style={[
+                      typography.bodySm,
+                      {
+                        color: selectedClinic.supportsAppointments
+                          ? colors.mutedText
+                          : colors.amberText,
+                      },
+                    ]}
+                  >
+                    {selectedClinic.supportsAppointments ? 'Booking' : 'Paused'}
                   </Text>
                 </View>
               </View>
@@ -874,6 +1088,11 @@ const styles = StyleSheet.create({
   tagBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  clinicSelectorChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
   },
   facilityCard: {
     width: '100%',

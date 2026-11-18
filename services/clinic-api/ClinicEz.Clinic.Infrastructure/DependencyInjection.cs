@@ -282,6 +282,9 @@ public static class DependencyInjection
         services.AddInterop<ApplicationDbContext>(configuration, b => b
             .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
             .Handle<FacilityCreatedEvent, FacilityDirectoryUpdatedHandler>(InteropTypes.FacilityDirectoryUpdated)
+            .Handle<FacilityVerificationRejectedPayload, FacilityVerificationRejectedHandler>(InteropTypes.FacilityVerificationRejected)
+            .Handle<PractitionerIdentityUpdatedPayload, PractitionerIdentityUpdatedHandler>(InteropTypes.PractitionerIdentityUpdated)
+            .Handle<PractitionerVerificationRevokedPayload, PractitionerVerificationRevokedHandler>(InteropTypes.PractitionerVerificationRevoked)
             .HandleWorkspaceProfileUpdated()
             .Handle<AppointmentBookedEvent, AppointmentBookedHandler>(InteropTypes.PatientAppointmentBooked)
             .Handle<PatientJoinRequestedPayload, PatientJoinRequestedHandler>(InteropTypes.PatientJoinRequested)

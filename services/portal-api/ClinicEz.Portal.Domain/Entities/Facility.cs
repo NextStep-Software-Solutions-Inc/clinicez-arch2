@@ -95,4 +95,12 @@ public class Facility : BaseEntity
     public string? JoinCode { get; set; }
     public DateTime? JoinCodeExpiresAtUtc { get; set; }
     public DateTime? JoinSettingsUpdatedAtUtc { get; set; }
+
+    // Platform Directory Verification
+    public PlatformVerificationStatus PlatformVerificationStatus { get; set; } = PlatformVerificationStatus.Unverified;
+    public string? LtoEvidenceObjectKey { get; set; }
+    public Guid? LatestVerificationRequestId { get; set; }
+    public DateTime? VerifiedAtUtc { get; set; }
+    public string? VerifiedByAdminUserId { get; set; }
+    public string? RejectionReason { get; set; }
 }

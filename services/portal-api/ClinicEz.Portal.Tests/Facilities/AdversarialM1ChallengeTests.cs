@@ -95,7 +95,8 @@ public class AdversarialM1ChallengeTests : IDisposable
             Slug = string.Empty,
             FacilityType = FacilityType.Clinic,
             Status = FacilityStatus.Active,
-            IsPatientDiscoveryEligible = true
+            IsPatientDiscoveryEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified
         };
         _context.Facilities.Add(emptySlugFacility);
         await _context.SaveChangesAsync();
@@ -126,6 +127,9 @@ public class AdversarialM1ChallengeTests : IDisposable
     [Fact]
     public async Task DualOutbox_MultiCycleToggle_MaintainsStrictSynchronization()
     {
+        _facility.PlatformVerificationStatus = PlatformVerificationStatus.Verified;
+        await _context.SaveChangesAsync();
+
         var publisher = TestSupport.ProvisioningPublisher(_context);
         var handler = new SetFacilityDiscoveryEligibilityCommandHandler(_context, publisher);
 

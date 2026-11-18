@@ -235,5 +235,68 @@ public sealed class CreateBookingDraftCommandHandlerTests
         var draftBId = await handler.Handle(cmdB, CancellationToken.None);
         draftBId.Should().NotBeEmpty();
     }
+
+    [Fact]
+    public async Task Handle_WhenClinicBookingIsPaused_ThrowsConflictException()
+    {
+        var clinicRepo = Substitute.For<IClinicRepository>();
+        _patientRepo.GetByIdAsync(_patientId, Arg.Any<CancellationToken>())
+            .Returns(new Domain.Entities.Patient { Id = _patientId, FirstName = "Juan", LastName = "Dela Cruz" });
+        clinicRepo.GetByIdAsync(_clinicId, Arg.Any<CancellationToken>())
+            .Returns(new Clinic { Id = _clinicId, Name = "Paused Clinic", SupportsAppointments = false });
+
+        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow, clinicRepo);
+        var cmd = new CreateBookingDraftCommand(_patientId, _clinicId, null, null, null, "Checkup", null, "[]", "[]");
+
+        Func<Task> act = () => handler.Handle(cmd, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ConflictException>()
+            .WithMessage("Online booking is currently paused for this clinic.");
+        await _draftRepo.DidNotReceive().AddAsync(Arg.Any<BookingDraft>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithProviderId_StoresProviderIdAndNameOnDraft()
+    {
+        var clinicRepo = Substitute.For<IClinicRepository>();
+        var providerId = Guid.NewGuid();
+        var practitionerId = Guid.NewGuid();
+        _patientRepo.GetByIdAsync(_patientId, Arg.Any<CancellationToken>())
+            .Returns(new Domain.Entities.Patient { Id = _patientId, FirstName = "Juan", LastName = "Dela Cruz" });
+        clinicRepo.GetByIdAsync(_clinicId, Arg.Any<CancellationToken>())
+            .Returns(new Clinic
+            {
+                Id = _clinicId,
+                Name = "Active Clinic",
+                SupportsAppointments = true,
+                HealthcareProviders =
+                [
+                    new ClinicHealthcareProvider
+                    {
+                        Id = providerId,
+                        ClinicId = _clinicId,
+                        PractitionerId = practitionerId,
+                        Name = "Dr. Maria Santos"
+                    }
+                ]
+            });
+        _draftRepo.GetByPatientAsync(_patientId, BookingDraftStatus.Draft, Arg.Any<CancellationToken>())
+            .Returns(new List<BookingDraft>());
+
+        BookingDraft? captured = null;
+        await _draftRepo.AddAsync(Arg.Do<BookingDraft>(d => captured = d), Arg.Any<CancellationToken>());
+
+        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow, clinicRepo);
+        var cmd = new CreateBookingDraftCommand(
+            _patientId, _clinicId, null, null, null, "Consult", null, "[]", "[]",
+            ProviderId: practitionerId);
+
+        var draftId = await handler.Handle(cmd, CancellationToken.None);
+
+        draftId.Should().NotBeEmpty();
+        captured.Should().NotBeNull();
+        captured!.ProviderId.Should().Be(providerId);
+        captured.ProviderName.Should().Be("Dr. Maria Santos");
+    }
 }
 

@@ -1,20 +1,34 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
-import Icon, { IconName } from '../ui/Icon';
+import Input from '../ui/Input';
+import Icon from '../ui/Icon';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Skeleton, SkeletonList } from '../ui/Skeleton';
 import { theme } from '../../constants/theme';
+import { notify } from '../../utils/feedback';
+import {
+  pickVerificationEvidenceFile,
+  resolveFacilityVerificationBadge,
+  toEvidenceFormData,
+} from '../../utils/directoryVerification';
 import { SettingsTabKey, ReadinessCheckItem } from './types';
-import { ClinicRole, ClinicServiceItem, FacilityLicenseStatus, StaffMember } from '../../services/clinicService';
+import {
+  ClinicRole,
+  ClinicServiceItem,
+  FacilityLicenseStatus,
+  PlatformVerificationStatus,
+  StaffMember,
+} from '../../services/clinicService';
 
 export interface ToggleSwitchProps {
   value: boolean;
   onValueChange: (val: boolean) => void;
   disabled?: boolean;
   accessibilityLabel?: string;
+  testID?: string;
 }
 
 export function ToggleSwitch({
@@ -22,6 +36,7 @@ export function ToggleSwitch({
   onValueChange,
   disabled = false,
   accessibilityLabel,
+  testID,
 }: ToggleSwitchProps) {
   return (
     <Pressable
@@ -29,6 +44,7 @@ export function ToggleSwitch({
       accessibilityRole="switch"
       accessibilityState={{ checked: value, disabled }}
       accessibilityLabel={accessibilityLabel}
+      testID={testID}
       disabled={disabled}
       style={[styles.switchTouchTarget, disabled && styles.switchDisabled]}
     >
@@ -64,8 +80,22 @@ export interface FacilityReadinessTabProps {
   isDirectoryPublished?: boolean;
   isOnlineBookingPaused?: boolean;
   isWorkspaceEligible?: boolean;
+  platformVerificationStatus?: PlatformVerificationStatus;
+  verificationRejectionReason?: string | null;
+  lastVerificationSubmittedAtUtc?: string | null;
+  letterheadDohLto?: string | null;
+  ltoEvidenceObjectKey?: string | null;
+  optedInCliniciansCount?: number;
+  optedInCliniciansReadyCount?: number;
+  onSaveDohLto?: (dohLto: string) => Promise<boolean | void> | boolean | void;
+  onUploadLtoProof?: (file: FormData) => Promise<boolean | void> | boolean | void;
+  onSubmitVerification?: () => Promise<void> | void;
+  onWithdrawVerification?: () => Promise<void> | void;
   onTogglePublishDirectory?: (nextPublished: boolean) => Promise<void> | void;
   onToggleBookingPause?: (nextPaused: boolean) => Promise<void> | void;
+  isLtoSaving?: boolean;
+  isLtoUploading?: boolean;
+  isWithdrawingVerification?: boolean;
   isPublishingMutating?: boolean;
   isBookingPauseMutating?: boolean;
   onNavigateTab: (tab: SettingsTabKey) => void;
@@ -85,12 +115,26 @@ export default function FacilityReadinessTab({
   operatingHours = '',
   staff,
   services,
-  roles,
+  roles: _roles,
   isDirectoryPublished = false,
   isOnlineBookingPaused = false,
   isWorkspaceEligible = true,
+  platformVerificationStatus = 'Unverified',
+  verificationRejectionReason = null,
+  lastVerificationSubmittedAtUtc = null,
+  letterheadDohLto = '',
+  ltoEvidenceObjectKey = null,
+  optedInCliniciansCount,
+  optedInCliniciansReadyCount,
+  onSaveDohLto,
+  onUploadLtoProof,
+  onSubmitVerification,
+  onWithdrawVerification,
   onTogglePublishDirectory,
   onToggleBookingPause,
+  isLtoSaving,
+  isLtoUploading,
+  isWithdrawingVerification,
   isPublishingMutating,
   isBookingPauseMutating,
   onNavigateTab,
@@ -101,8 +145,20 @@ export default function FacilityReadinessTab({
 }: FacilityReadinessTabProps) {
   const [localPublishingLoading, setLocalPublishingLoading] = useState(false);
   const [localPauseLoading, setLocalPauseLoading] = useState(false);
+  const [localWithdrawLoading, setLocalWithdrawLoading] = useState(false);
+  const [localLtoSaving, setLocalLtoSaving] = useState(false);
+  const [localLtoUploading, setLocalLtoUploading] = useState(false);
+  const [ltoInput, setLtoInput] = useState(letterheadDohLto ?? '');
+
+  useEffect(() => {
+    setLtoInput(letterheadDohLto ?? '');
+  }, [letterheadDohLto]);
+
   const publishingLoading = isPublishingMutating ?? localPublishingLoading;
   const pauseLoading = isBookingPauseMutating ?? localPauseLoading;
+  const withdrawLoading = isWithdrawingVerification ?? localWithdrawLoading;
+  const savingLto = isLtoSaving ?? localLtoSaving;
+  const uploadingLto = isLtoUploading ?? localLtoUploading;
 
   // 1. License Check
   const hasActiveLicense = Boolean(
@@ -110,31 +166,38 @@ export default function FacilityReadinessTab({
       license.status === 'Active' &&
       !license.isTampered &&
       (!license.expiresAtUtc || new Date(license.expiresAtUtc) > new Date()) &&
-      (license.limits?.maxStaff ?? 0) > 0
+      (license.limits?.maxStaff ?? 0) > 0,
   );
 
   // 2. Profile Check
   const hasProfile = Boolean(clinicName?.trim() && (letterheadAddress?.trim() || letterheadContact?.trim()));
 
-  // 3. Operating Hours Check (MANDATORY for M2)
+  // 3. Operating Hours Check
   const hasOperatingHours = Boolean(operatingHours && operatingHours.trim().length > 0);
 
-  // 4. Doctor with PRC
+  // 4. DOH LTO Number or Proof Check
+  const savedDohLto = letterheadDohLto?.trim() || '';
+  const hasLtoProof = Boolean(ltoEvidenceObjectKey?.trim());
+  const hasDohLtoOrProof = Boolean(savedDohLto || hasLtoProof);
+
+  // 5. Doctor with PRC
   const activeDoctors = staff.filter((s) => s.isActive && s.role === 'Doctor' && Boolean(s.prcLicenseNumber?.trim()));
   const hasDoctor = activeDoctors.length > 0;
 
-  // 5. Front Desk or Cashier
-  const activeFrontDesk = staff.filter((s) => s.isActive && (s.role === 'Receptionist' || s.role === 'Cashier' || s.role === 'Admin'));
+  // 6. Front Desk or Cashier
+  const activeFrontDesk = staff.filter(
+    (s) => s.isActive && (s.role === 'Receptionist' || s.role === 'Cashier' || s.role === 'Admin'),
+  );
   const hasFrontDesk = activeFrontDesk.length > 0;
 
-  // 6. Fee Schedule & Catalog
+  // 7. Fee Schedule & Catalog
   const activeServices = services.filter((s) => s.isActive);
   const hasServices = activeServices.length > 0;
 
-  // 7. PhilHealth (Optional — requires accreditation number and configured credentials)
+  // 8. PhilHealth (Optional)
   const hasPhilHealth = Boolean(accreditationNumber?.trim()) && Boolean(isPhilHealthConfigured);
 
-  // 8. Contact / Official details (Optional)
+  // 9. Contact / Official details (Optional)
   const hasOfficialDetails = Boolean(letterheadAddress?.trim() && letterheadContact?.trim());
 
   const checks: ReadinessCheckItem[] = [
@@ -175,11 +238,28 @@ export default function FacilityReadinessTab({
       actionTab: 'general',
     },
     {
+      id: 'dohLto',
+      category: 'directory',
+      title: 'DOH License to Operate (LTO) & Proof',
+      description: hasDohLtoOrProof
+        ? [
+            savedDohLto ? `LTO No. ${savedDohLto}` : null,
+            hasLtoProof ? 'LTO proof document uploaded' : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        : 'Enter a DOH LTO number or upload an LTO proof document (PDF, JPEG, or PNG) for directory verification.',
+      status: hasDohLtoOrProof ? 'passed' : 'failed',
+      required: true,
+      actionLabel: hasLtoProof ? 'Replace LTO Proof' : 'Upload LTO Proof',
+      actionTab: 'documents',
+    },
+    {
       id: 'doctor',
       category: 'staff',
       title: 'Attending Physician / Doctor with PRC',
       description: hasDoctor
-        ? `${activeDoctors.length} doctor(s) on roster with verified PRC license numbers.`
+        ? `${activeDoctors.length} doctor(s) on roster with PRC license numbers.`
         : 'Philippine regulatory compliance requires at least one registered physician with a valid PRC license.',
       status: hasDoctor ? 'passed' : 'failed',
       required: true,
@@ -244,6 +324,43 @@ export default function FacilityReadinessTab({
   const readinessPercent = Math.round((checks.filter((c) => c.status === 'passed').length / checks.length) * 100);
 
   const canPublish = Boolean(isWorkspaceEligible && isFacilityReady);
+  const verificationBadge = resolveFacilityVerificationBadge(platformVerificationStatus);
+  const isVerified = platformVerificationStatus === 'Verified';
+  const isPendingReview = platformVerificationStatus === 'PendingReview';
+  const isRejectedOrSuspended =
+    platformVerificationStatus === 'Rejected' || platformVerificationStatus === 'Suspended';
+  const isUnverified = !platformVerificationStatus || platformVerificationStatus === 'Unverified';
+  const isPublishedLive = isVerified && isDirectoryPublished;
+  const ltoDraftDirty = ltoInput.trim() !== savedDohLto;
+
+  const handlePickAndUploadLtoProof = async () => {
+    if (!onUploadLtoProof) {
+      onNavigateTab('documents');
+      return;
+    }
+    const picked = await pickVerificationEvidenceFile();
+    if (picked.canceled) return;
+    if (picked.error || !picked.file) {
+      notify.error(picked.error || 'Could not select DOH LTO proof file.');
+      return;
+    }
+    setLocalLtoUploading(true);
+    try {
+      await onUploadLtoProof(toEvidenceFormData(picked.file));
+    } finally {
+      setLocalLtoUploading(false);
+    }
+  };
+
+  const handleSaveDohLto = async () => {
+    if (!onSaveDohLto) return;
+    setLocalLtoSaving(true);
+    try {
+      await onSaveDohLto(ltoInput.trim());
+    } finally {
+      setLocalLtoSaving(false);
+    }
+  };
 
   const handleAction = (check: ReadinessCheckItem) => {
     if (check.id === 'doctor' || check.id === 'frontdesk') {
@@ -252,8 +369,36 @@ export default function FacilityReadinessTab({
       onOpenAddService();
     } else if (check.id === 'license') {
       onOpenLicenseModal();
+    } else if (check.id === 'dohLto') {
+      void handlePickAndUploadLtoProof();
     } else if (check.actionTab) {
       onNavigateTab(check.actionTab);
+    }
+  };
+
+  const handleSubmitVerification = async () => {
+    setLocalPublishingLoading(true);
+    try {
+      if (ltoDraftDirty && onSaveDohLto) {
+        await onSaveDohLto(ltoInput.trim());
+      }
+      if (onSubmitVerification) {
+        await onSubmitVerification();
+      } else if (onTogglePublishDirectory) {
+        await onTogglePublishDirectory(true);
+      }
+    } finally {
+      setLocalPublishingLoading(false);
+    }
+  };
+
+  const handleWithdrawVerification = async () => {
+    if (!onWithdrawVerification) return;
+    setLocalWithdrawLoading(true);
+    try {
+      await onWithdrawVerification();
+    } finally {
+      setLocalWithdrawLoading(false);
     }
   };
 
@@ -319,7 +464,7 @@ export default function FacilityReadinessTab({
             <ThemedText variant="body" color={theme.colors.textSecondary} style={styles.heroSubtext}>
               {isFacilityReady
                 ? 'All mandatory clinical, staffing, and legal prerequisites are met. The clinic workstation is fully operational.'
-                : 'Resolve the incomplete mandatory checks below before opening clinic doors and admitting patients.'}
+                : 'Resolve the incomplete mandatory checks below before opening clinic doors and submitting for directory verification.'}
             </ThemedText>
 
             {/* Progress bar */}
@@ -347,14 +492,13 @@ export default function FacilityReadinessTab({
       <Card>
         <CardHeader
           title="Facility Pre-Flight Checklist"
-          subtitle="Mandatory regulatory items must pass before daily clinic operations commence."
+          subtitle="Mandatory regulatory items must pass before daily clinic operations and directory submission."
         />
         <CardContent>
           <View style={styles.checklist}>
             {checks.map((check) => {
               const isPassed = check.status === 'passed';
               const isFailed = check.status === 'failed';
-              const isWarning = check.status === 'warning';
 
               return (
                 <View key={check.id} style={styles.checkRow}>
@@ -391,6 +535,7 @@ export default function FacilityReadinessTab({
                       title={check.actionLabel || 'Configure'}
                       variant={isPassed ? 'ghost' : 'outline'}
                       size="sm"
+                      loading={check.id === 'dohLto' && uploadingLto}
                       onPress={() => handleAction(check)}
                     />
                   </View>
@@ -405,8 +550,21 @@ export default function FacilityReadinessTab({
       <Card>
         <CardHeader
           title="Online Presence & Patient Directory"
-          subtitle="Control whether your facility profile and services are discoverable on the ClinicEZ patient mobile app."
+          subtitle="Verify your DOH License to Operate and manage patient directory visibility."
           icon="globe"
+          rightAction={
+            <View style={styles.headerBadgeGroup}>
+              <Badge
+                label={verificationBadge.label}
+                variant={verificationBadge.variant}
+                size="sm"
+                icon={verificationBadge.icon}
+              />
+              {isPublishedLive ? (
+                <Badge label="Published" variant="success" size="sm" icon="checkCircle" />
+              ) : null}
+            </View>
+          }
         />
         <CardContent>
           {/* Workspace Eligibility Warning Banner */}
@@ -426,44 +584,183 @@ export default function FacilityReadinessTab({
                   Your organization workspace administrator has not yet enabled public patient directory discovery for this facility branch. You can complete your pre-flight checklist and profile configuration, but patient app publishing remains locked until workspace-level eligibility is granted in the Portal.
                 </ThemedText>
                 <ThemedText variant="captionBold" color={theme.colors.warningText} style={styles.warningBannerFooter}>
-                  To resolve: Contact your workspace administrator to enable "Patient App Discovery" in Portal Settings → Facilities.
+                  To resolve: Contact your workspace administrator to enable &quot;Patient App Discovery&quot; in Portal Settings → Facilities.
                 </ThemedText>
               </View>
             </View>
           )}
 
-          {/* Directory Publishing Toggle Row */}
-          <View style={styles.controlRow}>
+          {/* Rejected / Action Required Notice */}
+          {isRejectedOrSuspended && (
+            <View style={styles.rejectedBanner}>
+              <View style={styles.warningBannerIconCol}>
+                <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergency} />
+              </View>
+              <View style={styles.warningBannerTextCol}>
+                <View style={styles.warningBannerHeaderRow}>
+                  <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
+                    Directory Verification Action Required
+                  </ThemedText>
+                  <Badge label="Action Required" variant="emergency" size="sm" icon="alertCircle" />
+                </View>
+                <ThemedText variant="small" color={theme.colors.emergencyText}>
+                  {verificationRejectionReason?.trim()
+                    ? verificationRejectionReason.trim()
+                    : 'Your directory verification submission requires updates before it can be published.'}
+                </ThemedText>
+              </View>
+            </View>
+          )}
+
+          {/* DOH LTO Number & Proof Document */}
+          <View style={styles.ltoBox}>
+            <View style={styles.ltoHeaderRow}>
+              <ThemedText variant="smallBold" color={theme.colors.text}>
+                DOH License to Operate (LTO)
+              </ThemedText>
+              <Badge
+                label={hasLtoProof ? 'LTO Proof Uploaded' : savedDohLto ? 'LTO Number Recorded' : 'LTO Required'}
+                variant={hasDohLtoOrProof ? 'success' : 'neutral'}
+                size="sm"
+                icon={hasDohLtoOrProof ? 'checkCircle' : 'file'}
+              />
+            </View>
+
+            <View style={styles.ltoInputRow}>
+              <Input
+                containerStyle={styles.ltoInputFlex}
+                label="DOH LTO Number"
+                value={ltoInput}
+                onChangeText={setLtoInput}
+                placeholder="e.g. DOH-LTO-04A-2026-0089"
+                helperText="Enter your DOH LTO number and/or upload a PDF, JPEG, or PNG proof (max 5 MB)."
+                testID="readiness-input-doh-lto"
+              />
+              {onSaveDohLto ? (
+                <View style={styles.ltoSaveBtnWrap}>
+                  <Button
+                    title="Save LTO"
+                    variant="outline"
+                    size="sm"
+                    onPress={handleSaveDohLto}
+                    loading={savingLto}
+                    disabled={!ltoDraftDirty || savingLto}
+                    testID="btn-save-doh-lto"
+                  />
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.ltoProofRow}>
+              <Button
+                title={hasLtoProof ? 'Replace LTO Proof' : 'Upload LTO Proof'}
+                variant="secondary"
+                size="sm"
+                icon="upload"
+                loading={uploadingLto}
+                disabled={uploadingLto}
+                onPress={handlePickAndUploadLtoProof}
+                testID="btn-upload-lto-proof"
+              />
+              {hasLtoProof ? (
+                <ThemedText variant="caption" color={theme.colors.successText}>
+                  LTO evidence document is stored on file.
+                </ThemedText>
+              ) : (
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  No LTO proof document uploaded yet.
+                </ThemedText>
+              )}
+            </View>
+          </View>
+
+          {/* Directory Verification & Publishing Control Row */}
+          <View style={[styles.controlRow, styles.controlRowBorderTop]}>
             <View style={styles.controlTextCol}>
               <View style={styles.controlTitleRow}>
-                <ThemedText variant="bodyBold">Publish to Patient Directory</ThemedText>
-                <Badge
-                  label={isDirectoryPublished ? 'Published (Live)' : 'Draft (Unlisted)'}
-                  variant={isDirectoryPublished ? 'success' : 'neutral'}
-                  size="sm"
-                  icon={isDirectoryPublished ? 'checkCircle' : 'lock'}
-                />
+                <ThemedText variant="bodyBold">
+                  {isVerified ? 'Publish to Directory' : 'Directory Verification'}
+                </ThemedText>
+                {isVerified ? (
+                  <Badge
+                    label={isDirectoryPublished ? 'Published' : 'Unlisted'}
+                    variant={isDirectoryPublished ? 'success' : 'neutral'}
+                    size="sm"
+                    icon={isDirectoryPublished ? 'checkCircle' : 'lock'}
+                  />
+                ) : (
+                  <Badge
+                    label={verificationBadge.label}
+                    variant={verificationBadge.variant}
+                    size="sm"
+                    icon={verificationBadge.icon}
+                  />
+                )}
               </View>
+
               <ThemedText variant="small" color={theme.colors.textSecondary}>
-                {isDirectoryPublished
-                  ? 'Your facility profile, verified operating hours, attending doctors, and clinical services are discoverable on the ClinicEZ patient mobile app.'
-                  : 'Your facility is unlisted from patient search. Staff and internal operations are active, but patients cannot discover this clinic on the mobile directory.'}
+                {isPendingReview
+                  ? 'Your clinic verification request is awaiting platform review.'
+                  : isRejectedOrSuspended
+                  ? 'Update your clinic details or DOH LTO documentation, then resubmit for verification.'
+                  : isVerified && isDirectoryPublished
+                  ? 'Your clinic is verified and published in the patient directory.'
+                  : isVerified
+                  ? 'Your clinic is verified. Turn on publishing to list it in the patient directory.'
+                  : 'Submit your clinic credentials and DOH LTO documentation for verification before publishing.'}
               </ThemedText>
-              {!canPublish && (
+
+              {isPendingReview && lastVerificationSubmittedAtUtc ? (
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Submitted {new Date(lastVerificationSubmittedAtUtc).toLocaleDateString()}
+                </ThemedText>
+              ) : null}
+
+              {typeof optedInCliniciansCount === 'number' && optedInCliniciansCount > 0 ? (
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Opted-in clinicians ready: {optedInCliniciansReadyCount ?? 0}/{optedInCliniciansCount}
+                </ThemedText>
+              ) : null}
+
+              {!canPublish && (isUnverified || isRejectedOrSuspended || isVerified) ? (
                 <ThemedText variant="captionBold" color={theme.colors.emergencyText} style={styles.ineligibleNotice}>
                   {!isWorkspaceEligible
                     ? 'Publishing locked: Requires workspace administrator approval in Portal.'
                     : 'Publishing locked: Complete all mandatory pre-flight checks above.'}
                 </ThemedText>
-              )}
+              ) : null}
             </View>
+
             <View style={styles.controlSwitchCol}>
-              <ToggleSwitch
-                value={isDirectoryPublished}
-                onValueChange={handlePublishToggle}
-                disabled={!canPublish || publishingLoading}
-                accessibilityLabel="Publish to Patient Directory"
-              />
+              {isVerified ? (
+                <ToggleSwitch
+                  value={isDirectoryPublished}
+                  onValueChange={handlePublishToggle}
+                  disabled={!canPublish || publishingLoading}
+                  accessibilityLabel="Publish to Directory"
+                  testID="switch-publish-directory"
+                />
+              ) : isPendingReview ? (
+                <Button
+                  title="Withdraw Submission"
+                  variant="outline"
+                  size="sm"
+                  onPress={handleWithdrawVerification}
+                  loading={withdrawLoading}
+                  disabled={withdrawLoading}
+                  testID="btn-withdraw-verification"
+                />
+              ) : (
+                <Button
+                  title="Submit for Verification"
+                  variant="primary"
+                  size="sm"
+                  onPress={handleSubmitVerification}
+                  loading={publishingLoading}
+                  disabled={!canPublish || publishingLoading || savingLto || uploadingLto}
+                  testID="btn-submit-verification"
+                />
+              )}
             </View>
           </View>
 
@@ -481,12 +778,12 @@ export default function FacilityReadinessTab({
               </View>
               <ThemedText variant="small" color={theme.colors.textSecondary}>
                 {isOnlineBookingPaused
-                  ? 'Online appointment booking is currently paused. Patients on the mobile app are notified of temporary booking suspension, while in-clinic walk-in queues and existing scheduled appointments continue normally.'
+                  ? 'Online appointment booking is currently paused. Patients see your clinic as paused while walk-in queues and existing appointments continue.'
                   : 'Patients can schedule outpatient consultations in available doctor shift slots based on your weekly roster.'}
               </ThemedText>
-              {!isDirectoryPublished && (
+              {!isPublishedLive && (
                 <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.ineligibleNotice}>
-                  Active when clinic is published to directory.
+                  Active when clinic is verified and published to directory.
                 </ThemedText>
               )}
             </View>
@@ -494,8 +791,9 @@ export default function FacilityReadinessTab({
               <ToggleSwitch
                 value={isOnlineBookingPaused}
                 onValueChange={handleBookingPauseToggle}
-                disabled={!isDirectoryPublished || pauseLoading}
+                disabled={!isPublishedLive || pauseLoading}
                 accessibilityLabel="Pause Online Appointment Booking"
+                testID="switch-booking-pause"
               />
             </View>
           </View>
@@ -589,6 +887,12 @@ const styles = StyleSheet.create({
   checkActionCol: {
     alignItems: 'flex-end',
   },
+  headerBadgeGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
   warningBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -597,6 +901,17 @@ const styles = StyleSheet.create({
     borderWidth: theme.sizes.borderWidth,
     borderRadius: theme.radii.lg,
     padding: theme.spacing.lg,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  rejectedBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: theme.colors.emergencySubtle,
+    borderColor: theme.colors.emergencyBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md,
     gap: theme.spacing.md,
     marginBottom: theme.spacing.md,
   },
@@ -620,6 +935,41 @@ const styles = StyleSheet.create({
   },
   warningBannerFooter: {
     marginTop: theme.spacing.xs,
+  },
+  ltoBox: {
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  ltoHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  ltoInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+  },
+  ltoInputFlex: {
+    flex: 1,
+    minWidth: 220,
+  },
+  ltoSaveBtnWrap: {
+    paddingBottom: 20,
+  },
+  ltoProofRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
   },
   controlRow: {
     flexDirection: 'row',

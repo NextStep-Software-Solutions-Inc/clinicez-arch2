@@ -3,17 +3,20 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Api.Authorization;
+using ClinicEz.Clinic.Application.Common.Helpers;
+using ClinicEz.Clinic.Application.Features.Settings.Commands;
 using ClinicEz.Clinic.Application.Features.Staff.Commands;
 using ClinicEz.Clinic.Application.Features.Staff.DTOs;
 using ClinicEz.Clinic.Application.Features.Staff.Queries;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Enums;
-using ClinicEz.Shared.Common;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
-
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Documents.Configuration;
+using MediatR;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace ClinicEz.Clinic.Api.Controllers;
 
@@ -65,7 +68,13 @@ public sealed class StaffController : ControllerBase
             request.Specialty,
             request.PhilHealthPan,
             SignatureSpecimen: request.SignatureSpecimen,
-            DefaultSignatureMode: request.DefaultSignatureMode);
+            DefaultSignatureMode: request.DefaultSignatureMode,
+            IsDirectoryOptIn: request.IsDirectoryOptIn,
+            PrcExpiryDate: request.PrcExpiryDate,
+            PrcEvidenceObjectKey: request.PrcEvidenceObjectKey,
+            VerificationContact: request.VerificationContact,
+            PublicBio: request.PublicBio,
+            AvatarUrl: request.AvatarUrl);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Profile updated successfully."));
@@ -133,7 +142,13 @@ public sealed class StaffController : ControllerBase
                 RequestedRole: request.Role,
                 RequestedClinicRoleId: request.ClinicRoleId,
                 SignatureSpecimen: request.SignatureSpecimen,
-                DefaultSignatureMode: request.DefaultSignatureMode);
+                DefaultSignatureMode: request.DefaultSignatureMode,
+                IsDirectoryOptIn: request.IsDirectoryOptIn,
+                PrcExpiryDate: request.PrcExpiryDate,
+                PrcEvidenceObjectKey: request.PrcEvidenceObjectKey,
+                VerificationContact: request.VerificationContact,
+                PublicBio: request.PublicBio,
+                AvatarUrl: request.AvatarUrl);
 
             var myResult = await _sender.Send(myCommand, ct);
             return Ok(ApiResponse<StaffMemberDto>.Success(myResult, "Profile updated successfully."));
@@ -158,10 +173,48 @@ public sealed class StaffController : ControllerBase
             request.AssignedRoomIds,
             request.ClearAssignedRoom,
             SignatureSpecimen: request.SignatureSpecimen,
-            DefaultSignatureMode: request.DefaultSignatureMode);
+            DefaultSignatureMode: request.DefaultSignatureMode,
+            IsDirectoryOptIn: request.IsDirectoryOptIn,
+            PrcExpiryDate: request.PrcExpiryDate,
+            PrcEvidenceObjectKey: request.PrcEvidenceObjectKey,
+            VerificationContact: request.VerificationContact,
+            PublicBio: request.PublicBio,
+            AvatarUrl: request.AvatarUrl);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member updated successfully."));
+    }
+
+    [HttpPost("{id:guid}/prc-proof")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<ApiResponse<EvidenceProofUploadResultDto>>> UploadPrcProof(
+        Guid id,
+        [FromForm] IFormFile? file,
+        CancellationToken ct)
+    {
+        var (fileName, contentType, length, bytes) = await VerificationEvidenceHelper.ReadValidatedFormFileAsync(file, ct);
+        var result = await _sender.Send(new UploadStaffPrcProofCommand(id, fileName, contentType, length, bytes), ct);
+        return Ok(ApiResponse<EvidenceProofUploadResultDto>.Success(result, "PRC proof uploaded."));
+    }
+
+    [HttpPost("{id:guid}/submit-verification")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> SubmitVerification(Guid id, CancellationToken ct)
+    {
+        var result = await _sender.Send(new SubmitPractitionerVerificationCommand(id), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Practitioner verification submitted."));
+    }
+
+    [HttpPost("{id:guid}/withdraw-verification")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> WithdrawVerification(
+        Guid id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] WithdrawPractitionerVerificationRequest? request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new WithdrawPractitionerVerificationCommand(id, request?.Reason), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Practitioner directory verification withdrawn."));
     }
 
     [HttpPost("{id:guid}/reset-password")]
@@ -259,6 +312,8 @@ public sealed record ResetStaffPasswordRequest(
 
 public sealed record ResendStaffInviteRequest(bool SendInviteEmail = true);
 
+public sealed record WithdrawPractitionerVerificationRequest(string? Reason = null);
+
 public sealed record UpdateStaffMemberRequest(
     string FirstName,
     string LastName,
@@ -277,7 +332,13 @@ public sealed record UpdateStaffMemberRequest(
     IReadOnlyList<Guid>? AssignedRoomIds = null,
     bool ClearAssignedRoom = false,
     string? SignatureSpecimen = null,
-    SignatureMode? DefaultSignatureMode = null);
+    SignatureMode? DefaultSignatureMode = null,
+    bool? IsDirectoryOptIn = null,
+    DateOnly? PrcExpiryDate = null,
+    string? PrcEvidenceObjectKey = null,
+    string? VerificationContact = null,
+    string? PublicBio = null,
+    string? AvatarUrl = null);
 
 public sealed record UpdateMyProfileRequest(
     string FirstName,
@@ -291,4 +352,10 @@ public sealed record UpdateMyProfileRequest(
     string? Specialty,
     string? PhilHealthPan = null,
     string? SignatureSpecimen = null,
-    SignatureMode? DefaultSignatureMode = null);
+    SignatureMode? DefaultSignatureMode = null,
+    bool? IsDirectoryOptIn = null,
+    DateOnly? PrcExpiryDate = null,
+    string? PrcEvidenceObjectKey = null,
+    string? VerificationContact = null,
+    string? PublicBio = null,
+    string? AvatarUrl = null);

@@ -16,7 +16,9 @@ public sealed record CreateBookingDraftRequest(
     string? Notes,
     string ShareFieldsJson,
     string AttachedFileIdsJson,
-    IReadOnlyList<string>? ShareSections = null);
+    IReadOnlyList<string>? ShareSections = null,
+    Guid? ProviderId = null,
+    string? ProviderName = null);
 
 public sealed class CreateBookingDraftEndpoint : IEndpoint
 {
@@ -41,7 +43,9 @@ public sealed class CreateBookingDraftEndpoint : IEndpoint
                     request.ShareFieldsJson,
                     request.AttachedFileIdsJson ?? "[]",
                     request.ShareSections,
-                    remoteIp), ct);
+                    remoteIp,
+                    request.ProviderId,
+                    request.ProviderName), ct);
 
                 return Results.Created(
                     $"/api/v1/patients/{patientId}/booking-drafts/{id}",
@@ -53,6 +57,7 @@ public sealed class CreateBookingDraftEndpoint : IEndpoint
             .WithDescription("Creates a new draft appointment request with preferred details, reason, and notes for a patient.")
             .Produces<ApiResponse<Guid>>(StatusCodes.Status201Created)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
+            .Produces<ApiResponse<object>>(StatusCodes.Status409Conflict)
             .RequireAuthorization();
     }
 }

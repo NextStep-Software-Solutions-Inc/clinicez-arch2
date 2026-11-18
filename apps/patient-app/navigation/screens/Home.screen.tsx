@@ -50,7 +50,7 @@ import type {
   TodayMedicationScheduleItemDto,
   WelcomeStepKey,
 } from '../../services/api/homeApi';
-import type { PatientSearchRouteParams } from './Search.screen';
+import type { DirectorySearchRouteParams } from './Search.screen';
 
 export default function HomeScreen() {
   const { colors, spacing } = useClinicalEmpathyTheme();
@@ -189,8 +189,8 @@ export default function HomeScreen() {
   );
 
   const openSearchScreen = useCallback(
-    (params?: PatientSearchRouteParams) => {
-      navigation.navigate('PatientSearch', params ?? {});
+    (params?: DirectorySearchRouteParams) => {
+      navigation.navigate('DirectorySearch', params ?? {});
     },
     [navigation],
   );

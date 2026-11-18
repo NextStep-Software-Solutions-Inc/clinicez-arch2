@@ -2,12 +2,13 @@ import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppIcon } from '../ui/Icon';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
-import type { PatientSearchDoctorDto } from '../../services/api/homeApi';
+import type { DirectoryDoctorDto } from '../../services/api/homeApi';
 import type { BookingStep } from './BookingStepIndicator';
 
 export interface BookingStickyFooterProps {
   currentStep: BookingStep;
-  selectedDoctor?: PatientSearchDoctorDto | null;
+  selectedDoctor?: DirectoryDoctorDto | null;
+  isBookingPaused?: boolean;
   selectedSlotSummary?: string | null;
   formattedCopay?: string;
   isSubmitting?: boolean;
@@ -25,6 +26,7 @@ export interface BookingStickyFooterProps {
 function BookingStickyFooterComponent({
   currentStep,
   selectedDoctor,
+  isBookingPaused = false,
   selectedSlotSummary,
   formattedCopay = '₱0.00',
   isSubmitting = false,
@@ -36,6 +38,9 @@ function BookingStickyFooterComponent({
   onConfirmAndBook,
 }: BookingStickyFooterProps) {
   const { colors, typography, radii, spacing } = useClinicalEmpathyTheme();
+  const bookingPaused = Boolean(
+    isBookingPaused || (selectedDoctor && !selectedDoctor.clinicSupportsAppointments),
+  );
 
   return (
     <View
@@ -75,29 +80,46 @@ function BookingStickyFooterComponent({
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Proceed to choose slot"
-              disabled={!selectedDoctor}
-              onPress={onProceedStep1}
+              accessibilityLabel={
+                bookingPaused && selectedDoctor
+                  ? 'Booking paused for selected clinic'
+                  : 'Proceed to choose slot'
+              }
+              accessibilityState={{ disabled: !selectedDoctor || bookingPaused }}
+              disabled={!selectedDoctor || bookingPaused}
+              onPress={() => {
+                if (!selectedDoctor || bookingPaused) return;
+                onProceedStep1();
+              }}
               style={({ pressed }) => [
                 styles.fullCtaButton,
                 {
-                  backgroundColor: selectedDoctor ? colors.primary : colors.border,
+                  backgroundColor:
+                    selectedDoctor && !bookingPaused ? colors.primary : colors.border,
                   borderRadius: radii.full,
                   paddingVertical: spacing.md + 2,
                   marginTop: spacing.md,
-                  opacity: pressed && selectedDoctor ? 0.9 : 1,
+                  opacity: pressed && selectedDoctor && !bookingPaused ? 0.9 : 1,
                 },
               ]}
             >
               <Text
                 style={[
                   typography.labelLg,
-                  { color: colors.onPrimary, marginRight: spacing.xs },
+                  {
+                    color:
+                      selectedDoctor && !bookingPaused ? colors.onPrimary : colors.mutedText,
+                    marginRight: spacing.xs,
+                  },
                 ]}
               >
-                Proceed to Choose Slot
+                {bookingPaused && selectedDoctor ? 'Booking Paused' : 'Proceed to Choose Slot'}
               </Text>
-              <AppIcon name="arrowRight" size={18} color={colors.onPrimary} />
+              <AppIcon
+                name={bookingPaused && selectedDoctor ? 'alert' : 'arrowRight'}
+                size={18}
+                color={selectedDoctor && !bookingPaused ? colors.onPrimary : colors.mutedText}
+              />
             </Pressable>
           </>
         ) : currentStep === 2 ? (
@@ -112,34 +134,57 @@ function BookingStickyFooterComponent({
               ]}
               numberOfLines={1}
             >
-              {selectedSlotSummary ?? 'Select an available time slot'}
+              {bookingPaused
+                ? 'Online booking paused for this clinic'
+                : selectedSlotSummary ?? 'Select an available time slot'}
             </Text>
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Continue to review and confirm"
-              disabled={!selectedSlotSummary}
-              onPress={onProceedStep2}
+              accessibilityLabel={
+                bookingPaused
+                  ? 'Booking paused for selected clinic'
+                  : 'Continue to review and confirm'
+              }
+              accessibilityState={{ disabled: !selectedSlotSummary || bookingPaused }}
+              disabled={!selectedSlotSummary || bookingPaused}
+              onPress={() => {
+                if (!selectedSlotSummary || bookingPaused) return;
+                onProceedStep2();
+              }}
               style={({ pressed }) => [
                 styles.fullCtaButton,
                 {
-                  backgroundColor: selectedSlotSummary ? colors.primary : colors.border,
+                  backgroundColor:
+                    selectedSlotSummary && !bookingPaused ? colors.primary : colors.border,
                   borderRadius: radii.full,
                   paddingVertical: spacing.md + 2,
                   marginTop: spacing.md,
-                  opacity: pressed && selectedSlotSummary ? 0.9 : 1,
+                  opacity: pressed && selectedSlotSummary && !bookingPaused ? 0.9 : 1,
                 },
               ]}
             >
               <Text
                 style={[
                   typography.labelLg,
-                  { color: colors.onPrimary, marginRight: spacing.xs },
+                  {
+                    color:
+                      selectedSlotSummary && !bookingPaused
+                        ? colors.onPrimary
+                        : colors.mutedText,
+                    marginRight: spacing.xs,
+                  },
                 ]}
               >
-                Continue to Review &amp; Confirm
+                {bookingPaused ? 'Booking Paused' : 'Continue to Review &amp; Confirm'}
               </Text>
-              <AppIcon name="arrowRight" size={18} color={colors.onPrimary} />
+              <AppIcon
+                name={bookingPaused ? 'alert' : 'arrowRight'}
+                size={18}
+                color={
+                  selectedSlotSummary && !bookingPaused ? colors.onPrimary : colors.mutedText
+                }
+              />
             </Pressable>
           </>
         ) : (
@@ -163,31 +208,48 @@ function BookingStickyFooterComponent({
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Confirm and book appointment"
-              disabled={isSubmitting}
-              onPress={onConfirmAndBook}
+              accessibilityLabel={
+                bookingPaused ? 'Booking paused for selected clinic' : 'Confirm and book appointment'
+              }
+              accessibilityState={{ disabled: isSubmitting || bookingPaused }}
+              disabled={isSubmitting || bookingPaused}
+              onPress={() => {
+                if (isSubmitting || bookingPaused) return;
+                onConfirmAndBook();
+              }}
               style={({ pressed }) => [
                 styles.confirmButton,
                 {
-                  backgroundColor: colors.primary,
+                  backgroundColor: bookingPaused ? colors.border : colors.primary,
                   borderRadius: radii.full,
                   paddingVertical: spacing.md + 2,
                   paddingHorizontal: spacing.lg,
                   marginLeft: spacing.lg,
-                  opacity: isSubmitting ? 0.7 : pressed ? 0.9 : 1,
+                  opacity: bookingPaused ? 0.75 : isSubmitting ? 0.7 : pressed ? 0.9 : 1,
                 },
               ]}
             >
-              <AppIcon name="lock" size={16} color={colors.onPrimary} />
+              <AppIcon
+                name={bookingPaused ? 'alert' : 'lock'}
+                size={16}
+                color={bookingPaused ? colors.mutedText : colors.onPrimary}
+              />
               <Text
                 style={[
                   typography.labelLg,
-                  { color: colors.onPrimary, marginLeft: spacing.xs },
+                  {
+                    color: bookingPaused ? colors.mutedText : colors.onPrimary,
+                    marginLeft: spacing.xs,
+                  },
                 ]}
               >
-                {isSubmitting ? 'Booking...' : 'Confirm & Book'}
+                {bookingPaused
+                  ? 'Booking Paused'
+                  : isSubmitting
+                    ? 'Booking...'
+                    : 'Confirm & Book'}
               </Text>
-              {!isSubmitting ? (
+              {!isSubmitting && !bookingPaused ? (
                 <View style={{ marginLeft: spacing.xs }}>
                   <AppIcon name="arrowRight" size={16} color={colors.onPrimary} />
                 </View>

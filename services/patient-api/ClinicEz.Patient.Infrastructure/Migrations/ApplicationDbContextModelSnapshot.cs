@@ -204,6 +204,15 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("preferred_time");
 
+                    b.Property<Guid?>("ProviderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("provider_id");
+
+                    b.Property<string>("ProviderName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("provider_name");
+
                     b.Property<string>("Reason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -249,6 +258,9 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
 
                     b.HasIndex("OrganizationId")
                         .HasDatabaseName("ix_booking_drafts_organization_id");
+
+                    b.HasIndex("ProviderId")
+                        .HasDatabaseName("ix_booking_drafts_provider_id");
 
                     b.HasIndex("PatientId", "Status")
                         .HasDatabaseName("ix_booking_drafts_patient_id_status");
@@ -301,6 +313,12 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_gated");
+
+                    b.Property<bool>("IsPlatformVerified")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_platform_verified");
 
                     b.Property<bool>("IsPublic")
                         .ValueGeneratedOnAdd()
@@ -394,6 +412,14 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AffiliationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("Active")
+                        .HasColumnName("affiliation_status");
+
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -411,9 +437,21 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("display_order");
 
+                    b.Property<bool>("HasIdentityConflict")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("has_identity_conflict");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDirectoryOptIn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_directory_opt_in");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -421,10 +459,27 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("name");
 
+                    b.Property<string>("NormalizedLicenseNo")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("normalized_license_no");
+
+                    b.Property<Guid?>("PractitionerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("practitioner_id");
+
                     b.Property<string>("ProfessionalLicenseNo")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("professional_license_no");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("Doctor")
+                        .HasColumnName("role");
 
                     b.Property<string>("Specialty")
                         .IsRequired()
@@ -439,8 +494,14 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_clinic_healthcare_providers");
 
+                    b.HasIndex("PractitionerId")
+                        .HasDatabaseName("ix_clinic_healthcare_providers_practitioner_id");
+
                     b.HasIndex("ClinicId", "IsActive")
                         .HasDatabaseName("ix_clinic_healthcare_providers_clinic_id_is_active");
+
+                    b.HasIndex("ClinicId", "NormalizedLicenseNo")
+                        .HasDatabaseName("ix_clinic_healthcare_providers_clinic_id_normalized_license_no");
 
                     b.ToTable("clinic_healthcare_providers", (string)null);
                 });
@@ -6014,6 +6075,108 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.ToTable("patient_travel_histories", (string)null);
                 });
 
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.Practitioner", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AvatarUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("avatar_url");
+
+                    b.Property<string>("Bio")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("bio");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayPrcLicenseNo")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("display_prc_license_no");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("first_name");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("last_name");
+
+                    b.Property<Guid?>("MergedIntoPractitionerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("merged_into_practitioner_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NormalizedPrcLicenseNo")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("normalized_prc_license_no");
+
+                    b.Property<DateOnly?>("PrcExpiryDate")
+                        .HasColumnType("date")
+                        .HasColumnName("prc_expiry_date");
+
+                    b.Property<string>("PrimarySpecialty")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("primary_specialty");
+
+                    b.Property<string>("ProfessionKind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("profession_kind");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("VerificationLevel")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("verification_level");
+
+                    b.Property<DateTime?>("VerifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verified_at_utc");
+
+                    b.HasKey("Id")
+                        .HasName("pk_practitioners");
+
+                    b.HasIndex("MergedIntoPractitionerId")
+                        .HasDatabaseName("ix_practitioners_merged_into_practitioner_id");
+
+                    b.HasIndex("VerificationLevel")
+                        .HasDatabaseName("ix_practitioners_verification_level");
+
+                    b.HasIndex("ProfessionKind", "NormalizedPrcLicenseNo")
+                        .IsUnique()
+                        .HasDatabaseName("ix_practitioners_profession_kind_normalized_prc_license_no")
+                        .HasFilter("merged_into_practitioner_id IS NULL");
+
+                    b.ToTable("practitioners", (string)null);
+                });
+
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.Prescription", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7164,7 +7327,15 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_clinic_healthcare_providers_clinics_clinic_id");
 
+                    b.HasOne("ClinicEz.Patient.Domain.Entities.Practitioner", "Practitioner")
+                        .WithMany("ClinicProviders")
+                        .HasForeignKey("PractitionerId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_clinic_healthcare_providers_practitioners_practitioner_id");
+
                     b.Navigation("Clinic");
+
+                    b.Navigation("Practitioner");
                 });
 
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.ClinicMembership", b =>
@@ -8072,6 +8243,11 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientMessage", b =>
                 {
                     b.Navigation("Attachments");
+                });
+
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.Practitioner", b =>
+                {
+                    b.Navigation("ClinicProviders");
                 });
 
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PrescriptionDocument", b =>

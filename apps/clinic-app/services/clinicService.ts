@@ -2,6 +2,23 @@ import type { AxiosRequestConfig } from 'axios';
 import { clinicApiClient, clinicApiUrl } from './apiClient';
 import { SyncStatus, type SearchResponseDto, type ApiError, type EhrOptionDescriptor } from '@shared/safe';
 
+function toEvidenceUploadFormData(
+  fileInput: FormData | Blob | { uri: string; name: string; type: string },
+  fileName?: string,
+): FormData {
+  if (typeof FormData !== 'undefined' && fileInput instanceof FormData) {
+    return fileInput;
+  }
+  const formData = new FormData();
+  if (typeof Blob !== 'undefined' && fileInput instanceof Blob) {
+    const resolvedName = fileName || (fileInput as File).name || 'evidence';
+    formData.append('file', fileInput, resolvedName);
+  } else {
+    formData.append('file', fileInput as any);
+  }
+  return formData;
+}
+
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
 export type QueueStatus =
   | 'Waiting'
@@ -73,6 +90,22 @@ export type SignatureMode = 'ESignatureSpecimen' | 'DigitalSealOnly' | 'WetSigna
 
 export type StaffAccountStatus = 'Invited' | 'Active' | 'Suspended' | 'Revoked';
 
+export type PlatformVerificationStatus =
+  | 'Unverified'
+  | 'PendingReview'
+  | 'Verified'
+  | 'Rejected'
+  | 'Suspended';
+
+export type PractitionerVerificationLevel =
+  | 'Unverified'
+  | 'PendingVerification'
+  | 'AwaitingConfirmation'
+  | 'Verified'
+  | 'Rejected'
+  | 'Expired'
+  | 'Suspended';
+
 export interface StaffMember {
   id: string;
   tenantId: string;
@@ -108,6 +141,16 @@ export interface StaffMember {
   hasCredentials?: boolean;
   mustChangePassword?: boolean;
   temporaryPassword?: string | null;
+  isDirectoryOptIn?: boolean;
+  prcExpiryDate?: string | null;
+  prcEvidenceObjectKey?: string | null;
+  verificationContact?: string | null;
+  canonicalProviderId?: string | null;
+  publicBio?: string | null;
+  avatarUrl?: string | null;
+  publicVerificationStatus?: PractitionerVerificationLevel;
+  publicVerificationReason?: string | null;
+  affiliatedVerifiedClinicCount?: number;
 }
 
 export interface CreateStaffPayload {
@@ -130,6 +173,12 @@ export interface CreateStaffPayload {
   defaultSignatureMode?: SignatureMode;
   initialPassword?: string;
   sendInviteEmail?: boolean;
+  isDirectoryOptIn?: boolean;
+  prcExpiryDate?: string | null;
+  prcEvidenceObjectKey?: string | null;
+  verificationContact?: string | null;
+  publicBio?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface UpdateStaffPayload {
@@ -152,6 +201,12 @@ export interface UpdateStaffPayload {
   signatureSpecimen?: string | null;
   defaultSignatureMode?: SignatureMode;
   isActive?: boolean;
+  isDirectoryOptIn?: boolean;
+  prcExpiryDate?: string | null;
+  prcEvidenceObjectKey?: string | null;
+  verificationContact?: string | null;
+  publicBio?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface UpdateMyProfilePayload {
@@ -167,6 +222,12 @@ export interface UpdateMyProfilePayload {
   specialty?: string;
   signatureSpecimen?: string | null;
   defaultSignatureMode?: SignatureMode;
+  isDirectoryOptIn?: boolean;
+  prcExpiryDate?: string | null;
+  prcEvidenceObjectKey?: string | null;
+  verificationContact?: string | null;
+  publicBio?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface ResetStaffPasswordResult {
@@ -2053,6 +2114,7 @@ export interface ClinicPublishingChecks {
   hasLicensedDoctors: boolean;
   hasActiveServices: boolean;
   hasLetterhead: boolean;
+  hasDohLtoOrProof?: boolean;
 }
 
 export interface ClinicPublishingReadiness {
@@ -2062,12 +2124,30 @@ export interface ClinicPublishingReadiness {
   licensedDoctorsCount: number;
   activeServicesCount: number;
   operatingHours?: string | null;
+  platformVerificationStatus?: PlatformVerificationStatus;
+  verificationRejectionReason?: string | null;
+  lastVerificationSubmittedAtUtc?: string | null;
+  letterheadDohLto?: string | null;
+  ltoEvidenceObjectKey?: string | null;
+  isOnlineBookingPaused?: boolean;
+  isDirectoryPublished?: boolean;
+  optedInDoctorsCount?: number;
+  optedInDoctorsReadyCount?: number;
+  optedInNursesCount?: number;
+  optedInNursesReadyCount?: number;
+  optedInCliniciansCount?: number;
+  optedInCliniciansReadyCount?: number;
+}
+
+export interface EvidenceProofUploadResult {
+  objectKey: string;
 }
 
 export interface ClinicPublishingResult {
   success: boolean;
   isPublished: boolean;
   message: string;
+  platformVerificationStatus?: PlatformVerificationStatus;
 }
 
 export interface ClinicBookingPauseResult {
@@ -2111,6 +2191,10 @@ export interface ClinicSettingsRecord {
   isDirectoryPublished?: boolean;
   isOnlineBookingPaused?: boolean;
   isWorkspaceEligible?: boolean;
+  platformVerificationStatus?: PlatformVerificationStatus;
+  verificationRejectionReason?: string | null;
+  lastVerificationSubmittedAtUtc?: string | null;
+  ltoEvidenceObjectKey?: string | null;
 
   patientSearchDisplayFieldsJson?: string | null;
   eodReconciliationTime?: string | null;
@@ -3196,6 +3280,30 @@ export const clinicService = {
     return clinicApiClient.post<StaffMember>(`/staff/${id}/suspend`, {});
   },
 
+  async uploadStaffPrcProof(
+    id: string,
+    fileInput: FormData | Blob | { uri: string; name: string; type: string },
+    fileName?: string,
+  ) {
+    const formData = toEvidenceUploadFormData(fileInput, fileName);
+    return clinicApiClient.post<EvidenceProofUploadResult>(`/staff/${id}/prc-proof`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
+  async submitStaffVerification(id: string) {
+    return clinicApiClient.post<StaffMember>(`/staff/${id}/submit-verification`, {});
+  },
+
+  async withdrawStaffVerification(id: string, reason?: string) {
+    return clinicApiClient.post<StaffMember>(
+      `/staff/${id}/withdraw-verification`,
+      reason?.trim() ? { reason: reason.trim() } : {},
+    );
+  },
+
   /** Sets or auto-generates a temporary password, or issues a password reset link/email; the staff member must change it at next sign-in. Requires `staff:manage`. */
   async resetStaffPassword(
     id: string,
@@ -3649,10 +3757,29 @@ export const clinicService = {
     return clinicApiClient.get<ClinicPublishingReadiness>('/clinic-settings/readiness');
   },
 
+  async uploadLtoProof(
+    fileInput: FormData | Blob | { uri: string; name: string; type: string },
+    fileName?: string,
+  ) {
+    const formData = toEvidenceUploadFormData(fileInput, fileName);
+    return clinicApiClient.post<EvidenceProofUploadResult>('/clinic-settings/lto-proof', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
   async publishToDirectory(isPublished: boolean) {
     return clinicApiClient.put<ClinicPublishingResult>('/clinic-settings/directory-publishing', {
       isPublished,
     });
+  },
+
+  async withdrawDirectoryPublishing(reason?: string) {
+    return clinicApiClient.post<ClinicPublishingResult>(
+      '/clinic-settings/directory-publishing/withdraw',
+      reason?.trim() ? { reason: reason.trim() } : {},
+    );
   },
 
   async toggleBookingPause(isPaused: boolean) {

@@ -32,12 +32,16 @@ public class FacilityProvisioningReconciliationJob(
     ILogger<FacilityProvisioningReconciliationJob> logger
 ) : IFacilityProvisioningReconciliationJob
 {
+    public const int MaxBatchSize = 100;
+
     public async Task ReconcileStuckFacilitiesAsync(CancellationToken cancellationToken = default)
     {
-        // Identify facilities that have been in Provisioning status for more than 2 minutes
+        // Identify facilities that have been in Provisioning status for more than 2 minutes (batch-throttled <= 100 per run)
         var threshold = DateTime.UtcNow.AddMinutes(-2);
         var stuckFacilities = await dbContext.Facilities
             .Where(f => f.Status == FacilityStatus.Provisioning && f.CreatedAt < threshold && !f.IsDeleted)
+            .OrderBy(f => f.CreatedAt)
+            .Take(MaxBatchSize)
             .ToListAsync(cancellationToken);
 
         if (stuckFacilities.Count == 0) return;

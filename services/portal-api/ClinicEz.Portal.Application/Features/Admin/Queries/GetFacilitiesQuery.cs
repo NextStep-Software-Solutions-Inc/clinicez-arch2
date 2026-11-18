@@ -40,7 +40,11 @@ public record FacilityDto(
     string Visibility = "Private",
     bool AcceptsExternalRequests = false,
     Guid? BranchId = null,
-    bool IsPatientDiscoveryEligible = false
+    bool IsPatientDiscoveryEligible = false,
+    PlatformVerificationStatus PlatformVerificationStatus = PlatformVerificationStatus.Unverified,
+    string? RejectionReason = null,
+    string? LtoEvidenceObjectKey = null,
+    DateTime? VerifiedAtUtc = null
 );
 
 public record GetFacilitiesQuery(string TenantSlug) : IRequest<List<FacilityDto>>;
@@ -97,7 +101,11 @@ public class GetFacilitiesQueryHandler(
                 f.Visibility.ToString(),
                 f.AcceptsExternalRequests,
                 f.BranchId,
-                f.IsPatientDiscoveryEligible
+                f.IsPatientDiscoveryEligible,
+                f.PlatformVerificationStatus,
+                f.RejectionReason,
+                f.LtoEvidenceObjectKey,
+                f.VerifiedAtUtc
             );
         }).ToList();
     }

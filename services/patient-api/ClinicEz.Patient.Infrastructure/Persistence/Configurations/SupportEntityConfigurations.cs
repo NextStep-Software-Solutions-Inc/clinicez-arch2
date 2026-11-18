@@ -47,6 +47,7 @@ public sealed class ClinicConfiguration : IEntityTypeConfiguration<Clinic>
         builder.Property(e => e.JoinCodeExpiresAt);
         builder.Property(e => e.IsWorkspaceEligible).HasDefaultValue(false).IsRequired();
         builder.Property(e => e.IsDirectoryPublished).HasDefaultValue(false).IsRequired();
+        builder.Property(e => e.IsPlatformVerified).HasDefaultValue(false).IsRequired();
         builder.Property(e => e.IsPublic).HasDefaultValue(false).IsRequired();
         builder.HasIndex(e => e.FeaturedScore);
         builder.HasIndex(e => e.JoinCode);
@@ -125,6 +126,7 @@ public sealed class BookingDraftConfiguration : IEntityTypeConfiguration<Booking
     public void Configure(EntityTypeBuilder<BookingDraft> builder)
     {
         builder.HasKey(e => e.Id);
+        builder.Property(e => e.ProviderName).HasMaxLength(200);
         builder.Property(e => e.PreferredTime).HasMaxLength(20);
         builder.Property(e => e.Reason).HasMaxLength(500);
         builder.Property(e => e.Notes).HasMaxLength(1000);
@@ -150,6 +152,7 @@ public sealed class BookingDraftConfiguration : IEntityTypeConfiguration<Booking
             .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasIndex(e => new { e.PatientId, e.Status });
+        builder.HasIndex(e => e.ProviderId);
     }
 }
 
@@ -176,9 +179,16 @@ public sealed class ClinicHealthcareProviderConfiguration : IEntityTypeConfigura
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Name).HasMaxLength(200).IsRequired();
         builder.Property(e => e.Specialty).HasMaxLength(150).IsRequired();
+        builder.Property(e => e.Role).HasMaxLength(30).HasDefaultValue("Doctor").IsRequired();
         builder.Property(e => e.AvatarUrl).HasMaxLength(500);
         builder.Property(e => e.ProfessionalLicenseNo).HasMaxLength(50);
+        builder.Property(e => e.NormalizedLicenseNo).HasMaxLength(50);
+        builder.Property(e => e.IsDirectoryOptIn).HasDefaultValue(true).IsRequired();
+        builder.Property(e => e.AffiliationStatus).HasMaxLength(30).HasDefaultValue("Active").IsRequired();
+        builder.Property(e => e.HasIdentityConflict).HasDefaultValue(false).IsRequired();
         builder.HasIndex(e => new { e.ClinicId, e.IsActive });
+        builder.HasIndex(e => e.PractitionerId);
+        builder.HasIndex(e => new { e.ClinicId, e.NormalizedLicenseNo });
 
         builder.HasOne(e => e.Clinic)
             .WithMany(c => c.HealthcareProviders)

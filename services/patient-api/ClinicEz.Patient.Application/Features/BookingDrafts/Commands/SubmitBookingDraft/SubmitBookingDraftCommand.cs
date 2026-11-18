@@ -75,6 +75,9 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
         var clinic = await _clinicRepo.GetByIdAsync(draft.ClinicId, cancellationToken)
             ?? throw new NotFoundException($"Clinic '{draft.ClinicId}' was not found.");
 
+        if (!clinic.SupportsAppointments)
+            throw new ConflictException("Online booking is currently paused for this clinic.");
+
         if (string.IsNullOrWhiteSpace(clinic.TenantId))
             throw new ConflictException($"Clinic '{clinic.Name}' is not registered in the facility directory yet, so it cannot receive bookings.");
 
@@ -123,11 +126,24 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
         var sections = (SharingScopes)(int)draft.ShareSections & ~SharingScopes.Demographics;
         var sharedContent = sections == SharingScopes.None ? null : await _snapshots.BuildAsync(patient.Id, sections, cancellationToken);
 
+        var selectedProvider = draft.ProviderId.HasValue
+            ? clinic.HealthcareProviders.FirstOrDefault(p => p.Id == draft.ProviderId.Value)
+                ?? clinic.HealthcareProviders.FirstOrDefault(p => p.PractitionerId == draft.ProviderId.Value)
+            : null;
+        var resolvedProviderId = selectedProvider?.Id ?? draft.ProviderId;
+        var resolvedProviderName = !string.IsNullOrWhiteSpace(draft.ProviderName)
+            ? draft.ProviderName.Trim()
+            : selectedProvider?.Name;
+        var resolvedCanonicalProviderId = selectedProvider?.PractitionerId;
+
         var booking = new AppointmentBookedEvent
         {
             DraftId = draft.Id,
             PatientId = request.PatientId,
             ClinicId = clinic.Id,
+            ProviderId = resolvedProviderId,
+            ProviderName = resolvedProviderName,
+            CanonicalProviderId = resolvedCanonicalProviderId,
             TenantId = clinic.TenantId,
             PreferredDate = draft.PreferredDate,
             PreferredTime = draft.PreferredTime,

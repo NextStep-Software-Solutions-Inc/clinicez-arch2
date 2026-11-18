@@ -605,6 +605,10 @@ export default function BranchManagementClient() {
                 acceptsExternalRequests: false,
                 branchId: branch.id,
                 isPatientDiscoveryEligible: false,
+                platformVerificationStatus: "Unverified",
+                rejectionReason: null,
+                ltoEvidenceObjectKey: null,
+                verifiedAtUtc: null,
               };
             });
 

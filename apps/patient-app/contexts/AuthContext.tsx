@@ -14,6 +14,7 @@ import { blobStorage } from '../services/storage';
 import { refreshDocumentTypes } from '../services/files/filesShared';
 import { refreshOrganizationsFromApi, refreshClinicsFromApi } from '../services/discovery/discoveryService';
 import { pullDocumentChanges } from '../services/sync/documentsSyncService';
+import { clearNetworkDirectoryCache, refreshNetworkDirectory } from '../services/search/networkDirectory';
 
 const PIN_KEY = 'app_pin';
 const PIN_SALT_KEY = 'app_pin_salt';
@@ -239,6 +240,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               pullDocumentChanges(storedId, getTokenRef.current).catch((err) =>
                 console.warn('[AuthContext] Background document pull failed:', err)
               );
+              refreshNetworkDirectory(getTokenRef.current, storedId).catch((err) =>
+                console.warn('[AuthContext] Background network directory refresh failed:', err)
+              );
               return;
             }
           }
@@ -278,6 +282,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               ),
               refreshClinicsFromApi(patient.id, '', undefined, getTokenRef.current).catch((err) =>
                 console.warn('[AuthContext] Refresh clinics failed during bootstrap:', err)
+              ),
+              refreshNetworkDirectory(getTokenRef.current, patient.id).catch((err) =>
+                console.warn('[AuthContext] Refresh network directory failed during bootstrap:', err)
               ),
             ]);
 
@@ -393,7 +400,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.warn('[AuthContext] Failed to wipe Web IndexedDB snapshot on logout:', err);
     });
 
-    // 2. Wipe binary blob storage cache (Native disk & Web IndexedDB)
+    // 2. Wipe binary blob storage cache & cached network directory (Native disk & Web IndexedDB)
+    await clearNetworkDirectoryCache().catch((err) => {
+      console.warn('[AuthContext] Failed to clear network directory cache on logout:', err);
+    });
     await blobStorage.clearCache().catch((err) => {
       console.warn('[AuthContext] Failed to clear blob cache on logout:', err);
     });

@@ -70,7 +70,7 @@ export const linking: LinkingOptions<RootParamList> = {
               HomeScreen: {
                 screens: {
                   Home: 'home',
-                  PatientSearch: 'search',
+                  DirectorySearch: 'search',
                 },
               },
               RecordsScreen: {
@@ -86,7 +86,7 @@ export const linking: LinkingOptions<RootParamList> = {
             },
           },
           ProfileScreen: 'profile',
-          PatientSearchScreen: 'care-search',
+          DirectorySearchScreen: 'care-search',
           NotificationScreen: 'notifications',
           NotificationDetailScreen: 'notifications/:id',
           SettingsScreen: 'settings',

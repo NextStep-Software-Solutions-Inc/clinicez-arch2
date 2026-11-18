@@ -28,6 +28,20 @@ public static class InteropTypes
     /// <summary>Clinic -> portal. Payload: <c>QueueBoardUpdatedPayload</c> (zero-PHI public waiting-area TV queue snapshot).</summary>
     public const string QueueBoardUpdated = "facility.queue-board.updated";
 
+    // Directory & practitioner verification (clinic <-> portal <-> patient-api)
+    /// <summary>Clinic -> portal. Payload: <c>FacilityVerificationRequestedPayload</c>.</summary>
+    public const string FacilityVerificationRequested = "facility.verification.requested";
+    /// <summary>Clinic -> portal. Payload: <c>FacilityVerificationWithdrawnPayload</c>.</summary>
+    public const string FacilityVerificationWithdrawn = "facility.verification.withdrawn";
+    /// <summary>Portal -> clinic. Payload: <c>FacilityVerificationRejectedPayload</c>.</summary>
+    public const string FacilityVerificationRejected = "facility.verification.rejected";
+    /// <summary>Clinic -> portal. Payload: <c>PractitionerVerificationRequestedPayload</c>.</summary>
+    public const string PractitionerVerificationRequested = "practitioner.verification.requested";
+    /// <summary>Portal -> clinic / patient-api. Payload: <c>PractitionerIdentityUpdatedPayload</c>.</summary>
+    public const string PractitionerIdentityUpdated = "practitioner.identity.updated";
+    /// <summary>Portal -> clinic / patient-api. Payload: <c>PractitionerVerificationRevokedPayload</c>.</summary>
+    public const string PractitionerVerificationRevoked = "practitioner.verification.revoked";
+
     // Hub directory feed (portal -> hub). Handled by the hub itself.
     public const string DirectoryCellUpserted = "directory.cell.upserted";
     public const string DirectoryFacilityUpserted = "directory.facility.upserted";

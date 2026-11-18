@@ -5,6 +5,7 @@ using System.Text.Json;
 using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop.Persistence;
 using ClinicEz.Shared.Workspace;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -31,6 +32,20 @@ public sealed class StaffMemberConfiguration : IEntityTypeConfiguration<StaffMem
             entity.Property(e => e.S2LicenseNumber).HasMaxLength(50);
             entity.Property(e => e.Specialty).HasMaxLength(100);
             entity.Property(e => e.PhilHealthPan).HasMaxLength(50);
+            entity.Property(e => e.IsDirectoryOptIn).HasDefaultValue(false);
+            entity.Property(e => e.PrcExpiryDate);
+            entity.Property(e => e.PrcEvidenceObjectKey).HasMaxLength(500);
+            entity.Property(e => e.VerificationContact).HasMaxLength(255);
+            entity.Property(e => e.CanonicalProviderId);
+            entity.Property(e => e.PublicBio).HasMaxLength(2000);
+            entity.Property(e => e.AvatarUrl).HasMaxLength(1000);
+            entity.Property(e => e.PublicVerificationStatus)
+                .HasConversion<string>()
+                .HasMaxLength(50)
+                .HasDefaultValue(PractitionerVerificationLevel.Unverified)
+                .HasSentinel((PractitionerVerificationLevel)(-1));
+            entity.Property(e => e.PublicVerificationReason).HasMaxLength(1000);
+            entity.Property(e => e.AffiliatedVerifiedClinicCount).HasDefaultValue(0);
             entity.Property(e => e.SignatureSpecimen).HasColumnType("text");
             entity.Property(e => e.DefaultSignatureMode).HasConversion<string>().HasMaxLength(50);
 

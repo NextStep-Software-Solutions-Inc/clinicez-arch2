@@ -2110,6 +2110,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<DateTime?>("LastVerificationSubmittedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("LetterheadAccentColorHex")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
@@ -2139,6 +2142,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("LicenseToken")
                         .HasColumnType("text");
 
+                    b.Property<string>("LtoEvidenceObjectKey")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<int>("MaxStaffLimit")
                         .HasColumnType("integer");
 
@@ -2164,6 +2171,13 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("PlanTier")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("PlatformVerificationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("Unverified");
 
                     b.Property<string>("PmccNumber")
                         .HasMaxLength(100)
@@ -2260,6 +2274,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<decimal>("VatRate")
                         .HasPrecision(5, 4)
                         .HasColumnType("numeric(5,4)");
+
+                    b.Property<string>("VerificationRejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.HasKey("Id");
 
@@ -8367,8 +8385,20 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AffiliatedVerifiedClinicCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("AssignedRoomIdsJson")
                         .HasColumnType("text");
+
+                    b.Property<string>("AvatarUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid?>("CanonicalProviderId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uuid");
@@ -8422,6 +8452,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsDirectoryOptIn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -8451,6 +8486,13 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<string>("PrcEvidenceObjectKey")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateOnly?>("PrcExpiryDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("PrcLicenseNumber")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
@@ -8458,6 +8500,21 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("PtrNumber")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("PublicBio")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("PublicVerificationReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("PublicVerificationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("Unverified");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -8498,6 +8555,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
+
+                    b.Property<string>("VerificationContact")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
 
                     b.HasKey("Id");
 

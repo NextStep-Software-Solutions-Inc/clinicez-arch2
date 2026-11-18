@@ -45,6 +45,28 @@ export type EntitlementStatus = z.infer<typeof entitlementStatusSchema>;
 export const workspaceRoleSchema = z.enum(["Member", "Billing", "Admin", "Owner"]);
 export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>;
 
+/** `PlatformVerificationStatus`: directory review state for a facility. */
+export const platformVerificationStatusSchema = z.enum([
+  "Unverified",
+  "PendingReview",
+  "Verified",
+  "Rejected",
+  "Suspended",
+]);
+export type PlatformVerificationStatus = z.infer<typeof platformVerificationStatusSchema>;
+
+/** `PractitionerVerificationLevel`: canonical PRC/directory verification state for a clinician. */
+export const practitionerVerificationLevelSchema = z.enum([
+  "Unverified",
+  "PendingVerification",
+  "AwaitingConfirmation",
+  "Verified",
+  "Rejected",
+  "Expired",
+  "Suspended",
+]);
+export type PractitionerVerificationLevel = z.infer<typeof practitionerVerificationLevelSchema>;
+
 /**
  * One hub client, returned once. The secret is stored by the hub only as a hash; `signingKey` is the base64 of the
  * PEM private key that signs the client's messages (`Messaging__SigningKey`) and is never retrievable again.

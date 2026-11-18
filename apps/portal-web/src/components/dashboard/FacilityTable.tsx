@@ -24,6 +24,8 @@ import { toast } from "sonner";
 import FacilitySettingsHub, { FacilityData } from "./FacilitySettingsHub";
 import { getConsoleBaseDomain } from "@/utils/domain";
 import { APP_SUBDOMAINS } from "@/config/site";
+import { getPlatformVerificationDisplay } from "@/lib/verificationStatus";
+import { cn } from "@/lib/utils";
 
 type Facility = FacilityData;
 
@@ -315,6 +317,14 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                             </div>
                             <div className="shrink-0 flex items-center gap-1.5 flex-wrap justify-end">
                                 {renderStatusBadge(fac.status)}
+                                {(() => {
+                                    const badge = getPlatformVerificationDisplay(fac.platformVerificationStatus);
+                                    return (
+                                        <Badge variant="outline" className={cn("text-[10px] font-bold", badge.badgeClassName)}>
+                                            {badge.label}
+                                        </Badge>
+                                    );
+                                })()}
                                 {fac.isPatientDiscoveryEligible ? (
                                     <Badge variant="outline" className="text-[10px] font-bold bg-primary/10 text-primary border-primary/20">
                                         Directory Eligible
@@ -326,6 +336,12 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                 )}
                             </div>
                         </div>
+
+                        {fac.platformVerificationStatus === "Rejected" && fac.rejectionReason ? (
+                            <p className="text-[11px] text-destructive bg-destructive/10 border border-destructive/25 rounded-lg px-2.5 py-1.5">
+                                Action Required: {fac.rejectionReason}
+                            </p>
+                        ) : null}
 
                         {/* Middle: Created At date */}
                         <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800/80">
@@ -439,6 +455,11 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                                 {getFacilityDomain(fac, tenantSlug)}
                                             </span>
                                         </div>
+                                        {fac.platformVerificationStatus === "Rejected" && fac.rejectionReason ? (
+                                            <div className="text-[11px] text-destructive mt-1 truncate max-w-xs" title={fac.rejectionReason}>
+                                                Action Required: {fac.rejectionReason}
+                                            </div>
+                                        ) : null}
                                     </td>
                                     <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
                                         {new Date(fac.createdAt).toLocaleDateString(undefined, {
@@ -448,8 +469,16 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                         })}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 flex-wrap">
                                             {renderStatusBadge(fac.status)}
+                                            {(() => {
+                                                const badge = getPlatformVerificationDisplay(fac.platformVerificationStatus);
+                                                return (
+                                                    <Badge variant="outline" className={cn("text-[10px] font-bold", badge.badgeClassName)}>
+                                                        {badge.label}
+                                                    </Badge>
+                                                );
+                                            })()}
                                             {fac.isPatientDiscoveryEligible ? (
                                                 <Badge variant="outline" className="text-[10px] font-bold bg-primary/10 text-primary border-primary/20">
                                                     Directory Eligible

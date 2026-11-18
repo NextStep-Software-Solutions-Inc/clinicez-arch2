@@ -39,6 +39,13 @@ public class MessageCoverageTests
         new(InteropTypes.DocumentAttestationPublished, [Clinic, Lab], [Portal]),
         new(InteropTypes.QueueBoardUpdated, [Clinic], [Portal]),
 
+        new(InteropTypes.FacilityVerificationRequested, [Clinic], [Portal]),
+        new(InteropTypes.FacilityVerificationWithdrawn, [Clinic], [Portal]),
+        new(InteropTypes.FacilityVerificationRejected, [Portal], [Clinic]),
+        new(InteropTypes.PractitionerVerificationRequested, [Clinic], [Portal]),
+        new(InteropTypes.PractitionerIdentityUpdated, [Portal], [Patient, Clinic]),
+        new(InteropTypes.PractitionerVerificationRevoked, [Portal], [Patient, Clinic]),
+
         new(InteropTypes.DirectoryCellUpserted, [Portal], [Hub]),
         new(InteropTypes.DirectoryFacilityUpserted, [Portal], [Hub]),
         new(InteropTypes.DirectoryLinkUpserted, [Portal], [Hub]),

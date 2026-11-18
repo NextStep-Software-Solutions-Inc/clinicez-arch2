@@ -116,8 +116,8 @@ public static class DependencyInjection
         services.AddScoped<ClinicEz.Patient.Application.Common.Interfaces.IImageConversionService, ClinicEz.Patient.Infrastructure.Services.ImageConversionService>();
         services.AddSingleton<IPsgcLocationService, PsgcLocationService>();
         services.AddScoped<IPatientHomeService, PatientHomeService>();
-        services.AddScoped<IPatientCatalogSearchService, PatientCatalogSearchService>();
-        services.AddPluggableSearch<PatientCatalogSearchService>();
+        services.AddScoped<IDirectoryCatalogSearchService, DirectoryCatalogSearchService>();
+        services.AddPluggableSearch<DirectoryCatalogSearchService>();
 
         // ── Sync entity processors ────────────────────────────────────────────
         // Core
@@ -186,6 +186,8 @@ public static class DependencyInjection
         IConfiguration configuration) =>
         services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
             .Handle<FacilityCreatedEvent, FacilityDirectoryUpdatedInteropHandler>(InteropTypes.FacilityDirectoryUpdated)
+            .Handle<PractitionerIdentityUpdatedPayload, PractitionerIdentityUpdatedInteropHandler>(InteropTypes.PractitionerIdentityUpdated)
+            .Handle<PractitionerVerificationRevokedPayload, PractitionerVerificationRevokedInteropHandler>(InteropTypes.PractitionerVerificationRevoked)
             .Handle<ClinicRecordVerifiedEvent, ClinicRecordVerifiedInteropHandler>(InteropTypes.ClinicRecordVerified)
             .Handle<ClinicAppointmentUpdatedEvent, ClinicAppointmentUpdatedInteropHandler>(InteropTypes.ClinicAppointmentUpdated)
             .Handle<PatientShareRedeemPayload, PatientShareRedeemInteropHandler>(InteropTypes.PatientShareRedeem)

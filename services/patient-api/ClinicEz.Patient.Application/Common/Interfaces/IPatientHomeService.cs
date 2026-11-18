@@ -12,14 +12,19 @@ public interface IPatientHomeService
     Task<AppointmentCheckInResponseDto> CheckInAppointmentAsync(Guid patientId, Guid appointmentId, CancellationToken ct = default);
 }
 
-public interface IPatientCatalogSearchService
+public interface IDirectoryCatalogSearchService
 {
-    Task<PatientSearchResponseDto> SearchAsync(
-        Guid patientId,
+    Task<DirectorySearchResponseDto> SearchAsync(
+        Guid? patientId,
         string? query,
         string category = "all",
         bool availableTodayOnly = false,
         bool openNowOnly = false,
         int takePerCategory = 20,
+        CancellationToken ct = default);
+
+    Task<PractitionerProfileDto?> GetPractitionerProfileAsync(
+        Guid id,
+        Guid? patientId = null,
         CancellationToken ct = default);
 }

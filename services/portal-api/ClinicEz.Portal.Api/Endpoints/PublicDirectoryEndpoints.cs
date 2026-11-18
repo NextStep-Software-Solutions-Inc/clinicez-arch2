@@ -1,12 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Api.Abstractions;
+using ClinicEz.Portal.Application.Common;
+using ClinicEz.Portal.Application.Features.DirectoryVerification;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Shared.Common;
+using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -58,24 +62,20 @@ public record PublicDirectoryProviderDto(
     string? City,
     int FacilityCount,
     string PrivacyPolicyUrl,
-    string TermsUrl);
+    string TermsUrl,
+    string? Title = null,
+    string? Bio = null,
+    string? AvatarUrl = null,
+    bool IsVerified = true);
+
+public sealed record ConfirmAffiliationHttpRequest(string? Token = null, string? OtpCode = null);
 
 /// <summary>
-/// Public, anonymous directory endpoints backing the portal-web /clinics, /organizations, and /hp pages.
-/// Serves real, synchronized facility, organization, and healthcare provider records from the portal registry.
+/// Public, anonymous directory endpoints backing the portal-web /clinics, /organizations, /hp, and /confirm-affiliation pages.
+/// Serves verified, discovery-eligible facility, organization, and practitioner records from the portal registry.
 /// </summary>
 public sealed class PublicDirectoryEndpoints : IEndpoint
 {
-    private static readonly HashSet<string> NonClinicalRoles = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Billing",
-        "Cashier",
-        "Receptionist",
-        "Front Desk",
-        "IT Support",
-        "Encoder"
-    };
-
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/public/directory")
@@ -85,7 +85,7 @@ public sealed class PublicDirectoryEndpoints : IEndpoint
 
         group.MapGet("/clinics", GetClinicsAsync)
             .WithName("GetPublicDirectoryClinics")
-            .WithDescription("Returns active public clinics registered on the platform.");
+            .WithDescription("Returns verified, discovery-eligible clinics registered on the platform.");
 
         group.MapGet("/organizations", GetOrganizationsAsync)
             .WithName("GetPublicDirectoryOrganizations")
@@ -93,7 +93,22 @@ public sealed class PublicDirectoryEndpoints : IEndpoint
 
         group.MapGet("/providers", GetProvidersAsync)
             .WithName("GetPublicDirectoryProviders")
-            .WithDescription("Returns active healthcare providers practicing at registered clinics.");
+            .WithDescription("Returns verified healthcare practitioners practicing at verified clinics.");
+
+        app.MapGet("/public/practitioners/confirm-affiliation", GetConfirmAffiliationAsync)
+            .AllowAnonymous()
+            .RequireRateLimiting("PublicApi")
+            .WithName("GetPractitionerAffiliationConfirmation")
+            .WithDescription("Inspects a practitioner clinic-affiliation confirmation token.")
+            .WithTags("PublicDirectory");
+
+        app.MapPost("/public/practitioners/confirm-affiliation", ConfirmAffiliationAsync)
+            .AllowAnonymous()
+            .DisableAntiforgery()
+            .RequireRateLimiting("PublicApi")
+            .WithName("ConfirmPractitionerAffiliation")
+            .WithDescription("Confirms a verified practitioner's affiliation with a clinic via token and optional OTP code.")
+            .WithTags("PublicDirectory");
     }
 
     public static async Task<IResult> GetClinicsAsync(
@@ -109,7 +124,9 @@ public sealed class PublicDirectoryEndpoints : IEndpoint
             .Where(f => !f.IsDeleted
                         && f.Tenant.ArchivedAt == null
                         && f.FacilityType == FacilityType.Clinic
-                        && (f.Status == FacilityStatus.Active || f.Status == FacilityStatus.Provisioning));
+                        && f.Status == FacilityStatus.Active
+                        && f.IsPatientDiscoveryEligible
+                        && f.PlatformVerificationStatus == PlatformVerificationStatus.Verified);
 
         if (!string.IsNullOrWhiteSpace(city))
         {
@@ -136,16 +153,19 @@ public sealed class PublicDirectoryEndpoints : IEndpoint
             .ToListAsync(ct);
 
         var facilityIds = facilities.Select(f => f.Id).ToList();
-        var tenantIds = facilities.Select(f => f.TenantId).Distinct().ToList();
 
-        var staffMembers = await context.StaffMembers
-            .AsNoTracking()
-            .Include(s => s.WorkspaceMember)
-            .Where(s => !s.IsDeleted
-                        && tenantIds.Contains(s.TenantId)
-                        && !s.WorkspaceMember.IsDeleted
-                        && s.WorkspaceMember.Status == MemberStatus.Active)
-            .ToListAsync(ct);
+        var verifiedAffiliations = facilityIds.Count == 0
+            ? new List<PractitionerAffiliation>()
+            : await context.PractitionerAffiliations
+                .AsNoTracking()
+                .Include(a => a.Practitioner)
+                .Where(a => !a.IsDeleted
+                            && facilityIds.Contains(a.FacilityId)
+                            && a.AffiliationStatus == "Active"
+                            && !a.Practitioner.IsDeleted
+                            && a.Practitioner.MergedIntoPractitionerId == null
+                            && a.Practitioner.VerificationStatus == PractitionerVerificationLevel.Verified)
+                .ToListAsync(ct);
 
         var items = facilities.Select(f =>
         {
@@ -157,13 +177,11 @@ public sealed class PublicDirectoryEndpoints : IEndpoint
             var resolvedAddress = BuildAddress(resolvedStreet, resolvedBarangay, resolvedCity, resolvedProvince);
             var isYakap = f.Branch != null && f.Branch.IsPhilHealthAccredited && !string.IsNullOrWhiteSpace(f.Branch.PhilHealthAccreditationNumber);
 
-            var providerCount = staffMembers.Count(s =>
-                (s.FacilityId == f.Id || (s.FacilityId == null && s.TenantId == f.TenantId))
-                && !NonClinicalRoles.Contains(s.Role));
-            if (providerCount == 0)
-            {
-                providerCount = Math.Max(1, staffMembers.Count(s => s.FacilityId == f.Id || s.TenantId == f.TenantId));
-            }
+            var providerCount = verifiedAffiliations
+                .Where(a => a.FacilityId == f.Id)
+                .Select(a => a.PractitionerId)
+                .Distinct()
+                .Count();
 
             var classificationLabel = FirstNonEmpty(f.Classification, "Primary Care & Outpatient Clinic")!;
             var locationLabel = FirstNonEmpty(resolvedCity, resolvedProvince);
@@ -311,56 +329,67 @@ public sealed class PublicDirectoryEndpoints : IEndpoint
         string? facilitySlug = null,
         CancellationToken ct = default)
     {
-        var staffQuery = context.StaffMembers
+        var affiliationsQuery = context.PractitionerAffiliations
             .AsNoTracking()
-            .Include(s => s.WorkspaceMember)
-            .Include(s => s.Facility)
-            .Include(s => s.Tenant)
-            .Where(s => !s.IsDeleted
-                        && !s.WorkspaceMember.IsDeleted
-                        && s.WorkspaceMember.Status == MemberStatus.Active
-                        && s.Tenant.ArchivedAt == null
-                        && (s.Facility == null || (!s.Facility.IsDeleted && s.Facility.Status != FacilityStatus.Suspended)));
+            .Include(a => a.Practitioner)
+            .Include(a => a.Facility)
+            .Include(a => a.Tenant)
+            .Where(a => !a.IsDeleted
+                        && a.AffiliationStatus == "Active"
+                        && !a.Practitioner.IsDeleted
+                        && a.Practitioner.MergedIntoPractitionerId == null
+                        && a.Practitioner.VerificationStatus == PractitionerVerificationLevel.Verified
+                        && !a.Facility.IsDeleted
+                        && !a.Tenant.IsDeleted
+                        && a.Tenant.ArchivedAt == null
+                        && a.Facility.FacilityType == FacilityType.Clinic
+                        && a.Facility.Status == FacilityStatus.Active
+                        && a.Facility.IsPatientDiscoveryEligible
+                        && a.Facility.PlatformVerificationStatus == PlatformVerificationStatus.Verified);
 
         if (!string.IsNullOrWhiteSpace(facilitySlug))
         {
             var normalizedSlug = facilitySlug.Trim().ToLowerInvariant();
-            staffQuery = staffQuery.Where(s =>
-                (s.Facility != null && s.Facility.Slug.ToLower() == normalizedSlug) ||
-                s.Tenant.TenantSlug.ToLower() == normalizedSlug);
+            affiliationsQuery = affiliationsQuery.Where(a =>
+                a.Facility.Slug.ToLower() == normalizedSlug ||
+                a.Tenant.TenantSlug.ToLower() == normalizedSlug);
         }
 
-        var staffList = await staffQuery
-            .OrderBy(s => s.WorkspaceMember.FullName)
+        var affiliations = await affiliationsQuery
+            .OrderBy(a => a.Practitioner.LastName)
+            .ThenBy(a => a.Practitioner.FirstName)
             .ToListAsync(ct);
 
-        var clinicalStaff = staffList
-            .Where(s => !NonClinicalRoles.Contains(s.Role) && !string.IsNullOrWhiteSpace(s.WorkspaceMember.FullName))
+        var items = affiliations
+            .GroupBy(a => a.PractitionerId)
+            .Select(group =>
+            {
+                var primary = group.First();
+                var prac = primary.Practitioner;
+                var displayName = DirectoryVerificationHelper.FormatDisplayName(prac.Title, prac.FirstName, prac.LastName);
+                var specialty = FirstNonEmpty(primary.LocalSpecialty, prac.PrimarySpecialty, prac.ProfessionKind)!;
+                var facilityCount = group.Select(g => g.FacilityId).Distinct().Count();
+                var resolvedCity = FirstNonEmpty(primary.Facility.City, primary.Tenant.City);
+
+                return new PublicDirectoryProviderDto(
+                    Id: prac.Id,
+                    Name: displayName,
+                    Role: prac.ProfessionKind,
+                    Specialty: specialty,
+                    FacilityId: primary.FacilityId,
+                    FacilityName: primary.Facility.Name,
+                    FacilitySlug: primary.Facility.Slug,
+                    TenantSlug: primary.Tenant.TenantSlug,
+                    City: resolvedCity,
+                    FacilityCount: facilityCount,
+                    PrivacyPolicyUrl: "/privacy",
+                    TermsUrl: "/terms",
+                    Title: prac.Title,
+                    Bio: prac.PublicBio,
+                    AvatarUrl: prac.AvatarUrl,
+                    IsVerified: true);
+            })
             .ToList();
-
-        var items = clinicalStaff.Select(s =>
-        {
-            var roleLabel = string.IsNullOrWhiteSpace(s.Role) || string.Equals(s.Role, "Staff", StringComparison.OrdinalIgnoreCase)
-                ? "General Practitioner"
-                : s.Role;
-            var facilityName = s.Facility?.Name ?? s.Tenant.Name;
-            var resolvedSlug = s.Facility?.Slug;
-            var resolvedCity = FirstNonEmpty(s.Facility?.City, s.Tenant.City);
-
-            return new PublicDirectoryProviderDto(
-                Id: s.Id,
-                Name: s.WorkspaceMember.FullName,
-                Role: roleLabel,
-                Specialty: $"{roleLabel} • {facilityName}",
-                FacilityId: s.FacilityId,
-                FacilityName: facilityName,
-                FacilitySlug: resolvedSlug,
-                TenantSlug: s.Tenant.TenantSlug,
-                City: resolvedCity,
-                FacilityCount: 1,
-                PrivacyPolicyUrl: "/privacy",
-                TermsUrl: "/terms");
-        }).ToList();
 
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -373,6 +402,91 @@ public sealed class PublicDirectoryEndpoints : IEndpoint
         }
 
         return Results.Ok(ApiResponse<List<PublicDirectoryProviderDto>>.Success(items));
+    }
+
+    public static async Task<IResult> GetConfirmAffiliationAsync(
+        string? token,
+        ISender sender,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return Results.BadRequest(ApiResponse<AffiliationConfirmationInfoDto>.Fail(
+                "Confirmation token is required.",
+                "REQUIRED_FIELD_MISSING"));
+        }
+
+        var info = await sender.Send(new GetAffiliationConfirmationQuery(token), ct);
+        if (info is null)
+        {
+            return Results.NotFound(ApiResponse<AffiliationConfirmationInfoDto>.Fail(
+                "Invalid or unrecognized affiliation confirmation token.",
+                "NOT_FOUND"));
+        }
+
+        if (info.IsExpired)
+        {
+            return Results.Json(
+                ApiResponse<AffiliationConfirmationInfoDto>.Fail("This confirmation link has expired.", "TOKEN_EXPIRED"),
+                statusCode: StatusCodes.Status410Gone);
+        }
+
+        return Results.Ok(ApiResponse<AffiliationConfirmationInfoDto>.Success(info));
+    }
+
+    public static async Task<IResult> ConfirmAffiliationAsync(
+        string? token,
+        string? otpCode,
+        HttpContext httpContext,
+        ISender sender,
+        CancellationToken ct = default)
+    {
+        ConfirmAffiliationHttpRequest? body = null;
+        if (httpContext.Request.ContentLength != 0 && httpContext.Request.HasJsonContentType())
+        {
+            try
+            {
+                body = await httpContext.Request.ReadFromJsonAsync<ConfirmAffiliationHttpRequest>(cancellationToken: ct);
+            }
+            catch (JsonException)
+            {
+                return Results.BadRequest(ApiResponse<AffiliationConfirmationResultDto>.Fail("Invalid JSON request.", "INVALID_JSON"));
+            }
+        }
+
+        var resolvedToken = !string.IsNullOrWhiteSpace(token) ? token : body?.Token;
+        var resolvedOtp = !string.IsNullOrWhiteSpace(otpCode) ? otpCode : body?.OtpCode;
+
+        if (string.IsNullOrWhiteSpace(resolvedToken))
+        {
+            return Results.BadRequest(ApiResponse<AffiliationConfirmationResultDto>.Fail(
+                "Confirmation token is required.",
+                "REQUIRED_FIELD_MISSING"));
+        }
+
+        try
+        {
+            var result = await sender.Send(new ConfirmPractitionerAffiliationCommand(resolvedToken, resolvedOtp), ct);
+            return Results.Ok(ApiResponse<AffiliationConfirmationResultDto>.Success(result));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return Results.NotFound(ApiResponse<AffiliationConfirmationResultDto>.Fail(ex.Message, "NOT_FOUND"));
+        }
+        catch (CodedConflictException ex)
+        {
+            return Results.Conflict(ApiResponse<AffiliationConfirmationResultDto>.Fail(ex.Message, ex.Code));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.Json(
+                ApiResponse<AffiliationConfirmationResultDto>.Fail(ex.Message, "TOKEN_EXPIRED"),
+                statusCode: StatusCodes.Status410Gone);
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.BadRequest(ApiResponse<AffiliationConfirmationResultDto>.Fail(ex.Message, "INVALID_REQUEST"));
+        }
     }
 
     private static string? FirstNonEmpty(params string?[] values) =>

@@ -88,6 +88,7 @@ public class FacilityHeartbeatHandlerTests : IDisposable
     public async Task Heartbeat_WithEligibilityDrift_TriggersSelfHealingDirectoryUpdate()
     {
         _facility.IsPatientDiscoveryEligible = true;
+        _facility.PlatformVerificationStatus = PlatformVerificationStatus.Verified;
         await _context.SaveChangesAsync();
 
         await BeatAsync(Self(), "1.4.2", isWorkspaceEligible: false);

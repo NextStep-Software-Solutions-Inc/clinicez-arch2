@@ -1,6 +1,6 @@
 import { createNativeStackNavigator, createNativeStackScreen } from '@react-navigation/native-stack';
 import HomeScreen from '../screens/Home.screen';
-import PatientSearchScreen from '../screens/Search.screen';
+import DirectorySearchScreen from '../screens/Search.screen';
 
 const HomeStackWeb = createNativeStackNavigator({
   screenOptions: {
@@ -13,8 +13,8 @@ const HomeStackWeb = createNativeStackNavigator({
         headerShown: false,
       },
     }),
-    PatientSearch: createNativeStackScreen({
-      screen: PatientSearchScreen,
+    DirectorySearch: createNativeStackScreen({
+      screen: DirectorySearchScreen,
       options: {
         headerShown: false,
       },

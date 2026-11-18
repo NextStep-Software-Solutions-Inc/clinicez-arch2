@@ -4,6 +4,8 @@ import type { BookingShareSection } from '../sharing/bookingSections';
 export interface CreateBookingDraftRequest {
     clinicId: string;
     organizationId?: string | null;
+    providerId?: string | null;
+    providerName?: string | null;
     /** YYYY-MM-DD */
     preferredDate?: string | null;
     /** HH:mm */

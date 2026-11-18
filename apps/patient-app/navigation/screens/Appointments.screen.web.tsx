@@ -40,7 +40,7 @@ import {
   getCachedAppointmentsWithLocalBookings,
 } from '../../services/appointments/appointmentsService';
 import type { AppointmentItem } from '../../services/appointments/types';
-import { queryPatientSearchCatalog } from '../../services/search/patientSearchService';
+import { queryDirectorySearchCatalog } from '../../services/search/directorySearchService';
 
 interface DraftSummary {
   id: string;
@@ -197,26 +197,39 @@ export default function AppointmentsScreenWeb() {
     let active = true;
     (async () => {
       try {
-        const { data } = await queryPatientSearchCatalog(getTokenRef.current, patientId);
+        const { data } = await queryDirectorySearchCatalog(getTokenRef.current, patientId);
         if (!active) return;
 
         const items: SuggestedCareServiceItem[] = [];
 
         if (data.doctors && data.doctors.length > 0) {
-          const doc = data.doctors[0];
+          const doc =
+            data.doctors.find((d) => d.clinicSupportsAppointments) ?? data.doctors[0];
+          const canBookDoc = doc.clinicSupportsAppointments;
           items.push({
             id: `doc-${doc.id}`,
             title: doc.specialty || 'General Consultation',
             subtitle: doc.name,
-            detail: `${doc.clinicName} • Available`,
+            detail: canBookDoc
+              ? `${doc.clinicName} • Available`
+              : `${doc.clinicName} • Booking Paused`,
             badgeType: 'doctor',
             imageUrl: doc.avatarUrl,
-            buttonLabel: 'Book Slot',
+            buttonLabel: canBookDoc ? 'Book Slot' : 'View Profile',
             buttonVariant: 'primary',
             onPress: () => {
-              navigateToMainRoute('BookingDraftScreen', {
-                clinicId: doc.clinicId,
-                providerId: doc.id,
+              if (canBookDoc) {
+                navigateToMainRoute('BookingDraftScreen', {
+                  clinicId: doc.clinicId,
+                  providerId: doc.id,
+                  practitionerId: doc.practitionerId ?? undefined,
+                  providerName: doc.name,
+                });
+                return;
+              }
+              navigateToMainRoute('ProviderProfileScreen', {
+                id: doc.practitionerId ?? doc.id,
+                directoryDoctor: doc,
               });
             },
           });

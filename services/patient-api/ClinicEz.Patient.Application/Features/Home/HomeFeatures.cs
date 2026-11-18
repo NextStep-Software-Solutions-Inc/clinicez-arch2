@@ -170,7 +170,7 @@ public sealed class CheckInAppointmentCommandHandler(IPatientHomeService homeSer
         => homeService.CheckInAppointmentAsync(request.PatientId, request.AppointmentId, cancellationToken);
 }
 
-// ── 6. Patient Multi-Entity Catalog Search Query ─────────────────────────────
+// ── 6. Directory Multi-Entity Catalog Search & Practitioner Profile ──────────
 
 public sealed record SearchPatientCatalogQuery(
     Guid PatientId,
@@ -178,7 +178,7 @@ public sealed record SearchPatientCatalogQuery(
     string Category = "all",
     bool AvailableTodayOnly = false,
     bool OpenNowOnly = false,
-    int Take = 20) : IRequest<PatientSearchResponseDto>;
+    int Take = 20) : IRequest<DirectorySearchResponseDto>;
 
 public sealed class SearchPatientCatalogQueryValidator : AbstractValidator<SearchPatientCatalogQuery>
 {
@@ -197,10 +197,10 @@ public sealed class SearchPatientCatalogQueryValidator : AbstractValidator<Searc
     }
 }
 
-public sealed class SearchPatientCatalogQueryHandler(IPatientCatalogSearchService searchService)
-    : IRequestHandler<SearchPatientCatalogQuery, PatientSearchResponseDto>
+public sealed class SearchPatientCatalogQueryHandler(IDirectoryCatalogSearchService searchService)
+    : IRequestHandler<SearchPatientCatalogQuery, DirectorySearchResponseDto>
 {
-    public Task<PatientSearchResponseDto> Handle(SearchPatientCatalogQuery request, CancellationToken cancellationToken)
+    public Task<DirectorySearchResponseDto> Handle(SearchPatientCatalogQuery request, CancellationToken cancellationToken)
         => searchService.SearchAsync(
             request.PatientId,
             request.Query,
@@ -209,4 +209,61 @@ public sealed class SearchPatientCatalogQueryHandler(IPatientCatalogSearchServic
             request.OpenNowOnly,
             request.Take,
             cancellationToken);
+}
+
+public sealed record SearchDirectoryQuery(
+    string? Query,
+    string Category = "all",
+    bool AvailableTodayOnly = false,
+    bool OpenNowOnly = false,
+    int Take = 20,
+    Guid? ForPatientId = null) : IRequest<DirectorySearchResponseDto>;
+
+public sealed class SearchDirectoryQueryValidator : AbstractValidator<SearchDirectoryQuery>
+{
+    private static readonly HashSet<string> ValidCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "all", "doctors", "clinics", "services"
+    };
+
+    public SearchDirectoryQueryValidator()
+    {
+        RuleFor(x => x.Category)
+            .Must(c => string.IsNullOrWhiteSpace(c) || ValidCategories.Contains(c.Trim()))
+            .WithMessage("Category must be one of: all, doctors, clinics, services.");
+        RuleFor(x => x.Take).InclusiveBetween(1, 50);
+    }
+}
+
+public sealed class SearchDirectoryQueryHandler(IDirectoryCatalogSearchService searchService)
+    : IRequestHandler<SearchDirectoryQuery, DirectorySearchResponseDto>
+{
+    public Task<DirectorySearchResponseDto> Handle(SearchDirectoryQuery request, CancellationToken cancellationToken)
+        => searchService.SearchAsync(
+            request.ForPatientId,
+            request.Query,
+            string.IsNullOrWhiteSpace(request.Category) ? "all" : request.Category.Trim().ToLowerInvariant(),
+            request.AvailableTodayOnly,
+            request.OpenNowOnly,
+            request.Take,
+            cancellationToken);
+}
+
+public sealed record GetPractitionerProfileQuery(
+    Guid Id,
+    Guid? ForPatientId = null) : IRequest<PractitionerProfileDto?>;
+
+public sealed class GetPractitionerProfileQueryValidator : AbstractValidator<GetPractitionerProfileQuery>
+{
+    public GetPractitionerProfileQueryValidator()
+    {
+        RuleFor(x => x.Id).NotEmpty();
+    }
+}
+
+public sealed class GetPractitionerProfileQueryHandler(IDirectoryCatalogSearchService searchService)
+    : IRequestHandler<GetPractitionerProfileQuery, PractitionerProfileDto?>
+{
+    public Task<PractitionerProfileDto?> Handle(GetPractitionerProfileQuery request, CancellationToken cancellationToken)
+        => searchService.GetPractitionerProfileAsync(request.Id, request.ForPatientId, cancellationToken);
 }

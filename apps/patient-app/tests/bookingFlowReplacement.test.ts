@@ -2,6 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { iconNames } from '../components/ui/iconNames';
+import {
+  applyDoctorAffiliation,
+  isDirectoryBookingPaused,
+  practitionerProfileToDoctorDto,
+  resolveDefaultAffiliation,
+} from '../services/search/directorySearchService';
 
 const APP_ROOT = join(import.meta.dir, '..');
 const readAppFile = (rel: string): string =>
@@ -104,9 +110,9 @@ describe('Patient Appointment Booking Flow Replacement Suite', () => {
 
   test('7. Dedicated Screen Integration, Strict No-Ops & Zero Mock Data: configures full-screen presentation, wires backend, and purges fake clinical placeholders', () => {
     const webFrameSrc = readAppFile('components/layout/WebAppFrame.web.tsx');
-    expect(webFrameSrc.includes('DEDICATED_FULLSCREEN_SCREENS')).toBe(true);
-    expect(webFrameSrc.includes("isDedicatedFullscreen")).toBe(true);
-    expect(webFrameSrc.includes("isWorkstation && !isDedicatedFullscreen")).toBe(true);
+    expect(webFrameSrc.includes("'BookingDraftScreen'")).toBe(true);
+    expect(webFrameSrc.includes('{isWorkstation ? (')).toBe(true);
+    expect(webFrameSrc.includes('DEDICATED_FULLSCREEN_SCREENS')).toBe(false);
 
     const mainStackSrc = readAppFile('navigation/navigators/MainStack.tsx');
     const bookingRouteSection = mainStackSrc.slice(
@@ -126,7 +132,7 @@ describe('Patient Appointment Booking Flow Replacement Suite', () => {
       expect(src.includes('Animated.ScrollView')).toBe(true);
       expect(src.includes('getTokenRef')).toBe(true);
       expect(src.includes('hasLoadedCatalogRef')).toBe(true);
-      expect(src.includes('queryPatientSearchCatalog')).toBe(true);
+      expect(src.includes('queryDirectorySearchCatalog')).toBe(true);
       expect(src.includes('createBookingDraftOnline')).toBe(true);
       expect(src.includes('submitBookingDraftOnline')).toBe(true);
       expect(src.includes('saveBookingDraft')).toBe(true);
@@ -285,5 +291,95 @@ describe('Patient Appointment Booking Flow Replacement Suite', () => {
         expect(content.includes(forbidden)).toBe(false);
       }
     }
+  });
+
+  test('11. Multi-Clinic Affiliations, Provider Attribution (providerId/providerName), and Booking Paused Blocking', () => {
+    const bookingApiSrc = readAppFile('services/api/bookingApi.ts');
+    const discoverySrc = readAppFile('services/discovery/discoveryService.ts');
+    expect(bookingApiSrc.includes('providerId?: string | null')).toBe(true);
+    expect(bookingApiSrc.includes('providerName?: string | null')).toBe(true);
+    expect(discoverySrc.includes('providerId?: string | null')).toBe(true);
+    expect(discoverySrc.includes('providerName?: string | null')).toBe(true);
+
+    for (const screenPath of [
+      'navigation/screens/BookingDraft.screen.tsx',
+      'navigation/screens/BookingDraft.screen.web.tsx',
+    ]) {
+      const src = readAppFile(screenPath);
+      expect(src.includes('providerId: selectedDoctor.id')).toBe(true);
+      expect(src.includes('providerName: selectedDoctor.name')).toBe(true);
+      expect(src.includes('if (isBookingPaused)')).toBe(true);
+      expect(src.includes('onSelectClinic')).toBe(true);
+    }
+
+    const doctorStepSrc = readAppFile('components/booking/BookingDoctorStep.tsx');
+    const slotStepSrc = readAppFile('components/booking/BookingSlotStep.tsx');
+    const reviewStepSrc = readAppFile('components/booking/BookingReviewStep.tsx');
+    const footerSrc = readAppFile('components/booking/BookingStickyFooter.tsx');
+    expect(doctorStepSrc.includes('Booking Paused')).toBe(true);
+    expect(doctorStepSrc.includes('Clinic locations')).toBe(true);
+    expect(slotStepSrc.includes('Booking Paused')).toBe(true);
+    expect(slotStepSrc.includes('disabled={isBookingPaused}')).toBe(true);
+    expect(reviewStepSrc.includes('Booking Paused')).toBe(true);
+    expect(footerSrc.includes('Booking Paused')).toBe(true);
+    expect(footerSrc.includes('disabled={isSubmitting || bookingPaused}')).toBe(true);
+
+    const multiClinicDoctor = practitionerProfileToDoctorDto({
+      id: 'prac-1',
+      practitionerId: 'prac-1',
+      name: 'Dr. Maria Santos',
+      firstName: 'Maria',
+      lastName: 'Santos',
+      role: 'Doctor',
+      primarySpecialty: 'Internal Medicine',
+      bio: null,
+      avatarUrl: null,
+      displayPrcLicenseNo: '0012345',
+      prcExpiryDate: null,
+      verificationLevel: 'Verified',
+      isVerified: true,
+      verifiedAtUtc: null,
+      affiliations: [
+        {
+          clinicId: 'clinic-paused',
+          clinicName: 'Paused Satellite Clinic',
+          clinicAddress: '1 Paused Ave',
+          supportsAppointments: false,
+          localSpecialty: 'General Medicine',
+          nextAvailableAt: null,
+          nextAvailableLabel: 'Booking Paused',
+          availabilities: [],
+          providerId: 'prov-paused',
+        },
+        {
+          clinicId: 'clinic-open',
+          clinicName: 'Active Heart Center',
+          clinicAddress: '2 Open Blvd',
+          supportsAppointments: true,
+          localSpecialty: 'Cardiology',
+          nextAvailableAt: '2026-11-19T09:00:00.000Z',
+          nextAvailableLabel: 'Tomorrow, 9:00 AM',
+          availabilities: [{ dayOfWeek: 'Thursday', startTime: '09:00', endTime: '17:00' }],
+          providerId: 'prov-open',
+        },
+      ],
+    });
+    expect(multiClinicDoctor).not.toBeNull();
+
+    // Default affiliation prefers bookable clinic
+    const defaultAff = resolveDefaultAffiliation(multiClinicDoctor!);
+    expect(defaultAff?.clinicId).toBe('clinic-open');
+    expect(defaultAff?.providerId).toBe('prov-open');
+    const activeDoc = applyDoctorAffiliation(multiClinicDoctor!, defaultAff);
+    expect(activeDoc.id).toBe('prov-open');
+    expect(activeDoc.specialty).toBe('Cardiology');
+    expect(isDirectoryBookingPaused(activeDoc, null)).toBe(false);
+
+    // Selecting paused affiliation blocks booking
+    const pausedAff = resolveDefaultAffiliation(multiClinicDoctor!, 'clinic-paused');
+    const pausedDoc = applyDoctorAffiliation(multiClinicDoctor!, pausedAff);
+    expect(pausedDoc.id).toBe('prov-paused');
+    expect(pausedDoc.clinicSupportsAppointments).toBe(false);
+    expect(isDirectoryBookingPaused(pausedDoc, null)).toBe(true);
   });
 });

@@ -56,6 +56,7 @@ public class TwoTierPublishingFlowTests
                 settings.OperatingHours = "Mon-Fri 8:00 AM - 5:00 PM";
                 settings.LetterheadAddress = "123 Medical Plaza, Manila";
                 settings.LetterheadContact = "0917-555-0199";
+                settings.LetterheadDohLto = "DOH-LTO-2026-E2E";
                 settings.IsWorkspaceEligible = isWorkspaceEligible;
             }
 
@@ -100,8 +101,11 @@ public class TwoTierPublishingFlowTests
         Fac facility,
         bool isWorkspaceEligible,
         bool toPatient = true,
-        bool toClinic = true)
+        bool toClinic = true,
+        bool? isPlatformVerified = null)
     {
+        var verified = isPlatformVerified ?? isWorkspaceEligible;
+        var verificationStatus = verified ? PlatformVerificationStatus.Verified : PlatformVerificationStatus.Unverified;
         var envelopes = new List<InteropEnvelope>();
 
         if (toPatient)
@@ -118,7 +122,11 @@ public class TwoTierPublishingFlowTests
                     FacilityType = FacilityType.Clinic,
                     Name = facility.Name,
                     Slug = facility.Name.ToLowerInvariant().Replace(' ', '-'),
-                    IsWorkspaceEligible = isWorkspaceEligible
+                    IsWorkspaceEligible = isWorkspaceEligible,
+                    IsPlatformVerified = verified,
+                    PlatformVerificationStatus = verificationStatus,
+                    DirectorySource = DirectorySourceKind.PortalControlPlane,
+                    ReplaceProvidersSnapshot = false
                 }));
         }
 
@@ -136,7 +144,11 @@ public class TwoTierPublishingFlowTests
                     FacilityType = FacilityType.Clinic,
                     Name = facility.Name,
                     Slug = facility.Name.ToLowerInvariant().Replace(' ', '-'),
-                    IsWorkspaceEligible = isWorkspaceEligible
+                    IsWorkspaceEligible = isWorkspaceEligible,
+                    IsPlatformVerified = verified,
+                    PlatformVerificationStatus = verificationStatus,
+                    DirectorySource = DirectorySourceKind.PortalControlPlane,
+                    ReplaceProvidersSnapshot = false
                 }));
         }
 

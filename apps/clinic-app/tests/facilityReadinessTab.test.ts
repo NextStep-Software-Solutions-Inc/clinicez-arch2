@@ -148,6 +148,7 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
         letterheadAddress: '123 Rizal Ave, Manila',
         letterheadContact: '0917-000-0000',
         accreditationNumber: 'PHIC-1234',
+        letterheadDohLto: 'DOH-LTO-04A-2026-0089',
         operatingHours: '',
         staff: mockStaff as any,
         services: mockServices as any,
@@ -167,10 +168,10 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
     expect(markup).toContain('Set Operating Hours');
     // Overall facility readiness must indicate Setup Needed
     expect(markup).toContain('Facility Setup Required');
-    expect(markup).toContain('5/6 Required');
+    expect(markup).toContain('6/7 Required');
   });
 
-  test('2. Satisfies readiness when Operating Hours are configured', () => {
+  test('2. Satisfies readiness when Operating Hours and DOH LTO are configured', () => {
     const markup = renderToStaticMarkup(
       React.createElement(FacilityReadinessTab, {
         license: mockActiveLicense as any,
@@ -178,6 +179,7 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
         letterheadAddress: '123 Rizal Ave, Manila',
         letterheadContact: '0917-000-0000',
         accreditationNumber: 'PHIC-1234',
+        letterheadDohLto: 'DOH-LTO-04A-2026-0089',
         operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
         staff: mockStaff as any,
         services: mockServices as any,
@@ -251,8 +253,8 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
     expect(markup).not.toContain('Workspace Eligibility Pending');
   });
 
-  test('5. Renders Online Presence & Patient Directory card with dual controls and 4-state badges', () => {
-    // State A: Published and Accepting Bookings
+  test('5. Renders Online Presence & Patient Directory verification states (Unverified, PendingReview, Rejected, Verified)', () => {
+    // State A: Verified, Published, and Accepting Bookings
     const markupA = renderToStaticMarkup(
       React.createElement(FacilityReadinessTab, {
         license: mockActiveLicense as any,
@@ -260,10 +262,13 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
         letterheadAddress: '123 Rizal Ave, Manila',
         letterheadContact: '0917-000-0000',
         accreditationNumber: 'PHIC-1234',
+        letterheadDohLto: 'DOH-LTO-04A-2026-0089',
+        ltoEvidenceObjectKey: 'tenants/t/clinics/c/lto.pdf',
         operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
         staff: mockStaff as any,
         services: mockServices as any,
         roles: mockRoles as any,
+        platformVerificationStatus: 'Verified',
         isDirectoryPublished: true,
         isOnlineBookingPaused: false,
         isWorkspaceEligible: true,
@@ -275,12 +280,13 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
     );
 
     expect(markupA).toContain('Online Presence &amp; Patient Directory');
-    expect(markupA).toContain('Publish to Patient Directory');
+    expect(markupA).toContain('Verified');
+    expect(markupA).toContain('Publish to Directory');
+    expect(markupA).toContain('Published');
     expect(markupA).toContain('Pause Online Appointment Booking');
-    expect(markupA).toContain('Published (Live)');
     expect(markupA).toContain('Booking Active');
 
-    // State B: Published but Capacity Paused
+    // State B: Verified and Published but Capacity Paused
     const markupB = renderToStaticMarkup(
       React.createElement(FacilityReadinessTab, {
         license: mockActiveLicense as any,
@@ -288,10 +294,12 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
         letterheadAddress: '123 Rizal Ave, Manila',
         letterheadContact: '0917-000-0000',
         accreditationNumber: 'PHIC-1234',
+        letterheadDohLto: 'DOH-LTO-04A-2026-0089',
         operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
         staff: mockStaff as any,
         services: mockServices as any,
         roles: mockRoles as any,
+        platformVerificationStatus: 'Verified',
         isDirectoryPublished: true,
         isOnlineBookingPaused: true,
         isWorkspaceEligible: true,
@@ -302,11 +310,11 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
       })
     );
 
-    expect(markupB).toContain('Published (Live)');
+    expect(markupB).toContain('Published');
     expect(markupB).toContain('Booking Paused');
     expect(markupB).toContain('Online appointment booking is currently paused');
 
-    // State C: Offline (Not Listed)
+    // State C: Verified but Unlisted
     const markupC = renderToStaticMarkup(
       React.createElement(FacilityReadinessTab, {
         license: mockActiveLicense as any,
@@ -314,10 +322,12 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
         letterheadAddress: '123 Rizal Ave, Manila',
         letterheadContact: '0917-000-0000',
         accreditationNumber: 'PHIC-1234',
+        letterheadDohLto: 'DOH-LTO-04A-2026-0089',
         operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
         staff: mockStaff as any,
         services: mockServices as any,
         roles: mockRoles as any,
+        platformVerificationStatus: 'Verified',
         isDirectoryPublished: false,
         isOnlineBookingPaused: false,
         isWorkspaceEligible: true,
@@ -328,7 +338,145 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
       })
     );
 
-    expect(markupC).toContain('Draft (Unlisted)');
+    expect(markupC).toContain('Unlisted');
+
+    // State D: Unverified -> Submit for Verification
+    const markupD = renderToStaticMarkup(
+      React.createElement(FacilityReadinessTab, {
+        license: mockActiveLicense as any,
+        clinicName: 'St. Jude Health Hub',
+        letterheadAddress: '123 Rizal Ave, Manila',
+        letterheadContact: '0917-000-0000',
+        accreditationNumber: 'PHIC-1234',
+        letterheadDohLto: 'DOH-LTO-04A-2026-0089',
+        operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
+        staff: mockStaff as any,
+        services: mockServices as any,
+        roles: mockRoles as any,
+        platformVerificationStatus: 'Unverified',
+        isDirectoryPublished: false,
+        isOnlineBookingPaused: false,
+        isWorkspaceEligible: true,
+        onNavigateTab: () => {},
+        onOpenAddStaff: () => {},
+        onOpenAddService: () => {},
+        onOpenLicenseModal: () => {},
+      })
+    );
+
+    expect(markupD).toContain('Not Listed');
+    expect(markupD).toContain('Submit for Verification');
+
+    // State E: PendingReview -> Pending Review badge + Withdraw Submission
+    const markupE = renderToStaticMarkup(
+      React.createElement(FacilityReadinessTab, {
+        license: mockActiveLicense as any,
+        clinicName: 'St. Jude Health Hub',
+        letterheadAddress: '123 Rizal Ave, Manila',
+        letterheadContact: '0917-000-0000',
+        accreditationNumber: 'PHIC-1234',
+        letterheadDohLto: 'DOH-LTO-04A-2026-0089',
+        operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
+        staff: mockStaff as any,
+        services: mockServices as any,
+        roles: mockRoles as any,
+        platformVerificationStatus: 'PendingReview',
+        isDirectoryPublished: true,
+        isOnlineBookingPaused: false,
+        isWorkspaceEligible: true,
+        onNavigateTab: () => {},
+        onOpenAddStaff: () => {},
+        onOpenAddService: () => {},
+        onOpenLicenseModal: () => {},
+      })
+    );
+
+    expect(markupE).toContain('Pending Review');
+    expect(markupE).toContain('Withdraw Submission');
+    expect(markupE).not.toContain('Publish to Directory');
+
+    // State F: Rejected -> Action Required + rejection reason + Submit for Verification
+    const markupF = renderToStaticMarkup(
+      React.createElement(FacilityReadinessTab, {
+        license: mockActiveLicense as any,
+        clinicName: 'St. Jude Health Hub',
+        letterheadAddress: '123 Rizal Ave, Manila',
+        letterheadContact: '0917-000-0000',
+        accreditationNumber: 'PHIC-1234',
+        letterheadDohLto: 'DOH-LTO-04A-2026-0089',
+        operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
+        staff: mockStaff as any,
+        services: mockServices as any,
+        roles: mockRoles as any,
+        platformVerificationStatus: 'Rejected',
+        verificationRejectionReason: 'DOH LTO scan is expired.',
+        isDirectoryPublished: false,
+        isOnlineBookingPaused: false,
+        isWorkspaceEligible: true,
+        onNavigateTab: () => {},
+        onOpenAddStaff: () => {},
+        onOpenAddService: () => {},
+        onOpenLicenseModal: () => {},
+      })
+    );
+
+    expect(markupF).toContain('Action Required');
+    expect(markupF).toContain('DOH LTO scan is expired.');
+    expect(markupF).toContain('Submit for Verification');
+  });
+
+  test('9. Enforces DOH LTO number or LTO proof document in readiness checklist', () => {
+    const markupMissing = renderToStaticMarkup(
+      React.createElement(FacilityReadinessTab, {
+        license: mockActiveLicense as any,
+        clinicName: 'St. Jude Health Hub',
+        letterheadAddress: '123 Rizal Ave, Manila',
+        letterheadContact: '0917-000-0000',
+        accreditationNumber: 'PHIC-1234',
+        operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
+        letterheadDohLto: '',
+        ltoEvidenceObjectKey: null,
+        staff: mockStaff as any,
+        services: mockServices as any,
+        roles: mockRoles as any,
+        platformVerificationStatus: 'Unverified',
+        isWorkspaceEligible: true,
+        onNavigateTab: () => {},
+        onOpenAddStaff: () => {},
+        onOpenAddService: () => {},
+        onOpenLicenseModal: () => {},
+      })
+    );
+
+    expect(markupMissing).toContain('DOH License to Operate (LTO)');
+    expect(markupMissing).toContain('6/7 Required');
+    expect(markupMissing).toContain('Upload LTO Proof');
+
+    const markupWithProofOnly = renderToStaticMarkup(
+      React.createElement(FacilityReadinessTab, {
+        license: mockActiveLicense as any,
+        clinicName: 'St. Jude Health Hub',
+        letterheadAddress: '123 Rizal Ave, Manila',
+        letterheadContact: '0917-000-0000',
+        accreditationNumber: 'PHIC-1234',
+        operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
+        letterheadDohLto: '',
+        ltoEvidenceObjectKey: 'tenants/t/clinics/c/verification/lto/doc.pdf',
+        staff: mockStaff as any,
+        services: mockServices as any,
+        roles: mockRoles as any,
+        platformVerificationStatus: 'Unverified',
+        isWorkspaceEligible: true,
+        onNavigateTab: () => {},
+        onOpenAddStaff: () => {},
+        onOpenAddService: () => {},
+        onOpenLicenseModal: () => {},
+      })
+    );
+
+    expect(markupWithProofOnly).toContain('Ready to Open');
+    expect(markupWithProofOnly).toContain('LTO Proof Uploaded');
+    expect(markupWithProofOnly).toContain('Replace LTO Proof');
   });
 
   test('6. Disables directory publishing switch when workspace is not eligible or readiness incomplete', () => {

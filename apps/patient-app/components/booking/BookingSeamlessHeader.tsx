@@ -8,6 +8,7 @@ import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 export interface BookingSeamlessHeaderProps {
   scrollY: Animated.Value;
   isConfirmedStep: boolean;
+  showBrandOnConfirmed?: boolean;
   maxContentWidth?: number;
   horizontalPadding?: number;
   onBackPress: () => void;
@@ -24,6 +25,7 @@ const NO_OP = () => {};
 function BookingSeamlessHeaderComponent({
   scrollY,
   isConfirmedStep,
+  showBrandOnConfirmed = true,
   maxContentWidth,
   horizontalPadding,
   onBackPress,
@@ -61,7 +63,13 @@ function BookingSeamlessHeaderComponent({
       >
         {isConfirmedStep ? (
           <View style={styles.row}>
-            <ClinicEzLogo size={32} variant="inverted" showWordmark />
+            {showBrandOnConfirmed ? (
+              <ClinicEzLogo size={32} variant="inverted" showWordmark />
+            ) : (
+              <Text style={[typography.headlineSm, { color: colors.navyText }]}>
+                Booking Confirmed
+              </Text>
+            )}
 
             <Pressable
               accessibilityRole="button"

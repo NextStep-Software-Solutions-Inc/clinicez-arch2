@@ -19,7 +19,7 @@ export interface SettingsTabItem {
 
 export interface ReadinessCheckItem {
   id: string;
-  category: 'license' | 'profile' | 'staff' | 'services' | 'philhealth' | 'legal';
+  category: 'license' | 'profile' | 'staff' | 'services' | 'philhealth' | 'legal' | 'directory';
   title: string;
   description: string;
   status: 'passed' | 'warning' | 'failed';

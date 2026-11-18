@@ -12,17 +12,18 @@ import { format, subDays } from 'date-fns';
 import { AppIcon } from '../ui/Icon';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 import type {
-  PatientSearchDoctorDto,
-  PatientSearchClinicDto,
-  PatientSearchServiceDto,
+  DirectoryClinicDto,
+  DirectoryDoctorDto,
+  DirectoryServiceDto,
 } from '../../services/api/homeApi';
 import type { AvailableSlot } from '../../services/appointments/types';
 import type { ConsultationMode } from './BookingSlotStep';
 
 export interface BookingReviewStepProps {
-  doctor: PatientSearchDoctorDto;
-  clinic?: PatientSearchClinicDto | null;
-  service?: PatientSearchServiceDto | null;
+  doctor: DirectoryDoctorDto;
+  clinic?: DirectoryClinicDto | null;
+  service?: DirectoryServiceDto | null;
+  isBookingPaused?: boolean;
   selectedDate: Date;
   selectedSlot: AvailableSlot;
   consultationMode: ConsultationMode;
@@ -50,6 +51,7 @@ function BookingReviewStepComponent({
   doctor,
   clinic,
   service,
+  isBookingPaused = false,
   selectedDate,
   selectedSlot,
   consultationMode,
@@ -61,6 +63,9 @@ function BookingReviewStepComponent({
 }: BookingReviewStepProps) {
   const { colors, typography, radii, spacing, elevation } = useClinicalEmpathyTheme();
   const [secondsRemaining, setSecondsRemaining] = useState<number>(15 * 60);
+  const bookingPaused = Boolean(
+    isBookingPaused || (clinic ? !clinic.supportsAppointments : !doctor.clinicSupportsAppointments),
+  );
 
   // Live 15-minute countdown
   useEffect(() => {
@@ -123,6 +128,31 @@ function BookingReviewStepComponent({
 
   return (
     <View style={styles.container}>
+      {bookingPaused ? (
+        <View
+          style={[
+            styles.pausedBanner,
+            {
+              backgroundColor: colors.amberSoftBg,
+              borderRadius: radii.xl,
+              padding: spacing.base,
+              marginBottom: spacing.md,
+              gap: spacing.sm,
+            },
+          ]}
+        >
+          <AppIcon name="alert" size={18} color={colors.amberText} />
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.labelBold, { color: colors.amberText }]}>
+              Booking Paused
+            </Text>
+            <Text style={[typography.bodySm, { color: colors.navyText, marginTop: spacing.xxs }]}>
+              Online booking is currently paused for {facilityName}. Choose another clinic or check back later.
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       {/* Live Reservation Countdown Banner */}
       <View
         style={[
@@ -569,6 +599,10 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   countdownBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pausedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
   },

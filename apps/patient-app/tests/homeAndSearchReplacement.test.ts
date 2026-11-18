@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   computeAppointmentsSection,
@@ -15,7 +15,20 @@ import {
   HEADER_REVEAL_SCROLL_START,
   parseVisitedStepsJson,
 } from '../services/home/homeDashboardService';
-import { filterOfflineSearchCatalog } from '../services/search/patientSearchService';
+import {
+  filterOfflineSearchCatalog,
+  formatAvailabilitySummary,
+  mapSqliteProviderToDirectoryDoctor,
+} from '../services/search/directorySearchService';
+import {
+  cachePractitionerProfile,
+  clearNetworkDirectoryCache,
+  getCachedNetworkDirectory,
+  getCachedPractitionerProfile,
+  saveNetworkDirectorySnapshot,
+  sortDirectoryClinics,
+  sortDirectoryDoctors,
+} from '../services/search/networkDirectory';
 import { resolveIsOnlineFromNetInfo } from '../hooks/useNetworkOnline';
 import { iconNames } from '../components/ui/iconNames';
 
@@ -98,19 +111,51 @@ describe('Patient Home & Dedicated Search Replacement Suite', () => {
     expect(webTabsSrc.includes('ProfileScreen:')).toBe(false);
   });
 
-  test('3. Search Bar & Dedicated Search Screen: registered inside HomeStack and filters live catalog counts accurately', () => {
+  test('3. Search Bar & Dedicated Search Screen: DirectorySearchScreen is registered and filters live catalog counts + affiliations accurately', () => {
     const homeStackSrc = readAppFile('navigation/navigators/HomeStack.tsx');
     const homeStackWebSrc = readAppFile('navigation/navigators/HomeStack.web.tsx');
+    const mainStackSrc = readAppFile('navigation/navigators/MainStack.tsx');
+    const mainStackWebSrc = readAppFile('navigation/navigators/MainStack.web.tsx');
+    const webFrameSrc = readAppFile('components/layout/WebAppFrame.web.tsx');
+    const linkingSrc = readAppFile('navigation/linking.ts');
     const searchSrc = readAppFile('navigation/screens/Search.screen.tsx');
+    const homeApiSrc = readAppFile('services/api/homeApi.ts');
 
-    expect(homeStackSrc.includes('PatientSearch:')).toBe(true);
-    expect(homeStackWebSrc.includes('PatientSearch:')).toBe(true);
+    expect(existsSync(join(APP_ROOT, 'services/search/patientSearchService.ts'))).toBe(false);
+    expect(existsSync(join(APP_ROOT, 'services/search/directorySearchService.ts'))).toBe(true);
+    expect(existsSync(join(APP_ROOT, 'services/search/networkDirectory.ts'))).toBe(true);
+
+    expect(searchSrc.includes('export default function DirectorySearchScreen()')).toBe(true);
+    expect(searchSrc.includes('export interface DirectorySearchRouteParams')).toBe(true);
+    expect(searchSrc.includes('PatientSearchScreen')).toBe(false);
+
+    expect(homeStackSrc.includes('DirectorySearch:')).toBe(true);
+    expect(homeStackWebSrc.includes('DirectorySearch:')).toBe(true);
+    expect(mainStackSrc.includes('DirectorySearchScreen:')).toBe(true);
+    expect(mainStackWebSrc.includes("'DirectorySearchScreen'")).toBe(true);
+    expect(webFrameSrc.includes("'DirectorySearchScreen'")).toBe(true);
+    expect(linkingSrc.includes("DirectorySearch: 'search'")).toBe(true);
+    expect(linkingSrc.includes("DirectorySearchScreen: 'care-search'")).toBe(true);
+
+    expect(homeApiSrc.includes('export interface DirectorySearchCountsDto')).toBe(true);
+    expect(homeApiSrc.includes('export interface DirectoryDoctorAffiliationDto')).toBe(true);
+    expect(homeApiSrc.includes('export interface DirectoryDoctorDto')).toBe(true);
+    expect(homeApiSrc.includes('export interface DirectoryClinicDto')).toBe(true);
+    expect(homeApiSrc.includes('export interface DirectoryServiceDto')).toBe(true);
+    expect(homeApiSrc.includes('export interface DirectorySearchResponseDto')).toBe(true);
+    expect(homeApiSrc.includes('export interface PractitionerProfileDto')).toBe(true);
+    expect(homeApiSrc.includes('export async function searchDirectoryCatalog')).toBe(true);
+    expect(homeApiSrc.includes('export async function getPractitionerProfile')).toBe(true);
+    expect(homeApiSrc.includes('/directory/search')).toBe(true);
+    expect(homeApiSrc.includes('/practitioners/')).toBe(true);
+
     expect(searchSrc.includes('DOCTORS & SPECIALISTS')).toBe(true);
     expect(searchSrc.includes('CLINICS & CARE CENTERS')).toBe(true);
     expect(searchSrc.includes('SPECIALIZED CARE PACKAGES')).toBe(true);
     expect(searchSrc.includes('Book Visit')).toBe(true);
     expect(searchSrc.includes('View Clinic')).toBe(true);
     expect(searchSrc.includes('Schedule')).toBe(true);
+    expect(searchSrc.includes('Booking Paused')).toBe(true);
 
     const searchResult = filterOfflineSearchCatalog({
       query: 'cardio',
@@ -118,6 +163,7 @@ describe('Patient Home & Dedicated Search Replacement Suite', () => {
       doctors: [
         {
           id: 'doc-1',
+          practitionerId: 'prac-1',
           clinicId: 'clinic-1',
           name: 'Dr. Evelyn Reed, MD',
           specialty: 'Cardiology Specialist',
@@ -130,6 +176,30 @@ describe('Patient Home & Dedicated Search Replacement Suite', () => {
           nextAvailableAt: null,
           nextAvailableLabel: 'Tomorrow, 10:30 AM',
           tags: ['Accepts Insurance', 'In-Person & Telehealth'],
+          affiliations: [
+            {
+              clinicId: 'clinic-1',
+              clinicName: 'Metro Cardiology Center',
+              clinicAddress: 'Suite 402',
+              supportsAppointments: true,
+              localSpecialty: 'Interventional Cardiology',
+              nextAvailableAt: null,
+              nextAvailableLabel: 'Tomorrow, 10:30 AM',
+              availabilities: [{ dayOfWeek: 'Monday', startTime: '09:00', endTime: '17:00' }],
+              providerId: 'doc-1',
+            },
+            {
+              clinicId: 'clinic-3',
+              clinicName: 'Northside Heart Annex',
+              clinicAddress: '100 North Rd',
+              supportsAppointments: false,
+              localSpecialty: 'Preventive Cardiology',
+              nextAvailableAt: null,
+              nextAvailableLabel: 'Booking Paused',
+              availabilities: [],
+              providerId: 'doc-1-annex',
+            },
+          ],
         },
         {
           id: 'doc-2',
@@ -167,6 +237,7 @@ describe('Patient Home & Dedicated Search Replacement Suite', () => {
           nextAvailableAt: null,
           nextAvailableLabel: 'Today 3:00 PM',
           tags: ['Walk-ins Welcome'],
+          isPlatformVerified: true,
         },
       ],
       services: [
@@ -191,6 +262,16 @@ describe('Patient Home & Dedicated Search Replacement Suite', () => {
       clinics: 1,
       services: 1,
     });
+
+    const annexMatch = filterOfflineSearchCatalog({
+      query: 'Northside Heart Annex',
+      category: 'doctors',
+      doctors: searchResult.doctors,
+      clinics: searchResult.clinics,
+      services: searchResult.services,
+    });
+    expect(annexMatch.doctors.length).toBe(1);
+    expect(annexMatch.doctors[0].id).toBe('doc-1');
 
     const doctorsOnly = filterOfflineSearchCatalog({
       query: 'cardio',
@@ -540,5 +621,235 @@ describe('Patient Home & Dedicated Search Replacement Suite', () => {
     expect(medLogCols.includes('log_date')).toBe(true);
     expect(medLogCols.includes('taken_at')).toBe(true);
     sqlite.close();
+  });
+
+  test('11. SQLite Personal Providers isVerified:false, Network Directory Caching, & Multi-Clinic ProviderProfile', async () => {
+    const dirServiceSrc = readAppFile('services/search/directorySearchService.ts');
+    expect(dirServiceSrc.includes('isVerified: false')).toBe(true);
+    expect(dirServiceSrc.includes('isVerified: true')).toBe(false);
+
+    const now = new Date('2026-11-18T00:00:00.000Z');
+    const sqliteContact = mapSqliteProviderToDirectoryDoctor(
+      {
+        id: 'local-prov-1',
+        patientId: 'p-1',
+        providerType: 'primary_care',
+        name: 'Dr. Personal Contact',
+        specialty: 'Family Medicine',
+        clinicHospital: 'Unlinked Neighborhood Clinic',
+        phone: null,
+        createdAt: now,
+        updatedAt: now,
+        syncedAt: null,
+        serverId: null,
+        deletedAt: null,
+      },
+      [],
+    );
+    expect(sqliteContact.isVerified).toBe(false);
+    expect(sqliteContact.clinicSupportsAppointments).toBe(false);
+
+    // Ranking puts verified bookable clinicians and clinics first
+    const rankedDoctors = sortDirectoryDoctors([
+      sqliteContact,
+      {
+        id: 'paused-verified',
+        clinicId: 'c-paused',
+        name: 'Dr. Paused Verified',
+        specialty: 'Cardiology',
+        avatarUrl: null,
+        professionalLicenseNo: '0011223',
+        isVerified: true,
+        clinicName: 'Paused Clinic',
+        clinicAddress: '10 Main St',
+        clinicSupportsAppointments: false,
+        nextAvailableAt: null,
+        nextAvailableLabel: 'Booking Paused',
+        tags: ['Booking Paused'],
+      },
+      {
+        id: 'bookable-verified',
+        practitionerId: 'prac-bookable',
+        clinicId: 'c-bookable',
+        name: 'Dr. Bookable Verified',
+        specialty: 'Internal Medicine',
+        avatarUrl: null,
+        professionalLicenseNo: '0044556',
+        isVerified: true,
+        clinicName: 'Open Care Clinic',
+        clinicAddress: '20 Oak Ave',
+        clinicSupportsAppointments: true,
+        nextAvailableAt: '2026-11-19T09:00:00.000Z',
+        nextAvailableLabel: 'Tomorrow, 9:00 AM',
+        tags: ['Open Network'],
+        affiliations: [
+          {
+            clinicId: 'c-bookable',
+            clinicName: 'Open Care Clinic',
+            clinicAddress: '20 Oak Ave',
+            supportsAppointments: true,
+            localSpecialty: 'Internal Medicine',
+            nextAvailableAt: '2026-11-19T09:00:00.000Z',
+            nextAvailableLabel: 'Tomorrow, 9:00 AM',
+            availabilities: [{ dayOfWeek: 'Thursday', startTime: '09:00', endTime: '17:00' }],
+            providerId: 'bookable-verified',
+          },
+        ],
+      },
+    ]);
+    expect(rankedDoctors.map((d) => d.id)).toEqual([
+      'bookable-verified',
+      'paused-verified',
+      'local-prov-1',
+    ]);
+
+    const rankedClinics = sortDirectoryClinics([
+      {
+        id: 'c-local',
+        name: 'Local Unverified Clinic',
+        primarySpecialty: null,
+        description: null,
+        address: null,
+        logoUrl: null,
+        coverImageUrl: null,
+        operatingHours: null,
+        openStatusLabel: 'Open Today',
+        isOpenNow: true,
+        supportsAppointments: true,
+        isPublic: false,
+        isGated: false,
+        isUnlocked: true,
+        activeMemberCount: 0,
+        nextAvailableAt: null,
+        nextAvailableLabel: null,
+        tags: [],
+        isPlatformVerified: false,
+      },
+      {
+        id: 'c-verified-paused',
+        name: 'Verified Paused Clinic',
+        primarySpecialty: 'Dermatology',
+        description: null,
+        address: '88 Sunset Rd',
+        logoUrl: null,
+        coverImageUrl: null,
+        operatingHours: '9:00 AM - 4:00 PM',
+        openStatusLabel: 'Open Today',
+        isOpenNow: true,
+        supportsAppointments: false,
+        isPublic: true,
+        isGated: false,
+        isUnlocked: true,
+        activeMemberCount: 2,
+        nextAvailableAt: null,
+        nextAvailableLabel: 'Booking Paused',
+        tags: ['Booking Paused'],
+        isPlatformVerified: true,
+      },
+      {
+        id: 'c-verified-open',
+        name: 'Verified Bookable Clinic',
+        primarySpecialty: 'Cardiology',
+        description: null,
+        address: '20 Oak Ave',
+        logoUrl: null,
+        coverImageUrl: null,
+        operatingHours: '8:00 AM - 6:00 PM',
+        openStatusLabel: 'Open Now',
+        isOpenNow: true,
+        supportsAppointments: true,
+        isPublic: true,
+        isGated: false,
+        isUnlocked: true,
+        activeMemberCount: 4,
+        nextAvailableAt: '2026-11-19T09:00:00.000Z',
+        nextAvailableLabel: 'Tomorrow, 9:00 AM',
+        tags: ['Walk-ins & Booking'],
+        isPlatformVerified: true,
+      },
+    ]);
+    expect(rankedClinics.map((c) => c.id)).toEqual([
+      'c-verified-open',
+      'c-verified-paused',
+      'c-local',
+    ]);
+
+    // Network directory cache persists verified clinicians, clinics, services, and practitioner profiles
+    await clearNetworkDirectoryCache();
+    await saveNetworkDirectorySnapshot({
+      patientId: 'p-1',
+      doctors: rankedDoctors,
+      clinics: rankedClinics,
+      services: [
+        {
+          id: 'svc-cached',
+          clinicId: 'c-verified-open',
+          clinicName: 'Verified Bookable Clinic',
+          name: 'Consultation',
+          subtitle: null,
+          description: null,
+          durationMinutes: 30,
+          price: 500,
+          priceBadgeLabel: 'PHP 500',
+          tags: [],
+        },
+      ],
+    });
+
+    const cachedSnapshot = await getCachedNetworkDirectory('p-1');
+    expect(cachedSnapshot.doctors.map((d) => d.id)).toEqual([
+      'bookable-verified',
+      'paused-verified',
+    ]);
+    expect(cachedSnapshot.clinics.map((c) => c.id)).toEqual([
+      'c-verified-open',
+      'c-verified-paused',
+    ]);
+    expect(cachedSnapshot.services.length).toBe(1);
+
+    const cachedProfile = await getCachedPractitionerProfile('prac-bookable', 'p-1');
+    expect(cachedProfile?.isVerified).toBe(true);
+    expect(cachedProfile?.affiliations.length).toBe(1);
+
+    await cachePractitionerProfile(
+      {
+        id: 'prac-extra',
+        practitionerId: 'prac-extra',
+        name: 'Dr. Extra Multi',
+        firstName: 'Extra',
+        lastName: 'Multi',
+        role: 'Doctor',
+        primarySpecialty: 'Neurology',
+        bio: 'Multi-clinic neurologist',
+        avatarUrl: null,
+        displayPrcLicenseNo: '0099887',
+        prcExpiryDate: null,
+        verificationLevel: 'Verified',
+        isVerified: true,
+        verifiedAtUtc: '2026-11-18T00:00:00.000Z',
+        affiliations: [],
+      },
+      'p-1',
+    );
+    expect((await getCachedPractitionerProfile('prac-extra', 'p-1'))?.name).toBe('Dr. Extra Multi');
+    await clearNetworkDirectoryCache();
+
+    expect(
+      formatAvailabilitySummary([
+        { dayOfWeek: 'Monday', startTime: '09:00', endTime: '12:00' },
+        { dayOfWeek: 'Wednesday', startTime: '13:00', endTime: '17:00' },
+      ]),
+    ).toBe('Mon 09:00–12:00 • Wed 13:00–17:00');
+
+    const authSrc = readAppFile('contexts/AuthContext.tsx');
+    expect(authSrc.includes('refreshNetworkDirectory')).toBe(true);
+    expect(authSrc.includes('clearNetworkDirectoryCache')).toBe(true);
+
+    const profileSrc = readAppFile('navigation/screens/appointments/ProviderProfile.screen.tsx');
+    expect(profileSrc.includes('getPractitionerProfile')).toBe(true);
+    expect(profileSrc.includes('getCachedPractitionerProfile')).toBe(true);
+    expect(profileSrc.includes('Booking Paused')).toBe(true);
+    expect(profileSrc.includes('SCHEDULE SLOTS')).toBe(true);
+    expect(profileSrc.includes('setIsVerified(false)')).toBe(true);
   });
 });

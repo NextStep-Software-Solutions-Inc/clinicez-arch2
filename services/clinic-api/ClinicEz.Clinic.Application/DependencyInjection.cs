@@ -1,5 +1,7 @@
 using ClinicEz.Clinic.Application.Behaviors;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Appointments.Services;
+using ClinicEz.Clinic.Application.Features.Settings.Services;
 using ClinicEz.Shared.Search;
 using FluentValidation;
 using MediatR;
@@ -36,6 +38,7 @@ public static class DependencyInjection
         services.AddScoped<ClinicEz.Clinic.Application.Features.Schedules.Services.ISlotAvailabilityService, ClinicEz.Clinic.Application.Features.Schedules.Services.SlotAvailabilityService>();
         services.AddScoped<ClinicEz.Clinic.Application.Features.Queue.Services.IQueueNotificationDispatcher, ClinicEz.Clinic.Application.Features.Queue.Services.QueueNotificationDispatcher>();
         services.AddScoped<IAppointmentNotificationDispatcher, AppointmentNotificationDispatcher>();
+        services.AddScoped<IClinicDirectorySyncService, ClinicDirectorySyncService>();
 
         return services;
     }

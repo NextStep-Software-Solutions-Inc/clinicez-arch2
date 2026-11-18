@@ -1,6 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.Settings.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Common;
@@ -24,17 +26,29 @@ public sealed class ToggleOnlineBookingPauseCommandHandler : IRequestHandler<Tog
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IInteropPublisher _interopPublisher;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
+    private readonly IRepository<StaffMember>? _staffRepo;
+    private readonly IRepository<ServiceItem>? _servicesRepo;
+    private readonly IRepository<DoctorScheduleTemplate>? _scheduleRepo;
 
     public ToggleOnlineBookingPauseCommandHandler(
         IRepository<FacilitySettings> settingsRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork,
-        IInteropPublisher interopPublisher)
+        IInteropPublisher interopPublisher,
+        IClinicDirectorySyncService? directorySyncService = null,
+        IRepository<StaffMember>? staffRepo = null,
+        IRepository<ServiceItem>? servicesRepo = null,
+        IRepository<DoctorScheduleTemplate>? scheduleRepo = null)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
         _interopPublisher = interopPublisher;
+        _directorySyncService = directorySyncService;
+        _staffRepo = staffRepo;
+        _servicesRepo = servicesRepo;
+        _scheduleRepo = scheduleRepo;
     }
 
     public async Task<ClinicBookingPauseResultDto> Handle(ToggleOnlineBookingPauseCommand request, CancellationToken ct)
@@ -48,29 +62,30 @@ public sealed class ToggleOnlineBookingPauseCommandHandler : IRequestHandler<Tog
         settings.IsOnlineBookingPaused = request.IsPaused;
         settings.UpdatedAt = DateTime.UtcNow;
 
-        // Enqueue directory update carrying new booking pause status
-        var directoryEvent = new FacilityCreatedEvent
+        if (settings.PlatformVerificationStatus == PlatformVerificationStatus.Verified)
         {
-            TenantId = settings.TenantId,
-            TenantSlug = settings.TenantSlug,
-            FacilityType = FacilityType.Clinic,
-            ResourceId = settings.ClinicId,
-            Name = settings.ClinicName,
-            Slug = settings.FacilitySlug,
-            OperatingHours = settings.OperatingHours,
-            IsPublic = settings.IsDirectoryPublished,
-            IsBookingPaused = settings.IsOnlineBookingPaused
-        };
-
-        var from = Party.ForFacility(settings.TenantId, settings.ClinicId.ToString(), FacilityType.Clinic);
-        var to = new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient };
-
-        _interopPublisher.Enqueue(
-            InteropTypes.FacilityDirectoryUpdated,
-            from,
-            to,
-            settings.ClinicId,
-            directoryEvent);
+            if (_directorySyncService != null)
+            {
+                await _directorySyncService.EnqueueDirectoryUpdateAsync(settings, ct);
+            }
+            else if (_staffRepo != null && _servicesRepo != null)
+            {
+                var syncService = new ClinicDirectorySyncService(_staffRepo, _servicesRepo, _interopPublisher, _scheduleRepo);
+                await syncService.EnqueueDirectoryUpdateAsync(settings, ct);
+            }
+            else
+            {
+                var directoryEvent = ClinicDirectorySnapshotBuilder.BuildFacilityDirectoryEvent(settings, [], [], []);
+                var from = Party.ForFacility(settings.TenantId, settings.ClinicId.ToString(), FacilityType.Clinic);
+                var to = new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient };
+                _interopPublisher.Enqueue(
+                    InteropTypes.FacilityDirectoryUpdated,
+                    from,
+                    to,
+                    settings.ClinicId,
+                    directoryEvent);
+            }
+        }
 
         await _unitOfWork.SaveChangesAsync(ct);
 

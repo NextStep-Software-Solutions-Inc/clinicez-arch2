@@ -1,4 +1,4 @@
-import { api } from './apiClient';
+import { api, ApiError } from './apiClient';
 
 export type WelcomeStepKey = 'health_profile' | 'link_insurance' | 'primary_clinic';
 export type AppointmentCarouselState = 'first_time' | 'active' | 'returning_empty';
@@ -148,18 +148,39 @@ export interface AppointmentCheckInResponseDto {
   providerName: string;
 }
 
-export interface PatientSearchCountsDto {
+export interface DirectorySearchCountsDto {
   all: number;
   doctors: number;
   clinics: number;
   services: number;
 }
 
-export interface PatientSearchDoctorDto {
+export interface DirectoryAvailabilityWindowDto {
+  dayOfWeek: string | number;
+  startTime: string;
+  endTime: string;
+  slotDurationMinutes?: number;
+}
+
+export interface DirectoryDoctorAffiliationDto {
+  clinicId: string;
+  clinicName: string;
+  clinicAddress: string | null;
+  supportsAppointments: boolean;
+  localSpecialty: string;
+  nextAvailableAt: string | null;
+  nextAvailableLabel: string;
+  availabilities: DirectoryAvailabilityWindowDto[];
+  providerId?: string;
+}
+
+export interface DirectoryDoctorDto {
   id: string;
+  practitionerId?: string | null;
   clinicId: string;
   name: string;
   specialty: string;
+  role?: string;
   avatarUrl: string | null;
   professionalLicenseNo: string | null;
   isVerified: boolean;
@@ -169,9 +190,11 @@ export interface PatientSearchDoctorDto {
   nextAvailableAt: string | null;
   nextAvailableLabel: string;
   tags: string[];
+  bio?: string | null;
+  affiliations?: DirectoryDoctorAffiliationDto[] | null;
 }
 
-export interface PatientSearchClinicDto {
+export interface DirectoryClinicDto {
   id: string;
   name: string;
   primarySpecialty: string | null;
@@ -191,9 +214,10 @@ export interface PatientSearchClinicDto {
   nextAvailableAt: string | null;
   nextAvailableLabel: string | null;
   tags: string[];
+  isPlatformVerified?: boolean;
 }
 
-export interface PatientSearchServiceDto {
+export interface DirectoryServiceDto {
   id: string;
   clinicId: string;
   clinicName: string;
@@ -206,21 +230,49 @@ export interface PatientSearchServiceDto {
   tags: string[];
 }
 
-export interface PatientSearchResponseDto {
+export interface DirectorySearchResponseDto {
   query: string;
   category: SearchCategoryFilter;
-  counts: PatientSearchCountsDto;
-  doctors: PatientSearchDoctorDto[];
-  clinics: PatientSearchClinicDto[];
-  services: PatientSearchServiceDto[];
+  counts: DirectorySearchCountsDto;
+  doctors: DirectoryDoctorDto[];
+  clinics: DirectoryClinicDto[];
+  services: DirectoryServiceDto[];
 }
 
-export interface SearchPatientCatalogParams {
+export type PractitionerVerificationLevel =
+  | 'Unverified'
+  | 'PendingVerification'
+  | 'AwaitingConfirmation'
+  | 'Verified'
+  | 'Rejected'
+  | 'Expired'
+  | 'Suspended';
+
+export interface PractitionerProfileDto {
+  id: string;
+  practitionerId: string | null;
+  name: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  primarySpecialty: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  displayPrcLicenseNo: string | null;
+  prcExpiryDate: string | null;
+  verificationLevel: PractitionerVerificationLevel;
+  isVerified: boolean;
+  verifiedAtUtc: string | null;
+  affiliations: DirectoryDoctorAffiliationDto[];
+}
+
+export interface SearchDirectoryCatalogParams {
   q?: string;
   category?: SearchCategoryFilter;
   availableTodayOnly?: boolean;
   openNowOnly?: boolean;
   take?: number;
+  forPatientId?: string | null;
 }
 
 export async function getPatientHomeDashboard(
@@ -282,11 +334,10 @@ export async function postAppointmentCheckIn(
   );
 }
 
-export async function searchPatientCatalog(
-  getToken: () => Promise<string | null>,
-  patientId: string,
-  params: SearchPatientCatalogParams = {},
-): Promise<PatientSearchResponseDto> {
+function buildDirectorySearchUrl(
+  params: SearchDirectoryCatalogParams,
+  includeForPatientId: boolean,
+): string {
   const searchParams = new URLSearchParams();
   if (params.q && params.q.trim().length > 0) {
     searchParams.set('q', params.q.trim());
@@ -303,7 +354,63 @@ export async function searchPatientCatalog(
   if (params.take) {
     searchParams.set('take', String(params.take));
   }
+  if (includeForPatientId && params.forPatientId) {
+    searchParams.set('forPatientId', params.forPatientId);
+  }
   const qs = searchParams.toString();
-  const url = `/patients/${patientId}/search${qs ? `?${qs}` : ''}`;
-  return api.get<PatientSearchResponseDto>(getToken, url);
+  return `/directory/search${qs ? `?${qs}` : ''}`;
+}
+
+export async function searchDirectoryCatalog(
+  getToken: () => Promise<string | null>,
+  params: SearchDirectoryCatalogParams = {},
+): Promise<DirectorySearchResponseDto> {
+  const token = await getToken().catch(() => null);
+  const withPatientContext = Boolean(token && params.forPatientId);
+  const url = buildDirectorySearchUrl(params, withPatientContext);
+  try {
+    return await api.get<DirectorySearchResponseDto>(() => Promise.resolve(token), url);
+  } catch (err) {
+    // Public directory endpoint allows anonymous queries when patient-scoped auth is rejected
+    if (withPatientContext && err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      const publicUrl = buildDirectorySearchUrl(params, false);
+      return api.get<DirectorySearchResponseDto>(() => Promise.resolve(null), publicUrl);
+    }
+    throw err;
+  }
+}
+
+export async function getPractitionerProfile(
+  getToken: () => Promise<string | null>,
+  id: string,
+  forPatientId?: string | null,
+): Promise<PractitionerProfileDto | null> {
+  const trimmedId = id.trim();
+  if (!trimmedId) return null;
+
+  const token = await getToken().catch(() => null);
+  const withPatientContext = Boolean(token && forPatientId);
+  const encodedId = encodeURIComponent(trimmedId);
+  const url = withPatientContext && forPatientId
+    ? `/practitioners/${encodedId}?forPatientId=${encodeURIComponent(forPatientId)}`
+    : `/practitioners/${encodedId}`;
+
+  try {
+    return await api.get<PractitionerProfileDto>(() => Promise.resolve(token), url);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return null;
+    }
+    if (withPatientContext && err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      try {
+        return await api.get<PractitionerProfileDto>(() => Promise.resolve(null), `/practitioners/${encodedId}`);
+      } catch (retryErr) {
+        if (retryErr instanceof ApiError && retryErr.status === 404) {
+          return null;
+        }
+        throw retryErr;
+      }
+    }
+    throw err;
+  }
 }

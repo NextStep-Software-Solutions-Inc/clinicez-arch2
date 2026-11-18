@@ -24,16 +24,22 @@ import { SkeletonCard } from '../../components/ui/Skeleton';
 import HomeHeader, { extractInitials } from '../../components/home/HomeHeader';
 import HomeOfflinePillBanner from '../../components/home/HomeOfflinePillBanner';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
-import { queryPatientSearchCatalog } from '../../services/search/patientSearchService';
+import {
+  formatAvailabilitySummary,
+  queryDirectorySearchCatalog,
+  resolveDefaultAffiliation,
+  resolveDoctorAffiliations,
+} from '../../services/search/directorySearchService';
 import type {
-  PatientSearchClinicDto,
-  PatientSearchDoctorDto,
-  PatientSearchResponseDto,
-  PatientSearchServiceDto,
+  DirectoryClinicDto,
+  DirectoryDoctorAffiliationDto,
+  DirectoryDoctorDto,
+  DirectorySearchResponseDto,
+  DirectoryServiceDto,
   SearchCategoryFilter,
 } from '../../services/api/homeApi';
 
-export interface PatientSearchRouteParams {
+export interface DirectorySearchRouteParams {
   initialQuery?: string;
   category?: SearchCategoryFilter;
   autoFocus?: boolean;
@@ -48,11 +54,11 @@ const CATEGORY_TABS: readonly { key: SearchCategoryFilter; label: string }[] = [
   { key: 'services', label: 'Services' },
 ];
 
-export default function PatientSearchScreen() {
+export default function DirectorySearchScreen() {
   const { colors, typography, radii, spacing, elevation } = useClinicalEmpathyTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const params = (route.params ?? {}) as PatientSearchRouteParams;
+  const params = (route.params ?? {}) as DirectorySearchRouteParams;
 
   const { getToken } = useAuth();
   const { user } = useUser();
@@ -73,8 +79,9 @@ export default function PatientSearchScreen() {
   const [openNowOnly, setOpenNowOnly] = useState<boolean>(false);
   const [availableTodayOnly, setAvailableTodayOnly] = useState<boolean>(false);
 
-  const [results, setResults] = useState<PatientSearchResponseDto | null>(null);
+  const [results, setResults] = useState<DirectorySearchResponseDto | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [selectedClinicByDoctor, setSelectedClinicByDoctor] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (params.category) {
@@ -109,7 +116,7 @@ export default function PatientSearchScreen() {
     let active = true;
     setIsLoading(true);
 
-    queryPatientSearchCatalog(getToken, patientId, {
+    queryDirectorySearchCatalog(getToken, patientId, {
       q: debouncedQuery,
       category,
       openNowOnly,
@@ -165,10 +172,19 @@ export default function PatientSearchScreen() {
   }, [navigation]);
 
   const handleBookDoctor = useCallback(
-    (doctor: PatientSearchDoctorDto) => {
+    (doctor: DirectoryDoctorDto, affiliation?: DirectoryDoctorAffiliationDto | null) => {
+      const targetClinicId = affiliation?.clinicId ?? doctor.clinicId;
+      const targetSupportsAppointments = affiliation
+        ? affiliation.supportsAppointments
+        : doctor.clinicSupportsAppointments;
+      if (!targetSupportsAppointments || !targetClinicId) {
+        return;
+      }
       navigateToMainRoute('BookingDraftScreen', {
-        clinicId: doctor.clinicId,
-        providerId: doctor.id,
+        clinicId: targetClinicId,
+        providerId: affiliation?.providerId || doctor.id,
+        practitionerId: doctor.practitionerId ?? undefined,
+        providerName: doctor.name,
         reason: `Consultation with ${doctor.name}`,
       });
     },
@@ -176,24 +192,33 @@ export default function PatientSearchScreen() {
   );
 
   const handleOpenDoctorProfile = useCallback(
-    (doctor: PatientSearchDoctorDto) => {
+    (doctor: DirectoryDoctorDto, affiliation?: DirectoryDoctorAffiliationDto | null) => {
+      const targetId = doctor.practitionerId ?? doctor.id;
+      const affiliations = resolveDoctorAffiliations(doctor);
       navigateToMainRoute('ProviderProfileScreen', {
-        id: doctor.id,
-        provider: {
-          id: doctor.id,
+        id: targetId,
+        providerData: {
+          id: targetId,
           name: doctor.name,
-          specialty: doctor.specialty,
+          specialty: affiliation?.localSpecialty || doctor.specialty,
           avatarUrl: doctor.avatarUrl ?? undefined,
-          credentials: doctor.professionalLicenseNo ? [doctor.professionalLicenseNo] : ['MD'],
-          affiliatedClinics: [doctor.clinicName],
+          rating: 5.0,
+          bio: doctor.bio ?? '',
+          credentials: doctor.professionalLicenseNo ? [doctor.professionalLicenseNo] : [],
+          affiliatedClinics: affiliations.map((aff) => ({
+            id: aff.clinicId,
+            name: aff.clinicName,
+            address: aff.clinicAddress ?? '',
+          })),
         },
+        directoryDoctor: doctor,
       });
     },
     [navigateToMainRoute],
   );
 
   const handleOpenClinic = useCallback(
-    (clinic: PatientSearchClinicDto) => {
+    (clinic: DirectoryClinicDto) => {
       navigateToMainRoute('ClinicDetailsScreen', {
         clinicId: clinic.id,
         id: clinic.id,
@@ -203,9 +228,11 @@ export default function PatientSearchScreen() {
   );
 
   const handleScheduleService = useCallback(
-    (service: PatientSearchServiceDto) => {
+    (service: DirectoryServiceDto, clinicPaused: boolean) => {
+      if (clinicPaused) return;
       navigateToMainRoute('BookingDraftScreen', {
         clinicId: service.clinicId,
+        serviceId: service.id,
         reason: service.name,
       });
     },
@@ -552,16 +579,37 @@ export default function PatientSearchScreen() {
                   <View style={{ gap: spacing.md }}>
                     {doctors.map((doctor) => {
                       const initials = extractInitials(doctor.name);
-                      const facilitySubtitle = [doctor.clinicName, doctor.clinicAddress]
+                      const doctorKey = doctor.practitionerId ?? doctor.id;
+                      const affiliations = resolveDoctorAffiliations(doctor);
+                      const activeAffiliation = resolveDefaultAffiliation(
+                        doctor,
+                        selectedClinicByDoctor[doctorKey],
+                      );
+                      const activeClinicName = activeAffiliation?.clinicName ?? doctor.clinicName;
+                      const activeClinicAddress =
+                        activeAffiliation?.clinicAddress ?? doctor.clinicAddress;
+                      const activeSpecialty = activeAffiliation?.localSpecialty || doctor.specialty;
+                      const activeSupportsAppointments = activeAffiliation
+                        ? activeAffiliation.supportsAppointments
+                        : doctor.clinicSupportsAppointments;
+                      const activeNextAvailableLabel =
+                        activeAffiliation?.nextAvailableLabel || doctor.nextAvailableLabel;
+                      const scheduleSummary = formatAvailabilitySummary(
+                        activeAffiliation?.availabilities,
+                      );
+                      const facilitySubtitle = [activeClinicName, activeClinicAddress]
                         .filter(Boolean)
                         .join(' • ');
+                      const visibleTags = doctor.tags
+                        .filter((t) => t.toLowerCase() !== 'booking paused')
+                        .slice(0, 3);
 
                       return (
                         <Pressable
                           key={doctor.id}
-                          onPress={() => handleOpenDoctorProfile(doctor)}
+                          onPress={() => handleOpenDoctorProfile(doctor, activeAffiliation)}
                           accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
-                          accessibilityLabel={`${doctor.name}, ${doctor.specialty}`}
+                          accessibilityLabel={`${doctor.name}, ${activeSpecialty}`}
                           style={({ pressed }) => [
                             styles.resultCard,
                             elevation.card,
@@ -653,27 +701,145 @@ export default function PatientSearchScreen() {
                                       Verified
                                     </Text>
                                   </View>
-                                ) : null}
+                                ) : (
+                                  <View
+                                    style={[
+                                      styles.topRightPill,
+                                      {
+                                        backgroundColor: colors.slatePillBg,
+                                        borderColor: colors.border,
+                                        borderRadius: radii.full,
+                                        paddingHorizontal: spacing.sm,
+                                        paddingVertical: spacing.xxs,
+                                      },
+                                    ]}
+                                  >
+                                    <Text
+                                      style={[typography.labelSm, { color: colors.slatePillText }]}
+                                    >
+                                      Saved Contact
+                                    </Text>
+                                  </View>
+                                )}
                               </View>
 
                               <Text
                                 numberOfLines={1}
                                 style={[typography.labelMd, { color: colors.primary }]}
                               >
-                                {doctor.specialty}
+                                {activeSpecialty}
                               </Text>
-                              <Text
-                                numberOfLines={1}
-                                style={[typography.bodySm, { color: colors.bodyText }]}
-                              >
-                                {facilitySubtitle}
-                              </Text>
+                              {facilitySubtitle ? (
+                                <Text
+                                  numberOfLines={1}
+                                  style={[typography.bodySm, { color: colors.bodyText }]}
+                                >
+                                  {facilitySubtitle}
+                                </Text>
+                              ) : null}
+                              {scheduleSummary ? (
+                                <Text
+                                  numberOfLines={1}
+                                  style={[typography.bodySm, { color: colors.mutedText }]}
+                                >
+                                  Hours: {scheduleSummary}
+                                </Text>
+                              ) : null}
                             </View>
                           </View>
 
-                          {doctor.tags.length > 0 ? (
+                          {/* Multi-clinic Affiliation Selector */}
+                          {affiliations.length > 1 ? (
+                            <View style={{ gap: spacing.xs }}>
+                              <Text style={[typography.labelSm, { color: colors.mutedText }]}>
+                                Select clinic ({affiliations.length} locations)
+                              </Text>
+                              <View style={[styles.tagsWrap, { gap: spacing.xs }]}>
+                                {affiliations.map((aff) => {
+                                  const isClinicSelected =
+                                    activeAffiliation?.clinicId === aff.clinicId;
+                                  return (
+                                    <Pressable
+                                      key={`${aff.clinicId}-${aff.providerId ?? 'primary'}`}
+                                      onPress={(e) => {
+                                        e.stopPropagation?.();
+                                        setSelectedClinicByDoctor((prev) => ({
+                                          ...prev,
+                                          [doctorKey]: aff.clinicId,
+                                        }));
+                                      }}
+                                      accessibilityRole="button"
+                                      accessibilityState={{ selected: isClinicSelected }}
+                                      style={[
+                                        styles.affiliationChip,
+                                        {
+                                          backgroundColor: isClinicSelected
+                                            ? colors.mintBadgeBg
+                                            : colors.surfaceLow,
+                                          borderColor: isClinicSelected
+                                            ? colors.primary
+                                            : colors.border,
+                                          borderRadius: radii.lg,
+                                          paddingHorizontal: spacing.sm,
+                                          paddingVertical: spacing.xs,
+                                          gap: spacing.xxs,
+                                        },
+                                      ]}
+                                    >
+                                      <Text
+                                        numberOfLines={1}
+                                        style={[
+                                          typography.labelSm,
+                                          {
+                                            color: isClinicSelected
+                                              ? colors.primary
+                                              : colors.navyText,
+                                          },
+                                        ]}
+                                      >
+                                        {aff.clinicName}
+                                      </Text>
+                                      {!aff.supportsAppointments ? (
+                                        <Text
+                                          style={[
+                                            typography.labelSm,
+                                            { color: colors.amberText },
+                                          ]}
+                                        >
+                                          • Booking Paused
+                                        </Text>
+                                      ) : null}
+                                    </Pressable>
+                                  );
+                                })}
+                              </View>
+                            </View>
+                          ) : null}
+
+                          {(!activeSupportsAppointments || visibleTags.length > 0) ? (
                             <View style={[styles.tagsWrap, { gap: spacing.sm }]}>
-                              {doctor.tags.slice(0, 3).map((tag) => (
+                              {!activeSupportsAppointments ? (
+                                <View
+                                  style={[
+                                    styles.tagPill,
+                                    {
+                                      backgroundColor: colors.amberSoftBg,
+                                      borderRadius: radii.full,
+                                      paddingHorizontal: spacing.md,
+                                      paddingVertical: spacing.xs,
+                                      gap: spacing.xs,
+                                    },
+                                  ]}
+                                >
+                                  <AppIcon name="alert" size={12} color={colors.amberText} />
+                                  <Text
+                                    style={[typography.labelSm, { color: colors.amberText }]}
+                                  >
+                                    Booking Paused
+                                  </Text>
+                                </View>
+                              ) : null}
+                              {visibleTags.map((tag) => (
                                 <View
                                   key={tag}
                                   style={[
@@ -698,7 +864,11 @@ export default function PatientSearchScreen() {
 
                           <View style={[styles.cardBottomRow, { gap: spacing.sm }]}>
                             <View style={[styles.bottomMetaLeft, { gap: spacing.xs }]}>
-                              <AppIcon name="calendar" size={15} color={colors.primary} />
+                              <AppIcon
+                                name={activeSupportsAppointments ? 'calendar' : 'clock'}
+                                size={15}
+                                color={activeSupportsAppointments ? colors.primary : colors.amberText}
+                              />
                               <Text
                                 numberOfLines={1}
                                 style={[
@@ -707,33 +877,58 @@ export default function PatientSearchScreen() {
                                   { color: colors.bodyText },
                                 ]}
                               >
-                                Next:{' '}
-                                <Text style={[typography.labelMd, { color: colors.navyText }]}>
-                                  {doctor.nextAvailableLabel}
-                                </Text>
+                                {activeSupportsAppointments ? (
+                                  <>
+                                    Next:{' '}
+                                    <Text style={[typography.labelMd, { color: colors.navyText }]}>
+                                      {activeNextAvailableLabel}
+                                    </Text>
+                                  </>
+                                ) : (
+                                  <Text style={[typography.labelMd, { color: colors.amberText }]}>
+                                    Booking Paused
+                                  </Text>
+                                )}
                               </Text>
                             </View>
 
                             <Pressable
                               onPress={(e) => {
                                 e.stopPropagation?.();
-                                handleBookDoctor(doctor);
+                                handleBookDoctor(doctor, activeAffiliation);
                               }}
+                              disabled={!activeSupportsAppointments}
                               accessibilityRole="button"
-                              accessibilityLabel={`Book visit with ${doctor.name}`}
+                              accessibilityState={{ disabled: !activeSupportsAppointments }}
+                              accessibilityLabel={
+                                activeSupportsAppointments
+                                  ? `Book visit with ${doctor.name}`
+                                  : `Booking paused for ${doctor.name}`
+                              }
                               style={({ pressed }) => [
                                 styles.cardCtaBtn,
                                 {
-                                  backgroundColor: colors.primary,
+                                  backgroundColor: activeSupportsAppointments
+                                    ? colors.primary
+                                    : colors.slatePillBg,
                                   borderRadius: radii.full,
                                   paddingHorizontal: spacing.lg,
                                   paddingVertical: spacing.sm,
-                                  opacity: pressed ? 0.86 : 1,
+                                  opacity: !activeSupportsAppointments ? 0.7 : pressed ? 0.86 : 1,
                                 },
                               ]}
                             >
-                              <Text style={[typography.labelMd, { color: colors.onPrimary }]}>
-                                Book Visit
+                              <Text
+                                style={[
+                                  typography.labelMd,
+                                  {
+                                    color: activeSupportsAppointments
+                                      ? colors.onPrimary
+                                      : colors.mutedText,
+                                  },
+                                ]}
+                              >
+                                {activeSupportsAppointments ? 'Book Visit' : 'Booking Paused'}
                               </Text>
                             </Pressable>
                           </View>
@@ -793,6 +988,10 @@ export default function PatientSearchScreen() {
                   <View style={{ gap: spacing.md }}>
                     {clinics.map((clinic) => {
                       const imageUri = clinic.coverImageUrl ?? clinic.logoUrl;
+                      const isClinicPaused = !clinic.supportsAppointments;
+                      const visibleClinicTags = clinic.tags
+                        .filter((t) => t.toLowerCase() !== 'booking paused')
+                        .slice(0, 3);
 
                       return (
                         <Pressable
@@ -874,12 +1073,16 @@ export default function PatientSearchScreen() {
                                   style={[
                                     styles.topRightPill,
                                     {
-                                      backgroundColor: clinic.isOpenNow
-                                        ? colors.mintSoftBg
-                                        : colors.slatePillBg,
-                                      borderColor: clinic.isOpenNow
-                                        ? colors.mintBadgeBorder
-                                        : colors.border,
+                                      backgroundColor: isClinicPaused
+                                        ? colors.amberSoftBg
+                                        : clinic.isOpenNow
+                                          ? colors.mintSoftBg
+                                          : colors.slatePillBg,
+                                      borderColor: isClinicPaused
+                                        ? colors.amberText
+                                        : clinic.isOpenNow
+                                          ? colors.mintBadgeBorder
+                                          : colors.border,
                                       borderRadius: radii.full,
                                       paddingHorizontal: spacing.sm,
                                       paddingVertical: spacing.xxs,
@@ -890,13 +1093,15 @@ export default function PatientSearchScreen() {
                                     style={[
                                       typography.labelSm,
                                       {
-                                        color: clinic.isOpenNow
-                                          ? colors.emeraldText
-                                          : colors.slatePillText,
+                                        color: isClinicPaused
+                                          ? colors.amberText
+                                          : clinic.isOpenNow
+                                            ? colors.emeraldText
+                                            : colors.slatePillText,
                                       },
                                     ]}
                                   >
-                                    {clinic.openStatusLabel}
+                                    {isClinicPaused ? 'Booking Paused' : clinic.openStatusLabel}
                                   </Text>
                                 </View>
                               </View>
@@ -915,12 +1120,39 @@ export default function PatientSearchScreen() {
                                   {clinic.address}
                                 </Text>
                               ) : null}
+                              {clinic.operatingHours ? (
+                                <Text
+                                  numberOfLines={1}
+                                  style={[typography.bodySm, { color: colors.mutedText }]}
+                                >
+                                  Hours: {clinic.operatingHours}
+                                </Text>
+                              ) : null}
                             </View>
                           </View>
 
-                          {clinic.tags.length > 0 ? (
+                          {(isClinicPaused || visibleClinicTags.length > 0) ? (
                             <View style={[styles.tagsWrap, { gap: spacing.sm }]}>
-                              {clinic.tags.slice(0, 3).map((tag) => (
+                              {isClinicPaused ? (
+                                <View
+                                  style={[
+                                    styles.tagPill,
+                                    {
+                                      backgroundColor: colors.amberSoftBg,
+                                      borderRadius: radii.full,
+                                      paddingHorizontal: spacing.md,
+                                      paddingVertical: spacing.xs,
+                                      gap: spacing.xs,
+                                    },
+                                  ]}
+                                >
+                                  <AppIcon name="alert" size={12} color={colors.amberText} />
+                                  <Text style={[typography.labelSm, { color: colors.amberText }]}>
+                                    Booking Paused
+                                  </Text>
+                                </View>
+                              ) : null}
+                              {visibleClinicTags.map((tag) => (
                                 <View
                                   key={tag}
                                   style={[
@@ -948,7 +1180,7 @@ export default function PatientSearchScreen() {
                               <AppIcon
                                 name={clinic.nextAvailableLabel ? 'clock' : 'badgeCheck'}
                                 size={15}
-                                color={colors.primary}
+                                color={isClinicPaused ? colors.amberText : colors.primary}
                               />
                               <Text
                                 numberOfLines={1}
@@ -958,7 +1190,13 @@ export default function PatientSearchScreen() {
                                   { color: colors.bodyText },
                                 ]}
                               >
-                                {clinic.nextAvailableLabel ? (
+                                {isClinicPaused ? (
+                                  <Text style={[typography.labelMd, { color: colors.amberText }]}>
+                                    {clinic.operatingHours
+                                      ? `${clinic.openStatusLabel} • ${clinic.operatingHours}`
+                                      : 'Online booking paused'}
+                                  </Text>
+                                ) : clinic.nextAvailableLabel ? (
                                   <>
                                     Next:{' '}
                                     <Text style={[typography.labelMd, { color: colors.navyText }]}>
@@ -1058,6 +1296,8 @@ export default function PatientSearchScreen() {
 
                   <View style={{ gap: spacing.md }}>
                     {services.map((service) => {
+                      const parentClinic = clinics.find((c) => c.id === service.clinicId);
+                      const isServicePaused = Boolean(parentClinic && !parentClinic.supportsAppointments);
                       const metaSummary = [
                         service.durationMinutes ? `${service.durationMinutes} min` : null,
                         service.description ?? service.clinicName,
@@ -1110,16 +1350,29 @@ export default function PatientSearchScreen() {
                                   style={[
                                     styles.topRightPill,
                                     {
-                                      backgroundColor: colors.mintSoftBg,
-                                      borderColor: colors.mintBadgeBorder,
+                                      backgroundColor: isServicePaused
+                                        ? colors.amberSoftBg
+                                        : colors.mintSoftBg,
+                                      borderColor: isServicePaused
+                                        ? colors.amberText
+                                        : colors.mintBadgeBorder,
                                       borderRadius: radii.full,
                                       paddingHorizontal: spacing.sm,
                                       paddingVertical: spacing.xxs,
                                     },
                                   ]}
                                 >
-                                  <Text style={[typography.labelSm, { color: colors.emeraldText }]}>
-                                    {service.priceBadgeLabel}
+                                  <Text
+                                    style={[
+                                      typography.labelSm,
+                                      {
+                                        color: isServicePaused
+                                          ? colors.amberText
+                                          : colors.emeraldText,
+                                      },
+                                    ]}
+                                  >
+                                    {isServicePaused ? 'Booking Paused' : service.priceBadgeLabel}
                                   </Text>
                                 </View>
                               </View>
@@ -1196,22 +1449,37 @@ export default function PatientSearchScreen() {
                             </View>
 
                             <Pressable
-                              onPress={() => handleScheduleService(service)}
+                              onPress={() => handleScheduleService(service, isServicePaused)}
+                              disabled={isServicePaused}
                               accessibilityRole="button"
-                              accessibilityLabel={`Schedule ${service.name}`}
+                              accessibilityState={{ disabled: isServicePaused }}
+                              accessibilityLabel={
+                                isServicePaused
+                                  ? `Booking paused for ${service.name}`
+                                  : `Schedule ${service.name}`
+                              }
                               style={({ pressed }) => [
                                 styles.cardCtaBtn,
                                 {
-                                  backgroundColor: colors.primary,
+                                  backgroundColor: isServicePaused
+                                    ? colors.slatePillBg
+                                    : colors.primary,
                                   borderRadius: radii.full,
                                   paddingHorizontal: spacing.lg,
                                   paddingVertical: spacing.sm,
-                                  opacity: pressed ? 0.86 : 1,
+                                  opacity: isServicePaused ? 0.7 : pressed ? 0.86 : 1,
                                 },
                               ]}
                             >
-                              <Text style={[typography.labelMd, { color: colors.onPrimary }]}>
-                                Schedule
+                              <Text
+                                style={[
+                                  typography.labelMd,
+                                  {
+                                    color: isServicePaused ? colors.mutedText : colors.onPrimary,
+                                  },
+                                ]}
+                              >
+                                {isServicePaused ? 'Booking Paused' : 'Schedule'}
                               </Text>
                             </Pressable>
                           </View>
@@ -1400,6 +1668,11 @@ const styles = StyleSheet.create({
   tagPill: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  affiliationChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
   },
   cardBottomRow: {
     flexDirection: 'row',

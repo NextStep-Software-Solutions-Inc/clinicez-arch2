@@ -18,14 +18,17 @@ import {
 } from 'date-fns';
 import { AppIcon } from '../ui/Icon';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
-import type { PatientSearchDoctorDto } from '../../services/api/homeApi';
+import { resolveDoctorAffiliations } from '../../services/search/directorySearchService';
+import type { DirectoryDoctorDto } from '../../services/api/homeApi';
 import type { AvailableSlot } from '../../services/appointments/types';
 
 export type ConsultationMode = 'in_person' | 'telehealth';
 export type TimeOfDayPeriod = 'morning' | 'afternoon' | 'evening';
 
 export interface BookingSlotStepProps {
-  doctor: PatientSearchDoctorDto;
+  doctor: DirectoryDoctorDto;
+  selectedClinicId?: string;
+  onSelectClinic?: (clinicId: string) => void;
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
   selectedSlot: AvailableSlot | null;
@@ -61,6 +64,8 @@ function extractInitials(name: string): string {
 
 function BookingSlotStepComponent({
   doctor,
+  selectedClinicId,
+  onSelectClinic,
   selectedDate,
   onSelectDate,
   selectedSlot,
@@ -74,6 +79,9 @@ function BookingSlotStepComponent({
 }: BookingSlotStepProps) {
   const { colors, typography, radii, spacing, elevation } = useClinicalEmpathyTheme();
   const [selectedPeriod, setSelectedPeriod] = useState<TimeOfDayPeriod>('morning');
+  const affiliations = useMemo(() => resolveDoctorAffiliations(doctor), [doctor]);
+  const activeClinicId = selectedClinicId ?? doctor.clinicId;
+  const isBookingPaused = !doctor.clinicSupportsAppointments;
 
   const openSlots = useMemo(
     () => availableSlots.filter((s) => s.available !== false),
@@ -267,6 +275,79 @@ function BookingSlotStepComponent({
             </View>
           ) : null}
         </View>
+
+        {affiliations.length > 1 && onSelectClinic ? (
+          <View style={{ marginTop: spacing.sm, gap: spacing.xs }}>
+            <Text style={[typography.labelSm, { color: colors.mutedText }]}>
+              Clinic location ({affiliations.length})
+            </Text>
+            <View style={[styles.clinicSelectorWrap, { gap: spacing.xs }]}>
+              {affiliations.map((aff) => {
+                const isSelectedClinic = aff.clinicId === activeClinicId;
+                return (
+                  <Pressable
+                    key={`${aff.clinicId}-${aff.providerId ?? 'primary'}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelectedClinic }}
+                    onPress={() => onSelectClinic(aff.clinicId)}
+                    style={[
+                      styles.clinicChip,
+                      {
+                        backgroundColor: isSelectedClinic
+                          ? colors.mintBadgeBg
+                          : colors.surfaceLow,
+                        borderColor: isSelectedClinic ? colors.primary : colors.border,
+                        borderRadius: radii.lg,
+                        paddingHorizontal: spacing.sm,
+                        paddingVertical: spacing.xs,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        typography.labelSm,
+                        { color: isSelectedClinic ? colors.primary : colors.navyText },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {aff.clinicName}
+                    </Text>
+                    {!aff.supportsAppointments ? (
+                      <Text
+                        style={[
+                          typography.labelSm,
+                          { color: colors.amberText, marginLeft: spacing.xs },
+                        ]}
+                      >
+                        Booking Paused
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        {isBookingPaused ? (
+          <View
+            style={[
+              styles.pausedBanner,
+              {
+                backgroundColor: colors.amberSoftBg,
+                borderRadius: radii.lg,
+                padding: spacing.md,
+                marginTop: spacing.md,
+                gap: spacing.sm,
+              },
+            ]}
+          >
+            <AppIcon name="alert" size={16} color={colors.amberText} />
+            <Text style={[typography.bodySm, { color: colors.amberText, flex: 1 }]}>
+              Booking Paused: Online booking is currently paused for this clinic.
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Consultation Mode Segmented Toggle */}
@@ -613,9 +694,12 @@ function BookingSlotStepComponent({
               <Pressable
                 key={slot.id}
                 accessibilityRole="radio"
-                accessibilityState={{ checked: isSelected }}
+                accessibilityState={{ checked: isSelected, disabled: isBookingPaused }}
                 accessibilityLabel={`Slot at ${slot.displayTime || slot.time}`}
-                onPress={() => onSelectSlot(slot)}
+                disabled={isBookingPaused}
+                onPress={() => {
+                  if (!isBookingPaused) onSelectSlot(slot);
+                }}
                 style={({ pressed }) => [
                   styles.slotCard,
                   {
@@ -787,6 +871,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   verifiedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  clinicSelectorWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  clinicChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  pausedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
   },

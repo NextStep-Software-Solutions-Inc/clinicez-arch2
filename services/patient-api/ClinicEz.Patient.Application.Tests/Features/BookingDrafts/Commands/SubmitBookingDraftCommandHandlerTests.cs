@@ -463,4 +463,63 @@ public sealed class SubmitBookingDraftCommandHandlerTests
             Arg.Any<int>(),
             Arg.Any<TimeSpan?>());
     }
+
+    [Fact]
+    public async Task Handle_WhenClinicBookingIsPaused_ThrowsConflictAndEnqueuesNothing()
+    {
+        var draft = ArrangeDraft();
+        _clinicRepo.GetByIdAsync(_clinicId, Arg.Any<CancellationToken>())
+            .Returns(new Clinic
+            {
+                Id = _clinicId,
+                Name = "Paused Clinic",
+                TenantId = "tenant-a",
+                SupportsAppointments = false
+            });
+
+        var act = async () => await CreateHandler().Handle(new SubmitBookingDraftCommand(_patientId, _draftId), CancellationToken.None);
+
+        await act.Should().ThrowAsync<ConflictException>()
+            .WithMessage("Online booking is currently paused for this clinic.");
+        _published.Should().BeNull();
+        draft.Status.Should().Be(BookingDraftStatus.Draft);
+        await _uow.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithProviderOnDraft_PopulatesProviderAndCanonicalProviderIdOnBookedEvent()
+    {
+        var draft = ArrangeDraft();
+        var providerId = Guid.NewGuid();
+        var canonicalId = Guid.NewGuid();
+        draft.ProviderId = providerId;
+        draft.ProviderName = "Dr. Maria Santos";
+
+        _clinicRepo.GetByIdAsync(_clinicId, Arg.Any<CancellationToken>())
+            .Returns(new Clinic
+            {
+                Id = _clinicId,
+                Name = "City Health Clinic",
+                TenantId = "tenant-a",
+                IsPublic = true,
+                SupportsAppointments = true,
+                HealthcareProviders =
+                [
+                    new ClinicHealthcareProvider
+                    {
+                        Id = providerId,
+                        ClinicId = _clinicId,
+                        PractitionerId = canonicalId,
+                        Name = "Dr. Maria Santos"
+                    }
+                ]
+            });
+
+        await CreateHandler().Handle(new SubmitBookingDraftCommand(_patientId, _draftId), CancellationToken.None);
+
+        _published.Should().NotBeNull();
+        _published!.ProviderId.Should().Be(providerId);
+        _published.ProviderName.Should().Be("Dr. Maria Santos");
+        _published.CanonicalProviderId.Should().Be(canonicalId);
+    }
 }

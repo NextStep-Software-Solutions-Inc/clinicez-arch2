@@ -1,5 +1,6 @@
 using System;
 using ClinicEz.Clinic.Domain.Common;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
@@ -106,6 +107,15 @@ public sealed class FacilitySettings : ClinicScopedEntity
     /// the clinic profile discoverable.
     /// </summary>
     public bool IsOnlineBookingPaused { get; set; } = false;
+
+    /// <summary>
+    /// Platform-level verification gate required before the clinic becomes publicly discoverable in patient-api.
+    /// </summary>
+    public PlatformVerificationStatus PlatformVerificationStatus { get; set; } = PlatformVerificationStatus.Unverified;
+
+    public string? VerificationRejectionReason { get; set; }
+    public DateTime? LastVerificationSubmittedAtUtc { get; set; }
+    public string? LtoEvidenceObjectKey { get; set; }
 
     // Configurable Patient Search Result Display Fields
     public string? PatientSearchDisplayFieldsJson { get; set; }

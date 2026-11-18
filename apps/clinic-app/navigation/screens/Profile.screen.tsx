@@ -27,6 +27,10 @@ import { clinicService, SignatureMode, StaffMember } from '../../services/clinic
 import SignatureSpecimenModal from '../../components/settings/SignatureSpecimenModal';
 import { notify } from '@utils/feedback';
 import { validatePasswordPolicy } from '../../services/passwordPolicy';
+import {
+  isClinicianRole,
+  resolvePractitionerVerificationBadge,
+} from '../../utils/directoryVerification';
 import { useTextScale, TEXT_SCALE_OPTIONS } from '../../context/TextScaleContext';
 import { useUiDensity, UI_DENSITY_OPTIONS } from '../../context/UiDensityContext';
 
@@ -125,6 +129,20 @@ export default function ProfileScreen() {
 
   const role = user.roleName || user.role;
   const isDoctor = user.role === 'Doctor' || effectiveStaff?.role === 'Doctor';
+  const isNurse = user.role === 'Nurse' || effectiveStaff?.role === 'Nurse';
+  const isClinician = isClinicianRole(effectiveStaff?.role ?? user.role) || isDoctor || isNurse;
+  const directoryBadge = isClinician
+    ? resolvePractitionerVerificationBadge(effectiveStaff?.publicVerificationStatus)
+    : null;
+  const showVerificationReason = Boolean(
+    isClinician &&
+      effectiveStaff?.publicVerificationReason?.trim() &&
+      (!effectiveStaff?.publicVerificationStatus ||
+        effectiveStaff.publicVerificationStatus === 'Rejected' ||
+        effectiveStaff.publicVerificationStatus === 'Expired' ||
+        effectiveStaff.publicVerificationStatus === 'Suspended'),
+  );
+  const listedClinicsCount = effectiveStaff?.affiliatedVerifiedClinicCount ?? 0;
   const displayName = effectiveStaff ? formatStaffName(effectiveStaff) : user.name;
   const accountEmail = effectiveStaff?.email?.trim() || user.email?.trim() || '';
 
@@ -148,7 +166,7 @@ export default function ProfileScreen() {
       middleName: middleName.trim() || undefined,
       title: title.trim() || undefined,
       phoneNumber: phone.trim() || undefined,
-      prcLicenseNumber: isDoctor ? prc.trim() : undefined,
+      prcLicenseNumber: isDoctor ? prc.trim() : isNurse ? prc.trim() || undefined : undefined,
       ptrNumber: isDoctor ? ptr.trim() || undefined : undefined,
       s2LicenseNumber: isDoctor ? s2.trim() || undefined : undefined,
       philHealthPan: isDoctor ? pan.trim() || undefined : undefined,
@@ -357,7 +375,11 @@ export default function ProfileScreen() {
                 value={prc}
                 onChangeText={setPrc}
                 placeholder="e.g. 0108924"
-                helperText={isDoctor ? 'Mandatory for doctors under the Philippine Medical Act of 1959.' : 'Optional for non-physicians.'}
+                helperText={
+                  isDoctor
+                    ? 'Mandatory for doctors under the Philippine Medical Act of 1959. Editing a PRC license triggers re-verification.'
+                    : 'Optional for non-physicians. Editing a PRC license triggers re-verification.'
+                }
               />
               <Input
                 containerStyle={styles.flexWide}
@@ -514,6 +536,70 @@ export default function ProfileScreen() {
             </View>
           </CardContent>
         </Card>
+
+        {/* Read-Only Patient Directory Verification (Synced from Portal via Hub) */}
+        {isClinician && directoryBadge ? (
+          <Card>
+            <CardHeader
+              title="Patient Directory Verification"
+              subtitle="Synced from Portal via Hub (no Portal login required)"
+              rightAction={
+                <Badge
+                  label={directoryBadge.label}
+                  variant={directoryBadge.variant}
+                  size="sm"
+                  icon={directoryBadge.icon}
+                />
+              }
+            />
+            <CardContent style={styles.cardSection}>
+              {showVerificationReason ? (
+                <View style={styles.errorBox}>
+                  <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+                  <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex1}>
+                    {effectiveStaff?.publicVerificationReason}
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              <View style={styles.sessionGrid}>
+                <View style={styles.sessionItem}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Directory Status
+                  </ThemedText>
+                  <Badge
+                    label={directoryBadge.label}
+                    variant={directoryBadge.variant}
+                    size="sm"
+                    icon={directoryBadge.icon}
+                  />
+                </View>
+
+                <View style={styles.sessionItem}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    PRC Expiry Date
+                  </ThemedText>
+                  <ThemedText variant="smallBold" color={theme.colors.text}>
+                    {effectiveStaff?.prcExpiryDate || 'Not set'}
+                  </ThemedText>
+                </View>
+
+                <View style={styles.sessionItem}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Listed Clinics
+                  </ThemedText>
+                  <ThemedText variant="smallBold" color={theme.colors.text}>
+                    {String(listedClinicsCount)}
+                  </ThemedText>
+                </View>
+              </View>
+
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Verification status and multi-clinic listings sync from Portal via Hub without a separate Portal sign-in. Editing a PRC license number triggers re-verification.
+              </ThemedText>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {/* Section 3: Workstation Account Security */}
         <Card>

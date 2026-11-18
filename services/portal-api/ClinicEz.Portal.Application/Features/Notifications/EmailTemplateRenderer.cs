@@ -14,6 +14,7 @@ public static class EmailTemplateKeys
     public const string ClinicStaffInvitation = "clinic.staff.invitation";
     public const string ClinicStaffPasswordReset = "clinic.staff.password_reset";
     public const string PortalPasswordReset = "portal.password_reset";
+    public const string PractitionerAffiliationConfirmation = "practitioner.affiliation.confirmation";
 }
 
 /// <param name="ReplyTo">Where a reply should go, when the template knows (for example the visitor of the contact form).</param>
@@ -55,6 +56,7 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
             EmailTemplateKeys.ClinicStaffInvitation => RenderClinicStaffInvitation(subject, model),
             EmailTemplateKeys.ClinicStaffPasswordReset => RenderClinicStaffPasswordReset(subject, model),
             EmailTemplateKeys.PortalPasswordReset => RenderPortalPasswordReset(subject, model),
+            EmailTemplateKeys.PractitionerAffiliationConfirmation => RenderPractitionerAffiliationConfirmation(subject, model),
             _ => throw new EmailTemplateException($"Unknown email template '{templateKey}'.")
         };
     }
@@ -684,6 +686,61 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
             {resetUrl}
 
             This password reset link will expire in 7 days.
+            """;
+
+        return new RenderedEmail(html, text);
+    }
+
+    private static RenderedEmail RenderPractitionerAffiliationConfirmation(string subject, IReadOnlyDictionary<string, string> model)
+    {
+        var practitionerName = Required(model, "practitionerName");
+        var facilityName = Required(model, "facilityName");
+        var professionKind = Optional(model, "professionKind") ?? "Practitioner";
+        var confirmUrl = RequiredHttpUrl(model, "confirmUrl");
+        var otpCode = Optional(model, "otpCode");
+
+        var otpBlock = otpCode is null
+            ? string.Empty
+            : $"""<p style="margin: 12px 0 0 0; color: #0f172a; font-size: 14px;"><strong>Verification code:</strong> <code style="font-size: 16px; letter-spacing: 2px;">{Encode(otpCode)}</code></p>""";
+
+        var html = $"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head><meta charset="utf-8" /><title>{Encode(subject)}</title></head>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;">
+                <tr>
+                  <td style="padding: 24px 32px; background-color: #0D6963;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Clinic EZ Directory Verification</h1>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 28px 32px;">
+                    <p style="font-size: 15px; line-height: 22px; margin: 0 0 16px 0;">Hello {Encode(practitionerName)},</p>
+                    <p style="font-size: 14px; line-height: 22px; color: #334155; margin: 0 0 16px 0;">
+                      <strong>{Encode(facilityName)}</strong> requested to list your verified {Encode(professionKind)} credentials under their clinic directory on Clinic EZ.
+                    </p>
+                    {otpBlock}
+                    <p style="margin: 24px 0;">
+                      <a href="{Encode(confirmUrl)}" target="_blank" style="display: inline-block; background-color: #0D6963; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 24px; border-radius: 8px;">Confirm Clinic Affiliation</a>
+                    </p>
+                    <p style="font-size: 12px; color: #64748b; word-break: break-all;">Link: <a href="{Encode(confirmUrl)}">{Encode(confirmUrl)}</a></p>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>
+            """;
+
+        var text = $"""
+            Hello {practitionerName},
+
+            {facilityName} requested to list your verified {professionKind} credentials under their clinic directory on Clinic EZ.
+            {(otpCode is null ? string.Empty : $"\nVerification code: {otpCode}\n")}
+            Confirm your clinic affiliation by visiting:
+            {confirmUrl}
+
+            If you did not authorize this listing, do not confirm it.
             """;
 
         return new RenderedEmail(html, text);
