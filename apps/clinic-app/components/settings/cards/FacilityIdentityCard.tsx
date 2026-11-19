@@ -3,7 +3,9 @@ import { View, StyleSheet } from 'react-native';
 import Input from '../../ui/Input';
 import Button from '../../ui/Button';
 import { theme } from '../../../constants/theme';
-import { type ClinicSettingsRecord } from '../../../services/clinicService';
+import { type ClinicSettingsRecord, type PlatformVerificationStatus } from '../../../services/clinicService';
+import { PENDING_VERIFICATION_BUTTON_LABEL } from '../../../utils/directoryVerification';
+import { PendingVerificationNote } from '../common';
 import SettingsSplitCard from './SettingsSplitCard';
 
 export interface FacilityIdentityCardProps {
@@ -17,6 +19,7 @@ export interface FacilityIdentityCardProps {
   showSkeletons: boolean;
   errorMessage?: string | null;
   onRetry?: () => void;
+  platformVerificationStatus?: PlatformVerificationStatus;
 }
 
 export default function FacilityIdentityCard({
@@ -30,7 +33,10 @@ export default function FacilityIdentityCard({
   showSkeletons,
   errorMessage = null,
   onRetry,
+  platformVerificationStatus,
 }: FacilityIdentityCardProps) {
+  const effectiveStatus = platformVerificationStatus ?? settings?.platformVerificationStatus;
+  const isPendingFacility = effectiveStatus === 'PendingReview';
   const isConfigured = Boolean(clinicName.trim());
   const isDirty = settings
     ? (clinicName ?? '') !== (settings.clinicName ?? '') ||
@@ -51,13 +57,16 @@ export default function FacilityIdentityCard({
       onRetryError={onRetry}
       footer={
         isDirty || savingSettings ? (
-          <Button
-            title="Save changes"
-            icon="save"
-            size="sm"
-            onPress={onSavePreferences}
-            loading={savingSettings}
-          />
+          <View style={styles.footerActions}>
+            {isPendingFacility ? <PendingVerificationNote /> : null}
+            <Button
+              title={isPendingFacility ? PENDING_VERIFICATION_BUTTON_LABEL : 'Save changes'}
+              icon="save"
+              size="sm"
+              onPress={onSavePreferences}
+              loading={savingSettings}
+            />
+          </View>
         ) : undefined
       }
     >
@@ -94,5 +103,12 @@ const styles = StyleSheet.create({
     flex: 1,
     flexBasis: 220,
     minWidth: 0,
+  },
+  footerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
   },
 });

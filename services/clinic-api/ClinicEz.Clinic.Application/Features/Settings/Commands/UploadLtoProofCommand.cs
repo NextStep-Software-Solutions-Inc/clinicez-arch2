@@ -7,6 +7,7 @@ using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +20,8 @@ public sealed record UploadLtoProofCommand(
     string FileName,
     string ContentType,
     long FileSizeBytes,
-    [property: JsonIgnore] byte[] FileBytes
+    [property: JsonIgnore] byte[] FileBytes,
+    bool SkipPendingVerificationSync = false
 ) : IRequest<EvidenceProofUploadResultDto>;
 
 public sealed class UploadLtoProofCommandHandler : IRequestHandler<UploadLtoProofCommand, EvidenceProofUploadResultDto>
@@ -30,6 +32,7 @@ public sealed class UploadLtoProofCommandHandler : IRequestHandler<UploadLtoProo
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicEncryptionService? _encryptionService;
     private readonly IRepository<AuditEntry>? _auditRepo;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public UploadLtoProofCommandHandler(
         IRepository<FacilitySettings> settingsRepo,
@@ -37,7 +40,8 @@ public sealed class UploadLtoProofCommandHandler : IRequestHandler<UploadLtoProo
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork,
         IClinicEncryptionService? encryptionService = null,
-        IRepository<AuditEntry>? auditRepo = null)
+        IRepository<AuditEntry>? auditRepo = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _settingsRepo = settingsRepo;
         _storageService = storageService;
@@ -45,6 +49,7 @@ public sealed class UploadLtoProofCommandHandler : IRequestHandler<UploadLtoProo
         _unitOfWork = unitOfWork;
         _encryptionService = encryptionService;
         _auditRepo = auditRepo;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<EvidenceProofUploadResultDto> Handle(UploadLtoProofCommand request, CancellationToken ct)
@@ -100,6 +105,18 @@ public sealed class UploadLtoProofCommandHandler : IRequestHandler<UploadLtoProo
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        if (!request.SkipPendingVerificationSync
+            && _directorySyncService != null
+            && settings.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+        {
+            await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                settings,
+                throwOnConflict: false,
+                _clinicContext.StaffId?.ToString(),
+                _clinicContext.StaffName,
+                ct);
+        }
 
         return new EvidenceProofUploadResultDto(storedKey);
     }

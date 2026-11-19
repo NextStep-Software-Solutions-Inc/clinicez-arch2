@@ -45,6 +45,14 @@ public static class InteropTypes
     public const string VerificationEvidenceRequested = "verification.evidence.requested";
     /// <summary>Clinic -> portal. Payload: <c>VerificationEvidenceRespondedPayload</c>.</summary>
     public const string VerificationEvidenceResponded = "verification.evidence.responded";
+    /// <summary>Clinic -> portal. Payload: <c>FacilityVerificationUpdateRequestedPayload</c>. Reply type: <see cref="FacilityVerificationUpdateResponded"/>.</summary>
+    public const string FacilityVerificationUpdateRequested = "facility.verification.update.requested";
+    /// <summary>Portal -> clinic. Payload: <c>VerificationUpdateRespondedPayload</c>.</summary>
+    public const string FacilityVerificationUpdateResponded = "facility.verification.update.responded";
+    /// <summary>Clinic -> portal. Payload: <c>PractitionerVerificationUpdateRequestedPayload</c>. Reply type: <see cref="PractitionerVerificationUpdateResponded"/>.</summary>
+    public const string PractitionerVerificationUpdateRequested = "practitioner.verification.update.requested";
+    /// <summary>Portal -> clinic. Payload: <c>VerificationUpdateRespondedPayload</c>.</summary>
+    public const string PractitionerVerificationUpdateResponded = "practitioner.verification.update.responded";
 
     // Hub directory feed (portal -> hub). Handled by the hub itself.
     public const string DirectoryCellUpserted = "directory.cell.upserted";

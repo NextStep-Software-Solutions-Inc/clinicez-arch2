@@ -15,7 +15,8 @@ namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
 public sealed record WithdrawPractitionerVerificationCommand(
     Guid StaffId,
-    string? Reason = null
+    string? Reason = null,
+    bool SkipPendingVerificationSync = false
 ) : IRequest<StaffMemberDto>;
 
 public sealed class WithdrawPractitionerVerificationCommandHandler : IRequestHandler<WithdrawPractitionerVerificationCommand, StaffMemberDto>
@@ -55,6 +56,7 @@ public sealed class WithdrawPractitionerVerificationCommandHandler : IRequestHan
         }
 
         var wasOptedIn = staff.IsDirectoryOptIn;
+        var wasPending = staff.PublicVerificationStatus is PractitionerVerificationLevel.PendingVerification or PractitionerVerificationLevel.AwaitingConfirmation;
         staff.IsDirectoryOptIn = false;
         staff.PublicVerificationStatus = PractitionerVerificationLevel.Unverified;
         staff.PublicVerificationReason = null;
@@ -83,13 +85,22 @@ public sealed class WithdrawPractitionerVerificationCommandHandler : IRequestHan
 
         await _unitOfWork.SaveChangesAsync(ct);
 
-        if (wasOptedIn && _settingsRepo != null && _directorySyncService != null)
+        if (!request.SkipPendingVerificationSync && (wasOptedIn || wasPending) && _settingsRepo != null && _directorySyncService != null)
         {
             var settings = await _settingsRepo.Query()
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(s => s.ClinicId == staff.ClinicId && !s.IsDeleted, ct);
 
-            if (settings is { PlatformVerificationStatus: PlatformVerificationStatus.Verified, IsDirectoryPublished: true })
+            if (settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+            {
+                await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                    settings,
+                    throwOnConflict: false,
+                    _clinicContext.StaffId?.ToString(),
+                    _clinicContext.StaffName,
+                    ct);
+            }
+            else if (wasOptedIn && settings is { PlatformVerificationStatus: PlatformVerificationStatus.Verified, IsDirectoryPublished: true })
             {
                 await _directorySyncService.EnqueueDirectoryUpdateAsync(settings, ct);
                 await _unitOfWork.SaveChangesAsync(ct);

@@ -12,7 +12,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.Settings.Commands;
 
-public sealed record ToggleOnlineBookingPauseCommand(bool IsPaused) : IRequest<ClinicBookingPauseResultDto>;
+public sealed record ToggleOnlineBookingPauseCommand(
+    bool IsPaused,
+    bool SkipPendingVerificationSync = false) : IRequest<ClinicBookingPauseResultDto>;
 
 public sealed record ClinicBookingPauseResultDto(
     bool Success,
@@ -88,6 +90,18 @@ public sealed class ToggleOnlineBookingPauseCommandHandler : IRequestHandler<Tog
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        if (!request.SkipPendingVerificationSync
+            && settings.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview
+            && _directorySyncService != null)
+        {
+            await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                settings,
+                throwOnConflict: false,
+                _clinicContext.StaffId?.ToString(),
+                _clinicContext.StaffName,
+                ct);
+        }
 
         return new ClinicBookingPauseResultDto(
             Success: true,

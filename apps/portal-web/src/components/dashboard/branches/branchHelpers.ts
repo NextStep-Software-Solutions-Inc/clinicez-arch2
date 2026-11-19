@@ -156,6 +156,7 @@ export function buildBranchFacilities(
       createdAt: "",
       classification: null,
       licenseToOperate: null,
+      ltoExpiryDate: null,
       philHealthAccreditationNumber: null,
       taxIdentificationNumber: null,
       operatingHours: null,

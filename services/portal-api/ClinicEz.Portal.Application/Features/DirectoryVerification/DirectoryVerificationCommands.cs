@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Application.Common;
@@ -67,14 +68,16 @@ public sealed record ApproveVerificationRequestCommand(
     string AdminName,
     string? Notes = null,
     IReadOnlyList<Guid>? PractitionerRequestIds = null,
-    bool ApproveBundledPractitioners = true) : IRequest<ApproveVerificationResult>;
+    bool ApproveBundledPractitioners = true,
+    string? AdminEmail = null) : IRequest<ApproveVerificationResult>;
 
 public sealed record RejectVerificationRequestCommand(
     Guid RequestId,
     string AdminUserId,
     string AdminName,
     string Reason,
-    string? Notes = null) : IRequest<RejectVerificationResult>;
+    string? Notes = null,
+    string? AdminEmail = null) : IRequest<RejectVerificationResult>;
 
 public sealed record SuspendPractitionerCommand(
     Guid PractitionerId,
@@ -114,8 +117,13 @@ public sealed class ApproveVerificationRequestCommandHandler(
                     $"Facility verification request has already been {facilityReq.Status}.");
             }
 
+            var (reviewerName, reviewerEmail) = await VerificationReviewerLookup.ResolveAsync(
+                db, request.AdminUserId, request.AdminName, request.AdminEmail, ct);
+
             facilityReq.Status = "Approved";
             facilityReq.ReviewedByAdminUserId = request.AdminUserId;
+            facilityReq.ReviewedByDisplayName = reviewerName;
+            facilityReq.ReviewedByEmail = reviewerEmail;
             facilityReq.ReviewedAtUtc = now;
             facilityReq.ReviewerNotes = string.IsNullOrWhiteSpace(request.Notes) ? facilityReq.ReviewerNotes : request.Notes.Trim();
 
@@ -135,14 +143,27 @@ public sealed class ApproveVerificationRequestCommandHandler(
             {
                 if (!string.IsNullOrWhiteSpace(snapshot.DohLtoNumber))
                     facility.LicenseToOperate = snapshot.DohLtoNumber.Trim();
+                if (VerificationReviewerLookup.HasJsonPropertyKey(facilityReq.SubmittedSnapshotJson, "dohLtoExpiryDate")
+                    || snapshot.DohLtoExpiryDate.HasValue)
+                    facility.LtoExpiryDate = snapshot.DohLtoExpiryDate;
                 if (!string.IsNullOrWhiteSpace(snapshot.Classification))
                     facility.Classification = snapshot.Classification.Trim();
                 if (!string.IsNullOrWhiteSpace(snapshot.OperatingHours))
                     facility.OperatingHours = snapshot.OperatingHours.Trim();
-                if (!string.IsNullOrWhiteSpace(snapshot.ContactNumber))
-                    facility.ContactNumber = snapshot.ContactNumber.Trim();
+                if (VerificationReviewerLookup.HasJsonPropertyKey(facilityReq.SubmittedSnapshotJson, "contactNumber")
+                    || !string.IsNullOrWhiteSpace(snapshot.ContactNumber))
+                    facility.ContactNumber = string.IsNullOrWhiteSpace(snapshot.ContactNumber) ? null : snapshot.ContactNumber.Trim();
                 if (!string.IsNullOrWhiteSpace(snapshot.ContactEmail))
                     facility.ContactEmail = snapshot.ContactEmail.Trim();
+                else if (snapshot.ContactEmail is not null)
+                    facility.ContactEmail = null;
+                if (VerificationReviewerLookup.HasJsonPropertyKey(facilityReq.SubmittedSnapshotJson, "philHealthAccreditationNumber")
+                    || !string.IsNullOrWhiteSpace(snapshot.PhilHealthAccreditationNumber)
+                    || (VerificationReviewerLookup.HasJsonPropertyKey(facilityReq.SubmittedSnapshotJson, "isPhilHealthAccredited")
+                        && !snapshot.IsPhilHealthAccredited))
+                    facility.PhilHealthAccreditationNumber = string.IsNullOrWhiteSpace(snapshot.PhilHealthAccreditationNumber)
+                        ? null
+                        : snapshot.PhilHealthAccreditationNumber.Trim();
             }
 
             var approvedPractitionerIds = new List<Guid>();
@@ -163,6 +184,8 @@ public sealed class ApproveVerificationRequestCommandHandler(
 
                     childReq.Status = "Approved";
                     childReq.ReviewedByAdminUserId = request.AdminUserId;
+                    childReq.ReviewedByDisplayName = reviewerName;
+                    childReq.ReviewedByEmail = reviewerEmail;
                     childReq.ReviewedAtUtc = now;
                     childReq.ReviewerNotes = request.Notes?.Trim();
 
@@ -222,12 +245,17 @@ public sealed class ApproveVerificationRequestCommandHandler(
                 $"Practitioner verification request has already been {pracReq.Status}.");
         }
 
+        var (pracReviewerName, pracReviewerEmail) = await VerificationReviewerLookup.ResolveAsync(
+            db, request.AdminUserId, request.AdminName, request.AdminEmail, ct);
+
         var pracSnap = DirectoryVerificationHelper.DeserializePractitionerSnapshot(pracReq.SubmittedSnapshotJson);
         var (upsertedPrac, upsertedAff) = await DirectoryVerificationHelper.UpsertVerifiedPractitionerAndAffiliationAsync(
             db, pracReq, pracSnap, request.AdminUserId, now, confirmedViaOtp: false, ct);
 
         pracReq.Status = "Approved";
         pracReq.ReviewedByAdminUserId = request.AdminUserId;
+        pracReq.ReviewedByDisplayName = pracReviewerName;
+        pracReq.ReviewedByEmail = pracReviewerEmail;
         pracReq.ReviewedAtUtc = now;
         pracReq.ReviewerNotes = string.IsNullOrWhiteSpace(request.Notes) ? pracReq.ReviewerNotes : request.Notes.Trim();
 
@@ -293,8 +321,13 @@ public sealed class RejectVerificationRequestCommandHandler(
                     $"Facility verification request has already been {facilityReq.Status}.");
             }
 
+            var (reviewerName, reviewerEmail) = await VerificationReviewerLookup.ResolveAsync(
+                db, request.AdminUserId, request.AdminName, request.AdminEmail, ct);
+
             facilityReq.Status = "Rejected";
             facilityReq.ReviewedByAdminUserId = request.AdminUserId;
+            facilityReq.ReviewedByDisplayName = reviewerName;
+            facilityReq.ReviewedByEmail = reviewerEmail;
             facilityReq.ReviewedAtUtc = now;
             facilityReq.ReviewerNotes = string.IsNullOrWhiteSpace(request.Notes) ? reason : request.Notes.Trim();
 
@@ -302,6 +335,8 @@ public sealed class RejectVerificationRequestCommandHandler(
             {
                 child.Status = "Rejected";
                 child.ReviewedByAdminUserId = request.AdminUserId;
+                child.ReviewedByDisplayName = reviewerName;
+                child.ReviewedByEmail = reviewerEmail;
                 child.ReviewedAtUtc = now;
                 child.ReviewerNotes = reason;
             }
@@ -374,8 +409,13 @@ public sealed class RejectVerificationRequestCommandHandler(
                 $"Practitioner verification request has already been {pracReq.Status}.");
         }
 
+        var (pracReviewerName, pracReviewerEmail) = await VerificationReviewerLookup.ResolveAsync(
+            db, request.AdminUserId, request.AdminName, request.AdminEmail, ct);
+
         pracReq.Status = "Rejected";
         pracReq.ReviewedByAdminUserId = request.AdminUserId;
+        pracReq.ReviewedByDisplayName = pracReviewerName;
+        pracReq.ReviewedByEmail = pracReviewerEmail;
         pracReq.ReviewedAtUtc = now;
         pracReq.ReviewerNotes = string.IsNullOrWhiteSpace(request.Notes) ? reason : request.Notes.Trim();
 
@@ -619,6 +659,11 @@ public sealed class ConfirmPractitionerAffiliationCommandHandler(
             db, pracReq, snap, "practitioner-otp", now, confirmedViaOtp: true, ct);
 
         pracReq.Status = "Approved";
+        pracReq.ReviewedByAdminUserId = "practitioner-otp";
+        pracReq.ReviewedByDisplayName = "Practitioner (OTP Confirmation)";
+        pracReq.ReviewedByEmail = !string.IsNullOrWhiteSpace(practitioner.VerificationContact)
+            ? practitioner.VerificationContact
+            : pracReq.VerificationContact;
         pracReq.ReviewedAtUtc = now;
         pracReq.ReviewerNotes = "Confirmed by practitioner via affiliation confirmation.";
 
@@ -651,5 +696,66 @@ public sealed class ConfirmPractitionerAffiliationCommandHandler(
             affiliation.AffiliationStatus,
             AlreadyConfirmed: false,
             now);
+    }
+}
+
+internal static class VerificationReviewerLookup
+{
+    public static async Task<(string? DisplayName, string? Email)> ResolveAsync(
+        IApplicationDbContext db,
+        string adminUserId,
+        string? fallbackName,
+        string? fallbackEmail,
+        CancellationToken ct)
+    {
+        var cleanName = string.IsNullOrWhiteSpace(fallbackName) ? null : fallbackName.Trim();
+        var cleanEmail = string.IsNullOrWhiteSpace(fallbackEmail) ? null : fallbackEmail.Trim();
+
+        if (cleanName is not null && cleanEmail is not null)
+            return (cleanName, cleanEmail);
+
+        if (!string.IsNullOrWhiteSpace(adminUserId))
+        {
+            var id = adminUserId.Trim();
+            Guid.TryParse(id, out var adminGuid);
+            var admin = await db.AdminUsers
+                .AsNoTracking()
+                .Where(a => !a.IsDeleted && (a.ClerkUserId == id || a.Email == id || (adminGuid != Guid.Empty && a.Id == adminGuid)))
+                .Select(a => new { a.FullName, a.Email })
+                .FirstOrDefaultAsync(ct);
+
+            if (admin is not null)
+            {
+                cleanName ??= string.IsNullOrWhiteSpace(admin.FullName) ? null : admin.FullName.Trim();
+                cleanEmail ??= string.IsNullOrWhiteSpace(admin.Email) ? null : admin.Email.Trim();
+            }
+        }
+
+        return (cleanName, cleanEmail);
+    }
+
+    internal static bool HasJsonPropertyKey(string? json, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return false;
+
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (string.Equals(prop.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

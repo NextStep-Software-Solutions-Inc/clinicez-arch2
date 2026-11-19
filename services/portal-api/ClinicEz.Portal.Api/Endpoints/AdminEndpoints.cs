@@ -400,7 +400,8 @@ public class AdminEndpoints : IEndpoint
                     admin.FullName,
                     body?.Notes,
                     body?.PractitionerRequestIds,
-                    body?.ApproveBundledPractitioners ?? true), ct);
+                    body?.ApproveBundledPractitioners ?? true,
+                    admin.Email), ct);
                 return Results.Ok(result);
             }
             catch (KeyNotFoundException ex)
@@ -442,7 +443,8 @@ public class AdminEndpoints : IEndpoint
                     adminUserId,
                     admin.FullName,
                     body.Reason,
-                    body.Notes), ct);
+                    body.Notes,
+                    admin.Email), ct);
                 return Results.Ok(result);
             }
             catch (KeyNotFoundException ex)

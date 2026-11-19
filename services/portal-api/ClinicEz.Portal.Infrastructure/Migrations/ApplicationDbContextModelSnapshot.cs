@@ -836,6 +836,9 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
 
+                    b.Property<DateOnly?>("LtoExpiryDate")
+                        .HasColumnType("date");
+
                     b.Property<int>("MaxStaffLimit")
                         .HasColumnType("integer");
 
@@ -1169,6 +1172,14 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<string>("ReviewedByAdminUserId")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ReviewedByDisplayName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ReviewedByEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
 
                     b.Property<string>("ReviewerNotes")
                         .HasMaxLength(2000)
@@ -2106,6 +2117,14 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<string>("ReviewedByDisplayName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ReviewedByEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
                     b.Property<string>("ReviewerNotes")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -2126,6 +2145,10 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<string>("SubmittedByClinicUserId")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
+
+                    b.Property<string>("SubmittedByDisplayName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<string>("SubmittedPrcLicenseNo")
                         .IsRequired()

@@ -36,6 +36,7 @@ public class PractitionerVerificationRequest : BaseEntity
     public string? PrcEvidenceObjectKey { get; set; }
     public string? VerificationContact { get; set; }
     public string? SubmittedByClinicUserId { get; set; }
+    public string? SubmittedByDisplayName { get; set; }
     public DateTime SubmittedAtUtc { get; set; }
     public string? OtpTokenHash { get; set; }
     public DateTime? OtpExpiresAtUtc { get; set; }
@@ -44,6 +45,8 @@ public class PractitionerVerificationRequest : BaseEntity
     public string? WithdrawnByActor { get; set; }
     public string? WithdrawalReason { get; set; }
     public string? ReviewedByAdminUserId { get; set; }
+    public string? ReviewedByDisplayName { get; set; }
+    public string? ReviewedByEmail { get; set; }
     public DateTime? ReviewedAtUtc { get; set; }
     public string? ReviewerNotes { get; set; }
 }

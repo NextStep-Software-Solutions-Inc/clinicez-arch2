@@ -140,9 +140,11 @@ public sealed class SettingsController : ControllerBase
 
     [HttpPost("philhealth/revert")]
     [HasPermission(ClinicPermissions.SettingsManage)]
-    public async Task<ActionResult<ApiResponse<ClinicSettingsDto>>> RevertPhilHealthToBranch(CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<ClinicSettingsDto>>> RevertPhilHealthToBranch(
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new RevertPhilHealthToBranchCommand(), ct);
+        var result = await _sender.Send(new RevertPhilHealthToBranchCommand(skipPendingVerificationSync), ct);
         return Ok(ApiResponse<ClinicSettingsDto>.Success(result, "Clinic PhilHealth settings reverted to branch baseline."));
     }
 }

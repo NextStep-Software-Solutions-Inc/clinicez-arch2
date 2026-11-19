@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Shared.Interoperability;
@@ -39,12 +40,17 @@ public sealed record FacilityVerificationRequestedPayload
     public string? FacilitySlug { get; init; }
     public string? Classification { get; init; }
     public string? DohLtoNumber { get; init; }
+    public DateOnly? DohLtoExpiryDate { get; init; }
     public string? LtoEvidenceObjectKey { get; init; }
     public string? Address { get; init; }
     public string? ContactNumber { get; init; }
     public string? ContactEmail { get; init; }
     public string? OperatingHours { get; init; }
     public bool IsOnlineBookingPaused { get; init; }
+    public string? PhilHealthAccreditationNumber { get; init; }
+    public bool IsPhilHealthAccredited { get; init; }
+    public bool SupportsInPerson { get; init; } = true;
+    public bool SupportsTeleconsult { get; init; }
     public string RequestKind { get; init; } = string.Empty;
     public string? SubmittedByClinicUserId { get; init; }
     public string? SubmittedByDisplayName { get; init; }
@@ -107,6 +113,7 @@ public sealed record PractitionerVerificationRequestedPayload
     public string? AvatarUrl { get; init; }
     public IReadOnlyList<ProviderAvailabilityWindowDto> Availabilities { get; init; } = Array.Empty<ProviderAvailabilityWindowDto>();
     public string? SubmittedByClinicUserId { get; init; }
+    public string? SubmittedByDisplayName { get; init; }
     public DateTime SubmittedAtUtc { get; init; } = DateTime.UtcNow;
 }
 
@@ -175,4 +182,86 @@ public sealed record VerificationEvidenceRespondedPayload
     public string? FileName { get; init; }
     public string? Base64Content { get; init; }
     public string? Error { get; init; }
+}
+
+/// <summary>
+/// Clinic -> portal, type <c>facility.verification.update.requested</c> (<c>InteropTypes.FacilityVerificationUpdateRequested</c>).
+/// Synchronously updates an active pending facility verification submission in place.
+/// Reply type: <see cref="VerificationUpdateRespondedPayload"/>.
+/// </summary>
+public sealed record FacilityVerificationUpdateRequestedPayload
+{
+    public string TenantId { get; init; } = string.Empty;
+    public Guid FacilityId { get; init; }
+    public string FacilityName { get; init; } = string.Empty;
+    public string? FacilitySlug { get; init; }
+    public string? Classification { get; init; }
+    public string? DohLtoNumber { get; init; }
+    public DateOnly? DohLtoExpiryDate { get; init; }
+    public string? LtoEvidenceObjectKey { get; init; }
+    public string? Address { get; init; }
+    public string? ContactNumber { get; init; }
+    public string? ContactEmail { get; init; }
+    public string? OperatingHours { get; init; }
+    public bool IsOnlineBookingPaused { get; init; }
+    public string? PhilHealthAccreditationNumber { get; init; }
+    public bool IsPhilHealthAccredited { get; init; }
+    public bool SupportsInPerson { get; init; } = true;
+    public bool SupportsTeleconsult { get; init; }
+    public string? SubmittedByClinicUserId { get; init; }
+    public string? SubmittedByDisplayName { get; init; }
+    public DateTime UpdatedAtUtc { get; init; } = DateTime.UtcNow;
+    public Guid? ExpectedRequestId { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public string? ExpectedStatus { get; init; } = "PendingReview";
+    public IReadOnlyList<ClinicServiceDto> Services { get; init; } = Array.Empty<ClinicServiceDto>();
+    public IReadOnlyList<BundledPractitionerSubmissionDto> Practitioners { get; init; } = Array.Empty<BundledPractitionerSubmissionDto>();
+}
+
+/// <summary>
+/// Clinic -> portal, type <c>practitioner.verification.update.requested</c> (<c>InteropTypes.PractitionerVerificationUpdateRequested</c>).
+/// Synchronously updates an active pending practitioner verification submission in place.
+/// Reply type: <see cref="VerificationUpdateRespondedPayload"/>.
+/// </summary>
+public sealed record PractitionerVerificationUpdateRequestedPayload
+{
+    public string TenantId { get; init; } = string.Empty;
+    public Guid FacilityId { get; init; }
+    public string FacilityName { get; init; } = string.Empty;
+    public Guid ClinicStaffMemberId { get; init; }
+    public string ProfessionKind { get; init; } = string.Empty;
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string? Title { get; init; }
+    public string SubmittedPrcLicenseNo { get; init; } = string.Empty;
+    public string NormalizedPrcLicenseNo { get; init; } = string.Empty;
+    public DateOnly? PrcExpiryDate { get; init; }
+    public string? PrcEvidenceObjectKey { get; init; }
+    public string? VerificationContact { get; init; }
+    public string? Specialty { get; init; }
+    public string? PublicBio { get; init; }
+    public string? AvatarUrl { get; init; }
+    public IReadOnlyList<ProviderAvailabilityWindowDto> Availabilities { get; init; } = Array.Empty<ProviderAvailabilityWindowDto>();
+    public string? SubmittedByClinicUserId { get; init; }
+    public string? SubmittedByDisplayName { get; init; }
+    public DateTime UpdatedAtUtc { get; init; } = DateTime.UtcNow;
+    public Guid? ExpectedRequestId { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public string? ExpectedStatus { get; init; } = "PendingReview";
+}
+
+/// <summary>
+/// Portal -> clinic, types <c>facility.verification.update.responded</c> (<c>InteropTypes.FacilityVerificationUpdateResponded</c>)
+/// and <c>practitioner.verification.update.responded</c> (<c>InteropTypes.PractitionerVerificationUpdateResponded</c>).
+/// Reports whether an active pending verification submission was updated in place or rejected due to a non-pending status conflict.
+/// </summary>
+public sealed record VerificationUpdateRespondedPayload
+{
+    public bool Succeeded { get; init; }
+    public bool Conflict { get; init; }
+    public string? ErrorCode { get; init; }
+    public string? CurrentStatus { get; init; }
+    public string? Message { get; init; }
+    public Guid? RequestId { get; init; }
+    public DateTime? UpdatedAtUtc { get; init; }
 }

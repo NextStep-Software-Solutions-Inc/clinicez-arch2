@@ -75,7 +75,8 @@ public sealed class StaffController : ControllerBase
             PrcEvidenceObjectKey: request.PrcEvidenceObjectKey,
             VerificationContact: request.VerificationContact,
             PublicBio: request.PublicBio,
-            AvatarUrl: request.AvatarUrl);
+            AvatarUrl: request.AvatarUrl,
+            SkipPendingVerificationSync: request.SkipPendingVerificationSync);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Profile updated successfully."));
@@ -149,7 +150,8 @@ public sealed class StaffController : ControllerBase
                 PrcEvidenceObjectKey: request.PrcEvidenceObjectKey,
                 VerificationContact: request.VerificationContact,
                 PublicBio: request.PublicBio,
-                AvatarUrl: request.AvatarUrl);
+                AvatarUrl: request.AvatarUrl,
+                SkipPendingVerificationSync: request.SkipPendingVerificationSync);
 
             var myResult = await _sender.Send(myCommand, ct);
             return Ok(ApiResponse<StaffMemberDto>.Success(myResult, "Profile updated successfully."));
@@ -180,7 +182,8 @@ public sealed class StaffController : ControllerBase
             PrcEvidenceObjectKey: request.PrcEvidenceObjectKey,
             VerificationContact: request.VerificationContact,
             PublicBio: request.PublicBio,
-            AvatarUrl: request.AvatarUrl);
+            AvatarUrl: request.AvatarUrl,
+            SkipPendingVerificationSync: request.SkipPendingVerificationSync);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member updated successfully."));
@@ -192,10 +195,11 @@ public sealed class StaffController : ControllerBase
     public async Task<ActionResult<ApiResponse<EvidenceProofUploadResultDto>>> UploadPrcProof(
         Guid id,
         [FromForm] IFormFile? file,
-        CancellationToken ct)
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
         var (fileName, contentType, length, bytes) = await VerificationEvidenceHelper.ReadValidatedFormFileAsync(file, ct);
-        var result = await _sender.Send(new UploadStaffPrcProofCommand(id, fileName, contentType, length, bytes), ct);
+        var result = await _sender.Send(new UploadStaffPrcProofCommand(id, fileName, contentType, length, bytes, skipPendingVerificationSync), ct);
         return Ok(ApiResponse<EvidenceProofUploadResultDto>.Success(result, "PRC proof uploaded."));
     }
 
@@ -223,14 +227,32 @@ public sealed class StaffController : ControllerBase
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Practitioner verification submitted."));
     }
 
+    [HttpPut("{id:guid}/verification/pending")]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> UpdatePendingVerification(Guid id, CancellationToken ct)
+    {
+        bool isSelf = _clinicContext.StaffId.HasValue && _clinicContext.StaffId.Value == id;
+        bool hasManage = _clinicContext.HasPermission(ClinicPermissions.StaffManage);
+
+        if (!hasManage && !isSelf)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<StaffMemberDto>.Fail(
+                $"Forbidden: Insufficient permissions. Required permission '{ClinicPermissions.StaffManage}' is not granted for this clinic role.",
+                new[] { new ApiFieldError("Permission", "FORBIDDEN", $"Missing required permission: {ClinicPermissions.StaffManage}") }));
+        }
+
+        var result = await _sender.Send(new UpdatePendingPractitionerVerificationCommand(id), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Pending practitioner verification submission updated."));
+    }
+
     [HttpPost("{id:guid}/withdraw-verification")]
     [HasPermission(ClinicPermissions.StaffManage)]
     public async Task<ActionResult<ApiResponse<StaffMemberDto>>> WithdrawVerification(
         Guid id,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] WithdrawPractitionerVerificationRequest? request,
-        CancellationToken ct)
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new WithdrawPractitionerVerificationCommand(id, request?.Reason), ct);
+        var result = await _sender.Send(new WithdrawPractitionerVerificationCommand(id, request?.Reason, skipPendingVerificationSync), ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Practitioner directory verification withdrawn."));
     }
 
@@ -253,9 +275,12 @@ public sealed class StaffController : ControllerBase
 
     [HttpDelete("{id:guid}")]
     [HasPermission(ClinicPermissions.StaffManage)]
-    public async Task<ActionResult<ApiResponse<bool>>> DeactivateStaffMember(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<bool>>> DeactivateStaffMember(
+        Guid id,
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new DeactivateStaffMemberCommand(id), ct);
+        var result = await _sender.Send(new DeactivateStaffMemberCommand(id, skipPendingVerificationSync), ct);
         return Ok(ApiResponse<bool>.Success(result, "Staff member deactivated successfully."));
     }
 
@@ -280,25 +305,34 @@ public sealed class StaffController : ControllerBase
 
     [HttpPost("{id:guid}/suspend")]
     [HasPermission(ClinicPermissions.StaffManage)]
-    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> SuspendStaffMember(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> SuspendStaffMember(
+        Guid id,
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new SuspendStaffMemberCommand(id), ct);
+        var result = await _sender.Send(new SuspendStaffMemberCommand(id, skipPendingVerificationSync), ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member suspended successfully."));
     }
 
     [HttpPost("{id:guid}/activate")]
     [HasPermission(ClinicPermissions.StaffManage)]
-    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ActivateStaffMember(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ActivateStaffMember(
+        Guid id,
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new ActivateStaffMemberCommand(id), ct);
+        var result = await _sender.Send(new ActivateStaffMemberCommand(id, skipPendingVerificationSync), ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member activated successfully."));
     }
 
     [HttpPost("{id:guid}/reactivate")]
     [HasPermission(ClinicPermissions.StaffManage)]
-    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ReactivateStaffMember(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ReactivateStaffMember(
+        Guid id,
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new ReactivateStaffMemberCommand(id), ct);
+        var result = await _sender.Send(new ReactivateStaffMemberCommand(id, skipPendingVerificationSync), ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member reactivated successfully."));
     }
 
@@ -315,9 +349,12 @@ public sealed class StaffController : ControllerBase
 
     [HttpDelete("{id:guid}/permanent")]
     [HasPermission(ClinicPermissions.StaffManage)]
-    public async Task<ActionResult<ApiResponse<bool>>> RemoveStaffMember(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<bool>>> RemoveStaffMember(
+        Guid id,
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new RemoveStaffMemberCommand(id), ct);
+        var result = await _sender.Send(new RemoveStaffMemberCommand(id, skipPendingVerificationSync), ct);
         return Ok(ApiResponse<bool>.Success(result, "Staff member permanently removed from facility directory."));
     }
 }
@@ -355,7 +392,8 @@ public sealed record UpdateStaffMemberRequest(
     string? PrcEvidenceObjectKey = null,
     string? VerificationContact = null,
     string? PublicBio = null,
-    string? AvatarUrl = null);
+    string? AvatarUrl = null,
+    bool SkipPendingVerificationSync = false);
 
 public sealed record UpdateMyProfileRequest(
     string FirstName,
@@ -376,4 +414,5 @@ public sealed record UpdateMyProfileRequest(
     string? PrcEvidenceObjectKey = null,
     string? VerificationContact = null,
     string? PublicBio = null,
-    string? AvatarUrl = null);
+    string? AvatarUrl = null,
+    bool SkipPendingVerificationSync = false);

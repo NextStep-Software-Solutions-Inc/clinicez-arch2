@@ -22,7 +22,7 @@ export interface VerificationStatusDisplay {
   badgeClassName: string;
 }
 
-const TONE_BADGE_CLASSES: Record<VerificationBadgeTone, string> = {
+export const TONE_BADGE_CLASSES: Record<VerificationBadgeTone, string> = {
   neutral: "bg-surface-muted text-text-muted border-border",
   info: "bg-primary-subtle text-primary border-primary/20",
   warning: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
@@ -166,6 +166,172 @@ export function formatVerificationTimestamp(iso?: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CLERK_USER_ID_REGEX = /^user_[a-zA-Z0-9_-]+$/;
+
+/** Returns true when a value is a raw UUID or Clerk `user_...` identifier rather than a human-readable name. */
+export function isRawUserId(value?: string | null): boolean {
+  if (!value) return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return UUID_REGEX.test(trimmed) || CLERK_USER_ID_REGEX.test(trimmed);
+}
+
+export interface HumanActorDisplay {
+  primary: string;
+  secondary: string | null;
+  tooltip: string | undefined;
+}
+
+function normalizeSpecialActorLabel(value: string): string {
+  if (value.toLowerCase() === "practitioner-otp") {
+    return "Practitioner (OTP Confirmation)";
+  }
+  return value;
+}
+
+/**
+ * Resolves a human-readable actor label without ever returning a raw UUID or Clerk `user_...` ID as `primary`.
+ * Raw IDs and emails are preserved for optional `tooltip` / `secondary` metadata.
+ */
+export function resolveHumanActorDisplay(
+  displayName?: string | null,
+  email?: string | null,
+  rawId?: string | null,
+  fallbackLabel = "Platform Reviewer",
+): HumanActorDisplay {
+  const cleanDisplay = displayName?.trim() || null;
+  const cleanEmail = email?.trim() || null;
+  const cleanRawId = rawId?.trim() || null;
+
+  let primary = fallbackLabel;
+  if (cleanDisplay && !isRawUserId(cleanDisplay)) {
+    primary = normalizeSpecialActorLabel(cleanDisplay);
+  } else if (cleanEmail && !isRawUserId(cleanEmail)) {
+    primary = cleanEmail;
+  } else if (cleanRawId && !isRawUserId(cleanRawId)) {
+    primary = normalizeSpecialActorLabel(cleanRawId);
+  }
+
+  const secondary = cleanEmail && cleanEmail !== primary ? cleanEmail : null;
+  const tooltipParts = [
+    secondary,
+    cleanRawId && cleanRawId !== primary ? cleanRawId : null,
+  ].filter((part): part is string => Boolean(part));
+
+  return {
+    primary,
+    secondary,
+    tooltip: tooltipParts.length > 0 ? tooltipParts.join(" • ") : undefined,
+  };
+}
+
+export type LicenseExpiryStatus = "valid" | "expiring_soon" | "expired" | "unknown";
+
+export interface LicenseExpiryDisplay {
+  dateText: string;
+  status: LicenseExpiryStatus;
+  badgeLabel: string | null;
+  badgeClassName: string | null;
+  daysRemaining: number | null;
+}
+
+/**
+ * Evaluates a `YYYY-MM-DD` (or ISO date prefix) expiry date using UTC date-only arithmetic
+ * so timezone offsets never shift expiration boundaries.
+ */
+export function getLicenseExpiryDisplay(
+  dateStr?: string | null,
+  referenceDate: Date = new Date(),
+): LicenseExpiryDisplay | null {
+  const trimmed = dateStr?.trim();
+  if (!trimmed) return null;
+
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) {
+    return {
+      dateText: trimmed,
+      status: "unknown",
+      badgeLabel: null,
+      badgeClassName: null,
+      daysRemaining: null,
+    };
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const expiryUtc = Date.UTC(year, month - 1, day);
+  const checkDate = new Date(expiryUtc);
+  if (
+    checkDate.getUTCFullYear() !== year ||
+    checkDate.getUTCMonth() !== month - 1 ||
+    checkDate.getUTCDate() !== day
+  ) {
+    return {
+      dateText: trimmed,
+      status: "unknown",
+      badgeLabel: null,
+      badgeClassName: null,
+      daysRemaining: null,
+    };
+  }
+
+  const todayUtc = Date.UTC(
+    referenceDate.getUTCFullYear(),
+    referenceDate.getUTCMonth(),
+    referenceDate.getUTCDate(),
+  );
+  const daysRemaining = Math.floor((expiryUtc - todayUtc) / 86_400_000);
+
+  if (daysRemaining < 0) {
+    return {
+      dateText: `${match[1]}-${match[2]}-${match[3]}`,
+      status: "expired",
+      badgeLabel: "Expired",
+      badgeClassName: TONE_BADGE_CLASSES.destructive,
+      daysRemaining,
+    };
+  }
+
+  if (daysRemaining <= 30) {
+    return {
+      dateText: `${match[1]}-${match[2]}-${match[3]}`,
+      status: "expiring_soon",
+      badgeLabel: "Expiring Soon",
+      badgeClassName: TONE_BADGE_CLASSES.warning,
+      daysRemaining,
+    };
+  }
+
+  return {
+    dateText: `${match[1]}-${match[2]}-${match[3]}`,
+    status: "valid",
+    badgeLabel: null,
+    badgeClassName: null,
+    daysRemaining,
+  };
+}
+
+/** Returns true when `updatedAtUtc` is present and meaningfully differs (> 1s) from `submittedAtUtc`. */
+export function isDistinctTimestamp(
+  updatedAtUtc?: string | null,
+  submittedAtUtc?: string | null,
+): boolean {
+  const cleanUpdated = updatedAtUtc?.trim();
+  if (!cleanUpdated) return false;
+  const cleanSubmitted = submittedAtUtc?.trim();
+  if (!cleanSubmitted) return true;
+
+  const updatedMs = Date.parse(cleanUpdated);
+  const submittedMs = Date.parse(cleanSubmitted);
+  if (!Number.isNaN(updatedMs) && !Number.isNaN(submittedMs)) {
+    return Math.abs(updatedMs - submittedMs) > 1000;
+  }
+
+  return cleanUpdated !== cleanSubmitted;
 }
 
 export type QueueStatusTab =

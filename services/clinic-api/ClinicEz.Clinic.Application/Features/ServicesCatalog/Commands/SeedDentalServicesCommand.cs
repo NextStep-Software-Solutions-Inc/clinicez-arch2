@@ -3,31 +3,39 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.ServicesCatalog.Common;
 using ClinicEz.Clinic.Application.Features.ServicesCatalog.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.ServicesCatalog.Commands;
 
-public sealed record SeedDentalServicesCommand : IRequest<List<ClinicServiceItemDto>>;
+public sealed record SeedDentalServicesCommand(bool SkipPendingVerificationSync = false) : IRequest<List<ClinicServiceItemDto>>;
 
 public sealed class SeedDentalServicesCommandHandler : IRequestHandler<SeedDentalServicesCommand, List<ClinicServiceItemDto>>
 {
     private readonly IRepository<ServiceItem> _serviceRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public SeedDentalServicesCommandHandler(
         IRepository<ServiceItem> serviceRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<FacilitySettings>? settingsRepo = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _serviceRepo = serviceRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _settingsRepo = settingsRepo;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<List<ClinicServiceItemDto>> Handle(SeedDentalServicesCommand request, CancellationToken cancellationToken)
@@ -85,13 +93,29 @@ public sealed class SeedDentalServicesCommandHandler : IRequestHandler<SeedDenta
 
         if (anyCreatedOrRestored)
         {
+            var saved = false;
             try
             {
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
+                saved = true;
             }
             catch (DbUpdateException)
             {
                 // Idempotent recovery for concurrent execution
+            }
+
+            if (saved && !request.SkipPendingVerificationSync && _settingsRepo != null && _directorySyncService != null)
+            {
+                var settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
+                if (settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+                {
+                    await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                        settings,
+                        throwOnConflict: false,
+                        _clinicContext.StaffId?.ToString(),
+                        _clinicContext.StaffName,
+                        cancellationToken);
+                }
             }
         }
 

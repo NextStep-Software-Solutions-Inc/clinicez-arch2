@@ -2,9 +2,11 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using MediatR;
@@ -13,7 +15,7 @@ using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
-public sealed record RemoveStaffMemberCommand(Guid Id) : IRequest<bool>;
+public sealed record RemoveStaffMemberCommand(Guid Id, bool SkipPendingVerificationSync = false) : IRequest<bool>;
 
 public sealed class RemoveStaffMemberCommandValidator : AbstractValidator<RemoveStaffMemberCommand>
 {
@@ -30,19 +32,25 @@ public sealed class RemoveStaffMemberCommandHandler : IRequestHandler<RemoveStaf
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IStaffAccessInvalidator? _accessCache;
+    private readonly IRepository<FacilitySettings>? _settingsRepository;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public RemoveStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IRepository<RefreshToken>? refreshTokenRepository = null,
-        IStaffAccessInvalidator? accessCache = null)
+        IStaffAccessInvalidator? accessCache = null,
+        IRepository<FacilitySettings>? settingsRepository = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _staffRepository = staffRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _refreshTokenRepository = refreshTokenRepository;
         _accessCache = accessCache;
+        _settingsRepository = settingsRepository;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<bool> Handle(RemoveStaffMemberCommand request, CancellationToken cancellationToken)
@@ -102,6 +110,23 @@ public sealed class RemoveStaffMemberCommandHandler : IRequestHandler<RemoveStaf
         }, cancellationToken);
 
         _accessCache?.Invalidate(staff.Id);
+
+        if (!request.SkipPendingVerificationSync
+            && (staff.IsDirectoryOptIn || staff.PublicVerificationStatus is PractitionerVerificationLevel.PendingVerification or PractitionerVerificationLevel.AwaitingConfirmation)
+            && _directorySyncService != null
+            && _settingsRepository != null)
+        {
+            var settings = await _settingsRepository.Query().FirstOrDefaultAsync(cancellationToken);
+            if (settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+            {
+                await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                    settings,
+                    throwOnConflict: false,
+                    _clinicContext.StaffId?.ToString(),
+                    _clinicContext.StaffName,
+                    cancellationToken);
+            }
+        }
 
         return true;
     }

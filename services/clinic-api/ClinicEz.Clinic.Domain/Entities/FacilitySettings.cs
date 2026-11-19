@@ -72,6 +72,7 @@ public sealed class FacilitySettings : ClinicScopedEntity
     public string? LetterheadAddress { get; set; }
     public string? LetterheadContact { get; set; }
     public string? LetterheadDohLto { get; set; }
+    public DateOnly? DohLtoExpiryDate { get; set; }
     public string? LetterheadFooter { get; set; }
     /// <summary>
     /// Document / Letterhead Accent Color used for clinical printouts, divider bars, and document headers.

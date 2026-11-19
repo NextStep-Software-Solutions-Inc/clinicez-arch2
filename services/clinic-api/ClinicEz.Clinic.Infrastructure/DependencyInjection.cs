@@ -313,6 +313,8 @@ public static class DependencyInjection
             .HandleReply(InteropTypes.GamotLookupResponded)
             .HandleReply(InteropTypes.PhilHealthResponse)
             .HandleReply(InteropTypes.MediaRoomResponded)
+            .HandleReply(InteropTypes.FacilityVerificationUpdateResponded)
+            .HandleReply(InteropTypes.PractitionerVerificationUpdateResponded)
             .Handle<CommsRecordingConsentLoggedPayload, CommsRecordingConsentLoggedHandler>(InteropTypes.CommsRecordingConsentLogged)
             .HandleEntitlementsChanged());
 

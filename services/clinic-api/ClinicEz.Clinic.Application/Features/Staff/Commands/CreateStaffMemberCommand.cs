@@ -47,7 +47,8 @@ public sealed record CreateStaffMemberCommand(
     string? PrcEvidenceObjectKey = null,
     string? VerificationContact = null,
     string? PublicBio = null,
-    string? AvatarUrl = null) : IRequest<StaffMemberDto>;
+    string? AvatarUrl = null,
+    bool SkipPendingVerificationSync = false) : IRequest<StaffMemberDto>;
 
 public sealed class CreateStaffMemberCommandValidator : AbstractValidator<CreateStaffMemberCommand>
 {
@@ -139,6 +140,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
     private readonly IFacilityPasswordHasher _passwordHasher;
     private readonly IRepository<Room>? _roomRepository;
     private readonly IClinicStaffInvitationNotifier? _invitationNotifier;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public CreateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
@@ -149,7 +151,8 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         IClinicContext clinicContext,
         IFacilityPasswordHasher? passwordHasher = null,
         IRepository<Room>? roomRepository = null,
-        IClinicStaffInvitationNotifier? invitationNotifier = null)
+        IClinicStaffInvitationNotifier? invitationNotifier = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _staffRepository = staffRepository;
         _roleRepository = roleRepository;
@@ -160,6 +163,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         _passwordHasher = passwordHasher ?? new FacilityPasswordHasher();
         _roomRepository = roomRepository;
         _invitationNotifier = invitationNotifier;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<StaffMemberDto> Handle(CreateStaffMemberCommand request, CancellationToken cancellationToken)
@@ -393,6 +397,19 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         catch (DbUpdateException ex) when (StaffEmailUniquenessHelper.IsStaffEmailUniqueViolation(ex))
         {
             throw new ValidationException(StaffEmailUniquenessHelper.DuplicateStaffEmailMessage);
+        }
+
+        if (!request.SkipPendingVerificationSync
+            && request.IsDirectoryOptIn
+            && _directorySyncService != null
+            && settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+        {
+            await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                settings,
+                throwOnConflict: false,
+                _clinicContext.StaffId?.ToString(),
+                _clinicContext.StaffName,
+                cancellationToken);
         }
 
         return StaffMemberDto.FromEntity(

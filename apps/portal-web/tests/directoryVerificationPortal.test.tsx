@@ -50,7 +50,7 @@ mock.module("@clerk/nextjs", () => ({
 
 import { apiClient } from "../src/transport/apiClient";
 import { verificationService } from "../src/services/verification.service";
-import { facilityService } from "../src/services/facility.service";
+import { facilityService, normalizeOptionalDateInput } from "../src/services/facility.service";
 import {
   isProtectedRoute,
   isPublicRoute,
@@ -69,6 +69,152 @@ import {
 
 const PORTAL_ROOT = path.resolve(__dirname, "..");
 const SRC_DIR = path.join(PORTAL_ROOT, "src");
+
+function createLocalHookHarness<Result, Props = any>(
+  hookFn: (props: Props) => Result,
+  initialProps?: Props,
+) {
+  const stateSlots: any[] = [];
+  const effectSlots: Array<{ fn: () => any; cleanup?: any; deps: any[]; hasChanged: boolean }> = [];
+  const refSlots: Array<{ current: any }> = [];
+  const memoSlots: Array<{ value: any; deps: any[] }> = [];
+  let slotIndex = 0;
+  let effectIndex = 0;
+  let refIndex = 0;
+  let memoIndex = 0;
+  let currentProps = initialProps as Props;
+  let result!: Result;
+  let isRendering = false;
+  let hasPendingRender = false;
+
+  const mockHooks: any = {
+    useState: (initial: any) => {
+      const idx = slotIndex++;
+      if (stateSlots.length <= idx) {
+        stateSlots.push(typeof initial === "function" ? initial() : initial);
+      }
+      const setState = (newVal: any) => {
+        const nextVal = typeof newVal === "function" ? newVal(stateSlots[idx]) : newVal;
+        if (!Object.is(stateSlots[idx], nextVal)) {
+          stateSlots[idx] = nextVal;
+          scheduleRender();
+        }
+      };
+      return [stateSlots[idx], setState];
+    },
+    useRef: (initial: any) => {
+      const idx = refIndex++;
+      if (refSlots.length <= idx) refSlots.push({ current: initial });
+      return refSlots[idx];
+    },
+    useCallback: (fn: any, deps: any[]) => mockHooks.useMemo(() => fn, deps),
+    useMemo: (fn: any, deps: any[]) => {
+      const idx = memoIndex++;
+      const prev = memoSlots[idx];
+      const changed = !prev || !deps || deps.some((d, i) => !Object.is(d, prev.deps[i]));
+      if (changed) {
+        const value = fn();
+        memoSlots[idx] = { value, deps };
+        return value;
+      }
+      return prev.value;
+    },
+    useEffect: (fn: any, deps: any[]) => {
+      const idx = effectIndex++;
+      const prev = effectSlots[idx];
+      const hasChanged =
+        !prev || !deps || !prev.deps || deps.some((d, i) => !Object.is(d, prev.deps[i]));
+      effectSlots[idx] = { fn, deps, hasChanged, cleanup: prev?.cleanup };
+    },
+    useLayoutEffect: (fn: any, deps: any[]) => mockHooks.useEffect(fn, deps),
+    useDebugValue: () => {},
+    useId: () => "portal-test-id",
+    useContext: (context: React.Context<any>) => (context as any)._currentValue,
+    useSyncExternalStore: (_sub: any, getSnap: () => any) => getSnap(),
+    useTransition: () => [false, (cb: () => void) => cb()],
+  };
+
+  function scheduleRender() {
+    if (isRendering) {
+      hasPendingRender = true;
+      return;
+    }
+    render();
+  }
+
+  function render() {
+    if (isRendering) return;
+    isRendering = true;
+    try {
+      do {
+        hasPendingRender = false;
+        slotIndex = 0;
+        effectIndex = 0;
+        refIndex = 0;
+        memoIndex = 0;
+        const internals = (React as any)
+          .__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+        const prevDispatcher = internals ? internals.H : null;
+        if (internals) internals.H = mockHooks;
+        try {
+          result = hookFn(currentProps);
+        } finally {
+          if (internals) internals.H = prevDispatcher;
+        }
+        for (const eff of effectSlots) {
+          if (eff.hasChanged) {
+            eff.hasChanged = false;
+            if (typeof eff.cleanup === "function") eff.cleanup();
+            eff.cleanup = eff.fn();
+          }
+        }
+      } while (hasPendingRender);
+    } finally {
+      isRendering = false;
+    }
+  }
+
+  render();
+
+  return {
+    get result() {
+      return { current: result };
+    },
+    rerender: (nextProps?: Props) => {
+      if (nextProps !== undefined) currentProps = nextProps;
+      render();
+    },
+    unmount: () => {
+      for (const eff of effectSlots) {
+        if (typeof eff.cleanup === "function") eff.cleanup();
+      }
+    },
+  };
+}
+
+function findNode(node: any, predicate: (el: any) => boolean): any {
+  if (!node || typeof node !== "object") return null;
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findNode(child, predicate);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (predicate(node)) return node;
+  if (node.props?.children) {
+    return findNode(node.props.children, predicate);
+  }
+  return null;
+}
+
+function extractNodeText(node: any): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractNodeText).join("");
+  if (node.props?.children) return extractNodeText(node.props.children);
+  return "";
+}
 
 describe("Phase 2B: Portal-Web Tenant & Public Directory Verification (Admin Isolation Enforced)", () => {
   let originalGet: typeof apiClient.get;
@@ -129,10 +275,22 @@ describe("Phase 2B: Portal-Web Tenant & Public Directory Verification (Admin Iso
             isPatientDiscoveryEligible: true,
             isPlatformVerified: false,
             ltoEvidenceObjectKey: "verification/lto/doc.pdf",
+            ltoExpiryDate: "2028-12-31",
             latestVerificationRequestId: "r-1",
             verifiedAtUtc: null,
             rejectionReason: "Blurry LTO scan",
-            latestRequest: null,
+            latestRequest: {
+              id: "r-1",
+              submissionNumber: 2,
+              requestKind: "Resubmission",
+              status: "PendingReview",
+              submittedAtUtc: "2026-11-18T00:00:00Z",
+              updatedAtUtc: "2026-11-19T02:00:00Z",
+              reviewedAtUtc: null,
+              reviewerNotes: null,
+              withdrawnAtUtc: null,
+              withdrawalReason: null,
+            },
             practitioners: [],
           },
         };
@@ -172,6 +330,8 @@ describe("Phase 2B: Portal-Web Tenant & Public Directory Verification (Admin Iso
       const status = await facilityService.getVerificationStatus("manila-care", "f-1");
       expect(status.platformVerificationStatus).toBe("Rejected");
       expect(status.rejectionReason).toBe("Blurry LTO scan");
+      expect(status.ltoExpiryDate).toBe("2028-12-31");
+      expect(status.latestRequest?.updatedAtUtc).toBe("2026-11-19T02:00:00Z");
 
       const file = new File(["%PDF-1.4"], "lto.pdf", { type: "application/pdf" });
       const uploadRes = await facilityService.uploadLtoProof("manila-care", "f-1", file);
@@ -340,6 +500,8 @@ describe("Phase 2B: Portal-Web Tenant & Public Directory Verification (Admin Iso
             status: "Active",
             createdAt: "2026-11-18T00:00:00Z",
             slug: "manila-care-ermita",
+            licenseToOperate: "DOH-LTO-101",
+            ltoExpiryDate: "2029-03-31",
             deploymentMode: "SharedCloud",
             visibility: "Private",
             acceptsExternalRequests: false,
@@ -349,6 +511,22 @@ describe("Phase 2B: Portal-Web Tenant & Public Directory Verification (Admin Iso
             ltoEvidenceObjectKey: "verification/lto/ermita.pdf",
             verifiedAtUtc: null,
           },
+          {
+            id: "f-2",
+            name: "Manila Care Makati",
+            facilityType: "Clinic",
+            status: "Active",
+            createdAt: "2026-11-18T00:00:00Z",
+            slug: "manila-care-makati",
+            deploymentMode: "SharedCloud",
+            visibility: "Private",
+            acceptsExternalRequests: false,
+            isPatientDiscoveryEligible: false,
+            platformVerificationStatus: "Unverified",
+            rejectionReason: null,
+            ltoEvidenceObjectKey: null,
+            verifiedAtUtc: null,
+          },
         ],
       })) as unknown as typeof apiClient.get;
 
@@ -356,6 +534,8 @@ describe("Phase 2B: Portal-Web Tenant & Public Directory Verification (Admin Iso
       expect(list[0].platformVerificationStatus).toBe("Rejected");
       expect(list[0].rejectionReason).toBe("DOH LTO document expired");
       expect(list[0].ltoEvidenceObjectKey).toBe("verification/lto/ermita.pdf");
+      expect(list[0].ltoExpiryDate).toBe("2029-03-31");
+      expect(list[1].ltoExpiryDate).toBeNull();
 
       expect(getPlatformVerificationDisplay("Unverified").label).toBe("Unverified");
       expect(getPlatformVerificationDisplay("PendingReview").label).toBe("Pending Review");
@@ -408,7 +588,60 @@ describe("Phase 2B: Portal-Web Tenant & Public Directory Verification (Admin Iso
       expect(imgHtml).not.toContain("verification/lto/t1/f1/ermita.png");
     });
 
-    test("FacilitySettingsHub wires Discovery toggle, inline LTO viewer, rejection notice, and submission summary", () => {
+    test("normalizeOptionalDateInput and updateFacilitySettings send ISO date or null instead of empty string", async () => {
+      expect(normalizeOptionalDateInput("2028-12-31")).toBe("2028-12-31");
+      expect(normalizeOptionalDateInput(" 2029-03-31 ")).toBe("2029-03-31");
+      expect(normalizeOptionalDateInput("")).toBeNull();
+      expect(normalizeOptionalDateInput("   ")).toBeNull();
+      expect(normalizeOptionalDateInput(null)).toBeNull();
+      expect(normalizeOptionalDateInput(undefined)).toBeNull();
+
+      const originalPut = apiClient.put;
+      const putCalls: Array<{ url: string; body: unknown }> = [];
+      (apiClient as unknown as { put: typeof apiClient.put }).put = (async (
+        url: string,
+        body: unknown,
+      ) => {
+        putCalls.push({ url, body });
+        return { data: { ok: true } };
+      }) as unknown as typeof apiClient.put;
+
+      try {
+        await facilityService.updateFacilitySettings("f-1", {
+          tenantSlug: "manila-care",
+          name: "Manila Care Ermita",
+          licenseToOperate: "DOH-LTO-101",
+          ltoExpiryDate: normalizeOptionalDateInput("2028-12-31"),
+        });
+        await facilityService.updateFacilitySettings("f-1", {
+          tenantSlug: "manila-care",
+          name: "Manila Care Ermita",
+          ltoExpiryDate: normalizeOptionalDateInput(""),
+        });
+      } finally {
+        apiClient.put = originalPut;
+      }
+
+      expect(putCalls[0]).toEqual({
+        url: "/facilities/f-1/settings",
+        body: {
+          tenantSlug: "manila-care",
+          name: "Manila Care Ermita",
+          licenseToOperate: "DOH-LTO-101",
+          ltoExpiryDate: "2028-12-31",
+        },
+      });
+      expect(putCalls[1]).toEqual({
+        url: "/facilities/f-1/settings",
+        body: {
+          tenantSlug: "manila-care",
+          name: "Manila Care Ermita",
+          ltoExpiryDate: null,
+        },
+      });
+    });
+
+    test("FacilitySettingsHub wires Discovery toggle, DOH LTO Expiry Date input, inline LTO viewer, rejection notice, and submission summary", () => {
       const hubSrc = fs.readFileSync(
         path.join(SRC_DIR, "components/dashboard/FacilitySettingsHub.tsx"),
         "utf8",
@@ -418,6 +651,16 @@ describe("Phase 2B: Portal-Web Tenant & Public Directory Verification (Admin Iso
       expect(hubSrc).toContain("InlineEvidenceViewer");
       expect(hubSrc).toContain("Submission History Summary");
       expect(hubSrc).toContain("Action Required — Verification Rejected");
+      expect(hubSrc).toContain("DOH LTO Expiry Date");
+      expect(hubSrc).toContain('id="facility-lto-expiry-date"');
+      expect(hubSrc).toContain('type="date"');
+      expect(hubSrc).toContain("normalizeOptionalDateInput(ltoExpiryDate)");
+      expect(hubSrc).toContain("facilityService.updateFacilitySettings");
+
+      const ltoBlockStart = hubSrc.indexOf('htmlFor="facility-lto-expiry-date"');
+      const ltoBlockSlice = hubSrc.slice(ltoBlockStart, ltoBlockStart + 700);
+      expect(ltoBlockSlice).not.toMatch(/#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b/g);
+      expect(ltoBlockSlice).not.toMatch(/\b(?:emerald|amber|yellow)-(?:[1-9]00|50|950)(?:\/[0-9]+)?\b/g);
 
       const closedHtml = renderToString(
         <FacilitySettingsHub
@@ -427,6 +670,7 @@ describe("Phase 2B: Portal-Web Tenant & Public Directory Verification (Admin Iso
             facilityType: "Clinic",
             status: "Active",
             createdAt: "2026-11-18T00:00:00Z",
+            ltoExpiryDate: "2028-12-31",
             isPatientDiscoveryEligible: true,
             platformVerificationStatus: "Rejected",
             rejectionReason: "Missing notary seal",
@@ -437,6 +681,142 @@ describe("Phase 2B: Portal-Web Tenant & Public Directory Verification (Admin Iso
         />,
       );
       expect(typeof closedHtml).toBe("string");
+    });
+
+    test("Runtime FacilitySettingsHub clears facility-lto-expiry-date to null and protects cleared input from statusDto refresh", async () => {
+      const originalPut = apiClient.put;
+      const putCalls: Array<{ url: string; body: any }> = [];
+      let verificationStatusFetches = 0;
+
+      (apiClient as unknown as { get: typeof apiClient.get }).get = (async (url: string) => {
+        if (url.includes("/verification-status")) {
+          verificationStatusFetches += 1;
+          return {
+            data: {
+              facilityId: "f-1",
+              platformVerificationStatus: "PendingReview",
+              isPatientDiscoveryEligible: true,
+              isPlatformVerified: false,
+              ltoEvidenceObjectKey: "verification/lto/existing.pdf",
+              ltoExpiryDate: "2027-06-30",
+              latestVerificationRequestId: "req-1",
+              verifiedAtUtc: null,
+              rejectionReason: null,
+              latestRequest: null,
+              practitioners: [],
+            },
+          };
+        }
+        return { data: { features: [] } };
+      }) as unknown as typeof apiClient.get;
+
+      (apiClient as unknown as { post: typeof apiClient.post }).post = (async () => ({
+        data: {
+          objectKey: "verification/lto/reloaded.pdf",
+          facilityId: "f-1",
+          ltoEvidenceObjectKey: "verification/lto/reloaded.pdf",
+        },
+      })) as unknown as typeof apiClient.post;
+
+      (apiClient as unknown as { put: typeof apiClient.put }).put = (async (
+        url: string,
+        body: unknown,
+      ) => {
+        putCalls.push({ url, body });
+        return { data: { ok: true } };
+      }) as unknown as typeof apiClient.put;
+
+      let openState = true;
+      let savedCount = 0;
+
+      try {
+        const harness = createLocalHookHarness(
+          (props: any) => FacilitySettingsHub(props),
+          {
+            facility: {
+              id: "f-1",
+              name: "Manila Care Ermita",
+              facilityType: "Clinic",
+              status: "Active",
+              createdAt: "2026-11-18T00:00:00Z",
+              licenseToOperate: "DOH-LTO-101",
+              ltoExpiryDate: "2027-06-30",
+              isPatientDiscoveryEligible: true,
+              platformVerificationStatus: "PendingReview",
+              ltoEvidenceObjectKey: "verification/lto/existing.pdf",
+            },
+            open: openState,
+            onOpenChange: (next: boolean) => {
+              openState = next;
+            },
+            onSaved: () => {
+              savedCount += 1;
+            },
+          },
+        );
+
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(verificationStatusFetches).toBe(1);
+
+        // 1) Initial value is "2027-06-30"
+        const expiryInputBefore = findNode(
+          harness.result.current,
+          (el) => el?.props?.id === "facility-lto-expiry-date",
+        );
+        expect(expiryInputBefore).not.toBeNull();
+        expect(expiryInputBefore.props.value).toBe("2027-06-30");
+
+        // 2) Clear input to "" (marks ltoExpiryDirtyRef.current = true)
+        expiryInputBefore.props.onChange({ target: { value: "" } });
+        const expiryInputCleared = findNode(
+          harness.result.current,
+          (el) => el?.props?.id === "facility-lto-expiry-date",
+        );
+        expect(expiryInputCleared.props.value).toBe("");
+
+        // 3) Trigger a statusDto refresh (via LTO proof upload -> loadVerificationStatus)
+        // Confirm ltoExpiryDirtyRef guard prevents stale statusDto.ltoExpiryDate ("2027-06-30") from overwriting ""
+        const ltoFileInput = findNode(
+          harness.result.current,
+          (el) => el?.props?.["aria-label"] === "Upload DOH LTO proof file",
+        );
+        expect(ltoFileInput).not.toBeNull();
+        const file = new File(["%PDF-1.4"], "lto.pdf", { type: "application/pdf" });
+        await ltoFileInput.props.onChange({
+          target: { files: [file], value: "lto.pdf" },
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(verificationStatusFetches).toBe(2);
+        const expiryInputAfterRefresh = findNode(
+          harness.result.current,
+          (el) => el?.props?.id === "facility-lto-expiry-date",
+        );
+        expect(expiryInputAfterRefresh.props.value).toBe("");
+
+        // 4) Click "Save Facility Settings" -> asserts explicit "ltoExpiryDate": null payload
+        const saveBtn = findNode(
+          harness.result.current,
+          (el) =>
+            typeof el?.props?.onClick === "function" &&
+            extractNodeText(el).includes("Save Facility Settings"),
+        );
+        expect(saveBtn).not.toBeNull();
+        await saveBtn.props.onClick();
+
+        expect(putCalls).toHaveLength(1);
+        expect(putCalls[0].url).toBe("/facilities/f-1/settings");
+        expect(Object.prototype.hasOwnProperty.call(putCalls[0].body, "ltoExpiryDate")).toBe(true);
+        expect(putCalls[0].body.ltoExpiryDate).toBeNull();
+        expect(openState).toBe(false);
+        expect(savedCount).toBe(2);
+
+        harness.unmount();
+      } finally {
+        apiClient.put = originalPut;
+      }
     });
   });
 

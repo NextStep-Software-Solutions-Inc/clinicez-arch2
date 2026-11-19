@@ -99,6 +99,7 @@ public class Facility : BaseEntity
     // Platform Directory Verification
     public PlatformVerificationStatus PlatformVerificationStatus { get; set; } = PlatformVerificationStatus.Unverified;
     public string? LtoEvidenceObjectKey { get; set; }
+    public DateOnly? LtoExpiryDate { get; set; }
     public Guid? LatestVerificationRequestId { get; set; }
     public DateTime? VerifiedAtUtc { get; set; }
     public string? VerifiedByAdminUserId { get; set; }

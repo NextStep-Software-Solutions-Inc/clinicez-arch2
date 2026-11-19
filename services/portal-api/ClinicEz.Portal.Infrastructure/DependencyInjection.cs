@@ -191,6 +191,10 @@ public static class DependencyInjection
                 InteropTypes.PhilHealthConfigRequested, InteropTypes.PhilHealthConfigResponded)
             .Respond<PhilHealthConfigPayload, PhilHealthConfigUpsertRespondedPayload, PhilHealthConfigUpsertRequestedResponder>(
                 InteropTypes.PhilHealthConfigUpsertRequested, InteropTypes.PhilHealthConfigUpsertResponded)
+            .Respond<FacilityVerificationUpdateRequestedPayload, VerificationUpdateRespondedPayload, FacilityVerificationUpdateRequestedResponder>(
+                InteropTypes.FacilityVerificationUpdateRequested, InteropTypes.FacilityVerificationUpdateResponded)
+            .Respond<PractitionerVerificationUpdateRequestedPayload, VerificationUpdateRespondedPayload, PractitionerVerificationUpdateRequestedResponder>(
+                InteropTypes.PractitionerVerificationUpdateRequested, InteropTypes.PractitionerVerificationUpdateResponded)
             .HandleReply(InteropTypes.YakapTransmittalResponded)
             .HandleReply(InteropTypes.YakapSubmissionResponded)
             .HandleReply(InteropTypes.VerificationEvidenceResponded));

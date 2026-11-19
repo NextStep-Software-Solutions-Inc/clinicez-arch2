@@ -53,7 +53,8 @@ public sealed class DoctorSchedulesController : ControllerBase
             IsActive: request.IsActive,
             EffectiveStartDate: request.EffectiveStartDate,
             EffectiveEndDate: request.EffectiveEndDate,
-            Breaks: request.Breaks);
+            Breaks: request.Breaks,
+            SkipPendingVerificationSync: request.SkipPendingVerificationSync);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<DoctorScheduleTemplateDto>.Success(result, "Doctor schedule template saved successfully."));
@@ -64,9 +65,10 @@ public sealed class DoctorSchedulesController : ControllerBase
     public async Task<ActionResult<ApiResponse<bool>>> DeleteTemplate(
         Guid doctorId,
         Guid templateId,
-        CancellationToken ct)
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new DeleteDoctorScheduleTemplateCommand(doctorId, templateId), ct);
+        var result = await _sender.Send(new DeleteDoctorScheduleTemplateCommand(doctorId, templateId, skipPendingVerificationSync), ct);
         return Ok(ApiResponse<bool>.Success(result, "Doctor schedule template removed successfully."));
     }
 
@@ -137,7 +139,8 @@ public sealed record UpsertTemplateRequest(
     bool IsActive = true,
     DateOnly? EffectiveStartDate = null,
     DateOnly? EffectiveEndDate = null,
-    List<DoctorBreakTimeDto>? Breaks = null);
+    List<DoctorBreakTimeDto>? Breaks = null,
+    bool SkipPendingVerificationSync = false);
 
 public sealed record CreateLeaveRequest(
     string? DoctorName,

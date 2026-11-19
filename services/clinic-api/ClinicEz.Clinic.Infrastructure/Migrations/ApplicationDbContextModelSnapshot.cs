@@ -2171,6 +2171,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("DocumentSignatoriesJson")
                         .HasColumnType("text");
 
+                    b.Property<DateOnly?>("DohLtoExpiryDate")
+                        .HasColumnType("date");
+
                     b.Property<bool>("EnableAppointmentReminders")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

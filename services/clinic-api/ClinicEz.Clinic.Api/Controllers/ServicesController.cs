@@ -62,7 +62,8 @@ public sealed class ServicesController : ControllerBase
             PhilHealthCode: request.PhilHealthCode,
             PhilHealthDescription: request.PhilHealthDescription,
             IsPhilHealthFormulary: request.IsPhilHealthFormulary,
-            IsNurseOrderable: request.IsNurseOrderable);
+            IsNurseOrderable: request.IsNurseOrderable,
+            SkipPendingVerificationSync: request.SkipPendingVerificationSync);
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicServiceItemDto>.Success(result, "Service updated successfully."));
     }
@@ -79,9 +80,11 @@ public sealed class ServicesController : ControllerBase
 
     [HttpPost("seed-dental")]
     [HasPermission(ClinicPermissions.ServicesManage)]
-    public async Task<ActionResult<ApiResponse<List<ClinicServiceItemDto>>>> SeedDentalServices(CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<List<ClinicServiceItemDto>>>> SeedDentalServices(
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new SeedDentalServicesCommand(), ct);
+        var result = await _sender.Send(new SeedDentalServicesCommand(skipPendingVerificationSync), ct);
         return Ok(ApiResponse<List<ClinicServiceItemDto>>.Success(result, "Dental service presets seeded successfully."));
     }
 }
@@ -95,4 +98,5 @@ public sealed record UpdateClinicServiceItemRequest(
     string? PhilHealthCode = null,
     string? PhilHealthDescription = null,
     bool IsPhilHealthFormulary = false,
-    bool IsNurseOrderable = false);
+    bool IsNurseOrderable = false,
+    bool SkipPendingVerificationSync = false);

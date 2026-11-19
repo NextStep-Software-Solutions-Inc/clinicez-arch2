@@ -79,8 +79,25 @@ public sealed class PractitionerVerificationRequestedHandler(
 
         foreach (var oldReq in priorForStaff.Where(r => r.Status is "PendingReview" or "AwaitingOtp"))
         {
+            var wasAwaitingOtp = oldReq.Status == "AwaitingOtp";
             oldReq.Status = "Superseded";
+            oldReq.OtpTokenHash = null;
+            oldReq.OtpExpiresAtUtc = null;
             oldReq.UpdatedAt = now;
+
+            if (wasAwaitingOtp)
+            {
+                var aff = dbContext.PractitionerAffiliations.Local.FirstOrDefault(
+                        a => !a.IsDeleted && a.FacilityId == facility.Id && a.ClinicStaffMemberId == oldReq.ClinicStaffMemberId)
+                    ?? await dbContext.PractitionerAffiliations.FirstOrDefaultAsync(
+                        a => !a.IsDeleted && a.FacilityId == facility.Id && a.ClinicStaffMemberId == oldReq.ClinicStaffMemberId, ct);
+                if (aff is not null && aff.AffiliationStatus == "AwaitingConfirmation")
+                {
+                    aff.AffiliationStatus = "Withdrawn";
+                    aff.WithdrawnAtUtc = now;
+                    aff.UpdatedAt = now;
+                }
+            }
         }
 
         var nextSubmissionNumber = (priorForStaff.Select(r => (int?)r.SubmissionNumber).Max() ?? 0) + 1;
@@ -114,10 +131,12 @@ public sealed class PractitionerVerificationRequestedHandler(
                 otpCodeHash = DirectoryVerificationHelper.HashSecret(otpCodeForEmail);
                 otpExpiresAt = now.AddHours(DirectoryVerificationHelper.AffiliationOtpTtlHours);
 
-                var affiliation = await dbContext.PractitionerAffiliations
-                    .FirstOrDefaultAsync(a => !a.IsDeleted
-                                              && a.FacilityId == facility.Id
-                                              && a.ClinicStaffMemberId == payload.ClinicStaffMemberId, ct);
+                var affiliation = dbContext.PractitionerAffiliations.Local.FirstOrDefault(
+                        a => !a.IsDeleted && a.FacilityId == facility.Id && a.ClinicStaffMemberId == payload.ClinicStaffMemberId)
+                    ?? await dbContext.PractitionerAffiliations
+                        .FirstOrDefaultAsync(a => !a.IsDeleted
+                                                  && a.FacilityId == facility.Id
+                                                  && a.ClinicStaffMemberId == payload.ClinicStaffMemberId, ct);
 
                 var localDisplayName = DirectoryVerificationHelper.FormatDisplayName(payload.Title, payload.FirstName, payload.LastName);
                 var availJson = DirectoryVerificationHelper.SerializeAvailabilities(payload.Availabilities);
@@ -183,7 +202,8 @@ public sealed class PractitionerVerificationRequestedHandler(
             HasNameMismatch: hasNameMismatch,
             MatchedPractitionerId: matched?.Id,
             MatchedPractitionerName: matchedName,
-            OtpCodeHash: otpCodeHash);
+            OtpCodeHash: otpCodeHash,
+            SubmittedByDisplayName: payload.SubmittedByDisplayName);
 
         var pracReq = new PractitionerVerificationRequest
         {
@@ -205,6 +225,7 @@ public sealed class PractitionerVerificationRequestedHandler(
             PrcEvidenceObjectKey = payload.PrcEvidenceObjectKey,
             VerificationContact = payload.VerificationContact,
             SubmittedByClinicUserId = payload.SubmittedByClinicUserId,
+            SubmittedByDisplayName = payload.SubmittedByDisplayName,
             SubmittedAtUtc = submittedAt,
             OtpTokenHash = otpTokenHash,
             OtpExpiresAtUtc = otpExpiresAt,
@@ -216,7 +237,7 @@ public sealed class PractitionerVerificationRequestedHandler(
             dbContext,
             payloadTenantId,
             payload.SubmittedByClinicUserId ?? sender.Address,
-            payload.SubmittedByClinicUserId ?? "Clinic Admin",
+            !string.IsNullOrWhiteSpace(payload.SubmittedByDisplayName) ? payload.SubmittedByDisplayName.Trim() : "Clinic Admin",
             "ClinicAdmin",
             "practitioner-submitted",
             new

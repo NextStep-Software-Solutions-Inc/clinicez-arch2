@@ -44,7 +44,8 @@ public record FacilityDto(
     PlatformVerificationStatus PlatformVerificationStatus = PlatformVerificationStatus.Unverified,
     string? RejectionReason = null,
     string? LtoEvidenceObjectKey = null,
-    DateTime? VerifiedAtUtc = null
+    DateTime? VerifiedAtUtc = null,
+    DateOnly? LtoExpiryDate = null
 );
 
 public record GetFacilitiesQuery(string TenantSlug) : IRequest<List<FacilityDto>>;
@@ -105,7 +106,8 @@ public class GetFacilitiesQueryHandler(
                 f.PlatformVerificationStatus,
                 f.RejectionReason,
                 f.LtoEvidenceObjectKey,
-                f.VerifiedAtUtc
+                f.VerifiedAtUtc,
+                f.LtoExpiryDate
             );
         }).ToList();
     }

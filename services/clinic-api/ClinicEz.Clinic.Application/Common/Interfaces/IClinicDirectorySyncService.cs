@@ -6,7 +6,7 @@ using ClinicEz.Clinic.Domain.Entities;
 namespace ClinicEz.Clinic.Application.Common.Interfaces;
 
 /// <summary>
-/// Synchronizes clinic directory profiles and platform verification requests via the transactional Interop outbox.
+/// Synchronizes clinic directory profiles and platform verification requests via Interop.
 /// </summary>
 public interface IClinicDirectorySyncService
 {
@@ -26,5 +26,20 @@ public interface IClinicDirectorySyncService
         string requestKind,
         string? submittedByClinicUserId = null,
         DateTime? submittedAtUtc = null,
+        string? submittedByDisplayName = null,
+        CancellationToken ct = default);
+
+    Task SyncPendingFacilityVerificationAsync(
+        FacilitySettings settings,
+        bool throwOnConflict,
+        string? updatedByClinicUserId = null,
+        string? updatedByDisplayName = null,
+        CancellationToken ct = default);
+
+    Task SyncPendingPractitionerVerificationAsync(
+        Guid staffId,
+        bool throwOnConflict,
+        string? updatedByClinicUserId = null,
+        string? updatedByDisplayName = null,
         CancellationToken ct = default);
 }

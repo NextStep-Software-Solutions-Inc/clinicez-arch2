@@ -40,6 +40,7 @@ const workspaceFacilitySchema = z.object({
   consoleUrl: optionalText,
   classification: optionalText,
   licenseToOperate: optionalText,
+  ltoExpiryDate: optionalText,
   philHealthAccreditationNumber: optionalText,
   taxIdentificationNumber: optionalText,
   operatingHours: optionalText,
@@ -119,12 +120,40 @@ const rotateHubCredentialsResultSchema = z.object({
   hubCredentials: hubRotatedCredentialsSchema,
 });
 
-const setDiscoveryEligibilityResultSchema = z.object({
+export const setDiscoveryEligibilityResultSchema = z.object({
   facilityId: z.string(),
   isEligible: z.boolean(),
   updatedAt: z.string(),
 });
 export type SetDiscoveryEligibilityResult = z.infer<typeof setDiscoveryEligibilityResultSchema>;
+
+export interface UpdateFacilitySettingsPayload {
+  tenantSlug: string;
+  name?: string;
+  slug?: string;
+  status?: "Provisioning" | "Active" | "Suspended" | "Failed";
+  classification?: string;
+  licenseToOperate?: string;
+  philHealthAccreditationNumber?: string;
+  taxIdentificationNumber?: string;
+  operatingHours?: string;
+  region?: string;
+  province?: string;
+  city?: string;
+  barangay?: string;
+  zipCode?: string;
+  streetAddress?: string;
+  contactNumber?: string;
+  contactEmail?: string;
+  notificationPreferencesJson?: string;
+  ltoExpiryDate?: string | null;
+}
+
+/** Normalizes `<Input type="date" />` values so blank/whitespace inputs become `null` for ASP.NET Core `DateOnly?`. */
+export function normalizeOptionalDateInput(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
 
 export const facilityService = {
   getFacilities: async (tenantSlug: string): Promise<WorkspaceFacility[]> => {
@@ -189,6 +218,18 @@ export const facilityService = {
     facilityId: string,
   ): Promise<EvidenceBlobResult> => {
     return verificationService.fetchFacilityLtoProof(facilityId, tenantSlug);
+  },
+
+  /** Updates facility profile and statutory settings (`PUT /facilities/{id}/settings`). */
+  updateFacilitySettings: async (
+    facilityId: string,
+    payload: UpdateFacilitySettingsPayload,
+  ): Promise<unknown> => {
+    const res = await apiClient.put<unknown>(
+      `/facilities/${encodeURIComponent(facilityId)}/settings`,
+      payload,
+    );
+    return res.data;
   },
 };
 

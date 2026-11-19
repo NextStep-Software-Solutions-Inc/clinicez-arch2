@@ -19,13 +19,15 @@ import { theme } from '../../constants/theme';
 import { notify, Alert } from '../../utils/feedback';
 import {
   clinicService,
+  isVerificationConflictError,
   StaffMember,
   StaffRole,
   ResetStaffPasswordResult,
   ClinicRole,
   SignatureMode,
+  PlatformVerificationStatus,
 } from '../../services/clinicService';
-import { Chip, FieldGroup } from './common';
+import { Chip, FieldGroup, PendingVerificationNote } from './common';
 
 import {
   RoleOption,
@@ -45,6 +47,7 @@ import {
   getPractitionerDirectoryActions,
   isClinicianRole,
   isStaffRecordReadyForVerification,
+  PENDING_VERIFICATION_BUTTON_LABEL,
   pickVerificationEvidenceFile,
   resolvePractitionerVerificationBadge,
   toEvidenceFormData,
@@ -109,6 +112,8 @@ interface StaffManagementTabProps {
   showAddModal: boolean;
   setShowAddModal: (show: boolean) => void;
   onStaffAdded: () => Promise<void>;
+  platformVerificationStatus?: PlatformVerificationStatus;
+  onRefreshVerificationState?: () => Promise<void>;
 }
 
 export default function StaffManagementTab({
@@ -123,6 +128,8 @@ export default function StaffManagementTab({
   showAddModal,
   setShowAddModal,
   onStaffAdded,
+  platformVerificationStatus,
+  onRefreshVerificationState,
 }: StaffManagementTabProps) {
   const { isCompact } = useBreakpoint();
   const { user } = useAuth();
@@ -242,6 +249,54 @@ export default function StaffManagementTab({
       activeSystemAdmins.length <= 1
   );
 
+  const prevStaffPropRef = useRef(staff);
+
+  // Keep open Edit Staff modal synchronized when parent refreshes staff after 409/background updates
+  useEffect(() => {
+    if (staff === prevStaffPropRef.current) return;
+    prevStaffPropRef.current = staff;
+    if (!editingStaff) return;
+    const latest = staff.find((member) => member.id === editingStaff.id);
+    if (!latest) return;
+    if (
+      latest.publicVerificationStatus !== editingStaff.publicVerificationStatus ||
+      latest.publicVerificationReason !== editingStaff.publicVerificationReason ||
+      latest.isDirectoryOptIn !== editingStaff.isDirectoryOptIn ||
+      latest.prcEvidenceObjectKey !== editingStaff.prcEvidenceObjectKey ||
+      latest.prcLicenseNumber !== editingStaff.prcLicenseNumber
+    ) {
+      setEditingStaff(latest);
+      if (latest.isDirectoryOptIn !== editingStaff.isDirectoryOptIn) {
+        setIsDirectoryOptIn(Boolean(latest.isDirectoryOptIn));
+      }
+      if (latest.prcEvidenceObjectKey !== editingStaff.prcEvidenceObjectKey) {
+        setPrcEvidenceObjectKey(latest.prcEvidenceObjectKey || null);
+      }
+    }
+  }, [staff, editingStaff]);
+
+  const refreshEditingStaffAfterConflict = async (
+    targetStaffId: string,
+    options?: { includeRooms?: boolean },
+  ) => {
+    const [[freshStaffList]] = await Promise.all([
+      clinicService.getStaff(),
+      onRefreshStaff(),
+      ...(options?.includeRooms ? [refreshRooms()] : []),
+      refreshGlobalStaff(),
+      onRefreshVerificationState?.(),
+    ]);
+    if (Array.isArray(freshStaffList) && freshStaffList.length > 0) {
+      setStaff(freshStaffList);
+      const freshTarget = freshStaffList.find((member) => member.id === targetStaffId);
+      if (freshTarget) {
+        setEditingStaff((prev) => (prev && prev.id === targetStaffId ? freshTarget : prev));
+        setIsDirectoryOptIn(Boolean(freshTarget.isDirectoryOptIn));
+        setPrcEvidenceObjectKey(freshTarget.prcEvidenceObjectKey || null);
+      }
+    }
+  };
+
   // Doctor Roster Calendar Modal State
   const [rosterModalVisible, setRosterModalVisible] = useState(false);
   const [rosterDoctorId, setRosterDoctorId] = useState<string | undefined>(undefined);
@@ -338,11 +393,48 @@ export default function StaffManagementTab({
       return;
     }
 
+    const targetStaff =
+      editingStaff?.id === targetStaffId
+        ? editingStaff
+        : staff.find((member) => member.id === targetStaffId);
+    const isTargetClinician = Boolean(targetStaff && isClinicianRole(targetStaff.role));
+    const isEditingTargetStaff = Boolean(editingStaff && editingStaff.id === targetStaffId);
+    const prcChangedWhileVerified = Boolean(
+      isEditingTargetStaff &&
+        targetStaff?.publicVerificationStatus === 'Verified' &&
+        (targetStaff.prcLicenseNumber ?? '').trim() !== prc.trim(),
+    );
+    const isTargetStaffPending = Boolean(
+      isTargetClinician &&
+        targetStaff &&
+        targetStaff.isDirectoryOptIn &&
+        targetStaff.publicVerificationStatus === 'PendingVerification',
+    );
+    const isTargetFacilityPending = Boolean(
+      !isTargetStaffPending &&
+        isTargetClinician &&
+        targetStaff &&
+        targetStaff.isDirectoryOptIn &&
+        platformVerificationStatus === 'PendingReview' &&
+        targetStaff.publicVerificationStatus &&
+        targetStaff.publicVerificationStatus !== 'Unverified' &&
+        targetStaff.publicVerificationStatus !== 'Rejected' &&
+        targetStaff.publicVerificationStatus !== 'Expired' &&
+        targetStaff.publicVerificationStatus !== 'Suspended' &&
+        !prcChangedWhileVerified,
+    );
+    const shouldSyncPendingPrc = isTargetStaffPending || isTargetFacilityPending;
+
     setUploadingPrcProof(true);
-    const [res, err] = await clinicService.uploadStaffPrcProof(targetStaffId, toEvidenceFormData(picked.file));
-    setUploadingPrcProof(false);
+    const [res, err] = await clinicService.uploadStaffPrcProof(
+      targetStaffId,
+      toEvidenceFormData(picked.file),
+      undefined,
+      shouldSyncPendingPrc ? { skipPendingVerificationSync: true } : undefined,
+    );
 
     if (err || !res?.objectKey) {
+      setUploadingPrcProof(false);
       const msg = err?.message || 'Could not upload PRC proof.';
       setEditError(msg);
       notify.error(msg);
@@ -357,6 +449,34 @@ export default function StaffManagementTab({
         member.id === targetStaffId ? { ...member, prcEvidenceObjectKey: res.objectKey } : member,
       ),
     );
+
+    if (shouldSyncPendingPrc) {
+      const [, syncErr] = isTargetStaffPending
+        ? await clinicService.updatePendingStaffVerification(targetStaffId)
+        : await clinicService.updatePendingDirectoryVerification();
+      setUploadingPrcProof(false);
+      if (syncErr) {
+        if (isVerificationConflictError(syncErr)) {
+          const conflictMsg =
+            syncErr.message ||
+            'Verification submission is no longer pending review. Refreshing status.';
+          setEditError(conflictMsg);
+          notify.error(conflictMsg);
+          await refreshEditingStaffAfterConflict(targetStaffId);
+          return;
+        }
+        const syncMsg =
+          syncErr.message ||
+          'PRC proof uploaded locally, but pending verification update failed.';
+        setEditError(syncMsg);
+        notify.error(syncMsg);
+        return;
+      }
+      notify.success('PRC proof replaced and pending verification submission updated.');
+      return;
+    }
+
+    setUploadingPrcProof(false);
     notify.success('PRC proof uploaded.');
   };
 
@@ -540,6 +660,27 @@ export default function StaffManagementTab({
     const canHaveRoom = clinicianAllowed;
     const nextRoomIds = canHaveRoom ? assignedRoomIds : [];
 
+    const needsVerificationSubmit =
+      effectiveOptIn &&
+      (!editingStaff.publicVerificationStatus ||
+        editingStaff.publicVerificationStatus === 'Unverified' ||
+        editingStaff.publicVerificationStatus === 'Rejected' ||
+        editingStaff.publicVerificationStatus === 'Expired' ||
+        editingStaff.publicVerificationStatus === 'Suspended');
+    const prcChangedWhileVerified =
+      effectiveOptIn &&
+      editingStaff.publicVerificationStatus === 'Verified' &&
+      (editingStaff.prcLicenseNumber ?? '').trim() !== prc.trim();
+    const isPractitionerPending =
+      effectiveOptIn && editingStaff.publicVerificationStatus === 'PendingVerification';
+    const isFacilityPendingForStaff =
+      effectiveOptIn &&
+      !isPractitionerPending &&
+      !needsVerificationSubmit &&
+      !prcChangedWhileVerified &&
+      platformVerificationStatus === 'PendingReview';
+    const shouldSyncPendingEdit = isPractitionerPending || isFacilityPendingForStaff;
+
     const [updated, err] = await clinicService.updateStaff(editingStaff.id, {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -560,9 +701,10 @@ export default function StaffManagementTab({
       defaultSignatureMode: effectiveStaffRole === 'Doctor' ? defaultSignatureMode : undefined,
       isDirectoryOptIn: effectiveOptIn,
       prcExpiryDate: clinicianAllowed && prcExpiryDate.trim() ? prcExpiryDate.trim() : null,
-      prcEvidenceObjectKey: clinicianAllowed ? prcEvidenceObjectKey || null : null,
-      verificationContact: clinicianAllowed ? verificationContact.trim() || null : null,
-      publicBio: clinicianAllowed ? publicBio.trim() || null : null,
+      prcEvidenceObjectKey: clinicianAllowed ? prcEvidenceObjectKey ?? '' : '',
+      verificationContact: clinicianAllowed ? verificationContact.trim() : '',
+      publicBio: clinicianAllowed ? publicBio.trim() : '',
+      ...(shouldSyncPendingEdit ? { skipPendingVerificationSync: true } : {}),
     });
 
     if (err || !updated) {
@@ -572,19 +714,37 @@ export default function StaffManagementTab({
     }
 
     let finalUpdated = updated;
-    const needsVerificationSubmit =
-      effectiveOptIn &&
-      (!editingStaff.publicVerificationStatus ||
-        editingStaff.publicVerificationStatus === 'Unverified' ||
-        editingStaff.publicVerificationStatus === 'Rejected' ||
-        editingStaff.publicVerificationStatus === 'Expired' ||
-        editingStaff.publicVerificationStatus === 'Suspended');
-    const prcChangedWhileVerified =
-      effectiveOptIn &&
-      editingStaff.publicVerificationStatus === 'Verified' &&
-      (editingStaff.prcLicenseNumber ?? '').trim() !== prc.trim();
 
-    if ((needsVerificationSubmit || prcChangedWhileVerified) && updated.publicVerificationStatus !== 'PendingVerification') {
+    if (shouldSyncPendingEdit) {
+      const [syncedStaff, syncErr] = isPractitionerPending
+        ? await clinicService.updatePendingStaffVerification(updated.id)
+        : await clinicService.updatePendingDirectoryVerification();
+
+      if (syncErr) {
+        setSavingEdit(false);
+        setStaff((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+        setEditingStaff(updated);
+        if (isVerificationConflictError(syncErr)) {
+          const conflictMsg =
+            syncErr.message ||
+            'Verification submission is no longer pending review. Refreshing status.';
+          setEditError(conflictMsg);
+          notify.error(conflictMsg);
+          await refreshEditingStaffAfterConflict(updated.id, { includeRooms: true });
+          return;
+        }
+        const syncMsg =
+          syncErr.message ||
+          'Staff details saved locally, but pending verification update failed.';
+        setEditError(syncMsg);
+        notify.error(syncMsg);
+        return;
+      }
+
+      if (isPractitionerPending && syncedStaff && 'id' in syncedStaff) {
+        finalUpdated = syncedStaff as StaffMember;
+      }
+    } else if ((needsVerificationSubmit || prcChangedWhileVerified) && updated.publicVerificationStatus !== 'PendingVerification') {
       const [submitted, submitErr] = await clinicService.submitStaffVerification(updated.id);
       if (submitErr || !submitted) {
         setSavingEdit(false);
@@ -605,7 +765,9 @@ export default function StaffManagementTab({
     setStaff((prev) => prev.map((s) => (s.id === finalUpdated.id ? finalUpdated : s)));
     setEditingStaff(null);
     notify.success(
-      needsVerificationSubmit || prcChangedWhileVerified
+      shouldSyncPendingEdit
+        ? `${finalUpdated.firstName} ${finalUpdated.lastName} saved and pending verification submission updated.`
+        : needsVerificationSubmit || prcChangedWhileVerified
         ? `${finalUpdated.firstName} ${finalUpdated.lastName} saved and submitted for verification.`
         : `Staff member ${finalUpdated.firstName} ${finalUpdated.lastName} updated.`,
     );
@@ -1115,6 +1277,19 @@ export default function StaffManagementTab({
       mode === 'edit' &&
       editingStaff?.publicVerificationStatus === 'Verified' &&
       (editingStaff.prcLicenseNumber ?? '').trim() !== prc.trim();
+    const isPendingPractitionerOrFacility =
+      mode === 'edit' &&
+      Boolean(editingStaff) &&
+      isDirectoryOptIn &&
+      (editingStaff?.publicVerificationStatus === 'PendingVerification' ||
+        (Boolean(editingStaff?.isDirectoryOptIn) &&
+          !prcChangedWhileVerified &&
+          Boolean(editingStaff?.publicVerificationStatus) &&
+          editingStaff?.publicVerificationStatus !== 'Unverified' &&
+          editingStaff?.publicVerificationStatus !== 'Rejected' &&
+          editingStaff?.publicVerificationStatus !== 'Expired' &&
+          editingStaff?.publicVerificationStatus !== 'Suspended' &&
+          platformVerificationStatus === 'PendingReview'));
     const targetStaffId = mode === 'edit' ? editingStaff?.id : undefined;
 
     return (
@@ -1242,6 +1417,10 @@ export default function StaffManagementTab({
                 }
                 testID={`prc-proof-preview-${mode}`}
               />
+            ) : null}
+
+            {isPendingPractitionerOrFacility ? (
+              <PendingVerificationNote testID="staff-prc-pending-helper-note" />
             ) : null}
 
             <Input
@@ -2134,7 +2313,26 @@ export default function StaffManagementTab({
       </Modal>
 
       {/* Edit Staff Modal */}
-      {editingStaff ? (
+      {editingStaff ? (() => {
+        const editEffectiveRole = isEditingSelf ? editingStaff.role : role;
+        const editClinicianAllowed = isClinicianRole(editEffectiveRole);
+        const editOptIn = editClinicianAllowed && isDirectoryOptIn;
+        const editNeedsSubmit =
+          editOptIn &&
+          (!editingStaff.publicVerificationStatus ||
+            editingStaff.publicVerificationStatus === 'Unverified' ||
+            editingStaff.publicVerificationStatus === 'Rejected' ||
+            editingStaff.publicVerificationStatus === 'Expired' ||
+            editingStaff.publicVerificationStatus === 'Suspended' ||
+            (editingStaff.publicVerificationStatus === 'Verified' &&
+              (editingStaff.prcLicenseNumber ?? '').trim() !== prc.trim()));
+        const editIsPendingSync =
+          editOptIn &&
+          !editNeedsSubmit &&
+          (editingStaff.publicVerificationStatus === 'PendingVerification' ||
+            platformVerificationStatus === 'PendingReview');
+
+        return (
         <Modal
           visible
           onClose={() => setEditingStaff(null)}
@@ -2142,30 +2340,29 @@ export default function StaffManagementTab({
           subtitle={`Update details and credentials for ${editingStaff.firstName} ${editingStaff.lastName}`}
           maxWidth={540}
           footer={
-            <View style={styles.modalFooter}>
-              <Button
-                title="Cancel"
-                variant="ghost"
-                onPress={() => setEditingStaff(null)}
-                disabled={savingEdit}
-              />
-              <Button
-                title={
-                  isClinicianRole(isEditingSelf ? editingStaff.role : role) &&
-                  isDirectoryOptIn &&
-                  (!editingStaff.publicVerificationStatus ||
-                    editingStaff.publicVerificationStatus === 'Unverified' ||
-                    editingStaff.publicVerificationStatus === 'Rejected' ||
-                    editingStaff.publicVerificationStatus === 'Expired' ||
-                    editingStaff.publicVerificationStatus === 'Suspended' ||
-                    (editingStaff.publicVerificationStatus === 'Verified' &&
-                      (editingStaff.prcLicenseNumber ?? '').trim() !== prc.trim()))
-                    ? 'Save & Submit for Verification'
-                    : 'Save Changes'
-                }
-                onPress={handleSaveEditStaff}
-                loading={savingEdit}
-              />
+            <View style={styles.editFooterWrap}>
+              {editIsPendingSync ? (
+                <PendingVerificationNote testID="staff-edit-pending-helper-note" />
+              ) : null}
+              <View style={styles.modalFooter}>
+                <Button
+                  title="Cancel"
+                  variant="ghost"
+                  onPress={() => setEditingStaff(null)}
+                  disabled={savingEdit}
+                />
+                <Button
+                  title={
+                    editNeedsSubmit
+                      ? 'Save & Submit for Verification'
+                      : editIsPendingSync
+                      ? PENDING_VERIFICATION_BUTTON_LABEL
+                      : 'Save Changes'
+                  }
+                  onPress={handleSaveEditStaff}
+                  loading={savingEdit}
+                />
+              </View>
             </View>
           }
         >
@@ -2591,7 +2788,8 @@ export default function StaffManagementTab({
 
           {renderClinicianDirectorySection('edit')}
         </Modal>
-      ) : null}
+        );
+      })() : null}
 
       {/* Password Reset Modal */}
       {resetModalStaff ? (
@@ -2939,6 +3137,8 @@ export default function StaffManagementTab({
           onClose={() => setRosterModalVisible(false)}
           doctors={doctors}
           initialDoctorId={rosterDoctorId}
+          platformVerificationStatus={platformVerificationStatus}
+          onRefreshVerificationState={onRefreshVerificationState}
           onAddStaff={() => {
             setRosterModalVisible(false);
             handleOpenAddModal();
@@ -3120,6 +3320,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.emergencySubtle,
     borderRadius: theme.radii.md,
     marginBottom: theme.spacing.md,
+  },
+  editFooterWrap: {
+    gap: theme.spacing.xs,
+    alignItems: 'flex-end',
   },
   credentialSection: {
     marginTop: theme.spacing.md,

@@ -22,6 +22,7 @@ import {
   ValidatedDateInput,
   validateDateString,
   TimeInput,
+  validateTimeString,
   ServiceSelect,
 } from '@ui';
 import type { BadgeVariant } from '@ui';
@@ -45,7 +46,6 @@ import {
   type TeleconsultPaymentPolicy,
   formatClinicDate,
   formatClinicTime,
-  getClinicTodayStr,
 } from '../../services/clinicService';
 import { SlotPicker } from '../../components/roster/SlotPicker';
 import { DoctorRosterCalendarModal } from '../../components/roster/DoctorRosterCalendarModal';
@@ -61,11 +61,13 @@ import {
   AppointmentInspectionModal,
   AppointmentRescheduleModal,
   getManilaTodayStr,
+  getManilaTimeParts,
   toDateString,
   parseDateOnly,
   formatDateString,
   getDaysInMonth,
-  manilaDateTimeToUtcIso,
+  validateFutureManilaDateTime,
+  extractAppointmentScheduleError,
   type CalendarViewMode,
   type ExtendedAppointmentItem,
   type DoctorShiftOverlay,
@@ -133,12 +135,13 @@ function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-/** Two hours from now, as editable form values. */
-export function defaultSlot(): { date: string; time: string } {
-  const d = new Date(Date.now() + 2 * 60 * 60 * 1000);
+/** Two hours from now in Asia/Manila, as editable form values. */
+export function defaultSlot(now: Date = new Date()): { date: string; time: string } {
+  const d = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  const { dateStr, hour } = getManilaTimeParts(d);
   return {
-    date: getClinicTodayStr(d),
-    time: `${pad(d.getHours())}:00`,
+    date: dateStr,
+    time: `${pad(hour)}:00`,
   };
 }
 
@@ -267,8 +270,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     error?: any;
     patientName?: string;
   } | null>(null);
-  const { staff } = useStaff();
-  const { settings, rooms } = useClinic();
+  const { staff, reload: reloadStaff } = useStaff();
+  const { settings, rooms, refresh: refreshClinic } = useClinic();
   const { lastTeleconsultEndedAt = 0 } = useClinicComms() ?? {};
   const doctors = staff.filter((s) => s.role === 'Doctor');
   const activeDoctors = useMemo(() => staff.filter((s) => s.role === 'Doctor' && s.isActive), [staff]);
@@ -395,6 +398,20 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const [formPaymentPolicy, setFormPaymentPolicy] = useState<TeleconsultPaymentPolicy>('Prepaid');
   const [formReason, setFormReason] = useState('');
   const [formNotes, setFormNotes] = useState('');
+  const [bookingError, setBookingError] = useState<string | null>(null);
+
+  const bookDateValidation = useMemo(
+    () => validateDateString(formDate, { boundaryMode: 'futureOrToday' }),
+    [formDate]
+  );
+  const bookTimeSyntax = useMemo(() => validateTimeString(formTime), [formTime]);
+  const bookingTimeError = useMemo(() => {
+    if (!bookDateValidation.isValid || formTime.trim().length !== 5 || !bookTimeSyntax.isValid) {
+      return undefined;
+    }
+    const res = validateFutureManilaDateTime(formDate, formTime, { mode: 'create' });
+    return res.isValid ? undefined : res.errorMessage;
+  }, [bookDateValidation.isValid, formDate, formTime, bookTimeSyntax.isValid]);
 
   const isEffectiveTeleconsultEnabled = Boolean(
     settings?.isWorkspaceTeleconsultEntitled && settings?.enableTeleconsultation
@@ -507,6 +524,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     setFormPaymentPolicy('Prepaid');
     setFormReason('');
     setFormNotes('');
+    setBookingError(null);
   }, []);
 
   const openBookModal = useCallback((preselectedPatient?: ClinicPatient | null) => {
@@ -520,6 +538,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         : null;
 
     setBookedAppointment(null);
+    setBookingError(null);
     setPatientSearch('');
     setPatientResults([]);
     setFormPatient(validPatient);
@@ -657,6 +676,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     (date: Date, timeStr: string, doctorId?: string) => {
       const dateStr = toDateString(date);
       setBookedAppointment(null);
+      setBookingError(null);
       setPatientSearch('');
       setPatientResults([]);
       setFormPatient(null);
@@ -676,20 +696,27 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const handleBookAppointment = async () => {
     if (isBookingRef.current || booking || bookedAppointment) return;
 
+    setBookingError(null);
+
     if (!formPatient) {
       notify.error('Select a patient for this appointment.');
       return;
     }
     const dateCheck = validateDateString(formDate, { boundaryMode: 'futureOrToday' });
     if (!dateCheck.isValid) {
-      notify.error(dateCheck.errorMessage || 'Enter a valid appointment date (today or in the future).');
+      const msg = dateCheck.errorMessage || 'Enter a valid appointment date (today or in the future).';
+      setBookingError(msg);
+      notify.error(msg);
       return;
     }
-    const scheduledAt = manilaDateTimeToUtcIso(formDate, formTime);
-    if (!scheduledAt) {
-      notify.error('Enter a valid date (YYYY-MM-DD) and time (HH:MM).');
+    const timeCheck = validateFutureManilaDateTime(formDate, formTime, { mode: 'create' });
+    if (!timeCheck.isValid || !timeCheck.utcIso) {
+      const msg = timeCheck.errorMessage || 'Enter a valid date (YYYY-MM-DD) and time (HH:MM).';
+      setBookingError(msg);
+      notify.error(msg);
       return;
     }
+    const scheduledAt = timeCheck.utcIso;
     if (formModality === 'Teleconsult' && !isEffectiveTeleconsultEnabled) {
       notify.error('Teleconsultation is not enabled for this clinic.');
       return;
@@ -714,7 +741,14 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       });
 
       if (err || !newApt) {
-        notify.error(err?.message || 'The appointment could not be booked. Please try again.');
+        const msg =
+          err?.status === 400 || err?.errorCode === 'VALIDATION_ERROR'
+            ? extractAppointmentScheduleError(err, ['ScheduledAt', 'NewScheduledAt']) ||
+              err?.message ||
+              'The appointment could not be booked. Please try again.'
+            : err?.message || 'The appointment could not be booked. Please try again.';
+        setBookingError(msg);
+        notify.error(msg);
         return;
       }
 
@@ -985,7 +1019,16 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
           ) : (
             <View style={styles.modalFooter}>
               <Button title="Cancel" variant="secondary" disabled={booking} onPress={closeBookModal} />
-              <Button title="Confirm and schedule" loading={booking} disabled={booking} onPress={handleBookAppointment} />
+              <Button
+                title="Confirm and schedule"
+                loading={booking}
+                disabled={
+                  booking ||
+                  Boolean(bookingTimeError) ||
+                  (bookDateValidation.isComplete && !bookDateValidation.isValid)
+                }
+                onPress={handleBookAppointment}
+              />
             </View>
           )
         }
@@ -994,6 +1037,19 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
           <AppointmentBookedSuccessView appointment={bookedAppointment} />
         ) : (
           <>
+            {bookingError ? (
+              <View
+                testID="book-appointment-error-alert"
+                role="alert"
+                style={styles.bookingErrorAlert}
+              >
+                <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+                <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flexFill}>
+                  {bookingError}
+                </ThemedText>
+              </View>
+            ) : null}
+
             {formPatient ? (
               <View style={styles.selectedPatient} testID="selected-patient-summary">
                 <View style={styles.flexFill}>
@@ -1202,12 +1258,24 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
                   label="Appointment Date"
                   placeholder="YYYY-MM-DD"
                   value={formDate}
-                  onChangeText={setFormDate}
+                  onChangeText={(val) => {
+                    setFormDate(val);
+                    if (bookingError) setBookingError(null);
+                  }}
                   boundaryMode="futureOrToday"
                 />
               </View>
               <View style={styles.flexFill}>
-                <TimeInput label="Selected Time" placeholder="HH:MM" value={formTime} onChangeText={setFormTime} />
+                <TimeInput
+                  label="Selected Time"
+                  placeholder="HH:MM"
+                  value={formTime}
+                  onChangeText={(val) => {
+                    setFormTime(val);
+                    if (bookingError) setBookingError(null);
+                  }}
+                  error={bookingTimeError}
+                />
               </View>
             </View>
 
@@ -1220,6 +1288,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
                   const parts = slot.startTime.split(':');
                   const hhmm = parts.length >= 2 ? `${parts[0]}:${parts[1]}` : slot.startTime;
                   setFormTime(hhmm);
+                  if (bookingError) setBookingError(null);
                 }}
               />
             ) : null}
@@ -1254,6 +1323,10 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         onClose={() => setRosterModalVisible(false)}
         doctors={doctors}
         initialDoctorId={formDoctorId || doctors[0]?.id}
+        platformVerificationStatus={settings?.platformVerificationStatus}
+        onRefreshVerificationState={async () => {
+          await Promise.all([reloadStaff?.(), refreshClinic?.()]);
+        }}
         onAddStaff={() => {
           setRosterModalVisible(false);
           navigation.navigate('Settings', { tab: 'staff', openAddStaff: true });
@@ -1553,5 +1626,15 @@ const styles = StyleSheet.create({
   },
   successSummaryRow: {
     gap: theme.spacing.xs,
+  },
+  bookingErrorAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.emergencyBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergencyBorder,
   },
 });

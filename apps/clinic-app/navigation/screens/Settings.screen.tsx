@@ -20,6 +20,7 @@ import { usePermission, useAuth } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../constants/permissions';
 import {
   clinicService,
+  isVerificationConflictError,
   ClinicSettingsRecord,
   ClinicPublishingReadiness,
   StaffMember,
@@ -27,6 +28,7 @@ import {
   ClinicServiceItem,
   ClinicRole,
 } from '../../services/clinicService';
+import { buildDohLtoSettingsPayload } from '../../utils/directoryVerification';
 
 import SettingsTabBar from '../../components/settings/SettingsTabBar';
 import SettingsVerticalRail from '../../components/settings/SettingsVerticalRail';
@@ -376,6 +378,64 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     [updateClinicSettings, refreshClinic]
   );
 
+  // Compute readiness state
+  const effectiveDohLto = settings?.letterheadDohLto ?? readiness?.letterheadDohLto ?? '';
+  const effectiveDohLtoExpiryDate = settings
+    ? (settings.dohLtoExpiryDate ?? null)
+    : (readiness?.dohLtoExpiryDate ?? null);
+  const effectiveLtoProofKey = settings?.ltoEvidenceObjectKey ?? readiness?.ltoEvidenceObjectKey ?? null;
+  const effectiveVerificationStatus =
+    settings?.platformVerificationStatus ?? readiness?.platformVerificationStatus ?? 'Unverified';
+  const effectiveRejectionReason =
+    settings?.verificationRejectionReason ?? readiness?.verificationRejectionReason ?? null;
+  const effectiveLastSubmittedAt =
+    settings?.lastVerificationSubmittedAtUtc ?? readiness?.lastVerificationSubmittedAtUtc ?? null;
+  const effectiveIsDirectoryPublished =
+    settings?.isDirectoryPublished ?? readiness?.isDirectoryPublished ?? false;
+  const effectiveIsOnlineBookingPaused =
+    settings?.isOnlineBookingPaused ?? readiness?.isOnlineBookingPaused ?? false;
+  const effectiveIsWorkspaceEligible =
+    settings?.isWorkspaceEligible ?? readiness?.isWorkspaceEligible ?? false;
+
+  const refreshVerificationState = useCallback(async () => {
+    const [
+      [settingsData],
+      [readinessData],
+      [staffData],
+    ] = await Promise.all([
+      clinicService.getSettings(),
+      clinicService.getPublishingReadiness(),
+      clinicService.getStaff(),
+    ]);
+    if (settingsData) {
+      setSettings(settingsData);
+      setClinicName(settingsData.clinicName ?? '');
+      setAccreditationNumber(settingsData.accreditationNumber ?? '');
+      setOperatingHours(sanitizeLegacyDefault(settingsData.operatingHours));
+      setSlotDuration(
+        settingsData.defaultSlotDurationMinutes != null
+          ? String(settingsData.defaultSlotDurationMinutes)
+          : ''
+      );
+      setConsultationFee(
+        settingsData.defaultConsultationFee != null
+          ? String(settingsData.defaultConsultationFee)
+          : ''
+      );
+      setLetterheadHeader(settingsData.letterheadHeader ?? '');
+      setLetterheadAddress(settingsData.letterheadAddress ?? '');
+      setLetterheadContact(settingsData.letterheadContact ?? '');
+      updateClinicSettings(settingsData);
+    }
+    if (readinessData) {
+      setReadiness(readinessData);
+    }
+    if (staffData) {
+      setStaff(staffData);
+    }
+    await Promise.all([refreshClinic(), reloadStaffContext()]);
+  }, [updateClinicSettings, refreshClinic, reloadStaffContext]);
+
   const handleSavePreferences = async () => {
     const slotMinutes = parseInt(slotDuration, 10);
     const fee = parseFloat(consultationFee);
@@ -391,6 +451,8 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       Alert.alert('Check consultation fee', 'Enter the default consultation fee as a number.');
       return;
     }
+
+    const isPendingFacility = effectiveVerificationStatus === 'PendingReview';
 
     setSavingSettings(true);
     const [saved, err] = await clinicService.updateSettings({
@@ -413,10 +475,11 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
           ? true
           : enableDentalModule ?? settings?.enableDentalModule,
       cashierMode: cashierMode ?? settings?.cashierMode,
+      ...(isPendingFacility ? { skipPendingVerificationSync: true } : {}),
     });
-    setSavingSettings(false);
 
     if (err) {
+      setSavingSettings(false);
       notify.error(err.message || 'Could not save settings.');
       return;
     }
@@ -436,28 +499,40 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       setLetterheadContact(saved.letterheadContact ?? '');
       updateClinicSettings(saved);
     }
+
+    if (isPendingFacility) {
+      const [, syncErr] = await clinicService.updatePendingDirectoryVerification();
+      setSavingSettings(false);
+      if (syncErr) {
+        if (isVerificationConflictError(syncErr)) {
+          notify.error(
+            syncErr.message ||
+              'Verification submission is no longer pending review. Refreshing status.'
+          );
+          await refreshVerificationState();
+          return;
+        }
+        notify.error(
+          syncErr.message ||
+            'Settings saved locally, but pending verification update failed.'
+        );
+        await refreshReadiness();
+        await refreshClinic();
+        return;
+      }
+      await refreshReadiness();
+      notify.success('Settings saved and pending verification submission updated.');
+      await refreshClinic();
+      return;
+    }
+
+    setSavingSettings(false);
     notify.success('Settings saved.');
     await refreshClinic();
   };
 
   const maxStaffSeats = license?.limits?.maxStaff ?? null;
   const activeStaffCount = staff.filter((s) => s.isActive).length;
-
-  // Compute readiness state
-  const effectiveDohLto = settings?.letterheadDohLto ?? readiness?.letterheadDohLto ?? '';
-  const effectiveLtoProofKey = settings?.ltoEvidenceObjectKey ?? readiness?.ltoEvidenceObjectKey ?? null;
-  const effectiveVerificationStatus =
-    settings?.platformVerificationStatus ?? readiness?.platformVerificationStatus ?? 'Unverified';
-  const effectiveRejectionReason =
-    settings?.verificationRejectionReason ?? readiness?.verificationRejectionReason ?? null;
-  const effectiveLastSubmittedAt =
-    settings?.lastVerificationSubmittedAtUtc ?? readiness?.lastVerificationSubmittedAtUtc ?? null;
-  const effectiveIsDirectoryPublished =
-    settings?.isDirectoryPublished ?? readiness?.isDirectoryPublished ?? false;
-  const effectiveIsOnlineBookingPaused =
-    settings?.isOnlineBookingPaused ?? readiness?.isOnlineBookingPaused ?? false;
-  const effectiveIsWorkspaceEligible =
-    settings?.isWorkspaceEligible ?? readiness?.isWorkspaceEligible ?? false;
 
   const hasActiveLicense = Boolean(
     license &&
@@ -483,31 +558,104 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const [ltoSaving, setLtoSaving] = useState(false);
   const [ltoUploading, setLtoUploading] = useState(false);
 
-  const handleSaveDohLto = async (dohLto: string) => {
-    setLtoSaving(true);
-    const [saved, err] = await clinicService.updateSettings({
-      letterheadDohLto: dohLto.trim(),
+  const handleSaveDohLto = async (dohLto: string, dohLtoExpiryDate?: string | null) => {
+    const isPendingFacility = effectiveVerificationStatus === 'PendingReview';
+    const payload = buildDohLtoSettingsPayload({
+      dohLto,
+      dohLtoExpiryDate: dohLtoExpiryDate ?? '',
+      previousDohLtoExpiryDate: effectiveDohLtoExpiryDate,
+      skipPendingVerificationSync: isPendingFacility,
     });
-    setLtoSaving(false);
+
+    setLtoSaving(true);
+    const [saved, err] = await clinicService.updateSettings(payload);
     if (err || !saved) {
-      notify.error(err?.message || 'Could not save DOH LTO number.');
+      setLtoSaving(false);
+      notify.error(err?.message || 'Could not save DOH LTO details.');
       return false;
     }
     setSettings(saved);
+    updateClinicSettings(saved);
+    setReadiness((prev) =>
+      prev
+        ? {
+            ...prev,
+            letterheadDohLto: saved.letterheadDohLto ?? prev.letterheadDohLto,
+            dohLtoExpiryDate: saved.dohLtoExpiryDate ?? null,
+          }
+        : prev
+    );
+
+    if (isPendingFacility) {
+      const [, syncErr] = await clinicService.updatePendingDirectoryVerification();
+      setLtoSaving(false);
+      if (syncErr) {
+        if (isVerificationConflictError(syncErr)) {
+          notify.error(
+            syncErr.message ||
+              'Verification submission is no longer pending review. Refreshing status.'
+          );
+          await refreshVerificationState();
+          return false;
+        }
+        notify.error(
+          syncErr.message ||
+            'DOH LTO saved locally, but pending verification update failed.'
+        );
+        await refreshReadiness();
+        return false;
+      }
+      await refreshReadiness();
+      notify.success('DOH LTO details saved and pending verification submission updated.');
+      return true;
+    }
+
+    setLtoSaving(false);
     await refreshReadiness();
-    notify.success('DOH LTO number saved.');
+    notify.success('DOH LTO details saved.');
     return true;
   };
 
   const handleUploadLtoProof = async (formData: FormData) => {
+    const isPendingFacility = effectiveVerificationStatus === 'PendingReview';
     setLtoUploading(true);
-    const [res, err] = await clinicService.uploadLtoProof(formData);
-    setLtoUploading(false);
+    const [res, err] = await clinicService.uploadLtoProof(
+      formData,
+      undefined,
+      isPendingFacility ? { skipPendingVerificationSync: true } : undefined,
+    );
     if (err || !res?.objectKey) {
+      setLtoUploading(false);
       notify.error(err?.message || 'Could not upload DOH LTO proof.');
       return false;
     }
     setSettings((prev) => (prev ? { ...prev, ltoEvidenceObjectKey: res.objectKey } : prev));
+
+    if (isPendingFacility) {
+      const [, syncErr] = await clinicService.updatePendingDirectoryVerification();
+      setLtoUploading(false);
+      if (syncErr) {
+        if (isVerificationConflictError(syncErr)) {
+          notify.error(
+            syncErr.message ||
+              'Verification submission is no longer pending review. Refreshing status.'
+          );
+          await refreshVerificationState();
+          return false;
+        }
+        notify.error(
+          syncErr.message ||
+            'DOH LTO proof uploaded locally, but pending verification update failed.'
+        );
+        await refreshReadiness();
+        return false;
+      }
+      await refreshReadiness();
+      notify.success('DOH LTO proof uploaded and pending verification submission updated.');
+      return true;
+    }
+
+    setLtoUploading(false);
     await refreshReadiness();
     notify.success('DOH LTO proof uploaded.');
     return true;
@@ -781,6 +929,8 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
           cashierMode={cashierMode}
           setCashierMode={setCashierMode}
           onSettingsUpdated={handleSettingsUpdated}
+          platformVerificationStatus={effectiveVerificationStatus}
+          onRefreshVerificationState={refreshVerificationState}
         />
       );
     }
@@ -806,6 +956,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             verificationRejectionReason={effectiveRejectionReason}
             lastVerificationSubmittedAtUtc={effectiveLastSubmittedAt}
             letterheadDohLto={effectiveDohLto}
+            dohLtoExpiryDate={effectiveDohLtoExpiryDate}
             ltoEvidenceObjectKey={effectiveLtoProofKey}
             optedInCliniciansCount={readiness?.optedInCliniciansCount}
             optedInCliniciansReadyCount={readiness?.optedInCliniciansReadyCount}
@@ -841,6 +992,8 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             showSkeletons={showSkeletons}
             settingsLoadError={settingsLoadError}
             onSettingsUpdated={handleSettingsUpdated}
+            platformVerificationStatus={effectiveVerificationStatus}
+            onRefreshVerificationState={refreshVerificationState}
             onRefreshSettings={async () => {
               const [fresh] = await clinicService.getSettings();
               if (fresh) setSettings(fresh);
@@ -867,6 +1020,8 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             showSkeletons={showSkeletons}
             activeStaffCount={activeStaffCount}
             maxStaffSeats={maxStaffSeats}
+            platformVerificationStatus={effectiveVerificationStatus}
+            onRefreshVerificationState={refreshVerificationState}
             onRefreshStaff={async () => {
               const [fresh] = await clinicService.getStaff();
               if (fresh) setStaff(fresh);
@@ -901,6 +1056,8 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             setServices={setServices}
             servicesLoadError={servicesLoadError}
             showSkeletons={showSkeletons}
+            platformVerificationStatus={effectiveVerificationStatus}
+            onRefreshVerificationState={refreshVerificationState}
             onRefreshServices={async () => {
               const [fresh] = await clinicService.getServices();
               if (fresh) setServices(fresh);

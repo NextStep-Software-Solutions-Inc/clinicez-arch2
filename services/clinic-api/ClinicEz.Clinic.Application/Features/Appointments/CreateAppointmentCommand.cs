@@ -13,6 +13,7 @@ using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
 using ClinicEz.Shared.Licensing;
+using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,6 +31,37 @@ public sealed record CreateAppointmentCommand(
     string? Notes = null,
     AppointmentType? AppointmentType = null,
     TeleconsultPaymentPolicy? PaymentPolicy = null) : IRequest<AppointmentDto>;
+
+public sealed class CreateAppointmentCommandValidator : AbstractValidator<CreateAppointmentCommand>
+{
+    private readonly TimeProvider _timeProvider;
+
+    public CreateAppointmentCommandValidator(TimeProvider? timeProvider = null)
+    {
+        _timeProvider = timeProvider ?? TimeProvider.System;
+
+        RuleFor(x => x.PatientId)
+            .NotEmpty()
+            .WithMessage("Patient ID is required.");
+
+        RuleFor(x => x.PatientName)
+            .NotEmpty()
+            .WithMessage("Patient name is required.")
+            .MaximumLength(150)
+            .WithMessage("Patient name must not exceed 150 characters.");
+
+        RuleFor(x => x.DurationMinutes)
+            .GreaterThan(0)
+            .WithMessage("Duration must be greater than 0 minutes.");
+
+        RuleFor(x => x.ScheduledAt)
+            .Cascade(CascadeMode.Stop)
+            .NotEqual(default(DateTime))
+            .WithMessage("Scheduled date and time is required.")
+            .Must(dt => !AppointmentScheduleValidation.IsInPast(dt, _timeProvider))
+            .WithMessage("Cannot schedule an appointment for a time that has already passed.");
+    }
+}
 
 public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppointmentCommand, AppointmentDto>
 {
@@ -68,7 +100,7 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
     public async Task<AppointmentDto> Handle(CreateAppointmentCommand request, CancellationToken ct)
     {
         var duration = request.DurationMinutes > 0 ? request.DurationMinutes : 30;
-        var scheduledStartUtc = request.ScheduledAt.ToUniversalTime();
+        var scheduledStartUtc = AppointmentScheduleValidation.NormalizeToUtc(request.ScheduledAt);
         var scheduledEndUtc = scheduledStartUtc.AddMinutes(duration);
 
         if (request.DoctorId.HasValue)

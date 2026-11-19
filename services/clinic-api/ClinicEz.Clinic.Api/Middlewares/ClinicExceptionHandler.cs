@@ -68,6 +68,23 @@ public sealed class ClinicExceptionHandler : IExceptionHandler
             return true;
         }
 
+        if (exception is VerificationConflictException verificationConflictEx)
+        {
+            httpContext.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            var response = new ApiResponse<VerificationConflictData>
+            {
+                Succeeded = false,
+                Message = verificationConflictEx.Message,
+                ErrorCode = VerificationConflictException.ErrorCode,
+                Data = new VerificationConflictData(
+                    verificationConflictEx.CurrentStatus,
+                    verificationConflictEx.RequestId),
+                Errors = [new ApiFieldError(null, VerificationConflictException.ErrorCode, verificationConflictEx.Message)]
+            };
+            await httpContext.Response.WriteAsJsonAsync(response, cancellationToken);
+            return true;
+        }
+
         return false;
     }
 }

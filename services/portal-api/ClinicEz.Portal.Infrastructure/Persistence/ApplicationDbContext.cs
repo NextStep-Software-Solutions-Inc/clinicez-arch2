@@ -733,6 +733,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.WithdrawnByActor).HasMaxLength(256);
             entity.Property(e => e.WithdrawalReason).HasMaxLength(2000);
             entity.Property(e => e.ReviewedByAdminUserId).HasMaxLength(128);
+            entity.Property(e => e.ReviewedByDisplayName).HasMaxLength(256);
+            entity.Property(e => e.ReviewedByEmail).HasMaxLength(254);
             entity.Property(e => e.ReviewerNotes).HasMaxLength(2000);
 
             entity.HasOne(e => e.Tenant)
@@ -761,11 +763,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.PrcEvidenceObjectKey).HasMaxLength(512);
             entity.Property(e => e.VerificationContact).HasMaxLength(254);
             entity.Property(e => e.SubmittedByClinicUserId).HasMaxLength(128);
+            entity.Property(e => e.SubmittedByDisplayName).HasMaxLength(256);
             entity.Property(e => e.OtpTokenHash).HasMaxLength(128);
             entity.Property(e => e.Status).HasMaxLength(32).IsRequired().HasDefaultValue("PendingReview");
             entity.Property(e => e.WithdrawnByActor).HasMaxLength(256);
             entity.Property(e => e.WithdrawalReason).HasMaxLength(2000);
             entity.Property(e => e.ReviewedByAdminUserId).HasMaxLength(128);
+            entity.Property(e => e.ReviewedByDisplayName).HasMaxLength(256);
+            entity.Property(e => e.ReviewedByEmail).HasMaxLength(254);
             entity.Property(e => e.ReviewerNotes).HasMaxLength(2000);
 
             entity.HasOne(e => e.FacilityVerificationRequest)

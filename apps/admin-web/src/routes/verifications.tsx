@@ -14,7 +14,10 @@ import {
 import { Route as authRoute } from "./_auth";
 import {
   formatVerificationTimestamp,
+  getLicenseExpiryDisplay,
+  isDistinctTimestamp,
   parseVerificationQueueSearch,
+  resolveHumanActorDisplay,
   serializeVerificationQueueSearch,
   type QueueKindFilter,
   type QueueStatusTab,
@@ -579,10 +582,39 @@ export function VerificationQueueView({
                       item.kind.toLowerCase() === "facility"
                         ? `${item.tenantName} (${item.tenantSlug})`
                         : `${item.facilityName} • ${item.tenantSlug}`;
-                    const licenseNumber =
-                      item.kind.toLowerCase() === "facility"
-                        ? item.dohLtoNumber || "No LTO #"
-                        : item.normalizedPrcLicenseNo || item.prcLicenseNo || "—";
+                    const isFacility = item.kind.toLowerCase() === "facility";
+                    const licenseNumber = isFacility
+                      ? item.dohLtoNumber || "No LTO #"
+                      : item.normalizedPrcLicenseNo || item.prcLicenseNo || "—";
+                    const licenseExpiry = getLicenseExpiryDisplay(
+                      isFacility ? item.dohLtoExpiryDate : item.prcExpiryDate,
+                    );
+                    const submittedBy = item.submittedByDisplayName
+                      ? resolveHumanActorDisplay(
+                          item.submittedByDisplayName,
+                          null,
+                          null,
+                          "Clinic Manager",
+                        )
+                      : null;
+                    const showUpdatedAt = isDistinctTimestamp(
+                      item.updatedAtUtc,
+                      item.submittedAtUtc,
+                    );
+                    const hasReviewer = Boolean(
+                      item.reviewedAtUtc ||
+                        item.reviewedByDisplayName ||
+                        item.reviewedByEmail ||
+                        item.reviewedByAdminUserId,
+                    );
+                    const reviewedBy = hasReviewer
+                      ? resolveHumanActorDisplay(
+                          item.reviewedByDisplayName,
+                          item.reviewedByEmail,
+                          item.reviewedByAdminUserId,
+                          "Platform Reviewer",
+                        )
+                      : null;
                     const detailHref = buildVerificationDetailHref(item.id, persistedQueueSearch);
 
                     return (
@@ -615,9 +647,16 @@ export function VerificationQueueView({
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap font-mono text-text">
                           <div>{licenseNumber}</div>
-                          {item.prcExpiryDate ? (
-                            <div className="text-[10px] font-sans text-text-muted">
-                              Exp {item.prcExpiryDate}
+                          {licenseExpiry ? (
+                            <div className="flex items-center gap-1.5 text-[10px] font-sans text-text-muted mt-0.5">
+                              <span>{`Exp ${licenseExpiry.dateText}`}</span>
+                              {licenseExpiry.badgeLabel && licenseExpiry.badgeClassName ? (
+                                <span
+                                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold border whitespace-nowrap ${licenseExpiry.badgeClassName}`}
+                                >
+                                  {licenseExpiry.badgeLabel}
+                                </span>
+                              ) : null}
                             </div>
                           ) : null}
                         </td>
@@ -625,10 +664,31 @@ export function VerificationQueueView({
                           {summarizeQueueItemSpecialtySchedule(item)}
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap text-text-muted">
-                          {formatVerificationTimestamp(item.submittedAtUtc)}
+                          <div>{formatVerificationTimestamp(item.submittedAtUtc)}</div>
+                          {submittedBy ? (
+                            <div
+                              className="text-[10px] text-text-muted truncate max-w-[180px]"
+                              title={submittedBy.tooltip}
+                            >
+                              {`by ${submittedBy.primary}`}
+                            </div>
+                          ) : null}
+                          {showUpdatedAt ? (
+                            <div className="text-[10px] font-medium text-primary">
+                              {`Updated ${formatVerificationTimestamp(item.updatedAtUtc)}`}
+                            </div>
+                          ) : null}
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <VerificationStatusBadge status={item.status} />
+                          {reviewedBy ? (
+                            <div
+                              className="text-[10px] text-text-muted mt-1 truncate max-w-[180px]"
+                              title={reviewedBy.tooltip}
+                            >
+                              {`Reviewed by ${reviewedBy.primary}`}
+                            </div>
+                          ) : null}
                         </td>
                         <td
                           className="px-4 py-3.5 whitespace-nowrap text-right"

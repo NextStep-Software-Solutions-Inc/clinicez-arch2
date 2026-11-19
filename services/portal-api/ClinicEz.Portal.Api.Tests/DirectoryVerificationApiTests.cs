@@ -27,6 +27,7 @@ using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Constants;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Hub;
+using ClinicEz.Portal.Infrastructure.Messaging.Handlers;
 using ClinicEz.Portal.Infrastructure.Options;
 using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Portal.Infrastructure.Persistence.Interceptors;
@@ -34,6 +35,7 @@ using ClinicEz.Portal.Infrastructure.Persistence.Seeders;
 using ClinicEz.Portal.Infrastructure.Services;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interop.Persistence;
 using ClinicEz.Shared.Interop.Requests;
 using ClinicEz.Shared.Interoperability;
@@ -44,6 +46,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
@@ -654,6 +657,367 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, repeatRes.StatusCode);
         var repeatJson = await repeatRes.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(repeatJson.GetProperty("data").GetProperty("alreadyConfirmed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task FacilitySettingsAndLtoProof_SyncActivePendingVerificationInPlace_AndLeaveApprovedSnapshotsUntouched()
+    {
+        // 1. Update facility settings with ltoExpiryDate while request is PendingReview
+        var settingsReq = AsUser(HttpMethod.Put, $"/api/v1/facilities/{_facilityId}/settings", "clerk_clinic_owner");
+        settingsReq.Content = JsonContent.Create(new
+        {
+            tenantSlug = "manila-care",
+            licenseToOperate = "DOH-LTO-9988-REV1",
+            ltoExpiryDate = "2029-03-31",
+            contactNumber = "+639175551234",
+            operatingHours = "Mon-Sun 07:00-21:00"
+        });
+        var settingsRes = await _client.SendAsync(settingsReq);
+        Assert.Equal(HttpStatusCode.OK, settingsRes.StatusCode);
+
+        // 2. Attach new LTO proof objectKey while PendingReview -> syncs onto active request
+        var ltoReq = AsUser(HttpMethod.Post, $"/api/v1/facilities/{_facilityId}/lto-proof?tenantSlug=manila-care", "clerk_clinic_owner");
+        ltoReq.Content = JsonContent.Create(new { objectKey = "verification/lto/ermita-lto-v2.pdf" });
+        var ltoRes = await _client.SendAsync(ltoReq);
+        Assert.Equal(HttpStatusCode.OK, ltoRes.StatusCode);
+
+        // 3. GET /facilities returns ltoExpiryDate
+        var facilitiesRes = await _client.SendAsync(AsUser(HttpMethod.Get, "/api/v1/facilities?tenantSlug=manila-care", "clerk_clinic_owner"));
+        Assert.Equal(HttpStatusCode.OK, facilitiesRes.StatusCode);
+        var facilitiesJson = await facilitiesRes.Content.ReadFromJsonAsync<JsonElement>();
+        var firstFacility = facilitiesJson[0];
+        Assert.Equal("2029-03-31", firstFacility.GetProperty("ltoExpiryDate").GetString());
+
+        // 4. Admin detail reflects updated in-place snapshot & updatedAtUtc without creating duplicate rows
+        var detailBeforeApproveRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{_facReqId}", "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, detailBeforeApproveRes.StatusCode);
+        var detailBeforeApprove = await detailBeforeApproveRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("2029-03-31", detailBeforeApprove.GetProperty("dohLtoExpiryDate").GetString());
+        Assert.Equal("+639175551234", detailBeforeApprove.GetProperty("clinicContactNumber").GetString());
+        Assert.Equal("verification/lto/ermita-lto-v2.pdf", detailBeforeApprove.GetProperty("ltoEvidenceObjectKey").GetString());
+        Assert.NotEqual(JsonValueKind.Null, detailBeforeApprove.GetProperty("updatedAtUtc").ValueKind);
+        Assert.Equal(1, detailBeforeApprove.GetProperty("submissionHistory").GetArrayLength());
+
+        // 5. Approve request -> stores ReviewedByDisplayName & ReviewedByEmail
+        var approveReq = AsUser(HttpMethod.Post, $"/api/v1/admin/verification-queue/{_facReqId}/approve", "clerk_verifier");
+        approveReq.Content = JsonContent.Create(new { notes = "Approved with LTO expiry" });
+        var approveRes = await _client.SendAsync(approveReq);
+        Assert.Equal(HttpStatusCode.OK, approveRes.StatusCode);
+
+        var detailAfterApproveRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{_facReqId}", "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, detailAfterApproveRes.StatusCode);
+        var detailAfterApprove = await detailAfterApproveRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Directory Verifier", detailAfterApprove.GetProperty("reviewedByDisplayName").GetString());
+        Assert.Equal("verifier@clinicez.ph", detailAfterApprove.GetProperty("reviewedByEmail").GetString());
+        Assert.Equal("Directory Verifier", detailAfterApprove.GetProperty("submissionHistory")[0].GetProperty("reviewedByDisplayName").GetString());
+
+        // 6. Subsequent settings edit after approval must NOT mutate the approved request snapshot
+        var postApproveSettingsReq = AsUser(HttpMethod.Put, $"/api/v1/facilities/{_facilityId}/settings", "clerk_clinic_owner");
+        postApproveSettingsReq.Content = JsonContent.Create(new
+        {
+            tenantSlug = "manila-care",
+            licenseToOperate = "DOH-LTO-MUTATE-ATTEMPT",
+            ltoExpiryDate = "2031-12-31"
+        });
+        var postApproveSettingsRes = await _client.SendAsync(postApproveSettingsReq);
+        Assert.Equal(HttpStatusCode.OK, postApproveSettingsRes.StatusCode);
+
+        var detailImmutableRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{_facReqId}", "clerk_verifier"));
+        var detailImmutable = await detailImmutableRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("DOH-LTO-9988-REV1", detailImmutable.GetProperty("dohLtoNumber").GetString());
+        Assert.Equal("2029-03-31", detailImmutable.GetProperty("dohLtoExpiryDate").GetString());
+    }
+
+    [Fact]
+    public async Task AdminVerificationDetail_ReturnsResubmissionDiffAndOtpReviewerDisplayName()
+    {
+        // Confirm OTP affiliation and verify admin detail reports Practitioner (OTP Confirmation)
+        var confirmRes = await _client.PostAsJsonAsync("/api/v1/public/practitioners/confirm-affiliation", new
+        {
+            token = ConfirmToken,
+            otpCode = ConfirmOtp
+        });
+        Assert.Equal(HttpStatusCode.OK, confirmRes.StatusCode);
+
+        var pracDetailRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{_pracReqAwaitingOtpId}", "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, pracDetailRes.StatusCode);
+        var pracDetail = await pracDetailRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Practitioner (OTP Confirmation)", pracDetail.GetProperty("reviewedByDisplayName").GetString());
+        Assert.Equal("owner@manilacare.ph", pracDetail.GetProperty("submittedByDisplayName").GetString());
+
+        // Seed Rejected #1 -> PendingReview #2 for a second facility and verify resubmissionDiff over HTTP
+        var fac2Id = Guid.NewGuid();
+        var sub1Id = Guid.NewGuid();
+        var sub2Id = Guid.NewGuid();
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var fac2 = new Facility
+            {
+                Id = fac2Id,
+                TenantId = _tenantId,
+                Name = "Manila Care Makati",
+                Slug = "manila-care-makati",
+                FacilityType = FacilityType.Clinic,
+                Status = FacilityStatus.Active,
+                PlatformVerificationStatus = PlatformVerificationStatus.PendingReview
+            };
+            var p1 = new FacilityVerificationRequestedPayload
+            {
+                RequestId = sub1Id,
+                TenantId = _tenantId.ToString(),
+                FacilityId = fac2Id,
+                FacilityName = fac2.Name,
+                DohLtoNumber = "LTO-MKT-1",
+                LtoEvidenceObjectKey = "verification/lto/mkt-v1.pdf",
+                RequestKind = "Initial",
+                SubmittedAtUtc = DateTime.UtcNow.AddDays(-2)
+            };
+            var p2 = p1 with
+            {
+                RequestId = sub2Id,
+                DohLtoNumber = "LTO-MKT-2",
+                DohLtoExpiryDate = new DateOnly(2029, 1, 15),
+                LtoEvidenceObjectKey = "verification/lto/mkt-v2.pdf",
+                SupportsTeleconsult = true,
+                RequestKind = "Resubmission",
+                SubmittedAtUtc = DateTime.UtcNow
+            };
+            db.Facilities.Add(fac2);
+            db.FacilityVerificationRequests.AddRange(
+                new FacilityVerificationRequest
+                {
+                    Id = sub1Id,
+                    TenantId = _tenantId,
+                    FacilityId = fac2Id,
+                    SubmissionNumber = 1,
+                    CorrelationId = sub1Id.ToString(),
+                    RequestKind = "Initial",
+                    SubmittedAtUtc = p1.SubmittedAtUtc,
+                    SubmittedSnapshotJson = JsonSerializer.Serialize(p1, InteropJson.Options),
+                    LtoEvidenceObjectKey = p1.LtoEvidenceObjectKey,
+                    Status = "Rejected",
+                    ReviewedByAdminUserId = "clerk_verifier",
+                    ReviewerNotes = "Update LTO number and expiry"
+                },
+                new FacilityVerificationRequest
+                {
+                    Id = sub2Id,
+                    TenantId = _tenantId,
+                    FacilityId = fac2Id,
+                    SubmissionNumber = 2,
+                    CorrelationId = sub2Id.ToString(),
+                    RequestKind = "Resubmission",
+                    SubmittedAtUtc = p2.SubmittedAtUtc,
+                    SubmittedSnapshotJson = JsonSerializer.Serialize(p2, InteropJson.Options),
+                    LtoEvidenceObjectKey = p2.LtoEvidenceObjectKey,
+                    Status = "PendingReview"
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var resubRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{sub2Id}", "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, resubRes.StatusCode);
+        var resubJson = await resubRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(resubJson.GetProperty("supportsTeleconsult").GetBoolean());
+        var diff = resubJson.GetProperty("resubmissionDiff");
+        Assert.Equal(1, diff.GetProperty("previousSubmissionNumber").GetInt32());
+        Assert.Equal("Rejected", diff.GetProperty("previousStatus").GetString());
+        Assert.Equal("Update LTO number and expiry", diff.GetProperty("previousReason").GetString());
+        Assert.True(diff.GetProperty("ltoProofUpdated").GetBoolean());
+        Assert.True(diff.GetProperty("changedFields").GetArrayLength() >= 2);
+    }
+
+    [Fact]
+    public async Task FacilitySettings_ExplicitNullLtoExpiryDate_ClearsPendingAndFacility_WhileOmittedPreserves()
+    {
+        // 1. Set ltoExpiryDate while request is PendingReview
+        var setReq = AsUser(HttpMethod.Put, $"/api/v1/facilities/{_facilityId}/settings", "clerk_clinic_owner");
+        setReq.Content = JsonContent.Create(new
+        {
+            tenantSlug = "manila-care",
+            ltoExpiryDate = "2029-03-31"
+        });
+        var setRes = await _client.SendAsync(setReq);
+        Assert.Equal(HttpStatusCode.OK, setRes.StatusCode);
+
+        // 2. Partial PUT omitting ltoExpiryDate must preserve 2029-03-31 on both facility and pending request
+        var partialReq = AsUser(HttpMethod.Put, $"/api/v1/facilities/{_facilityId}/settings", "clerk_clinic_owner");
+        partialReq.Content = JsonContent.Create(new
+        {
+            tenantSlug = "manila-care",
+            operatingHours = "Mon-Sun 08:00-20:00"
+        });
+        var partialRes = await _client.SendAsync(partialReq);
+        Assert.Equal(HttpStatusCode.OK, partialRes.StatusCode);
+
+        var facAfterPartialRes = await _client.SendAsync(AsUser(HttpMethod.Get, "/api/v1/facilities?tenantSlug=manila-care", "clerk_clinic_owner"));
+        Assert.Equal(HttpStatusCode.OK, facAfterPartialRes.StatusCode);
+        var facAfterPartial = (await facAfterPartialRes.Content.ReadFromJsonAsync<JsonElement>())[0];
+        Assert.Equal("2029-03-31", facAfterPartial.GetProperty("ltoExpiryDate").GetString());
+
+        var detailAfterPartialRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{_facReqId}", "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, detailAfterPartialRes.StatusCode);
+        var detailAfterPartial = await detailAfterPartialRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("2029-03-31", detailAfterPartial.GetProperty("dohLtoExpiryDate").GetString());
+
+        // 3. Explicit ltoExpiryDate: null clears Facility.LtoExpiryDate and pending queue/detail DohLtoExpiryDate
+        var clearReq = AsUser(HttpMethod.Put, $"/api/v1/facilities/{_facilityId}/settings", "clerk_clinic_owner");
+        clearReq.Content = JsonContent.Create(new
+        {
+            tenantSlug = "manila-care",
+            ltoExpiryDate = (string?)null
+        });
+        var clearRes = await _client.SendAsync(clearReq);
+        Assert.Equal(HttpStatusCode.OK, clearRes.StatusCode);
+
+        var facAfterClearRes = await _client.SendAsync(AsUser(HttpMethod.Get, "/api/v1/facilities?tenantSlug=manila-care", "clerk_clinic_owner"));
+        Assert.Equal(HttpStatusCode.OK, facAfterClearRes.StatusCode);
+        var facAfterClear = (await facAfterClearRes.Content.ReadFromJsonAsync<JsonElement>())[0];
+        Assert.Equal(JsonValueKind.Null, facAfterClear.GetProperty("ltoExpiryDate").ValueKind);
+
+        var queueAfterClearRes = await _client.SendAsync(AsUser(HttpMethod.Get, "/api/v1/admin/verification-queue", "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, queueAfterClearRes.StatusCode);
+        var queueAfterClear = await queueAfterClearRes.Content.ReadFromJsonAsync<JsonElement>();
+        var queueItem = queueAfterClear.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("id").GetGuid() == _facReqId);
+        Assert.Equal(JsonValueKind.Null, queueItem.GetProperty("dohLtoExpiryDate").ValueKind);
+
+        var detailAfterClearRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{_facReqId}", "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, detailAfterClearRes.StatusCode);
+        var detailAfterClear = await detailAfterClearRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, detailAfterClear.GetProperty("dohLtoExpiryDate").ValueKind);
+    }
+
+    [Fact]
+    public async Task Resubmission_WithClearedDohLtoExpiryDate_PreservesNullAcrossLtoProofUploadAndPartialSettingsPut()
+    {
+        var facId = Guid.NewGuid();
+        var sub1Id = Guid.NewGuid();
+        var sub2Id = Guid.NewGuid();
+        var priorExpiry = new DateOnly(2029, 6, 30);
+
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var fac = new Facility
+            {
+                Id = facId,
+                TenantId = _tenantId,
+                Name = "Manila Care Quezon City",
+                Slug = "manila-care-qc",
+                FacilityType = FacilityType.Clinic,
+                Status = FacilityStatus.Active,
+                LtoExpiryDate = priorExpiry,
+                LtoEvidenceObjectKey = "verification/lto/qc-v1.pdf",
+                PlatformVerificationStatus = PlatformVerificationStatus.Rejected
+            };
+            var sub1Payload = new FacilityVerificationRequestedPayload
+            {
+                RequestId = sub1Id,
+                TenantId = _tenantId.ToString(),
+                FacilityId = facId,
+                FacilityName = fac.Name,
+                FacilitySlug = fac.Slug,
+                DohLtoNumber = "DOH-LTO-QC-1",
+                DohLtoExpiryDate = priorExpiry,
+                LtoEvidenceObjectKey = "verification/lto/qc-v1.pdf",
+                RequestKind = "Initial",
+                SubmittedByClinicUserId = "clerk_clinic_owner",
+                SubmittedByDisplayName = "Clinic Owner",
+                SubmittedAtUtc = DateTime.UtcNow.AddDays(-1)
+            };
+            db.Facilities.Add(fac);
+            db.FacilityVerificationRequests.Add(new FacilityVerificationRequest
+            {
+                Id = sub1Id,
+                TenantId = _tenantId,
+                FacilityId = facId,
+                SubmissionNumber = 1,
+                CorrelationId = sub1Id.ToString(),
+                RequestKind = "Initial",
+                SubmittedByClinicUserId = "clerk_clinic_owner",
+                SubmittedByDisplayName = "Clinic Owner",
+                SubmittedAtUtc = sub1Payload.SubmittedAtUtc,
+                SubmittedSnapshotJson = DirectoryVerificationHelper.SerializeFacilitySnapshot(sub1Payload),
+                LtoEvidenceObjectKey = sub1Payload.LtoEvidenceObjectKey,
+                Status = "Rejected",
+                ReviewedByAdminUserId = "clerk_verifier",
+                ReviewerNotes = "Remove invalid expiry date"
+            });
+            await db.SaveChangesAsync();
+
+            var reqHandler = new FacilityVerificationRequestedHandler(
+                db, TimeProvider.System, NullLogger<FacilityVerificationRequestedHandler>.Instance);
+            var sub2Payload = sub1Payload with
+            {
+                RequestId = sub2Id,
+                DohLtoExpiryDate = null,
+                RequestKind = "Resubmission",
+                SubmittedAtUtc = DateTime.UtcNow
+            };
+            await reqHandler.HandleAsync(
+                sub2Payload,
+                new InteropMessageContext(InteropEnvelope.Create(
+                    InteropTypes.FacilityVerificationRequested,
+                    Party.ForFacility(_tenantId.ToString(), facId.ToString(), FacilityType.Clinic),
+                    Party.Portal,
+                    sub2Id,
+                    sub2Payload)),
+                CancellationToken.None);
+            await db.SaveChangesAsync();
+        }
+
+        // Baseline: Resubmission has explicit dohLtoExpiryDate: null while Facility still holds prior 2029-06-30
+        var beforeRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{sub2Id}", "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, beforeRes.StatusCode);
+        var beforeJson = await beforeRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, beforeJson.GetProperty("dohLtoExpiryDate").ValueKind);
+
+        // 1. Upload new LTO proof via POST /api/v1/facilities/{id}/lto-proof -> must NOT resurrect 2029-06-30
+        var ltoReq = AsUser(HttpMethod.Post, $"/api/v1/facilities/{facId}/lto-proof?tenantSlug=manila-care", "clerk_clinic_owner");
+        ltoReq.Content = JsonContent.Create(new { objectKey = "verification/lto/qc-v2.pdf" });
+        var ltoRes = await _client.SendAsync(ltoReq);
+        Assert.Equal(HttpStatusCode.OK, ltoRes.StatusCode);
+
+        var afterLtoRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{sub2Id}", "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, afterLtoRes.StatusCode);
+        var afterLtoJson = await afterLtoRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, afterLtoJson.GetProperty("dohLtoExpiryDate").ValueKind);
+        Assert.Equal("verification/lto/qc-v2.pdf", afterLtoJson.GetProperty("ltoEvidenceObjectKey").GetString());
+
+        // 2. Partial PUT /api/v1/facilities/{id}/settings omitting ltoExpiryDate -> must NOT resurrect 2029-06-30
+        var partialReq = AsUser(HttpMethod.Put, $"/api/v1/facilities/{facId}/settings", "clerk_clinic_owner");
+        partialReq.Content = JsonContent.Create(new
+        {
+            tenantSlug = "manila-care",
+            operatingHours = "Mon-Sat 09:00-18:00"
+        });
+        var partialRes = await _client.SendAsync(partialReq);
+        Assert.Equal(HttpStatusCode.OK, partialRes.StatusCode);
+
+        var afterPartialRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{sub2Id}", "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, afterPartialRes.StatusCode);
+        var afterPartialJson = await afterPartialRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, afterPartialJson.GetProperty("dohLtoExpiryDate").ValueKind);
+        Assert.Equal("Mon-Sat 09:00-18:00", afterPartialJson.GetProperty("snapshot").GetProperty("operatingHours").GetString());
+        var changedFields = afterPartialJson.GetProperty("resubmissionDiff").GetProperty("changedFields").EnumerateArray().ToList();
+        var ltoDiff = Assert.Single(changedFields, c => c.GetProperty("fieldKey").GetString() == "dohLtoExpiryDate");
+        Assert.Equal("Removed", ltoDiff.GetProperty("changeKind").GetString());
+
+        // 3. Explicit PUT /api/v1/facilities/{id}/settings WITH ltoExpiryDate updates pending snapshot as expected
+        var setReq = AsUser(HttpMethod.Put, $"/api/v1/facilities/{facId}/settings", "clerk_clinic_owner");
+        setReq.Content = JsonContent.Create(new
+        {
+            tenantSlug = "manila-care",
+            ltoExpiryDate = "2030-01-15"
+        });
+        var setRes = await _client.SendAsync(setReq);
+        Assert.Equal(HttpStatusCode.OK, setRes.StatusCode);
+
+        var afterSetRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{sub2Id}", "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, afterSetRes.StatusCode);
+        var afterSetJson = await afterSetRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("2030-01-15", afterSetJson.GetProperty("dohLtoExpiryDate").GetString());
     }
 
     private sealed class HeaderTestAuthHandler(

@@ -39,7 +39,9 @@ import {
   facilityService,
   hubServiceFor,
   HUB_ROTATABLE_SERVICES,
+  normalizeOptionalDateInput,
   type HubRotatableService,
+  type UpdateFacilitySettingsPayload,
 } from "@/services/facility.service";
 import { linkService } from "@/services/link.service";
 import { tenantService } from "@/services/tenant.service";
@@ -97,6 +99,7 @@ export interface FacilityData {
   consoleUrl?: string;
   classification?: string | null;
   licenseToOperate?: string | null;
+  ltoExpiryDate?: string | null;
   philHealthAccreditationNumber?: string | null;
   taxIdentificationNumber?: string | null;
   operatingHours?: string | null;
@@ -182,6 +185,8 @@ export default function FacilitySettingsHub({
   const [ltoUploadError, setLtoUploadError] = useState<string | null>(null);
   const [uploadedLtoLocalFile, setUploadedLtoLocalFile] = useState<File | null>(null);
   const ltoFileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [ltoExpiryDate, setLtoExpiryDate] = useState(facility?.ltoExpiryDate ?? "");
+  const ltoExpiryDirtyRef = React.useRef(false);
 
   const facilityId = facility?.id;
   const loadVerificationStatus = React.useCallback(async () => {
@@ -193,6 +198,9 @@ export default function FacilitySettingsHub({
         tenantSlug,
       );
       setVerificationStatus(statusDto);
+      if (statusDto.ltoExpiryDate && !ltoExpiryDirtyRef.current) {
+        setLtoExpiryDate((prev) => prev || statusDto.ltoExpiryDate || "");
+      }
     } catch {
       // Keep fallback status from facility prop if detail query fails
     } finally {
@@ -340,6 +348,8 @@ export default function FacilitySettingsHub({
       setStatus(facility.status || "Active");
       setClassification(facility.classification || "");
       setLicenseToOperate(facility.licenseToOperate || "");
+      setLtoExpiryDate(facility.ltoExpiryDate ?? "");
+      ltoExpiryDirtyRef.current = false;
       setPhilHealthAccreditationNumber(facility.philHealthAccreditationNumber || "");
       setTaxIdentificationNumber(facility.taxIdentificationNumber || "");
       setOperatingHours(sanitizeLegacyDefault(facility.operatingHours));
@@ -472,12 +482,13 @@ export default function FacilitySettingsHub({
 
     setSaving(true);
     try {
-      const payload = {
+      const payload: UpdateFacilitySettingsPayload = {
         tenantSlug,
         name: name.trim() || facility.name,
         status,
         classification: classification.trim() || undefined,
         licenseToOperate: licenseToOperate.trim() || undefined,
+        ltoExpiryDate: normalizeOptionalDateInput(ltoExpiryDate),
         philHealthAccreditationNumber: philHealthAccreditationNumber.trim() || undefined,
         taxIdentificationNumber: taxIdentificationNumber.trim() || undefined,
         operatingHours: operatingHours.trim() || undefined,
@@ -490,7 +501,7 @@ export default function FacilitySettingsHub({
         notificationPreferencesJson: JSON.stringify(notifications),
       };
 
-      await apiClient.put(`/facilities/${facility.id}/settings`, payload);
+      await facilityService.updateFacilitySettings(facility.id, payload);
       toast.success("Facility profile and regulatory settings updated successfully!");
       onOpenChange(false);
       if (onSaved) onSaved();
@@ -841,6 +852,10 @@ export default function FacilitySettingsHub({
                           Submission #{latestSubmission.submissionNumber} • {latestSubmission.requestKind}
                         </div>
                         <div>Submitted: {formatVerificationTimestamp(latestSubmission.submittedAtUtc)}</div>
+                        {latestSubmission.updatedAtUtc &&
+                        latestSubmission.updatedAtUtc !== latestSubmission.submittedAtUtc ? (
+                          <div>Updated: {formatVerificationTimestamp(latestSubmission.updatedAtUtc)}</div>
+                        ) : null}
                         {latestSubmission.reviewedAtUtc ? (
                           <div>Reviewed: {formatVerificationTimestamp(latestSubmission.reviewedAtUtc)}</div>
                         ) : null}
@@ -908,7 +923,7 @@ export default function FacilitySettingsHub({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     DOH License to Operate (LTO)
@@ -918,6 +933,32 @@ export default function FacilitySettingsHub({
                     onChange={(e) => setLicenseToOperate(e.target.value)}
                     placeholder="e.g. DOH-LTO-01-2026"
                     className="h-9 text-xs font-mono uppercase rounded-xl"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label
+                      htmlFor="facility-lto-expiry-date"
+                      className="text-xs font-bold text-foreground"
+                    >
+                      DOH LTO Expiry Date
+                    </Label>
+                    {!ltoExpiryDate ? (
+                      <span className="text-[10px] text-muted-foreground font-normal">
+                        Optional
+                      </span>
+                    ) : null}
+                  </div>
+                  <Input
+                    id="facility-lto-expiry-date"
+                    type="date"
+                    value={ltoExpiryDate}
+                    onChange={(e) => {
+                      ltoExpiryDirtyRef.current = true;
+                      setLtoExpiryDate(e.target.value);
+                    }}
+                    className="h-9 text-xs font-mono rounded-xl border-border text-foreground"
                   />
                 </div>
 

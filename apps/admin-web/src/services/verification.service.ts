@@ -68,6 +68,10 @@ export interface VerificationQueueItemDto {
   reviewedAtUtc: string | null;
   reviewedByAdminUserId: string | null;
   reviewerNotes: string | null;
+  dohLtoExpiryDate?: string | null;
+  reviewedByDisplayName?: string | null;
+  reviewedByEmail?: string | null;
+  updatedAtUtc?: string | null;
 }
 
 export interface VerificationQueueResponse {
@@ -131,6 +135,29 @@ export interface VerificationSubmissionHistoryItemDto {
   reviewerNotes: string | null;
   withdrawnAtUtc: string | null;
   withdrawalReason: string | null;
+  reviewedByDisplayName?: string | null;
+  reviewedByEmail?: string | null;
+}
+
+export interface FieldChangeDto {
+  fieldKey: string;
+  label: string;
+  previousValue: string | null;
+  currentValue: string | null;
+  changeKind: string;
+}
+
+export interface ResubmissionDiffDto {
+  previousRequestId: string;
+  previousSubmissionNumber: number;
+  previousStatus: string;
+  previousSubmittedAtUtc: string;
+  previousReason: string | null;
+  ltoProofUpdated: boolean;
+  prcProofUpdated: boolean;
+  updatedChildPractitionerIds: string[];
+  updatedChildPrcProofIds: string[];
+  changedFields: FieldChangeDto[];
 }
 
 export interface VerificationRequestDetailDto {
@@ -166,6 +193,17 @@ export interface VerificationRequestDetailDto {
   childPractitionerRequests: ChildPractitionerRequestDetailDto[];
   prcMatchCandidates: PrcMatchCandidateDto[];
   submissionHistory: VerificationSubmissionHistoryItemDto[];
+  dohLtoExpiryDate?: string | null;
+  reviewedByDisplayName?: string | null;
+  reviewedByEmail?: string | null;
+  clinicContactNumber?: string | null;
+  clinicContactEmail?: string | null;
+  philHealthAccreditationNumber?: string | null;
+  isPhilHealthAccredited?: boolean;
+  supportsInPerson?: boolean;
+  supportsTeleconsult?: boolean;
+  updatedAtUtc?: string | null;
+  resubmissionDiff?: ResubmissionDiffDto | null;
 }
 
 export interface ApproveVerificationPayload {

@@ -39,10 +39,11 @@ public sealed class ClinicSettingsController : ControllerBase
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<ApiResponse<EvidenceProofUploadResultDto>>> UploadLtoProof(
         [FromForm] IFormFile? file,
-        CancellationToken ct)
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
         var (fileName, contentType, length, bytes) = await VerificationEvidenceHelper.ReadValidatedFormFileAsync(file, ct);
-        var result = await _sender.Send(new UploadLtoProofCommand(fileName, contentType, length, bytes), ct);
+        var result = await _sender.Send(new UploadLtoProofCommand(fileName, contentType, length, bytes, skipPendingVerificationSync), ct);
         return Ok(ApiResponse<EvidenceProofUploadResultDto>.Success(result, "DOH LTO proof uploaded."));
     }
 
@@ -74,6 +75,15 @@ public sealed class ClinicSettingsController : ControllerBase
         return Ok(ApiResponse<ClinicPublishingResultDto>.Success(result, result.Message));
     }
 
+    /// <summary>Updates an active pending facility directory verification submission in place.</summary>
+    [HttpPut("directory-publishing/pending")]
+    [HasPermission(ClinicPermissions.SettingsManage)]
+    public async Task<ActionResult<ApiResponse<ClinicPublishingResultDto>>> UpdatePendingVerification(CancellationToken ct)
+    {
+        var result = await _sender.Send(new UpdatePendingFacilityVerificationCommand(), ct);
+        return Ok(ApiResponse<ClinicPublishingResultDto>.Success(result, result.Message));
+    }
+
     /// <summary>Withdraws a pending or active directory verification submission.</summary>
     [HttpPost("directory-publishing/withdraw")]
     [HasPermission(ClinicPermissions.SettingsManage)]
@@ -92,11 +102,11 @@ public sealed class ClinicSettingsController : ControllerBase
         [FromBody] ToggleBookingPauseRequest request,
         CancellationToken ct)
     {
-        var result = await _sender.Send(new ToggleOnlineBookingPauseCommand(request.IsPaused), ct);
+        var result = await _sender.Send(new ToggleOnlineBookingPauseCommand(request.IsPaused, request.SkipPendingVerificationSync), ct);
         return Ok(ApiResponse<ClinicBookingPauseResultDto>.Success(result, result.Message));
     }
 }
 
 public sealed record PublishClinicRequest(bool IsPublished);
-public sealed record ToggleBookingPauseRequest(bool IsPaused);
+public sealed record ToggleBookingPauseRequest(bool IsPaused, bool SkipPendingVerificationSync = false);
 public sealed record WithdrawFacilityVerificationRequest(string? Reason = null);
