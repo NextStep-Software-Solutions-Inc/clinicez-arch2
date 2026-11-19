@@ -158,23 +158,45 @@ describe("Milestone R2 Challenger: Empirical Dynamic Options & Other Drugstore V
         { code: "CUSTOM_OTHER", label: "Other Local Pharmacy", requiresSpecifyText: true },
       ];
 
-      const html = renderToString(
+      const defaultHtml = renderToString(
         React.createElement(RxVerifyClient, {
           token: "RX-TEST-002",
           initialData: validInitialData,
         })
       );
 
-      // Verify all dynamic labels are present in the select options
-      expect(html).toContain("Cebu Doctors Hospital Pharmacy");
-      expect(html).toContain("Chong Hua Hospital Pharmacy");
-      expect(html).toContain("Perpetual Succour Pharmacy");
-      expect(html).toContain("Other Local Pharmacy");
+      expect(mockOptionSetRequested).toBe("common_drugstore");
+      expect(defaultHtml).toContain('id="drugstore-select"');
+      expect(defaultHtml).toContain('role="combobox"');
+      expect(defaultHtml).toContain("Cebu Doctors Hospital Pharmacy");
+      expect(defaultHtml).not.toContain("Mercury Drug");
+      expect(defaultHtml).not.toContain("Rose Pharmacy");
+      expect(defaultHtml).not.toContain("The Generics Pharmacy (TGP)");
 
-      // Verify default fallback options are NOT rendered when dynamic options exist
-      expect(html).not.toContain("Mercury Drug");
-      expect(html).not.toContain("Rose Pharmacy");
-      expect(html).not.toContain("The Generics Pharmacy (TGP)");
+      // Verify every dynamic option resolves inside SelectField when selected
+      for (const option of mockDynamicOptions) {
+        const selectedHtml = renderWithSelectedPharmacy(
+          option.label,
+          validInitialData,
+          "RX-TEST-002"
+        );
+        expect(selectedHtml).toContain('id="drugstore-select"');
+        expect(selectedHtml).toContain(option.label);
+      }
+
+      // Verify default fallback options are NOT resolved as selectable options when dynamic options exist
+      for (const fallbackLabel of [
+        "Mercury Drug",
+        "Rose Pharmacy",
+        "The Generics Pharmacy (TGP)",
+      ]) {
+        const fallbackHtml = renderWithSelectedPharmacy(
+          fallbackLabel,
+          validInitialData,
+          "RX-TEST-002"
+        );
+        expect(fallbackHtml).not.toContain(fallbackLabel);
+      }
     });
 
     test("T2.3: Hydrates SSR initialDrugstoreOptions fetched from backend when client hook has not yet resolved", () => {
@@ -185,7 +207,7 @@ describe("Milestone R2 Challenger: Empirical Dynamic Options & Other Drugstore V
         { code: "OTHER", label: "Other", requiresSpecifyText: true, isActive: true },
       ];
 
-      const html = renderToString(
+      const defaultHtml = renderToString(
         React.createElement(RxVerifyClient, {
           token: "RX-TEST-003",
           initialData: validInitialData,
@@ -193,9 +215,21 @@ describe("Milestone R2 Challenger: Empirical Dynamic Options & Other Drugstore V
         })
       );
 
-      expect(html).toContain("Mercury Drug");
-      expect(html).toContain("Watsons");
-      expect(html).toContain("Other");
+      expect(defaultHtml).toContain('id="drugstore-select"');
+      expect(defaultHtml).toContain('role="combobox"');
+      expect(defaultHtml).toContain("Mercury Drug");
+
+      for (const option of serverFetchedOptions) {
+        const selectedHtml = renderToString(
+          React.createElement(RxVerifyClient, {
+            token: "RX-TEST-003",
+            initialData: validInitialData,
+            initialPharmacyName: option.label,
+            initialDrugstoreOptions: serverFetchedOptions,
+          })
+        );
+        expect(selectedHtml).toContain(option.label);
+      }
     });
   });
 

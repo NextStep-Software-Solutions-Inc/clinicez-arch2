@@ -6,6 +6,7 @@ import {
   IconDashboard,
   IconBuildingHospital,
   IconCash,
+  IconClipboardCheck,
   IconUsersGroup,
   IconArticle,
   IconMail,
@@ -94,6 +95,17 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
       icon: IconUsersGroup,
       action: () => {
         navigate({ to: '/leads' });
+        onClose();
+      },
+    },
+    {
+      id: 'route-verifications',
+      category: 'Workstation',
+      title: 'Directory Verifications',
+      subtitle: 'Clinic DOH LTO & practitioner PRC review queue',
+      icon: IconClipboardCheck,
+      action: () => {
+        navigate({ to: '/verifications' });
         onClose();
       },
     },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { SelectField } from "@/components/ui/select";
 import { locationService, type PsgcLocationDto } from "@/services/location.service";
 import { IconMapPin, IconLoader } from "@tabler/icons-react";
 
@@ -250,145 +251,131 @@ export default function PsgcAddressPicker({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
         {/* Region */}
         <div className="space-y-1">
-          <label className="block text-xs font-semibold text-foreground">
-            Region {required && <span className="text-destructive">*</span>}
-          </label>
-          <div className="relative">
-            <select
-              value={regionPsgc}
-              disabled={disabled || loadingRegions}
-              required={required}
-              onChange={(e) => {
-                const val = e.target.value;
-                setRegionPsgc(val);
-                setProvincePsgc("");
-                setCityPsgc("");
-                setBarangayPsgc("");
-                emitChange(val, "", "", "", street, zipCode);
-              }}
-              className="w-full px-3 py-2 rounded-xl border border-input text-xs bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none pr-8"
-            >
-              <option value="">Select Region</option>
-              {regions.map((r) => (
-                <option key={r.psgcCode} value={r.psgcCode}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <span>
+              Region {required && <span className="text-destructive">*</span>}
+            </span>
             {loadingRegions && (
-              <IconLoader className="absolute right-2.5 top-2.5 h-3.5 w-3.5 animate-spin text-primary" />
+              <IconLoader className="h-3 w-3 animate-spin text-primary" />
             )}
-          </div>
+          </label>
+          <SelectField
+            ariaLabel="Region"
+            value={regionPsgc}
+            disabled={disabled || loadingRegions}
+            required={required}
+            placeholder="Select Region"
+            onValueChange={(val) => {
+              setRegionPsgc(val);
+              setProvincePsgc("");
+              setCityPsgc("");
+              setBarangayPsgc("");
+              emitChange(val, "", "", "", street, zipCode);
+            }}
+            options={regions.map((r) => ({
+              value: r.psgcCode,
+              label: r.name,
+            }))}
+          />
         </div>
 
         {/* Province (Hidden or disabled if NCR / single direct district) */}
         <div className="space-y-1">
-          <label className="block text-xs font-semibold text-foreground">
-            Province {!isNcrOrDirectRegion && required && <span className="text-destructive">*</span>}
-          </label>
-          <div className="relative">
-            <select
-              value={provincePsgc}
-              disabled={disabled || loadingProvinces || isNcrOrDirectRegion || !regionPsgc}
-              required={!isNcrOrDirectRegion && required}
-              onChange={(e) => {
-                const val = e.target.value;
-                setProvincePsgc(val);
-                setCityPsgc("");
-                setBarangayPsgc("");
-                emitChange(regionPsgc, val, "", "", street, zipCode);
-              }}
-              className="w-full px-3 py-2 rounded-xl border border-input text-xs bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none pr-8 disabled:opacity-50 disabled:bg-muted"
-            >
-              <option value="">
-                {isNcrOrDirectRegion
-                  ? "Metro Manila (NCR - Direct Cities)"
-                  : !regionPsgc
-                  ? "Select Region First"
-                  : "Select Province"}
-              </option>
-              {provinces.map((p) => (
-                <option key={p.psgcCode} value={p.psgcCode}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <span>
+              Province {!isNcrOrDirectRegion && required && <span className="text-destructive">*</span>}
+            </span>
             {loadingProvinces && (
-              <IconLoader className="absolute right-2.5 top-2.5 h-3.5 w-3.5 animate-spin text-primary" />
+              <IconLoader className="h-3 w-3 animate-spin text-primary" />
             )}
-          </div>
+          </label>
+          <SelectField
+            ariaLabel="Province"
+            value={provincePsgc}
+            disabled={disabled || loadingProvinces || isNcrOrDirectRegion || !regionPsgc}
+            required={!isNcrOrDirectRegion && required}
+            placeholder={
+              isNcrOrDirectRegion
+                ? "Metro Manila (NCR - Direct Cities)"
+                : !regionPsgc
+                  ? "Select Region First"
+                  : "Select Province"
+            }
+            onValueChange={(val) => {
+              setProvincePsgc(val);
+              setCityPsgc("");
+              setBarangayPsgc("");
+              emitChange(regionPsgc, val, "", "", street, zipCode);
+            }}
+            options={provinces.map((p) => ({
+              value: p.psgcCode,
+              label: p.name,
+            }))}
+          />
         </div>
 
         {/* City / Municipality */}
         <div className="space-y-1">
-          <label className="block text-xs font-semibold text-foreground">
-            City / Municipality {required && <span className="text-destructive">*</span>}
-          </label>
-          <div className="relative">
-            <select
-              value={cityPsgc}
-              disabled={disabled || loadingCities || (!provincePsgc && !isNcrOrDirectRegion)}
-              required={required}
-              onChange={(e) => {
-                const val = e.target.value;
-                setCityPsgc(val);
-                setBarangayPsgc("");
-                const cityObj = cities.find((c) => c.psgcCode === val);
-                const resolvedZip = cityObj?.zipCode || zipCode;
-                if (cityObj?.zipCode) setZipCode(cityObj.zipCode);
-                emitChange(regionPsgc, provincePsgc, val, "", street, resolvedZip);
-              }}
-              className="w-full px-3 py-2 rounded-xl border border-input text-xs bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none pr-8 disabled:opacity-50 disabled:bg-muted"
-            >
-              <option value="">
-                {!regionPsgc
-                  ? "Select Region First"
-                  : !provincePsgc && !isNcrOrDirectRegion
-                  ? "Select Province First"
-                  : "Select City / Municipality"}
-              </option>
-              {cities.map((c) => (
-                <option key={c.psgcCode} value={c.psgcCode}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <span>
+              City / Municipality {required && <span className="text-destructive">*</span>}
+            </span>
             {loadingCities && (
-              <IconLoader className="absolute right-2.5 top-2.5 h-3.5 w-3.5 animate-spin text-primary" />
+              <IconLoader className="h-3 w-3 animate-spin text-primary" />
             )}
-          </div>
+          </label>
+          <SelectField
+            ariaLabel="City or Municipality"
+            value={cityPsgc}
+            disabled={disabled || loadingCities || (!provincePsgc && !isNcrOrDirectRegion)}
+            required={required}
+            placeholder={
+              !regionPsgc
+                ? "Select Region First"
+                : !provincePsgc && !isNcrOrDirectRegion
+                  ? "Select Province First"
+                  : "Select City / Municipality"
+            }
+            onValueChange={(val) => {
+              setCityPsgc(val);
+              setBarangayPsgc("");
+              const cityObj = cities.find((c) => c.psgcCode === val);
+              const resolvedZip = cityObj?.zipCode || zipCode;
+              if (cityObj?.zipCode) setZipCode(cityObj.zipCode);
+              emitChange(regionPsgc, provincePsgc, val, "", street, resolvedZip);
+            }}
+            options={cities.map((c) => ({
+              value: c.psgcCode,
+              label: c.name,
+            }))}
+          />
         </div>
 
         {/* Barangay */}
         <div className="space-y-1">
-          <label className="block text-xs font-semibold text-foreground">
-            Barangay {required && <span className="text-destructive">*</span>}
-          </label>
-          <div className="relative">
-            <select
-              value={barangayPsgc}
-              disabled={disabled || loadingBarangays || !cityPsgc}
-              required={required}
-              onChange={(e) => {
-                const val = e.target.value;
-                setBarangayPsgc(val);
-                emitChange(regionPsgc, provincePsgc, cityPsgc, val, street, zipCode);
-              }}
-              className="w-full px-3 py-2 rounded-xl border border-input text-xs bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none pr-8 disabled:opacity-50 disabled:bg-muted"
-            >
-              <option value="">
-                {!cityPsgc ? "Select City / Municipality First" : "Select Barangay"}
-              </option>
-              {barangays.map((b) => (
-                <option key={b.psgcCode} value={b.psgcCode}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <span>
+              Barangay {required && <span className="text-destructive">*</span>}
+            </span>
             {loadingBarangays && (
-              <IconLoader className="absolute right-2.5 top-2.5 h-3.5 w-3.5 animate-spin text-primary" />
+              <IconLoader className="h-3 w-3 animate-spin text-primary" />
             )}
-          </div>
+          </label>
+          <SelectField
+            ariaLabel="Barangay"
+            value={barangayPsgc}
+            disabled={disabled || loadingBarangays || !cityPsgc}
+            required={required}
+            placeholder={!cityPsgc ? "Select City / Municipality First" : "Select Barangay"}
+            onValueChange={(val) => {
+              setBarangayPsgc(val);
+              emitChange(regionPsgc, provincePsgc, cityPsgc, val, street, zipCode);
+            }}
+            options={barangays.map((b) => ({
+              value: b.psgcCode,
+              label: b.name,
+            }))}
+          />
         </div>
 
         {/* Street / Building Address */}

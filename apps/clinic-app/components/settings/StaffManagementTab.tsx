@@ -51,6 +51,7 @@ import {
   validateClinicianDirectoryOptIn,
   type PickedEvidenceFile,
 } from '../../utils/directoryVerification';
+import { EvidenceProofPreview } from './EvidenceProofPreview';
 import { buildStaffCreationPayload, validateStaffEmailNotInClinic } from '../../utils/staffManagement';
 
 export const DUPLICATE_STAFF_EMAIL_ERROR =
@@ -1228,6 +1229,20 @@ export default function StaffManagementTab({
                 testID={`btn-upload-prc-proof-${mode}`}
               />
             </View>
+
+            {prcEvidenceObjectKey || pickedPrcFile ? (
+              <EvidenceProofPreview
+                label="PRC License Proof"
+                objectKey={prcEvidenceObjectKey}
+                localFile={pickedPrcFile}
+                fetchBlob={
+                  targetStaffId && prcEvidenceObjectKey
+                    ? () => clinicService.fetchStaffPrcProofBlob(targetStaffId)
+                    : undefined
+                }
+                testID={`prc-proof-preview-${mode}`}
+              />
+            ) : null}
 
             <Input
               label="Public Bio"

@@ -73,7 +73,9 @@ public sealed class UploadLtoProofCommandHandler : IRequestHandler<UploadLtoProo
             settings.ClinicId,
             rawKey,
             request.FileBytes,
-            ct);
+            ct,
+            request.ContentType,
+            request.FileName);
 
         settings.LtoEvidenceObjectKey = storedKey;
         settings.UpdatedAt = DateTime.UtcNow;

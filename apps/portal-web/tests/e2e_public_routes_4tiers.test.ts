@@ -24,7 +24,9 @@ import JoinLandingClient from "../src/components/join/JoinLandingClient";
 import JoinCodeErrorCard from "../src/components/join/JoinCodeErrorCard";
 import { ProgressiveClaimCard, CLAIM_CARD_BENEFITS } from "../src/components/join/ProgressiveClaimCard";
 import { MobileAppStoreBadges, DEFAULT_APPLE_STORE_URL, DEFAULT_GOOGLE_PLAY_URL } from "../src/components/join/MobileAppStoreBadges";
-import VerifyLookupClient from "../src/app/verify/VerifyLookupClient";
+import VerifyLookupClient, {
+  DOCUMENT_CATEGORY_OPTIONS,
+} from "../src/app/verify/VerifyLookupClient";
 import VerifyClient from "../src/app/verify/[kind]/[token]/VerifyClient";
 import RxVerifyClient from "../src/app/verify/[kind]/[token]/RxVerifyClient";
 import JoinPage, { generateMetadata as generateJoinMetadata } from "../src/app/join/page";
@@ -258,9 +260,16 @@ describe("Tier 1: Canonical Public Route Existence & Happy Path", () => {
       const jsx = await VerifyIndexPage({ searchParams: Promise.resolve({}) });
       const html = renderToString(jsx);
       expect(html).toContain("Philippine National Health Document Registry");
+      expect(html).toContain('id="doc-type-select"');
+      expect(html).toContain('role="combobox"');
       expect(html).toContain("Auto-detect (Universal Registry)");
-      expect(html).toContain("Electronic Prescription (RA 6675)");
-      expect(html).toContain("Medical Certificate");
+      expect(DOCUMENT_CATEGORY_OPTIONS.map((opt) => opt.label)).toEqual(
+        expect.arrayContaining([
+          "Auto-detect (Universal Registry)",
+          "Electronic Prescription (RA 6675)",
+          "Medical Certificate",
+        ])
+      );
     });
 
     test("T1.4.2: /verify?ref=MC-2026-0001 queries portal-api and renders VerifyClient result", async () => {
@@ -1406,12 +1415,24 @@ describe("Tier 3: Cross-Feature Combinations & Pairwise Interactions", () => {
   // Combination 3: Verify Lookup Client Router Navigation Matrix (5 tests)
   describe("Combination 3: Verify Lookup Client Router Navigation", () => {
     test("T3.3.1: VerifyLookupClient renders all 5 document categories in select control", () => {
-      const html = renderToString(React.createElement(VerifyLookupClient));
-      expect(html).toContain('value="auto"');
-      expect(html).toContain('value="rx"');
-      expect(html).toContain('value="med-cert"');
-      expect(html).toContain('value="referral"');
-      expect(html).toContain('value="lab-report"');
+      expect(DOCUMENT_CATEGORY_OPTIONS.map((opt) => opt.value)).toEqual([
+        "auto",
+        "rx",
+        "med-cert",
+        "referral",
+        "lab-report",
+      ]);
+
+      for (const option of DOCUMENT_CATEGORY_OPTIONS) {
+        const html = renderToString(
+          React.createElement(VerifyLookupClient, {
+            initialDocType: option.value,
+          })
+        );
+        expect(html).toContain('id="doc-type-select"');
+        expect(html).toContain('role="combobox"');
+        expect(html).toContain(option.label);
+      }
     });
 
     test("T3.3.2: VerifyLookupClient contains reference number and security seal inputs", () => {

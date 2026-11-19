@@ -4783,6 +4783,10 @@ export const clinicService = {
     });
   },
 
+  async fetchStaffPrcProofBlob(id: string) {
+    return clinicApiClient.getBlob(`/staff/${id}/prc-proof`);
+  },
+
   async submitStaffVerification(id: string) {
     return clinicApiClient.post<StaffMember>(`/staff/${id}/submit-verification`, {});
   },
@@ -5375,6 +5379,10 @@ export const clinicService = {
         'Content-Type': 'multipart/form-data',
       },
     });
+  },
+
+  async fetchLtoProofBlob() {
+    return clinicApiClient.getBlob('/clinic-settings/lto-proof');
   },
 
   async publishToDirectory(isPublished: boolean) {

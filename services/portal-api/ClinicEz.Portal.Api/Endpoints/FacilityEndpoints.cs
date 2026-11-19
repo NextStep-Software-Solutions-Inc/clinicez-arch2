@@ -16,6 +16,7 @@ using ClinicEz.Portal.Api.Abstractions;
 using ClinicEz.Portal.Application.Features.Admin.Commands;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop.Requests;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Application.Features.Entitlements;
 using MediatR;
@@ -25,6 +26,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ClinicEz.Shared.Licensing;
 
@@ -696,6 +698,62 @@ public class FacilityEndpoints : IEndpoint
         .RequireAuthorization()
         .WithName("GetFacilityVerificationStatus")
         .WithDescription("Returns the platform directory verification status, latest verification request, and practitioner statuses for a facility.")
+        .WithTags("Facilities");
+
+        // 9b. Stream uploaded DOH LTO verification proof inline for authorized tenant workspace members
+        app.MapGet("/facilities/{id:guid}/lto-proof", async (
+            Guid id,
+            string? tenantSlug,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            IPortalEvidenceStorageService storage,
+            CancellationToken ct) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
+
+            var tenant = await ResolveTenantForFacilityAsync(context, id, tenantSlug, ct);
+            if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isStaff = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active, ct);
+            if (!isOwner && !isStaff) return Results.Forbid();
+
+            var facility = await context.Facilities
+                .AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Id == id && f.TenantId == tenant.Id && !f.IsDeleted, ct);
+            if (facility == null) return Results.NotFound(new { Message = "Facility not found." });
+
+            if (string.IsNullOrWhiteSpace(facility.LtoEvidenceObjectKey))
+                return Results.NotFound(new { Message = "No DOH LTO proof file is uploaded for this facility." });
+
+            var interopClient = httpContext.RequestServices.GetService<IInteropRequestClient>();
+            var logger = httpContext.RequestServices.GetService<ILogger<FacilityEndpoints>>();
+            var outcome = await VerificationEvidenceResolver.ResolveAsync(
+                storage,
+                interopClient,
+                tenant.Id,
+                facility.Id,
+                facility.LtoEvidenceObjectKey,
+                logger,
+                ct);
+
+            if (outcome.File == null)
+            {
+                return outcome.ClinicUnavailable
+                    ? Results.Json(new { Message = outcome.ErrorMessage ?? "Clinic workstation is unreachable." }, statusCode: 502)
+                    : Results.NotFound(new { Message = outcome.ErrorMessage ?? "DOH LTO proof file not found." });
+            }
+
+            httpContext.Response.Headers.CacheControl = "private, no-store";
+            httpContext.Response.Headers.XContentTypeOptions = "nosniff";
+            httpContext.Response.Headers.ContentDisposition = $"inline; filename=\"{outcome.File.FileName}\"";
+            return Results.File(outcome.File.Content, outcome.File.ContentType);
+        })
+        .RequireAuthorization()
+        .WithName("GetFacilityLtoProof")
+        .WithDescription("Streams the facility's uploaded DOH License to Operate (LTO) proof inline for authorized workspace members.")
         .WithTags("Facilities");
 
         // 10. Upload or attach DOH LTO verification proof for a facility

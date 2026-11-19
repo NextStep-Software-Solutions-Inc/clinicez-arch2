@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser, useAuth } from "@clerk/nextjs";
+import { SelectField } from "@/components/ui/select";
 import { tenantService } from "@/services/tenant.service";
 import { apiErrorCode, apiErrorMessage } from "@/lib/apiError";
 import {
@@ -394,16 +395,19 @@ export function TenantRegistrationClient() {
                     <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                       Entity Classification
                     </label>
-                    <select
+                    <SelectField
+                      ariaLabel="Entity Classification"
                       value={formData.tenantType}
-                      onChange={(e) => setFormData({ ...formData, tenantType: e.target.value })}
-                      className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                      onValueChange={(v) => setFormData({ ...formData, tenantType: v })}
                       disabled={isLoading}
-                    >
-                      <option value="Workplace">Workplace / Medical Practice</option>
-                      <option value="Person">Individual Practitioner / Person</option>
-                      <option value="Entity">Healthcare Entity / Enterprise Group</option>
-                    </select>
+                      size="lg"
+                      className="text-sm"
+                      options={[
+                        { value: "Workplace", label: "Workplace / Medical Practice" },
+                        { value: "Person", label: "Individual Practitioner / Person" },
+                        { value: "Entity", label: "Healthcare Entity / Enterprise Group" },
+                      ]}
+                    />
                   </div>
 
                   <button
@@ -605,15 +609,18 @@ export function TenantRegistrationClient() {
                         <label className="text-xs font-bold text-muted-foreground uppercase">
                           Entity Classification
                         </label>
-                        <select
+                        <SelectField
+                          ariaLabel="Entity Classification"
                           value={formData.tenantType}
-                          onChange={(e) => setFormData({ ...formData, tenantType: e.target.value })}
-                          className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-                        >
-                          <option value="Workplace">Workplace / Medical Practice</option>
-                          <option value="Person">Individual Practitioner / Person</option>
-                          <option value="Entity">Healthcare Entity / Enterprise Group</option>
-                        </select>
+                          onValueChange={(v) => setFormData({ ...formData, tenantType: v })}
+                          size="lg"
+                          className="text-sm"
+                          options={[
+                            { value: "Workplace", label: "Workplace / Medical Practice" },
+                            { value: "Person", label: "Individual Practitioner / Person" },
+                            { value: "Entity", label: "Healthcare Entity / Enterprise Group" },
+                          ]}
+                        />
                       </div>
                     </div>
 

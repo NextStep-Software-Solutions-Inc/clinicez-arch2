@@ -3,12 +3,25 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldCheck, Search, ArrowRight, CheckCircle2, FileText, Pill, FileSpreadsheet, Send } from 'lucide-react';
+import { SelectField } from '@/components/ui/select';
 
-type DocumentKindChoice = 'auto' | 'rx' | 'med-cert' | 'referral' | 'lab-report';
+export type DocumentKindChoice = 'auto' | 'rx' | 'med-cert' | 'referral' | 'lab-report';
 
-export default function VerifyLookupClient() {
+export const DOCUMENT_CATEGORY_OPTIONS: ReadonlyArray<{ value: DocumentKindChoice; label: string }> = [
+  { value: 'auto', label: 'Auto-detect (Universal Registry)' },
+  { value: 'rx', label: 'Electronic Prescription (RA 6675)' },
+  { value: 'med-cert', label: 'Medical Certificate' },
+  { value: 'referral', label: 'Clinical Referral Letter' },
+  { value: 'lab-report', label: 'Diagnostic Laboratory Report' },
+];
+
+export default function VerifyLookupClient({
+  initialDocType = 'auto',
+}: {
+  initialDocType?: DocumentKindChoice;
+} = {}) {
   const [query, setQuery] = useState('');
-  const [docType, setDocType] = useState<DocumentKindChoice>('auto');
+  const [docType, setDocType] = useState<DocumentKindChoice>(initialDocType);
   const [seal, setSeal] = useState('');
   const router = useRouter();
 
@@ -54,18 +67,14 @@ export default function VerifyLookupClient() {
               <label htmlFor="doc-type-select" className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Document Category
               </label>
-              <select
+              <SelectField
                 id="doc-type-select"
                 value={docType}
-                onChange={(e) => setDocType(e.target.value as DocumentKindChoice)}
-                className="w-full py-2.5 px-3 bg-muted border border-input rounded-xl text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:bg-background transition-all"
-              >
-                <option value="auto">Auto-detect (Universal Registry)</option>
-                <option value="rx">Electronic Prescription (RA 6675)</option>
-                <option value="med-cert">Medical Certificate</option>
-                <option value="referral">Clinical Referral Letter</option>
-                <option value="lab-report">Diagnostic Laboratory Report</option>
-              </select>
+                onValueChange={(v) => setDocType(v as DocumentKindChoice)}
+                size="md"
+                className="bg-muted text-sm font-medium"
+                options={DOCUMENT_CATEGORY_OPTIONS}
+              />
             </div>
 
             {/* Document Reference Input */}

@@ -80,7 +80,9 @@ public sealed class UploadStaffPrcProofCommandHandler : IRequestHandler<UploadSt
             staff.ClinicId,
             rawKey,
             request.FileBytes,
-            ct);
+            ct,
+            request.ContentType,
+            request.FileName);
 
         staff.PrcEvidenceObjectKey = storedKey;
         staff.UpdatedAt = DateTime.UtcNow;

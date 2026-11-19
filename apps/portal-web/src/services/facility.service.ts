@@ -19,6 +19,7 @@ import {
 } from "@/lib/wire";
 import {
   verificationService,
+  type EvidenceBlobResult,
   type FacilityVerificationStatusDto,
   type UploadLtoProofJsonPayload,
   type UploadLtoProofResult,
@@ -180,6 +181,14 @@ export const facilityService = {
     input: File | UploadLtoProofJsonPayload,
   ): Promise<UploadLtoProofResult> => {
     return verificationService.uploadFacilityLtoProof(facilityId, input, tenantSlug);
+  },
+
+  /** Fetches the facility's uploaded DOH LTO proof document as a Blob for inline viewing. */
+  fetchLtoProof: async (
+    tenantSlug: string,
+    facilityId: string,
+  ): Promise<EvidenceBlobResult> => {
+    return verificationService.fetchFacilityLtoProof(facilityId, tenantSlug);
   },
 };
 

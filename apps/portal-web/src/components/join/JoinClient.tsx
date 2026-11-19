@@ -22,6 +22,7 @@ import {
   Smartphone,
 } from "lucide-react";
 import { useUser, SignInButton, useAuth } from "@clerk/nextjs";
+import { SelectField } from "@/components/ui/select";
 import {
   type PatientJoinRequestedPayload,
   type PatientJoinAllergyItem,
@@ -829,34 +830,28 @@ export default function JoinClient({
                 <label className="block text-xs font-bold text-foreground mb-1">
                   Sex at Birth *
                 </label>
-                <select
+                <SelectField
+                  ariaLabel="Sex at Birth"
                   value={sex}
-                  onChange={(e) => setSex(e.target.value as any)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-                >
-                  {sexOptions.map((opt) => (
-                    <option key={opt.value + opt.label} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={(v) => setSex(v as "Male" | "Female" | "Other")}
+                  size="md"
+                  className="text-sm"
+                  options={sexOptions}
+                />
               </div>
 
               <div className="sm:col-span-2">
                 <label className="block text-xs font-bold text-foreground mb-1">
                   Civil Status
                 </label>
-                <select
+                <SelectField
+                  ariaLabel="Civil Status"
                   value={civilStatus}
-                  onChange={(e) => setCivilStatus(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-                >
-                  {civilStatusOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setCivilStatus}
+                  size="md"
+                  className="text-sm"
+                  options={civilStatusOptions}
+                />
               </div>
 
               <div className="sm:col-span-2">
@@ -1009,16 +1004,19 @@ export default function JoinClient({
                     <label className="block text-xs font-bold text-foreground mb-1">
                       Relationship to Principal *
                     </label>
-                    <select
+                    <SelectField
+                      ariaLabel="Relationship to Principal"
                       value={principalRelationship}
-                      onChange={(e) => setPrincipalRelationship(e.target.value as any)}
-                      className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-                    >
-                      <option value="C">Child (C) &bull; Under 21 years old</option>
-                      <option value="S">Spouse (S) &bull; Legitimate spouse</option>
-                      <option value="P">Parent (P) &bull; Dependent parent 60+</option>
-                      <option value="D">Disabled Dependent (D) &bull; 21+ with disability</option>
-                    </select>
+                      onValueChange={(v) => setPrincipalRelationship(v as "C" | "S" | "P" | "D")}
+                      size="md"
+                      className="text-sm"
+                      options={[
+                        { value: "C", label: "Child (C) • Under 21 years old" },
+                        { value: "S", label: "Spouse (S) • Legitimate spouse" },
+                        { value: "P", label: "Parent (P) • Dependent parent 60+" },
+                        { value: "D", label: "Disabled Dependent (D) • 21+ with disability" },
+                      ]}
+                    />
                   </div>
 
                   <div>
@@ -1122,18 +1120,18 @@ export default function JoinClient({
                     </label>
 
                     {field.dataType === "Select" ? (
-                      <select
+                      <SelectField
+                        ariaLabel={field.label}
                         value={customFieldValues[field.fieldKey] || ""}
-                        onChange={(e) => handleCustomFieldChange(field.fieldKey, e.target.value)}
-                        className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-                      >
-                        <option value="">Select option...</option>
-                        {optionsToRender.map((opt) => (
-                          <option key={opt} value={opt}>
-                            {opt}
-                          </option>
-                        ))}
-                      </select>
+                        onValueChange={(v) => handleCustomFieldChange(field.fieldKey, v)}
+                        placeholder="Select option..."
+                        size="md"
+                        className="text-sm"
+                        options={[
+                          ...(field.isRequired ? [] : [{ value: "", label: "Select option..." }]),
+                          ...optionsToRender.map((opt) => ({ value: opt, label: opt })),
+                        ]}
+                      />
                     ) : (
                       <input
                         type="text"
@@ -1208,33 +1206,39 @@ export default function JoinClient({
                       <label className="block text-[11px] font-bold text-muted-foreground mb-1">
                         Category
                       </label>
-                      <select
+                      <SelectField
+                        ariaLabel="Allergy Category"
                         value={newCategory}
-                        onChange={(e) => setNewCategory(e.target.value as any)}
-                        className="w-full px-3 py-1.5 rounded-lg border border-input text-xs bg-background text-foreground"
-                      >
-                        <option value="Medication">Medication</option>
-                        <option value="Food">Food</option>
-                        <option value="Environmental">Environmental</option>
-                        <option value="Biologic">Biologic</option>
-                        <option value="Other">Other</option>
-                      </select>
+                        onValueChange={(v) => setNewCategory(v as PatientJoinAllergyItem["category"])}
+                        size="sm"
+                        className="rounded-lg"
+                        options={[
+                          { value: "Medication", label: "Medication" },
+                          { value: "Food", label: "Food" },
+                          { value: "Environmental", label: "Environmental" },
+                          { value: "Biologic", label: "Biologic" },
+                          { value: "Other", label: "Other" },
+                        ]}
+                      />
                     </div>
 
                     <div>
                       <label className="block text-[11px] font-bold text-muted-foreground mb-1">
                         Severity
                       </label>
-                      <select
+                      <SelectField
+                        ariaLabel="Allergy Severity"
                         value={newSeverity}
-                        onChange={(e) => setNewSeverity(e.target.value as any)}
-                        className="w-full px-3 py-1.5 rounded-lg border border-input text-xs bg-background text-foreground"
-                      >
-                        <option value="Mild">Mild</option>
-                        <option value="Moderate">Moderate</option>
-                        <option value="Severe">Severe</option>
-                        <option value="LifeThreatening">Life-Threatening / Anaphylaxis</option>
-                      </select>
+                        onValueChange={(v) => setNewSeverity(v as PatientJoinAllergyItem["severity"])}
+                        size="sm"
+                        className="rounded-lg"
+                        options={[
+                          { value: "Mild", label: "Mild" },
+                          { value: "Moderate", label: "Moderate" },
+                          { value: "Severe", label: "Severe" },
+                          { value: "LifeThreatening", label: "Life-Threatening / Anaphylaxis" },
+                        ]}
+                      />
                     </div>
 
                     <div>

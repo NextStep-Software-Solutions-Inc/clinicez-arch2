@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { SelectField } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { describeApiError } from "@/lib/apiError";
@@ -35,9 +36,6 @@ function StatusChip({ status }: { status: LinkStatus }) {
     </Badge>
   );
 }
-
-const selectClass =
-  "h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary";
 
 interface NetworkClientProps {
   tenantSlug: string;
@@ -174,7 +172,11 @@ export default function NetworkClient({ tenantSlug }: NetworkClientProps) {
             <IconWorld className="h-5 w-5" /> Directory
           </CardTitle>
           <CardDescription className="text-xs font-medium text-slate-500">
-            Only facilities whose workspace made them public or network-visible are listed. Make your own facilities findable in Settings → Facilities.
+            Only facilities whose workspace made them public or network-visible are listed. Make your own facilities findable from{" "}
+            <Link href={`/${tenantSlug}/dashboard/branches`} className="font-semibold text-primary hover:underline">
+              Branches &amp; Locations
+            </Link>{" "}
+            → Facility Settings → Deployment &amp; Network.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 pt-3 space-y-4">
@@ -185,14 +187,16 @@ export default function NetworkClient({ tenantSlug }: NetworkClientProps) {
               void search();
             }}
           >
-            <select aria-label="Facility type" value={type} onChange={(e) => setType(e.target.value as FacilityKind | "")} className={selectClass}>
-              <option value="">Any type</option>
-              {FACILITY_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+            <SelectField
+              ariaLabel="Facility type"
+              value={type}
+              onValueChange={(v) => setType(v as FacilityKind | "")}
+              className="w-fit min-w-32"
+              options={[
+                { value: "", label: "Any type" },
+                ...FACILITY_TYPES.map((t) => ({ value: t, label: t })),
+              ]}
+            />
             <Input
               aria-label="Facility name"
               placeholder="Name"

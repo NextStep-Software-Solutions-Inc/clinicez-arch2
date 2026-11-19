@@ -194,7 +194,7 @@ describe('Challenger M4 — Adversarial Two-Tier Governance UI Stress Harness', 
     expect(markup).toContain('Workspace Eligibility Pending');
     expect(markup).toContain('Approval Required');
     expect(markup).toContain('Your organization workspace administrator has not yet enabled public patient directory discovery');
-    expect(markup).toContain('Portal Settings → Facilities');
+    expect(markup).toContain('Portal Branches → Facility Settings');
 
     // 2. Specific lock reason must cite workspace administrator approval
     expect(markup).toContain('Publishing locked: Requires workspace administrator approval in Portal.');

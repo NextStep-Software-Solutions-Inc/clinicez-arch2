@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiClient } from "@/transport/apiClient";
@@ -14,6 +16,7 @@ import { toast } from "sonner";
 import {
   IconBuildingHospital,
   IconCheck,
+  IconCloud,
   IconLoader,
   IconFileCertificate,
   IconPalette,
@@ -24,8 +27,6 @@ import {
   IconShieldCheck,
   IconServer,
   IconMapPin,
-  IconPhone,
-  IconMail,
   IconExternalLink,
   IconAlertTriangle,
   IconTrash,
@@ -34,18 +35,34 @@ import {
   IconWorld
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
-import { facilityService } from "@/services/facility.service";
+import {
+  facilityService,
+  hubServiceFor,
+  HUB_ROTATABLE_SERVICES,
+  type HubRotatableService,
+} from "@/services/facility.service";
+import { linkService } from "@/services/link.service";
+import { tenantService } from "@/services/tenant.service";
+import { ENTITLEMENT_KEYS } from "@/services/entitlement.service";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { useOptionalHubCredentials } from "@/components/dashboard/HubCredentialsDialog";
 import {
   verificationService,
   type FacilityVerificationStatusDto,
 } from "@/services/verification.service";
-import type { PlatformVerificationStatus } from "@/lib/wire";
+import type {
+  FacilityDeploymentMode,
+  FacilityVisibility,
+  PlatformVerificationStatus,
+} from "@/lib/wire";
 import {
   formatVerificationTimestamp,
   getPlatformVerificationDisplay,
   getQueueStatusDisplay,
   validateLtoProofFile,
 } from "@/lib/verificationStatus";
+import { InlineEvidenceViewer } from "@/components/dashboard/InlineEvidenceViewer";
+import { apiErrorMessage } from "@/lib/apiError";
 import { toastApiError } from "@/lib/apiToast";
 
 // Prevent legacy hardcoded dummy strings from being assumed as authentic user configurations
@@ -54,6 +71,20 @@ const sanitizeLegacyDefault = (val?: string | null): string => {
   const trimmed = val.trim();
   if (trimmed === "Mon-Sat 8:00 AM - 5:00 PM") return "";
   return trimmed;
+};
+
+export type FacilitySettingsTab =
+  | "profile"
+  | "deployment"
+  | "letterhead"
+  | "notifications"
+  | "license"
+  | "danger";
+
+const VISIBILITY_HELP: Record<FacilityVisibility, string> = {
+  Private: "Only your workspace can see this facility.",
+  Network: "Facilities you link with can see it.",
+  Public: "Listed in the directory so other workspaces can find it.",
 };
 
 export interface FacilityData {
@@ -78,6 +109,11 @@ export interface FacilityData {
   contactNumber?: string | null;
   contactEmail?: string | null;
   notificationPreferencesJson?: string | null;
+  deploymentMode?: FacilityDeploymentMode;
+  consoleBaseUrl?: string | null;
+  visibility?: FacilityVisibility;
+  acceptsExternalRequests?: boolean;
+  branchId?: string | null;
   isPatientDiscoveryEligible?: boolean | null;
   platformVerificationStatus?: PlatformVerificationStatus | null;
   rejectionReason?: string | null;
@@ -90,6 +126,7 @@ interface FacilitySettingsHubProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
+  initialTab?: FacilitySettingsTab;
 }
 
 export default function FacilitySettingsHub({
@@ -97,12 +134,39 @@ export default function FacilitySettingsHub({
   open,
   onOpenChange,
   onSaved,
+  initialTab = "profile",
 }: FacilitySettingsHubProps) {
   const params = useParams();
   const tenantSlug = params?.tenant as string;
+  const hubCredentials = useOptionalHubCredentials();
+  const { hasFeature } = useEntitlements(tenantSlug || "");
+  const interopAvailable = hasFeature(ENTITLEMENT_KEYS.crossTenantInterop);
+  const interopLocked = interopAvailable === false;
 
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
+
+  // Deployment, Network Visibility & On-Premise Hub Rotation State (migrated from Workspace Settings)
+  const [deploymentMode, setDeploymentMode] = useState<FacilityDeploymentMode>(
+    facility?.deploymentMode ?? "SharedCloud"
+  );
+  const [savedDeploymentMode, setSavedDeploymentMode] = useState<FacilityDeploymentMode>(
+    facility?.deploymentMode ?? "SharedCloud"
+  );
+  const [consoleBaseUrl, setConsoleBaseUrl] = useState(facility?.consoleBaseUrl ?? "");
+  const [savingDeployment, setSavingDeployment] = useState(false);
+
+  const [visibility, setVisibility] = useState<FacilityVisibility>(facility?.visibility ?? "Private");
+  const [acceptsExternalRequests, setAcceptsExternalRequests] = useState<boolean>(
+    Boolean(facility?.acceptsExternalRequests)
+  );
+  const [savingVisibility, setSavingVisibility] = useState(false);
+
+  const [rotateService, setRotateService] = useState<HubRotatableService>(
+    facility ? hubServiceFor(facility.facilityType) : "clinic"
+  );
+  const [confirmingRotate, setConfirmingRotate] = useState(false);
+  const [rotatingHub, setRotatingHub] = useState(false);
 
   // Milestone 2 Discovery Eligibility State
   const [isPatientDiscoveryEligible, setIsPatientDiscoveryEligible] = useState<boolean>(
@@ -116,6 +180,7 @@ export default function FacilitySettingsHub({
   const [loadingVerification, setLoadingVerification] = useState(false);
   const [uploadingLtoProof, setUploadingLtoProof] = useState(false);
   const [ltoUploadError, setLtoUploadError] = useState<string | null>(null);
+  const [uploadedLtoLocalFile, setUploadedLtoLocalFile] = useState<File | null>(null);
   const ltoFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const facilityId = facility?.id;
@@ -138,9 +203,11 @@ export default function FacilitySettingsHub({
   React.useEffect(() => {
     if (open && facilityId) {
       setLtoUploadError(null);
+      setUploadedLtoLocalFile(null);
       void loadVerificationStatus();
     } else if (!open) {
       setVerificationStatus(null);
+      setUploadedLtoLocalFile(null);
     }
   }, [open, facilityId, loadVerificationStatus]);
 
@@ -169,6 +236,7 @@ export default function FacilitySettingsHub({
           ? { ...prev, ltoEvidenceObjectKey: result.ltoEvidenceObjectKey }
           : prev,
       );
+      setUploadedLtoLocalFile(file);
       toast.success("DOH LTO proof uploaded.");
       await loadVerificationStatus();
       if (onSaved) onSaved();
@@ -282,6 +350,13 @@ export default function FacilitySettingsHub({
       setContactNumber(facility.contactNumber || "");
       setContactEmail(facility.contactEmail || "");
       setIsPatientDiscoveryEligible(Boolean(facility.isPatientDiscoveryEligible));
+      setDeploymentMode(facility.deploymentMode ?? "SharedCloud");
+      setSavedDeploymentMode(facility.deploymentMode ?? "SharedCloud");
+      setConsoleBaseUrl(facility.consoleBaseUrl ?? "");
+      setVisibility(facility.visibility ?? "Private");
+      setAcceptsExternalRequests(Boolean(facility.acceptsExternalRequests));
+      setRotateService(hubServiceFor(facility.facilityType));
+      setConfirmingRotate(false);
 
       try {
         if (facility.notificationPreferencesJson) {
@@ -292,6 +367,78 @@ export default function FacilitySettingsHub({
       }
     }
   }, [facility]);
+
+  const deploymentDirty = Boolean(
+    facility &&
+      (deploymentMode !== savedDeploymentMode ||
+        (deploymentMode === "OnPremise" && consoleBaseUrl.trim() !== (facility.consoleBaseUrl ?? "")))
+  );
+
+  const visibilityDirty = Boolean(
+    facility &&
+      (visibility !== (facility.visibility ?? "Private") ||
+        acceptsExternalRequests !== Boolean(facility.acceptsExternalRequests))
+  );
+
+  const handleSaveDeployment = async () => {
+    if (!facility || !tenantSlug) return;
+    setSavingDeployment(true);
+    try {
+      await tenantService.updateFacilityDeployment(tenantSlug, facility.id, {
+        deploymentMode,
+        consoleBaseUrl: deploymentMode === "OnPremise" ? consoleBaseUrl.trim() : null,
+      });
+      setSavedDeploymentMode(deploymentMode);
+      toast.success(`${facility.name} deployment saved`);
+      onSaved?.();
+    } catch (err: unknown) {
+      toast.error(apiErrorMessage(err, "Failed to save deployment"));
+    } finally {
+      setSavingDeployment(false);
+    }
+  };
+
+  const handleChangeVisibility = (next: FacilityVisibility) => {
+    setVisibility(next);
+    if (next !== "Public") {
+      setAcceptsExternalRequests(false);
+    }
+  };
+
+  const handleSaveVisibility = async () => {
+    if (!facility || !tenantSlug) return;
+    setSavingVisibility(true);
+    try {
+      await linkService.setVisibility(tenantSlug, facility.id, {
+        visibility,
+        acceptsExternalRequests: visibility === "Public" && acceptsExternalRequests,
+      });
+      toast.success(`${facility.name} visibility saved`);
+      onSaved?.();
+    } catch (err: unknown) {
+      toastApiError(err, "Failed to save visibility", tenantSlug);
+    } finally {
+      setSavingVisibility(false);
+    }
+  };
+
+  const handleRotateHubCredentials = async () => {
+    if (!facility || !tenantSlug) return;
+    setRotatingHub(true);
+    try {
+      const rotated = await facilityService.rotateHubCredentials(tenantSlug, facility.id, rotateService);
+      setConfirmingRotate(false);
+      if (hubCredentials) {
+        hubCredentials.showRotated(facility.name, rotated);
+      } else {
+        toast.success(`New ${rotateService} hub credentials generated.`);
+      }
+    } catch (err: unknown) {
+      toastApiError(err, "Failed to rotate hub credentials", tenantSlug);
+    } finally {
+      setRotatingHub(false);
+    }
+  };
 
   const handleToggleDiscoveryEligibility = async () => {
     if (!facility || !tenantSlug || updatingDiscovery) return;
@@ -406,6 +553,16 @@ export default function FacilitySettingsHub({
     }
   };
 
+  const effectiveLtoEvidenceKey =
+    verificationStatus?.ltoEvidenceObjectKey ?? facility?.ltoEvidenceObjectKey ?? null;
+  const fetchFacilityLtoProof = React.useMemo(
+    () =>
+      facilityId && effectiveLtoEvidenceKey
+        ? () => verificationService.fetchFacilityLtoProof(facilityId, tenantSlug)
+        : undefined,
+    [facilityId, tenantSlug, effectiveLtoEvidenceKey],
+  );
+
   if (!facility) return null;
 
   const effectiveVerificationStatus =
@@ -415,8 +572,6 @@ export default function FacilitySettingsHub({
   const verificationBadge = getPlatformVerificationDisplay(effectiveVerificationStatus);
   const effectiveRejectionReason =
     verificationStatus?.rejectionReason ?? facility.rejectionReason ?? null;
-  const effectiveLtoEvidenceKey =
-    verificationStatus?.ltoEvidenceObjectKey ?? facility.ltoEvidenceObjectKey ?? null;
   const latestSubmission = verificationStatus?.latestRequest ?? null;
   const latestSubmissionBadge = latestSubmission
     ? getQueueStatusDisplay(latestSubmission.status)
@@ -485,6 +640,13 @@ export default function FacilitySettingsHub({
               >
                 <IconFileCertificate className="h-3.5 w-3.5" />
                 <span>Regulatory &amp; Statutory</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="deployment"
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-primary data-[state=active]:shadow-xs gap-1.5 shrink-0 whitespace-nowrap text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-all"
+              >
+                <IconServer className="h-3.5 w-3.5" />
+                <span>Deployment &amp; Network</span>
               </TabsTrigger>
               <TabsTrigger
                 value="letterhead"
@@ -618,10 +780,13 @@ export default function FacilitySettingsHub({
                         </Badge>
                       )}
                     </div>
-                    {effectiveLtoEvidenceKey ? (
-                      <p className="text-[11px] font-mono text-muted-foreground truncate" title={effectiveLtoEvidenceKey}>
-                        {effectiveLtoEvidenceKey}
-                      </p>
+                    {effectiveLtoEvidenceKey || uploadedLtoLocalFile ? (
+                      <InlineEvidenceViewer
+                        label="DOH License to Operate (LTO) Proof"
+                        objectKey={effectiveLtoEvidenceKey}
+                        localFile={uploadedLtoLocalFile}
+                        fetchEvidence={fetchFacilityLtoProof}
+                      />
                     ) : (
                       <p className="text-[11px] text-muted-foreground">
                         Upload PDF, JPEG, or PNG (max 5 MiB) for platform verification.
@@ -728,16 +893,18 @@ export default function FacilitySettingsHub({
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Operational Status
                   </Label>
-                  <select
+                  <SelectField
+                    ariaLabel="Operational Status"
                     value={status}
-                    onChange={(e) => setStatus(e.target.value as FacilityData["status"])}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-background font-semibold"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Provisioning">Provisioning</option>
-                    <option value="Suspended">Suspended</option>
-                    <option value="Failed">Failed</option>
-                  </select>
+                    onValueChange={(v) => setStatus(v as FacilityData["status"])}
+                    className="font-semibold"
+                    options={[
+                      { value: "Active", label: "Active" },
+                      { value: "Provisioning", label: "Provisioning" },
+                      { value: "Suspended", label: "Suspended" },
+                      { value: "Failed", label: "Failed" },
+                    ]}
+                  />
                 </div>
               </div>
 
@@ -902,7 +1069,195 @@ export default function FacilitySettingsHub({
               </div>
             </TabsContent>
 
-            {/* TAB 2: LETTERHEAD LIVES IN THE FACILITY CONSOLE */}
+            {/* TAB 2: DEPLOYMENT, NETWORK VISIBILITY & HUB CREDENTIALS */}
+            <TabsContent value="deployment" className="m-0 space-y-5">
+              {/* Deployment Mode Card */}
+              <div className="p-4 sm:p-5 rounded-2xl border border-border bg-card shadow-xs space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-foreground">
+                    <IconServer className="h-4 w-4 text-primary shrink-0" />
+                    <span>Facility Hosting &amp; Console Address</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Every facility runs as its own service. Choose whether it runs in the Clinic EZ shared cloud or on your own on-premise server.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <SelectField
+                    ariaLabel={`${facility.name} deployment`}
+                    value={deploymentMode}
+                    onValueChange={(v) => setDeploymentMode(v as FacilityDeploymentMode)}
+                    className="w-fit min-w-40"
+                    options={[
+                      { value: "SharedCloud", label: "Shared cloud" },
+                      { value: "OnPremise", label: "On-premise" },
+                    ]}
+                  />
+
+                  {deploymentMode === "OnPremise" ? (
+                    <Input
+                      aria-label={`${facility.name} console address`}
+                      value={consoleBaseUrl}
+                      onChange={(e) => setConsoleBaseUrl(e.target.value)}
+                      placeholder="https://clinic.hospital.local"
+                      maxLength={2048}
+                      className="h-9 rounded-xl text-xs flex-1 min-w-56"
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1.5 flex-1 min-w-48">
+                      <IconCloud className="h-3.5 w-3.5 shrink-0" />
+                      <span>Console address is generated by Clinic EZ</span>
+                    </span>
+                  )}
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!deploymentDirty || savingDeployment}
+                    onClick={handleSaveDeployment}
+                    className="rounded-xl text-xs font-bold h-9"
+                  >
+                    {savingDeployment ? "Saving..." : "Save Deployment"}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Network Visibility Card */}
+              <div className="p-4 sm:p-5 rounded-2xl border border-border bg-card shadow-xs space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-foreground">
+                    <IconWorld className="h-4 w-4 text-primary shrink-0" />
+                    <span>Network Visibility (Workspace Links)</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {VISIBILITY_HELP[visibility]}
+                    {visibility === "Public" && " Automatic acceptance activates incoming links without an admin review."}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <SelectField
+                    ariaLabel={`${facility.name} visibility`}
+                    value={visibility}
+                    disabled={interopLocked}
+                    onValueChange={(v) => handleChangeVisibility(v as FacilityVisibility)}
+                    className="w-fit min-w-36"
+                    options={[
+                      { value: "Private", label: "Private" },
+                      { value: "Network", label: "Network" },
+                      { value: "Public", label: "Public" },
+                    ]}
+                  />
+
+                  <label
+                    className={cn(
+                      "flex items-center gap-2 text-xs select-none",
+                      interopLocked || visibility !== "Public" ? "text-muted-foreground" : "text-foreground cursor-pointer"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={acceptsExternalRequests}
+                      disabled={interopLocked || visibility !== "Public"}
+                      onChange={(e) => setAcceptsExternalRequests(e.target.checked)}
+                    />
+                    <span>Accept link requests automatically</span>
+                  </label>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!visibilityDirty || savingVisibility || interopLocked}
+                    onClick={handleSaveVisibility}
+                    className="rounded-xl text-xs font-bold h-9 ml-auto"
+                  >
+                    {savingVisibility ? "Saving..." : "Save Visibility"}
+                  </Button>
+                </div>
+
+                {interopLocked && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    Cross-workspace links are not part of your current plan.{" "}
+                    <Link href={`/${tenantSlug}/dashboard/plan`} className="font-semibold underline">
+                      View plans
+                    </Link>
+                  </p>
+                )}
+              </div>
+
+              {/* On-Premise Hub Credentials Rotation Card */}
+              {savedDeploymentMode === "OnPremise" && (
+                <div className="p-4 sm:p-5 rounded-2xl border border-border bg-muted/30 space-y-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-foreground">
+                      <IconKey className="h-4 w-4 text-primary shrink-0" />
+                      <span>On-Premise Hub Credentials</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Rotate a hub client&apos;s secret and signing key if credentials were lost or compromised.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <SelectField
+                      ariaLabel={`${facility.name} hub client`}
+                      value={rotateService}
+                      onValueChange={(v) => {
+                        setRotateService(v as HubRotatableService);
+                        setConfirmingRotate(false);
+                      }}
+                      className="w-fit min-w-44"
+                      options={HUB_ROTATABLE_SERVICES.map((s) => ({
+                        value: s,
+                        label: s === "cell" ? "cell (upstream)" : s,
+                      }))}
+                    />
+
+                    {confirmingRotate ? (
+                      <>
+                        <span className="text-xs text-amber-700 dark:text-amber-400 flex-1 min-w-48">
+                          The current {rotateService} secret and signing key stop working immediately.
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          disabled={rotatingHub}
+                          onClick={handleRotateHubCredentials}
+                          className="rounded-xl text-xs font-bold h-9"
+                        >
+                          {rotatingHub ? "Rotating..." : "Rotate now"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={rotatingHub}
+                          onClick={() => setConfirmingRotate(false)}
+                          className="rounded-xl text-xs h-9"
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setConfirmingRotate(true)}
+                        className="rounded-xl text-xs font-bold h-9"
+                      >
+                        Rotate hub credentials
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* TAB 3: LETTERHEAD LIVES IN THE FACILITY CONSOLE */}
             <TabsContent value="letterhead" className="m-0 space-y-4">
               <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-2.5">
                 <IconSparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
@@ -1263,34 +1618,47 @@ export default function FacilitySettingsHub({
 
         {/* Responsive Footer */}
         <div className="p-3.5 sm:p-5 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 bg-slate-50/50 dark:bg-slate-900/30 shrink-0 z-20">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={saving}
-            className="w-full sm:w-auto rounded-xl text-xs font-semibold h-9"
-          >
-            Cancel
-          </Button>
+          {activeTab === "profile" || activeTab === "notifications" ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={saving}
+                className="w-full sm:w-auto rounded-xl text-xs font-semibold h-9"
+              >
+                Cancel
+              </Button>
 
-          <Button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="w-full sm:w-auto rounded-xl text-xs font-bold px-6 h-9 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 shadow-md"
-          >
-            {saving ? (
-              <>
-                <IconLoader className="h-4 w-4 animate-spin" />
-                <span>Saving Settings...</span>
-              </>
-            ) : (
-              <>
-                <IconCheck className="h-4 w-4" />
-                <span>Save Facility Settings</span>
-              </>
-            )}
-          </Button>
+              <Button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full sm:w-auto rounded-xl text-xs font-bold px-6 h-9 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 shadow-md"
+              >
+                {saving ? (
+                  <>
+                    <IconLoader className="h-4 w-4 animate-spin" />
+                    <span>Saving Settings...</span>
+                  </>
+                ) : (
+                  <>
+                    <IconCheck className="h-4 w-4" />
+                    <span>Save Facility Settings</span>
+                  </>
+                )}
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="w-full sm:w-auto sm:ml-auto rounded-xl text-xs font-semibold h-9"
+            >
+              Close
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

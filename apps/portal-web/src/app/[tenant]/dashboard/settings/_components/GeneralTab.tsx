@@ -6,6 +6,7 @@ import { IconDeviceFloppy } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { tenantService, WorkspaceGeneral } from "@/services/tenant.service";
 
@@ -28,8 +29,6 @@ const LOCALES = [
 
 const CURRENCIES = ["PHP", "USD", "SGD", "EUR", "GBP", "AUD", "JPY", "AED", "SAR"];
 
-const selectClass =
-    "w-full h-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary";
 const labelClass = "text-xs font-bold text-slate-500 uppercase tracking-wider";
 
 function supportedTimeZones(current: string): string[] {
@@ -154,37 +153,59 @@ export function GeneralTab({ tenantSlug, general, onSaved }: GeneralTabProps) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="timeZone" className={labelClass}>Default Time Zone</Label>
-                            <select id="timeZone" value={form.timeZoneId} onChange={(e) => set("timeZoneId", e.target.value)} className={selectClass}>
-                                {timeZones.map((tz) => (
-                                    <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>
-                                ))}
-                            </select>
+                            <SelectField
+                                id="timeZone"
+                                value={form.timeZoneId}
+                                onValueChange={(v) => set("timeZoneId", v)}
+                                size="md"
+                                className="text-sm"
+                                options={timeZones.map((tz) => ({ value: tz, label: tz.replace(/_/g, " ") }))}
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="locale" className={labelClass}>Language &amp; Region</Label>
-                            <select id="locale" value={form.locale} onChange={(e) => set("locale", e.target.value)} className={selectClass}>
-                                {(LOCALES.some((l) => l.value === form.locale) ? LOCALES : [{ value: form.locale, label: form.locale }, ...LOCALES]).map((l) => (
-                                    <option key={l.value} value={l.value}>{l.label}</option>
-                                ))}
-                            </select>
+                            <SelectField
+                                id="locale"
+                                value={form.locale}
+                                onValueChange={(v) => set("locale", v)}
+                                size="md"
+                                className="text-sm"
+                                options={
+                                    LOCALES.some((l) => l.value === form.locale)
+                                        ? LOCALES
+                                        : [{ value: form.locale, label: form.locale }, ...LOCALES]
+                                }
+                            />
                         </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="dateFormat" className={labelClass}>Date Format</Label>
-                            <select id="dateFormat" value={form.dateFormat} onChange={(e) => set("dateFormat", e.target.value)} className={selectClass}>
-                                {DATE_FORMATS.map((f) => (
-                                    <option key={f.value} value={f.value}>{f.example} ({f.value})</option>
-                                ))}
-                            </select>
+                            <SelectField
+                                id="dateFormat"
+                                value={form.dateFormat}
+                                onValueChange={(v) => set("dateFormat", v)}
+                                size="md"
+                                className="text-sm"
+                                options={DATE_FORMATS.map((f) => ({
+                                    value: f.value,
+                                    label: `${f.example} (${f.value})`,
+                                }))}
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="currency" className={labelClass}>Currency</Label>
-                            <select id="currency" value={form.currencyCode} onChange={(e) => set("currencyCode", e.target.value)} className={selectClass}>
-                                {(CURRENCIES.includes(form.currencyCode) ? CURRENCIES : [form.currencyCode, ...CURRENCIES]).map((c) => (
-                                    <option key={c} value={c}>{c}</option>
-                                ))}
-                            </select>
+                            <SelectField
+                                id="currency"
+                                value={form.currencyCode}
+                                onValueChange={(v) => set("currencyCode", v)}
+                                size="md"
+                                className="text-sm"
+                                options={(CURRENCIES.includes(form.currencyCode)
+                                    ? CURRENCIES
+                                    : [form.currencyCode, ...CURRENCIES]
+                                ).map((c) => ({ value: c, label: c }))}
+                            />
                         </div>
                     </div>
                 </CardContent>

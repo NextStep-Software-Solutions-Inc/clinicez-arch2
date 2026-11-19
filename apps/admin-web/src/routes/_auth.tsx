@@ -12,6 +12,7 @@ import {
   IconDashboard,
   IconBuildingHospital,
   IconCash,
+  IconClipboardCheck,
   IconUsersGroup,
   IconArticle,
   IconMail,
@@ -53,6 +54,7 @@ export const SIDEBAR_GROUPS: NavGroup[] = [
     items: [
       { label: 'Tenants', to: '/tenants', icon: IconBuildingHospital },
       { label: 'Leads', to: '/leads', icon: IconUsersGroup },
+      { label: 'Directory Verifications', to: '/verifications', icon: IconClipboardCheck },
     ],
   },
   {

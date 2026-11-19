@@ -32,6 +32,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { staffService, TenantStaffResultDto, StaffMemberDto } from "@/services/staff.service";
@@ -1218,23 +1219,22 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                             <Label htmlFor="role" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                                 Workspace Role <span className="text-rose-500">*</span>
                             </Label>
-                            <select
+                            <SelectField
                                 id="role"
                                 value={role}
-                                onChange={(e) => {
-                                    const newRole = e.target.value;
+                                onValueChange={(newRole) => {
                                     setRole(newRole);
                                     if (newRole !== "Facility Administrator") {
                                         setFacilityId("");
                                     }
                                 }}
-                                className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            >
-                                <option value="Admin">Tenant Administrator (Manage branches, invites, &amp; tenancy settings)</option>
-                                <option value="Facility Administrator">Facility Administrator (Branch clinical operations &amp; local settings)</option>
-                                <option value="Biller">Biller / Finance (Manage subscriptions, checkout sessions, &amp; invoices)</option>
-                                <option value="Viewer">Viewer / Analyst (Read-only access to tenancy health &amp; branch stats)</option>
-                            </select>
+                                options={[
+                                    { value: "Admin", label: "Tenant Administrator (Manage branches, invites, & tenancy settings)" },
+                                    { value: "Facility Administrator", label: "Facility Administrator (Branch clinical operations & local settings)" },
+                                    { value: "Biller", label: "Biller / Finance (Manage subscriptions, checkout sessions, & invoices)" },
+                                    { value: "Viewer", label: "Viewer / Analyst (Read-only access to tenancy health & branch stats)" },
+                                ]}
+                            />
                             <p className="text-[11px] text-slate-400">
                                 {ROLE_DETAILS[role]?.description}
                             </p>
@@ -1245,20 +1245,17 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                 <Label htmlFor="facilityId" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                                     Assigned Branch / Facility <span className="text-rose-500">*</span>
                                 </Label>
-                                <select
+                                <SelectField
                                     id="facilityId"
                                     value={facilityId}
-                                    onChange={(e) => setFacilityId(e.target.value)}
-                                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                    onValueChange={setFacilityId}
+                                    placeholder="Select a branch / facility..."
                                     required
-                                >
-                                    <option value="">Select a branch / facility...</option>
-                                    {facilities.map((fac) => (
-                                        <option key={fac.id} value={fac.id}>
-                                            {fac.name} ({fac.facilityType})
-                                        </option>
-                                    ))}
-                                </select>
+                                    options={facilities.map((fac) => ({
+                                        value: fac.id,
+                                        label: `${fac.name} (${fac.facilityType})`,
+                                    }))}
+                                />
                                 <p className="text-[11px] text-slate-400">
                                     Designate which branch facility this administrator manages in the portal.
                                 </p>
@@ -1391,23 +1388,22 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                             <Label htmlFor="editRole" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                                 Workspace Role <span className="text-rose-500">*</span>
                             </Label>
-                            <select
+                            <SelectField
                                 id="editRole"
                                 value={editRole}
-                                onChange={(e) => {
-                                    const newRole = e.target.value;
+                                onValueChange={(newRole) => {
                                     setEditRole(newRole);
                                     if (newRole !== "Facility Administrator") {
                                         setEditFacilityId("");
                                     }
                                 }}
-                                className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            >
-                                <option value="Admin">Tenant Administrator (Manage branches, invites, &amp; tenancy settings)</option>
-                                <option value="Facility Administrator">Facility Administrator (Branch clinical operations &amp; local settings)</option>
-                                <option value="Biller">Biller / Finance (Manage subscriptions, checkout sessions, &amp; invoices)</option>
-                                <option value="Viewer">Viewer / Analyst (Read-only access to tenancy health &amp; branch stats)</option>
-                            </select>
+                                options={[
+                                    { value: "Admin", label: "Tenant Administrator (Manage branches, invites, & tenancy settings)" },
+                                    { value: "Facility Administrator", label: "Facility Administrator (Branch clinical operations & local settings)" },
+                                    { value: "Biller", label: "Biller / Finance (Manage subscriptions, checkout sessions, & invoices)" },
+                                    { value: "Viewer", label: "Viewer / Analyst (Read-only access to tenancy health & branch stats)" },
+                                ]}
+                            />
                         </div>
 
                         {editRole === "Facility Administrator" && (
@@ -1415,20 +1411,17 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                 <Label htmlFor="editFacilityId" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                                     Assigned Branch / Facility <span className="text-rose-500">*</span>
                                 </Label>
-                                <select
+                                <SelectField
                                     id="editFacilityId"
                                     value={editFacilityId}
-                                    onChange={(e) => setEditFacilityId(e.target.value)}
-                                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                    onValueChange={setEditFacilityId}
+                                    placeholder="Select a branch / facility..."
                                     required
-                                >
-                                    <option value="">Select a branch / facility...</option>
-                                    {facilities.map((fac) => (
-                                        <option key={fac.id} value={fac.id}>
-                                            {fac.name} ({fac.facilityType})
-                                        </option>
-                                    ))}
-                                </select>
+                                    options={facilities.map((fac) => ({
+                                        value: fac.id,
+                                        label: `${fac.name} (${fac.facilityType})`,
+                                    }))}
+                                />
                             </div>
                         )}
 

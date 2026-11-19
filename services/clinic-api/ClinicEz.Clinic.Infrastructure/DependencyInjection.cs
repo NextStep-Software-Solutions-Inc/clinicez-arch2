@@ -308,6 +308,8 @@ public static class DependencyInjection
                 InteropTypes.YakapTransmittalRequested, InteropTypes.YakapTransmittalResponded)
             .Respond<YakapSubmissionRequestedPayload, YakapSubmissionRespondedPayload, ClinicEz.Clinic.Infrastructure.Messaging.Responders.YakapSubmissionResponder>(
                 InteropTypes.YakapSubmissionRequested, InteropTypes.YakapSubmissionResponded)
+            .Respond<VerificationEvidenceRequestedPayload, VerificationEvidenceRespondedPayload, ClinicEz.Clinic.Infrastructure.Messaging.Responders.VerificationEvidenceResponder>(
+                InteropTypes.VerificationEvidenceRequested, InteropTypes.VerificationEvidenceResponded)
             .HandleReply(InteropTypes.GamotLookupResponded)
             .HandleReply(InteropTypes.PhilHealthResponse)
             .HandleReply(InteropTypes.MediaRoomResponded)

@@ -157,6 +157,8 @@ public class PractitionerIdentityTests
         InteropTypes.PractitionerVerificationRequested.Should().Be("practitioner.verification.requested");
         InteropTypes.PractitionerIdentityUpdated.Should().Be("practitioner.identity.updated");
         InteropTypes.PractitionerVerificationRevoked.Should().Be("practitioner.verification.revoked");
+        InteropTypes.VerificationEvidenceRequested.Should().Be("verification.evidence.requested");
+        InteropTypes.VerificationEvidenceResponded.Should().Be("verification.evidence.responded");
     }
 
     [Fact]
@@ -366,6 +368,27 @@ public class PractitionerIdentityTests
             InteropEnvelope.Create(InteropTypes.PractitionerVerificationRevoked, Party.Portal, from, Guid.NewGuid(), revoked).ToJson())
             .GetPayload<PractitionerVerificationRevokedPayload>();
         roundTrippedRevoked.Should().Be(revoked);
+
+        var evidenceReq = new VerificationEvidenceRequestedPayload
+        {
+            ObjectKey = "tenants/t1/clinics/c1/verification/lto/doc.pdf"
+        };
+        var roundTrippedEvidenceReq = InteropEnvelope.FromJson(
+            InteropEnvelope.Create(InteropTypes.VerificationEvidenceRequested, Party.Portal, from, Guid.NewGuid(), evidenceReq).ToJson())
+            .GetPayload<VerificationEvidenceRequestedPayload>();
+        roundTrippedEvidenceReq.Should().Be(evidenceReq);
+
+        var evidenceRes = new VerificationEvidenceRespondedPayload
+        {
+            Found = true,
+            ContentType = "application/pdf",
+            FileName = "doc.pdf",
+            Base64Content = Convert.ToBase64String("%PDF-1.4"u8.ToArray())
+        };
+        var roundTrippedEvidenceRes = InteropEnvelope.FromJson(
+            InteropEnvelope.Create(InteropTypes.VerificationEvidenceResponded, from, Party.Portal, Guid.NewGuid(), evidenceRes).ToJson())
+            .GetPayload<VerificationEvidenceRespondedPayload>();
+        roundTrippedEvidenceRes.Should().Be(evidenceRes);
     }
 
     [Fact]

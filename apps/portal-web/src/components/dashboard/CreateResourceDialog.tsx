@@ -1,13 +1,15 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import FacilityOnboardingWizard from "./FacilityOnboardingWizard";
 
 export default function CreateResourceDialog() {
+  const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const type = searchParams.get("create") as "clinic" | "organization" | "laboratory" | "pharmacy" | null;
-  const branchId = searchParams.get("branchId");
+  const routeBranchId = typeof params?.branchId === "string" ? params.branchId : null;
+  const branchId = searchParams.get("branchId") || routeBranchId;
   const open = !!type;
 
   const handleOpenChange = (isOpen: boolean) => {

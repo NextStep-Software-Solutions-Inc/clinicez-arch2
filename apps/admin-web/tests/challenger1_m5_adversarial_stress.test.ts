@@ -27,9 +27,13 @@ describe('Adversarial Challenge 1: Route Hijacking & Legacy Shims', () => {
     expect(fs.existsSync(portalAdminDir)).toBe(false);
   });
 
-  test('C1.2: apps/portal-web contains exactly 0 files or directories under src/components/admin', () => {
+  test('C1.2: apps/portal-web contains exactly 0 files or directories under src/components/admin, src/app/portal/verifications, or src/components/verifications', () => {
     const portalAdminComponents = path.join(portalRoot, 'src', 'components', 'admin');
+    const portalVerificationsRoute = path.join(portalRoot, 'src', 'app', 'portal', 'verifications');
+    const portalVerificationsComponents = path.join(portalRoot, 'src', 'components', 'verifications');
     expect(fs.existsSync(portalAdminComponents)).toBe(false);
+    expect(fs.existsSync(portalVerificationsRoute)).toBe(false);
+    expect(fs.existsSync(portalVerificationsComponents)).toBe(false);
   });
 
   test('C1.3: apps/portal-web next.config.ts has zero /admin redirect shims (zero 301/302 shims)', () => {
@@ -57,6 +61,7 @@ describe('Adversarial Challenge 1: Route Hijacking & Legacy Shims', () => {
       '/admin/plans',
       '/admin/settings',
       '/admin/leads',
+      '/admin/verifications',
       '/admin/subscribers',
       '/admin/roles',
       '/admin/blog',

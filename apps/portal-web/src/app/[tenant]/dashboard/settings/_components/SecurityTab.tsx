@@ -6,6 +6,7 @@ import { IconDeviceFloppy, IconInfoCircle } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { tenantService, WorkspaceSecurity } from "@/services/tenant.service";
@@ -22,8 +23,6 @@ const IDLE_PRESETS = [
     { value: 480, label: "8 hours" },
 ];
 
-const selectClass =
-    "w-full h-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary";
 const labelClass = "text-xs font-bold text-slate-500 uppercase tracking-wider";
 
 interface SecurityTabProps {
@@ -85,11 +84,14 @@ export function SecurityTab({ tenantSlug, security, onSaved }: SecurityTabProps)
 
                     <div className="space-y-2 max-w-sm">
                         <Label htmlFor="idleTimeout" className={labelClass}>Sign out after inactivity</Label>
-                        <select id="idleTimeout" value={idle} onChange={(e) => setIdle(Number(e.target.value))} className={selectClass}>
-                            {idleOptions.map((o) => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                        </select>
+                        <SelectField
+                            id="idleTimeout"
+                            value={String(idle)}
+                            onValueChange={(v) => setIdle(Number(v))}
+                            size="md"
+                            className="text-sm"
+                            options={idleOptions.map((o) => ({ value: String(o.value), label: o.label }))}
+                        />
                     </div>
 
                     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/30 p-4 flex gap-3 text-xs text-slate-600 dark:text-slate-400">

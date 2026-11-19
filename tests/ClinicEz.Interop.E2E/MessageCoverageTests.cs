@@ -45,6 +45,8 @@ public class MessageCoverageTests
         new(InteropTypes.PractitionerVerificationRequested, [Clinic], [Portal]),
         new(InteropTypes.PractitionerIdentityUpdated, [Portal], [Patient, Clinic]),
         new(InteropTypes.PractitionerVerificationRevoked, [Portal], [Patient, Clinic]),
+        new(InteropTypes.VerificationEvidenceRequested, [Portal], [Clinic]),
+        new(InteropTypes.VerificationEvidenceResponded, [Clinic], [Portal]),
 
         new(InteropTypes.DirectoryCellUpserted, [Portal], [Hub]),
         new(InteropTypes.DirectoryFacilityUpserted, [Portal], [Hub]),

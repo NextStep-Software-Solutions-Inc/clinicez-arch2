@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { joinApiUrl, type EhrOptionDescriptor } from '@shared/safe';
 import { getPortalApiUrl } from '@/utils/domain';
 import { useEhrOptions } from '@/hooks/useEhrOptions';
+import { SelectField } from '@/components/ui/select';
 import {
   CheckCircle,
   AlertTriangle,
@@ -727,20 +728,21 @@ export default function RxVerifyClient({
                 <form onSubmit={handleDispenseSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-foreground">
+                      <label htmlFor="drugstore-select" className="text-xs font-bold text-foreground">
                         Drugstore Chain *
                       </label>
-                      <select
+                      <SelectField
+                        id="drugstore-select"
                         value={pharmacyName}
-                        onChange={(e) => setPharmacyName(e.target.value)}
-                        className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
-                      >
-                        {drugstoreOptions.map((opt) => (
-                          <option key={opt.code} value={opt.label}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
+                        onValueChange={setPharmacyName}
+                        placeholder="Select drugstore chain"
+                        size="md"
+                        className="rounded-lg text-sm"
+                        options={drugstoreOptions.map((opt) => ({
+                          value: opt.label,
+                          label: opt.label,
+                        }))}
+                      />
                     </div>
 
                     {isOtherPharmacy ? (

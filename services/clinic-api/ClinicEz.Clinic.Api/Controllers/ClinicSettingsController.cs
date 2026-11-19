@@ -46,6 +46,23 @@ public sealed class ClinicSettingsController : ControllerBase
         return Ok(ApiResponse<EvidenceProofUploadResultDto>.Success(result, "DOH LTO proof uploaded."));
     }
 
+    /// <summary>Streams the clinic's uploaded DOH LTO proof document for inline viewing.</summary>
+    [HttpGet("lto-proof")]
+    [HasPermission(ClinicPermissions.SettingsRead)]
+    public async Task<IActionResult> GetLtoProof(CancellationToken ct)
+    {
+        var file = await _sender.Send(new GetLtoProofEvidenceQuery(), ct);
+        if (file == null)
+        {
+            return NotFound(ApiResponse<object>.Fail("No DOH LTO proof document is uploaded for this clinic."));
+        }
+
+        Response.Headers.CacheControl = "private, no-store";
+        Response.Headers.XContentTypeOptions = "nosniff";
+        Response.Headers.ContentDisposition = $"inline; filename=\"{file.FileName}\"";
+        return File(file.Bytes, file.ContentType);
+    }
+
     /// <summary>Publishes or unpublishes the clinic from the patient discovery directory.</summary>
     [HttpPut("directory-publishing")]
     [HasPermission(ClinicPermissions.SettingsManage)]

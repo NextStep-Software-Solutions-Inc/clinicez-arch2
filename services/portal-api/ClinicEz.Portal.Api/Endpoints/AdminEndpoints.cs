@@ -19,11 +19,14 @@ using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Constants;
 using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Shared.Interop.Requests;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Portal.Api.Endpoints;
 
@@ -258,6 +261,123 @@ public class AdminEndpoints : IEndpoint
         })
         .WithName("GetVerificationRequestDetail")
         .WithDescription("Returns verification request snapshot, child practitioner requests, PRC match candidates, name-mismatch flag, submission history, and evidence object key.")
+        .WithTags("Admin");
+
+        group.MapGet("/verification-queue/{requestId:guid}/evidence", async (
+            Guid requestId,
+            string? kind,
+            Guid? childRequestId,
+            HttpContext httpContext,
+            ISender sender,
+            IApplicationDbContext context,
+            IPortalEvidenceStorageService storage,
+            CancellationToken ct) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ViewVerifications, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            string? objectKey = null;
+            Guid tenantId = Guid.Empty;
+            Guid facilityId = Guid.Empty;
+
+            var normalizedKind = (kind ?? string.Empty).Trim().ToLowerInvariant();
+            var facReq = await context.FacilityVerificationRequests
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == requestId && !r.IsDeleted, ct);
+
+            if (facReq != null)
+            {
+                tenantId = facReq.TenantId;
+                facilityId = facReq.FacilityId;
+
+                if (childRequestId.HasValue)
+                {
+                    var childReq = await context.PractitionerVerificationRequests
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(
+                            p => p.Id == childRequestId.Value &&
+                                 p.FacilityVerificationRequestId == facReq.Id &&
+                                 !p.IsDeleted,
+                            ct);
+                    if (childReq == null)
+                        return Results.NotFound(new { Message = "Bundled practitioner request not found." });
+
+                    objectKey = childReq.PrcEvidenceObjectKey;
+                }
+                else if (normalizedKind == "prc")
+                {
+                    var firstChild = await context.PractitionerVerificationRequests
+                        .AsNoTracking()
+                        .Where(p => p.FacilityVerificationRequestId == facReq.Id && !p.IsDeleted)
+                        .OrderBy(p => p.SubmittedAtUtc)
+                        .FirstOrDefaultAsync(ct);
+                    objectKey = firstChild?.PrcEvidenceObjectKey;
+                }
+                else
+                {
+                    var facilityLtoKey = await context.Facilities
+                        .AsNoTracking()
+                        .Where(f => f.Id == facReq.FacilityId && !f.IsDeleted)
+                        .Select(f => f.LtoEvidenceObjectKey)
+                        .FirstOrDefaultAsync(ct);
+                    objectKey = !string.IsNullOrWhiteSpace(facReq.LtoEvidenceObjectKey)
+                        ? facReq.LtoEvidenceObjectKey
+                        : facilityLtoKey;
+                }
+            }
+            else
+            {
+                var pracReq = await context.PractitionerVerificationRequests
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.Id == requestId && !r.IsDeleted, ct);
+                if (pracReq == null)
+                    return Results.NotFound(new { Message = "Verification request not found." });
+
+                tenantId = pracReq.TenantId;
+                facilityId = pracReq.FacilityId;
+
+                if (normalizedKind == "lto")
+                {
+                    objectKey = await context.Facilities
+                        .AsNoTracking()
+                        .Where(f => f.Id == pracReq.FacilityId && !f.IsDeleted)
+                        .Select(f => f.LtoEvidenceObjectKey)
+                        .FirstOrDefaultAsync(ct);
+                }
+                else
+                {
+                    objectKey = pracReq.PrcEvidenceObjectKey;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(objectKey))
+                return Results.NotFound(new { Message = "No verification proof file is attached to this request." });
+
+            var interopClient = httpContext.RequestServices.GetService<IInteropRequestClient>();
+            var logger = httpContext.RequestServices.GetService<ILogger<AdminEndpoints>>();
+            var outcome = await VerificationEvidenceResolver.ResolveAsync(
+                storage,
+                interopClient,
+                tenantId,
+                facilityId,
+                objectKey,
+                logger,
+                ct);
+
+            if (outcome.File == null)
+            {
+                return outcome.ClinicUnavailable
+                    ? Results.Json(new { Message = outcome.ErrorMessage ?? "Clinic workstation is unreachable." }, statusCode: 502)
+                    : Results.NotFound(new { Message = outcome.ErrorMessage ?? "Verification proof file not found." });
+            }
+
+            httpContext.Response.Headers.CacheControl = "private, no-store";
+            httpContext.Response.Headers.XContentTypeOptions = "nosniff";
+            httpContext.Response.Headers.ContentDisposition = $"inline; filename=\"{outcome.File.FileName}\"";
+            return Results.File(outcome.File.Content, outcome.File.ContentType);
+        })
+        .WithName("GetVerificationRequestEvidence")
+        .WithDescription("Streams an uploaded DOH LTO or PRC verification proof file inline for authorized reviewers.")
         .WithTags("Admin");
 
         group.MapPost("/verification-queue/{requestId:guid}/approve", async (

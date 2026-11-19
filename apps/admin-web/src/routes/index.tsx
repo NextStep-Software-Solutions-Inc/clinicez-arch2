@@ -14,6 +14,7 @@ import {
   IconCheck,
   IconAlertCircle,
   IconClock,
+  IconClipboardCheck,
   IconCreditCard,
   IconSettings,
 } from '@tabler/icons-react';
@@ -128,6 +129,7 @@ function OverviewDashboard() {
   }, [filteredTrends]);
 
   const quickActions = [
+    { label: 'Directory Verifications', destination: '/verifications', icon: IconClipboardCheck },
     { label: 'New Plan', destination: '/plans?action=create', icon: IconPlus },
     { label: 'Invite Admin', destination: '/users?action=invite', icon: IconUsers },
     { label: 'Record Payment', destination: '/tenants', icon: IconCreditCard },

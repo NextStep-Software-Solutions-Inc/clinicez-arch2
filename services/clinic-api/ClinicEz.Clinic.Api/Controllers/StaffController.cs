@@ -199,6 +199,22 @@ public sealed class StaffController : ControllerBase
         return Ok(ApiResponse<EvidenceProofUploadResultDto>.Success(result, "PRC proof uploaded."));
     }
 
+    [HttpGet("{id:guid}/prc-proof")]
+    [HasPermission(ClinicPermissions.StaffRead)]
+    public async Task<IActionResult> GetPrcProof(Guid id, CancellationToken ct)
+    {
+        var file = await _sender.Send(new GetStaffPrcProofEvidenceQuery(id), ct);
+        if (file == null)
+        {
+            return NotFound(ApiResponse<object>.Fail("No PRC proof document is uploaded for this clinician."));
+        }
+
+        Response.Headers.CacheControl = "private, no-store";
+        Response.Headers.XContentTypeOptions = "nosniff";
+        Response.Headers.ContentDisposition = $"inline; filename=\"{file.FileName}\"";
+        return File(file.Bytes, file.ContentType);
+    }
+
     [HttpPost("{id:guid}/submit-verification")]
     [HasPermission(ClinicPermissions.StaffManage)]
     public async Task<ActionResult<ApiResponse<StaffMemberDto>>> SubmitVerification(Guid id, CancellationToken ct)

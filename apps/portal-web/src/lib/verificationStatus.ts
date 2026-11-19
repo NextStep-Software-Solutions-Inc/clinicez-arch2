@@ -1,4 +1,4 @@
-import type { PlatformVerificationStatus, PractitionerVerificationLevel } from "@/lib/wire";
+import type { PlatformVerificationStatus } from "@/lib/wire";
 
 export const LTO_PROOF_MAX_BYTES = 5 * 1024 * 1024;
 export const LTO_PROOF_ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png"] as const;
@@ -53,7 +53,7 @@ export function getPlatformVerificationDisplay(
   }
 }
 
-/** Maps a verification queue item / practitioner status to concise clinical UI copy and semantic token styling. */
+/** Maps a verification submission status to concise clinical UI copy and semantic token styling. */
 export function getQueueStatusDisplay(status?: string | null): VerificationStatusDisplay {
   switch (status) {
     case "Pending":
@@ -105,42 +105,6 @@ export function getQueueStatusDisplay(status?: string | null): VerificationStatu
         badgeClassName: TONE_BADGE_CLASSES.neutral,
       };
   }
-}
-
-export function getPractitionerLevelDisplay(
-  level?: PractitionerVerificationLevel | string | null,
-): VerificationStatusDisplay {
-  if (level === "PendingVerification") {
-    return {
-      label: "Pending Verification",
-      tone: "warning",
-      badgeClassName: TONE_BADGE_CLASSES.warning,
-    };
-  }
-  return getQueueStatusDisplay(level);
-}
-
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
-
-export interface ScheduleWindowLike {
-  dayOfWeek: number | string;
-  startTime: string;
-  endTime: string;
-  slotDurationMinutes?: number;
-}
-
-/** Formats availability windows into a compact clinical schedule summary. */
-export function formatScheduleSummary(windows?: ReadonlyArray<ScheduleWindowLike> | null): string {
-  if (!windows || windows.length === 0) return "No schedule set";
-  return windows
-    .map((w) => {
-      const dayLabel =
-        typeof w.dayOfWeek === "number"
-          ? DAY_NAMES[w.dayOfWeek] ?? `Day ${w.dayOfWeek}`
-          : String(w.dayOfWeek).slice(0, 3);
-      return `${dayLabel} ${w.startTime}–${w.endTime}`;
-    })
-    .join(", ");
 }
 
 /** Formats ISO UTC timestamps into readable local date/time strings without throwing on invalid input. */

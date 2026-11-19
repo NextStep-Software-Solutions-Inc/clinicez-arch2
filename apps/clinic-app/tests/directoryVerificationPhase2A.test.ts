@@ -477,8 +477,17 @@ describe('Phase 2A: Directory Verification Helpers, API Contracts & Staff Direct
     expect(staffTabSrc).toContain('Save & Submit for Verification');
     expect(staffTabSrc).toContain('PRC Expiry Date');
     expect(staffTabSrc).toContain('Upload PRC Proof');
+    expect(staffTabSrc).toContain('EvidenceProofPreview');
+    expect(staffTabSrc).toContain('fetchStaffPrcProofBlob');
     expect(staffTabSrc).toContain('Verification Contact');
     expect(staffTabSrc).toContain('Public Bio');
+
+    const readinessTabSrc = fs.readFileSync(
+      path.resolve(__dirname, '../components/settings/FacilityReadinessTab.tsx'),
+      'utf8',
+    );
+    expect(readinessTabSrc).toContain('EvidenceProofPreview');
+    expect(readinessTabSrc).toContain('fetchLtoProofBlob');
   });
 
   test('5. Dashboard.screen.tsx remains completely clean of directory publishing or verification controls', () => {

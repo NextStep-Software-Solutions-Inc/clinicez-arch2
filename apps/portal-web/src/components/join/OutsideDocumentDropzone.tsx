@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { UploadCloud, FileText, Trash2, ShieldAlert, AlertCircle } from "lucide-react";
 import { validateFileUpload } from "@/lib/join";
+import { SelectField } from "@/components/ui/select";
 import { type PatientJoinAttachmentItem } from "./types";
 
 interface OutsideDocumentDropzoneProps {
@@ -135,17 +136,14 @@ export function OutsideDocumentDropzone({ attachments, onChange }: OutsideDocume
               </div>
 
               <div className="flex items-center gap-2 self-end sm:self-auto">
-                <select
+                <SelectField
+                  ariaLabel={`Document category for ${file.fileName}`}
                   value={file.recordType || "OutsideChestXRay"}
-                  onChange={(e) => handleTypeChange(idx, e.target.value)}
-                  className="px-2.5 py-1.5 rounded-lg border border-input text-xs bg-background text-foreground"
-                >
-                  {DOCUMENT_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={(v) => handleTypeChange(idx, v)}
+                  size="sm"
+                  className="w-fit min-w-52 rounded-lg"
+                  options={DOCUMENT_TYPES}
+                />
 
                 <button
                   type="button"

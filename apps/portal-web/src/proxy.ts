@@ -12,7 +12,6 @@ import {
 export const isProtectedRoute = createRouteMatcher([
     '/:tenant/dashboard(.*)',
     '/sync-auth(.*)',
-    '/portal/verifications(.*)',
 ]);
 
 // Canonical public unauthenticated routes (no tenant resolution, no Clerk auth gate)
@@ -62,9 +61,7 @@ export function isTenantSubdomainBypassPath(pathname: string): boolean {
         pathname === '/sync-auth' ||
         pathname.startsWith('/sync-auth/') ||
         pathname === '/tenants/register' ||
-        pathname.startsWith('/tenants/register/') ||
-        pathname === '/portal/verifications' ||
-        pathname.startsWith('/portal/verifications/')
+        pathname.startsWith('/tenants/register/')
     );
 }
 

@@ -6,6 +6,7 @@ import { apiClient } from "@/transport/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
@@ -634,17 +635,18 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                         </div>
                         <div className="space-y-1.5">
                             <Label htmlFor="editStatus" className="text-xs font-bold">Operational Status</Label>
-                            <select
+                            <SelectField
                                 id="editStatus"
                                 value={editStatus}
-                                onChange={(e) => setEditStatus(e.target.value as Facility["status"])}
-                                className="w-full h-9 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-background px-3 font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary"
-                            >
-                                <option value="Active">Active</option>
-                                <option value="Provisioning">Provisioning</option>
-                                <option value="Suspended">Suspended</option>
-                                <option value="Failed">Failed</option>
-                            </select>
+                                onValueChange={(v) => setEditStatus(v as Facility["status"])}
+                                className="font-semibold"
+                                options={[
+                                    { value: "Active", label: "Active" },
+                                    { value: "Provisioning", label: "Provisioning" },
+                                    { value: "Suspended", label: "Suspended" },
+                                    { value: "Failed", label: "Failed" },
+                                ]}
+                            />
                         </div>
                         <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
                             <Button 

@@ -1,9 +1,7 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
-import { useParams, usePathname } from "next/navigation"
-import useSWR from "swr"
+import { useParams } from "next/navigation"
 import {
   IconArrowsExchange,
   IconBuilding,
@@ -15,7 +13,6 @@ import {
   IconCreditCard,
   IconUsers,
   IconFileCertificate,
-  IconShieldCheck,
 } from "@tabler/icons-react"
 
 import { NavMain, resolveDashboardNavHref } from "@/components/dashboard/nav-main"
@@ -26,9 +23,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -36,26 +30,12 @@ import {
 } from "@/components/ui/sidebar"
 import { NavSecondary } from "./nav-secondary"
 import { ClinicEzMark } from "@/components/ClinicEzLogo"
-import {
-  canViewVerifications,
-  verificationService,
-  type ReviewerProfile,
-} from "@/services/verification.service"
-
-export const PORTAL_VERIFICATIONS_PATH = "/portal/verifications"
-
-export function shouldShowVerificationsNav(
-  profile: ReviewerProfile | null | undefined,
-): boolean {
-  return canViewVerifications(profile)
-}
 
 export function AppSidebar({ 
   name, 
   clinicName = "Clinic EZ", 
   logoUrl,
-  user,
-  reviewerProfile,
+  user, 
   ...props 
 }: { 
   name?: string; 
@@ -66,27 +46,12 @@ export function AppSidebar({
     email: string;
     avatar: string;
     role?: string;
-  };
-  reviewerProfile?: ReviewerProfile | null;
+  }
 } & React.ComponentProps<typeof Sidebar>) {
   const params = useParams();
-  const pathname = usePathname();
   const tenant = (params?.tenant as string) || "demo-tenant";
   const displayName = name || clinicName;
   const [notificationsOpen, setNotificationsOpen] = React.useState(false);
-
-  const { data: fetchedReviewerProfile } = useSWR<ReviewerProfile | null>(
-    reviewerProfile === undefined ? "portal/reviewer-profile" : null,
-    () => verificationService.getReviewerProfile().catch(() => null),
-    { revalidateOnFocus: false, shouldRetryOnError: false },
-  );
-
-  const resolvedReviewerProfile =
-    reviewerProfile !== undefined ? reviewerProfile : fetchedReviewerProfile;
-  const showVerificationsNav = shouldShowVerificationsNav(resolvedReviewerProfile);
-  const isVerificationsActive =
-    pathname === PORTAL_VERIFICATIONS_PATH ||
-    Boolean(pathname?.startsWith(`${PORTAL_VERIFICATIONS_PATH}/`));
 
   const data = {
     user: user || {
@@ -176,27 +141,6 @@ export function AppSidebar({
         </SidebarHeader>
         <SidebarContent>
           <NavMain items={data.navMain} />
-          {showVerificationsNav ? (
-            <SidebarGroup>
-              <SidebarGroupLabel>Platform Review</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isVerificationsActive}
-                      tooltip="Directory Verifications"
-                    >
-                      <Link href={PORTAL_VERIFICATIONS_PATH}>
-                        <IconShieldCheck />
-                        <span>Directory Verifications</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ) : null}
           <NavSecondary items={data.navSecondary} />
         </SidebarContent>
         <SidebarFooter>

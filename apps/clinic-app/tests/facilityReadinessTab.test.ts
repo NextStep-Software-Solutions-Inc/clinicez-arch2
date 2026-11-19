@@ -231,7 +231,7 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
 
     expect(markup).toContain('Workspace Eligibility Pending');
     expect(markup).toContain('Your organization workspace administrator has not yet enabled public patient directory discovery for this facility branch');
-    expect(markup).toContain('To resolve: Contact your workspace administrator to enable &quot;Patient App Discovery&quot; in Portal Settings → Facilities.');
+    expect(markup).toContain('To resolve: Contact your workspace administrator to enable &quot;Patient App Discovery&quot; in Portal Branches → Facility Settings.');
   });
 
   test('4. Does not render Workspace Eligibility Pending warning banner when isWorkspaceEligible is true', () => {

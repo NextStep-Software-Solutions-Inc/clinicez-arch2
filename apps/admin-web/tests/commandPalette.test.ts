@@ -14,6 +14,7 @@ describe('CommandPalette — Search Index & Navigation Routing', () => {
     { id: 'route-tenants', category: 'Workstation', title: 'Tenants Registry', subtitle: 'Registered multi-facility workspaces', destination: '/tenants' },
     { id: 'route-plans', category: 'Workstation', title: 'Commercial Plans', subtitle: 'Subscription ladders & limits', destination: '/plans' },
     { id: 'route-leads', category: 'Workstation', title: 'Conversion Leads', subtitle: 'Trial onboarding pipeline', destination: '/leads' },
+    { id: 'route-verifications', category: 'Workstation', title: 'Directory Verifications', subtitle: 'Clinic DOH LTO & practitioner PRC review queue', destination: '/verifications' },
     { id: 'route-blog', category: 'Workstation', title: 'Blog CRM', subtitle: 'Editorial articles & notices', destination: '/blog' },
     { id: 'route-subscribers', category: 'Workstation', title: 'Subscribers Directory', subtitle: 'Audience & RFC-4180 CSV export', destination: '/subscribers' },
     { id: 'route-roles', category: 'Workstation', title: 'Roles & Access Control', subtitle: 'RBAC permissions matrix', destination: '/roles' },
@@ -44,8 +45,8 @@ describe('CommandPalette — Search Index & Navigation Routing', () => {
     );
   }
 
-  it('covers all 9 primary governance workstation modules in command search', () => {
-    expect(workstationRoutes.length).toBe(9);
+  it('covers all 10 primary governance workstation modules in command search', () => {
+    expect(workstationRoutes.length).toBe(10);
     for (const route of workstationRoutes) {
       expect(route.destination).toBeDefined();
       expect(route.destination!.startsWith('/admin')).toBe(false);

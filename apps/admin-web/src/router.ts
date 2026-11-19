@@ -6,6 +6,7 @@ import { Route as tenantsIndexRoute } from './routes/tenants/index';
 import { Route as tenantsSlugRoute } from './routes/tenants/$slug';
 import { Route as plansRoute } from './routes/plans';
 import { Route as leadsRoute } from './routes/leads';
+import { Route as verificationsRoute } from './routes/verifications';
 import { Route as blogRoute } from './routes/blog';
 import { Route as subscribersRoute } from './routes/subscribers';
 import { Route as rolesRoute } from './routes/roles';
@@ -24,6 +25,7 @@ export const routeTree = rootRoute.addChildren([
     tenantsSlugRoute,
     plansRoute,
     leadsRoute,
+    verificationsRoute,
     blogRoute,
     subscribersRoute,
     rolesRoute,

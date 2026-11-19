@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, Pressable, ViewStyle } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
@@ -13,7 +13,10 @@ import {
   pickVerificationEvidenceFile,
   resolveFacilityVerificationBadge,
   toEvidenceFormData,
+  type PickedEvidenceFile,
 } from '../../utils/directoryVerification';
+import { clinicService } from '../../services/clinicService';
+import { EvidenceProofPreview } from './EvidenceProofPreview';
 import { SettingsTabKey, ReadinessCheckItem } from './types';
 import {
   ClinicRole,
@@ -152,7 +155,12 @@ export default function FacilityReadinessTab({
   const [localWithdrawLoading, setLocalWithdrawLoading] = useState(false);
   const [localLtoSaving, setLocalLtoSaving] = useState(false);
   const [localLtoUploading, setLocalLtoUploading] = useState(false);
+  const [localLtoFile, setLocalLtoFile] = useState<PickedEvidenceFile | null>(null);
   const [ltoInput, setLtoInput] = useState(letterheadDohLto ?? '');
+  const fetchLtoProofBlob = useMemo(
+    () => (ltoEvidenceObjectKey ? () => clinicService.fetchLtoProofBlob() : undefined),
+    [ltoEvidenceObjectKey],
+  );
 
   useEffect(() => {
     setLtoInput(letterheadDohLto ?? '');
@@ -350,7 +358,10 @@ export default function FacilityReadinessTab({
     }
     setLocalLtoUploading(true);
     try {
-      await onUploadLtoProof(toEvidenceFormData(picked.file));
+      const ok = await onUploadLtoProof(toEvidenceFormData(picked.file));
+      if (ok !== false) {
+        setLocalLtoFile(picked.file);
+      }
     } finally {
       setLocalLtoUploading(false);
     }
@@ -620,7 +631,7 @@ export default function FacilityReadinessTab({
                   Your organization workspace administrator has not yet enabled public patient directory discovery for this facility branch. You can complete your pre-flight checklist and profile configuration, but patient app publishing remains locked until workspace-level eligibility is granted in the Portal.
                 </ThemedText>
                 <ThemedText variant="captionBold" color={theme.colors.warningText} style={styles.warningBannerFooter}>
-                  To resolve: Contact your workspace administrator to enable &quot;Patient App Discovery&quot; in Portal Settings → Facilities.
+                  To resolve: Contact your workspace administrator to enable &quot;Patient App Discovery&quot; in Portal Branches → Facility Settings.
                 </ThemedText>
               </View>
             </View>
@@ -708,6 +719,16 @@ export default function FacilityReadinessTab({
                 </ThemedText>
               )}
             </View>
+
+            {hasLtoProof || localLtoFile ? (
+              <EvidenceProofPreview
+                label="DOH License to Operate (LTO) Proof"
+                objectKey={ltoEvidenceObjectKey}
+                localFile={localLtoFile}
+                fetchBlob={fetchLtoProofBlob}
+                testID="lto-proof-preview"
+              />
+            ) : null}
           </View>
 
           {/* Directory Verification & Publishing Control Row */}

@@ -154,3 +154,25 @@ public sealed record PractitionerVerificationRevokedPayload
     public string Reason { get; init; } = string.Empty;
     public DateTime RevokedAtUtc { get; init; } = DateTime.UtcNow;
 }
+
+/// <summary>
+/// Portal -> clinic, type <c>verification.evidence.requested</c> (<c>InteropTypes.VerificationEvidenceRequested</c>).
+/// Requests a clinic-stored DOH LTO or PRC verification evidence document by its authorized storage object key.
+/// </summary>
+public sealed record VerificationEvidenceRequestedPayload
+{
+    public string ObjectKey { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Clinic -> portal, type <c>verification.evidence.responded</c> (<c>InteropTypes.VerificationEvidenceResponded</c>).
+/// Returns the decrypted verification evidence bytes (Base64) along with its MIME type and filename.
+/// </summary>
+public sealed record VerificationEvidenceRespondedPayload
+{
+    public bool Found { get; init; }
+    public string? ContentType { get; init; }
+    public string? FileName { get; init; }
+    public string? Base64Content { get; init; }
+    public string? Error { get; init; }
+}

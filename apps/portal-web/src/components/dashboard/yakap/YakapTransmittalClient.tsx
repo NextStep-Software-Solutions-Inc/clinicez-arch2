@@ -10,6 +10,7 @@ import {
 } from "@/services/yakap.service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SelectField } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -234,18 +235,17 @@ export default function YakapTransmittalClient() {
 
         <div className="flex items-center gap-3">
           <div className="relative">
-            <select
+            <SelectField
+              ariaLabel="Select accredited branch"
               value={selectedBranchId}
-              onChange={(e) => setSelectedBranchId(e.target.value)}
+              onValueChange={setSelectedBranchId}
               disabled={loadingBranches}
-              className="h-9 px-3 py-1.5 rounded-xl border border-input text-xs bg-background text-foreground font-medium focus:ring-2 focus:ring-primary focus:outline-none pr-8"
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name} {b.philHealthAccreditationNumber ? `(${b.philHealthAccreditationNumber})` : "(Unaccredited)"}
-                </option>
-              ))}
-            </select>
+              className="w-fit min-w-52 font-medium"
+              options={branches.map((b) => ({
+                value: b.id,
+                label: `${b.name} ${b.philHealthAccreditationNumber ? `(${b.philHealthAccreditationNumber})` : "(Unaccredited)"}`,
+              }))}
+            />
           </div>
 
           <Button
@@ -442,32 +442,38 @@ export default function YakapTransmittalClient() {
               </div>
 
               {/* Status Filter */}
-              <select
+              <SelectField
+                ariaLabel="Filter by submission status"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-8 px-2.5 rounded-xl border border-input text-xs bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-              >
-                <option value="all">All Statuses</option>
-                <option value="pending">Pending</option>
-                <option value="submitted">Submitted</option>
-                <option value="accepted">Accepted</option>
-                <option value="rejected">Rejected</option>
-                <option value="failed">Failed</option>
-              </select>
+                onValueChange={setStatusFilter}
+                size="sm"
+                className="w-fit min-w-32"
+                options={[
+                  { value: "all", label: "All Statuses" },
+                  { value: "pending", label: "Pending" },
+                  { value: "submitted", label: "Submitted" },
+                  { value: "accepted", label: "Accepted" },
+                  { value: "rejected", label: "Rejected" },
+                  { value: "failed", label: "Failed" },
+                ]}
+              />
 
               {/* Type Filter */}
-              <select
+              <SelectField
+                ariaLabel="Filter by submission type"
                 value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                className="h-8 px-2.5 rounded-xl border border-input text-xs bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-              >
-                <option value="all">All Types</option>
-                <option value="fpe">FPE</option>
-                <option value="consultation">Consultation</option>
-                <option value="diagnostic">Diagnostic</option>
-                <option value="medicine">Medicine</option>
-                <option value="referral">Referral</option>
-              </select>
+                onValueChange={setTypeFilter}
+                size="sm"
+                className="w-fit min-w-32"
+                options={[
+                  { value: "all", label: "All Types" },
+                  { value: "fpe", label: "FPE" },
+                  { value: "consultation", label: "Consultation" },
+                  { value: "diagnostic", label: "Diagnostic" },
+                  { value: "medicine", label: "Medicine" },
+                  { value: "referral", label: "Referral" },
+                ]}
+              />
             </div>
           </div>
         </CardHeader>

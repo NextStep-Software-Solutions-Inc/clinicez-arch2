@@ -6,6 +6,7 @@ import { IconHistory } from "@tabler/icons-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SelectField } from "@/components/ui/select";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { apiErrorMessage } from "@/lib/apiError";
 import { tenantService, WorkspaceAuditEntry } from "@/services/tenant.service";
@@ -101,16 +102,13 @@ export function AuditLogTab({ tenantSlug }: { tenantSlug: string }) {
                 </CardDescription>
             </CardHeader>
             <CardContent className="p-6 pt-0 space-y-4">
-                <select
-                    aria-label="Filter audit log"
+                <SelectField
+                    ariaLabel="Filter audit log"
                     value={section}
-                    onChange={(e) => setSection(e.target.value)}
-                    className="h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                    {SECTIONS.map((s) => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
-                </select>
+                    onValueChange={setSection}
+                    className="w-fit min-w-44"
+                    options={SECTIONS}
+                />
 
                 {isLoading && <Skeleton className="h-40 w-full rounded-2xl" />}
                 {!isLoading && error && <p className="text-sm text-red-600">The audit log could not be loaded. Please refresh and try again.</p>}

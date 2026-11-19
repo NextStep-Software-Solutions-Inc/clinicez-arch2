@@ -41,6 +41,10 @@ export function useHubCredentials(): HubCredentialsContextValue {
   return ctx;
 }
 
+export function useOptionalHubCredentials(): HubCredentialsContextValue | null {
+  return useContext(HubCredentialsContext);
+}
+
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
 

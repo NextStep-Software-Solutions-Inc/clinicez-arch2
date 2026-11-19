@@ -10,6 +10,7 @@ using ClinicEz.Portal.Application.Features.Admin.Queries;
 using ClinicEz.Portal.Application.Features.DirectoryVerification;
 using ClinicEz.Portal.Application.Features.Entitlements;
 using ClinicEz.Portal.Application.Features.Licensing;
+using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Constants;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Messaging.Handlers;
@@ -20,6 +21,7 @@ using ClinicEz.Portal.Tests.Support;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Handling;
+using ClinicEz.Shared.Interop.Requests;
 using ClinicEz.Shared.Interoperability;
 using ClinicEz.Shared.Licensing;
 using Microsoft.AspNetCore.Http;
@@ -780,5 +782,47 @@ public sealed class DirectoryVerificationTests : IDisposable
         Assert.Equal(PlatformVerificationStatus.Rejected, dto.PlatformVerificationStatus);
         Assert.Equal("Expired LTO attachment", dto.RejectionReason);
         Assert.Equal("verification/lto/doc.pdf", dto.LtoEvidenceObjectKey);
+    }
+
+    [Fact]
+    public async Task VerificationEvidenceResolver_FetchesClinicStoredProofViaInteropWhenNotLocal()
+    {
+        var storage = new Mock<IPortalEvidenceStorageService>();
+        storage.Setup(s => s.ReadEvidenceAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PortalEvidenceFile?)null);
+
+        var expectedPng = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        var interopClient = new Mock<IInteropRequestClient>();
+        interopClient
+            .Setup(c => c.RequestAsync<VerificationEvidenceRequestedPayload, VerificationEvidenceRespondedPayload>(
+                InteropTypes.VerificationEvidenceRequested,
+                InteropTypes.VerificationEvidenceResponded,
+                Party.Portal,
+                It.Is<Party>(p => p.TenantId == _tenantA.Id.ToString() && p.FacilityId == _clinicA.Id.ToString()),
+                It.Is<VerificationEvidenceRequestedPayload>(req => req.ObjectKey == "tenants/t/clinics/c/verification/prc/card.png"),
+                It.IsAny<TimeSpan>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VerificationEvidenceRespondedPayload
+            {
+                Found = true,
+                ContentType = "image/png",
+                FileName = "prc-card.png",
+                Base64Content = Convert.ToBase64String(expectedPng)
+            });
+
+        var outcome = await VerificationEvidenceResolver.ResolveAsync(
+            storage.Object,
+            interopClient.Object,
+            _tenantA.Id,
+            _clinicA.Id,
+            "tenants/t/clinics/c/verification/prc/card.png",
+            NullLogger.Instance,
+            CancellationToken.None);
+
+        Assert.NotNull(outcome.File);
+        Assert.False(outcome.ClinicUnavailable);
+        Assert.Equal("image/png", outcome.File!.ContentType);
+        Assert.Equal("prc-card.png", outcome.File.FileName);
+        Assert.Equal(expectedPng, outcome.File.Content);
     }
 }

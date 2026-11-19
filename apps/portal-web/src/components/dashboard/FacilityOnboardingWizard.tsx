@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { apiClient } from "@/transport/apiClient";
 import { useBillingInfo } from "@/hooks/useBilling";
@@ -578,7 +579,7 @@ export default function FacilityOnboardingWizard({
         showEdge(facilityName, result.hubCredentials);
       } else if (result.hubOnboardingPending) {
         toast.warning(
-          "The hub could not be reached, so no credentials were issued yet. Open Settings → Facilities and use \"Rotate hub credentials\" for this facility.",
+          "The hub could not be reached, so no credentials were issued yet. Open the facility's Settings → Deployment & Network tab under Branches & Locations and use \"Rotate hub credentials\".",
         );
       }
 
@@ -706,20 +707,20 @@ export default function FacilityOnboardingWizard({
                       )}
                     </div>
                     {!targetBranch && availableBranches.length > 1 && (
-                      <select
+                      <SelectField
+                        ariaLabel="Target physical branch"
                         value={selectedBranch.id}
-                        onChange={(e) => {
-                          const b = availableBranches.find((item) => item.id === e.target.value);
+                        onValueChange={(nextId) => {
+                          const b = availableBranches.find((item) => item.id === nextId);
                           if (b) setSelectedBranch(b);
                         }}
-                        className="text-xs h-7 px-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 font-medium"
-                      >
-                        {availableBranches.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </select>
+                        size="sm"
+                        className="h-7 w-fit min-w-44 rounded-lg px-2"
+                        options={availableBranches.map((b) => ({
+                          value: b.id,
+                          label: b.name,
+                        }))}
+                      />
                     )}
                   </div>
 
@@ -754,21 +755,20 @@ export default function FacilityOnboardingWizard({
                   <p className="text-[11px] text-amber-800 dark:text-amber-300">
                     Every facility belongs to a physical branch location. Address and statutory credentials will be inherited automatically.
                   </p>
-                  <select
+                  <SelectField
+                    ariaLabel="Choose target physical branch"
                     value=""
-                    onChange={(e) => {
-                      const b = availableBranches.find((item) => item.id === e.target.value);
+                    onValueChange={(nextId) => {
+                      const b = availableBranches.find((item) => item.id === nextId);
                       if (b) setSelectedBranch(b);
                     }}
-                    className="w-full text-xs h-9 px-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200"
-                  >
-                    <option value="">-- Choose Target Branch --</option>
-                    {availableBranches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} ({b.city || "Main Location"})
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="-- Choose Target Branch --"
+                    className="border-amber-300 dark:border-amber-800"
+                    options={availableBranches.map((b) => ({
+                      value: b.id,
+                      label: `${b.name} (${b.city || "Main Location"})`,
+                    }))}
+                  />
                 </div>
               ) : (
                 <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 space-y-2">
@@ -1138,39 +1138,33 @@ export default function FacilityOnboardingWizard({
                   <Label htmlFor="reg-select" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Administrative Region <span className="text-rose-500">*</span>
                   </Label>
-                  <select
+                  <SelectField
                     id="reg-select"
                     value={selectedRegionCode}
-                    onChange={(e) => handleRegionChange(e.target.value)}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  >
-                    <option value="">-- Select Administrative Region --</option>
-                    {regions.map((r) => (
-                      <option key={r.psgcCode} value={r.psgcCode}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={handleRegionChange}
+                    placeholder="-- Select Administrative Region --"
+                    options={regions.map((r) => ({
+                      value: r.psgcCode,
+                      label: r.name,
+                    }))}
+                  />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="prov-select" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Province <span className="text-rose-500">*</span>
                   </Label>
-                  <select
+                  <SelectField
                     id="prov-select"
                     value={selectedProvinceName}
-                    onChange={(e) => handleProvinceChange(e.target.value)}
+                    onValueChange={handleProvinceChange}
                     disabled={!selectedRegionCode}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                  >
-                    <option value="">{selectedRegionCode ? "-- Select Province --" : "-- Select Region First --"}</option>
-                    {provinceOptions.map((p) => (
-                      <option key={p.psgcCode} value={p.name}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={selectedRegionCode ? "-- Select Province --" : "-- Select Region First --"}
+                    options={provinceOptions.map((p) => ({
+                      value: p.name,
+                      label: p.name,
+                    }))}
+                  />
                 </div>
               </div>
 
@@ -1179,40 +1173,34 @@ export default function FacilityOnboardingWizard({
                   <Label htmlFor="city-select" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     City / Municipality <span className="text-rose-500">*</span>
                   </Label>
-                  <select
+                  <SelectField
                     id="city-select"
                     value={selectedCityName}
-                    onChange={(e) => handleCityChange(e.target.value)}
+                    onValueChange={handleCityChange}
                     disabled={!selectedRegionCode}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                  >
-                    <option value="">{selectedRegionCode ? "-- Select City / Municipality --" : "-- Select Region First --"}</option>
-                    {cityOptions.map((c) => (
-                      <option key={c.psgcCode} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={selectedRegionCode ? "-- Select City / Municipality --" : "-- Select Region First --"}
+                    options={cityOptions.map((c) => ({
+                      value: c.name,
+                      label: c.name,
+                    }))}
+                  />
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-1">
                   <Label htmlFor="brgy-select" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Barangay <span className="text-rose-500">*</span>
                   </Label>
-                  <select
+                  <SelectField
                     id="brgy-select"
                     value={selectedBarangay}
-                    onChange={(e) => setSelectedBarangay(e.target.value)}
+                    onValueChange={setSelectedBarangay}
                     disabled={!selectedCityName}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                  >
-                    <option value="">{selectedCityName ? "-- Select Barangay --" : "-- Select City First --"}</option>
-                    {barangayOptions.map((b) => (
-                      <option key={b.psgcCode} value={b.name}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={selectedCityName ? "-- Select Barangay --" : "-- Select City First --"}
+                    options={barangayOptions.map((b) => ({
+                      value: b.name,
+                      label: b.name,
+                    }))}
+                  />
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-1">

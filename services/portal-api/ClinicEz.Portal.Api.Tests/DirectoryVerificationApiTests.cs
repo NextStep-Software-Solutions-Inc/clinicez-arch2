@@ -434,7 +434,8 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
 
         // Valid PDF magic bytes -> 200 with stored objectKey
         using var pdfForm = new MultipartFormDataContent();
-        var pdfBytes = new ByteArrayContent("%PDF-1.4\n%test"u8.ToArray());
+        var pdfBytesRaw = "%PDF-1.4\n%test"u8.ToArray();
+        var pdfBytes = new ByteArrayContent(pdfBytesRaw);
         pdfBytes.Headers.ContentType = MediaTypeHeaderValue.Parse("application/pdf");
         pdfForm.Add(pdfBytes, "file", "doh-lto.pdf");
         var okReq = AsUser(HttpMethod.Post, $"/api/v1/facilities/{_facilityId}/lto-proof?tenantSlug=manila-care", "clerk_clinic_owner");
@@ -443,6 +444,36 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, okRes.StatusCode);
         var okJson = await okRes.Content.ReadFromJsonAsync<JsonElement>();
         Assert.StartsWith("verification/lto/", okJson.GetProperty("objectKey").GetString());
+
+        // GET /facilities/{id}/lto-proof streams uploaded PDF inline to authorized tenant owner
+        var getLtoRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/facilities/{_facilityId}/lto-proof?tenantSlug=manila-care", "clerk_clinic_owner"));
+        Assert.Equal(HttpStatusCode.OK, getLtoRes.StatusCode);
+        Assert.Equal("application/pdf", getLtoRes.Content.Headers.ContentType?.MediaType);
+        Assert.StartsWith("inline", getLtoRes.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Equal(pdfBytesRaw, await getLtoRes.Content.ReadAsByteArrayAsync());
+
+        // Unauthorized outsider cannot stream facility LTO proof -> 403
+        var outsiderLtoRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/facilities/{_facilityId}/lto-proof?tenantSlug=manila-care", "clerk_outsider"));
+        Assert.Equal(HttpStatusCode.Forbidden, outsiderLtoRes.StatusCode);
+
+        // GET /admin/verification-queue/{requestId}/evidence enforces view:verifications and streams inline for authorized reviewers
+        var forbiddenEvidenceRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{_facReqId}/evidence?kind=lto", "clerk_support", "support@clinicez.test"));
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenEvidenceRes.StatusCode);
+
+        // Update facility verification request to point to the newly stored LTO file and stream via admin review endpoint
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var reqEntity = await db.FacilityVerificationRequests.FirstAsync(r => r.Id == _facReqId);
+            reqEntity.LtoEvidenceObjectKey = okJson.GetProperty("objectKey").GetString();
+            await db.SaveChangesAsync();
+        }
+
+        var adminEvidenceRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{_facReqId}/evidence?kind=lto", "clerk_verifier", "verifier@clinicez.test"));
+        Assert.Equal(HttpStatusCode.OK, adminEvidenceRes.StatusCode);
+        Assert.Equal("application/pdf", adminEvidenceRes.Content.Headers.ContentType?.MediaType);
+        Assert.StartsWith("inline", adminEvidenceRes.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Equal(pdfBytesRaw, await adminEvidenceRes.Content.ReadAsByteArrayAsync());
 
         // JSON objectKey registration -> 200
         var jsonReq = AsUser(HttpMethod.Post, $"/api/v1/facilities/{_facilityId}/lto-proof?tenantSlug=manila-care", "clerk_clinic_owner");

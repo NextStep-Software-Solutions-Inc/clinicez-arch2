@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { describeApiError } from "@/lib/apiError";
@@ -78,9 +79,6 @@ function TotalsHead({ first }: { first: string }) {
   );
 }
 
-const selectClass =
-  "h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary";
-
 interface FinanceClientProps {
   tenantSlug: string;
 }
@@ -144,25 +142,27 @@ export default function FinanceClient({ tenantSlug }: FinanceClientProps) {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="finance-facility" className="text-xs font-bold">Facility</Label>
-          <select id="finance-facility" value={facilityId} onChange={(e) => setFacilityId(e.target.value)} className={selectClass}>
-            <option value="">All facilities</option>
-            {(facilities ?? []).map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
+          <SelectField
+            id="finance-facility"
+            value={facilityId}
+            onValueChange={setFacilityId}
+            className="w-fit min-w-44"
+            options={[
+              { value: "", label: "All facilities" },
+              ...(facilities ?? []).map((f) => ({ value: f.id, label: f.name })),
+            ]}
+          />
         </div>
         {currencies.length > 1 && (
           <div className="space-y-1.5">
             <Label htmlFor="finance-currency" className="text-xs font-bold">Currency</Label>
-            <select id="finance-currency" value={activeCurrency} onChange={(e) => setCurrency(e.target.value)} className={selectClass}>
-              {currencies.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+            <SelectField
+              id="finance-currency"
+              value={activeCurrency}
+              onValueChange={setCurrency}
+              className="w-fit min-w-24"
+              options={currencies.map((c) => ({ value: c, label: c }))}
+            />
           </div>
         )}
         <Button type="submit" size="sm" disabled={validation !== null || isLoading} className="rounded-xl text-xs font-bold">

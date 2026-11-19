@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Settings.Commands;
 using ClinicEz.Clinic.Application.Features.Settings.Queries;
@@ -14,10 +15,12 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Messaging;
 using ClinicEz.Clinic.Infrastructure.Messaging.Handlers;
+using ClinicEz.Clinic.Infrastructure.Messaging.Responders;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interoperability;
 using ClinicEz.Shared.Licensing;
 using FluentAssertions;
@@ -924,6 +927,133 @@ public class ClinicDirectoryVerificationTests
         var listHandler = new GetStaffMembersQueryHandler(staffRepo, _clinicContext);
         var list = await listHandler.Handle(new GetStaffMembersQuery(), CancellationToken.None);
         list.Should().ContainSingle(x => x.Id == docId && x.PublicVerificationStatus == PractitionerVerificationLevel.AwaitingConfirmation);
+    }
+
+    [Fact]
+    public async Task EncryptedEvidenceUploadAndRead_RoundTripsViaSidecarMetadataAndInteropResponder()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        var storedFiles = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        var storage = Substitute.For<IClinicStorageService>();
+        storage.SaveEncryptedFileAsync(Arg.Any<string>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var key = ci.ArgAt<string>(0);
+                storedFiles[key] = ci.ArgAt<byte[]>(1);
+                return key;
+            });
+        storage.FileExistsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ci => storedFiles.ContainsKey(ci.ArgAt<string>(0)));
+        storage.ReadEncryptedFileAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ci => storedFiles[ci.ArgAt<string>(0)]);
+
+        var encryption = Substitute.For<IClinicEncryptionService>();
+        encryption.EncryptAsync(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var plain = ci.ArgAt<byte[]>(0);
+                var xored = plain.Select(b => (byte)(b ^ 0x5A)).ToArray();
+                return new ClinicEncryptedPayload(xored, "iv-base64", "tag-base64", "hash", xored.Length, "{\"k\":\"wrapped\"}");
+            });
+        encryption.DecryptAsync(Arg.Any<byte[]>(), "iv-base64", "tag-base64", "{\"k\":\"wrapped\"}", Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.ArgAt<byte[]>(0).Select(b => (byte)(b ^ 0x5A)).ToArray());
+
+        await settingsRepo.AddAsync(new FacilitySettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            ClinicId = _clinicId,
+            ClinicName = "Manila Care Clinic"
+        });
+        var staffId = Guid.NewGuid();
+        await staffRepo.AddAsync(new StaffMember
+        {
+            Id = staffId,
+            TenantId = TenantId,
+            ClinicId = _clinicId,
+            FirstName = "Clara",
+            LastName = "Mendoza",
+            Role = StaffRole.Nurse,
+            PrcLicenseNumber = "PRC-0554433",
+            IsActive = true
+        });
+        await uow.SaveChangesAsync();
+
+        var originalPdf = "%PDF-1.4\nencrypted-lto-body"u8.ToArray();
+        var ltoUpload = await new UploadLtoProofCommandHandler(settingsRepo, storage, _clinicContext, uow, encryption)
+            .Handle(new UploadLtoProofCommand("doh-lto-2026.pdf", "application/pdf", originalPdf.Length, originalPdf), CancellationToken.None);
+
+        storedFiles.Should().ContainKey(ltoUpload.ObjectKey);
+        storedFiles.Should().ContainKey(ltoUpload.ObjectKey + VerificationEvidenceHelper.SidecarSuffix);
+        storedFiles[ltoUpload.ObjectKey].Should().NotEqual(originalPdf);
+
+        var readLto = await new GetLtoProofEvidenceQueryHandler(settingsRepo, storage, encryption)
+            .Handle(new GetLtoProofEvidenceQuery(), CancellationToken.None);
+        readLto.Should().NotBeNull();
+        readLto!.Bytes.Should().Equal(originalPdf);
+        readLto.ContentType.Should().Be("application/pdf");
+        readLto.FileName.Should().Be("doh-lto-2026.pdf");
+
+        var originalPng = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        var prcUpload = await new UploadStaffPrcProofCommandHandler(staffRepo, storage, _clinicContext, uow, encryption)
+            .Handle(new UploadStaffPrcProofCommand(staffId, "prc-id.png", "image/png", originalPng.Length, originalPng), CancellationToken.None);
+
+        storedFiles.Should().ContainKey(prcUpload.ObjectKey + VerificationEvidenceHelper.SidecarSuffix);
+
+        var readPrc = await new GetStaffPrcProofEvidenceQueryHandler(staffRepo, _clinicContext, storage, encryption)
+            .Handle(new GetStaffPrcProofEvidenceQuery(staffId), CancellationToken.None);
+        readPrc.Should().NotBeNull();
+        readPrc!.Bytes.Should().Equal(originalPng);
+        readPrc.ContentType.Should().Be("image/png");
+        readPrc.FileName.Should().Be("prc-id.png");
+
+        // Interop responder streams authorized clinic verification evidence to Party.Portal and rejects unrelated keys / senders
+        var responder = new VerificationEvidenceResponder(
+            context,
+            storage,
+            new ClinicRecipientResolver(context, NullLogger<ClinicRecipientResolver>.Instance),
+            NullLogger<VerificationEvidenceResponder>.Instance,
+            encryption);
+        var clinicParty = Party.ForFacility(TenantId, _clinicId.ToString("D"), FacilityType.Clinic);
+
+        var portalEnvelope = InteropEnvelope.Create(
+            InteropTypes.VerificationEvidenceRequested,
+            Party.Portal,
+            clinicParty,
+            Guid.NewGuid(),
+            new VerificationEvidenceRequestedPayload { ObjectKey = prcUpload.ObjectKey });
+        var reply = await responder.RespondAsync(
+            new VerificationEvidenceRequestedPayload { ObjectKey = prcUpload.ObjectKey },
+            new InteropMessageContext(portalEnvelope),
+            CancellationToken.None);
+        reply.Found.Should().BeTrue();
+        reply.ContentType.Should().Be("image/png");
+        reply.FileName.Should().Be("prc-id.png");
+        Convert.FromBase64String(reply.Base64Content!).Should().Equal(originalPng);
+
+        // Unrelated non-verification record key must be rejected even from Party.Portal
+        storedFiles[$"tenants/{TenantId}/clinics/{_clinicId:D}/records/patient-phi.pdf"] = originalPdf;
+        var blockedReply = await responder.RespondAsync(
+            new VerificationEvidenceRequestedPayload { ObjectKey = $"tenants/{TenantId}/clinics/{_clinicId:D}/records/patient-phi.pdf" },
+            new InteropMessageContext(portalEnvelope),
+            CancellationToken.None);
+        blockedReply.Found.Should().BeFalse();
+
+        // Non-ControlPlane sender must be rejected
+        var nonPortalEnvelope = InteropEnvelope.Create(
+            InteropTypes.VerificationEvidenceRequested,
+            Party.ForPatient(Guid.NewGuid().ToString()),
+            clinicParty,
+            Guid.NewGuid(),
+            new VerificationEvidenceRequestedPayload { ObjectKey = prcUpload.ObjectKey });
+        var forbiddenReply = await responder.RespondAsync(
+            new VerificationEvidenceRequestedPayload { ObjectKey = prcUpload.ObjectKey },
+            new InteropMessageContext(nonPortalEnvelope),
+            CancellationToken.None);
+        forbiddenReply.Found.Should().BeFalse();
     }
 
     #endregion
