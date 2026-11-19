@@ -641,8 +641,20 @@ export default function BranchDetailClient() {
   const tenantSlug = (params?.tenant as string) || "demo-tenant";
   const branchId = typeof params?.branchId === "string" ? params.branchId : "";
 
-  const [activeTab, setActiveTab] = useState<BranchDetailTab>(() =>
-    resolveBranchDetailTab(searchParams.get("tab")),
+  const requestedTabParam = searchParams?.get("tab") ?? null;
+  const [tabOverride, setTabOverride] = useState<{
+    param: string | null;
+    tab: BranchDetailTab;
+  } | null>(null);
+  const activeTab: BranchDetailTab =
+    tabOverride && tabOverride.param === requestedTabParam
+      ? tabOverride.tab
+      : resolveBranchDetailTab(requestedTabParam);
+  const setActiveTab = useCallback(
+    (tab: BranchDetailTab) => {
+      setTabOverride({ param: requestedTabParam, tab });
+    },
+    [requestedTabParam, setTabOverride],
   );
 
   // Danger Zone delete state
@@ -687,7 +699,7 @@ export default function BranchDetailClient() {
 
   const branch = data?.branch ?? null;
   const allFacilities = useMemo(() => data?.allFacilities ?? [], [data?.allFacilities]);
-  const loading = isLoading;
+  const loading = isLoading && !data;
   const loadError = !branchId
     ? "No branch ID was provided."
     : swrError

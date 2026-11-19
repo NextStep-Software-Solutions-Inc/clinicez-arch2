@@ -22,10 +22,11 @@ describe('Edge Security Headers & Robots Specification', () => {
       headersMap.set(h.key.toLowerCase(), h.value);
     }
 
-    // 1. Content-Security-Policy with frame-ancestors 'none'
+    // 1. Content-Security-Policy with frame-ancestors 'none' and frame-src 'self' blob:
     const csp = headersMap.get('content-security-policy');
     expect(csp).toBeDefined();
     expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("frame-src 'self' blob:");
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain('https://*.clerk.accounts.dev');
     expect(csp).toContain('https://*.clerk.com');

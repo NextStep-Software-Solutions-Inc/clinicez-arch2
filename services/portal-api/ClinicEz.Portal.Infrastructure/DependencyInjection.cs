@@ -22,6 +22,7 @@ using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Infrastructure.Hub;
 using ClinicEz.Portal.Infrastructure.Messaging.Handlers;
 using ClinicEz.Portal.Infrastructure.Notifications;
+using ClinicEz.Portal.Infrastructure.Options;
 using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Portal.Infrastructure.Persistence.Interceptors;
 using ClinicEz.Portal.Infrastructure.Persistence.Repositories;
@@ -32,6 +33,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ClinicEz.Portal.Infrastructure.Xendit;
 
@@ -88,6 +90,7 @@ public static class DependencyInjection
         services.AddOptions<BillingOptions>().Bind(configuration.GetSection(BillingOptions.SectionName));
         services.AddOptions<LicenseOptions>().Bind(configuration.GetSection(LicenseOptions.SectionName));
         services.AddOptions<ClinicEz.Portal.Application.Features.PublicUploads.LabUploadOptions>().Bind(configuration.GetSection(ClinicEz.Portal.Application.Features.PublicUploads.LabUploadOptions.SectionName));
+        services.Configure<Options.R2Options>(configuration.GetSection(Options.R2Options.SectionName));
         services.AddScoped<IEntitlementService, EntitlementService>();
         services.AddScoped<IEntitlementGuard, EntitlementGuard>();
         services.AddScoped<ISubscriptionService, SubscriptionService>();
@@ -123,7 +126,34 @@ public static class DependencyInjection
         services.AddHangfireServer();
         services.AddScoped<IFacilityProvisioningReconciliationJob, FacilityProvisioningReconciliationJob>();
         services.AddScoped<IPrcExpirySweeperJob, PrcExpirySweeperJob>();
-        services.AddScoped<IPortalEvidenceStorageService, LocalPortalEvidenceStorageService>();
+        services.TryAddSingleton<LocalPortalEvidenceStorageService>();
+        services.AddSingleton<IPortalEvidenceStorageService>(sp =>
+        {
+            var r2Options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Options.R2Options>>();
+            var localFallback = sp.GetRequiredService<LocalPortalEvidenceStorageService>();
+            if (r2Options.Value.IsConfigured())
+            {
+                return new R2PortalEvidenceStorageService(
+                    r2Options,
+                    sp.GetRequiredService<ILogger<R2PortalEvidenceStorageService>>(),
+                    localFallback);
+            }
+
+            var env = sp.GetService<Microsoft.Extensions.Hosting.IHostEnvironment>();
+            var logger = sp.GetRequiredService<ILogger<R2PortalEvidenceStorageService>>();
+            if (env?.IsProduction() == true)
+            {
+                logger.LogWarning(
+                    "Cloudflare R2 credentials (R2:AccountId, R2:AccessKeyId, R2:SecretAccessKey) are not configured; falling back to local disk verification storage.");
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Cloudflare R2 credentials are not configured; using LocalPortalEvidenceStorageService for verification evidence.");
+            }
+
+            return localFallback;
+        });
         services.AddScoped<IDirectoryVerificationSyncService, DirectoryVerificationSyncService>();
 
         // Outbound webhooks: no redirects, no proxy, and every connection is checked against private/reserved ranges.

@@ -11,7 +11,7 @@ describe('Clean Root TanStack Router Tree (ZERO /admin/* prefix)', () => {
     expect(typeof router.buildLocation).toBe('function');
   });
 
-  it('scaffolds all 18 expected clean root route files', () => {
+  it('scaffolds all 19 expected clean root route files', () => {
     const expectedFiles = [
       '__root.tsx',
       '_auth.tsx',
@@ -21,6 +21,7 @@ describe('Clean Root TanStack Router Tree (ZERO /admin/* prefix)', () => {
       'plans.tsx',
       'leads.tsx',
       'verifications.tsx',
+      'verifications/$requestId.tsx',
       'blog.tsx',
       'subscribers.tsx',
       'roles.tsx',

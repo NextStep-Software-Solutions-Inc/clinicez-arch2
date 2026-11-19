@@ -113,6 +113,30 @@ function parseFilenameFromContentDisposition(header?: string | null): string | n
   return plainMatch?.[1]?.trim() || null;
 }
 
+async function extractBlobErrorMessage(error: unknown): Promise<string | null> {
+  const response = (error as { response?: { data?: unknown } })?.response;
+  const data = response?.data;
+  if (!data) return null;
+
+  if (typeof Blob !== "undefined" && data instanceof Blob) {
+    try {
+      const text = await data.text();
+      if (!text.trim()) return null;
+      const parsed = JSON.parse(text) as { message?: string; Message?: string };
+      return parsed.message || parsed.Message || null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof data === "object") {
+    const obj = data as { message?: string; Message?: string };
+    return obj.message || obj.Message || null;
+  }
+
+  return null;
+}
+
 export const verificationService = {
   /** Fetches directory verification status and latest submission summary for a facility (`GET /facilities/{id}/verification-status`). */
   getFacilityVerificationStatus: async (
@@ -132,10 +156,19 @@ export const verificationService = {
     tenantSlug?: string,
   ): Promise<EvidenceBlobResult> => {
     const qs = tenantSlug ? `?tenantSlug=${encodeURIComponent(tenantSlug)}` : "";
-    const res = await apiClient.get<Blob>(
-      `/facilities/${encodeURIComponent(facilityId)}/lto-proof${qs}`,
-      { responseType: "blob" },
-    );
+    let res;
+    try {
+      res = await apiClient.get<Blob>(
+        `/facilities/${encodeURIComponent(facilityId)}/lto-proof${qs}`,
+        { responseType: "blob" },
+      );
+    } catch (error: unknown) {
+      const parsedMessage = await extractBlobErrorMessage(error);
+      if (parsedMessage) {
+        throw new Error(parsedMessage);
+      }
+      throw error;
+    }
     const headers = (res.headers ?? {}) as Record<string, string | undefined>;
     const contentType =
       res.data?.type ||

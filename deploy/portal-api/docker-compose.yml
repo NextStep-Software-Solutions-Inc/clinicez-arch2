@@ -86,6 +86,12 @@ services:
       - LIVEKIT_URL=${LIVEKIT_URL:-wss://media.clinicez.internal}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
+      # Cloudflare R2 object storage (DOH LTO / PRC verification evidence). Shares account credentials with patient-api, using bucket clinicez-portal-uploads.
+      - R2__AccountId=${R2_ACCOUNT_ID:-}
+      - R2__BucketName=${R2_BUCKET_NAME:-clinicez-portal-uploads}
+      - R2__AccessKeyId=${R2_ACCESS_KEY_ID:-}
+      - R2__SecretAccessKey=${R2_SECRET_ACCESS_KEY:-}
+      - R2__PublicUrl=${R2_PUBLIC_URL:-}
       # Facility license keys (ECDSA P-256, PEM or base64 of PEM; scripts/generate-license-keys.sh). The portal signs licenses with
       # the PRIVATE key (it lives only here) and validates them with the public key. No built-in default keys. The previous public
       # key is only set during a rotation, until every issued license was renewed.

@@ -196,6 +196,24 @@ describe("Phase 2B: Portal-Web Tenant & Public Directory Verification (Admin Iso
         url: "/public/practitioners/confirm-affiliation",
         body: { token: "tok-123", otpCode: "654321" },
       });
+
+      // Extracts backend JSON error messages from responseType: "blob" failures
+      (apiClient as unknown as { get: typeof apiClient.get }).get = (async () => {
+        const err = new Error("Request failed with status code 404") as Error & {
+          response?: { status: number; data: Blob };
+        };
+        err.response = {
+          status: 404,
+          data: new Blob(
+            [JSON.stringify({ message: "DOH LTO proof file not found." })],
+            { type: "application/json" },
+          ),
+        };
+        throw err;
+      }) as unknown as typeof apiClient.get;
+      await expect(facilityService.fetchLtoProof("manila-care", "f-1")).rejects.toThrow(
+        "DOH LTO proof file not found.",
+      );
     });
   });
 

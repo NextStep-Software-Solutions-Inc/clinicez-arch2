@@ -167,3 +167,83 @@ export function formatVerificationTimestamp(iso?: string | null): string {
     minute: "2-digit",
   });
 }
+
+export type QueueStatusTab =
+  | "pending"
+  | "in_review"
+  | "awaiting_confirmation"
+  | "approved"
+  | "rejected"
+  | "withdrawn"
+  | "all";
+
+export type QueueKindFilter = "all" | "facility" | "practitioner";
+
+export interface VerificationQueueSearch {
+  status?: QueueStatusTab;
+  kind?: QueueKindFilter;
+  q?: string;
+}
+
+const VALID_QUEUE_STATUS_TABS = new Set<QueueStatusTab>([
+  "pending",
+  "in_review",
+  "awaiting_confirmation",
+  "approved",
+  "rejected",
+  "withdrawn",
+  "all",
+]);
+
+export function parseVerificationQueueSearch(
+  raw: Record<string, unknown> | null | undefined,
+): VerificationQueueSearch {
+  if (!raw) return {};
+  const result: VerificationQueueSearch = {};
+
+  if (typeof raw.status === "string") {
+    const trimmedStatus = raw.status.trim() as QueueStatusTab;
+    if (VALID_QUEUE_STATUS_TABS.has(trimmedStatus) && trimmedStatus !== "pending") {
+      result.status = trimmedStatus;
+    }
+  }
+
+  if (raw.kind === "facility" || raw.kind === "practitioner") {
+    result.kind = raw.kind;
+  }
+
+  if (typeof raw.q === "string" && raw.q.trim().length > 0) {
+    result.q = raw.q.trim();
+  }
+
+  return result;
+}
+
+export function serializeVerificationQueueSearch(filters: {
+  statusTab: QueueStatusTab;
+  kindFilter: QueueKindFilter;
+  q?: string;
+}): VerificationQueueSearch {
+  const result: VerificationQueueSearch = {};
+  if (filters.statusTab && filters.statusTab !== "pending") {
+    result.status = filters.statusTab;
+  }
+  if (filters.kindFilter && filters.kindFilter !== "all") {
+    result.kind = filters.kindFilter;
+  }
+  const trimmedQ = filters.q?.trim();
+  if (trimmedQ) {
+    result.q = trimmedQ;
+  }
+  return result;
+}
+
+export function buildVerificationsQueueHref(search?: VerificationQueueSearch): string {
+  if (!search) return "/verifications";
+  const params = new URLSearchParams();
+  if (search.status && search.status !== "pending") params.set("status", search.status);
+  if (search.kind && search.kind !== "all") params.set("kind", search.kind);
+  if (search.q?.trim()) params.set("q", search.q.trim());
+  const qs = params.toString();
+  return qs ? `/verifications?${qs}` : "/verifications";
+}

@@ -77,6 +77,7 @@ export interface ProofEvidenceCardProps {
   initialPreviewUrl?: string | null;
   initialContentType?: string | null;
   initialFileName?: string | null;
+  variant?: "compact" | "workspace";
 }
 
 export function ProofEvidenceCard({
@@ -86,7 +87,9 @@ export function ProofEvidenceCard({
   initialPreviewUrl,
   initialContentType,
   initialFileName,
+  variant = "compact",
 }: ProofEvidenceCardProps) {
+  const isWorkspace = variant === "workspace";
   const directUrl = !fetchEvidence && objectKey && isUrlReference(objectKey) ? objectKey : null;
   const resolvedInitialUrl = initialPreviewUrl ?? directUrl;
 
@@ -235,7 +238,7 @@ export function ProofEvidenceCard({
         {/* Inline Document Viewer */}
         {loading ? (
           <div
-            className="h-48 rounded-lg border border-border bg-surface-muted animate-pulse flex items-center justify-center text-xs text-text-muted"
+            className={`${isWorkspace ? "h-[68vh] min-h-[560px]" : "h-48"} rounded-lg border border-border bg-surface-muted animate-pulse flex items-center justify-center text-xs text-text-muted`}
             aria-label={`Loading ${label}`}
           >
             Loading document preview...
@@ -268,7 +271,9 @@ export function ProofEvidenceCard({
               <img
                 src={previewUrl}
                 alt={label}
-                className="w-full max-h-64 object-contain bg-surface-muted/20"
+                className={`w-full object-contain bg-surface-muted/20 ${
+                  isWorkspace ? "max-h-[68vh] min-h-[360px]" : "max-h-64"
+                }`}
                 referrerPolicy="no-referrer"
               />
             </button>
@@ -277,7 +282,9 @@ export function ProofEvidenceCard({
               <iframe
                 src={previewUrl}
                 title={label}
-                className="w-full h-72 border-0 bg-surface"
+                className={`w-full border-0 bg-surface ${
+                  isWorkspace ? "h-[68vh] min-h-[560px]" : "h-72"
+                }`}
               />
             </div>
           ) : (

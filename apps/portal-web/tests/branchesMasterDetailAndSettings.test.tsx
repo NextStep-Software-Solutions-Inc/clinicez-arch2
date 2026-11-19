@@ -3,6 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import React from "react";
 import { renderToString } from "react-dom/server";
+import { SWRConfig } from "swr";
+
+let mockSearchParams = new URLSearchParams();
 
 mock.module("next/navigation", () => ({
   useParams: () => ({ tenant: "manila-care", branchId: "branch-1" }),
@@ -15,7 +18,7 @@ mock.module("next/navigation", () => ({
     forward: () => {},
   }),
   usePathname: () => "/manila-care/dashboard/branches/branch-1",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => mockSearchParams,
   redirect: (url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
   },
@@ -400,6 +403,29 @@ describe("Workspace Settings Cleanup & Branches Master-Detail Redesign", () => {
 
       const detailHtml = renderToString(<BranchDetailClient />);
       expect(detailHtml.length).toBeGreaterThan(0);
+
+      // ?tab=philhealth activates the PhilHealth YAKAP credentials card directly
+      mockSearchParams = new URLSearchParams("tab=philhealth");
+      try {
+        const philHealthHtml = renderToString(
+          <SWRConfig
+            value={{
+              fallback: {
+                "branch-detail/manila-care/branch-1": {
+                  branch: sampleBranch,
+                  allFacilities: sampleFacilities,
+                },
+              },
+            }}
+          >
+            <BranchDetailClient />
+          </SWRConfig>,
+        );
+        expect(philHealthHtml).toContain("PhilHealth YAKAP Accreditation");
+        expect(philHealthHtml).toContain("Gateway Connectivity Test");
+      } finally {
+        mockSearchParams = new URLSearchParams();
+      }
 
       // Token hygiene check on all newly authored branch files
       const filesToInspect = [

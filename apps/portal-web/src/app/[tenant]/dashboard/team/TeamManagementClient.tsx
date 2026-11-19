@@ -26,7 +26,8 @@ import {
     IconPlayerPause,
     IconPlayerPlay,
     IconBan,
-    IconKey
+    IconKey,
+    IconDotsVertical
 } from "@tabler/icons-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,13 @@ import { Label } from "@/components/ui/label";
 import { SelectField } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { staffService, TenantStaffResultDto, StaffMemberDto } from "@/services/staff.service";
 import { apiClient } from "@/transport/apiClient";
 import { apiErrorMessage } from "@/lib/apiError";
@@ -45,6 +53,151 @@ import {
     SELF_ACTION_MESSAGES,
 } from "@/lib/selfActionGuard";
 import { toast } from "sonner";
+
+type WorkspaceMemberActionRestriction = ReturnType<typeof getWorkspaceMemberActionRestriction>;
+
+export interface WorkspaceMemberMenuActionSpec {
+    key: string;
+    label: string;
+    disabled: boolean;
+    tooltip?: string;
+    variant?: "default" | "warning" | "destructive";
+    separatorBefore?: boolean;
+}
+
+export function getWorkspaceMemberMenuActions(
+    member: Pick<StaffMemberDto, "id" | "role" | "status" | "invitationToken">,
+    restriction: WorkspaceMemberActionRestriction,
+    options: {
+        isQuotaFull?: boolean;
+        isActionLoading?: boolean;
+        isResending?: boolean;
+    } = {}
+): WorkspaceMemberMenuActionSpec[] {
+    if (member.role === "Owner") {
+        return [];
+    }
+
+    const { isQuotaFull = false, isActionLoading = false, isResending = false } = options;
+
+    switch (member.status) {
+        case "Invited": {
+            const items: WorkspaceMemberMenuActionSpec[] = [];
+            if (member.invitationToken) {
+                items.push({
+                    key: "copy-invite",
+                    label: "Copy Invite Link",
+                    disabled: false,
+                    tooltip: "Copy direct invitation link",
+                });
+            }
+            items.push({
+                key: "resend-invite",
+                label: "Resend Invitation",
+                disabled: isResending,
+                tooltip: "Resend invitation email",
+            });
+            items.push({
+                key: "revoke",
+                label: "Revoke Invitation",
+                disabled: !restriction.canRevoke,
+                tooltip: restriction.revokeTooltip,
+                variant: "destructive",
+                separatorBefore: true,
+            });
+            return items;
+        }
+        case "Expired":
+            return [
+                {
+                    key: "resend-invite",
+                    label: "Resend Invitation",
+                    disabled: isResending,
+                    tooltip: "Resend fresh invitation email",
+                },
+                {
+                    key: "revoke",
+                    label: "Revoke Invitation",
+                    disabled: !restriction.canRevoke,
+                    tooltip: restriction.revokeTooltip,
+                    variant: "destructive",
+                    separatorBefore: true,
+                },
+            ];
+        case "Active":
+            return [
+                {
+                    key: "edit",
+                    label: "Edit Details",
+                    disabled: false,
+                },
+                {
+                    key: "reset-password",
+                    label: "Reset Password",
+                    disabled: false,
+                },
+                {
+                    key: "suspend",
+                    label: "Suspend Access",
+                    disabled: isActionLoading || !restriction.canSuspend,
+                    tooltip: restriction.suspendTooltip,
+                    variant: "warning",
+                    separatorBefore: true,
+                },
+                {
+                    key: "revoke",
+                    label: "Revoke Access",
+                    disabled: !restriction.canRevoke,
+                    tooltip: restriction.revokeTooltip,
+                    variant: "destructive",
+                },
+            ];
+        case "Suspended":
+            return [
+                {
+                    key: "reactivate",
+                    label: "Reactivate Access",
+                    disabled: isActionLoading,
+                },
+                {
+                    key: "revoke",
+                    label: "Revoke Access",
+                    disabled: !restriction.canRevoke,
+                    tooltip: restriction.revokeTooltip,
+                    variant: "destructive",
+                    separatorBefore: true,
+                },
+                {
+                    key: "delete",
+                    label: "Delete Permanently",
+                    disabled: !restriction.canDelete,
+                    tooltip: restriction.deleteTooltip,
+                    variant: "destructive",
+                },
+            ];
+        case "Revoked":
+            return [
+                {
+                    key: "reinvite",
+                    label: "Re-invite",
+                    disabled: isResending || isQuotaFull,
+                    tooltip: isQuotaFull
+                        ? "Workspace seat limit reached for your current plan"
+                        : "Send a fresh 7-day invitation",
+                },
+                {
+                    key: "delete",
+                    label: "Delete Permanently",
+                    disabled: !restriction.canDelete,
+                    tooltip: restriction.deleteTooltip,
+                    variant: "destructive",
+                    separatorBefore: true,
+                },
+            ];
+        default:
+            return [];
+    }
+}
 
 interface FacilityOption {
     id: string;
@@ -702,12 +855,12 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                             <table className="w-full text-left text-xs border-collapse">
                                 <thead>
                                     <tr className="border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-900/20 text-slate-500 font-semibold">
-                                        <th className="py-3 px-4 sm:px-6">Team Member</th>
-                                        <th className="py-3 px-4">Workspace Role</th>
-                                        <th className="py-3 px-4">Access Scope</th>
-                                        <th className="py-3 px-4">Status</th>
-                                        <th className="py-3 px-4 hidden md:table-cell">Added On</th>
-                                        <th className="py-3 px-4 sm:px-6 text-right">Actions</th>
+                                        <th className="py-3 px-4 sm:px-6 min-w-[220px]">Team Member</th>
+                                        <th className="py-3 px-4 whitespace-nowrap">Workspace Role</th>
+                                        <th className="py-3 px-4 whitespace-nowrap">Access Scope</th>
+                                        <th className="py-3 px-4 whitespace-nowrap">Status</th>
+                                        <th className="py-3 px-4 hidden md:table-cell whitespace-nowrap">Added On</th>
+                                        <th className="py-3 px-4 sm:px-6 text-right w-16">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -720,6 +873,85 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                         const isRevoked = member.status === "Revoked";
                                         const isActive = member.status === "Active";
                                         const restriction = getWorkspaceMemberActionRestriction(member, currentIdentity);
+                                        const canQuickEdit = !isOwner && isActive;
+                                        const isRowBusy = actionLoadingId === member.id || resendingId === member.id;
+                                        const menuActions = getWorkspaceMemberMenuActions(member, restriction, {
+                                            isQuotaFull,
+                                            isActionLoading: actionLoadingId === member.id,
+                                            isResending: resendingId === member.id,
+                                        });
+
+                                        const handleMenuAction = (actionKey: string) => {
+                                            switch (actionKey) {
+                                                case "copy-invite":
+                                                    handleCopyInviteLink(member.invitationToken);
+                                                    break;
+                                                case "resend-invite":
+                                                    void handleResendInvite(member);
+                                                    break;
+                                                case "edit":
+                                                    handleOpenEdit(member);
+                                                    break;
+                                                case "reset-password":
+                                                    handleOpenResetPassword(member);
+                                                    break;
+                                                case "suspend":
+                                                    void handleSuspend(member);
+                                                    break;
+                                                case "reactivate":
+                                                    void handleReactivate(member);
+                                                    break;
+                                                case "reinvite":
+                                                    void handleReinvite(member);
+                                                    break;
+                                                case "revoke":
+                                                    handleOpenRevoke(member);
+                                                    break;
+                                                case "delete":
+                                                    handleOpenDelete(member);
+                                                    break;
+                                            }
+                                        };
+
+                                        const renderActionIcon = (actionKey: string) => {
+                                            switch (actionKey) {
+                                                case "copy-invite":
+                                                    return <IconCopy className="h-3.5 w-3.5 text-slate-500" />;
+                                                case "resend-invite":
+                                                case "reinvite":
+                                                    return resendingId === member.id ? (
+                                                        <IconLoader className="h-3.5 w-3.5 animate-spin text-primary" />
+                                                    ) : (
+                                                        <IconRefresh className="h-3.5 w-3.5 text-slate-500" />
+                                                    );
+                                                case "edit":
+                                                    return <IconPencil className="h-3.5 w-3.5 text-slate-500" />;
+                                                case "reset-password":
+                                                    return <IconKey className="h-3.5 w-3.5 text-slate-500" />;
+                                                case "suspend":
+                                                    return actionLoadingId === member.id ? (
+                                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                        <IconPlayerPause className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                                    );
+                                                case "reactivate":
+                                                    return actionLoadingId === member.id ? (
+                                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                        <IconPlayerPlay className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                                    );
+                                                case "revoke":
+                                                    return isPending || isExpired ? (
+                                                        <IconTrash className="h-3.5 w-3.5" />
+                                                    ) : (
+                                                        <IconBan className="h-3.5 w-3.5" />
+                                                    );
+                                                case "delete":
+                                                    return <IconTrash className="h-3.5 w-3.5" />;
+                                                default:
+                                                    return null;
+                                            }
+                                        };
 
                                         // Initials for avatar
                                         const initials = member.fullName
@@ -731,8 +963,24 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                             .toUpperCase() || "U";
 
                                         return (
-                                            <tr key={member.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/40 transition-colors">
-                                                <td className="py-3.5 px-4 sm:px-6">
+                                            <tr
+                                                key={member.id}
+                                                onClick={
+                                                    canQuickEdit
+                                                        ? () => {
+                                                              if (typeof window !== "undefined" && window.getSelection()?.toString()) {
+                                                                  return;
+                                                              }
+                                                              handleOpenEdit(member);
+                                                          }
+                                                        : undefined
+                                                }
+                                                title={canQuickEdit ? `Click to edit details for ${member.fullName}` : undefined}
+                                                className={`hover:bg-slate-50/60 dark:hover:bg-slate-900/40 transition-colors ${
+                                                    canQuickEdit ? "cursor-pointer" : ""
+                                                }`}
+                                            >
+                                                <td className="py-3.5 px-4 sm:px-6 min-w-[220px]">
                                                     <div className="flex items-center gap-3">
                                                         <div className={`size-8 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0 ${
                                                             isOwner 
@@ -752,12 +1000,12 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                             </div>
                                                             <div className="text-[11px] text-slate-400 truncate flex items-center gap-1">
                                                                 <IconMail className="h-3 w-3 inline shrink-0" />
-                                                                {member.email}
+                                                                <span className="truncate">{member.email}</span>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="py-3.5 px-4">
+                                                <td className="py-3.5 px-4 whitespace-nowrap">
                                                     <Badge 
                                                         variant="outline" 
                                                         className={`text-[10px] font-bold px-2 py-0.5 border ${roleMeta.badgeClass}`}
@@ -765,7 +1013,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                         {roleMeta.label}
                                                     </Badge>
                                                 </td>
-                                                <td className="py-3.5 px-4">
+                                                <td className="py-3.5 px-4 whitespace-nowrap">
                                                     {member.facilityName ? (
                                                         <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-medium">
                                                             <IconBuildingHospital className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -775,7 +1023,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                         <span className="text-slate-500 font-medium">Entire Workspace</span>
                                                     )}
                                                 </td>
-                                                <td className="py-3.5 px-4">
+                                                <td className="py-3.5 px-4 whitespace-nowrap">
                                                     {isPending && (
                                                         <div className="flex flex-col gap-0.5">
                                                             <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border-blue-200 dark:border-blue-800 w-fit">
@@ -819,260 +1067,67 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                         </Badge>
                                                     )}
                                                 </td>
-                                                <td className="py-3.5 px-4 hidden md:table-cell text-slate-400 text-[11px]">
+                                                <td className="py-3.5 px-4 hidden md:table-cell whitespace-nowrap text-slate-400 text-[11px]">
                                                     {new Date(member.createdAt).toLocaleDateString("en-US", {
                                                         month: "short",
                                                         day: "numeric",
                                                         year: "numeric"
                                                     })}
                                                 </td>
-                                                <td className="py-3.5 px-4 sm:px-6 text-right">
+                                                <td
+                                                    className="py-3.5 px-4 sm:px-6 text-right w-16"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
                                                     {isOwner ? (
                                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                                                             Owner
                                                         </span>
                                                     ) : (
-                                                        <div className="flex items-center justify-end gap-1.5">
-                                                            {isPending && (
-                                                                <>
-                                                                    {member.invitationToken && (
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="outline"
-                                                                            onClick={() => handleCopyInviteLink(member.invitationToken)}
-                                                                            title="Copy direct invitation link"
-                                                                            className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
-                                                                        >
-                                                                            <IconCopy className="h-3.5 w-3.5" />
-                                                                            <span className="hidden lg:inline">Copy Link</span>
-                                                                        </Button>
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    disabled={isRowBusy}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    aria-label={`Actions for ${member.fullName}`}
+                                                                    title={`Manage ${member.fullName}`}
+                                                                    className="h-8 w-8 p-0 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
+                                                                >
+                                                                    {isRowBusy ? (
+                                                                        <IconLoader className="h-4 w-4 animate-spin text-primary" />
+                                                                    ) : (
+                                                                        <IconDotsVertical className="h-4 w-4" />
                                                                     )}
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        disabled={resendingId === member.id}
-                                                                        onClick={() => handleResendInvite(member)}
-                                                                        title="Resend invitation"
-                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
-                                                                    >
-                                                                        {resendingId === member.id ? (
-                                                                            <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                                                                        ) : (
-                                                                            <IconRefresh className="h-3.5 w-3.5" />
-                                                                        )}
-                                                                        <span className="hidden lg:inline">Resend</span>
-                                                                    </Button>
-                                                                    <span
-                                                                        title={restriction.revokeTooltip}
-                                                                        className={!restriction.canRevoke ? "inline-flex cursor-not-allowed" : "inline-flex"}
-                                                                    >
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            disabled={!restriction.canRevoke}
-                                                                            onClick={() => handleOpenRevoke(member)}
-                                                                            title={restriction.revokeTooltip}
-                                                                            aria-label={restriction.revokeTooltip}
-                                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end" className="w-52 rounded-xl shadow-lg border">
+                                                                {menuActions.map((spec) => (
+                                                                    <React.Fragment key={spec.key}>
+                                                                        {spec.separatorBefore && <DropdownMenuSeparator />}
+                                                                        <span
+                                                                            title={spec.tooltip}
+                                                                            className={spec.disabled ? "block cursor-not-allowed" : "block"}
                                                                         >
-                                                                            <IconTrash className="h-3.5 w-3.5" />
-                                                                            <span className="hidden sm:inline">Revoke</span>
-                                                                        </Button>
-                                                                    </span>
-                                                                </>
-                                                            )}
-
-                                                            {isExpired && (
-                                                                <>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        disabled={resendingId === member.id}
-                                                                        onClick={() => handleResendInvite(member)}
-                                                                        title="Resend fresh invitation email"
-                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
-                                                                    >
-                                                                        {resendingId === member.id ? (
-                                                                            <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                                                                        ) : (
-                                                                            <IconRefresh className="h-3.5 w-3.5" />
-                                                                        )}
-                                                                        <span className="hidden lg:inline">Resend</span>
-                                                                    </Button>
-                                                                    <span
-                                                                        title={restriction.revokeTooltip}
-                                                                        className={!restriction.canRevoke ? "inline-flex cursor-not-allowed" : "inline-flex"}
-                                                                    >
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            disabled={!restriction.canRevoke}
-                                                                            onClick={() => handleOpenRevoke(member)}
-                                                                            title={restriction.revokeTooltip}
-                                                                            aria-label={restriction.revokeTooltip}
-                                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
-                                                                        >
-                                                                            <IconTrash className="h-3.5 w-3.5" />
-                                                                            <span className="hidden sm:inline">Revoke</span>
-                                                                        </Button>
-                                                                    </span>
-                                                                </>
-                                                            )}
-
-                                                            {isActive && (
-                                                                <>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        onClick={() => handleOpenEdit(member)}
-                                                                        title="Edit Details"
-                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
-                                                                    >
-                                                                        <IconPencil className="h-3.5 w-3.5" />
-                                                                        <span className="hidden lg:inline">Edit Details</span>
-                                                                    </Button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        onClick={() => handleOpenResetPassword(member)}
-                                                                        title="Reset Password"
-                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
-                                                                    >
-                                                                        <IconKey className="h-3.5 w-3.5" />
-                                                                        <span className="hidden lg:inline">Reset Password</span>
-                                                                    </Button>
-                                                                    <span
-                                                                        title={restriction.suspendTooltip}
-                                                                        className={!restriction.canSuspend ? "inline-flex cursor-not-allowed" : "inline-flex"}
-                                                                    >
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            disabled={actionLoadingId === member.id || !restriction.canSuspend}
-                                                                            onClick={() => handleSuspend(member)}
-                                                                            title={restriction.suspendTooltip}
-                                                                            aria-label={restriction.suspendTooltip}
-                                                                            className="h-8 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
-                                                                        >
-                                                                            {actionLoadingId === member.id ? (
-                                                                                <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                                                                            ) : (
-                                                                                <IconPlayerPause className="h-3.5 w-3.5" />
-                                                                            )}
-                                                                            <span className="hidden sm:inline">Suspend</span>
-                                                                        </Button>
-                                                                    </span>
-                                                                    <span
-                                                                        title={restriction.revokeTooltip}
-                                                                        className={!restriction.canRevoke ? "inline-flex cursor-not-allowed" : "inline-flex"}
-                                                                    >
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            disabled={!restriction.canRevoke}
-                                                                            onClick={() => handleOpenRevoke(member)}
-                                                                            title={restriction.revokeTooltip}
-                                                                            aria-label={restriction.revokeTooltip}
-                                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
-                                                                        >
-                                                                            <IconBan className="h-3.5 w-3.5" />
-                                                                            <span className="hidden sm:inline">Revoke</span>
-                                                                        </Button>
-                                                                    </span>
-                                                                </>
-                                                            )}
-
-                                                            {isSuspended && (
-                                                                <>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        disabled={actionLoadingId === member.id}
-                                                                        onClick={() => handleReactivate(member)}
-                                                                        title="Reactivate Account"
-                                                                        className="h-8 px-2.5 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg text-xs font-semibold gap-1.5"
-                                                                    >
-                                                                        {actionLoadingId === member.id ? (
-                                                                            <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                                                                        ) : (
-                                                                            <IconPlayerPlay className="h-3.5 w-3.5" />
-                                                                        )}
-                                                                        <span>Reactivate</span>
-                                                                    </Button>
-                                                                    <span
-                                                                        title={restriction.revokeTooltip}
-                                                                        className={!restriction.canRevoke ? "inline-flex cursor-not-allowed" : "inline-flex"}
-                                                                    >
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            disabled={!restriction.canRevoke}
-                                                                            onClick={() => handleOpenRevoke(member)}
-                                                                            title={restriction.revokeTooltip}
-                                                                            aria-label={restriction.revokeTooltip}
-                                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
-                                                                        >
-                                                                            <IconBan className="h-3.5 w-3.5" />
-                                                                            <span className="hidden sm:inline">Revoke</span>
-                                                                        </Button>
-                                                                    </span>
-                                                                    <span
-                                                                        title={restriction.deleteTooltip}
-                                                                        className={!restriction.canDelete ? "inline-flex cursor-not-allowed" : "inline-flex"}
-                                                                    >
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            disabled={!restriction.canDelete}
-                                                                            onClick={() => handleOpenDelete(member)}
-                                                                            title={restriction.deleteTooltip}
-                                                                            aria-label={restriction.deleteTooltip}
-                                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
-                                                                        >
-                                                                            <IconTrash className="h-3.5 w-3.5" />
-                                                                            <span className="hidden sm:inline">Remove</span>
-                                                                        </Button>
-                                                                    </span>
-                                                                </>
-                                                            )}
-
-                                                            {isRevoked && (
-                                                                <>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        disabled={resendingId === member.id || isQuotaFull}
-                                                                        onClick={() => handleReinvite(member)}
-                                                                        title="Send a fresh 7-day invitation"
-                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
-                                                                    >
-                                                                        {resendingId === member.id ? (
-                                                                            <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                                                                        ) : (
-                                                                            <IconRefresh className="h-3.5 w-3.5" />
-                                                                        )}
-                                                                        <span>Re-invite</span>
-                                                                    </Button>
-                                                                    <span
-                                                                        title={restriction.deleteTooltip}
-                                                                        className={!restriction.canDelete ? "inline-flex cursor-not-allowed" : "inline-flex"}
-                                                                    >
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            disabled={!restriction.canDelete}
-                                                                            onClick={() => handleOpenDelete(member)}
-                                                                            title={restriction.deleteTooltip}
-                                                                            aria-label={restriction.deleteTooltip}
-                                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
-                                                                        >
-                                                                            <IconTrash className="h-3.5 w-3.5" />
-                                                                            <span className="hidden sm:inline">Remove</span>
-                                                                        </Button>
-                                                                    </span>
-                                                                </>
-                                                            )}
-                                                        </div>
+                                                                            <DropdownMenuItem
+                                                                                disabled={spec.disabled}
+                                                                                variant={spec.variant === "destructive" ? "destructive" : "default"}
+                                                                                onClick={() => handleMenuAction(spec.key)}
+                                                                                className={`cursor-pointer text-xs font-medium gap-2 py-2 ${
+                                                                                    spec.variant === "warning"
+                                                                                        ? "text-amber-600 dark:text-amber-400 focus:text-amber-700 focus:bg-amber-50 dark:focus:bg-amber-950/40"
+                                                                                        : ""
+                                                                                }`}
+                                                                            >
+                                                                                {renderActionIcon(spec.key)}
+                                                                                <span>{spec.label}</span>
+                                                                            </DropdownMenuItem>
+                                                                        </span>
+                                                                    </React.Fragment>
+                                                                ))}
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
                                                     )}
                                                 </td>
                                             </tr>

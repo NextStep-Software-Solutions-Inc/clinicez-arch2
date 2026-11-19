@@ -233,6 +233,30 @@ function parseFilenameFromContentDisposition(header?: string | null): string | n
   return plainMatch?.[1]?.trim() || null;
 }
 
+async function extractBlobErrorMessage(error: unknown): Promise<string | null> {
+  const response = (error as { response?: { data?: unknown } })?.response;
+  const data = response?.data;
+  if (!data) return null;
+
+  if (typeof Blob !== "undefined" && data instanceof Blob) {
+    try {
+      const text = await data.text();
+      if (!text.trim()) return null;
+      const parsed = JSON.parse(text) as { message?: string; Message?: string };
+      return parsed.message || parsed.Message || null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof data === "object") {
+    const obj = data as { message?: string; Message?: string };
+    return obj.message || obj.Message || null;
+  }
+
+  return null;
+}
+
 export const verificationService = {
   /** Fetches the signed-in admin reviewer profile and scopes (`GET /admin/me`). Returns null on 401/403. */
   getReviewerProfile: async (): Promise<ReviewerProfile | null> => {
@@ -291,10 +315,19 @@ export const verificationService = {
       searchParams.set("childRequestId", options.childRequestId);
     }
     const qs = searchParams.toString();
-    const res = await apiClient.get<Blob>(
-      `/admin/verification-queue/${encodeURIComponent(requestId)}/evidence${qs ? `?${qs}` : ""}`,
-      { responseType: "blob" },
-    );
+    let res;
+    try {
+      res = await apiClient.get<Blob>(
+        `/admin/verification-queue/${encodeURIComponent(requestId)}/evidence${qs ? `?${qs}` : ""}`,
+        { responseType: "blob" },
+      );
+    } catch (error: unknown) {
+      const parsedMessage = await extractBlobErrorMessage(error);
+      if (parsedMessage) {
+        throw new Error(parsedMessage);
+      }
+      throw error;
+    }
     const headers = (res.headers ?? {}) as Record<string, string | undefined>;
     const contentType =
       res.data?.type ||

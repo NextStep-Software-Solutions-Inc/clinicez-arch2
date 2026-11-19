@@ -22,11 +22,19 @@ import {
 } from "../src/services/verification.service";
 import {
   VerificationQueueView,
+  buildVerificationDetailHref,
   filterQueueItemsForTab,
+  parseVerificationQueueSearch,
+  serializeVerificationQueueSearch,
   statusTabToApiQuery,
   summarizeQueueItemSpecialtySchedule,
 } from "../src/routes/verifications";
-import { VerificationReviewDrawer } from "../src/components/verifications/VerificationReviewDrawer";
+import { VerificationDetailPageView } from "../src/routes/verifications/$requestId";
+import {
+  VerificationDetailWorkspace,
+  VerificationReviewDrawer,
+} from "../src/components/verifications/VerificationReviewDrawer";
+import { buildVerificationsQueueHref } from "../src/lib/verificationStatus";
 import {
   NameMismatchAlert,
   ProofEvidenceCard,
@@ -145,6 +153,25 @@ describe("Directory Verifications — Admin Governance Workstation", () => {
       expect((requested[2].config as { responseType?: string })?.responseType).toBe("blob");
       expect(evidence.contentType).toBe("application/pdf");
       expect(evidence.fileName).toBe("doh-lto-2026.pdf");
+
+      // Extracts backend JSON error messages from responseType: "blob" failures (e.g. 502 clinic offline)
+      (apiClient as unknown as { get: typeof apiClient.get }).get = (async () => {
+        const err = new Error("Request failed with status code 502") as Error & {
+          response?: { status: number; data: Blob };
+        };
+        err.response = {
+          status: 502,
+          data: new Blob(
+            [JSON.stringify({ message: "The clinic workstation is currently offline." })],
+            { type: "application/json" },
+          ),
+        };
+        throw err;
+      }) as unknown as typeof apiClient.get;
+
+      await expect(
+        verificationService.fetchVerificationEvidence("req-1", { kind: "prc" }),
+      ).rejects.toThrow("The clinic workstation is currently offline.");
     });
 
     test("approve, reject (requires reason), and suspend call expected admin endpoints", async () => {
@@ -205,9 +232,28 @@ describe("Directory Verifications — Admin Governance Workstation", () => {
       expect(item?.label).toBe("Directory Verifications");
     });
 
-    test("TanStack router matches /verifications cleanly and rejects /admin/verifications and /portal/verifications", async () => {
+    test("TanStack router matches /verifications and /verifications/$requestId cleanly and rejects /admin/verifications and /portal/verifications", async () => {
       const validMatches = router.matchRoutes("/verifications");
       expect(validMatches.some((m) => m.routeId.includes("verifications"))).toBe(true);
+
+      const detailMatches = router.matchRoutes("/verifications/req-123");
+      expect(detailMatches.some((m) => m.routeId.includes("$requestId"))).toBe(true);
+
+      const detailHistory = createMemoryHistory({
+        initialEntries: ["/verifications/req-123?status=approved&kind=facility&q=ermita"],
+      });
+      const detailRouter = createRouter({ routeTree, history: detailHistory });
+      await detailRouter.load();
+      const matchedDetail = detailRouter.state.matches.find((m) =>
+        m.routeId.includes("$requestId"),
+      );
+      expect(matchedDetail).toBeDefined();
+      expect(matchedDetail?.params).toEqual({ requestId: "req-123" });
+      expect(matchedDetail?.search).toEqual({
+        status: "approved",
+        kind: "facility",
+        q: "ermita",
+      });
 
       for (const badPath of ["/admin/verifications", "/portal/verifications"]) {
         const memHistory = createMemoryHistory({ initialEntries: [badPath] });
@@ -216,6 +262,39 @@ describe("Directory Verifications — Admin Governance Workstation", () => {
         const nonRoot = testRouter.state.matches.filter((m) => m.routeId !== "__root__");
         expect(nonRoot.length).toBe(0);
       }
+    });
+
+    test("URL search helpers parse, serialize, and round-trip queue filters across /verifications and /verifications/$requestId", () => {
+      expect(
+        parseVerificationQueueSearch({ status: "pending", kind: "all", q: "   " }),
+      ).toEqual({});
+      expect(
+        parseVerificationQueueSearch({
+          status: "approved",
+          kind: "practitioner",
+          q: "  clara  ",
+        }),
+      ).toEqual({
+        status: "approved",
+        kind: "practitioner",
+        q: "clara",
+      });
+      expect(
+        parseVerificationQueueSearch({ status: "bogus", kind: "invalid" }),
+      ).toEqual({});
+
+      const serialized = serializeVerificationQueueSearch({
+        statusTab: "rejected",
+        kindFilter: "facility",
+        q: "doh",
+      });
+      expect(serialized).toEqual({ status: "rejected", kind: "facility", q: "doh" });
+      expect(buildVerificationDetailHref("req-9", serialized)).toBe(
+        "/verifications/req-9?status=rejected&kind=facility&q=doh",
+      );
+      expect(buildVerificationsQueueHref(serialized)).toBe(
+        "/verifications?status=rejected&kind=facility&q=doh",
+      );
     });
   });
 
@@ -345,6 +424,18 @@ describe("Directory Verifications — Admin Governance Workstation", () => {
       expect(queueHtml).toContain("0554433");
       expect(queueHtml).toContain("PRC name mismatch detected");
       expect(summarizeQueueItemSpecialtySchedule(sampleQueue.items[0])).toContain("2 clinicians");
+      expect(queueHtml).toContain("/verifications/fac-req-1");
+      expect(queueHtml).not.toContain("Verification review drawer");
+
+      const filteredQueueHtml = renderToString(
+        <VerificationQueueView
+          initialProfile={verifierProfile}
+          initialQueue={sampleQueue}
+          initialSearch={{ status: "in_review", kind: "facility", q: "ermita" }}
+        />,
+      );
+      expect(filteredQueueHtml).toContain("Manila Care Ermita");
+      expect(filteredQueueHtml).toContain("/verifications/fac-req-1?status=in_review&amp;kind=facility&amp;q=ermita");
     });
 
     test("statusTabToApiQuery and filterQueueItemsForTab map all status tabs accurately", () => {
@@ -504,6 +595,114 @@ describe("Directory Verifications — Admin Governance Workstation", () => {
       expect(superHtml).toContain("Approve Request");
       expect(superHtml).toContain("Suspend Practitioner Across Clinics");
     });
+
+    test("VerificationDetailPageView & VerificationDetailWorkspace render 2-column comparison layout, Back link with queue filters, tall proof viewer, and RBAC", () => {
+      const deniedDetailHtml = renderToString(
+        <VerificationDetailPageView
+          requestId="req-1"
+          queueSearch={{ status: "approved", kind: "facility", q: "manila" }}
+          initialProfile={supportProfile}
+        />,
+      );
+      expect(deniedDetailHtml).toContain("Directory Verification Access Required");
+      expect(deniedDetailHtml).toContain("Back to Directory Verifications");
+      expect(deniedDetailHtml).toContain("/verifications?status=approved&amp;kind=facility&amp;q=manila");
+
+      const facilityDetail: VerificationRequestDetailDto = {
+        id: "fac-req-1",
+        kind: "Facility",
+        status: "PendingReview",
+        requestKind: "Initial",
+        submissionNumber: 4,
+        correlationId: "corr-fac-4",
+        submittedAtUtc: "2026-11-18T05:00:00Z",
+        submittedByClinicUserId: "user-1",
+        submittedByDisplayName: "Clinic Owner",
+        reviewedAtUtc: null,
+        reviewedByAdminUserId: null,
+        reviewerNotes: null,
+        withdrawnAtUtc: null,
+        withdrawnByActor: null,
+        withdrawalReason: null,
+        tenantId: "t-1",
+        tenantSlug: "manila-care",
+        tenantName: "Manila Care Network",
+        facilityId: "f-1",
+        facilityName: "Manila Care Ermita",
+        facilitySlug: "manila-care-ermita",
+        facilityVerificationStatus: "PendingReview",
+        dohLtoNumber: "DOH-LTO-9988",
+        evidenceObjectKey: "verification/lto/t1/f1/lto.pdf",
+        ltoEvidenceObjectKey: "verification/lto/t1/f1/lto.pdf",
+        prcEvidenceObjectKey: null,
+        submittedSnapshotJson: "{}",
+        snapshot: {
+          classification: "Primary Care Clinic",
+          operatingHours: "Mon-Sat 08:00-17:00",
+          address: "123 Taft Ave, Manila",
+        },
+        hasNameMismatch: false,
+        childPractitionerRequests: [
+          {
+            id: "child-1",
+            clinicStaffMemberId: "staff-1",
+            practitionerId: null,
+            affiliationId: null,
+            submissionNumber: 1,
+            requestKind: "Initial",
+            professionKind: "Doctor",
+            firstName: "Jose",
+            lastName: "Rizal",
+            title: "Dr.",
+            submittedPrcLicenseNo: "0088112",
+            normalizedPrcLicenseNo: "0088112",
+            prcExpiryDate: "2028-06-30",
+            prcEvidenceObjectKey: "verification/prc/rizal.pdf",
+            verificationContact: "jose@manilacare.ph",
+            specialty: "Family Medicine",
+            publicBio: null,
+            avatarUrl: null,
+            status: "PendingReview",
+            hasNameMismatch: false,
+            prcMatchCandidates: [],
+            availabilities: [],
+          },
+        ],
+        prcMatchCandidates: [],
+        submissionHistory: [],
+      };
+
+      const workspaceHtml = renderToString(
+        <VerificationDetailWorkspace
+          requestId="fac-req-1"
+          profile={verifierProfile}
+          queueSearch={{ status: "in_review", kind: "facility", q: "ermita" }}
+          initialDetail={facilityDetail}
+        />,
+      );
+      expect(workspaceHtml).toContain("Directory verification review workspace");
+      expect(workspaceHtml).toContain("Back to Directory Verifications");
+      expect(workspaceHtml).toContain("/verifications?status=in_review&amp;kind=facility&amp;q=ermita");
+      expect(workspaceHtml).toContain("lg:grid-cols-12");
+      expect(workspaceHtml).toContain("lg:sticky lg:top-20");
+      expect(workspaceHtml).toContain("min-h-[560px]");
+      expect(workspaceHtml).toContain("DOH LTO Proof");
+      expect(workspaceHtml).toContain("PRC • Dr. Jose Rizal");
+      expect(workspaceHtml).toContain("Inspect PRC Proof");
+      expect(workspaceHtml).toContain("Approve bundled clinicians");
+      expect(workspaceHtml).toContain("Approve Request");
+      expect(workspaceHtml).toContain("Reject Request");
+
+      const readOnlyWorkspaceHtml = renderToString(
+        <VerificationDetailPageView
+          requestId="fac-req-1"
+          initialProfile={readOnlyProfile}
+          initialDetail={facilityDetail}
+        />,
+      );
+      expect(readOnlyWorkspaceHtml).toContain("Read-only access");
+      expect(readOnlyWorkspaceHtml).not.toContain("Approve Request");
+    });
   });
 
   describe("4. Design Token & Branding Guardrails", () => {
@@ -515,6 +714,7 @@ describe("Directory Verifications — Admin Governance Workstation", () => {
         "components/verifications/VerificationStatusBadge.tsx",
         "components/verifications/VerificationReviewDrawer.tsx",
         "routes/verifications.tsx",
+        "routes/verifications/$requestId.tsx",
       ];
       const hexRegex = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b/g;
 

@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoute, useNavigate } from "@tanstack/react-router";
 import {
   IconAlertCircle,
   IconAlertTriangle,
   IconArrowLeft,
+  IconChevronRight,
   IconClipboardCheck,
   IconRefresh,
   IconSearch,
@@ -11,7 +12,14 @@ import {
   IconShieldLock,
 } from "@tabler/icons-react";
 import { Route as authRoute } from "./_auth";
-import { formatVerificationTimestamp } from "@/lib/verificationStatus";
+import {
+  formatVerificationTimestamp,
+  parseVerificationQueueSearch,
+  serializeVerificationQueueSearch,
+  type QueueKindFilter,
+  type QueueStatusTab,
+  type VerificationQueueSearch,
+} from "@/lib/verificationStatus";
 import {
   canViewVerifications,
   verificationService,
@@ -19,22 +27,13 @@ import {
   type VerificationQueueItemDto,
   type VerificationQueueResponse,
 } from "@/services/verification.service";
-import { VerificationReviewDrawer } from "@/components/verifications/VerificationReviewDrawer";
 import {
   VerificationKindBadge,
   VerificationStatusBadge,
 } from "@/components/verifications/VerificationStatusBadge";
 
-export type QueueStatusTab =
-  | "pending"
-  | "in_review"
-  | "awaiting_confirmation"
-  | "approved"
-  | "rejected"
-  | "withdrawn"
-  | "all";
-
-export type QueueKindFilter = "all" | "facility" | "practitioner";
+export type { QueueStatusTab, QueueKindFilter, VerificationQueueSearch };
+export { parseVerificationQueueSearch, serializeVerificationQueueSearch };
 
 const STATUS_TABS: ReadonlyArray<{ value: QueueStatusTab; label: string }> = [
   { value: "pending", label: "Pending" },
@@ -113,12 +112,35 @@ export function summarizeQueueItemSpecialtySchedule(item: VerificationQueueItemD
   return item.requestKind ? `${role} • ${item.requestKind}` : role;
 }
 
+export function buildVerificationDetailHref(
+  requestId: string,
+  search?: VerificationQueueSearch,
+): string {
+  const base = `/verifications/${encodeURIComponent(requestId)}`;
+  if (!search) return base;
+  const params = new URLSearchParams();
+  if (search.status && search.status !== "pending") params.set("status", search.status);
+  if (search.kind && search.kind !== "all") params.set("kind", search.kind);
+  if (search.q?.trim()) params.set("q", search.q.trim());
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
+}
+
+function readWindowQueueSearch(): VerificationQueueSearch {
+  if (typeof window === "undefined") return {};
+  return parseVerificationQueueSearch(
+    Object.fromEntries(new URLSearchParams(window.location.search).entries()),
+  );
+}
+
 export function VerificationQueueView({
   initialProfile,
   initialQueue,
+  initialSearch,
 }: {
   initialProfile?: ReviewerProfile | null;
   initialQueue?: VerificationQueueResponse | null;
+  initialSearch?: VerificationQueueSearch;
 } = {}) {
   let navigate: ReturnType<typeof useNavigate> | null = null;
   try {
@@ -127,35 +149,79 @@ export function VerificationQueueView({
     // Outside RouterProvider in unit tests
   }
 
+  const resolvedInitialSearch = useMemo(
+    () => initialSearch ?? readWindowQueueSearch(),
+    [initialSearch],
+  );
+
   const [profile, setProfile] = useState<ReviewerProfile | null | undefined>(initialProfile);
   const [profileLoading, setProfileLoading] = useState(initialProfile === undefined);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  const [statusTab, setStatusTab] = useState<QueueStatusTab>("pending");
-  const [kindFilter, setKindFilter] = useState<QueueKindFilter>("all");
-  const [searchInput, setSearchInput] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusTab, setStatusTab] = useState<QueueStatusTab>(
+    () => resolvedInitialSearch.status ?? "pending",
+  );
+  const [kindFilter, setKindFilter] = useState<QueueKindFilter>(
+    () => resolvedInitialSearch.kind ?? "all",
+  );
+  const [searchInput, setSearchInput] = useState(() => resolvedInitialSearch.q ?? "");
+  const [debouncedSearch, setDebouncedSearch] = useState(() => resolvedInitialSearch.q ?? "");
 
   const [queueData, setQueueData] = useState<VerificationQueueResponse | null>(initialQueue ?? null);
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+
+  const lastSyncedSearchRef = useRef<string>(
+    JSON.stringify(
+      serializeVerificationQueueSearch({
+        statusTab: resolvedInitialSearch.status ?? "pending",
+        kindFilter: resolvedInitialSearch.kind ?? "all",
+        q: resolvedInitialSearch.q ?? "",
+      }),
+    ),
+  );
+
+  // Sync external URL search param updates (e.g. sidebar reset or browser Back/Forward)
+  useEffect(() => {
+    if (!initialSearch) return;
+    const externalNormalized = serializeVerificationQueueSearch({
+      statusTab: initialSearch.status ?? "pending",
+      kindFilter: initialSearch.kind ?? "all",
+      q: initialSearch.q ?? "",
+    });
+    const externalKey = JSON.stringify(externalNormalized);
+    if (externalKey !== lastSyncedSearchRef.current) {
+      lastSyncedSearchRef.current = externalKey;
+      setStatusTab(externalNormalized.status ?? "pending");
+      setKindFilter(externalNormalized.kind ?? "all");
+      setSearchInput(externalNormalized.q ?? "");
+      setDebouncedSearch(externalNormalized.q ?? "");
+    }
+  }, [initialSearch]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchInput.trim()), 250);
     return () => clearTimeout(timer);
   }, [searchInput]);
 
+  // Persist active status, kind, and search query into URL search params
   useEffect(() => {
-    if (!selectedRequestId) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setSelectedRequestId(null);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedRequestId]);
+    if (!navigate) return;
+    const nextSearch = serializeVerificationQueueSearch({
+      statusTab,
+      kindFilter,
+      q: debouncedSearch,
+    });
+    const nextKey = JSON.stringify(nextSearch);
+    if (nextKey !== lastSyncedSearchRef.current) {
+      lastSyncedSearchRef.current = nextKey;
+      void navigate({
+        to: "/verifications",
+        search: nextSearch,
+        replace: true,
+      });
+    }
+  }, [navigate, statusTab, kindFilter, debouncedSearch]);
 
   useEffect(() => {
     if (initialProfile !== undefined) return;
@@ -219,6 +285,28 @@ export function VerificationQueueView({
     [queueData?.items, statusTab],
   );
 
+  const persistedQueueSearch = useMemo(
+    () =>
+      serializeVerificationQueueSearch({
+        statusTab,
+        kindFilter,
+        q: searchInput.trim(),
+      }),
+    [statusTab, kindFilter, searchInput],
+  );
+
+  const handleOpenDetail = (requestId: string) => {
+    if (navigate) {
+      void navigate({
+        to: "/verifications/$requestId",
+        params: { requestId },
+        search: persistedQueueSearch,
+      });
+    } else if (typeof window !== "undefined") {
+      window.location.assign(buildVerificationDetailHref(requestId, persistedQueueSearch));
+    }
+  };
+
   if (profileLoading) {
     return (
       <div className="space-y-6 animate-pulse" aria-label="Loading verification queue">
@@ -253,7 +341,7 @@ export function VerificationQueueView({
               onClick={(e) => {
                 if (navigate) {
                   e.preventDefault();
-                  navigate({ to: "/" });
+                  void navigate({ to: "/" });
                 }
               }}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-text bg-surface-muted border border-border hover:bg-surface transition-colors"
@@ -414,185 +502,173 @@ export function VerificationQueueView({
         </div>
       </div>
 
-      {/* Split-Pane Queue + Review Drawer */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        <div className={selectedRequestId ? "lg:col-span-7" : "lg:col-span-12"}>
-          {queueLoading && !queueData ? (
-            <div className="space-y-2.5 animate-pulse" aria-label="Loading verification requests">
-              {[1, 2, 3, 4].map((row) => (
-                <div key={row} className="h-16 w-full rounded-xl bg-surface-muted" />
-              ))}
-            </div>
-          ) : queueError ? (
-            <div className="p-5 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2.5">
-                <IconAlertCircle className="h-4 w-4 shrink-0" />
-                <div>
-                  <div className="font-bold">Unable to load verification queue</div>
-                  <p className="mt-0.5">{queueError}</p>
-                </div>
+      {/* Full-Width Verification Queue Table */}
+      <div className="w-full">
+        {queueLoading && !queueData ? (
+          <div className="space-y-2.5 animate-pulse" aria-label="Loading verification requests">
+            {[1, 2, 3, 4].map((row) => (
+              <div key={row} className="h-16 w-full rounded-xl bg-surface-muted" />
+            ))}
+          </div>
+        ) : queueError ? (
+          <div className="p-5 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <IconAlertCircle className="h-4 w-4 shrink-0" />
+              <div>
+                <div className="font-bold">Unable to load verification queue</div>
+                <p className="mt-0.5">{queueError}</p>
               </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void fetchQueue()}
+              className="px-3 py-1.5 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer shrink-0"
+            >
+              Try Again
+            </button>
+          </div>
+        ) : displayedItems.length === 0 ? (
+          <div className="p-12 rounded-2xl bg-surface border border-dashed border-border text-center space-y-3">
+            <div className="inline-flex p-3 rounded-2xl bg-primary-subtle text-primary">
+              <IconClipboardCheck className="h-7 w-7" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-sm font-bold text-text">No verification requests found</h2>
+              <p className="text-xs text-text-muted max-w-sm mx-auto">
+                No facility or practitioner submissions match the selected status, kind, or search query.
+              </p>
+            </div>
+            {statusTab !== "all" || kindFilter !== "all" || searchInput.trim() ? (
               <button
                 type="button"
-                onClick={() => void fetchQueue()}
-                className="px-3 py-1.5 font-semibold rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors cursor-pointer shrink-0"
+                onClick={() => {
+                  setStatusTab("all");
+                  setKindFilter("all");
+                  setSearchInput("");
+                  setDebouncedSearch("");
+                }}
+                className="px-4 py-1.5 text-xs font-semibold text-primary bg-primary-subtle rounded-xl hover:bg-primary/20 transition-colors cursor-pointer"
               >
-                Try Again
+                Show All Requests
               </button>
-            </div>
-          ) : displayedItems.length === 0 ? (
-            <div className="p-12 rounded-2xl bg-surface border border-dashed border-border text-center space-y-3">
-              <div className="inline-flex p-3 rounded-2xl bg-primary-subtle text-primary">
-                <IconClipboardCheck className="h-7 w-7" />
-              </div>
-              <div className="space-y-1">
-                <h2 className="text-sm font-bold text-text">No verification requests found</h2>
-                <p className="text-xs text-text-muted max-w-sm mx-auto">
-                  No facility or practitioner submissions match the selected status, kind, or search query.
-                </p>
-              </div>
-              {statusTab !== "all" || kindFilter !== "all" || searchInput.trim() ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStatusTab("all");
-                    setKindFilter("all");
-                    setSearchInput("");
-                  }}
-                  className="px-4 py-1.5 text-xs font-semibold text-primary bg-primary-subtle rounded-xl hover:bg-primary/20 transition-colors cursor-pointer"
-                >
-                  Show All Requests
-                </button>
-              ) : null}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-border bg-surface overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-surface-muted border-b border-border text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                    <tr>
-                      <th className="px-4 py-3 whitespace-nowrap">Submission #</th>
-                      <th className="px-4 py-3 whitespace-nowrap">Kind</th>
-                      <th className="px-4 py-3 whitespace-nowrap">Facility / Clinician</th>
-                      <th className="px-4 py-3 whitespace-nowrap">PRC / LTO #</th>
-                      <th className="px-4 py-3 whitespace-nowrap">Specialty / Schedule</th>
-                      <th className="px-4 py-3 whitespace-nowrap">Submitted</th>
-                      <th className="px-4 py-3 whitespace-nowrap">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {displayedItems.map((item) => {
-                      const isSelected = selectedRequestId === item.id;
-                      const primaryName =
-                        item.kind.toLowerCase() === "facility"
-                          ? item.facilityName
-                          : item.practitionerName || item.facilityName;
-                      const secondaryName =
-                        item.kind.toLowerCase() === "facility"
-                          ? `${item.tenantName} (${item.tenantSlug})`
-                          : `${item.facilityName} • ${item.tenantSlug}`;
-                      const licenseNumber =
-                        item.kind.toLowerCase() === "facility"
-                          ? item.dohLtoNumber || "No LTO #"
-                          : item.normalizedPrcLicenseNo || item.prcLicenseNo || "—";
+            ) : null}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-surface-muted border-b border-border text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                  <tr>
+                    <th className="px-4 py-3 whitespace-nowrap">Submission #</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Kind</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Facility / Clinician</th>
+                    <th className="px-4 py-3 whitespace-nowrap">PRC / LTO #</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Specialty / Schedule</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Submitted</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Status</th>
+                    <th className="px-4 py-3 whitespace-nowrap text-right">Review</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {displayedItems.map((item) => {
+                    const primaryName =
+                      item.kind.toLowerCase() === "facility"
+                        ? item.facilityName
+                        : item.practitionerName || item.facilityName;
+                    const secondaryName =
+                      item.kind.toLowerCase() === "facility"
+                        ? `${item.tenantName} (${item.tenantSlug})`
+                        : `${item.facilityName} • ${item.tenantSlug}`;
+                    const licenseNumber =
+                      item.kind.toLowerCase() === "facility"
+                        ? item.dohLtoNumber || "No LTO #"
+                        : item.normalizedPrcLicenseNo || item.prcLicenseNo || "—";
+                    const detailHref = buildVerificationDetailHref(item.id, persistedQueueSearch);
 
-                      return (
-                        <tr
-                          key={item.id}
-                          onClick={() => setSelectedRequestId(item.id)}
-                          className={`cursor-pointer transition-colors hover:bg-surface-muted/60 ${
-                            isSelected ? "bg-primary-subtle/60" : ""
-                          }`}
-                        >
-                          <td className="px-4 py-3.5 whitespace-nowrap font-mono font-bold text-text">
-                            #{item.submissionNumber}
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap">
-                            <VerificationKindBadge kind={item.kind} />
-                          </td>
-                          <td className="px-4 py-3.5 min-w-[190px]">
-                            <div className="flex items-center gap-1.5 font-semibold text-text">
-                              <span className="truncate max-w-[200px]">{primaryName}</span>
-                              {item.hasNameMismatch ? (
-                                <span
-                                  title="PRC name mismatch detected"
-                                  className="inline-flex items-center text-amber-600 dark:text-amber-400 shrink-0"
-                                >
-                                  <IconAlertTriangle className="h-3.5 w-3.5" />
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="text-[11px] text-text-muted truncate max-w-[220px]">
-                              {secondaryName}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap font-mono text-text">
-                            <div>{licenseNumber}</div>
-                            {item.prcExpiryDate ? (
-                              <div className="text-[10px] font-sans text-text-muted">
-                                Exp {item.prcExpiryDate}
-                              </div>
+                    return (
+                      <tr
+                        key={item.id}
+                        onClick={() => handleOpenDetail(item.id)}
+                        className="cursor-pointer transition-colors hover:bg-surface-muted/60"
+                      >
+                        <td className="px-4 py-3.5 whitespace-nowrap font-mono font-bold text-text">
+                          #{item.submissionNumber}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <VerificationKindBadge kind={item.kind} />
+                        </td>
+                        <td className="px-4 py-3.5 min-w-[200px]">
+                          <div className="flex items-center gap-1.5 font-semibold text-text">
+                            <span className="truncate max-w-[240px]">{primaryName}</span>
+                            {item.hasNameMismatch ? (
+                              <span
+                                title="PRC name mismatch detected"
+                                className="inline-flex items-center text-amber-600 dark:text-amber-400 shrink-0"
+                              >
+                                <IconAlertTriangle className="h-3.5 w-3.5" />
+                              </span>
                             ) : null}
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap text-text-secondary">
-                            {summarizeQueueItemSpecialtySchedule(item)}
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap text-text-muted">
-                            {formatVerificationTimestamp(item.submittedAtUtc)}
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap">
-                            <VerificationStatusBadge status={item.status} />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                          </div>
+                          <div className="text-[11px] text-text-muted truncate max-w-[260px]">
+                            {secondaryName}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap font-mono text-text">
+                          <div>{licenseNumber}</div>
+                          {item.prcExpiryDate ? (
+                            <div className="text-[10px] font-sans text-text-muted">
+                              Exp {item.prcExpiryDate}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-text-secondary">
+                          {summarizeQueueItemSpecialtySchedule(item)}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-text-muted">
+                          {formatVerificationTimestamp(item.submittedAtUtc)}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <VerificationStatusBadge status={item.status} />
+                        </td>
+                        <td
+                          className="px-4 py-3.5 whitespace-nowrap text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <a
+                            href={detailHref}
+                            onClick={(e) => {
+                              if (navigate) {
+                                e.preventDefault();
+                                handleOpenDetail(item.id);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-primary hover:bg-primary-subtle transition-colors"
+                          >
+                            <span>Inspect</span>
+                            <IconChevronRight className="h-3.5 w-3.5" />
+                          </a>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
-
-        {/* Desktop Split-Pane Detail Drawer */}
-        {selectedRequestId ? (
-          <div className="hidden lg:block lg:col-span-5 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)]">
-            <VerificationReviewDrawer
-              requestId={selectedRequestId}
-              profile={profile}
-              onClose={() => setSelectedRequestId(null)}
-              onActionCompleted={() => void fetchQueue()}
-            />
           </div>
-        ) : null}
+        )}
       </div>
-
-      {/* Mobile / Tablet Slide-Over Review Drawer */}
-      {selectedRequestId ? (
-        <div className="fixed inset-0 z-50 lg:hidden flex justify-end">
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-xs"
-            onClick={() => setSelectedRequestId(null)}
-          />
-          <div className="relative z-10 w-full sm:max-w-xl h-full p-2 sm:p-4">
-            <VerificationReviewDrawer
-              requestId={selectedRequestId}
-              profile={profile}
-              onClose={() => setSelectedRequestId(null)}
-              onActionCompleted={() => void fetchQueue()}
-            />
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
 
 function VerificationsPage() {
-  return <VerificationQueueView />;
+  const search = Route.useSearch();
+  return <VerificationQueueView initialSearch={search} />;
 }
 
 export const Route = createRoute({
   getParentRoute: () => authRoute,
   path: "verifications",
+  validateSearch: parseVerificationQueueSearch,
   component: VerificationsPage,
 });

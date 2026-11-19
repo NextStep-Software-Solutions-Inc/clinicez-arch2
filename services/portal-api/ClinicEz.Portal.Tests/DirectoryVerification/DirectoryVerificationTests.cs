@@ -1,9 +1,14 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Amazon.S3;
+using Amazon.S3.Model;
 using ClinicEz.Portal.Api.Endpoints;
 using ClinicEz.Portal.Application.Common;
 using ClinicEz.Portal.Application.Features.Admin.Queries;
@@ -14,6 +19,7 @@ using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Constants;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Messaging.Handlers;
+using ClinicEz.Portal.Infrastructure.Options;
 using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Portal.Infrastructure.Persistence.Seeders;
 using ClinicEz.Portal.Infrastructure.Services;
@@ -28,6 +34,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -824,5 +831,258 @@ public sealed class DirectoryVerificationTests : IDisposable
         Assert.Equal("image/png", outcome.File!.ContentType);
         Assert.Equal("prc-card.png", outcome.File.FileName);
         Assert.Equal(expectedPng, outcome.File.Content);
+        storage.Verify(s => s.SaveCachedEvidenceAsync(
+            _tenantA.Id,
+            _clinicA.Id,
+            "tenants/t/clinics/c/verification/prc/card.png",
+            "image/png",
+            "prc-card.png",
+            expectedPng,
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task R2PortalEvidenceStorageService_UploadsReadsRejectsTraversalAndWriteThroughCaches()
+    {
+        var r2Store = new ConcurrentDictionary<(string Bucket, string Key), (byte[] Bytes, string ContentType, string? FileName)>();
+        var capturedPutFlags = new List<(bool DisablePayloadSigning, bool UseChunkEncoding, bool DisableDefaultChecksumValidation)>();
+
+        var s3Mock = new Mock<IAmazonS3>(MockBehavior.Strict);
+        s3Mock
+            .Setup(c => c.PutObjectAsync(It.IsAny<PutObjectRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PutObjectRequest req, CancellationToken _) =>
+            {
+                capturedPutFlags.Add((
+                    req.DisablePayloadSigning ?? false,
+                    req.UseChunkEncoding,
+                    req.DisableDefaultChecksumValidation ?? false));
+
+                using var ms = new MemoryStream();
+                req.InputStream.Position = 0;
+                req.InputStream.CopyTo(ms);
+                var metaName = req.Metadata?["file-name"] ?? req.Metadata?["x-amz-meta-file-name"];
+                r2Store[(req.BucketName, req.Key)] = (ms.ToArray(), req.ContentType, metaName);
+                return new PutObjectResponse { HttpStatusCode = HttpStatusCode.OK };
+            });
+
+        s3Mock
+            .Setup(c => c.GetObjectAsync(It.IsAny<GetObjectRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((GetObjectRequest req, CancellationToken _) =>
+            {
+                if (!r2Store.TryGetValue((req.BucketName, req.Key), out var entry))
+                {
+                    throw new AmazonS3Exception("Not found")
+                    {
+                        StatusCode = HttpStatusCode.NotFound,
+                        ErrorCode = "NoSuchKey"
+                    };
+                }
+
+                var res = new GetObjectResponse
+                {
+                    BucketName = req.BucketName,
+                    Key = req.Key,
+                    HttpStatusCode = HttpStatusCode.OK,
+                    ResponseStream = new MemoryStream(entry.Bytes, writable: false),
+                };
+                res.Headers.ContentType = entry.ContentType;
+                if (!string.IsNullOrWhiteSpace(entry.FileName))
+                    res.Metadata["file-name"] = entry.FileName;
+                return res;
+            });
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"clinicez-r2-fallback-{Guid.NewGuid():N}");
+        try
+        {
+            var localFallbackConfig = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["Storage:BasePath"] = tempDir })
+                .Build();
+            var localFallback = new LocalPortalEvidenceStorageService(
+                localFallbackConfig,
+                NullLogger<LocalPortalEvidenceStorageService>.Instance);
+
+            var defaultOpts = new R2Options
+            {
+                AccountId = "acct123",
+                BucketName = "",
+                AccessKeyId = "ak123",
+                SecretAccessKey = "sk123"
+            };
+            Assert.True(defaultOpts.IsConfigured());
+            Assert.Equal("clinicez-portal-uploads", defaultOpts.ResolveBucketName());
+
+            using var storage = new R2PortalEvidenceStorageService(
+                s3Mock.Object,
+                defaultOpts.ResolveBucketName(),
+                NullLogger<R2PortalEvidenceStorageService>.Instance,
+                localFallback);
+
+            var pdfBytes = "%PDF-1.7\n%portal-r2-test"u8.ToArray();
+            var objectKey = await storage.SaveLtoProofAsync(_tenantA.Id, _clinicA.Id, "application/pdf", pdfBytes, CancellationToken.None);
+            Assert.StartsWith($"verification/lto/{_tenantA.Id:D}/{_clinicA.Id:D}/", objectKey);
+            Assert.True(r2Store.TryGetValue(("clinicez-portal-uploads", objectKey), out var storedObj));
+            Assert.Equal("application/pdf", storedObj.ContentType);
+            Assert.Equal(pdfBytes, storedObj.Bytes);
+            Assert.Single(capturedPutFlags);
+            Assert.Equal((true, false, true), capturedPutFlags[0]);
+
+            var readBack = await storage.ReadEvidenceAsync(objectKey, CancellationToken.None);
+            Assert.NotNull(readBack);
+            Assert.Equal("application/pdf", readBack!.ContentType);
+            Assert.Equal(pdfBytes, readBack.Content);
+
+            // Path traversal / invalid keys return null without querying R2
+            Assert.Null(await storage.ReadEvidenceAsync("../secret.pdf", CancellationToken.None));
+            Assert.Null(await storage.ReadEvidenceAsync("verification/lto/%2e%2e/secret.pdf", CancellationToken.None));
+            Assert.Null(await storage.ReadEvidenceAsync("verification/lto/missing.pdf", CancellationToken.None));
+            s3Mock.Verify(
+                c => c.GetObjectAsync(It.Is<GetObjectRequest>(r => r.Key.Contains("secret.pdf")), It.IsAny<CancellationToken>()),
+                Times.Never);
+
+            // Fallback to legacy local disk evidence on R2 404
+            var legacyPng = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+            var legacyKey = await localFallback.SaveLtoProofAsync(_tenantA.Id, _clinicA.Id, "image/png", legacyPng, CancellationToken.None);
+            var legacyRead = await storage.ReadEvidenceAsync(legacyKey, CancellationToken.None);
+            Assert.NotNull(legacyRead);
+            Assert.Equal(legacyPng, legacyRead!.Content);
+
+            // Oversized (> 5 MB) and invalid MIME uploads are rejected before touching R2
+            var oversized = new byte[(5 * 1024 * 1024) + 1];
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                storage.SaveLtoProofAsync(_tenantA.Id, _clinicA.Id, "application/pdf", oversized, CancellationToken.None));
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                storage.SaveLtoProofAsync(_tenantA.Id, _clinicA.Id, "text/plain", new byte[] { 1, 2, 3 }, CancellationToken.None));
+
+            // Write-through caching from Interop into clinicez-portal-uploads R2 bucket
+            var clinicKey = $"tenants/{_tenantA.Id:N}/clinics/{_clinicA.Id:N}/verification/prc/doc.jpg";
+            var jpegBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10 };
+            var interopCalls = 0;
+            var interopMock = new Mock<IInteropRequestClient>();
+            interopMock
+                .Setup(c => c.RequestAsync<VerificationEvidenceRequestedPayload, VerificationEvidenceRespondedPayload>(
+                    InteropTypes.VerificationEvidenceRequested,
+                    InteropTypes.VerificationEvidenceResponded,
+                    Party.Portal,
+                    It.IsAny<Party>(),
+                    It.Is<VerificationEvidenceRequestedPayload>(p => p.ObjectKey == clinicKey),
+                    It.IsAny<TimeSpan>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() =>
+                {
+                    interopCalls++;
+                    if (interopCalls > 1)
+                    {
+                        throw new InteropRequestTimeoutException(
+                            InteropTypes.VerificationEvidenceRequested,
+                            Guid.NewGuid(),
+                            TimeSpan.FromSeconds(1));
+                    }
+                    return new VerificationEvidenceRespondedPayload
+                    {
+                        Found = true,
+                        ContentType = "image/jpeg",
+                        FileName = "prc-license.jpg",
+                        Base64Content = Convert.ToBase64String(jpegBytes)
+                    };
+                });
+
+            var first = await VerificationEvidenceResolver.ResolveAsync(
+                storage, interopMock.Object, _tenantA.Id, _clinicA.Id, clinicKey, NullLogger.Instance, CancellationToken.None);
+            Assert.NotNull(first.File);
+            Assert.Equal("image/jpeg", first.File!.ContentType);
+            Assert.Equal("prc-license.jpg", first.File.FileName);
+            Assert.Equal(jpegBytes, first.File.Content);
+            Assert.Equal(1, interopCalls);
+            Assert.True(r2Store.ContainsKey(("clinicez-portal-uploads", clinicKey)));
+
+            // Even with null / offline interop client, subsequent read loads from R2 clinicez-portal-uploads
+            var second = await VerificationEvidenceResolver.ResolveAsync(
+                storage, null, _tenantA.Id, _clinicA.Id, clinicKey, NullLogger.Instance, CancellationToken.None);
+            Assert.NotNull(second.File);
+            Assert.Equal("prc-license.jpg", second.File!.FileName);
+            Assert.Equal(jpegBytes, second.File.Content);
+            Assert.Equal(1, interopCalls);
+
+            // Unicode / accented filenames and image/jpg MIME types normalize to ASCII-safe S3 metadata and canonical MIME
+            var unicodeKey = $"tenants/{_tenantA.Id:N}/clinics/{_clinicA.Id:N}/verification/prc/jose-pena.jpg";
+            await storage.SaveCachedEvidenceAsync(
+                _tenantA.Id,
+                _clinicA.Id,
+                unicodeKey,
+                "image/jpg; charset=binary",
+                "Dr. José Peña - PRC.jpg",
+                jpegBytes,
+                CancellationToken.None);
+
+            var unicodeRead = await storage.ReadEvidenceAsync(unicodeKey, CancellationToken.None);
+            Assert.NotNull(unicodeRead);
+            Assert.Equal("image/jpeg", unicodeRead!.ContentType);
+            Assert.Equal("Dr. Jose Pena - PRC.jpg", unicodeRead.FileName);
+            Assert.All(unicodeRead.FileName, ch => Assert.True(char.IsAscii(ch)));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DependencyInjection_ResolvesR2WithDefaultOrConfiguredBucket_OrFallsBackToLocal()
+    {
+        static IPortalEvidenceStorageService ResolveStorage(Dictionary<string, string?> extraConfig)
+        {
+            var builder = Microsoft.AspNetCore.Builder.WebApplication.CreateBuilder(
+                new Microsoft.AspNetCore.Builder.WebApplicationOptions { EnvironmentName = Environments.Development });
+            var baseConfig = new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=test;Username=postgres;Password=postgres",
+                ["Clerk:Authority"] = "https://clerk.example.test",
+                ["Clerk:SecretKey"] = "sk_test_dummy",
+                ["Xendit:SecretKey"] = "xnd_test_dummy",
+                ["Xendit:CallbackToken"] = "cb_test_dummy",
+                ["ClaimToken:SigningKey"] = "test-claim-token-signing-key-32-bytes-minimum",
+                ["Storage:BasePath"] = Path.Combine(Path.GetTempPath(), $"clinicez-di-test-{Guid.NewGuid():N}"),
+            };
+            foreach (var kv in extraConfig)
+                baseConfig[kv.Key] = kv.Value;
+
+            builder.Configuration.AddInMemoryCollection(baseConfig);
+            ClinicEz.Portal.Infrastructure.DependencyInjection.AddInfrastructureServices(
+                builder.Services,
+                builder.Configuration,
+                builder.Environment);
+
+            using var provider = builder.Services.BuildServiceProvider();
+            return provider.GetRequiredService<IPortalEvidenceStorageService>();
+        }
+
+        // 1. Unconfigured R2 -> LocalPortalEvidenceStorageService
+        var local = ResolveStorage(new Dictionary<string, string?>());
+        Assert.IsType<LocalPortalEvidenceStorageService>(local);
+
+        // 2. R2 credentials present + empty BucketName -> R2PortalEvidenceStorageService targeting clinicez-portal-uploads
+        var r2Default = ResolveStorage(new Dictionary<string, string?>
+        {
+            ["R2:AccountId"] = "acct-test-123",
+            ["R2:BucketName"] = "",
+            ["R2:AccessKeyId"] = "ak-test-123",
+            ["R2:SecretAccessKey"] = "sk-test-123",
+        });
+        var defaultSvc = Assert.IsType<R2PortalEvidenceStorageService>(r2Default);
+        Assert.Equal("clinicez-portal-uploads", defaultSvc.BucketName);
+        defaultSvc.Dispose();
+
+        // 3. R2 credentials present + custom BucketName -> R2PortalEvidenceStorageService targeting configured bucket
+        var r2Custom = ResolveStorage(new Dictionary<string, string?>
+        {
+            ["R2:AccountId"] = "acct-test-123",
+            ["R2:BucketName"] = "clinicez-portal-staging",
+            ["R2:AccessKeyId"] = "ak-test-123",
+            ["R2:SecretAccessKey"] = "sk-test-123",
+        });
+        var customSvc = Assert.IsType<R2PortalEvidenceStorageService>(r2Custom);
+        Assert.Equal("clinicez-portal-staging", customSvc.BucketName);
+        customSvc.Dispose();
     }
 }

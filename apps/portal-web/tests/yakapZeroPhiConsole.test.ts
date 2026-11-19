@@ -1,10 +1,27 @@
 import { describe, expect, test, mock } from "bun:test";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import React from "react";
+import { renderToString } from "react-dom/server";
+
+mock.module("next/navigation", () => ({
+  useParams: () => ({ tenant: "manila-care" }),
+  useRouter: () => ({ push: () => {}, replace: () => {} }),
+  usePathname: () => "/manila-care/dashboard/philhealth-yakap",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 import {
   yakapService,
   type PortalYakapBranchSummaryDto,
   type PortalYakapSubmissionDto,
   type PortalYakapMasterlistSyncResultDto,
 } from "../src/services/yakap.service";
+import YakapTransmittalClient, {
+  buildBranchPhilHealthSetupHref,
+  filterYakapSubmissions,
+  resolvePcapiEnvironmentLabel,
+} from "../src/components/dashboard/yakap/YakapTransmittalClient";
 import { apiClient } from "../src/transport/apiClient";
 
 describe("PhilHealth YAKAP 2.0 Zero-PHI Telemetry Console (Milestone M4-B)", () => {
@@ -275,6 +292,87 @@ describe("PhilHealth YAKAP 2.0 Zero-PHI Telemetry Console (Milestone M4-B)", () 
       expect(res.totalActiveCount).toBe(2355);
 
       apiClient.post = originalPost;
+    });
+  });
+
+  describe("Tier 5: YAKAP 2.0 Console Layout, Helpers & Streamlined Flows", () => {
+    test("T5.1: resolvePcapiEnvironmentLabel maps staging/sandbox/localhost vs production cleanly", () => {
+      expect(resolvePcapiEnvironmentLabel(null)).toEqual({
+        label: "Production",
+        url: "https://pcapi.philhealth.gov.ph",
+      });
+      expect(resolvePcapiEnvironmentLabel("https://pcapi.philhealth.gov.ph")).toEqual({
+        label: "Production",
+        url: "https://pcapi.philhealth.gov.ph",
+      });
+      expect(resolvePcapiEnvironmentLabel("https://pcapi-staging.philhealth.gov.ph/ws?wsdl")).toEqual({
+        label: "Staging",
+        url: "https://pcapi-staging.philhealth.gov.ph/ws?wsdl",
+      });
+      expect(resolvePcapiEnvironmentLabel("http://localhost:8090")).toEqual({
+        label: "Staging",
+        url: "http://localhost:8090",
+      });
+    });
+
+    test("T5.2: buildBranchPhilHealthSetupHref routes directly to ?tab=philhealth", () => {
+      expect(buildBranchPhilHealthSetupHref("manila-care", "branch-1", false)).toBe(
+        "/manila-care/dashboard/branches/branch-1?tab=philhealth",
+      );
+      expect(buildBranchPhilHealthSetupHref("manila-care", "branch-1", true)).toBe(
+        "/dashboard/branches/branch-1?tab=philhealth",
+      );
+    });
+
+    test("T5.3: filterYakapSubmissions supports composite pending_polling and rejected_failed KPI quick filters", () => {
+      const mixed: PortalYakapSubmissionDto[] = [
+        ...mockSubmissions,
+        {
+          ...mockSubmissions[1],
+          id: "sub-4",
+          patientCode: "PAT-0004",
+          processingStatus: "Submitted",
+          submissionType: "Medicine",
+        },
+        {
+          ...mockSubmissions[2],
+          id: "sub-5",
+          patientCode: "PAT-0005",
+          processingStatus: "Failed",
+          submissionType: "Referral",
+        },
+      ];
+
+      expect(
+        filterYakapSubmissions(mixed, { status: "pending_polling", type: "all", query: "" }).map((s) => s.id),
+      ).toEqual(["sub-2", "sub-4"]);
+
+      expect(
+        filterYakapSubmissions(mixed, { status: "rejected_failed", type: "all", query: "" }).map((s) => s.id),
+      ).toEqual(["sub-3", "sub-5"]);
+
+      expect(
+        filterYakapSubmissions(mixed, { status: "accepted", type: "fpe", query: "MCA2026" }).map((s) => s.id),
+      ).toEqual(["sub-1"]);
+    });
+
+    test("T5.4: YakapTransmittalClient uses standard dashboard padding, uniform clickable KPIs, and zero raw hex literals", () => {
+      const html = renderToString(React.createElement(YakapTransmittalClient));
+      expect(html).toContain("p-4 sm:p-6 md:p-8 max-w-7xl mx-auto");
+      expect(html).toContain("text-2xl sm:text-3xl font-extrabold tracking-tight");
+      expect(html).toContain("U-prefix batch upload codes");
+      expect(html).toContain("MCA confirmation numbers");
+      expect(html).not.toContain("U...");
+      expect(html).not.toContain("MCA...");
+
+      const src = fs.readFileSync(
+        path.resolve(__dirname, "../src/components/dashboard/yakap/YakapTransmittalClient.tsx"),
+        "utf8",
+      );
+      expect(src).toContain("Configure PCAPI Credentials");
+      expect(src).toContain("Poll All Pending");
+      expect(src).toContain("?tab=philhealth");
+      expect(src).not.toMatch(/#[0-9a-fA-F]{6}\b/);
     });
   });
 });

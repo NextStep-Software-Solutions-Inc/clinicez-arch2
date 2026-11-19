@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -87,8 +88,40 @@ public static class VerificationEvidenceResolver
                     ErrorMessage: "Clinic returned a malformed verification evidence payload.");
             }
 
+            if (bytes.Length == 0)
+            {
+                return new VerificationEvidenceLookupOutcome(
+                    null,
+                    ErrorMessage: "Clinic returned an empty verification evidence payload.");
+            }
+
             var contentType = NormalizeContentType(reply.ContentType, trimmedKey);
             var fileName = SanitizeFileName(reply.FileName, trimmedKey);
+
+            // 3. Write-through cache into portal storage so subsequent previews work even if clinic goes offline
+            try
+            {
+                await storage.SaveCachedEvidenceAsync(
+                    tenantId,
+                    facilityId,
+                    trimmedKey,
+                    contentType,
+                    fileName,
+                    bytes,
+                    ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(
+                    ex,
+                    "Failed to write-through cache verification evidence '{ObjectKey}' in portal storage.",
+                    trimmedKey);
+            }
+
             return new VerificationEvidenceLookupOutcome(new PortalEvidenceFile(bytes, contentType, fileName));
         }
         catch (InteropRequestTimeoutException ex)
@@ -128,10 +161,13 @@ public static class VerificationEvidenceResolver
         if (string.IsNullOrWhiteSpace(raw))
             return "verification-evidence";
 
-        var sb = new StringBuilder(raw.Length);
-        foreach (var ch in raw)
+        var decomposed = raw.Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder(decomposed.Length);
+        foreach (var ch in decomposed)
         {
-            if (char.IsLetterOrDigit(ch) || ch is '.' or '-' or '_' or ' ')
+            if (CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark)
+                continue;
+            if (char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_' or ' ')
                 sb.Append(ch);
         }
 

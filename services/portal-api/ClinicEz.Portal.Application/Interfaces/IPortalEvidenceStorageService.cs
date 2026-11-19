@@ -10,7 +10,7 @@ public sealed record PortalEvidenceFile(
     string FileName);
 
 /// <summary>
-/// Persists and reads DOH LTO verification proof artifacts stored by the portal control plane.
+/// Persists and reads DOH LTO and cached PRC verification proof artifacts in the portal control plane.
 /// </summary>
 public interface IPortalEvidenceStorageService
 {
@@ -23,5 +23,14 @@ public interface IPortalEvidenceStorageService
 
     Task<PortalEvidenceFile?> ReadEvidenceAsync(
         string objectKey,
+        CancellationToken ct = default);
+
+    Task SaveCachedEvidenceAsync(
+        Guid tenantId,
+        Guid facilityId,
+        string objectKey,
+        string contentType,
+        string? fileName,
+        byte[] content,
         CancellationToken ct = default);
 }

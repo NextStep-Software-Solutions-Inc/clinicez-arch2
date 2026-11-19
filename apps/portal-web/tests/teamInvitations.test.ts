@@ -8,6 +8,7 @@ import {
   isSelfWorkspaceMember,
   SELF_ACTION_MESSAGES,
 } from "../src/lib/selfActionGuard";
+import { getWorkspaceMemberMenuActions } from "../src/app/[tenant]/dashboard/team/TeamManagementClient";
 
 describe("Tenant Workspace Team Invitations & Member Lifecycle (Milestone 2)", () => {
   describe("Proxy Middleware Whitelisting Logic", () => {
@@ -493,6 +494,109 @@ describe("Tenant Workspace Team Invitations & Member Lifecycle (Milestone 2)", (
       expect(source).toContain("!restriction.canDelete");
       expect(source).toContain("SELF_ACTION_MESSAGES.workspaceRevoke");
       expect(source).toContain("SELF_ACTION_MESSAGES.workspaceSuspend");
+      expect(source).toContain("DropdownMenuTrigger");
+      expect(source).toContain("IconDotsVertical");
+      expect(source).toContain("min-w-[220px]");
+      expect(source).toContain("w-16");
+    });
+
+    test("getWorkspaceMemberMenuActions builds compact ••• menu across all member statuses & self-action guards", () => {
+      const otherRestriction = getWorkspaceMemberActionRestriction(
+        { userId: "user_other", email: "other@clinicez.net", status: "Active" },
+        { userId: "user_self", email: "me@clinicez.net" }
+      );
+      const selfRestriction = getWorkspaceMemberActionRestriction(
+        { userId: "user_self", email: "me@clinicez.net", status: "Active" },
+        { userId: "user_self", email: "me@clinicez.net" }
+      );
+
+      // Owner has no menu actions
+      expect(
+        getWorkspaceMemberMenuActions(
+          { id: "m-owner", role: "Owner", status: "Active", invitationToken: null },
+          otherRestriction
+        )
+      ).toEqual([]);
+
+      // Invited with token -> Copy Invite Link, Resend Invitation, Revoke Invitation
+      const invitedWithToken = getWorkspaceMemberMenuActions(
+        { id: "m-inv", role: "Admin", status: "Invited", invitationToken: "tok-123" },
+        otherRestriction
+      );
+      expect(invitedWithToken.map((a) => a.label)).toEqual([
+        "Copy Invite Link",
+        "Resend Invitation",
+        "Revoke Invitation",
+      ]);
+
+      // Invited without token omits Copy Invite Link
+      const invitedNoToken = getWorkspaceMemberMenuActions(
+        { id: "m-inv-2", role: "Admin", status: "Invited", invitationToken: null },
+        otherRestriction
+      );
+      expect(invitedNoToken.map((a) => a.label)).toEqual([
+        "Resend Invitation",
+        "Revoke Invitation",
+      ]);
+
+      // Expired -> Resend Invitation, Revoke Invitation
+      const expired = getWorkspaceMemberMenuActions(
+        { id: "m-exp", role: "Biller", status: "Expired", invitationToken: "old" },
+        otherRestriction
+      );
+      expect(expired.map((a) => a.label)).toEqual([
+        "Resend Invitation",
+        "Revoke Invitation",
+      ]);
+
+      // Active (non-self) -> Edit Details, Reset Password, Suspend Access, Revoke Access
+      const activeOther = getWorkspaceMemberMenuActions(
+        { id: "m-act", role: "Admin", status: "Active", invitationToken: null },
+        otherRestriction
+      );
+      expect(activeOther.map((a) => a.label)).toEqual([
+        "Edit Details",
+        "Reset Password",
+        "Suspend Access",
+        "Revoke Access",
+      ]);
+      expect(activeOther.every((a) => !a.disabled)).toBe(true);
+
+      // Active (self) -> Edit & Reset enabled; Suspend & Revoke disabled with self-action tooltips
+      const activeSelf = getWorkspaceMemberMenuActions(
+        { id: "m-self", role: "Admin", status: "Active", invitationToken: null },
+        selfRestriction
+      );
+      expect(activeSelf.find((a) => a.key === "edit")?.disabled).toBe(false);
+      expect(activeSelf.find((a) => a.key === "reset-password")?.disabled).toBe(false);
+      expect(activeSelf.find((a) => a.key === "suspend")?.disabled).toBe(true);
+      expect(activeSelf.find((a) => a.key === "suspend")?.tooltip).toBe(SELF_ACTION_MESSAGES.workspaceSuspend);
+      expect(activeSelf.find((a) => a.key === "revoke")?.disabled).toBe(true);
+      expect(activeSelf.find((a) => a.key === "revoke")?.tooltip).toBe(SELF_ACTION_MESSAGES.workspaceRevoke);
+
+      // Suspended -> Reactivate Access, Revoke Access, Delete Permanently
+      const suspended = getWorkspaceMemberMenuActions(
+        { id: "m-sus", role: "Viewer", status: "Suspended", invitationToken: null },
+        otherRestriction
+      );
+      expect(suspended.map((a) => a.label)).toEqual([
+        "Reactivate Access",
+        "Revoke Access",
+        "Delete Permanently",
+      ]);
+
+      // Revoked with quota full disables Re-invite
+      const revokedQuotaFull = getWorkspaceMemberMenuActions(
+        { id: "m-rev", role: "Viewer", status: "Revoked", invitationToken: null },
+        otherRestriction,
+        { isQuotaFull: true }
+      );
+      expect(revokedQuotaFull.map((a) => a.label)).toEqual([
+        "Re-invite",
+        "Delete Permanently",
+      ]);
+      expect(revokedQuotaFull[0].disabled).toBe(true);
+      expect(revokedQuotaFull[1].disabled).toBe(false);
     });
   });
 });

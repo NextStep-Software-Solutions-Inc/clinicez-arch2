@@ -1,9 +1,9 @@
 using System;
 using System.IO;
 using System.Security;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Portal.Application.Features.DirectoryVerification;
 using ClinicEz.Portal.Application.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -129,19 +129,27 @@ public sealed class LocalPortalEvidenceStorageService(
         return new PortalEvidenceFile(bytes, contentType, fileName);
     }
 
-    private static string SanitizeFileName(string? name)
+    public async Task SaveCachedEvidenceAsync(
+        Guid tenantId,
+        Guid facilityId,
+        string objectKey,
+        string contentType,
+        string? fileName,
+        byte[] content,
+        CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            return "verification-evidence";
+        ArgumentNullException.ThrowIfNull(content);
+        if (content.Length == 0)
+            throw new ArgumentException("Verification evidence content cannot be empty.", nameof(content));
 
-        var sb = new StringBuilder(name.Length);
-        foreach (var ch in name)
-        {
-            if (char.IsLetterOrDigit(ch) || ch is '.' or '-' or '_' or ' ')
-                sb.Append(ch);
-        }
+        var fullPath = ResolveSafeFullPath(objectKey.Trim());
+        var dir = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
 
-        var cleaned = sb.ToString().Trim();
-        return string.IsNullOrWhiteSpace(cleaned) ? "verification-evidence" : cleaned;
+        await File.WriteAllBytesAsync(fullPath, content, ct);
     }
+
+    private static string SanitizeFileName(string? name)
+        => VerificationEvidenceResolver.SanitizeFileName(name, null);
 }

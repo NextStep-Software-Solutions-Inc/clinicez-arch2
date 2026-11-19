@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -10,6 +12,8 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Amazon.S3;
+using Amazon.S3.Model;
 using ClinicEz.Portal.Api;
 using ClinicEz.Portal.Api.Endpoints;
 using ClinicEz.Portal.Application;
@@ -23,6 +27,7 @@ using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Constants;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Hub;
+using ClinicEz.Portal.Infrastructure.Options;
 using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Portal.Infrastructure.Persistence.Interceptors;
 using ClinicEz.Portal.Infrastructure.Persistence.Seeders;
@@ -30,6 +35,7 @@ using ClinicEz.Portal.Infrastructure.Services;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Persistence;
+using ClinicEz.Shared.Interop.Requests;
 using ClinicEz.Shared.Interoperability;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -53,8 +59,55 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
     private Guid _facilityId;
     private Guid _facReqId;
     private Guid _pracReqAwaitingOtpId;
+    private readonly StubInteropRequestClient _interopClient = new();
+    private readonly ConcurrentDictionary<(string Bucket, string Key), (byte[] Bytes, string ContentType, string? FileName)> _r2Objects = new();
     private const string ConfirmToken = "confirm-token-secret-2026";
     private const string ConfirmOtp = "654321";
+
+    private IAmazonS3 CreateMockS3Client()
+    {
+        var mock = new Mock<IAmazonS3>(MockBehavior.Strict);
+        mock.Setup(c => c.PutObjectAsync(It.IsAny<PutObjectRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PutObjectRequest req, CancellationToken _) =>
+            {
+                Assert.True(req.DisablePayloadSigning);
+                Assert.False(req.UseChunkEncoding);
+                Assert.True(req.DisableDefaultChecksumValidation);
+                using var ms = new MemoryStream();
+                req.InputStream.Position = 0;
+                req.InputStream.CopyTo(ms);
+                var metaName = req.Metadata?["file-name"] ?? req.Metadata?["x-amz-meta-file-name"];
+                _r2Objects[(req.BucketName, req.Key)] = (ms.ToArray(), req.ContentType, metaName);
+                return new PutObjectResponse { HttpStatusCode = HttpStatusCode.OK };
+            });
+
+        mock.Setup(c => c.GetObjectAsync(It.IsAny<GetObjectRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((GetObjectRequest req, CancellationToken _) =>
+            {
+                if (!_r2Objects.TryGetValue((req.BucketName, req.Key), out var entry))
+                {
+                    throw new AmazonS3Exception("Not found")
+                    {
+                        StatusCode = HttpStatusCode.NotFound,
+                        ErrorCode = "NoSuchKey"
+                    };
+                }
+
+                var res = new GetObjectResponse
+                {
+                    BucketName = req.BucketName,
+                    Key = req.Key,
+                    HttpStatusCode = HttpStatusCode.OK,
+                    ResponseStream = new MemoryStream(entry.Bytes, writable: false),
+                };
+                res.Headers.ContentType = entry.ContentType;
+                if (!string.IsNullOrWhiteSpace(entry.FileName))
+                    res.Metadata["file-name"] = entry.FileName;
+                return res;
+            });
+
+        return mock.Object;
+    }
 
     public async Task InitializeAsync()
     {
@@ -89,7 +142,14 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
         builder.Services.AddScoped<IFacilityProvisioningPublisher, FacilityProvisioningPublisher>();
         builder.Services.AddScoped<IHubDirectoryResyncService, HubDirectoryResyncService>();
         builder.Services.AddScoped<IDirectoryVerificationSyncService, DirectoryVerificationSyncService>();
-        builder.Services.AddScoped<IPortalEvidenceStorageService, LocalPortalEvidenceStorageService>();
+        builder.Services.AddSingleton<LocalPortalEvidenceStorageService>();
+        builder.Services.AddSingleton<IPortalEvidenceStorageService>(sp =>
+            new R2PortalEvidenceStorageService(
+                CreateMockS3Client(),
+                R2Options.DefaultBucketName,
+                sp.GetRequiredService<ILogger<R2PortalEvidenceStorageService>>(),
+                sp.GetRequiredService<LocalPortalEvidenceStorageService>()));
+        builder.Services.AddSingleton<IInteropRequestClient>(_interopClient);
         builder.Services.AddSingleton(Mock.Of<IEntitlementGuard>());
         builder.Services.AddSingleton(Mock.Of<IEntitlementService>());
         builder.Services.AddSingleton(Mock.Of<IFacilityAllocationService>());
@@ -432,7 +492,7 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
         var badRes = await _client.SendAsync(badReq);
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, badRes.StatusCode);
 
-        // Valid PDF magic bytes -> 200 with stored objectKey
+        // Valid PDF magic bytes -> 200 with stored objectKey in R2 bucket clinicez-portal-uploads
         using var pdfForm = new MultipartFormDataContent();
         var pdfBytesRaw = "%PDF-1.4\n%test"u8.ToArray();
         var pdfBytes = new ByteArrayContent(pdfBytesRaw);
@@ -443,7 +503,13 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
         var okRes = await _client.SendAsync(okReq);
         Assert.Equal(HttpStatusCode.OK, okRes.StatusCode);
         var okJson = await okRes.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.StartsWith("verification/lto/", okJson.GetProperty("objectKey").GetString());
+        var uploadedObjectKey = okJson.GetProperty("objectKey").GetString()!;
+        Assert.StartsWith("verification/lto/", uploadedObjectKey);
+
+        // Verify object was uploaded into Cloudflare R2 bucket clinicez-portal-uploads
+        Assert.True(_r2Objects.TryGetValue((R2Options.DefaultBucketName, uploadedObjectKey), out var storedObj));
+        Assert.Equal("application/pdf", storedObj.ContentType);
+        Assert.Equal(pdfBytesRaw, storedObj.Bytes);
 
         // GET /facilities/{id}/lto-proof streams uploaded PDF inline to authorized tenant owner
         var getLtoRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/facilities/{_facilityId}/lto-proof?tenantSlug=manila-care", "clerk_clinic_owner"));
@@ -482,6 +548,69 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, jsonRes.StatusCode);
         var jsonResBody = await jsonRes.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("verification/lto/manual-key.pdf", jsonResBody.GetProperty("ltoEvidenceObjectKey").GetString());
+    }
+
+    [Fact]
+    public async Task AdminVerificationEvidence_WriteThroughCachesClinicInteropProofInR2Bucket()
+    {
+        var prcPngBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01, 0x02 };
+        _interopClient.ConfigureResponse("verification/prc/clara.pdf", new VerificationEvidenceRespondedPayload
+        {
+            Found = true,
+            ContentType = "image/png",
+            FileName = "clara-prc-card.png",
+            Base64Content = Convert.ToBase64String(prcPngBytes)
+        });
+
+        // 1st request resolves via Interop Hub and write-through caches into clinicez-portal-uploads R2 bucket
+        var firstRes = await _client.SendAsync(AsUser(
+            HttpMethod.Get,
+            $"/api/v1/admin/verification-queue/{_pracReqAwaitingOtpId}/evidence?kind=prc",
+            "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, firstRes.StatusCode);
+        Assert.Equal("image/png", firstRes.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(prcPngBytes, await firstRes.Content.ReadAsByteArrayAsync());
+        Assert.Equal(1, _interopClient.RequestCount);
+        Assert.True(_r2Objects.ContainsKey((R2Options.DefaultBucketName, "verification/prc/clara.pdf")));
+
+        // Simulate clinic workstation going offline
+        _interopClient.SimulateOffline = true;
+
+        // 2nd request serves instantaneously from R2 cache without a second Interop round-trip
+        var secondRes = await _client.SendAsync(AsUser(
+            HttpMethod.Get,
+            $"/api/v1/admin/verification-queue/{_pracReqAwaitingOtpId}/evidence?kind=prc",
+            "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, secondRes.StatusCode);
+        Assert.Equal("image/png", secondRes.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(prcPngBytes, await secondRes.Content.ReadAsByteArrayAsync());
+        Assert.Equal(1, _interopClient.RequestCount);
+
+        // Unicode / accented filename from Clinic Interop is sanitized to ASCII-safe Content-Disposition + R2 metadata
+        var unicodeKey = "verification/prc/jose-pena.pdf";
+        var pdfBytes = "%PDF-1.4\n%unicode-name"u8.ToArray();
+        _interopClient.ConfigureResponse(unicodeKey, new VerificationEvidenceRespondedPayload
+        {
+            Found = true,
+            ContentType = "application/pdf",
+            FileName = "Dr. José Peña - PRC.pdf",
+            Base64Content = Convert.ToBase64String(pdfBytes)
+        });
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var reqEntity = await db.PractitionerVerificationRequests.FirstAsync(r => r.Id == _pracReqAwaitingOtpId);
+            reqEntity.PrcEvidenceObjectKey = unicodeKey;
+            await db.SaveChangesAsync();
+        }
+        _interopClient.SimulateOffline = false;
+        var unicodeRes = await _client.SendAsync(AsUser(
+            HttpMethod.Get,
+            $"/api/v1/admin/verification-queue/{_pracReqAwaitingOtpId}/evidence?kind=prc",
+            "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, unicodeRes.StatusCode);
+        Assert.Equal("Dr. Jose Pena - PRC.pdf", unicodeRes.Content.Headers.ContentDisposition?.FileName?.Trim('"'));
+        Assert.Equal(pdfBytes, await unicodeRes.Content.ReadAsByteArrayAsync());
     }
 
     [Fact]
@@ -548,6 +677,52 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
             var identity = new ClaimsIdentity(claims, SchemeName);
             var principal = new ClaimsPrincipal(identity);
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName)));
+        }
+    }
+
+    private sealed class StubInteropRequestClient : IInteropRequestClient
+    {
+        private readonly Dictionary<string, VerificationEvidenceRespondedPayload> _responses = new(StringComparer.Ordinal);
+        public int RequestCount { get; private set; }
+        public bool SimulateOffline { get; set; }
+
+        public void ConfigureResponse(string objectKey, VerificationEvidenceRespondedPayload payload)
+        {
+            _responses[objectKey] = payload;
+        }
+
+        public Task<TReply> RequestAsync<TRequest, TReply>(
+            string requestType,
+            string replyType,
+            Party from,
+            Party to,
+            TRequest payload,
+            TimeSpan? timeout = null,
+            CancellationToken ct = default)
+        {
+            RequestCount++;
+            if (SimulateOffline)
+            {
+                throw new InteropRequestTimeoutException(requestType, Guid.NewGuid(), timeout ?? TimeSpan.FromSeconds(25));
+            }
+
+            if (payload is VerificationEvidenceRequestedPayload req &&
+                _responses.TryGetValue(req.ObjectKey, out var reply) &&
+                reply is TReply typedReply)
+            {
+                return Task.FromResult(typedReply);
+            }
+
+            if (typeof(TReply) == typeof(VerificationEvidenceRespondedPayload))
+            {
+                return Task.FromResult((TReply)(object)new VerificationEvidenceRespondedPayload
+                {
+                    Found = false,
+                    Error = "Not found in stub clinic storage."
+                });
+            }
+
+            throw new InvalidOperationException($"Unsupported stub request type {typeof(TRequest).Name}");
         }
     }
 }
