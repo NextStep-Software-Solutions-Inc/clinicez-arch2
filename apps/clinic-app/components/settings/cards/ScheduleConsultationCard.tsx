@@ -3,7 +3,9 @@ import { View, StyleSheet } from 'react-native';
 import Input from '../../ui/Input';
 import Button from '../../ui/Button';
 import { theme } from '../../../constants/theme';
-import { type ClinicSettingsRecord } from '../../../services/clinicService';
+import { type ClinicSettingsRecord, type PlatformVerificationStatus } from '../../../services/clinicService';
+import { PENDING_VERIFICATION_BUTTON_LABEL } from '../../../utils/directoryVerification';
+import { PendingVerificationNote } from '../common';
 import SettingsSplitCard from './SettingsSplitCard';
 
 export interface ScheduleConsultationCardProps {
@@ -17,6 +19,7 @@ export interface ScheduleConsultationCardProps {
   savingSettings: boolean;
   onSavePreferences: () => Promise<void>;
   showSkeletons: boolean;
+  platformVerificationStatus?: PlatformVerificationStatus;
 }
 
 const normalizeSavedOperatingHours = (val?: string | null): string => {
@@ -36,7 +39,10 @@ export default function ScheduleConsultationCard({
   savingSettings,
   onSavePreferences,
   showSkeletons,
+  platformVerificationStatus,
 }: ScheduleConsultationCardProps) {
+  const effectiveStatus = platformVerificationStatus ?? settings?.platformVerificationStatus;
+  const isPendingFacility = effectiveStatus === 'PendingReview';
   const hasHours = Boolean(operatingHours.trim());
   const savedHours = normalizeSavedOperatingHours(settings?.operatingHours);
   const savedSlot =
@@ -67,13 +73,16 @@ export default function ScheduleConsultationCard({
       skeletonRows={2}
       footer={
         isDirty || savingSettings ? (
-          <Button
-            title="Save hours & fee"
-            icon="save"
-            size="sm"
-            onPress={onSavePreferences}
-            loading={savingSettings}
-          />
+          <View style={styles.footerActions}>
+            {isPendingFacility ? <PendingVerificationNote /> : null}
+            <Button
+              title={isPendingFacility ? PENDING_VERIFICATION_BUTTON_LABEL : 'Save hours & fee'}
+              icon="save"
+              size="sm"
+              onPress={onSavePreferences}
+              loading={savingSettings}
+            />
+          </View>
         ) : undefined
       }
     >
@@ -119,5 +128,12 @@ const styles = StyleSheet.create({
     flex: 1,
     flexBasis: 180,
     minWidth: 0,
+  },
+  footerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
   },
 });

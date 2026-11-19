@@ -3,6 +3,7 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
+import { PENDING_VERIFICATION_HELPER_NOTE } from '../../utils/directoryVerification';
 
 export const formatPeso = (amount: number | undefined | null) =>
   `₱${(amount ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
@@ -80,6 +81,17 @@ export function FieldGroup({ label, children }: { label: string; children: React
   );
 }
 
+export function PendingVerificationNote({ testID }: { testID?: string }) {
+  return (
+    <View style={styles.pendingNoteRow} testID={testID}>
+      <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+      <ThemedText variant="caption" color={theme.colors.warningText} style={styles.pendingNoteText}>
+        {PENDING_VERIFICATION_HELPER_NOTE}
+      </ThemedText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
@@ -119,5 +131,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.emergencySubtle,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.emergencyBorder,
+  },
+  pendingNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexShrink: 1,
+  },
+  pendingNoteText: {
+    flexShrink: 1,
   },
 });

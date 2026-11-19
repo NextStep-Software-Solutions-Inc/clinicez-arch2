@@ -94,8 +94,25 @@ public sealed class FacilityVerificationRequestedHandler(
 
             foreach (var oldChild in priorChildren)
             {
+                var wasAwaitingOtp = oldChild.Status == "AwaitingOtp";
                 oldChild.Status = "Superseded";
+                oldChild.OtpTokenHash = null;
+                oldChild.OtpExpiresAtUtc = null;
                 oldChild.UpdatedAt = now;
+
+                if (wasAwaitingOtp)
+                {
+                    var aff = dbContext.PractitionerAffiliations.Local.FirstOrDefault(
+                            a => !a.IsDeleted && a.FacilityId == facility.Id && a.ClinicStaffMemberId == oldChild.ClinicStaffMemberId)
+                        ?? await dbContext.PractitionerAffiliations.FirstOrDefaultAsync(
+                            a => !a.IsDeleted && a.FacilityId == facility.Id && a.ClinicStaffMemberId == oldChild.ClinicStaffMemberId, ct);
+                    if (aff is not null && aff.AffiliationStatus == "AwaitingConfirmation")
+                    {
+                        aff.AffiliationStatus = "Withdrawn";
+                        aff.WithdrawnAtUtc = now;
+                        aff.UpdatedAt = now;
+                    }
+                }
             }
         }
 
@@ -106,6 +123,10 @@ public sealed class FacilityVerificationRequestedHandler(
         var ltoEvidenceKey = !string.IsNullOrWhiteSpace(payload.LtoEvidenceObjectKey)
             ? payload.LtoEvidenceObjectKey.Trim()
             : facility.LtoEvidenceObjectKey;
+
+        var snapshotPayload = string.IsNullOrWhiteSpace(payload.ContactEmail) && !string.IsNullOrWhiteSpace(facility.ContactEmail)
+            ? payload with { ContactEmail = facility.ContactEmail.Trim() }
+            : payload;
 
         var facilityReq = new FacilityVerificationRequest
         {
@@ -118,7 +139,7 @@ public sealed class FacilityVerificationRequestedHandler(
             SubmittedByClinicUserId = payload.SubmittedByClinicUserId,
             SubmittedByDisplayName = payload.SubmittedByDisplayName,
             SubmittedAtUtc = submittedAt,
-            SubmittedSnapshotJson = JsonSerializer.Serialize(payload, InteropJson.Options),
+            SubmittedSnapshotJson = DirectoryVerificationHelper.SerializeFacilitySnapshot(snapshotPayload),
             LtoEvidenceObjectKey = ltoEvidenceKey,
             Status = "PendingReview"
         };
@@ -131,14 +152,22 @@ public sealed class FacilityVerificationRequestedHandler(
             facility.LtoEvidenceObjectKey = ltoEvidenceKey;
         if (!string.IsNullOrWhiteSpace(payload.DohLtoNumber))
             facility.LicenseToOperate = payload.DohLtoNumber.Trim();
+        if (payload.DohLtoExpiryDate.HasValue)
+            facility.LtoExpiryDate = payload.DohLtoExpiryDate;
         if (!string.IsNullOrWhiteSpace(payload.Classification))
             facility.Classification = payload.Classification.Trim();
         if (!string.IsNullOrWhiteSpace(payload.OperatingHours))
             facility.OperatingHours = payload.OperatingHours.Trim();
         if (!string.IsNullOrWhiteSpace(payload.ContactNumber))
             facility.ContactNumber = payload.ContactNumber.Trim();
+        else if (maxSubmission > 0)
+            facility.ContactNumber = null;
         if (!string.IsNullOrWhiteSpace(payload.ContactEmail))
             facility.ContactEmail = payload.ContactEmail.Trim();
+        if (!string.IsNullOrWhiteSpace(payload.PhilHealthAccreditationNumber))
+            facility.PhilHealthAccreditationNumber = payload.PhilHealthAccreditationNumber.Trim();
+        else if (!payload.IsPhilHealthAccredited || maxSubmission > 0)
+            facility.PhilHealthAccreditationNumber = null;
         facility.UpdatedAt = now;
 
         // Preload existing canonical practitioners for bundled submissions
@@ -175,8 +204,25 @@ public sealed class FacilityVerificationRequestedHandler(
                          r.ClinicStaffMemberId == item.ClinicStaffMemberId
                          && r.Status is "PendingReview" or "AwaitingOtp"))
             {
+                var wasAwaitingOtp = oldStaffReq.Status == "AwaitingOtp";
                 oldStaffReq.Status = "Superseded";
+                oldStaffReq.OtpTokenHash = null;
+                oldStaffReq.OtpExpiresAtUtc = null;
                 oldStaffReq.UpdatedAt = now;
+
+                if (wasAwaitingOtp)
+                {
+                    var aff = dbContext.PractitionerAffiliations.Local.FirstOrDefault(
+                            a => !a.IsDeleted && a.FacilityId == facility.Id && a.ClinicStaffMemberId == oldStaffReq.ClinicStaffMemberId)
+                        ?? await dbContext.PractitionerAffiliations.FirstOrDefaultAsync(
+                            a => !a.IsDeleted && a.FacilityId == facility.Id && a.ClinicStaffMemberId == oldStaffReq.ClinicStaffMemberId, ct);
+                    if (aff is not null && aff.AffiliationStatus == "AwaitingConfirmation")
+                    {
+                        aff.AffiliationStatus = "Withdrawn";
+                        aff.WithdrawnAtUtc = now;
+                        aff.UpdatedAt = now;
+                    }
+                }
             }
 
             var staffMaxSub = priorStaffRequests
@@ -211,8 +257,10 @@ public sealed class FacilityVerificationRequestedHandler(
                     otpCodeHash = DirectoryVerificationHelper.HashSecret(otpCode);
                     otpExpiresAt = now.AddHours(DirectoryVerificationHelper.AffiliationOtpTtlHours);
 
-                    var existingAff = await dbContext.PractitionerAffiliations
-                        .FirstOrDefaultAsync(a => !a.IsDeleted && a.FacilityId == facility.Id && a.ClinicStaffMemberId == item.ClinicStaffMemberId, ct);
+                    var existingAff = dbContext.PractitionerAffiliations.Local.FirstOrDefault(
+                            a => !a.IsDeleted && a.FacilityId == facility.Id && a.ClinicStaffMemberId == item.ClinicStaffMemberId)
+                        ?? await dbContext.PractitionerAffiliations
+                            .FirstOrDefaultAsync(a => !a.IsDeleted && a.FacilityId == facility.Id && a.ClinicStaffMemberId == item.ClinicStaffMemberId, ct);
 
                     if (existingAff is null)
                     {
@@ -236,6 +284,7 @@ public sealed class FacilityVerificationRequestedHandler(
                     {
                         existingAff.PractitionerId = matched.Id;
                         existingAff.AffiliationStatus = "AwaitingConfirmation";
+                        existingAff.WithdrawnAtUtc = null;
                         existingAff.LocalDisplayName = DirectoryVerificationHelper.FormatDisplayName(item.Title, item.FirstName, item.LastName);
                         existingAff.LocalSpecialty = item.Specialty;
                         existingAff.AvailabilitiesJson = DirectoryVerificationHelper.SerializeAvailabilities(item.Availabilities);
@@ -286,7 +335,8 @@ public sealed class FacilityVerificationRequestedHandler(
                 HasNameMismatch: hasNameMismatch,
                 MatchedPractitionerId: matchedPractitionerId,
                 MatchedPractitionerName: matchedName,
-                OtpCodeHash: otpCodeHash);
+                OtpCodeHash: otpCodeHash,
+                SubmittedByDisplayName: payload.SubmittedByDisplayName);
 
             var pracReq = new PractitionerVerificationRequest
             {
@@ -308,6 +358,7 @@ public sealed class FacilityVerificationRequestedHandler(
                 PrcEvidenceObjectKey = item.PrcEvidenceObjectKey,
                 VerificationContact = item.VerificationContact,
                 SubmittedByClinicUserId = payload.SubmittedByClinicUserId,
+                SubmittedByDisplayName = payload.SubmittedByDisplayName,
                 SubmittedAtUtc = submittedAt,
                 OtpTokenHash = otpTokenHash,
                 OtpExpiresAtUtc = otpExpiresAt,

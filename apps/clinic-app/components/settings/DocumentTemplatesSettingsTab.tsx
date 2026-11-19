@@ -18,7 +18,14 @@ import { Skeleton, SkeletonList } from '../ui/Skeleton';
 import SegmentedControl, { SegmentedOption } from '../ui/SegmentedControl';
 import { theme } from '../../constants/theme';
 import { useBreakpoint } from '../../utils/useBreakpoint';
-import { clinicService, type ClinicSettingsRecord } from '../../services/clinicService';
+import {
+  clinicService,
+  isVerificationConflictError,
+  type ClinicSettingsRecord,
+  type PlatformVerificationStatus,
+} from '../../services/clinicService';
+import { PENDING_VERIFICATION_BUTTON_LABEL } from '../../utils/directoryVerification';
+import { PendingVerificationNote } from './common';
 import {
   BRAND_COLOR_PRESETS,
   DEFAULT_CLINIC_BRAND_COLOR,
@@ -53,6 +60,8 @@ export interface DocumentTemplatesSettingsTabProps {
   settingsLoadError?: string | null;
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
   onRefreshSettings?: () => Promise<void>;
+  platformVerificationStatus?: PlatformVerificationStatus;
+  onRefreshVerificationState?: () => Promise<void>;
 }
 
 const CATEGORY_OPTIONS: SegmentedOption<StudioCategory>[] = [
@@ -132,12 +141,16 @@ export default function DocumentTemplatesSettingsTab({
   settingsLoadError = null,
   onSettingsUpdated,
   onRefreshSettings,
+  platformVerificationStatus,
+  onRefreshVerificationState,
 }: DocumentTemplatesSettingsTabProps) {
   const { isDesktop } = useBreakpoint();
   const initialForm = deriveStationeryFormValues(initialSettings);
 
   // Internal state for self-loading if props are omitted (e.g. standalone rendering in tests)
   const [internalSettings, setInternalSettings] = useState<ClinicSettingsRecord | null>(initialSettings ?? null);
+  const effectiveVerificationStatus = platformVerificationStatus ?? internalSettings?.platformVerificationStatus;
+  const isPendingFacility = effectiveVerificationStatus === 'PendingReview';
   const [loading, setLoading] = useState<boolean>(!initialSettings && showSkeletons);
   const [loadError, setLoadError] = useState<string | null>(settingsLoadError);
 
@@ -325,8 +338,9 @@ export default function DocumentTemplatesSettingsTab({
         documentAccentColorHex: letterheadAccentColorHex,
         paperSize,
         letterheadFooter: letterheadFooter.trim(),
-        defaultApproverName: defaultApproverName.trim() || null,
-        defaultApproverTitle: defaultApproverTitle.trim() || null,
+        defaultApproverName: defaultApproverName.trim(),
+        defaultApproverTitle: defaultApproverTitle.trim(),
+        ...(isPendingFacility ? { skipPendingVerificationSync: true } : {}),
       };
 
       const [updated, err] = await clinicService.updateSettings(payload);
@@ -336,6 +350,30 @@ export default function DocumentTemplatesSettingsTab({
         setInternalSettings(updated);
         populateForm(updated);
         onSettingsUpdated?.(updated);
+
+        if (isPendingFacility) {
+          const [, syncErr] = await clinicService.updatePendingDirectoryVerification();
+          if (syncErr) {
+            if (isVerificationConflictError(syncErr)) {
+              const conflictMsg =
+                syncErr.message ||
+                'Verification submission is no longer pending review. Refreshing status.';
+              notify.error(conflictMsg);
+              Alert.alert('Verification Status Changed', conflictMsg);
+              await (onRefreshVerificationState ? onRefreshVerificationState() : fetchSettings());
+              return;
+            }
+            const syncMsg =
+              syncErr.message ||
+              'Stationery saved locally, but pending verification update failed.';
+            notify.error(syncMsg);
+            Alert.alert('Pending Verification Sync Failed', syncMsg);
+            return;
+          }
+          notify.success('Stationery saved and pending verification submission updated.');
+          return;
+        }
+
         notify.success('Stationery and document settings successfully saved.');
       }
     } catch (e: any) {
@@ -658,8 +696,15 @@ export default function DocumentTemplatesSettingsTab({
           {/* Save Action Bar */}
           {isDirty || saving ? (
             <View style={styles.saveActionBar}>
+              {isPendingFacility ? <PendingVerificationNote /> : null}
               <Button
-                title={saving ? 'Saving Changes...' : 'Save Changes'}
+                title={
+                  saving
+                    ? 'Saving Changes...'
+                    : isPendingFacility
+                    ? PENDING_VERIFICATION_BUTTON_LABEL
+                    : 'Save Changes'
+                }
                 icon="save"
                 variant="primary"
                 loading={saving}
@@ -1342,6 +1387,7 @@ const styles = StyleSheet.create({
   saveActionBar: {
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.lg,
+    gap: theme.spacing.xs,
   },
   canvasContainerCard: {
     padding: theme.spacing.md,

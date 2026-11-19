@@ -33,7 +33,8 @@ public sealed record ClinicPublishingReadinessDto(
     int OptedInNursesCount = 0,
     int OptedInNursesReadyCount = 0,
     int OptedInCliniciansCount = 0,
-    int OptedInCliniciansReadyCount = 0
+    int OptedInCliniciansReadyCount = 0,
+    DateOnly? DohLtoExpiryDate = null
 );
 
 public sealed record ClinicPublishingChecksDto(
@@ -131,7 +132,8 @@ public sealed class GetClinicPublishingReadinessQueryHandler : IRequestHandler<G
             OptedInNursesCount: optedInNurses.Count,
             OptedInNursesReadyCount: optedInNursesReadyCount,
             OptedInCliniciansCount: optedInDoctors.Count + optedInNurses.Count,
-            OptedInCliniciansReadyCount: optedInDoctorsReadyCount + optedInNursesReadyCount
+            OptedInCliniciansReadyCount: optedInDoctorsReadyCount + optedInNursesReadyCount,
+            DohLtoExpiryDate: settings?.DohLtoExpiryDate
         );
     }
 }

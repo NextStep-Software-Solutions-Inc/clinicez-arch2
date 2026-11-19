@@ -22,11 +22,17 @@ import { notify, Alert } from '@utils/feedback';
 import { theme } from '../../constants/theme';
 import {
   clinicService,
+  isVerificationConflictError,
   DoctorScheduleTemplateItem,
   DoctorBreakTimeItem,
   DoctorLeaveItem,
   StaffMember,
+  PlatformVerificationStatus,
 } from '../../services/clinicService';
+import {
+  PENDING_VERIFICATION_BUTTON_LABEL,
+  PENDING_VERIFICATION_HELPER_NOTE,
+} from '../../utils/directoryVerification';
 
 export interface DoctorRosterCalendarModalProps {
   visible: boolean;
@@ -34,6 +40,8 @@ export interface DoctorRosterCalendarModalProps {
   doctors: StaffMember[];
   initialDoctorId?: string;
   onAddStaff?: () => void;
+  platformVerificationStatus?: PlatformVerificationStatus;
+  onRefreshVerificationState?: () => Promise<void>;
 }
 
 export function resolveSelectedDoctorId(
@@ -113,6 +121,8 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
   doctors,
   initialDoctorId,
   onAddStaff,
+  platformVerificationStatus,
+  onRefreshVerificationState,
 }) => {
   const [activeTab, setActiveTab] = useState<'templates' | 'leaves'>('templates');
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>(() =>
@@ -254,6 +264,18 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
     }
   }, [selectedDay, templates]);
 
+  const selectedDoctor = doctors.find((d) => d.id === selectedDoctorId);
+  const isDoctorPending = Boolean(
+    selectedDoctor?.isDirectoryOptIn &&
+      selectedDoctor.publicVerificationStatus === 'PendingVerification'
+  );
+  const isFacilityPendingForDoctor = Boolean(
+    !isDoctorPending &&
+      selectedDoctor?.isDirectoryOptIn &&
+      platformVerificationStatus === 'PendingReview'
+  );
+  const isPendingRosterSync = isDoctorPending || isFacilityPendingForDoctor;
+
   const handleSaveTemplate = async () => {
     if (!selectedDoctorId) {
       notify.error('Please select a doctor.');
@@ -278,10 +300,45 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
           startTime: b.startTime.length === 5 ? `${b.startTime}:00` : b.startTime,
           endTime: b.endTime.length === 5 ? `${b.endTime}:00` : b.endTime,
         })),
+        ...(isPendingRosterSync ? { skipPendingVerificationSync: true } : {}),
       });
 
       if (err) {
         notify.error(err.message || 'Failed to save schedule template.');
+        return;
+      }
+
+      if (isPendingRosterSync) {
+        const [, syncErr] = isDoctorPending
+          ? await clinicService.updatePendingStaffVerification(selectedDoctorId)
+          : await clinicService.updatePendingDirectoryVerification();
+
+        if (syncErr) {
+          if (isVerificationConflictError(syncErr)) {
+            notify.error(
+              syncErr.message ||
+                'Verification submission is no longer pending review. Refreshing status.'
+            );
+            await Promise.all([
+              loadTemplates(selectedDoctorId),
+              onRefreshVerificationState?.(),
+            ]);
+            return;
+          }
+          notify.error(
+            syncErr.message ||
+              'Schedule saved locally, but pending verification update failed.'
+          );
+          await loadTemplates(selectedDoctorId);
+          return;
+        }
+
+        notify.success(
+          isActiveDay
+            ? `${getDayName(selectedDay)} schedule saved and pending verification submission updated.`
+            : `${getDayName(selectedDay)} marked Off Duty and pending verification submission updated.`
+        );
+        await loadTemplates(selectedDoctorId);
         return;
       }
 
@@ -317,12 +374,45 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
           onPress: async () => {
             try {
               setDeletingTemplate(true);
-              const [, err] = await clinicService.deleteDoctorScheduleTemplate(selectedDoctorId, existing.id);
+              const [, err] = await clinicService.deleteDoctorScheduleTemplate(
+                selectedDoctorId,
+                existing.id,
+                isPendingRosterSync ? { skipPendingVerificationSync: true } : undefined,
+              );
               if (err) {
                 notify.error(err.message || `Failed to remove ${dayName} schedule.`);
                 return;
               }
-              notify.success(`${dayName} schedule removed successfully.`);
+              if (isPendingRosterSync) {
+                const [, syncErr] = isDoctorPending
+                  ? await clinicService.updatePendingStaffVerification(selectedDoctorId)
+                  : await clinicService.updatePendingDirectoryVerification();
+
+                if (syncErr) {
+                  if (isVerificationConflictError(syncErr)) {
+                    notify.error(
+                      syncErr.message ||
+                        'Verification submission is no longer pending review. Refreshing status.'
+                    );
+                    await Promise.all([
+                      loadTemplates(selectedDoctorId),
+                      onRefreshVerificationState?.(),
+                    ]);
+                    return;
+                  }
+                  notify.error(
+                    syncErr.message ||
+                      `${dayName} schedule removed locally, but pending verification update failed.`
+                  );
+                  await loadTemplates(selectedDoctorId);
+                  return;
+                }
+              }
+              notify.success(
+                isPendingRosterSync
+                  ? `${dayName} schedule removed and pending verification submission updated.`
+                  : `${dayName} schedule removed successfully.`
+              );
               await loadTemplates(selectedDoctorId);
               // Reset day form to clean defaults
               setStartTime('09:00');
@@ -738,6 +828,15 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                   </>
                 ) : null}
 
+                {isPendingRosterSync ? (
+                  <View style={styles.pendingNoteRow} testID="roster-pending-helper-note">
+                    <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+                    <ThemedText variant="caption" color={theme.colors.warningText}>
+                      {PENDING_VERIFICATION_HELPER_NOTE}
+                    </ThemedText>
+                  </View>
+                ) : null}
+
                 <View style={styles.submitRow}>
                   {currentTemplate ? (
                     <Button
@@ -749,7 +848,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                     />
                   ) : null}
                   <Button
-                    title="Save Template"
+                    title={isPendingRosterSync ? PENDING_VERIFICATION_BUTTON_LABEL : 'Save Template'}
                     variant="primary"
                     loading={savingTemplate}
                     onPress={handleSaveTemplate}
@@ -1178,6 +1277,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
+  },
+  pendingNoteRow: {
+    marginTop: theme.spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: theme.spacing.xs,
   },
   leaveFormCard: {
     backgroundColor: theme.colors.surfaceMuted,

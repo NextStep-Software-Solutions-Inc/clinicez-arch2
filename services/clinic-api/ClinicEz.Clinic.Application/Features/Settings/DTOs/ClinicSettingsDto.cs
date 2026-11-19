@@ -93,7 +93,8 @@ public sealed record ClinicSettingsDto(
     PlatformVerificationStatus PlatformVerificationStatus = PlatformVerificationStatus.Unverified,
     string? VerificationRejectionReason = null,
     DateTime? LastVerificationSubmittedAtUtc = null,
-    string? LtoEvidenceObjectKey = null)
+    string? LtoEvidenceObjectKey = null,
+    DateOnly? DohLtoExpiryDate = null)
 {
     public static ClinicSettingsDto FromEntity(FacilitySettings settings, bool isWorkspaceTeleconsultEntitled = false) => new(
         settings.Id,
@@ -183,5 +184,6 @@ public sealed record ClinicSettingsDto(
         PlatformVerificationStatus: settings.PlatformVerificationStatus,
         VerificationRejectionReason: settings.VerificationRejectionReason,
         LastVerificationSubmittedAtUtc: settings.LastVerificationSubmittedAtUtc,
-        LtoEvidenceObjectKey: settings.LtoEvidenceObjectKey);
+        LtoEvidenceObjectKey: settings.LtoEvidenceObjectKey,
+        DohLtoExpiryDate: settings.DohLtoExpiryDate);
 }

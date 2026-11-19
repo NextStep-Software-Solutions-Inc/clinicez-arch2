@@ -30,6 +30,8 @@ public class FacilityVerificationRequest : BaseEntity
     public string? WithdrawalReason { get; set; }
     public Guid? SupersededByRequestId { get; set; }
     public string? ReviewedByAdminUserId { get; set; }
+    public string? ReviewedByDisplayName { get; set; }
+    public string? ReviewedByEmail { get; set; }
     public DateTime? ReviewedAtUtc { get; set; }
     public string? ReviewerNotes { get; set; }
 

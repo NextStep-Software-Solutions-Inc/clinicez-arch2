@@ -8,7 +8,14 @@ import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { SkeletonList } from '../../ui/Skeleton';
 import { ToggleSwitch } from '../FacilityReadinessTab';
 import { theme } from '../../../constants/theme';
-import { clinicService, type ClinicSettingsRecord } from '../../../services/clinicService';
+import {
+  clinicService,
+  isVerificationConflictError,
+  type ClinicSettingsRecord,
+  type PlatformVerificationStatus,
+} from '../../../services/clinicService';
+import { PENDING_VERIFICATION_BUTTON_LABEL } from '../../../utils/directoryVerification';
+import { PendingVerificationNote } from '../common';
 import { useClinic } from '../../../context/ClinicContext';
 import { notify } from '../../../utils/feedback';
 
@@ -79,6 +86,8 @@ export interface ClinicalSpecialtyCardProps {
   savingSettings?: boolean;
   showSkeletons: boolean;
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
+  platformVerificationStatus?: PlatformVerificationStatus;
+  onRefreshVerificationState?: () => Promise<void>;
 }
 
 export default function ClinicalSpecialtyCard({
@@ -90,7 +99,11 @@ export default function ClinicalSpecialtyCard({
   savingSettings = false,
   showSkeletons,
   onSettingsUpdated,
+  platformVerificationStatus,
+  onRefreshVerificationState,
 }: ClinicalSpecialtyCardProps) {
+  const effectiveStatus = platformVerificationStatus ?? settings?.platformVerificationStatus;
+  const isPendingFacility = effectiveStatus === 'PendingReview';
   const { refresh: refreshClinic } = useClinic();
   const [internalSpecialty, setInternalSpecialty] = useState<ClinicSpecialtyMode>(() => {
     if (specialtyMode) return specialtyMode;
@@ -155,12 +168,42 @@ export default function ClinicalSpecialtyCard({
     const [updated, err] = await clinicService.updateSettings({
       specialtyMode: effectiveSpecialty,
       enableDentalModule: effectiveDentalEnabled,
+      ...(isPendingFacility ? { skipPendingVerificationSync: true } : {}),
     });
-    setSavingSpecialty(false);
     if (err || !updated) {
+      setSavingSpecialty(false);
       notify.error(err?.message || 'Failed to update clinic specialty settings.');
       return;
     }
+
+    if (isPendingFacility) {
+      const [, syncErr] = await clinicService.updatePendingDirectoryVerification();
+      setSavingSpecialty(false);
+      if (syncErr) {
+        onSettingsUpdated?.(updated);
+        if (isVerificationConflictError(syncErr)) {
+          notify.error(
+            syncErr.message ||
+              'Verification submission is no longer pending review. Refreshing status.'
+          );
+          await onRefreshVerificationState?.();
+          await refreshClinic();
+          return;
+        }
+        notify.error(
+          syncErr.message ||
+            'Specialty saved locally, but pending verification update failed.'
+        );
+        await refreshClinic();
+        return;
+      }
+      notify.success('Clinic specialty saved and pending verification submission updated.');
+      onSettingsUpdated?.(updated);
+      await refreshClinic();
+      return;
+    }
+
+    setSavingSpecialty(false);
     notify.success('Clinic specialty settings saved.');
     onSettingsUpdated?.(updated);
     await refreshClinic();
@@ -276,8 +319,9 @@ export default function ClinicalSpecialtyCard({
 
             {isDirty || isSaving ? (
               <View style={styles.actionsEnd}>
+                {isPendingFacility ? <PendingVerificationNote /> : null}
                 <Button
-                  title="Save specialty"
+                  title={isPendingFacility ? PENDING_VERIFICATION_BUTTON_LABEL : 'Save specialty'}
                   icon="save"
                   size="sm"
                   onPress={handleSaveSpecialty}
@@ -397,7 +441,10 @@ const styles = StyleSheet.create({
   },
   actionsEnd: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
     paddingTop: theme.spacing.xs,
   },
 });

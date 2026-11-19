@@ -12,7 +12,7 @@ import {
   IconStethoscope,
   IconX,
 } from "@tabler/icons-react";
-import { getQueueStatusDisplay } from "@/lib/verificationStatus";
+import { getQueueStatusDisplay, TONE_BADGE_CLASSES } from "@/lib/verificationStatus";
 import type { VerificationEvidenceBlobResult } from "@/services/verification.service";
 
 export function VerificationStatusBadge({
@@ -78,6 +78,7 @@ export interface ProofEvidenceCardProps {
   initialContentType?: string | null;
   initialFileName?: string | null;
   variant?: "compact" | "workspace";
+  isUpdated?: boolean;
 }
 
 export function ProofEvidenceCard({
@@ -88,6 +89,7 @@ export function ProofEvidenceCard({
   initialContentType,
   initialFileName,
   variant = "compact",
+  isUpdated = false,
 }: ProofEvidenceCardProps) {
   const isWorkspace = variant === "workspace";
   const directUrl = !fetchEvidence && objectKey && isUrlReference(objectKey) ? objectKey : null;
@@ -179,9 +181,18 @@ export function ProofEvidenceCard({
           <IconFileText className="h-4 w-4 text-text-muted shrink-0" />
           <span className="truncate">{label}: Not attached</span>
         </div>
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-muted text-text-muted border border-border shrink-0">
-          Missing
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {isUpdated ? (
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${TONE_BADGE_CLASSES.warning}`}
+            >
+              Updated
+            </span>
+          ) : null}
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-muted text-text-muted border border-border">
+            Missing
+          </span>
+        </div>
       </div>
     );
   }
@@ -203,7 +214,16 @@ export function ProofEvidenceCard({
               <IconFileText className="h-4 w-4 text-primary shrink-0" />
             )}
             <div className="min-w-0">
-              <div className="text-xs font-semibold text-text truncate">{label}</div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="text-xs font-semibold text-text truncate">{label}</div>
+                {isUpdated ? (
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${TONE_BADGE_CLASSES.warning}`}
+                  >
+                    Updated
+                  </span>
+                ) : null}
+              </div>
               <div className="text-[10px] text-text-muted truncate">
                 {kindLabel} • {fileName}
               </div>

@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Application.Features.ServicesCatalog.Common;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Licensing;
@@ -78,7 +79,10 @@ public sealed record UpdateClinicSettingsCommand(
     bool? TeleconsultRecordingConsentRequired = null,
     TeleconsultPaymentPolicy? TeleconsultPaymentPolicy = null,
     decimal? TeleconsultDefaultFee = null,
-    bool? EnableTeleconsultation = null) : IRequest<ClinicSettingsDto>;
+    bool? EnableTeleconsultation = null,
+    DateOnly? DohLtoExpiryDate = null,
+    bool ClearDohLtoExpiryDate = false,
+    bool SkipPendingVerificationSync = false) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -88,6 +92,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
     private readonly IRepository<ServiceItem>? _serviceRepo;
     private readonly ClinicEz.Clinic.Domain.Interfaces.IKioskAccessInvalidator? _kioskInvalidator;
     private readonly IFacilityLicenseValidator? _licenseValidator;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public UpdateClinicSettingsCommandHandler(
         IRepository<FacilitySettings> settingsRepo,
@@ -95,7 +100,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         IUnitOfWork unitOfWork,
         IRepository<ServiceItem>? serviceRepo = null,
         ClinicEz.Clinic.Domain.Interfaces.IKioskAccessInvalidator? kioskInvalidator = null,
-        IFacilityLicenseValidator? licenseValidator = null)
+        IFacilityLicenseValidator? licenseValidator = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
@@ -103,6 +109,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         _serviceRepo = serviceRepo;
         _kioskInvalidator = kioskInvalidator;
         _licenseValidator = licenseValidator;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<ClinicSettingsDto> Handle(UpdateClinicSettingsCommand request, CancellationToken ct)
@@ -123,6 +130,17 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             };
             await _settingsRepo.AddAsync(settings, ct);
         }
+
+        var prevClinicName = settings.ClinicName;
+        var prevOperatingHours = settings.OperatingHours;
+        var prevLetterheadAddress = settings.LetterheadAddress;
+        var prevLetterheadContact = settings.LetterheadContact;
+        var prevLetterheadDohLto = settings.LetterheadDohLto;
+        var prevDohLtoExpiryDate = settings.DohLtoExpiryDate;
+        var prevSpecialtyMode = settings.SpecialtyMode;
+        var prevAccreditationNumber = settings.AccreditationNumber;
+        var prevIsPhilHealthConfigured = settings.IsPhilHealthConfigured;
+        var prevEnableTeleconsultation = settings.EnableTeleconsultation;
 
         if (!string.IsNullOrWhiteSpace(request.ClinicName))
             settings.ClinicName = request.ClinicName.Trim();
@@ -165,6 +183,11 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
 
         if (request.LetterheadDohLto != null)
             settings.LetterheadDohLto = string.IsNullOrWhiteSpace(request.LetterheadDohLto) ? null : request.LetterheadDohLto.Trim();
+
+        if (request.ClearDohLtoExpiryDate)
+            settings.DohLtoExpiryDate = null;
+        else if (request.DohLtoExpiryDate.HasValue)
+            settings.DohLtoExpiryDate = request.DohLtoExpiryDate.Value;
 
         if (request.LetterheadFooter != null)
             settings.LetterheadFooter = string.IsNullOrWhiteSpace(request.LetterheadFooter) ? null : request.LetterheadFooter.Trim();
@@ -390,6 +413,31 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         settings.UpdatedBy = "ClinicAdmin";
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        var directoryFieldsChanged =
+            !string.Equals(prevClinicName, settings.ClinicName, StringComparison.Ordinal) ||
+            !string.Equals(prevOperatingHours, settings.OperatingHours, StringComparison.Ordinal) ||
+            !string.Equals(prevLetterheadAddress, settings.LetterheadAddress, StringComparison.Ordinal) ||
+            !string.Equals(prevLetterheadContact, settings.LetterheadContact, StringComparison.Ordinal) ||
+            !string.Equals(prevLetterheadDohLto, settings.LetterheadDohLto, StringComparison.Ordinal) ||
+            prevDohLtoExpiryDate != settings.DohLtoExpiryDate ||
+            !string.Equals(prevSpecialtyMode, settings.SpecialtyMode, StringComparison.Ordinal) ||
+            !string.Equals(prevAccreditationNumber, settings.AccreditationNumber, StringComparison.Ordinal) ||
+            prevIsPhilHealthConfigured != settings.IsPhilHealthConfigured ||
+            prevEnableTeleconsultation != settings.EnableTeleconsultation;
+
+        if (!request.SkipPendingVerificationSync
+            && directoryFieldsChanged
+            && _directorySyncService != null
+            && settings.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+        {
+            await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                settings,
+                throwOnConflict: false,
+                _clinicContext.StaffId?.ToString(),
+                _clinicContext.StaffName,
+                ct);
+        }
 
         var isWorkspaceEntitled = false;
         if (!string.IsNullOrWhiteSpace(settings.LicenseToken))

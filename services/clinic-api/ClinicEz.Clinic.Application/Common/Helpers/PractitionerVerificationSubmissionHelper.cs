@@ -29,8 +29,12 @@ public static class PractitionerVerificationSubmissionHelper
         IRepository<FacilitySettings>? settingsRepository,
         IRepository<DoctorScheduleTemplate>? scheduleRepository,
         IRepository<AuditEntry>? auditRepository,
-        CancellationToken ct)
+        CancellationToken ct,
+        IRepository<StaffMember>? staffRepository = null)
     {
+        var submitterDisplayName = await ResolveSubmitterDisplayNameAsync(
+            staff, clinicContext, staffRepository, ct);
+
         if (directorySyncService != null)
         {
             await directorySyncService.EnqueuePractitionerVerificationRequestAsync(
@@ -38,6 +42,7 @@ public static class PractitionerVerificationSubmissionHelper
                 requestKind,
                 clinicContext.StaffId?.ToString(),
                 submittedAtUtc,
+                submitterDisplayName,
                 ct);
         }
         else if (interopPublisher != null)
@@ -65,7 +70,8 @@ public static class PractitionerVerificationSubmissionHelper
                 schedules,
                 requestKind,
                 clinicContext.StaffId?.ToString(),
-                submittedAtUtc);
+                submittedAtUtc,
+                submitterDisplayName);
 
             var from = Party.ForFacility(staff.TenantId, staff.ClinicId.ToString(), FacilityType.Clinic);
             interopPublisher.Enqueue(
@@ -89,7 +95,7 @@ public static class PractitionerVerificationSubmissionHelper
                 ClinicAuditOutcomes.Success,
                 $"Submitted practitioner verification request ({requestKind}) for {staff.FirstName} {staff.LastName}.",
                 clinicContext.StaffId,
-                clinicContext.StaffName,
+                submitterDisplayName,
                 clinicContext.StaffRole,
                 new
                 {
@@ -101,5 +107,33 @@ public static class PractitionerVerificationSubmissionHelper
                 }),
                 ct);
         }
+    }
+
+    private static async Task<string?> ResolveSubmitterDisplayNameAsync(
+        StaffMember targetStaff,
+        IClinicContext clinicContext,
+        IRepository<StaffMember>? staffRepository,
+        CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(clinicContext.StaffName))
+            return clinicContext.StaffName.Trim();
+
+        if (clinicContext.StaffId is not { } submitterStaffId)
+            return null;
+
+        if (submitterStaffId == targetStaff.Id)
+            return ClinicDirectorySnapshotBuilder.FormatDisplayName(targetStaff.Title, targetStaff.FirstName, targetStaff.LastName);
+
+        if (staffRepository != null)
+        {
+            var submitter = await staffRepository.Query()
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.Id == submitterStaffId && s.ClinicId == targetStaff.ClinicId && !s.IsDeleted, ct);
+
+            if (submitter != null)
+                return ClinicDirectorySnapshotBuilder.FormatDisplayName(submitter.Title, submitter.FirstName, submitter.LastName);
+        }
+
+        return null;
     }
 }

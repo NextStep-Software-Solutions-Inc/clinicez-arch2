@@ -5,6 +5,8 @@ using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Application.Features.Notifications;
@@ -41,12 +43,35 @@ public sealed record PractitionerRequestSnapshot(
     bool HasNameMismatch = false,
     Guid? MatchedPractitionerId = null,
     string? MatchedPractitionerName = null,
-    string? OtpCodeHash = null);
+    string? OtpCodeHash = null,
+    string? SubmittedByDisplayName = null);
 
 public static class DirectoryVerificationHelper
 {
     public const string AuditSection = "directory-verification";
     public const int AffiliationOtpTtlHours = 72;
+
+    private static readonly JsonSerializerOptions SnapshotPreserveNullKeyOptions = new(InteropJson.Options)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.Never
+    };
+
+    public static string SerializeFacilitySnapshot(FacilityVerificationRequestedPayload snapshot)
+    {
+        var node = JsonSerializer.SerializeToNode(snapshot, InteropJson.Options);
+        if (node is JsonObject obj)
+        {
+            if (!obj.ContainsKey("dohLtoExpiryDate"))
+                obj["dohLtoExpiryDate"] = null;
+            if (!obj.ContainsKey("philHealthAccreditationNumber"))
+                obj["philHealthAccreditationNumber"] = null;
+            if (!obj.ContainsKey("contactNumber"))
+                obj["contactNumber"] = null;
+        }
+
+        return node?.ToJsonString(SnapshotPreserveNullKeyOptions)
+            ?? JsonSerializer.Serialize(snapshot, InteropJson.Options);
+    }
 
     public static string HashSecret(string raw)
     {

@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Card, CardContent } from '../ui/Card';
 import { SkeletonList } from '../ui/Skeleton';
 import { theme } from '../../constants/theme';
-import { clinicService, DailyEodReport, ClinicSettingsRecord } from '../../services/clinicService';
+import { clinicService, DailyEodReport, ClinicSettingsRecord, type PlatformVerificationStatus } from '../../services/clinicService';
 import { type ChartLayoutMode } from '../chart/types';
 import { type GeneralSettingsSectionKey } from './types';
 import { notify } from '../../utils/feedback';
@@ -94,6 +94,8 @@ export interface GeneralSettingsTabProps {
   setEnableDentalModule?: (v: boolean) => void;
   cashierMode?: 'ClinicDesk' | 'CashierCounter';
   setCashierMode?: (v: 'ClinicDesk' | 'CashierCounter') => void;
+  platformVerificationStatus?: PlatformVerificationStatus;
+  onRefreshVerificationState?: () => Promise<void>;
 }
 
 export default function GeneralSettingsTab(props: GeneralSettingsTabProps) {

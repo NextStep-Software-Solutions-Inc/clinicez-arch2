@@ -50,6 +50,28 @@ public static class ClinicDirectorySnapshotBuilder
             ? staff.Specialty
             : (staff.Role == StaffRole.Nurse ? "Nursing" : "General Practice");
 
+    public static string? FormatDisplayName(string? title, string? firstName, string? lastName)
+    {
+        var parts = new[] { title, firstName, lastName }
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p!.Trim());
+        var joined = string.Join(" ", parts);
+        return string.IsNullOrWhiteSpace(joined) ? null : joined;
+    }
+
+    public static string? ResolvePhilHealthAccreditationNumber(FacilitySettings settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.AccreditationNumber))
+            return settings.AccreditationNumber.Trim();
+
+        return settings.IsPhilHealthOverridden || string.IsNullOrWhiteSpace(settings.BranchPhilHealthAccreditationNumber)
+            ? null
+            : settings.BranchPhilHealthAccreditationNumber.Trim();
+    }
+
+    public static bool IsClinicPhilHealthAccredited(FacilitySettings settings) =>
+        settings.IsPhilHealthConfigured || (!settings.IsPhilHealthOverridden && settings.IsBranchPhilHealthAccredited);
+
     public static FacilityCreatedEvent BuildFacilityDirectoryEvent(
         FacilitySettings settings,
         IReadOnlyList<StaffMember> staffMembers,
@@ -130,15 +152,9 @@ public static class ClinicDirectorySnapshotBuilder
         };
     }
 
-    public static FacilityVerificationRequestedPayload BuildVerificationRequestedPayload(
-        FacilitySettings settings,
+    private static List<BundledPractitionerSubmissionDto> BuildBundledPractitioners(
         IReadOnlyList<StaffMember> staffMembers,
-        IReadOnlyList<ServiceItem> serviceItems,
-        IReadOnlyList<DoctorScheduleTemplate> scheduleTemplates,
-        string requestKind,
-        string? submittedByClinicUserId,
-        string? submittedByDisplayName,
-        DateTime submittedAtUtc)
+        IReadOnlyList<DoctorScheduleTemplate> scheduleTemplates)
     {
         var optedInClinicians = staffMembers
             .Where(s => s.IsActive
@@ -150,7 +166,7 @@ public static class ClinicDirectorySnapshotBuilder
             .ThenBy(s => s.FirstName)
             .ToList();
 
-        var practitioners = optedInClinicians.Select(s => new BundledPractitionerSubmissionDto
+        return optedInClinicians.Select(s => new BundledPractitionerSubmissionDto
         {
             ClinicStaffMemberId = s.Id,
             ProfessionKind = s.Role == StaffRole.Nurse ? "Nurse" : "Doctor",
@@ -167,8 +183,10 @@ public static class ClinicDirectorySnapshotBuilder
             AvatarUrl = s.AvatarUrl,
             Availabilities = MapAvailabilities(s.Id, scheduleTemplates)
         }).ToList();
+    }
 
-        var serviceDtos = serviceItems
+    private static List<ClinicServiceDto> BuildActiveServiceDtos(IReadOnlyList<ServiceItem> serviceItems) =>
+        serviceItems
             .Where(s => s.IsActive && !s.IsDeleted)
             .OrderBy(s => s.Name)
             .Select(s => new ClinicServiceDto(
@@ -179,6 +197,19 @@ public static class ClinicDirectorySnapshotBuilder
                 IsActive: s.IsActive))
             .ToList();
 
+    public static FacilityVerificationRequestedPayload BuildVerificationRequestedPayload(
+        FacilitySettings settings,
+        IReadOnlyList<StaffMember> staffMembers,
+        IReadOnlyList<ServiceItem> serviceItems,
+        IReadOnlyList<DoctorScheduleTemplate> scheduleTemplates,
+        string requestKind,
+        string? submittedByClinicUserId,
+        string? submittedByDisplayName,
+        DateTime submittedAtUtc)
+    {
+        var practitioners = BuildBundledPractitioners(staffMembers, scheduleTemplates);
+        var serviceDtos = BuildActiveServiceDtos(serviceItems);
+
         return new FacilityVerificationRequestedPayload
         {
             RequestId = Guid.NewGuid(),
@@ -188,16 +219,63 @@ public static class ClinicDirectorySnapshotBuilder
             FacilitySlug = settings.FacilitySlug,
             Classification = MapClassification(settings.SpecialtyMode),
             DohLtoNumber = settings.LetterheadDohLto,
+            DohLtoExpiryDate = settings.DohLtoExpiryDate,
             LtoEvidenceObjectKey = settings.LtoEvidenceObjectKey,
             Address = settings.LetterheadAddress,
             ContactNumber = settings.LetterheadContact,
             ContactEmail = null,
             OperatingHours = settings.OperatingHours,
             IsOnlineBookingPaused = settings.IsOnlineBookingPaused,
+            PhilHealthAccreditationNumber = ResolvePhilHealthAccreditationNumber(settings),
+            IsPhilHealthAccredited = IsClinicPhilHealthAccredited(settings),
+            SupportsInPerson = true,
+            SupportsTeleconsult = settings.EnableTeleconsultation,
             RequestKind = requestKind,
             SubmittedByClinicUserId = submittedByClinicUserId,
             SubmittedByDisplayName = submittedByDisplayName,
             SubmittedAtUtc = submittedAtUtc,
+            Services = serviceDtos,
+            Practitioners = practitioners
+        };
+    }
+
+    public static FacilityVerificationUpdateRequestedPayload BuildFacilityUpdatePayload(
+        FacilitySettings settings,
+        IReadOnlyList<StaffMember> staffMembers,
+        IReadOnlyList<ServiceItem> serviceItems,
+        IReadOnlyList<DoctorScheduleTemplate> scheduleTemplates,
+        string? submittedByClinicUserId,
+        string? submittedByDisplayName,
+        DateTime updatedAtUtc,
+        Guid? expectedRequestId = null)
+    {
+        var practitioners = BuildBundledPractitioners(staffMembers, scheduleTemplates);
+        var serviceDtos = BuildActiveServiceDtos(serviceItems);
+
+        return new FacilityVerificationUpdateRequestedPayload
+        {
+            TenantId = settings.TenantId,
+            FacilityId = settings.ClinicId,
+            FacilityName = settings.ClinicName,
+            FacilitySlug = settings.FacilitySlug,
+            Classification = MapClassification(settings.SpecialtyMode),
+            DohLtoNumber = settings.LetterheadDohLto,
+            DohLtoExpiryDate = settings.DohLtoExpiryDate,
+            LtoEvidenceObjectKey = settings.LtoEvidenceObjectKey,
+            Address = settings.LetterheadAddress,
+            ContactNumber = settings.LetterheadContact,
+            ContactEmail = null,
+            OperatingHours = settings.OperatingHours,
+            IsOnlineBookingPaused = settings.IsOnlineBookingPaused,
+            PhilHealthAccreditationNumber = ResolvePhilHealthAccreditationNumber(settings),
+            IsPhilHealthAccredited = IsClinicPhilHealthAccredited(settings),
+            SupportsInPerson = true,
+            SupportsTeleconsult = settings.EnableTeleconsultation,
+            SubmittedByClinicUserId = submittedByClinicUserId,
+            SubmittedByDisplayName = submittedByDisplayName,
+            UpdatedAtUtc = updatedAtUtc,
+            ExpectedRequestId = expectedRequestId,
+            ExpectedStatus = "PendingReview",
             Services = serviceDtos,
             Practitioners = practitioners
         };
@@ -209,7 +287,8 @@ public static class ClinicDirectorySnapshotBuilder
         IReadOnlyList<DoctorScheduleTemplate> scheduleTemplates,
         string requestKind,
         string? submittedByClinicUserId,
-        DateTime submittedAtUtc)
+        DateTime submittedAtUtc,
+        string? submittedByDisplayName = null)
     {
         var professionKind = PractitionerIdentity.NormalizeProfessionKind(staff.Role.ToString())
             ?? throw new InvalidOperationException("Only Doctor and Nurse roles may submit practitioner verification.");
@@ -238,7 +317,49 @@ public static class ClinicDirectorySnapshotBuilder
             AvatarUrl = staff.AvatarUrl,
             Availabilities = MapAvailabilities(staff.Id, scheduleTemplates),
             SubmittedByClinicUserId = submittedByClinicUserId,
+            SubmittedByDisplayName = submittedByDisplayName,
             SubmittedAtUtc = submittedAtUtc
+        };
+    }
+
+    public static PractitionerVerificationUpdateRequestedPayload BuildPractitionerUpdatePayload(
+        FacilitySettings? settings,
+        StaffMember staff,
+        IReadOnlyList<DoctorScheduleTemplate> scheduleTemplates,
+        string? submittedByClinicUserId,
+        string? submittedByDisplayName,
+        DateTime updatedAtUtc,
+        Guid? expectedRequestId = null)
+    {
+        var professionKind = PractitionerIdentity.NormalizeProfessionKind(staff.Role.ToString())
+            ?? throw new InvalidOperationException("Only Doctor and Nurse roles may submit practitioner verification.");
+        var normalizedPrc = PractitionerIdentity.NormalizePrc(staff.PrcLicenseNumber)
+            ?? throw new InvalidOperationException("A valid PRC license number is required.");
+
+        return new PractitionerVerificationUpdateRequestedPayload
+        {
+            TenantId = staff.TenantId,
+            FacilityId = staff.ClinicId,
+            FacilityName = settings?.ClinicName ?? "Clinic Facility",
+            ClinicStaffMemberId = staff.Id,
+            ProfessionKind = professionKind,
+            FirstName = staff.FirstName,
+            LastName = staff.LastName,
+            Title = staff.Title,
+            SubmittedPrcLicenseNo = staff.PrcLicenseNumber ?? string.Empty,
+            NormalizedPrcLicenseNo = normalizedPrc,
+            PrcExpiryDate = staff.PrcExpiryDate,
+            PrcEvidenceObjectKey = staff.PrcEvidenceObjectKey,
+            VerificationContact = staff.VerificationContact,
+            Specialty = ResolveSpecialty(staff),
+            PublicBio = staff.PublicBio,
+            AvatarUrl = staff.AvatarUrl,
+            Availabilities = MapAvailabilities(staff.Id, scheduleTemplates),
+            SubmittedByClinicUserId = submittedByClinicUserId,
+            SubmittedByDisplayName = submittedByDisplayName,
+            UpdatedAtUtc = updatedAtUtc,
+            ExpectedRequestId = expectedRequestId,
+            ExpectedStatus = null
         };
     }
 }

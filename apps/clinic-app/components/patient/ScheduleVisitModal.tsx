@@ -17,8 +17,18 @@ import {
   Card,
   Input,
   ValidatedDateInput,
+  validateDateString,
 } from '../ui';
 import { theme } from '../../constants/theme';
+import {
+  extractAppointmentScheduleError,
+  formatDateString,
+  getManilaTodayStr,
+  isPastManilaDateTime,
+  manilaDateTimeToUtcIso,
+  parseDateOnly,
+  validateFutureManilaDateTime,
+} from '../calendar/calendarUtils';
 import {
   clinicService,
   type ClinicPatient,
@@ -83,40 +93,111 @@ const STANDARD_INTERVAL_SLOTS = [
 ];
 
 export function getTodayIsoDate(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return getManilaTodayStr();
 }
 
 export function getRelativeIsoDate(daysOffset: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + daysOffset);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  const todayStr = getManilaTodayStr();
+  const { year, month, day } = parseDateOnly(todayStr);
+  const d = new Date(Date.UTC(year, month - 1, day + daysOffset));
+  return formatDateString(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
 }
 
-export function createStandardSlot(time: string, date: string): AvailableSlotItem {
-  const [hhStr, mmStr] = time.split(':');
+export function normalizeSlotTimeToHhMm(
+  rawTime?: string | null,
+  fallback = '08:00'
+): string {
+  const trimmed = (rawTime ?? '').trim();
+  if (!trimmed) return fallback;
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(trimmed);
+  if (!match) return fallback;
+  const hh = parseInt(match[1], 10);
+  const mm = parseInt(match[2], 10);
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return fallback;
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+export function createStandardSlot(
+  time: string,
+  date: string,
+  now: Date = new Date()
+): AvailableSlotItem {
+  const normalizedTime = normalizeSlotTimeToHhMm(time, '08:00');
+  const [hhStr, mmStr] = normalizedTime.split(':');
   const hh = parseInt(hhStr, 10) || 8;
   const mm = parseInt(mmStr, 10) || 0;
   const endMinutes = mm + 30;
   const endHh = hh + Math.floor(endMinutes / 60);
   const endMm = endMinutes % 60;
   const endTime = `${String(endHh).padStart(2, '0')}:${String(endMm).padStart(2, '0')}`;
+  const isPast = isPastManilaDateTime(date, normalizedTime, now);
   return {
-    startTime: time,
+    startTime: normalizedTime,
     endTime,
-    slotStartUtc: `${date}T${time}:00Z`,
-    slotEndUtc: `${date}T${endTime}:00Z`,
-    isAvailable: true,
-    status: 'Available',
-    time,
-    available: true,
+    slotStartUtc: manilaDateTimeToUtcIso(date, normalizedTime) || `${date}T${normalizedTime}:00Z`,
+    slotEndUtc: manilaDateTimeToUtcIso(date, endTime) || `${date}T${endTime}:00Z`,
+    isAvailable: !isPast,
+    status: isPast ? 'Past' : 'Available',
+    ...(isPast ? { reason: 'Past' } : {}),
+    time: normalizedTime,
+    available: !isPast,
   };
+}
+
+export function markPastScheduleSlots(
+  slots: AvailableSlotItem[],
+  date: string,
+  now: Date = new Date()
+): AvailableSlotItem[] {
+  return slots.map((slot) => {
+    const slotTime = normalizeSlotTimeToHhMm(slot.startTime || slot.time, '');
+    if (!slotTime || !isPastManilaDateTime(date, slotTime, now)) {
+      return slot;
+    }
+    return {
+      ...slot,
+      isAvailable: false,
+      available: false,
+      status: 'Past',
+      reason: 'Past',
+    };
+  });
+}
+
+export function normalizeDoctorAvailableSlots(
+  rawSlots: AvailableSlotItem[],
+  date: string,
+  now: Date = new Date()
+): AvailableSlotItem[] {
+  const normalized: AvailableSlotItem[] = rawSlots.map((s) => {
+    const startTime = normalizeSlotTimeToHhMm(s.startTime ?? s.time, '08:00');
+    const isAvail =
+      s.isAvailable !== undefined
+        ? Boolean(s.isAvailable)
+        : s.available !== undefined
+        ? Boolean(s.available)
+        : s.status === 'Available';
+    const [hhStr, mmStr] = startTime.split(':');
+    const hh = parseInt(hhStr, 10) || 8;
+    const mm = parseInt(mmStr, 10) || 0;
+    const endMinutes = mm + 30;
+    const endHh = hh + Math.floor(endMinutes / 60);
+    const endMm = endMinutes % 60;
+    const defaultEndTime = `${String(endHh).padStart(2, '0')}:${String(endMm).padStart(2, '0')}`;
+    const resolvedEndTime = s.endTime ? normalizeSlotTimeToHhMm(s.endTime, defaultEndTime) : defaultEndTime;
+    return {
+      ...s,
+      startTime,
+      endTime: resolvedEndTime,
+      slotStartUtc: s.slotStartUtc ?? (manilaDateTimeToUtcIso(date, startTime) || `${date}T${startTime}:00Z`),
+      slotEndUtc: s.slotEndUtc ?? (manilaDateTimeToUtcIso(date, resolvedEndTime) || `${date}T${resolvedEndTime}:00Z`),
+      isAvailable: isAvail,
+      status: s.status ?? (isAvail ? 'Available' : 'Booked'),
+      time: startTime,
+      available: isAvail,
+    };
+  });
+  return markPastScheduleSlots(normalized, date, now);
 }
 
 export default function ScheduleVisitModal({
@@ -177,6 +258,7 @@ export default function ScheduleVisitModal({
   const [scheduling, setScheduling] = useState<boolean>(false);
   const [notifying, setNotifying] = useState<boolean>(false);
   const [scheduledDetails, setScheduledDetails] = useState<ScheduledVisitDetails | null>(null);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   // Synchronize initial doctor if provided by string or ID
   useEffect(() => {
@@ -207,10 +289,12 @@ export default function ScheduleVisitModal({
   useEffect(() => {
     if (!visible) {
       setScheduledDetails(null);
+      setSelectedDate(getTodayIsoDate());
       setSelectedSlotTime('');
       setClinicalNotes('');
       setScheduling(false);
       setNotifying(false);
+      setScheduleError(null);
       setModality('InPerson');
       setPaymentPolicy('Prepaid');
     }
@@ -246,29 +330,7 @@ export default function ScheduleVisitModal({
 
         const rawSlots = data.slots ?? data.availableSlots ?? [];
         if (rawSlots.length > 0) {
-          const normalized: AvailableSlotItem[] = rawSlots.map((s) => {
-            const startTime = s.startTime ?? s.time ?? '08:00';
-            const isAvail = s.isAvailable !== undefined ? Boolean(s.isAvailable) : s.available !== undefined ? Boolean(s.available) : s.status === 'Available';
-            const [hhStr, mmStr] = startTime.split(':');
-            const hh = parseInt(hhStr, 10) || 8;
-            const mm = parseInt(mmStr, 10) || 0;
-            const endMinutes = mm + 30;
-            const endHh = hh + Math.floor(endMinutes / 60);
-            const endMm = endMinutes % 60;
-            const defaultEndTime = `${String(endHh).padStart(2, '0')}:${String(endMm).padStart(2, '0')}`;
-            return {
-              ...s,
-              startTime,
-              endTime: s.endTime ?? defaultEndTime,
-              slotStartUtc: s.slotStartUtc ?? `${date}T${startTime}:00Z`,
-              slotEndUtc: s.slotEndUtc ?? `${date}T${s.endTime ?? defaultEndTime}:00Z`,
-              isAvailable: isAvail,
-              status: s.status ?? (isAvail ? 'Available' : 'Booked'),
-              time: startTime,
-              available: isAvail,
-            };
-          });
-          setDoctorSlots(normalized);
+          setDoctorSlots(normalizeDoctorAvailableSlots(rawSlots, date));
         } else if (!onDuty) {
           setDoctorSlots([]);
         } else {
@@ -304,28 +366,54 @@ export default function ScheduleVisitModal({
   const handleSelectDoctor = (docId: string) => {
     setSelectedDoctorId(docId);
     setSelectedSlotTime('');
+    setScheduleError(null);
   };
 
   const handleSelectQuickDate = (isoDate: string) => {
     setSelectedDate(isoDate);
     setSelectedSlotTime('');
+    setScheduleError(null);
   };
 
   const handleSlotSelect = (time: string, isAvailable: boolean) => {
     if (!isAvailable || !isDoctorOnDuty) return;
-    setSelectedSlotTime(time);
+    setSelectedSlotTime(normalizeSlotTimeToHhMm(time, time));
+    setScheduleError(null);
   };
 
   const handleConfirmSchedule = async () => {
     if (!patient) return;
+
+    setScheduleError(null);
 
     if (!selectedDate) {
       notify.warning('Please select a visit date.');
       return;
     }
 
+    const dateCheck = validateDateString(selectedDate, { boundaryMode: 'futureOrToday' });
+    if (!dateCheck.isValid) {
+      const msg =
+        dateCheck.errorMessage || 'Enter a valid appointment date (today or in the future).';
+      setScheduleError(msg);
+      notify.error(msg);
+      return;
+    }
+
     if (!selectedSlotTime) {
       notify.warning('Please select an available time slot.');
+      return;
+    }
+
+    const scheduleCheck = validateFutureManilaDateTime(selectedDate, selectedSlotTime, {
+      mode: 'create',
+    });
+    if (!scheduleCheck.isValid || !scheduleCheck.utcIso) {
+      const msg =
+        scheduleCheck.errorMessage ||
+        'Cannot schedule an appointment for a time that has already passed.';
+      setScheduleError(msg);
+      notify.error(msg);
       return;
     }
 
@@ -342,7 +430,7 @@ export default function ScheduleVisitModal({
     setScheduling(true);
 
     try {
-      const scheduledAt = `${selectedDate}T${selectedSlotTime}:00`;
+      const scheduledAt = scheduleCheck.utcIso;
       const docName = selectedDoctorObj ? formatStaffName(selectedDoctorObj) : 'Any available doctor';
 
       const payload = {
@@ -362,7 +450,14 @@ export default function ScheduleVisitModal({
       const [res, err] = await clinicService.createAppointment(payload);
 
       if (err) {
-        notify.error(err.message ?? 'Failed to schedule appointment. Please try again.');
+        const msg =
+          err.status === 400 || err.errorCode === 'VALIDATION_ERROR'
+            ? extractAppointmentScheduleError(err, ['ScheduledAt', 'NewScheduledAt']) ||
+              err.message ||
+              'Failed to schedule appointment. Please try again.'
+            : err.message ?? 'Failed to schedule appointment. Please try again.';
+        setScheduleError(msg);
+        notify.error(msg);
         setScheduling(false);
         return;
       }
@@ -810,6 +905,7 @@ export default function ScheduleVisitModal({
                     onChangeText={(val) => {
                       setSelectedDate(val);
                       setSelectedSlotTime('');
+                      setScheduleError(null);
                     }}
                     boundaryMode="futureOrToday"
                     testID="schedule-visit-date-input"
@@ -934,6 +1030,19 @@ export default function ScheduleVisitModal({
                   multiline
                 />
               </View>
+
+              {scheduleError ? (
+                <View
+                  testID="schedule-visit-error-alert"
+                  role="alert"
+                  style={styles.scheduleErrorAlert}
+                >
+                  <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+                  <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.scheduleErrorText}>
+                    {scheduleError}
+                  </ThemedText>
+                </View>
+              ) : null}
 
               {/* Booking Form Footer Actions */}
               <View style={styles.modalFooter}>
@@ -1205,5 +1314,18 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.lg,
     padding: theme.spacing.md,
     marginTop: theme.spacing.xs,
+  },
+  scheduleErrorAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.emergencyBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  scheduleErrorText: {
+    flex: 1,
   },
 });

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import React from "react";
-import { renderToString } from "react-dom/server";
+import { renderToStaticMarkup, renderToString } from "react-dom/server";
 import { createMemoryHistory, createRouter } from "@tanstack/react-router";
 
 import { apiClient } from "../src/lib/api";
@@ -31,10 +31,19 @@ import {
 } from "../src/routes/verifications";
 import { VerificationDetailPageView } from "../src/routes/verifications/$requestId";
 import {
+  DEFAULT_VISIBLE_SERVICES,
   VerificationDetailWorkspace,
   VerificationReviewDrawer,
+  getVisibleServices,
+  indexChangedFields,
 } from "../src/components/verifications/VerificationReviewDrawer";
-import { buildVerificationsQueueHref } from "../src/lib/verificationStatus";
+import {
+  buildVerificationsQueueHref,
+  getLicenseExpiryDisplay,
+  isDistinctTimestamp,
+  isRawUserId,
+  resolveHumanActorDisplay,
+} from "../src/lib/verificationStatus";
 import {
   NameMismatchAlert,
   ProofEvidenceCard,
@@ -44,6 +53,222 @@ import { routeTree, router } from "../src/router";
 
 const ADMIN_ROOT = path.resolve(__dirname, "..");
 const SRC_DIR = path.join(ADMIN_ROOT, "src");
+
+interface TreeInstance {
+  type: any;
+  stateSlots: any[];
+  effectSlots: Array<{ fn: () => any; cleanup?: any; deps: any[]; hasChanged: boolean }>;
+  refSlots: Array<{ current: any }>;
+  memoSlots: Array<{ value: any; deps: any[] }>;
+}
+
+function mountReactTree(initialElement: React.ReactElement) {
+  const instances = new Map<string, TreeInstance>();
+  let currentElement = initialElement;
+  let renderedTree: any = null;
+  let isRendering = false;
+  let hasPendingRender = false;
+  let activePaths = new Set<string>();
+
+  function renderNode(node: any, nodePath: string): any {
+    if (node == null || typeof node === "boolean") return node;
+    if (typeof node === "string" || typeof node === "number") return node;
+    if (Array.isArray(node)) {
+      return node.map((child, idx) => {
+        const keyPart =
+          child && typeof child === "object" && child.key != null ? `k_${child.key}` : `i_${idx}`;
+        return renderNode(child, `${nodePath}.${keyPart}`);
+      });
+    }
+    if (!React.isValidElement(node)) return node;
+
+    const el = node as React.ReactElement<any>;
+    const keySuffix = el.key != null ? `@${String(el.key)}` : "";
+    const instancePath = `${nodePath}${keySuffix}`;
+
+    if (el.type === React.Fragment) {
+      return React.createElement(
+        React.Fragment,
+        el.key != null ? { key: el.key } : null,
+        renderNode(el.props.children, `${instancePath}.frag`),
+      );
+    }
+
+    if (typeof el.type === "function") {
+      activePaths.add(instancePath);
+      let inst = instances.get(instancePath);
+      if (!inst || inst.type !== el.type) {
+        if (inst) {
+          for (const eff of inst.effectSlots) {
+            if (typeof eff.cleanup === "function") eff.cleanup();
+          }
+        }
+        inst = {
+          type: el.type,
+          stateSlots: [],
+          effectSlots: [],
+          refSlots: [],
+          memoSlots: [],
+        };
+        instances.set(instancePath, inst);
+      }
+
+      let slotIndex = 0;
+      let effectIndex = 0;
+      let refIndex = 0;
+      let memoIndex = 0;
+      const targetInst = inst;
+      const mockHooks: any = {
+        useState: (initial: any) => {
+          const idx = slotIndex++;
+          if (targetInst.stateSlots.length <= idx) {
+            targetInst.stateSlots.push(typeof initial === "function" ? initial() : initial);
+          }
+          const setState = (newVal: any) => {
+            const nextVal =
+              typeof newVal === "function" ? newVal(targetInst.stateSlots[idx]) : newVal;
+            if (!Object.is(targetInst.stateSlots[idx], nextVal)) {
+              targetInst.stateSlots[idx] = nextVal;
+              scheduleRender();
+            }
+          };
+          return [targetInst.stateSlots[idx], setState];
+        },
+        useRef: (initial: any) => {
+          const idx = refIndex++;
+          if (targetInst.refSlots.length <= idx) targetInst.refSlots.push({ current: initial });
+          return targetInst.refSlots[idx];
+        },
+        useCallback: (fn: any, deps: any[]) => mockHooks.useMemo(() => fn, deps),
+        useMemo: (fn: any, deps: any[]) => {
+          const idx = memoIndex++;
+          const prev = targetInst.memoSlots[idx];
+          const changed = !prev || !deps || deps.some((d, i) => !Object.is(d, prev.deps[i]));
+          if (changed) {
+            const value = fn();
+            targetInst.memoSlots[idx] = { value, deps };
+            return value;
+          }
+          return prev.value;
+        },
+        useEffect: (fn: any, deps: any[]) => {
+          const idx = effectIndex++;
+          const prev = targetInst.effectSlots[idx];
+          const hasChanged =
+            !prev || !deps || !prev.deps || deps.some((d, i) => !Object.is(d, prev.deps[i]));
+          targetInst.effectSlots[idx] = { fn, deps, hasChanged, cleanup: prev?.cleanup };
+        },
+        useContext: (context: React.Context<any>) => (context as any)._currentValue,
+        useSyncExternalStore: (_sub: any, getSnap: () => any) => getSnap(),
+      };
+
+      const internals = (React as any)
+        .__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+      const prevDispatcher = internals ? internals.H : null;
+      if (internals) internals.H = mockHooks;
+      let output: any;
+      try {
+        output = (el.type as (p: any) => any)(el.props);
+      } finally {
+        if (internals) internals.H = prevDispatcher;
+      }
+      return renderNode(output, `${instancePath}.out`);
+    }
+
+    if (el.props && "children" in el.props) {
+      return React.cloneElement(el, el.props, renderNode(el.props.children, `${instancePath}.c`));
+    }
+    return el;
+  }
+
+  function scheduleRender() {
+    if (isRendering) {
+      hasPendingRender = true;
+      return;
+    }
+    render();
+  }
+
+  function render() {
+    if (isRendering) return;
+    isRendering = true;
+    try {
+      do {
+        hasPendingRender = false;
+        activePaths = new Set<string>();
+        renderedTree = renderNode(currentElement, "root");
+        for (const [p, inst] of Array.from(instances.entries())) {
+          if (!activePaths.has(p)) {
+            for (const eff of inst.effectSlots) {
+              if (typeof eff.cleanup === "function") eff.cleanup();
+            }
+            instances.delete(p);
+          }
+        }
+        for (const p of Array.from(activePaths)) {
+          const inst = instances.get(p);
+          if (!inst) continue;
+          for (const eff of inst.effectSlots) {
+            if (eff.hasChanged) {
+              eff.hasChanged = false;
+              if (typeof eff.cleanup === "function") eff.cleanup();
+              eff.cleanup = eff.fn();
+            }
+          }
+        }
+      } while (hasPendingRender);
+    } finally {
+      isRendering = false;
+    }
+  }
+
+  render();
+
+  return {
+    get tree() {
+      return renderedTree;
+    },
+    get html() {
+      return renderToStaticMarkup(renderedTree);
+    },
+    rerender(nextElement: React.ReactElement) {
+      currentElement = nextElement;
+      render();
+    },
+    unmount() {
+      for (const inst of instances.values()) {
+        for (const eff of inst.effectSlots) {
+          if (typeof eff.cleanup === "function") eff.cleanup();
+        }
+      }
+      instances.clear();
+    },
+  };
+}
+
+function findReactNode(node: any, predicate: (el: any) => boolean): any {
+  if (!node || typeof node !== "object") return null;
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findReactNode(child, predicate);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (predicate(node)) return node;
+  if (node.props?.children) {
+    return findReactNode(node.props.children, predicate);
+  }
+  return null;
+}
+
+function extractNodeText(node: any): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractNodeText).join("");
+  if (node.props?.children) return extractNodeText(node.props.children);
+  return "";
+}
 
 describe("Directory Verifications — Admin Governance Workstation", () => {
   let originalGet: typeof apiClient.get;
@@ -705,7 +930,803 @@ describe("Directory Verifications — Admin Governance Workstation", () => {
     });
   });
 
-  describe("4. Design Token & Branding Guardrails", () => {
+  describe("4. M4B Enrichment: Services Expansion, Human Actors, Metadata & Resubmission Diff", () => {
+    const verifierProfile: ReviewerProfile = {
+      isAdmin: true,
+      fullName: "Ana Verifier",
+      email: "ana@example.com",
+      roleName: "Directory Verifier",
+      permissions: [VERIFICATION_PERMISSIONS.VIEW, VERIFICATION_PERMISSIONS.VERIFY],
+    };
+
+    test("getVerificationQueue and getVerificationRequestDetail preserve M2 fields and resubmissionDiff", async () => {
+      (apiClient as unknown as { get: typeof apiClient.get }).get = (async (url: string) => {
+        if (url.startsWith("/admin/verification-queue?")) {
+          return {
+            data: {
+              items: [
+                {
+                  id: "fac-1",
+                  kind: "Facility",
+                  tenantId: "t-1",
+                  tenantSlug: "manila-care",
+                  tenantName: "Manila Care Network",
+                  facilityId: "f-1",
+                  facilityName: "Manila Care Ermita",
+                  facilitySlug: "manila-care-ermita",
+                  submissionNumber: 2,
+                  requestKind: "Resubmission",
+                  status: "Approved",
+                  submittedAtUtc: "2026-11-18T05:00:00Z",
+                  submittedByDisplayName: "Dr. Maria Santos",
+                  dohLtoNumber: "DOH-LTO-9988",
+                  dohLtoExpiryDate: "2029-03-31",
+                  reviewedAtUtc: "2026-11-19T06:00:00Z",
+                  reviewedByAdminUserId: "user_2abcAdmin",
+                  reviewedByDisplayName: "Ana Verifier",
+                  reviewedByEmail: "ana@example.com",
+                  updatedAtUtc: "2026-11-19T06:00:00Z",
+                },
+              ],
+              totalCount: 1,
+              pendingCount: 0,
+              pendingFacilityCount: 0,
+              pendingPractitionerCount: 0,
+            },
+          };
+        }
+        return {
+          data: {
+            id: "fac-1",
+            kind: "Facility",
+            status: "PendingReview",
+            dohLtoExpiryDate: "2029-03-31",
+            reviewedByDisplayName: "Ana Verifier",
+            reviewedByEmail: "ana@example.com",
+            clinicContactNumber: "+63 2 8555 0100",
+            clinicContactEmail: "ermita@example.ph",
+            philHealthAccreditationNumber: "P10038831",
+            isPhilHealthAccredited: true,
+            supportsInPerson: true,
+            supportsTeleconsult: true,
+            updatedAtUtc: "2026-11-19T08:00:00Z",
+            resubmissionDiff: {
+              previousRequestId: "fac-0",
+              previousSubmissionNumber: 1,
+              previousStatus: "Rejected",
+              previousSubmittedAtUtc: "2026-11-10T05:00:00Z",
+              previousReason: "Expired DOH LTO",
+              ltoProofUpdated: true,
+              prcProofUpdated: false,
+              updatedChildPractitionerIds: ["child-1"],
+              updatedChildPrcProofIds: ["child-1"],
+              changedFields: [
+                {
+                  fieldKey: "dohLtoExpiryDate",
+                  label: "DOH LTO Expiry Date",
+                  previousValue: "2025-12-31",
+                  currentValue: "2029-03-31",
+                  changeKind: "Modified",
+                },
+              ],
+            },
+          },
+        };
+      }) as unknown as typeof apiClient.get;
+
+      const queue = await verificationService.getVerificationQueue({ status: "Approved" });
+      expect(queue.items[0].dohLtoExpiryDate).toBe("2029-03-31");
+      expect(queue.items[0].reviewedByDisplayName).toBe("Ana Verifier");
+      expect(queue.items[0].updatedAtUtc).toBe("2026-11-19T06:00:00Z");
+
+      const detail = await verificationService.getVerificationRequestDetail("fac-1");
+      expect(detail.clinicContactNumber).toBe("+63 2 8555 0100");
+      expect(detail.philHealthAccreditationNumber).toBe("P10038831");
+      expect(detail.supportsTeleconsult).toBe(true);
+      expect(detail.resubmissionDiff?.ltoProofUpdated).toBe(true);
+      expect(detail.resubmissionDiff?.changedFields[0].fieldKey).toBe("dohLtoExpiryDate");
+    });
+
+    test("Declared Clinic Services defaults to 9 visible services, expands to all 19, and resets on detail.id change", async () => {
+      expect(DEFAULT_VISIBLE_SERVICES).toBe(9);
+      const nineteenServices = Array.from({ length: 19 }, (_, idx) => ({
+        name: `Clinical Service ${idx + 1}`,
+      }));
+
+      const collapsedSlice = getVisibleServices(nineteenServices, false);
+      expect(collapsedSlice.visibleServices).toHaveLength(9);
+      expect(collapsedSlice.hiddenCount).toBe(10);
+      expect(collapsedSlice.hasMore).toBe(true);
+
+      const expandedSlice = getVisibleServices(nineteenServices, true);
+      expect(expandedSlice.visibleServices).toHaveLength(19);
+
+      const facilityDetail: VerificationRequestDetailDto = {
+        id: "fac-services-19",
+        kind: "Facility",
+        status: "PendingReview",
+        requestKind: "Initial",
+        submissionNumber: 1,
+        correlationId: "corr-19",
+        submittedAtUtc: "2026-11-18T05:00:00Z",
+        submittedByClinicUserId: "user_2owner",
+        submittedByDisplayName: "Dr. Maria Santos",
+        reviewedAtUtc: null,
+        reviewedByAdminUserId: null,
+        reviewerNotes: null,
+        withdrawnAtUtc: null,
+        withdrawnByActor: null,
+        withdrawalReason: null,
+        tenantId: "t-1",
+        tenantSlug: "manila-care",
+        tenantName: "Manila Care Network",
+        facilityId: "f-1",
+        facilityName: "Manila Care Ermita",
+        facilitySlug: "manila-care-ermita",
+        facilityVerificationStatus: "PendingReview",
+        dohLtoNumber: "DOH-LTO-9988",
+        evidenceObjectKey: "verification/lto/t1/f1/lto.pdf",
+        ltoEvidenceObjectKey: "verification/lto/t1/f1/lto.pdf",
+        prcEvidenceObjectKey: null,
+        submittedSnapshotJson: "{}",
+        snapshot: { services: nineteenServices },
+        hasNameMismatch: false,
+        childPractitionerRequests: [],
+        prcMatchCandidates: [],
+        submissionHistory: [],
+      };
+
+      const collapsedHtml = renderToString(
+        <VerificationDetailWorkspace
+          requestId="fac-services-19"
+          profile={verifierProfile}
+          initialDetail={facilityDetail}
+        />,
+      );
+      expect(collapsedHtml).toContain("Declared Clinic Services (19)");
+      expect(collapsedHtml).toContain("Clinical Service 1");
+      expect(collapsedHtml).toContain("Clinical Service 9");
+      expect(collapsedHtml).not.toContain("Clinical Service 10");
+      expect(collapsedHtml).not.toContain("Clinical Service 19");
+      expect(collapsedHtml).toContain("Show all 19 services (+10 more)");
+      expect(collapsedHtml).toContain('aria-expanded="false"');
+
+      const expandedHtml = renderToString(
+        <VerificationReviewDrawer
+          requestId="fac-services-19"
+          profile={verifierProfile}
+          initialDetail={facilityDetail}
+          initialShowAllServices
+          onClose={() => {}}
+          onActionCompleted={() => {}}
+        />,
+      );
+      expect(expandedHtml).toContain("Clinical Service 10");
+      expect(expandedHtml).toContain("Clinical Service 19");
+      expect(expandedHtml).toContain("Show fewer");
+      expect(expandedHtml).toContain('aria-expanded="true"');
+
+      // Stateful interactive runtime test (no source grep):
+      // 9 services (no toggle) -> 11 services (+2 more) -> click expand (Show fewer) -> switch requestId (resets collapsed +3 more) + cleared dohLtoExpiryDate diff & child badges/tabs
+      const makeServices = (count: number) =>
+        Array.from({ length: count }, (_, idx) => ({ name: `Runtime Service ${idx + 1}` }));
+
+      const detailMap: Record<string, VerificationRequestDetailDto> = {
+        "req-9": {
+          ...facilityDetail,
+          id: "req-9",
+          submissionNumber: 1,
+          snapshot: { services: makeServices(9) },
+        },
+        "req-11": {
+          ...facilityDetail,
+          id: "req-11",
+          submissionNumber: 2,
+          snapshot: { services: makeServices(11) },
+        },
+        "req-12": {
+          ...facilityDetail,
+          id: "req-12",
+          requestKind: "Resubmission",
+          submissionNumber: 3,
+          dohLtoExpiryDate: null,
+          ltoEvidenceObjectKey: "verification/lto/t1/f1/lto-v3.pdf",
+          evidenceObjectKey: "verification/lto/t1/f1/lto-v3.pdf",
+          snapshot: { services: makeServices(12) },
+          childPractitionerRequests: [
+            {
+              id: "child-upd-1",
+              clinicStaffMemberId: "staff-1",
+              practitionerId: null,
+              affiliationId: null,
+              submissionNumber: 3,
+              requestKind: "Resubmission",
+              professionKind: "Doctor",
+              firstName: "Jose",
+              lastName: "Rizal",
+              title: "Dr.",
+              submittedPrcLicenseNo: "0088112",
+              normalizedPrcLicenseNo: "0088112",
+              prcExpiryDate: "2028-06-30",
+              prcEvidenceObjectKey: "verification/prc/rizal-v3.pdf",
+              verificationContact: "jose@manilacare.ph",
+              specialty: "Family Medicine",
+              publicBio: null,
+              avatarUrl: null,
+              status: "PendingReview",
+              hasNameMismatch: false,
+              prcMatchCandidates: [],
+              availabilities: [],
+            },
+            {
+              id: "child-unchanged-2",
+              clinicStaffMemberId: "staff-2",
+              practitionerId: null,
+              affiliationId: null,
+              submissionNumber: 3,
+              requestKind: "Resubmission",
+              professionKind: "Nurse",
+              firstName: "Clara",
+              lastName: "Mendoza",
+              title: "RN",
+              submittedPrcLicenseNo: "0554433",
+              normalizedPrcLicenseNo: "0554433",
+              prcExpiryDate: "2028-08-01",
+              prcEvidenceObjectKey: "verification/prc/clara.pdf",
+              verificationContact: "clara@manilacare.ph",
+              specialty: "Outpatient Nursing",
+              publicBio: null,
+              avatarUrl: null,
+              status: "PendingReview",
+              hasNameMismatch: false,
+              prcMatchCandidates: [],
+              availabilities: [],
+            },
+          ],
+          resubmissionDiff: {
+            previousRequestId: "req-11",
+            previousSubmissionNumber: 2,
+            previousStatus: "Rejected",
+            previousSubmittedAtUtc: "2026-11-17T05:00:00Z",
+            previousReason: "Update LTO expiry and Rizal PRC",
+            ltoProofUpdated: false,
+            prcProofUpdated: true,
+            updatedChildPractitionerIds: ["child-upd-1"],
+            updatedChildPrcProofIds: ["child-upd-1"],
+            changedFields: [
+              {
+                fieldKey: "dohLtoExpiryDate",
+                label: "DOH LTO Expiry Date",
+                previousValue: "2026-12-31",
+                currentValue: null,
+                changeKind: "Removed",
+              },
+            ],
+          },
+        },
+      };
+
+      (apiClient as unknown as { get: typeof apiClient.get }).get = (async (url: string) => {
+        if (url.includes("/evidence")) {
+          return {
+            data: new Blob(["%PDF-1.4"], { type: "application/pdf" }),
+            headers: {
+              "content-type": "application/pdf",
+              "content-disposition": 'inline; filename="proof.pdf"',
+            },
+          };
+        }
+        const matchedKey = Object.keys(detailMap).find((id) => url.endsWith(`/${id}`));
+        return { data: detailMap[matchedKey ?? "req-9"] };
+      }) as unknown as typeof apiClient.get;
+
+      const flushMicrotasks = async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      };
+
+      const mounted = mountReactTree(
+        <VerificationDetailWorkspace requestId="req-9" profile={verifierProfile} />,
+      );
+      await flushMicrotasks();
+
+      // 1) 9 services -> all 9 rendered, no toggle button
+      expect(mounted.html).toContain("Declared Clinic Services (9)");
+      expect(mounted.html).toContain("Runtime Service 9");
+      expect(mounted.html).not.toContain("Show all");
+      expect(mounted.html).not.toContain("Show fewer");
+
+      // 2) Switch to 11 services -> collapsed at 9 with "+2 more"
+      mounted.rerender(
+        <VerificationDetailWorkspace requestId="req-11" profile={verifierProfile} />,
+      );
+      await flushMicrotasks();
+
+      expect(mounted.html).toContain("Declared Clinic Services (11)");
+      expect(mounted.html).toContain("Runtime Service 9");
+      expect(mounted.html).not.toContain("Runtime Service 10");
+      expect(mounted.html).not.toContain("Runtime Service 11");
+      expect(mounted.html).toContain("Show all 11 services (+2 more)");
+
+      // 3) Click expand -> shows all 11 and switches button to "Show fewer"
+      const expandBtn = findReactNode(
+        mounted.tree,
+        (el) =>
+          el?.type === "button" &&
+          extractNodeText(el).includes("Show all 11 services (+2 more)"),
+      );
+      expect(expandBtn).not.toBeNull();
+      expect(expandBtn.props["aria-expanded"]).toBe(false);
+      expandBtn.props.onClick();
+
+      expect(mounted.html).toContain("Runtime Service 10");
+      expect(mounted.html).toContain("Runtime Service 11");
+      expect(mounted.html).toContain("Show fewer");
+      const collapseBtn = findReactNode(
+        mounted.tree,
+        (el) => el?.type === "button" && extractNodeText(el).includes("Show fewer"),
+      );
+      expect(collapseBtn?.props["aria-expanded"]).toBe(true);
+
+      // 4) Switch requestId to req-12 (same component instance, no key) -> resets collapsed to +3 more,
+      // renders cleared dohLtoExpiryDate diff ("→ —"), and highlights UpdatedChildPractitionerIds / UpdatedChildPrcProofIds
+      mounted.rerender(
+        <VerificationDetailWorkspace requestId="req-12" profile={verifierProfile} />,
+      );
+      await flushMicrotasks();
+
+      expect(mounted.html).toContain("Declared Clinic Services (12)");
+      expect(mounted.html).toContain("Runtime Service 9");
+      expect(mounted.html).not.toContain("Runtime Service 10");
+      expect(mounted.html).not.toContain("Runtime Service 12");
+      expect(mounted.html).toContain("Show all 12 services (+3 more)");
+      expect(mounted.html).toContain("DOH LTO Expiry Date");
+      expect(mounted.html).toContain("2026-12-31");
+      expect(mounted.html).toContain("→");
+      expect(mounted.html).toContain("—");
+      // Cleared dohLtoExpiryDate is omitted from Submitted Snapshot
+      expect(mounted.html).not.toContain("font-mono font-semibold text-text\">2026-12-31");
+      // Updated child practitioner badges & proof tab Updated badge
+      expect(mounted.html).toContain("Dr. Jose Rizal");
+      expect(mounted.html).toContain("RN Clara Mendoza");
+      expect(mounted.html).toContain("PRC Proof Updated");
+      const updatedRizalTab = findReactNode(
+        mounted.tree,
+        (el) =>
+          el?.type === "button" &&
+          el?.props?.role === "tab" &&
+          extractNodeText(el).includes("Dr. Jose Rizal"),
+      );
+      expect(updatedRizalTab).not.toBeNull();
+      expect(extractNodeText(updatedRizalTab)).toContain("Updated");
+
+      const unchangedClaraTab = findReactNode(
+        mounted.tree,
+        (el) =>
+          el?.type === "button" &&
+          el?.props?.role === "tab" &&
+          extractNodeText(el).includes("RN Clara Mendoza"),
+      );
+      expect(unchangedClaraTab).not.toBeNull();
+      expect(extractNodeText(unchangedClaraTab)).not.toContain("Updated");
+
+      mounted.unmount();
+    });
+
+    test("human actor resolution & raw UUID / user_... Clerk ID guard across Facility, Practitioner, History, and Queue", () => {
+      const uuid = "8f14e45f-ea7b-4f9b-9b5f-1234567890ab";
+      const clerkId = "user_2abcXYZ123";
+
+      expect(isRawUserId(uuid)).toBe(true);
+      expect(isRawUserId(clerkId)).toBe(true);
+      expect(isRawUserId("Dr. Maria Santos")).toBe(false);
+      expect(isRawUserId("practitioner-otp")).toBe(false);
+
+      expect(resolveHumanActorDisplay("practitioner-otp", null, null, "Clinician").primary).toBe(
+        "Practitioner (OTP Confirmation)",
+      );
+      expect(resolveHumanActorDisplay(clerkId, null, clerkId, "Clinic Manager").primary).toBe(
+        "Clinic Manager",
+      );
+      expect(resolveHumanActorDisplay(uuid, null, uuid, "Platform Reviewer").primary).toBe(
+        "Platform Reviewer",
+      );
+      expect(
+        resolveHumanActorDisplay(clerkId, "verifier@example.com", clerkId, "Platform Reviewer")
+          .primary,
+      ).toBe("verifier@example.com");
+
+      const practitionerDetailWithRawIds: VerificationRequestDetailDto = {
+        id: "prac-raw-1",
+        kind: "Practitioner",
+        status: "Approved",
+        requestKind: "Initial",
+        submissionNumber: 2,
+        correlationId: "corr-p-2",
+        submittedAtUtc: "2026-11-18T05:00:00Z",
+        submittedByClinicUserId: clerkId,
+        submittedByDisplayName: clerkId,
+        reviewedAtUtc: "2026-11-19T04:00:00Z",
+        reviewedByAdminUserId: uuid,
+        reviewedByDisplayName: uuid,
+        reviewedByEmail: null,
+        reviewerNotes: "Verified PRC card",
+        withdrawnAtUtc: null,
+        withdrawnByActor: null,
+        withdrawalReason: null,
+        tenantId: "t-1",
+        tenantSlug: "manila-care",
+        tenantName: "Manila Care Network",
+        facilityId: "f-1",
+        facilityName: "Manila Care Ermita",
+        facilitySlug: "manila-care-ermita",
+        facilityVerificationStatus: "Verified",
+        dohLtoNumber: null,
+        evidenceObjectKey: "verification/prc/p1.pdf",
+        ltoEvidenceObjectKey: null,
+        prcEvidenceObjectKey: "verification/prc/p1.pdf",
+        submittedSnapshotJson: "{}",
+        snapshot: { specialty: "Pediatrics" },
+        hasNameMismatch: false,
+        childPractitionerRequests: [],
+        prcMatchCandidates: [],
+        submissionHistory: [
+          {
+            id: "hist-1",
+            submissionNumber: 1,
+            requestKind: "Initial",
+            status: "Rejected",
+            submittedAtUtc: "2026-11-10T05:00:00Z",
+            reviewedAtUtc: "2026-11-11T05:00:00Z",
+            reviewedByAdminUserId: clerkId,
+            reviewedByDisplayName: "Ana Verifier",
+            reviewedByEmail: "ana@example.com",
+            reviewerNotes: "Blurry PRC photo",
+            withdrawnAtUtc: null,
+            withdrawalReason: null,
+          },
+        ],
+      };
+
+      const pracHtml = renderToString(
+        <VerificationDetailWorkspace
+          requestId="prac-raw-1"
+          profile={verifierProfile}
+          initialDetail={practitionerDetailWithRawIds}
+        />,
+      );
+      expect(pracHtml).toContain("Clinic Manager");
+      expect(pracHtml).toContain("Platform Reviewer");
+      expect(pracHtml).toContain("Reviewed by");
+      expect(pracHtml).toContain("Ana Verifier");
+      expect(pracHtml).toContain("(ana@example.com)");
+      expect(pracHtml).not.toContain(`>${clerkId}<`);
+      expect(pracHtml).not.toContain(`>${uuid}<`);
+      expect(pracHtml).not.toContain(`by <span class="font-medium text-text" title="${uuid}">${uuid}`);
+
+      const facilityHumanDetail: VerificationRequestDetailDto = {
+        ...practitionerDetailWithRawIds,
+        id: "fac-human-1",
+        kind: "Facility",
+        submittedByClinicUserId: "user_2owner",
+        submittedByDisplayName: "Dr. Maria Santos",
+        reviewedByAdminUserId: "user_2ana",
+        reviewedByDisplayName: "Ana Verifier",
+        reviewedByEmail: "ana@example.com",
+      };
+      const facHtml = renderToString(
+        <VerificationDetailWorkspace
+          requestId="fac-human-1"
+          profile={verifierProfile}
+          initialDetail={facilityHumanDetail}
+        />,
+      );
+      expect(facHtml).toContain("Dr. Maria Santos");
+      expect(facHtml).toContain("Ana Verifier");
+
+      const queueHtml = renderToString(
+        <VerificationQueueView
+          initialProfile={verifierProfile}
+          initialQueue={{
+            totalCount: 1,
+            pendingCount: 0,
+            pendingFacilityCount: 0,
+            pendingPractitionerCount: 0,
+            items: [
+              {
+                id: "q-raw-1",
+                kind: "Facility",
+                tenantId: "t-1",
+                tenantSlug: "manila-care",
+                tenantName: "Manila Care Network",
+                facilityId: "f-1",
+                facilityName: "Manila Care Ermita",
+                facilitySlug: "manila-care-ermita",
+                submissionNumber: 2,
+                requestKind: "Resubmission",
+                status: "Approved",
+                submittedAtUtc: "2026-11-18T05:00:00Z",
+                submittedByDisplayName: clerkId,
+                dohLtoNumber: "DOH-LTO-9988",
+                dohLtoExpiryDate: "2024-01-15",
+                ltoEvidenceObjectKey: "verification/lto/ermita.pdf",
+                facilityVerificationRequestId: null,
+                practitionerId: null,
+                clinicStaffMemberId: null,
+                practitionerName: null,
+                professionKind: null,
+                prcLicenseNo: null,
+                normalizedPrcLicenseNo: null,
+                prcExpiryDate: null,
+                prcEvidenceObjectKey: null,
+                hasNameMismatch: false,
+                bundledPractitionerCount: 1,
+                reviewedAtUtc: "2026-11-19T06:00:00Z",
+                reviewedByAdminUserId: uuid,
+                reviewedByDisplayName: "Ana Verifier",
+                reviewedByEmail: "ana@example.com",
+                updatedAtUtc: "2026-11-19T06:00:00Z",
+                reviewerNotes: null,
+              },
+            ],
+          }}
+          initialSearch={{ status: "approved" }}
+        />,
+      );
+      expect(queueHtml).toContain("by Clinic Manager");
+      expect(queueHtml).toContain("Reviewed by Ana Verifier");
+      expect(queueHtml).toContain("Exp 2024-01-15");
+      expect(queueHtml).toContain("Expired");
+      expect(queueHtml).not.toContain(`by ${clerkId}`);
+      expect(queueHtml).not.toContain(`Reviewed by ${uuid}`);
+    });
+
+    test("metadata enrichment surfaces DOH LTO expiry, labeled Phone/Email, PhilHealth/YAKAP, consultation modes & updatedAtUtc", () => {
+      const ref = new Date("2026-11-19T00:00:00Z");
+      expect(getLicenseExpiryDisplay("2024-01-15", ref)?.badgeLabel).toBe("Expired");
+      expect(getLicenseExpiryDisplay("2026-12-01", ref)?.badgeLabel).toBe("Expiring Soon");
+      expect(getLicenseExpiryDisplay("2029-03-31", ref)?.badgeLabel).toBeNull();
+      expect(isDistinctTimestamp("2026-11-18T05:00:00Z", "2026-11-18T05:00:00Z")).toBe(false);
+      expect(isDistinctTimestamp("2026-11-19T08:00:00Z", "2026-11-18T05:00:00Z")).toBe(true);
+
+      const enrichedDetail: VerificationRequestDetailDto = {
+        id: "fac-meta-1",
+        kind: "Facility",
+        status: "PendingReview",
+        requestKind: "Initial",
+        submissionNumber: 1,
+        correlationId: "corr-meta",
+        submittedAtUtc: "2026-11-18T05:00:00Z",
+        updatedAtUtc: "2026-11-19T08:30:00Z",
+        submittedByClinicUserId: "user_2owner",
+        submittedByDisplayName: "Clinic Owner",
+        reviewedAtUtc: null,
+        reviewedByAdminUserId: null,
+        reviewerNotes: null,
+        withdrawnAtUtc: null,
+        withdrawnByActor: null,
+        withdrawalReason: null,
+        tenantId: "t-1",
+        tenantSlug: "manila-care",
+        tenantName: "Manila Care Network",
+        facilityId: "f-1",
+        facilityName: "Manila Care Ermita",
+        facilitySlug: "manila-care-ermita",
+        facilityVerificationStatus: "PendingReview",
+        dohLtoNumber: "DOH-LTO-2026",
+        dohLtoExpiryDate: "2024-01-15",
+        clinicContactNumber: "+63 2 8555 0199",
+        clinicContactEmail: "care@example.ph",
+        philHealthAccreditationNumber: "P10038831",
+        isPhilHealthAccredited: true,
+        supportsInPerson: true,
+        supportsTeleconsult: true,
+        evidenceObjectKey: "verification/lto/t1/f1/lto.pdf",
+        ltoEvidenceObjectKey: "verification/lto/t1/f1/lto.pdf",
+        prcEvidenceObjectKey: null,
+        submittedSnapshotJson: "{}",
+        snapshot: { classification: "Primary Care" },
+        hasNameMismatch: false,
+        childPractitionerRequests: [],
+        prcMatchCandidates: [],
+        submissionHistory: [],
+      };
+
+      const enrichedHtml = renderToString(
+        <VerificationDetailWorkspace
+          requestId="fac-meta-1"
+          profile={verifierProfile}
+          initialDetail={enrichedDetail}
+        />,
+      );
+      expect(enrichedHtml).toContain("Last Updated");
+      expect(enrichedHtml).toContain("DOH LTO Expiry Date");
+      expect(enrichedHtml).toContain("2024-01-15");
+      expect(enrichedHtml).toContain("Expired");
+      expect(enrichedHtml).toContain("Phone");
+      expect(enrichedHtml).toContain("+63 2 8555 0199");
+      expect(enrichedHtml).toContain("Email");
+      expect(enrichedHtml).toContain("care@example.ph");
+      expect(enrichedHtml).toContain("PhilHealth / YAKAP");
+      expect(enrichedHtml).toContain("Accredited");
+      expect(enrichedHtml).toContain("P10038831");
+      expect(enrichedHtml).toContain("Consultation Modes");
+      expect(enrichedHtml).toContain("In-Person");
+      expect(enrichedHtml).toContain("Teleconsult");
+
+      const minimalSameTimeDetail: VerificationRequestDetailDto = {
+        ...enrichedDetail,
+        id: "fac-meta-2",
+        updatedAtUtc: "2026-11-18T05:00:00Z",
+        dohLtoExpiryDate: "2029-06-30",
+        supportsInPerson: true,
+        supportsTeleconsult: false,
+      };
+      const minimalHtml = renderToString(
+        <VerificationDetailWorkspace
+          requestId="fac-meta-2"
+          profile={verifierProfile}
+          initialDetail={minimalSameTimeDetail}
+        />,
+      );
+      expect(minimalHtml).not.toContain("Last Updated");
+      expect(minimalHtml).toContain("2029-06-30");
+      expect(minimalHtml).not.toContain(">Expired<");
+      expect(minimalHtml).toContain("In-Person");
+      expect(minimalHtml).not.toContain("Teleconsult");
+    });
+
+    test("resubmissionDiff renders summary card, field pills, child practitioner badges, and proof Updated badges", () => {
+      const diffDetail: VerificationRequestDetailDto = {
+        id: "fac-resub-2",
+        kind: "Facility",
+        status: "PendingReview",
+        requestKind: "Resubmission",
+        submissionNumber: 2,
+        correlationId: "corr-resub",
+        submittedAtUtc: "2026-11-19T05:00:00Z",
+        submittedByClinicUserId: "user_2owner",
+        submittedByDisplayName: "Dr. Maria Santos",
+        reviewedAtUtc: null,
+        reviewedByAdminUserId: null,
+        reviewerNotes: null,
+        withdrawnAtUtc: null,
+        withdrawnByActor: null,
+        withdrawalReason: null,
+        tenantId: "t-1",
+        tenantSlug: "manila-care",
+        tenantName: "Manila Care Network",
+        facilityId: "f-1",
+        facilityName: "Manila Care Ermita",
+        facilitySlug: "manila-care-ermita",
+        facilityVerificationStatus: "PendingReview",
+        dohLtoNumber: "DOH-LTO-2026",
+        dohLtoExpiryDate: "2029-03-31",
+        clinicContactNumber: "02-8999-9999",
+        clinicContactEmail: "ermita@example.ph",
+        evidenceObjectKey: "verification/lto/t1/f1/lto-v2.pdf",
+        ltoEvidenceObjectKey: "verification/lto/t1/f1/lto-v2.pdf",
+        prcEvidenceObjectKey: null,
+        submittedSnapshotJson: "{}",
+        snapshot: {
+          contactNumber: "02-8999-9999",
+          contactEmail: "ermita@example.ph",
+          services: [{ name: "General Consultation" }, { name: "CBC Panel" }],
+        },
+        hasNameMismatch: false,
+        childPractitionerRequests: [
+          {
+            id: "child-1",
+            clinicStaffMemberId: "staff-1",
+            practitionerId: null,
+            affiliationId: null,
+            submissionNumber: 2,
+            requestKind: "Resubmission",
+            professionKind: "Doctor",
+            firstName: "Jose",
+            lastName: "Rizal",
+            title: "Dr.",
+            submittedPrcLicenseNo: "0088112",
+            normalizedPrcLicenseNo: "0088112",
+            prcExpiryDate: "2028-06-30",
+            prcEvidenceObjectKey: "verification/prc/rizal-v2.pdf",
+            verificationContact: "jose@example.ph",
+            specialty: "Family Medicine",
+            publicBio: null,
+            avatarUrl: null,
+            status: "PendingReview",
+            hasNameMismatch: false,
+            prcMatchCandidates: [],
+            availabilities: [],
+          },
+        ],
+        prcMatchCandidates: [],
+        submissionHistory: [],
+        resubmissionDiff: {
+          previousRequestId: "fac-resub-1",
+          previousSubmissionNumber: 1,
+          previousStatus: "Rejected",
+          previousSubmittedAtUtc: "2026-11-10T05:00:00Z",
+          previousReason: "Blurry DOH LTO",
+          ltoProofUpdated: true,
+          prcProofUpdated: true,
+          updatedChildPractitionerIds: ["child-1"],
+          updatedChildPrcProofIds: ["child-1"],
+          changedFields: [
+            {
+              fieldKey: "contactNumber",
+              label: "Clinic Phone",
+              previousValue: "02-8111-1111",
+              currentValue: "02-8999-9999",
+              changeKind: "Modified",
+            },
+            {
+              fieldKey: "services",
+              label: "Declared Clinic Services",
+              previousValue: "1 service(s)",
+              currentValue: "2 service(s) (+CBC Panel)",
+              changeKind: "Modified",
+            },
+          ],
+        },
+      };
+
+      expect(indexChangedFields(diffDetail.resubmissionDiff).get("contactNumber")?.previousValue).toBe(
+        "02-8111-1111",
+      );
+
+      const workspaceHtml = renderToString(
+        <VerificationDetailWorkspace
+          requestId="fac-resub-2"
+          profile={verifierProfile}
+          initialDetail={diffDetail}
+        />,
+      );
+      expect(workspaceHtml).toContain("Changes from Submission #1");
+      expect(workspaceHtml).toContain("Blurry DOH LTO");
+      expect(workspaceHtml).toContain("DOH LTO Proof Updated");
+      expect(workspaceHtml).toContain("PRC Proof Updated");
+      expect(workspaceHtml).toContain("Previous: 02-8111-1111");
+      expect(workspaceHtml).toContain("Previous: 1 service(s)");
+      expect(workspaceHtml).toContain("Updated");
+
+      const drawerHtml = renderToString(
+        <VerificationReviewDrawer
+          requestId="fac-resub-2"
+          profile={verifierProfile}
+          initialDetail={diffDetail}
+          onClose={() => {}}
+          onActionCompleted={() => {}}
+        />,
+      );
+      expect(drawerHtml).toContain("Changes from Submission #1");
+      expect(drawerHtml).toContain("Updated");
+
+      const updatedProofHtml = renderToString(
+        <ProofEvidenceCard
+          label="DOH LTO Proof"
+          objectKey="verification/lto/t1/f1/lto-v2.pdf"
+          initialPreviewUrl="blob:http://localhost/pdf-v2"
+          initialContentType="application/pdf"
+          initialFileName="lto-v2.pdf"
+          isUpdated
+        />,
+      );
+      expect(updatedProofHtml).toContain("Updated");
+
+      const noDiffHtml = renderToString(
+        <VerificationDetailWorkspace
+          requestId="fac-no-diff"
+          profile={verifierProfile}
+          initialDetail={{ ...diffDetail, id: "fac-no-diff", resubmissionDiff: null }}
+        />,
+      );
+      expect(noDiffHtml).not.toContain("Changes from Submission #");
+    });
+  });
+
+  describe("5. Design Token & Branding Guardrails", () => {
     test("admin verification source files contain zero raw hex codes and zero unspaced ClinicEZ branding", () => {
       const files = [
         "constants/permissions.ts",

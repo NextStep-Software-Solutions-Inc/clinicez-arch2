@@ -6,6 +6,7 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop.Contracts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +20,8 @@ public sealed record OverridePhilHealthSettingsCommand(
     string? Username,
     string? Password,
     string? CipherKey,
-    string? KonsultaEndpoint = null) : IRequest<ClinicSettingsDto>;
+    string? KonsultaEndpoint = null,
+    bool SkipPendingVerificationSync = false) : IRequest<ClinicSettingsDto>;
 
 public sealed class OverridePhilHealthSettingsCommandHandler : IRequestHandler<OverridePhilHealthSettingsCommand, ClinicSettingsDto>
 {
@@ -27,17 +29,20 @@ public sealed class OverridePhilHealthSettingsCommandHandler : IRequestHandler<O
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPhilHealthProxyClient _proxyClient;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public OverridePhilHealthSettingsCommandHandler(
         IRepository<FacilitySettings> settingsRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork,
-        IPhilHealthProxyClient proxyClient)
+        IPhilHealthProxyClient proxyClient,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
         _proxyClient = proxyClient;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<ClinicSettingsDto> Handle(OverridePhilHealthSettingsCommand request, CancellationToken ct)
@@ -96,6 +101,18 @@ public sealed class OverridePhilHealthSettingsCommandHandler : IRequestHandler<O
         settings.UpdatedAt = DateTime.UtcNow;
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        if (!request.SkipPendingVerificationSync
+            && _directorySyncService != null
+            && settings.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+        {
+            await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                settings,
+                throwOnConflict: false,
+                _clinicContext.StaffId?.ToString(),
+                _clinicContext.StaffName,
+                ct);
+        }
 
         return ClinicSettingsDto.FromEntity(settings);
     }

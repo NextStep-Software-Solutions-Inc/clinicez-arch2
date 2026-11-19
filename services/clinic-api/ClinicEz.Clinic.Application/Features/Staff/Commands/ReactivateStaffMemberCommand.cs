@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Staff.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Licensing;
 using FluentValidation;
@@ -16,7 +19,7 @@ using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
-public sealed record ReactivateStaffMemberCommand(Guid Id) : IRequest<StaffMemberDto>;
+public sealed record ReactivateStaffMemberCommand(Guid Id, bool SkipPendingVerificationSync = false) : IRequest<StaffMemberDto>;
 
 public sealed class ReactivateStaffMemberCommandValidator : AbstractValidator<ReactivateStaffMemberCommand>
 {
@@ -34,6 +37,7 @@ public sealed class ReactivateStaffMemberCommandHandler : IRequestHandler<Reacti
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IRepository<Room>? _roomRepository;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public ReactivateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
@@ -41,7 +45,8 @@ public sealed class ReactivateStaffMemberCommandHandler : IRequestHandler<Reacti
         IFacilityLicenseValidator licenseValidator,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IRepository<Room>? roomRepository = null)
+        IRepository<Room>? roomRepository = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _staffRepository = staffRepository;
         _settingsRepository = settingsRepository;
@@ -49,6 +54,7 @@ public sealed class ReactivateStaffMemberCommandHandler : IRequestHandler<Reacti
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _roomRepository = roomRepository;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<StaffMemberDto> Handle(ReactivateStaffMemberCommand request, CancellationToken cancellationToken)
@@ -117,6 +123,21 @@ public sealed class ReactivateStaffMemberCommandHandler : IRequestHandler<Reacti
 
             _staffRepository.Update(staff);
         }, cancellationToken);
+
+        if (!request.SkipPendingVerificationSync
+            && staff.IsDirectoryOptIn
+            && ClinicianDirectoryValidationHelper.IsClinicianRole(staff.Role)
+            && PractitionerIdentity.IsValidPrcFormat(staff.PrcLicenseNumber)
+            && settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview
+            && _directorySyncService != null)
+        {
+            await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                settings,
+                throwOnConflict: false,
+                _clinicContext.StaffId?.ToString(),
+                _clinicContext.StaffName,
+                cancellationToken);
+        }
 
         return MapToDto(staff, roomNames);
     }

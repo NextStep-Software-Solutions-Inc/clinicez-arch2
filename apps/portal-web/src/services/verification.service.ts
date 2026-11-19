@@ -18,6 +18,7 @@ export interface FacilityVerificationStatusDto {
   isPatientDiscoveryEligible: boolean;
   isPlatformVerified: boolean;
   ltoEvidenceObjectKey: string | null;
+  ltoExpiryDate?: string | null;
   latestVerificationRequestId: string | null;
   verifiedAtUtc: string | null;
   rejectionReason: string | null;
@@ -27,6 +28,7 @@ export interface FacilityVerificationStatusDto {
     requestKind: string;
     status: string;
     submittedAtUtc: string;
+    updatedAtUtc?: string | null;
     reviewedAtUtc: string | null;
     reviewerNotes: string | null;
     withdrawnAtUtc: string | null;

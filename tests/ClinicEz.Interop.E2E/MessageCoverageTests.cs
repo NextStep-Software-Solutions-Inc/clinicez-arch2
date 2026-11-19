@@ -47,6 +47,10 @@ public class MessageCoverageTests
         new(InteropTypes.PractitionerVerificationRevoked, [Portal], [Patient, Clinic]),
         new(InteropTypes.VerificationEvidenceRequested, [Portal], [Clinic]),
         new(InteropTypes.VerificationEvidenceResponded, [Clinic], [Portal]),
+        new(InteropTypes.FacilityVerificationUpdateRequested, [Clinic], [Portal]),
+        new(InteropTypes.FacilityVerificationUpdateResponded, [Portal], [Clinic]),
+        new(InteropTypes.PractitionerVerificationUpdateRequested, [Clinic], [Portal]),
+        new(InteropTypes.PractitionerVerificationUpdateResponded, [Portal], [Clinic]),
 
         new(InteropTypes.DirectoryCellUpserted, [Portal], [Hub]),
         new(InteropTypes.DirectoryFacilityUpserted, [Portal], [Hub]),
@@ -112,14 +116,17 @@ public class MessageCoverageTests
         new(InteropTypes.CommsCallStateChanged, [Comms], [Comms, Patient]),
         new(InteropTypes.CommsCallEvent, [Patient], [Comms]),
         new(InteropTypes.CommsCallPaymentCleared, [Clinic], [Comms]),
-        new(InteropTypes.CommsRecordingConsentLogged, [Comms], [Comms]),
+        new(InteropTypes.CommsRecordingConsentLogged, [Comms], [Clinic]),
         new(InteropTypes.CommsConversationArchived, [Comms], [Comms]),
         new(InteropTypes.CommsTranscriptArchived, [Comms], [Clinic]),
         new(InteropTypes.CommsAttachmentFiled, [Comms], [Clinic]),
         new(InteropTypes.GuestCallJoinRequested, [Portal], [Comms]),
+        new(InteropTypes.GuestTeleconsultInviteIssued, [Clinic], [Portal]),
+        new(InteropTypes.GuestTeleconsultInviteRevoked, [Clinic], [Portal]),
 
         new(InteropTypes.MediaRoomRequested, [Clinic, Lab, Pharmacy, Comms], [Media]),
-        new(InteropTypes.MediaRoomResponded, [Media], [Comms]),
+        new(InteropTypes.MediaRoomResponded, [Media], [Comms, Clinic]),
+        new(InteropTypes.MediaRoomEnded, [Clinic, Lab, Pharmacy, Comms], [Media]),
         new(InteropTypes.MediaEntitlementUpdated, [Portal], [Media]),
         new(InteropTypes.MediaUsageRecorded, [Media], [Portal])
     ];

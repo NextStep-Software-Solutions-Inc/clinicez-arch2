@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Settings.Commands;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +20,8 @@ public sealed record UploadStaffPrcProofCommand(
     string FileName,
     string ContentType,
     long FileSizeBytes,
-    [property: JsonIgnore] byte[] FileBytes
+    [property: JsonIgnore] byte[] FileBytes,
+    bool SkipPendingVerificationSync = false
 ) : IRequest<EvidenceProofUploadResultDto>;
 
 public sealed class UploadStaffPrcProofCommandHandler : IRequestHandler<UploadStaffPrcProofCommand, EvidenceProofUploadResultDto>
@@ -30,6 +32,8 @@ public sealed class UploadStaffPrcProofCommandHandler : IRequestHandler<UploadSt
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicEncryptionService? _encryptionService;
     private readonly IRepository<AuditEntry>? _auditRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public UploadStaffPrcProofCommandHandler(
         IRepository<StaffMember> staffRepo,
@@ -37,7 +41,9 @@ public sealed class UploadStaffPrcProofCommandHandler : IRequestHandler<UploadSt
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork,
         IClinicEncryptionService? encryptionService = null,
-        IRepository<AuditEntry>? auditRepo = null)
+        IRepository<AuditEntry>? auditRepo = null,
+        IRepository<FacilitySettings>? settingsRepo = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _staffRepo = staffRepo;
         _storageService = storageService;
@@ -45,6 +51,8 @@ public sealed class UploadStaffPrcProofCommandHandler : IRequestHandler<UploadSt
         _unitOfWork = unitOfWork;
         _encryptionService = encryptionService;
         _auditRepo = auditRepo;
+        _settingsRepo = settingsRepo;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<EvidenceProofUploadResultDto> Handle(UploadStaffPrcProofCommand request, CancellationToken ct)
@@ -109,6 +117,34 @@ public sealed class UploadStaffPrcProofCommandHandler : IRequestHandler<UploadSt
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        if (!request.SkipPendingVerificationSync && _directorySyncService != null)
+        {
+            if (staff.IsActive
+                && staff.IsDirectoryOptIn
+                && staff.PublicVerificationStatus == PractitionerVerificationLevel.PendingVerification)
+            {
+                await _directorySyncService.SyncPendingPractitionerVerificationAsync(
+                    staff.Id,
+                    throwOnConflict: false,
+                    _clinicContext.StaffId?.ToString(),
+                    _clinicContext.StaffName,
+                    ct);
+            }
+            else if (staff.IsActive && staff.IsDirectoryOptIn && _settingsRepo != null)
+            {
+                var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct);
+                if (settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+                {
+                    await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                        settings,
+                        throwOnConflict: false,
+                        _clinicContext.StaffId?.ToString(),
+                        _clinicContext.StaffName,
+                        ct);
+                }
+            }
+        }
 
         return new EvidenceProofUploadResultDto(storedKey);
     }

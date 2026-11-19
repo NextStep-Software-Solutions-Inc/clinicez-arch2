@@ -28,6 +28,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ClinicEz.Shared.Licensing;
 
 namespace ClinicEz.Portal.Api.Endpoints;
@@ -489,14 +490,52 @@ public class FacilityEndpoints : IEndpoint
         // 7. Update facility settings (regulatory profile, notifications)
         app.MapPut("/facilities/{id:guid}/settings", async (
             Guid id,
-            UpdateFacilitySettingsRequest request,
             HttpContext httpContext,
+            IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> jsonOptions,
             IApplicationDbContext context,
             IFacilityProvisioningPublisher provisioningPublisher,
+            IDirectoryVerificationPendingUpdater pendingUpdater,
             CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
+
+            JsonDocument doc;
+            try
+            {
+                doc = await JsonDocument.ParseAsync(httpContext.Request.Body, cancellationToken: ct);
+            }
+            catch (JsonException)
+            {
+                return Results.BadRequest(new { Message = "Invalid JSON payload." });
+            }
+
+            UpdateFacilitySettingsRequest? request;
+            bool hasLtoExpiryProperty;
+            using (doc)
+            {
+                if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    return Results.BadRequest(new { Message = "Request body must be a JSON object." });
+                }
+
+                hasLtoExpiryProperty = doc.RootElement.EnumerateObject()
+                    .Any(p => string.Equals(p.Name, "ltoExpiryDate", StringComparison.OrdinalIgnoreCase));
+
+                try
+                {
+                    request = doc.RootElement.Deserialize<UpdateFacilitySettingsRequest>(jsonOptions.Value.SerializerOptions);
+                }
+                catch (JsonException)
+                {
+                    return Results.BadRequest(new { Message = "Invalid facility settings payload." });
+                }
+            }
+
+            if (request is null || string.IsNullOrWhiteSpace(request.TenantSlug))
+            {
+                return Results.BadRequest(new { Message = "tenantSlug is required." });
+            }
 
             var tenant = await context.Tenants
                 .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == request.TenantSlug.ToLower() || t.Id.ToString() == request.TenantSlug, ct);
@@ -530,6 +569,11 @@ public class FacilityEndpoints : IEndpoint
             if (request.Status.HasValue) facility.Status = request.Status.Value;
             if (request.Classification != null) facility.Classification = request.Classification;
             if (request.LicenseToOperate != null) facility.LicenseToOperate = request.LicenseToOperate;
+            var shouldClearLtoExpiry = request.ClearLtoExpiryDate || (hasLtoExpiryProperty && !request.LtoExpiryDate.HasValue);
+            if (shouldClearLtoExpiry)
+                facility.LtoExpiryDate = null;
+            else if (request.LtoExpiryDate.HasValue)
+                facility.LtoExpiryDate = request.LtoExpiryDate;
             if (request.PhilHealthAccreditationNumber != null) facility.PhilHealthAccreditationNumber = request.PhilHealthAccreditationNumber;
             if (request.TaxIdentificationNumber != null) facility.TaxIdentificationNumber = request.TaxIdentificationNumber;
             if (request.OperatingHours != null) facility.OperatingHours = request.OperatingHours;
@@ -544,10 +588,21 @@ public class FacilityEndpoints : IEndpoint
             if (request.NotificationPreferencesJson != null) facility.NotificationPreferencesJson = request.NotificationPreferencesJson;
             facility.UpdatedAt = DateTime.UtcNow;
 
+            await pendingUpdater.SyncPendingFacilityFromPortalAsync(
+                facility,
+                tenant,
+                clerkUserId,
+                httpContext.User.FindFirst("name")?.Value,
+                isOwner ? "Owner" : "Admin",
+                "facility-pending-updated",
+                clearLtoExpiryDate: shouldClearLtoExpiry,
+                preservePendingDohLtoExpiryDate: !shouldClearLtoExpiry && !hasLtoExpiryProperty,
+                ct: ct);
             await provisioningPublisher.StageDirectoryUpdateAsync(tenant, facility, ct);
             await context.SaveChangesAsync(ct);
             return Results.Ok(new { Success = true, Message = "Facility settings saved successfully." });
         })
+        .Accepts<UpdateFacilitySettingsRequest>("application/json")
         .RequireAuthorization()
         .WithName("UpdateFacilitySettings")
         .WithDescription("Updates facility regulatory profile and notification preferences.")
@@ -677,6 +732,7 @@ public class FacilityEndpoints : IEndpoint
                 isPatientDiscoveryEligible = facility.IsPatientDiscoveryEligible,
                 isPlatformVerified = facility.PlatformVerificationStatus == PlatformVerificationStatus.Verified,
                 ltoEvidenceObjectKey = facility.LtoEvidenceObjectKey,
+                ltoExpiryDate = facility.LtoExpiryDate,
                 latestVerificationRequestId = facility.LatestVerificationRequestId,
                 verifiedAtUtc = facility.VerifiedAtUtc,
                 rejectionReason = facility.RejectionReason,
@@ -687,6 +743,7 @@ public class FacilityEndpoints : IEndpoint
                     requestKind = latestRequest.RequestKind,
                     status = latestRequest.Status,
                     submittedAtUtc = latestRequest.SubmittedAtUtc,
+                    updatedAtUtc = latestRequest.UpdatedAt,
                     reviewedAtUtc = latestRequest.ReviewedAtUtc,
                     reviewerNotes = latestRequest.ReviewerNotes,
                     withdrawnAtUtc = latestRequest.WithdrawnAtUtc,
@@ -763,6 +820,7 @@ public class FacilityEndpoints : IEndpoint
             HttpContext httpContext,
             IApplicationDbContext context,
             IPortalEvidenceStorageService storage,
+            IDirectoryVerificationPendingUpdater pendingUpdater,
             CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -882,6 +940,16 @@ public class FacilityEndpoints : IEndpoint
                 "lto-proof-uploaded",
                 new { facilityId = facility.Id, oldKey = previousKey, newKey = objectKey });
 
+            await pendingUpdater.SyncPendingFacilityFromPortalAsync(
+                facility,
+                tenant,
+                clerkUserId,
+                httpContext.User.FindFirst("name")?.Value,
+                isOwner ? "Owner" : "Admin",
+                "lto-proof-pending-synced",
+                preservePendingDohLtoExpiryDate: true,
+                ct: ct);
+
             await context.SaveChangesAsync(ct);
 
             return Results.Ok(new
@@ -945,5 +1013,7 @@ public record UpdateFacilitySettingsRequest(
     string? StreetAddress = null,
     string? ContactNumber = null,
     string? ContactEmail = null,
-    string? NotificationPreferencesJson = null
+    string? NotificationPreferencesJson = null,
+    DateOnly? LtoExpiryDate = null,
+    bool ClearLtoExpiryDate = false
 );

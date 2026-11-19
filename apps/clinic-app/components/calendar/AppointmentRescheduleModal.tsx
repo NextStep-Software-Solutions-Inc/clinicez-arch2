@@ -13,16 +13,18 @@ import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 import Button from '../ui/Button';
 import CustomModal from '../ui/Modal';
-import ValidatedDateInput from '../ui/ValidatedDateInput';
-import TimeInput from '../ui/TimeInput';
+import ValidatedDateInput, { validateDateString } from '../ui/ValidatedDateInput';
+import TimeInput, { validateTimeString } from '../ui/TimeInput';
 import { SlotPicker } from '../roster/SlotPicker';
 import { notify } from '../../utils/feedback';
 import { clinicService } from '../../services/clinicService';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import type { ExtendedAppointmentItem } from './types';
 import {
+  extractAppointmentScheduleError,
   getAppointmentLocalDateTime,
   manilaDateTimeToUtcIso,
+  validateFutureManilaDateTime,
 } from './calendarUtils';
 
 export interface AppointmentRescheduleModalProps {
@@ -60,6 +62,7 @@ export function AppointmentRescheduleModal({
   const [reason, setReason] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [internalConflictError, setInternalConflictError] = useState<string | null>(null);
+  const [serverTimeError, setServerTimeError] = useState<string | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState<boolean>(false);
 
   const initialRef = useRef<{ date: string; time: string; doctorId: string | null; reason: string }>({
@@ -82,6 +85,7 @@ export function AppointmentRescheduleModal({
       setSelectedDoctorId(initDocId);
       setReason('');
       setInternalConflictError(null);
+      setServerTimeError(null);
       setShowDiscardConfirm(false);
 
       initialRef.current = {
@@ -114,6 +118,26 @@ export function AppointmentRescheduleModal({
     return [];
   }, [doctors, staffDoctors, appointment?.doctorId, appointment?.doctorName]);
 
+  const dateCheck = useMemo(
+    () => validateDateString(newDate, { boundaryMode: 'futureOrToday' }),
+    [newDate]
+  );
+  const timeSyntax = useMemo(() => validateTimeString(newTime), [newTime]);
+  const clientTimeError = useMemo(() => {
+    if (!dateCheck.isValid || newTime.trim().length !== 5 || !timeSyntax.isValid) {
+      return undefined;
+    }
+    const check = validateFutureManilaDateTime(newDate, newTime, { mode: 'reschedule' });
+    return check.isValid ? undefined : check.errorMessage;
+  }, [dateCheck.isValid, newDate, newTime, timeSyntax.isValid]);
+  const timeError = clientTimeError || serverTimeError || undefined;
+  const isScheduleInvalid =
+    !dateCheck.isValid ||
+    !newTime ||
+    newTime.trim().length !== 5 ||
+    !timeSyntax.isValid ||
+    Boolean(timeError);
+
   if (!visible || !appointment) {
     return null;
   }
@@ -139,7 +163,27 @@ export function AppointmentRescheduleModal({
     : null;
 
   const handleSubmit = async () => {
-    if (!newDate || !newTime) return;
+    if (!newDate || !newTime) {
+      setInternalConflictError('Please enter a new appointment date and time.');
+      return;
+    }
+
+    const currentDateCheck = validateDateString(newDate, { boundaryMode: 'futureOrToday' });
+    if (!currentDateCheck.isValid) {
+      setInternalConflictError(
+        currentDateCheck.errorMessage || 'Enter a valid appointment date (today or in the future).'
+      );
+      return;
+    }
+
+    const scheduleCheck = validateFutureManilaDateTime(newDate, newTime, { mode: 'reschedule' });
+    if (!scheduleCheck.isValid || !scheduleCheck.utcIso) {
+      const msg =
+        scheduleCheck.errorMessage || 'Cannot reschedule an appointment to a time that has already passed.';
+      setInternalConflictError(msg);
+      setServerTimeError(msg);
+      return;
+    }
 
     if (onSubmitReschedule) {
       onSubmitReschedule(newDate, newTime, reason, selectedDoctorId || undefined);
@@ -148,8 +192,9 @@ export function AppointmentRescheduleModal({
 
     setLoading(true);
     setInternalConflictError(null);
+    setServerTimeError(null);
 
-    const newScheduledAt = manilaDateTimeToUtcIso(newDate, newTime);
+    const newScheduledAt = scheduleCheck.utcIso;
     const [result, err] = await clinicService.rescheduleAppointment(
       appointment.id,
       {
@@ -171,6 +216,13 @@ export function AppointmentRescheduleModal({
         setInternalConflictError(
           'This time slot is already booked or conflicts with a physician break. Please choose another time.'
         );
+      } else if (err.status === 400 || err.errorCode === 'VALIDATION_ERROR') {
+        const validationMsg =
+          extractAppointmentScheduleError(err, ['NewScheduledAt', 'ScheduledAt']) ||
+          err.message ||
+          'Cannot reschedule an appointment to a time that has already passed.';
+        setInternalConflictError(validationMsg);
+        setServerTimeError(validationMsg);
       } else {
         notify.error(err.message || 'Failed to reschedule appointment.');
       }
@@ -348,7 +400,11 @@ export function AppointmentRescheduleModal({
                 <ValidatedDateInput
                   label="New Date (YYYY-MM-DD)"
                   value={newDate}
-                  onChangeText={setNewDate}
+                  onChangeText={(val) => {
+                    setNewDate(val);
+                    if (serverTimeError) setServerTimeError(null);
+                    if (internalConflictError) setInternalConflictError(null);
+                  }}
                   placeholder="YYYY-MM-DD"
                   boundaryMode="futureOrToday"
                   testID="reschedule-date-container"
@@ -359,7 +415,12 @@ export function AppointmentRescheduleModal({
                 <TimeInput
                   label="New Time (HH:MM)"
                   value={newTime}
-                  onChangeText={setNewTime}
+                  onChangeText={(val) => {
+                    setNewTime(val);
+                    if (serverTimeError) setServerTimeError(null);
+                    if (internalConflictError) setInternalConflictError(null);
+                  }}
+                  error={timeError}
                   placeholder="HH:MM"
                   testID="reschedule-time-container"
                   inputTestID="reschedule-time-input"
@@ -381,6 +442,8 @@ export function AppointmentRescheduleModal({
                     const parts = slot.startTime.split(':');
                     const hhmm = parts.length >= 2 ? `${parts[0]}:${parts[1]}` : slot.startTime;
                     setNewTime(hhmm);
+                    if (serverTimeError) setServerTimeError(null);
+                    if (internalConflictError) setInternalConflictError(null);
                   }}
                 />
               </View>
@@ -461,11 +524,11 @@ export function AppointmentRescheduleModal({
               accessibilityRole="button"
               accessibilityLabel="Save Reschedule"
               onPress={handleSubmit}
-              disabled={loading}
+              disabled={loading || isScheduleInvalid}
               style={({ pressed }) => [
                 styles.btn,
                 styles.btnPrimary,
-                loading && styles.disabled,
+                (loading || isScheduleInvalid) && styles.disabled,
                 pressed && styles.pressed,
               ]}
             >

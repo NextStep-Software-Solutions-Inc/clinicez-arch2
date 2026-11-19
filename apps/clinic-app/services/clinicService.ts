@@ -199,6 +199,18 @@ export interface CreateStaffPayload {
   avatarUrl?: string | null;
 }
 
+export interface PendingSyncMutationOptions {
+  skipPendingVerificationSync?: boolean;
+}
+
+export function isVerificationConflictError(err?: ApiError | null): boolean {
+  return Boolean(
+    err &&
+      (err.errorCode === 'verification_request_not_pending' ||
+        (err.status === 409 && !err.errorCode))
+  );
+}
+
 export interface UpdateStaffPayload {
   firstName: string;
   lastName: string;
@@ -225,6 +237,7 @@ export interface UpdateStaffPayload {
   verificationContact?: string | null;
   publicBio?: string | null;
   avatarUrl?: string | null;
+  skipPendingVerificationSync?: boolean;
 }
 
 export interface UpdateMyProfilePayload {
@@ -247,6 +260,7 @@ export interface UpdateMyProfilePayload {
   publicBio?: string | null;
   avatarUrl?: string | null;
   preferencesJson?: string | null;
+  skipPendingVerificationSync?: boolean;
 }
 
 export interface ResetStaffPasswordResult {
@@ -3415,6 +3429,7 @@ export interface ClinicPublishingReadiness {
   verificationRejectionReason?: string | null;
   lastVerificationSubmittedAtUtc?: string | null;
   letterheadDohLto?: string | null;
+  dohLtoExpiryDate?: string | null;
   ltoEvidenceObjectKey?: string | null;
   isOnlineBookingPaused?: boolean;
   isDirectoryPublished?: boolean;
@@ -3465,6 +3480,9 @@ export interface ClinicSettingsRecord {
   documentAccentColorHex?: string | null;
   letterheadDohLto?: string;
   dohLicenseToOperate?: string;
+  dohLtoExpiryDate?: string | null;
+  clearDohLtoExpiryDate?: boolean;
+  skipPendingVerificationSync?: boolean;
   paperSize?: 'Letter' | 'A4' | 'A5';
   preferredChartLayout?: 'modal' | 'split' | 'drawer';
   isJoinEnabled?: boolean;
@@ -4229,8 +4247,14 @@ export const clinicService = {
     philHealthCode?: string;
     philHealthDescription?: string;
     isPhilHealthFormulary?: boolean;
+    skipPendingVerificationSync?: boolean;
   }) {
-    return clinicApiClient.post<ClinicServiceItem>('/services', payload);
+    const { skipPendingVerificationSync, ...rest } = payload;
+    const finalPayload =
+      skipPendingVerificationSync === true
+        ? { ...rest, skipPendingVerificationSync: true }
+        : rest;
+    return clinicApiClient.post<ClinicServiceItem>('/services', finalPayload);
   },
 
   async updateService(id: string, payload: {
@@ -4242,16 +4266,26 @@ export const clinicService = {
     philHealthCode?: string;
     philHealthDescription?: string;
     isPhilHealthFormulary?: boolean;
+    skipPendingVerificationSync?: boolean;
   }) {
-    return clinicApiClient.put<ClinicServiceItem>(`/services/${id}`, payload);
+    const { skipPendingVerificationSync, ...rest } = payload;
+    const finalPayload =
+      skipPendingVerificationSync === true
+        ? { ...rest, skipPendingVerificationSync: true }
+        : rest;
+    return clinicApiClient.put<ClinicServiceItem>(`/services/${id}`, finalPayload);
   },
 
-  async bulkImportServices(items: BulkImportServiceItem[]) {
-    return clinicApiClient.post<BulkImportResult>('/services/bulk-import', { items });
+  async bulkImportServices(items: BulkImportServiceItem[], options?: PendingSyncMutationOptions) {
+    return clinicApiClient.post<BulkImportResult>('/services/bulk-import', {
+      items,
+      ...(options?.skipPendingVerificationSync === true ? { skipPendingVerificationSync: true } : {}),
+    });
   },
 
-  async seedDentalServices() {
-    return clinicApiClient.post<ClinicServiceItem[]>('/services/seed-dental');
+  async seedDentalServices(options?: PendingSyncMutationOptions) {
+    const qs = options?.skipPendingVerificationSync === true ? '?skipPendingVerificationSync=true' : '';
+    return clinicApiClient.post<ClinicServiceItem[]>(`/services/seed-dental${qs}`);
   },
 
   // Procedures & Nursing Station
@@ -4727,7 +4761,12 @@ export const clinicService = {
   },
 
   async updateStaff(id: string, payload: UpdateStaffPayload) {
-    return clinicApiClient.put<StaffMember>(`/staff/${id}`, payload);
+    const { skipPendingVerificationSync, ...rest } = payload;
+    const finalPayload =
+      skipPendingVerificationSync === true
+        ? { ...rest, skipPendingVerificationSync: true }
+        : rest;
+    return clinicApiClient.put<StaffMember>(`/staff/${id}`, finalPayload);
   },
 
   async getMyProfile() {
@@ -4735,7 +4774,12 @@ export const clinicService = {
   },
 
   async updateMyProfile(payload: UpdateMyProfilePayload) {
-    return clinicApiClient.put<StaffMember>('/staff/me', payload);
+    const { skipPendingVerificationSync, ...rest } = payload;
+    const finalPayload =
+      skipPendingVerificationSync === true
+        ? { ...rest, skipPendingVerificationSync: true }
+        : rest;
+    return clinicApiClient.put<StaffMember>('/staff/me', finalPayload);
   },
 
   async deactivateStaff(id: string) {
@@ -4774,13 +4818,19 @@ export const clinicService = {
     id: string,
     fileInput: FormData | Blob | { uri: string; name: string; type: string },
     fileName?: string,
+    options?: PendingSyncMutationOptions,
   ) {
     const formData = toEvidenceUploadFormData(fileInput, fileName);
-    return clinicApiClient.post<EvidenceProofUploadResult>(`/staff/${id}/prc-proof`, formData, {
+    const qs = options?.skipPendingVerificationSync === true ? '?skipPendingVerificationSync=true' : '';
+    return clinicApiClient.post<EvidenceProofUploadResult>(`/staff/${id}/prc-proof${qs}`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
+  },
+
+  async updatePendingStaffVerification(id: string) {
+    return clinicApiClient.put<StaffMember>(`/staff/${id}/verification/pending`, {});
   },
 
   async fetchStaffPrcProofBlob(id: string) {
@@ -5090,12 +5140,23 @@ export const clinicService = {
     effectiveStartDate?: string;
     effectiveEndDate?: string;
     breaks?: DoctorBreakTimeItem[];
+    skipPendingVerificationSync?: boolean;
   }) {
-    return clinicApiClient.post<DoctorScheduleTemplateItem>(`/doctors/${doctorId}/schedules/templates`, payload);
+    const { skipPendingVerificationSync, ...rest } = payload;
+    const finalPayload =
+      skipPendingVerificationSync === true
+        ? { ...rest, skipPendingVerificationSync: true }
+        : rest;
+    return clinicApiClient.post<DoctorScheduleTemplateItem>(`/doctors/${doctorId}/schedules/templates`, finalPayload);
   },
 
-  async deleteDoctorScheduleTemplate(doctorId: string, templateId: string) {
-    return clinicApiClient.delete<boolean>(`/doctors/${doctorId}/schedules/templates/${templateId}`);
+  async deleteDoctorScheduleTemplate(
+    doctorId: string,
+    templateId: string,
+    options?: PendingSyncMutationOptions,
+  ) {
+    const qs = options?.skipPendingVerificationSync === true ? '?skipPendingVerificationSync=true' : '';
+    return clinicApiClient.delete<boolean>(`/doctors/${doctorId}/schedules/templates/${templateId}${qs}`);
   },
 
   async getDoctorAvailableSlots(doctorId: string, date: string, interval?: number) {
@@ -5328,6 +5389,12 @@ export const clinicService = {
     } else if (finalPayload.letterheadDohLto !== undefined && finalPayload.dohLicenseToOperate === undefined) {
       finalPayload.dohLicenseToOperate = finalPayload.letterheadDohLto;
     }
+    if (finalPayload.dohLtoExpiryDate === '') {
+      delete finalPayload.dohLtoExpiryDate;
+    }
+    if (finalPayload.skipPendingVerificationSync !== true) {
+      delete finalPayload.skipPendingVerificationSync;
+    }
     return clinicApiClient.put<ClinicSettingsRecord>('/settings', finalPayload);
   },
 
@@ -5372,13 +5439,19 @@ export const clinicService = {
   async uploadLtoProof(
     fileInput: FormData | Blob | { uri: string; name: string; type: string },
     fileName?: string,
+    options?: PendingSyncMutationOptions,
   ) {
     const formData = toEvidenceUploadFormData(fileInput, fileName);
-    return clinicApiClient.post<EvidenceProofUploadResult>('/clinic-settings/lto-proof', formData, {
+    const qs = options?.skipPendingVerificationSync === true ? '?skipPendingVerificationSync=true' : '';
+    return clinicApiClient.post<EvidenceProofUploadResult>(`/clinic-settings/lto-proof${qs}`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
+  },
+
+  async updatePendingDirectoryVerification() {
+    return clinicApiClient.put<ClinicPublishingResult>('/clinic-settings/directory-publishing/pending', {});
   },
 
   async fetchLtoProofBlob() {
@@ -5398,9 +5471,10 @@ export const clinicService = {
     );
   },
 
-  async toggleBookingPause(isPaused: boolean) {
+  async toggleBookingPause(isPaused: boolean, options?: PendingSyncMutationOptions) {
     return clinicApiClient.put<ClinicBookingPauseResult>('/clinic-settings/booking-pause', {
       isPaused,
+      ...(options?.skipPendingVerificationSync === true ? { skipPendingVerificationSync: true } : {}),
     });
   },
 

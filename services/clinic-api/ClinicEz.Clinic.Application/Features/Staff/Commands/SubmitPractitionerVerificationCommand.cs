@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Exceptions;
 using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Staff.DTOs;
@@ -63,6 +64,13 @@ public sealed class SubmitPractitionerVerificationCommandHandler : IRequestHandl
             throw new ValidationException("Inactive staff members cannot be submitted for directory verification.");
         }
 
+        if (staff.PublicVerificationStatus == PractitionerVerificationLevel.PendingVerification)
+        {
+            throw new VerificationConflictException(
+                "A practitioner verification submission is already pending for this staff member. Save updates to the pending submission instead.",
+                currentStatus: staff.PublicVerificationStatus.ToString());
+        }
+
         ClinicianDirectoryValidationHelper.ValidateOptInRequirements(
             staff.Role,
             isDirectoryOptIn: true,
@@ -92,7 +100,8 @@ public sealed class SubmitPractitionerVerificationCommandHandler : IRequestHandl
             _settingsRepo,
             _scheduleRepo,
             _auditRepo,
-            ct);
+            ct,
+            _staffRepo);
 
         _staffRepo.Update(staff);
         await _unitOfWork.SaveChangesAsync(ct);

@@ -3,7 +3,9 @@ import { View, StyleSheet } from 'react-native';
 import Input from '../../ui/Input';
 import Button from '../../ui/Button';
 import { theme } from '../../../constants/theme';
-import { type ClinicSettingsRecord } from '../../../services/clinicService';
+import { type ClinicSettingsRecord, type PlatformVerificationStatus } from '../../../services/clinicService';
+import { PENDING_VERIFICATION_BUTTON_LABEL } from '../../../utils/directoryVerification';
+import { PendingVerificationNote } from '../common';
 import SettingsSplitCard from './SettingsSplitCard';
 
 export interface OfficialLetterheadCardProps {
@@ -17,6 +19,7 @@ export interface OfficialLetterheadCardProps {
   savingSettings: boolean;
   onSavePreferences: () => Promise<void>;
   showSkeletons: boolean;
+  platformVerificationStatus?: PlatformVerificationStatus;
 }
 
 export default function OfficialLetterheadCard({
@@ -30,7 +33,10 @@ export default function OfficialLetterheadCard({
   savingSettings,
   onSavePreferences,
   showSkeletons,
+  platformVerificationStatus,
 }: OfficialLetterheadCardProps) {
+  const effectiveStatus = platformVerificationStatus ?? settings?.platformVerificationStatus;
+  const isPendingFacility = effectiveStatus === 'PendingReview';
   const hasDetails = Boolean(letterheadAddress.trim() && letterheadContact.trim());
   const isDirty = settings
     ? (letterheadHeader ?? '') !== (settings.letterheadHeader ?? '') ||
@@ -51,13 +57,16 @@ export default function OfficialLetterheadCard({
       skeletonRows={2}
       footer={
         isDirty || savingSettings ? (
-          <Button
-            title="Save header & contact info"
-            icon="save"
-            size="sm"
-            onPress={onSavePreferences}
-            loading={savingSettings}
-          />
+          <View style={styles.footerActions}>
+            {isPendingFacility ? <PendingVerificationNote /> : null}
+            <Button
+              title={isPendingFacility ? PENDING_VERIFICATION_BUTTON_LABEL : 'Save header & contact info'}
+              icon="save"
+              size="sm"
+              onPress={onSavePreferences}
+              loading={savingSettings}
+            />
+          </View>
         ) : undefined
       }
     >
@@ -100,5 +109,12 @@ const styles = StyleSheet.create({
     flex: 1,
     flexBasis: 220,
     minWidth: 0,
+  },
+  footerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
   },
 });

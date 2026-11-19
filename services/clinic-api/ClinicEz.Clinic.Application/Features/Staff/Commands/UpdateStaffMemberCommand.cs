@@ -45,7 +45,8 @@ public sealed record UpdateStaffMemberCommand(
     string? PrcEvidenceObjectKey = null,
     string? VerificationContact = null,
     string? PublicBio = null,
-    string? AvatarUrl = null) : IRequest<StaffMemberDto>;
+    string? AvatarUrl = null,
+    bool SkipPendingVerificationSync = false) : IRequest<StaffMemberDto>;
 
 public sealed class UpdateStaffMemberCommandValidator : AbstractValidator<UpdateStaffMemberCommand>
 {
@@ -262,7 +263,19 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             }
         }
 
+        var prevFirstName = staff.FirstName;
+        var prevLastName = staff.LastName;
+        var prevTitle = staff.Title;
+        var prevRole = staff.Role;
+        var prevSpecialty = staff.Specialty;
         var previousPrc = staff.PrcLicenseNumber;
+        var prevExpiry = staff.PrcExpiryDate;
+        var prevProofKey = staff.PrcEvidenceObjectKey;
+        var prevVerificationContact = staff.VerificationContact;
+        var prevPublicBio = staff.PublicBio;
+        var prevAvatarUrl = staff.AvatarUrl;
+        var prevOptIn = staff.IsDirectoryOptIn;
+        var prevIsActive = staff.IsActive;
         var wasVerified = staff.PublicVerificationStatus == PractitionerVerificationLevel.Verified;
 
         var effectiveOptIn = request.IsDirectoryOptIn ?? (ClinicianDirectoryValidationHelper.IsClinicianRole(request.Role) && staff.IsDirectoryOptIn);
@@ -319,6 +332,7 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         staff.UpdatedAt = DateTime.UtcNow;
         staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
 
+        var triggeredPrcUpdateResubmission = false;
         if (wasVerified
             && ClinicianDirectoryValidationHelper.IsClinicianRole(staff.Role)
             && ClinicianDirectoryValidationHelper.HasPrcLicenseChanged(previousPrc, staff.PrcLicenseNumber))
@@ -341,7 +355,9 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
                 _settingsRepository,
                 _scheduleRepository,
                 _auditRepository,
-                cancellationToken);
+                cancellationToken,
+                _staffRepository);
+            triggeredPrcUpdateResubmission = true;
         }
 
         _staffRepository.Update(staff);
@@ -352,6 +368,53 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         catch (DbUpdateException ex) when (StaffEmailUniquenessHelper.IsStaffEmailUniqueViolation(ex))
         {
             throw new ValidationException(StaffEmailUniquenessHelper.DuplicateStaffEmailMessage);
+        }
+
+        var directoryProfileChanged =
+            !string.Equals(prevFirstName, staff.FirstName, StringComparison.Ordinal) ||
+            !string.Equals(prevLastName, staff.LastName, StringComparison.Ordinal) ||
+            !string.Equals(prevTitle, staff.Title, StringComparison.Ordinal) ||
+            prevRole != staff.Role ||
+            !string.Equals(prevSpecialty, staff.Specialty, StringComparison.Ordinal) ||
+            !string.Equals(previousPrc, staff.PrcLicenseNumber, StringComparison.Ordinal) ||
+            prevExpiry != staff.PrcExpiryDate ||
+            !string.Equals(prevProofKey, staff.PrcEvidenceObjectKey, StringComparison.Ordinal) ||
+            !string.Equals(prevVerificationContact, staff.VerificationContact, StringComparison.Ordinal) ||
+            !string.Equals(prevPublicBio, staff.PublicBio, StringComparison.Ordinal) ||
+            !string.Equals(prevAvatarUrl, staff.AvatarUrl, StringComparison.Ordinal) ||
+            prevOptIn != staff.IsDirectoryOptIn ||
+            prevIsActive != staff.IsActive;
+
+        if (!request.SkipPendingVerificationSync
+            && !triggeredPrcUpdateResubmission
+            && directoryProfileChanged
+            && _directorySyncService != null)
+        {
+            if (staff.IsActive
+                && staff.IsDirectoryOptIn
+                && ClinicianDirectoryValidationHelper.IsClinicianRole(staff.Role)
+                && staff.PublicVerificationStatus == PractitionerVerificationLevel.PendingVerification)
+            {
+                await _directorySyncService.SyncPendingPractitionerVerificationAsync(
+                    staff.Id,
+                    throwOnConflict: false,
+                    _clinicContext.StaffId?.ToString(),
+                    _clinicContext.StaffName,
+                    cancellationToken);
+            }
+            else if ((prevOptIn || staff.IsDirectoryOptIn) && _settingsRepository != null)
+            {
+                var settings = await _settingsRepository.Query().FirstOrDefaultAsync(cancellationToken);
+                if (settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+                {
+                    await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                        settings,
+                        throwOnConflict: false,
+                        _clinicContext.StaffId?.ToString(),
+                        _clinicContext.StaffName,
+                        cancellationToken);
+                }
+            }
         }
 
         _accessCache?.Invalidate(staff.Id);

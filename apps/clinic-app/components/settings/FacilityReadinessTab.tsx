@@ -4,18 +4,21 @@ import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
 import Input from '../ui/Input';
+import ValidatedDateInput, { validateDateString } from '../ui/ValidatedDateInput';
 import Icon from '../ui/Icon';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Skeleton, SkeletonList } from '../ui/Skeleton';
 import { theme, subscribeActiveTheme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 import {
+  PENDING_VERIFICATION_BUTTON_LABEL,
   pickVerificationEvidenceFile,
   resolveFacilityVerificationBadge,
   toEvidenceFormData,
   type PickedEvidenceFile,
 } from '../../utils/directoryVerification';
 import { clinicService } from '../../services/clinicService';
+import { PendingVerificationNote } from './common';
 import { EvidenceProofPreview } from './EvidenceProofPreview';
 import { SettingsTabKey, ReadinessCheckItem } from './types';
 import {
@@ -88,10 +91,11 @@ export interface FacilityReadinessTabProps {
   verificationRejectionReason?: string | null;
   lastVerificationSubmittedAtUtc?: string | null;
   letterheadDohLto?: string | null;
+  dohLtoExpiryDate?: string | null;
   ltoEvidenceObjectKey?: string | null;
   optedInCliniciansCount?: number;
   optedInCliniciansReadyCount?: number;
-  onSaveDohLto?: (dohLto: string) => Promise<boolean | void> | boolean | void;
+  onSaveDohLto?: (dohLto: string, dohLtoExpiryDate?: string | null) => Promise<boolean | void> | boolean | void;
   onUploadLtoProof?: (file: FormData) => Promise<boolean | void> | boolean | void;
   onSubmitVerification?: () => Promise<void> | void;
   onWithdrawVerification?: () => Promise<void> | void;
@@ -127,6 +131,7 @@ export default function FacilityReadinessTab({
   verificationRejectionReason = null,
   lastVerificationSubmittedAtUtc = null,
   letterheadDohLto = '',
+  dohLtoExpiryDate = '',
   ltoEvidenceObjectKey = null,
   optedInCliniciansCount,
   optedInCliniciansReadyCount,
@@ -157,6 +162,7 @@ export default function FacilityReadinessTab({
   const [localLtoUploading, setLocalLtoUploading] = useState(false);
   const [localLtoFile, setLocalLtoFile] = useState<PickedEvidenceFile | null>(null);
   const [ltoInput, setLtoInput] = useState(letterheadDohLto ?? '');
+  const [ltoExpiryInput, setLtoExpiryInput] = useState(dohLtoExpiryDate ?? '');
   const fetchLtoProofBlob = useMemo(
     () => (ltoEvidenceObjectKey ? () => clinicService.fetchLtoProofBlob() : undefined),
     [ltoEvidenceObjectKey],
@@ -165,6 +171,10 @@ export default function FacilityReadinessTab({
   useEffect(() => {
     setLtoInput(letterheadDohLto ?? '');
   }, [letterheadDohLto]);
+
+  useEffect(() => {
+    setLtoExpiryInput(dohLtoExpiryDate ?? '');
+  }, [dohLtoExpiryDate]);
 
   const publishingLoading = isPublishingMutating ?? localPublishingLoading;
   const pauseLoading = isBookingPauseMutating ?? localPauseLoading;
@@ -189,6 +199,7 @@ export default function FacilityReadinessTab({
 
   // 4. DOH LTO Number or Proof Check
   const savedDohLto = letterheadDohLto?.trim() || '';
+  const savedDohLtoExpiry = dohLtoExpiryDate?.trim() || '';
   const hasLtoProof = Boolean(ltoEvidenceObjectKey?.trim());
   const hasDohLtoOrProof = Boolean(savedDohLto || hasLtoProof);
 
@@ -256,6 +267,7 @@ export default function FacilityReadinessTab({
       description: hasDohLtoOrProof
         ? [
             savedDohLto ? `LTO No. ${savedDohLto}` : null,
+            savedDohLtoExpiry ? `Expires ${savedDohLtoExpiry}` : null,
             hasLtoProof ? 'LTO proof document uploaded' : null,
           ]
             .filter(Boolean)
@@ -343,7 +355,16 @@ export default function FacilityReadinessTab({
     platformVerificationStatus === 'Rejected' || platformVerificationStatus === 'Suspended';
   const isUnverified = !platformVerificationStatus || platformVerificationStatus === 'Unverified';
   const isPublishedLive = isVerified && isDirectoryPublished;
-  const ltoDraftDirty = ltoInput.trim() !== savedDohLto;
+  const trimmedLtoExpiry = ltoExpiryInput.trim();
+  const ltoExpiryValidation = trimmedLtoExpiry
+    ? validateDateString(trimmedLtoExpiry, { boundaryMode: 'any' })
+    : null;
+  const ltoExpiryError =
+    ltoExpiryValidation && !ltoExpiryValidation.isValid
+      ? ltoExpiryValidation.errorMessage || 'Enter a valid DOH LTO expiry date (YYYY-MM-DD).'
+      : undefined;
+  const ltoDraftDirty =
+    ltoInput.trim() !== savedDohLto || trimmedLtoExpiry !== savedDohLtoExpiry;
 
   const handlePickAndUploadLtoProof = async () => {
     if (!onUploadLtoProof) {
@@ -369,9 +390,13 @@ export default function FacilityReadinessTab({
 
   const handleSaveDohLto = async () => {
     if (!onSaveDohLto) return;
+    if (ltoExpiryError) {
+      notify.error(ltoExpiryError);
+      return;
+    }
     setLocalLtoSaving(true);
     try {
-      await onSaveDohLto(ltoInput.trim());
+      await onSaveDohLto(ltoInput.trim(), trimmedLtoExpiry || null);
     } finally {
       setLocalLtoSaving(false);
     }
@@ -392,10 +417,15 @@ export default function FacilityReadinessTab({
   };
 
   const handleSubmitVerification = async () => {
+    if (ltoExpiryError) {
+      notify.error(ltoExpiryError);
+      return;
+    }
     setLocalPublishingLoading(true);
     try {
       if (ltoDraftDirty && onSaveDohLto) {
-        await onSaveDohLto(ltoInput.trim());
+        const savedOk = await onSaveDohLto(ltoInput.trim(), trimmedLtoExpiry || null);
+        if (savedOk === false) return;
       }
       if (onSubmitVerification) {
         await onSubmitVerification();
@@ -683,20 +713,34 @@ export default function FacilityReadinessTab({
                 helperText="Enter your DOH LTO number and/or upload a PDF, JPEG, or PNG proof (max 5 MB)."
                 testID="readiness-input-doh-lto"
               />
+              <ValidatedDateInput
+                containerStyle={styles.ltoInputFlex}
+                label="DOH LTO Expiry Date"
+                value={ltoExpiryInput}
+                onChangeText={setLtoExpiryInput}
+                boundaryMode="any"
+                placeholder="YYYY-MM-DD"
+                helperText="Optional. Format: YYYY-MM-DD."
+                testID="readiness-input-doh-lto-expiry"
+              />
               {onSaveDohLto ? (
                 <View style={styles.ltoSaveBtnWrap}>
                   <Button
-                    title="Save LTO"
+                    title={isPendingReview ? PENDING_VERIFICATION_BUTTON_LABEL : 'Save LTO'}
                     variant="outline"
                     size="sm"
                     onPress={handleSaveDohLto}
                     loading={savingLto}
-                    disabled={!ltoDraftDirty || savingLto}
+                    disabled={!ltoDraftDirty || savingLto || Boolean(ltoExpiryError)}
                     testID="btn-save-doh-lto"
                   />
                 </View>
               ) : null}
             </View>
+
+            {isPendingReview ? (
+              <PendingVerificationNote testID="readiness-pending-helper-note" />
+            ) : null}
 
             <View style={styles.ltoProofRow}>
               <Button

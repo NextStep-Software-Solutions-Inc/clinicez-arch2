@@ -6,7 +6,9 @@ using ClinicEz.Shared.Search;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sieve.Services;
+using System;
 using System.Reflection;
 
 namespace ClinicEz.Clinic.Application;
@@ -16,6 +18,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
         services.AddScoped<ISieveProcessor, SieveProcessor>();
+        services.TryAddSingleton(TimeProvider.System);
 
         services.AddMediatR(config =>
             { config.LicenseKey = ClinicEz.Shared.Common.MediatRLicense.Resolve(); config.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()); });

@@ -1,4 +1,6 @@
+import type { ApiError } from '@shared/safe';
 import type {
+  ClinicSettingsRecord,
   PlatformVerificationStatus,
   PractitionerVerificationLevel,
   StaffMember,
@@ -6,6 +8,45 @@ import type {
 } from '../services/clinicService';
 import type { BadgeVariant } from '../components/ui/Badge';
 import { validateDateString } from '../components/ui/ValidatedDateInput';
+
+export const PENDING_VERIFICATION_CONFLICT_CODE = 'verification_request_not_pending';
+export const PENDING_VERIFICATION_BUTTON_LABEL = 'Save & Update Submission';
+export const PENDING_VERIFICATION_HELPER_NOTE =
+  'Updates your active pending verification application';
+
+export function isPendingVerificationConflictError(
+  err?: Pick<ApiError, 'status' | 'errorCode'> | null,
+): boolean {
+  if (!err) return false;
+  if (err.errorCode === PENDING_VERIFICATION_CONFLICT_CODE) return true;
+  return err.status === 409 && !err.errorCode;
+}
+
+export function buildDohLtoSettingsPayload(input: {
+  dohLto: string;
+  dohLtoExpiryDate?: string | null;
+  previousDohLtoExpiryDate?: string | null;
+  skipPendingVerificationSync?: boolean;
+}): Partial<ClinicSettingsRecord> {
+  const payload: Partial<ClinicSettingsRecord> = {
+    letterheadDohLto: input.dohLto.trim(),
+  };
+
+  const trimmedExpiry = (input.dohLtoExpiryDate ?? '').trim();
+  const hadSavedExpiry = Boolean((input.previousDohLtoExpiryDate ?? '').trim());
+
+  if (trimmedExpiry) {
+    payload.dohLtoExpiryDate = trimmedExpiry;
+  } else if (hadSavedExpiry) {
+    payload.clearDohLtoExpiryDate = true;
+  }
+
+  if (input.skipPendingVerificationSync === true) {
+    payload.skipPendingVerificationSync = true;
+  }
+
+  return payload;
+}
 
 export const MAX_EVIDENCE_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
