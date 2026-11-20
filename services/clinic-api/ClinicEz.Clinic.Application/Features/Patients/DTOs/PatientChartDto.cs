@@ -5,6 +5,7 @@ using ClinicEz.Clinic.Application.Features.Billing.DTOs;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
 using ClinicEz.Clinic.Application.Features.Dental.DTOs;
 using ClinicEz.Clinic.Application.Features.Documents.DTOs;
+using ClinicEz.Clinic.Application.Features.HealthScreenings.DTOs;
 using ClinicEz.Clinic.Application.Features.Immunizations.DTOs;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
 using ClinicEz.Clinic.Application.Features.Problems.Dtos;
@@ -48,5 +49,6 @@ public record PatientChartDto(
     List<PatientPhysicalExamDto>? PhysicalExams = null,
     PatientPhysicalExamDto? LatestPhysicalExam = null,
     List<PatientAddressDto>? Addresses = null,
-    List<PatientGuardianDto>? Guardians = null
+    List<PatientGuardianDto>? Guardians = null,
+    List<HealthScreeningDto>? HealthScreenings = null
 );

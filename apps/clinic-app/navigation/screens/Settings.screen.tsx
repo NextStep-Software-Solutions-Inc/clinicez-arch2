@@ -889,6 +889,16 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     [tabs, activeTab, handleSelectTab]
   );
 
+  const handleRefreshServices = useCallback(async () => {
+    const [fresh, err] = await clinicService.getServices();
+    if (err) {
+      setServicesLoadError(err.message || 'Unable to load the service catalog.');
+      return;
+    }
+    setServicesLoadError(null);
+    setServices(fresh ?? []);
+  }, []);
+
   const renderSectionCanvas = () => {
     if (isGeneralSettingsSectionKey(activeTab)) {
       return (
@@ -919,6 +929,9 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
           showSkeletons={showSkeletons}
           settingsLoadError={settingsLoadError}
           settings={settings}
+          services={services}
+          servicesLoadError={servicesLoadError}
+          onRefreshServices={handleRefreshServices}
           onRefreshEod={onRefresh}
           formatPeso={formatPeso}
           onNavigatePatients={() => navigation.navigate('Patients')}
@@ -1097,6 +1110,12 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             accreditationNumber={accreditationNumber}
             clinicName={clinicName}
             settings={settings}
+            settingsLoadError={settingsLoadError}
+            onRetrySettings={loadAll}
+            services={services}
+            servicesLoadError={servicesLoadError}
+            showSkeletons={showSkeletons}
+            onRefreshServices={handleRefreshServices}
             onSettingsUpdated={(updated) => {
               handleSettingsUpdated(updated);
               if (updated.accreditationNumber !== undefined) {

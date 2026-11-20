@@ -156,9 +156,9 @@ public class ServicesCatalogChallengerTests
         await uow.SaveChangesAsync();
 
         var multiResult = await queryHandler.Handle(new GetClinicServicesQuery(), CancellationToken.None);
-        multiResult.Should().HaveCount(19); // 10 dental + 9 medical presets seeded idempotently without duplicates
+        multiResult.Should().HaveCount(20); // 10 dental + 10 medical presets seeded idempotently without duplicates
         multiResult.Count(x => x.Category == "Dental").Should().Be(10);
-        multiResult.Count(x => x.Category != "Dental").Should().Be(9);
+        multiResult.Count(x => x.Category != "Dental").Should().Be(10);
 
         // Step 5: Transition from Medical (existing medical items) to Dental idempotently adds all 10 dental presets
         var clinicId2 = Guid.NewGuid();
@@ -182,30 +182,31 @@ public class ServicesCatalogChallengerTests
 
         var handler2 = new GetClinicServicesQueryHandler(repo2, uow2, clinicContext2, settingsRepo2);
         var medResult = await handler2.Handle(new GetClinicServicesQuery(), CancellationToken.None);
-        medResult.Should().HaveCount(9);
+        medResult.Should().HaveCount(10);
+        medResult.Should().Contain(x => x.Code == "HEALTH-SCREEN" && x.Category == "Consultation");
 
         settings2.SpecialtyMode = "Dental";
         await uow2.SaveChangesAsync();
 
         var dentalResult = await handler2.Handle(new GetClinicServicesQuery(), CancellationToken.None);
-        dentalResult.Should().HaveCount(19);
+        dentalResult.Should().HaveCount(20);
         dentalResult.Count(x => x.Category == "Dental").Should().Be(10);
-        dentalResult.Count(x => x.Category != "Dental").Should().Be(9);
+        dentalResult.Count(x => x.Category != "Dental").Should().Be(10);
     }
 
     [Theory]
     [InlineData("Dental", 10, true)]
     [InlineData("dental", 10, true)]
     [InlineData("   DENTAL   ", 10, true)]
-    [InlineData("MultiSpecialty", 19, false)]
-    [InlineData("Multi-Specialty", 19, false)]
-    [InlineData("multispecialty", 19, false)]
-    [InlineData("  multi-specialty  ", 19, false)]
-    [InlineData("Medical", 9, false)]
-    [InlineData("medical", 9, false)]
-    [InlineData("", 9, false)]
-    [InlineData(null, 9, false)]
-    [InlineData("ArbitraryCardiology", 9, false)]
+    [InlineData("MultiSpecialty", 20, false)]
+    [InlineData("Multi-Specialty", 20, false)]
+    [InlineData("multispecialty", 20, false)]
+    [InlineData("  multi-specialty  ", 20, false)]
+    [InlineData("Medical", 10, false)]
+    [InlineData("medical", 10, false)]
+    [InlineData("", 10, false)]
+    [InlineData(null, 10, false)]
+    [InlineData("ArbitraryCardiology", 10, false)]
     public async Task AutoSeeding_SpecialtyModeParsing_HandlesAllVariationsSafely(
         string? specialtyMode,
         int expectedCount,
@@ -240,10 +241,10 @@ public class ServicesCatalogChallengerTests
         {
             result.All(x => x.Category == "Dental").Should().BeTrue();
         }
-        else if (expectedCount == 19)
+        else if (expectedCount == 20)
         {
             result.Count(x => x.Category == "Dental").Should().Be(10);
-            result.Count(x => x.Category != "Dental").Should().Be(9);
+            result.Count(x => x.Category != "Dental").Should().Be(10);
         }
         else
         {

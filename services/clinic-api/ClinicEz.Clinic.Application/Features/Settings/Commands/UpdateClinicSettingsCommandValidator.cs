@@ -43,5 +43,13 @@ public sealed class UpdateClinicSettingsCommandValidator : AbstractValidator<Upd
                 .OverridePropertyName(nameof(UpdateClinicSettingsCommand.TeleconsultDefaultFee))
                 .WithMessage("TeleconsultDefaultFee must be greater than or equal to 0.");
         });
+
+        When(x => x.DefaultHealthScreeningServiceCode != null, () =>
+        {
+            RuleFor(x => x.DefaultHealthScreeningServiceCode!)
+                .Must(code => code.Trim().Length <= 50)
+                .OverridePropertyName(nameof(UpdateClinicSettingsCommand.DefaultHealthScreeningServiceCode))
+                .WithMessage("DefaultHealthScreeningServiceCode must not exceed 50 characters.");
+        });
     }
 }

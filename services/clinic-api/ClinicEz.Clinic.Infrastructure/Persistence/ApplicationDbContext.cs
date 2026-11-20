@@ -41,6 +41,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<Appointment> Appointments { get; set; } = null!;
     public DbSet<QueueItem> QueueItems { get; set; } = null!;
     public DbSet<PatientVitals> PatientVitals { get; set; } = null!;
+    public DbSet<HealthScreening> HealthScreenings => Set<HealthScreening>();
     public DbSet<ConsultationEncounter> Consultations { get; set; } = null!;
     public DbSet<EncounterDiagnosis> Diagnoses { get; set; } = null!;
     public DbSet<PrescriptionItem> Prescriptions { get; set; } = null!;
@@ -177,6 +178,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<DoctorScheduleOverride>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<QueueItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<PatientVitals>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<HealthScreening>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ConsultationEncounter>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);

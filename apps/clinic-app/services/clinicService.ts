@@ -3040,6 +3040,7 @@ export interface PatientChart {
   referralLetters?: ReferralLetterRecord[];
   addresses?: PatientAddressDto[];
   guardians?: PatientGuardianDto[];
+  healthScreenings?: HealthScreeningRecord[];
 }
 
 export type ToothStatus =
@@ -3561,6 +3562,11 @@ export interface ClinicSettingsRecord {
   teleconsultRecordingConsentRequired?: boolean;
   teleconsultPaymentPolicy?: TeleconsultPaymentPolicy | string;
   teleconsultDefaultFee?: number | null;
+
+  // Health Screening & PhilHealth YAKAP FPE Facilitator Settings
+  allowNurseMidwifeYakapFpeFacilitator?: boolean;
+  defaultHealthScreeningServiceItemId?: string | null;
+  defaultHealthScreeningServiceCode?: string | null;
 }
 
 export interface DocumentSignatoryItemConfig {
@@ -5598,6 +5604,43 @@ export const clinicService = {
     return clinicApiClient.put<PhilHealthPatientProfile>(`/yakap/patients/${patientId}/profile`, profile);
   },
 
+  // 1NF PhilHealth Coverage & Annual YAKAP Enlistment
+  async getPatientPhilHealthCoverage(patientId: string) {
+    return clinicApiClient.get<PatientPhilHealthCoverageDto>(`/patients/${patientId}/philhealth`);
+  },
+
+  async upsertPatientPhilHealthMembership(patientId: string, payload: UpsertPhilHealthMembershipPayload) {
+    return clinicApiClient.put<PatientPhilHealthMembershipDto>(`/patients/${patientId}/philhealth/membership`, payload);
+  },
+
+  async createPatientYakapEnlistment(patientId: string, payload: CreateYakapEnlistmentPayload) {
+    return clinicApiClient.post<PatientYakapEnlistmentDto>(`/patients/${patientId}/yakap/enlistments`, payload);
+  },
+
+  // 4-Station Clinical Health Screening
+  async getPatientHealthScreenings(patientId: string, queueItemId?: string) {
+    const params = new URLSearchParams();
+    params.append('patientId', patientId);
+    if (queueItemId) params.append('queueItemId', queueItemId);
+    return clinicApiClient.get<HealthScreeningRecord[]>(`/health-screenings?${params.toString()}`);
+  },
+
+  async getHealthScreeningById(id: string) {
+    return clinicApiClient.get<HealthScreeningDetailRecord>(`/health-screenings/${id}`);
+  },
+
+  async saveHealthScreeningProgress(payload: SaveHealthScreeningProgressPayload) {
+    return clinicApiClient.post<HealthScreeningDetailRecord>('/health-screenings', payload);
+  },
+
+  async completeHealthScreening(id: string, payload: CompleteHealthScreeningPayload) {
+    return clinicApiClient.post<HealthScreeningDetailRecord>(`/health-screenings/${id}/complete`, payload);
+  },
+
+  async escalateHealthScreening(id: string, payload?: EscalateHealthScreeningPayload) {
+    return clinicApiClient.post<HealthScreeningDetailRecord>(`/health-screenings/${id}/escalate`, payload ?? {});
+  },
+
 
   // PhilHealth GAMOT & UPSC. Reached through the clinic server, which talks to the pharmacy with its own service key.
   async getGamotLedger(pin: string, year?: string) {
@@ -6270,6 +6313,288 @@ export interface PinValidationResult {
   isValid: boolean;
   formattedPin: string;
   failureReason?: string;
+}
+
+export type PhilHealthMemberType = 'MM' | 'DD';
+export type PhilHealthDependentRelationship = 'S' | 'C' | 'P' | 'D';
+
+export type YakapEnlistmentStatus =
+  | 'Active'
+  | 'Expired'
+  | 'Transferred'
+  | 'Draft'
+  | 'Registered'
+  | 'Verified'
+  | 'ProfilingCompleted'
+  | 'Transmitted'
+  | 'Suspended'
+  | 'Cancelled';
+
+export type YakapEnlistmentSource =
+  | 'ClinicEnlistment'
+  | 'PhilHealthMasterlist'
+  | 'SelfReported'
+  | 'WalkIn'
+  | 'OnlinePortal'
+  | 'MasterlistSync'
+  | 'AssistedIntake';
+
+export type YakapPackageType =
+  | 'Konsulta'
+  | 'YakapPlus'
+  | 'FirstPatientEncounter'
+  | 'FollowUpEncounter'
+  | 'AnnualCheckup'
+  | 'NcdHypertension'
+  | 'NcdDiabetes'
+  | 'Comprehensive';
+
+export type YakapServiceDeliveryMethod = 'FacilityBased' | 'OutOfFacility' | 'SettingsBased';
+
+export interface PatientPhilHealthMembershipDto {
+  id?: string;
+  patientId: string;
+  memberType: PhilHealthMemberType;
+  dependentRelationship?: PhilHealthDependentRelationship | string | null;
+  philHealthPin?: string | null;
+  memberPin?: string | null;
+  principalMemberPin?: string | null;
+  principalLastName?: string | null;
+  principalFirstName?: string | null;
+  principalMiddleName?: string | null;
+  principalSuffix?: string | null;
+  principalDateOfBirth?: string | null;
+  principalSex?: string | null;
+  membershipCategoryCode?: string | null;
+  membershipCategoryDesc?: string | null;
+  employerPin?: string | null;
+  employerName?: string | null;
+  defaultWalkInAtc?: string | null;
+  principalMemberLandlineNumber?: string | null;
+  principalMemberMobileNumber?: string | null;
+  principalMemberEmail?: string | null;
+  updatedAtUtc?: string | null;
+}
+
+export interface PatientYakapEnlistmentDto {
+  id: string;
+  patientId: string;
+  effectiveYear: number;
+  status: YakapEnlistmentStatus | string;
+  source: YakapEnlistmentSource | string;
+  packageType: YakapPackageType | string;
+  enlistmentDate: string;
+  validUntil?: string | null;
+  caseNo?: string | null;
+  enlistmentTransNo?: string | null;
+  enlistmentTransDate?: string | null;
+  profilingTransNo?: string | null;
+  profilingDate?: string | null;
+  profilingAtc?: string | null;
+  isWalkedIn?: boolean;
+  hciAccreditationNumber?: string | null;
+  yesReferenceNo?: string | null;
+  profilingTime?: string | null;
+  fpeClassificationType?: string | null;
+  serviceDeliveryMethod?: YakapServiceDeliveryMethod | string | null;
+  facilitatorType?: string | null;
+  facilitatorName?: string | null;
+  hasCoPayment?: boolean;
+  coPaymentDate?: string | null;
+  coPaymentAmount?: number | null;
+  coPaymentBalance?: number | null;
+  remarks?: string | null;
+}
+
+export interface CurrentYearFpeStatusDto {
+  effectiveYear: number;
+  hasActiveEnlistment: boolean;
+  enlistmentId?: string | null;
+  isCompleted: boolean;
+  profilingDate?: string | null;
+  profilingTransNo?: string | null;
+  profilingAtc?: string | null;
+}
+
+export interface PatientPhilHealthCoverageDto {
+  patientId: string;
+  philHealthNumber?: string | null;
+  membership?: PatientPhilHealthMembershipDto | null;
+  enlistments: PatientYakapEnlistmentDto[];
+  currentYearFpeStatus: CurrentYearFpeStatusDto;
+}
+
+export interface UpsertPhilHealthMembershipPayload {
+  memberType: PhilHealthMemberType;
+  dependentRelationship?: PhilHealthDependentRelationship | string | null;
+  philHealthPin?: string | null;
+  principalMemberPin?: string | null;
+  principalLastName?: string | null;
+  principalFirstName?: string | null;
+  principalMiddleName?: string | null;
+  principalSuffix?: string | null;
+  principalDateOfBirth?: string | null;
+  principalSex?: string | null;
+  membershipCategoryCode?: string | null;
+  membershipCategoryDesc?: string | null;
+  employerPin?: string | null;
+  employerName?: string | null;
+  defaultWalkInAtc?: string | null;
+}
+
+export interface CreateYakapEnlistmentPayload {
+  effectiveYear: number;
+  enlistmentDate: string;
+  validUntil?: string | null;
+  source?: YakapEnlistmentSource | string | null;
+  packageType?: YakapPackageType | string | null;
+  caseNo?: string | null;
+  enlistmentTransNo?: string | null;
+  yesReferenceNo?: string | null;
+  notes?: string | null;
+}
+
+export type HealthScreeningType =
+  | 'RoutineWellness'
+  | 'AnnualPhysicalExam'
+  | 'PreEmployment'
+  | 'SchoolPhysical'
+  | 'YakapFpe'
+  | 'CommunityScreening';
+
+export type HealthScreeningStatus =
+  | 'InProgress'
+  | 'AwaitingDoctor'
+  | 'Completed'
+  | 'EscalatedToConsultation'
+  | 'Cancelled';
+
+export type HealthScreeningDisposition =
+  | 'Cleared'
+  | 'ClearedWithAdvice'
+  | 'ForWorkup'
+  | 'EscalatedToConsultation';
+
+export interface HealthScreeningRecord {
+  id: string;
+  clinicId?: string;
+  patientId: string;
+  queueItemId?: string | null;
+  consultationEncounterId?: string | null;
+  yakapEnlistmentId?: string | null;
+  patientVitalsId?: string | null;
+  patientPhysicalExamId?: string | null;
+  ncdRiskAssessmentId?: string | null;
+  serviceItemId?: string | null;
+  screeningType: HealthScreeningType;
+  workflowMode: 'Regular' | 'YakapAvailment';
+  status: HealthScreeningStatus;
+  disposition?: HealthScreeningDisposition | null;
+  screeningDateUtc: string;
+  screenedByNurseId?: string | null;
+  screenedByNurseName?: string | null;
+  nurseCompletedAtUtc?: string | null;
+  examinedByDoctorId?: string | null;
+  examinedByDoctorName?: string | null;
+  completedAtUtc?: string | null;
+  nurseScreeningNotes?: string | null;
+  clinicalImpression?: string | null;
+  preventiveCounselingNotes?: string | null;
+  recommendedFollowUpDate?: string | null;
+  adultRoutineScreeningCode?: string | null;
+  pediatricRoutineScreeningCode?: string | null;
+  prenatalScreeningServicesCode?: string | null;
+  breastCancerScreeningCode?: string | null;
+  cervicalCancerScreeningCode?: string | null;
+  colorectalCancerScreeningCode?: string | null;
+  prostateCancerScreeningCode?: string | null;
+  philHealthAtc?: string | null;
+  isWalkedIn?: boolean;
+  serviceDeliveryMethod?: YakapServiceDeliveryMethod | string | null;
+  fpeClassificationType?: string | null;
+  profilingTransNo?: string | null;
+  queueNumber?: string | null;
+}
+
+export interface YakapFpeReadinessDto {
+  isReady: boolean;
+  hasValidPin: boolean;
+  hasActiveEnlistment: boolean;
+  hasAtcOrWalkIn: boolean;
+  hasVitals: boolean;
+  hasPhysicalExam: boolean;
+  hasNcdRiskAssessment: boolean;
+  missingRequirements?: string[];
+}
+
+export interface HealthScreeningDetailRecord extends HealthScreeningRecord {
+  vitals?: TriageVitals | null;
+  physicalExam?: PatientPhysicalExamProfile | null;
+  ncdRiskAssessment?: NcdRiskAssessment | null;
+  orderedLabs?: ClinicLabOrderRecord[];
+  yakapFpeReadiness?: YakapFpeReadinessDto | null;
+}
+
+export interface SaveHealthScreeningProgressPayload {
+  screeningId?: string | null;
+  patientId: string;
+  queueItemId?: string | null;
+  screeningType: HealthScreeningType;
+  workflowMode: 'Regular' | 'YakapAvailment';
+  allowDuplicateActive?: boolean;
+  sendToDoctor?: boolean;
+  patientVitalsId?: string | null;
+  patientPhysicalExamId?: string | null;
+  ncdRiskAssessmentId?: string | null;
+  serviceItemId?: string | null;
+  nurseScreeningNotes?: string | null;
+  clinicalImpression?: string | null;
+  preventiveCounselingNotes?: string | null;
+  recommendedFollowUpDate?: string | null;
+  adultRoutineScreeningCode?: string | null;
+  pediatricRoutineScreeningCode?: string | null;
+  prenatalScreeningServicesCode?: string | null;
+  breastCancerScreeningCode?: string | null;
+  cervicalCancerScreeningCode?: string | null;
+  colorectalCancerScreeningCode?: string | null;
+  prostateCancerScreeningCode?: string | null;
+  philHealthAtc?: string | null;
+  isWalkedIn?: boolean;
+  serviceDeliveryMethod?: YakapServiceDeliveryMethod | string | null;
+  fpeClassificationType?: string | null;
+}
+
+export interface CompleteHealthScreeningPayload {
+  disposition: HealthScreeningDisposition;
+  clinicalImpression?: string | null;
+  preventiveCounselingNotes?: string | null;
+  recommendedFollowUpDate?: string | null;
+  patientVitalsId?: string | null;
+  patientPhysicalExamId?: string | null;
+  ncdRiskAssessmentId?: string | null;
+  serviceItemId?: string | null;
+  adultRoutineScreeningCode?: string | null;
+  pediatricRoutineScreeningCode?: string | null;
+  prenatalScreeningServicesCode?: string | null;
+  breastCancerScreeningCode?: string | null;
+  cervicalCancerScreeningCode?: string | null;
+  colorectalCancerScreeningCode?: string | null;
+  prostateCancerScreeningCode?: string | null;
+  philHealthAtc?: string | null;
+  isWalkedIn?: boolean;
+  serviceDeliveryMethod?: YakapServiceDeliveryMethod | string | null;
+  fpeClassificationType?: string | null;
+  facilitatorType?: string | null;
+  facilitatorName?: string | null;
+}
+
+export interface EscalateHealthScreeningPayload {
+  escalationReason?: string | null;
+  isUrgent?: boolean;
+  doctorId?: string | null;
+  doctorName?: string | null;
+  roomId?: string | null;
+  roomOrStation?: string | null;
 }
 
 export type SoapSimulationScenario =

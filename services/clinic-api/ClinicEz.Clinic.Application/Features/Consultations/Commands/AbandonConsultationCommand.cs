@@ -46,6 +46,7 @@ public sealed class AbandonConsultationCommandHandler : IRequestHandler<AbandonC
     private readonly IRepository<Procedure>? _procedureRepository;
     private readonly IRepository<Invoice>? _invoiceRepository;
     private readonly IRepository<InvoiceLineItem>? _invoiceLineItemRepository;
+    private readonly IRepository<HealthScreening>? _healthScreeningRepository;
 
     public AbandonConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
@@ -66,7 +67,8 @@ public sealed class AbandonConsultationCommandHandler : IRequestHandler<AbandonC
         IRepository<DentalToothRecord>? dentalRepository = null,
         IRepository<Procedure>? procedureRepository = null,
         IRepository<Invoice>? invoiceRepository = null,
-        IRepository<InvoiceLineItem>? invoiceLineItemRepository = null)
+        IRepository<InvoiceLineItem>? invoiceLineItemRepository = null,
+        IRepository<HealthScreening>? healthScreeningRepository = null)
     {
         _consultationRepository = consultationRepository;
         _queueRepository = queueRepository;
@@ -87,6 +89,7 @@ public sealed class AbandonConsultationCommandHandler : IRequestHandler<AbandonC
         _procedureRepository = procedureRepository;
         _invoiceRepository = invoiceRepository;
         _invoiceLineItemRepository = invoiceLineItemRepository;
+        _healthScreeningRepository = healthScreeningRepository;
     }
 
     public async Task<bool> Handle(AbandonConsultationCommand request, CancellationToken cancellationToken)
@@ -127,6 +130,7 @@ public sealed class AbandonConsultationCommandHandler : IRequestHandler<AbandonC
             procedureRepo: _procedureRepository,
             invoiceRepo: _invoiceRepository,
             invoiceLineItemRepo: _invoiceLineItemRepository,
+            healthScreeningRepo: _healthScreeningRepository,
             unitOfWork: _unitOfWork,
             ct: cancellationToken);
 
@@ -150,6 +154,12 @@ public sealed class AbandonConsultationCommandHandler : IRequestHandler<AbandonC
                     var labRepo = _labOrderRepository ?? repoProvider?.GetRepository<LabOrder>();
                     var medCertRepo = _medCertRepository ?? repoProvider?.GetRepository<MedicalCertificate>();
                     var referralRepo = _referralRepository ?? repoProvider?.GetRepository<ReferralLetter>();
+                    var healthScreeningRepo = _healthScreeningRepository ?? repoProvider?.GetRepository<HealthScreening>();
+
+                    bool hasHealthScreeningFk = healthScreeningRepo != null &&
+                        await healthScreeningRepo.Query(hs => hs.QueueItemId == queueItem.Id)
+                            .IgnoreQueryFilters()
+                            .AnyAsync(cancellationToken);
 
                     bool hasRemainingDispenseFk = dispRepo != null &&
                         await dispRepo.Query(d => d.QueueItemId == queueItem.Id)
@@ -190,7 +200,8 @@ public sealed class AbandonConsultationCommandHandler : IRequestHandler<AbandonC
                         !hasOtherConsultationFk &&
                         !hasRemainingProcedureFk &&
                         !hasRemainingInvoiceFk &&
-                        !hasRemainingSignedArtifacts)
+                        !hasRemainingSignedArtifacts &&
+                        !hasHealthScreeningFk)
                     {
                         _queueRepository.Remove(queueItem, hardDelete: true);
                     }

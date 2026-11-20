@@ -227,6 +227,7 @@ public class ServicesCatalogTests
         result.Should().NotBeEmpty();
         result.Should().Contain(x => x.Code == "PROC-ECG" && x.IsPhilHealthFormulary && x.PhilHealthCode == "93000");
         result.Should().Contain(x => x.Code == "LAB-RBS" && x.IsPhilHealthFormulary && x.PhilHealthCode == "82947");
+        result.Should().Contain(x => x.Code == "HEALTH-SCREEN" && x.Category == "Consultation" && x.IsNurseOrderable);
     }
 
     [Fact]
@@ -293,8 +294,9 @@ public class ServicesCatalogTests
         var result = await queryHandler.Handle(new GetClinicServicesQuery(), CancellationToken.None);
 
         // Assert
-        result.Should().HaveCount(19); // 9 general medical + 10 dental
+        result.Should().HaveCount(20); // 10 general medical + 10 dental
         result.Should().Contain(x => x.Code == "CONS-GEN" && x.Category == "Consultation");
+        result.Should().Contain(x => x.Code == "HEALTH-SCREEN" && x.Category == "Consultation" && x.IsNurseOrderable);
         result.Should().Contain(x => x.Code == "DENT-CONS" && x.Category == "Dental");
         result.Should().Contain(x => x.Code == "DENT-RCT" && x.Category == "Dental");
     }

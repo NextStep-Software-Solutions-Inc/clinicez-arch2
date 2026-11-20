@@ -1365,7 +1365,8 @@ describe('Profile & Workstation Preferences Modular Redesign', () => {
         '../components/layout/MobileBottomTabBar.tsx',
         '../components/layout/ClinicHeaderBar.tsx',
         '../components/consultation/PlanManagementCard.tsx',
-        '../components/PhilHealthProfileModal.tsx',
+        '../components/patient/PhilHealthCoverageModal.tsx',
+        '../components/screening/HealthScreeningModal.tsx',
       ];
       for (const rel of shadowTargetFiles) {
         const src = fs.readFileSync(path.resolve(__dirname, rel), 'utf8');

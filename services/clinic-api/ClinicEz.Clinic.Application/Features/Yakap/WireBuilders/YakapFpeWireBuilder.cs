@@ -27,6 +27,17 @@ public sealed class YakapFpeContext
     public string? EnlistmentCaseNo { get; set; }
     public string? TransmittalNo { get; set; }
     public DateOnly? EffectiveDate { get; set; }
+    public HealthScreening? HealthScreening { get; set; }
+    public PatientYakapEnlistment? Enlistment { get; set; }
+    public string? ProfilingTransNo { get; set; }
+    public DateOnly? ProfilingDate { get; set; }
+    public TimeOnly? ProfilingTime { get; set; }
+    public string? ProfilingAtc { get; set; }
+    public bool? IsWalkedIn { get; set; }
+    public YakapServiceDeliveryMethod? ServiceDeliveryMethod { get; set; }
+    public string? FpeClassificationType { get; set; }
+    public string? FacilitatorType { get; set; }
+    public string? FacilitatorName { get; set; }
 }
 
 /// <summary>
@@ -86,7 +97,7 @@ public sealed class YakapFpeWireBuilder : IYakapWireBuilder<YakapFpeContext, str
         var wireDict = new Dictionary<string, object?>
         {
             ["pHciAccreNo"] = accreNo,
-            ["pHciCaseNo"] = context.EnlistmentCaseNo ?? p.PatientCode ?? string.Empty,
+            ["pHciCaseNo"] = context.EnlistmentCaseNo ?? context.Enlistment?.CaseNo ?? p.PatientCode ?? string.Empty,
             ["pPatientPin"] = pin,
             ["pPatientLName"] = p.LastName.Trim(),
             ["pPatientFName"] = p.FirstName.Trim(),
@@ -169,6 +180,126 @@ public sealed class YakapFpeWireBuilder : IYakapWireBuilder<YakapFpeContext, str
             }).ToList();
         }
 
+        // FPE Profiling Metadata (only emitted when provided via context, HealthScreening, or Enlistment)
+        var profTransNo = FirstNonEmpty(context.ProfilingTransNo, context.HealthScreening?.ProfilingTransNo, context.Enlistment?.ProfilingTransNo);
+        if (profTransNo != null)
+            wireDict["pProfilingTransNo"] = profTransNo;
+
+        var profDate = context.ProfilingDate
+            ?? context.Enlistment?.ProfilingDate
+            ?? (context.HealthScreening?.CompletedAtUtc.HasValue == true
+                ? DateOnly.FromDateTime(context.HealthScreening.CompletedAtUtc.Value)
+                : null);
+        if (profDate.HasValue)
+            wireDict["pProfilingDate"] = profDate.Value.ToString("yyyy-MM-dd");
+
+        var profTime = context.ProfilingTime ?? context.Enlistment?.ProfilingTime;
+        if (profTime.HasValue)
+            wireDict["pProfilingTime"] = profTime.Value.ToString("HH:mm:ss");
+
+        var profAtc = FirstNonEmpty(context.ProfilingAtc, context.HealthScreening?.PhilHealthAtc, context.Enlistment?.ProfilingAtc);
+        if (profAtc != null)
+            wireDict["pProfilingAtc"] = profAtc;
+
+        bool? resolvedWalkIn = context.IsWalkedIn
+            ?? (context.HealthScreening != null ? (bool?)context.HealthScreening.IsWalkedIn : null)
+            ?? (context.Enlistment != null ? (bool?)context.Enlistment.IsWalkedIn : null);
+        if (resolvedWalkIn.HasValue)
+            wireDict["pIsWalkedIn"] = resolvedWalkIn.Value ? "Y" : "N";
+
+        var deliveryMethodCode = context.ServiceDeliveryMethod.HasValue
+            ? MapDeliveryMethodCode(context.ServiceDeliveryMethod.Value)
+            : (context.HealthScreening != null
+                ? MapDeliveryMethodCode(context.HealthScreening.ServiceDeliveryMethod)
+                : FirstNonEmpty(context.Enlistment?.ServiceDeliveryMethod));
+        if (deliveryMethodCode != null)
+            wireDict["pServiceDeliveryMethod"] = deliveryMethodCode;
+
+        var fpeClassification = FirstNonEmpty(context.FpeClassificationType, context.HealthScreening?.FpeClassificationType, context.Enlistment?.FpeClassificationType);
+        if (fpeClassification != null)
+            wireDict["pFpeClassificationType"] = fpeClassification;
+
+        var facilitatorType = FirstNonEmpty(context.FacilitatorType, context.Enlistment?.FacilitatorType);
+        if (facilitatorType != null)
+            wireDict["pFacilitatorType"] = facilitatorType;
+
+        var facilitatorName = FirstNonEmpty(
+            context.FacilitatorName,
+            context.Enlistment?.FacilitatorName,
+            context.HealthScreening?.ExaminedByDoctorName,
+            context.HealthScreening?.ScreenedByNurseName);
+        if (facilitatorName != null)
+            wireDict["pFacilitatorName"] = facilitatorName;
+
+        // Physical Examination (omitted when null)
+        if (context.PhysicalExam != null)
+        {
+            var pe = context.PhysicalExam;
+            wireDict["pPhysicalExam"] = new Dictionary<string, object?>
+            {
+                ["pGeneralSurveyId"] = FirstNonEmpty(pe.GenSurveyId) ?? (pe.GeneralSurveyStatus == GeneralSurveyStatus.Normal ? "1" : "2"),
+                ["pGeneralSurveyRemarks"] = pe.GeneralSurveyRemarks?.Trim() ?? string.Empty,
+                ["pSkinId"] = FirstNonEmpty(pe.SkinId) ?? "1",
+                ["pSkinRemarks"] = pe.SkinRemarks?.Trim() ?? string.Empty,
+                ["pHeentId"] = FirstNonEmpty(pe.HeentId) ?? "11",
+                ["pHeentRemarks"] = pe.HeentRemarks?.Trim() ?? string.Empty,
+                ["pChestId"] = FirstNonEmpty(pe.ChestId) ?? "6",
+                ["pChestRemarks"] = pe.ChestLungsRemarks?.Trim() ?? string.Empty,
+                ["pHeartId"] = FirstNonEmpty(pe.HeartId) ?? "5",
+                ["pHeartRemarks"] = pe.HeartRemarks?.Trim() ?? string.Empty,
+                ["pAbdomenId"] = FirstNonEmpty(pe.AbdomenId) ?? "7",
+                ["pAbdomenRemarks"] = pe.AbdomenRemarks?.Trim() ?? string.Empty,
+                ["pNeuroId"] = FirstNonEmpty(pe.NeuroId) ?? "6",
+                ["pNeuroRemarks"] = pe.NeurologicalRemarks?.Trim() ?? string.Empty,
+                ["pRectalId"] = FirstNonEmpty(pe.RectalId) ?? "1",
+                ["pRectalRemarks"] = pe.DigitalRectalRemarks?.Trim() ?? string.Empty,
+                ["pGuId"] = FirstNonEmpty(pe.GuId) ?? "1",
+                ["pGuRemarks"] = pe.GenitourinaryRemarks?.Trim() ?? string.Empty
+            };
+        }
+
+        // Social History (omitted when null)
+        if (context.SocialHistory != null)
+        {
+            var sh = context.SocialHistory;
+            wireDict["pSocialHistory"] = new Dictionary<string, object?>
+            {
+                ["pIsSmoker"] = sh.IsSmoker ? "Y" : "N",
+                ["pSmokingStatus"] = sh.SmokingStatus?.Trim() ?? (sh.IsSmoker ? "current" : "never"),
+                ["pPacksPerDay"] = sh.PacksPerDay,
+                ["pCigarettesPerDay"] = sh.CigarettesPerDay,
+                ["pYearsSmoking"] = sh.YearsSmoking,
+                ["pSmokingPackYears"] = sh.SmokingPackYears,
+                ["pIsAlcoholDrinker"] = sh.IsAlcoholDrinker ? "Y" : "N",
+                ["pAlcoholStatus"] = sh.AlcoholStatus?.Trim() ?? (sh.IsAlcoholDrinker ? "current" : "never"),
+                ["pAlcoholBottlesPerDay"] = sh.AlcoholBottlesPerDay,
+                ["pAlcoholDrinksPerWeek"] = sh.AlcoholDrinksPerWeek,
+                ["pIllDrugUser"] = sh.UsesIllicitDrugs ? "Y" : "N",
+                ["pIsSexuallyActive"] = sh.IsSexuallyActive ? "Y" : "N",
+                ["pPhysicalActivityCode"] = sh.PhysicalActivityFrequency?.Trim() ?? string.Empty,
+                ["pDietaryIntakeCode"] = sh.DietaryHabits?.Trim() ?? string.Empty
+            };
+        }
+
+        // NCD Risk Assessment (omitted when null)
+        if (context.NcdAssessment != null)
+        {
+            var ncd = context.NcdAssessment;
+            wireDict["pNcdAssessment"] = new Dictionary<string, object?>
+            {
+                ["pRiskBand"] = ncd.RiskBand?.Trim() ?? "BandA",
+                ["pDiagnosedDiabetes"] = ncd.DiagnosedDiabetes?.Trim() ?? string.Empty,
+                ["pHasChestPain"] = FormatYn(ncd.HasChestPain),
+                ["pHasRaisedBloodGlucose"] = FormatYn(ncd.HasRaisedBloodGlucose),
+                ["pFastingBloodSugarMgDl"] = ncd.FastingBloodSugarMgDl,
+                ["pHasRaisedBloodLipids"] = FormatYn(ncd.HasRaisedBloodLipids),
+                ["pTotalCholesterolMgDl"] = ncd.TotalCholesterolMgDl,
+                ["pHasHistoryAnginaHeartAttack"] = FormatYn(ncd.HasHistoryAnginaHeartAttack),
+                ["pHasHistoryStrokeOrTia"] = FormatYn(ncd.HasHistoryStrokeOrTia),
+                ["pAssessmentDate"] = ncd.AssessmentDate.ToString("yyyy-MM-dd")
+            };
+        }
+
         var json = JsonSerializer.Serialize(wireDict, JsonOpts);
         return Result<string>.Success(json);
     }
@@ -232,5 +363,30 @@ public sealed class YakapFpeWireBuilder : IYakapWireBuilder<YakapFpeContext, str
         BloodType.OPositive => "O+",
         BloodType.ONegative => "O-",
         _ => null
+    };
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var v in values)
+        {
+            if (!string.IsNullOrWhiteSpace(v))
+                return v.Trim();
+        }
+        return null;
+    }
+
+    private static string MapDeliveryMethodCode(YakapServiceDeliveryMethod method) => method switch
+    {
+        YakapServiceDeliveryMethod.FacilityBased => "1",
+        YakapServiceDeliveryMethod.OutOfFacility => "2",
+        YakapServiceDeliveryMethod.SettingsBased => "3",
+        _ => "1"
+    };
+
+    private static string FormatYn(bool? value) => value switch
+    {
+        true => "Y",
+        false => "N",
+        null => string.Empty
     };
 }

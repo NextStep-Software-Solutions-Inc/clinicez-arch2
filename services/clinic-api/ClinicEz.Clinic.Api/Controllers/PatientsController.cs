@@ -598,7 +598,106 @@ public sealed class PatientsController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<PatientPhysicalExamProfileDto>.Success(result, "Physical examination findings updated successfully."));
     }
+
+    // --- PhilHealth Coverage & Annual YAKAP Enlistment Endpoints ---
+
+    [HttpGet("{patientId:guid}/philhealth")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<PatientPhilHealthCoverageDto>>> GetPhilHealthCoverage(
+        Guid patientId,
+        [FromQuery] int? year = null,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new GetPatientPhilHealthCoverageQuery(patientId, year), ct);
+        return Ok(ApiResponse<PatientPhilHealthCoverageDto>.Success(result));
+    }
+
+    [HttpPut("{patientId:guid}/philhealth/membership")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientPhilHealthMembershipDto>>> UpsertPhilHealthMembership(
+        Guid patientId,
+        [FromBody] UpsertPhilHealthMembershipRequest request,
+        CancellationToken ct = default)
+    {
+        var command = new UpsertPatientPhilHealthMembershipCommand(
+            patientId,
+            request.MemberType,
+            request.DependentRelationship,
+            request.PhilHealthPin,
+            request.PrincipalMemberPin,
+            request.PrincipalLastName,
+            request.PrincipalFirstName,
+            request.PrincipalMiddleName,
+            request.PrincipalSuffix,
+            request.PrincipalDateOfBirth,
+            request.PrincipalSex,
+            request.MembershipCategoryCode,
+            request.MembershipCategoryDesc,
+            request.EmployerPin,
+            request.EmployerName,
+            request.DefaultWalkInAtc,
+            request.PrincipalMemberLandlineNumber,
+            request.PrincipalMemberMobileNumber,
+            request.PrincipalMemberEmail);
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<PatientPhilHealthMembershipDto>.Success(result, "PhilHealth membership details updated successfully."));
+    }
+
+    [HttpPost("{patientId:guid}/yakap/enlistments")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientYakapEnlistmentDto>>> CreateYakapEnlistment(
+        Guid patientId,
+        [FromBody] CreateYakapEnlistmentRequest request,
+        CancellationToken ct = default)
+    {
+        var command = new CreatePatientYakapEnlistmentCommand(
+            patientId,
+            request.EffectiveYear,
+            request.EnlistmentDate,
+            request.ValidUntil,
+            request.Source,
+            request.PackageType,
+            request.CaseNo,
+            request.EnlistmentTransNo,
+            request.YesReferenceNo,
+            request.Notes);
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<PatientYakapEnlistmentDto>.Success(result, "PhilHealth YAKAP enlistment recorded successfully."));
+    }
 }
+
+public sealed record UpsertPhilHealthMembershipRequest(
+    string MemberType,
+    string? DependentRelationship = null,
+    string? PhilHealthPin = null,
+    string? PrincipalMemberPin = null,
+    string? PrincipalLastName = null,
+    string? PrincipalFirstName = null,
+    string? PrincipalMiddleName = null,
+    string? PrincipalSuffix = null,
+    DateOnly? PrincipalDateOfBirth = null,
+    string? PrincipalSex = null,
+    string? MembershipCategoryCode = null,
+    string? MembershipCategoryDesc = null,
+    string? EmployerPin = null,
+    string? EmployerName = null,
+    string? DefaultWalkInAtc = null,
+    string? PrincipalMemberLandlineNumber = null,
+    string? PrincipalMemberMobileNumber = null,
+    string? PrincipalMemberEmail = null);
+
+public sealed record CreateYakapEnlistmentRequest(
+    int EffectiveYear,
+    DateOnly EnlistmentDate,
+    DateOnly? ValidUntil = null,
+    string? Source = null,
+    string? PackageType = null,
+    string? CaseNo = null,
+    string? EnlistmentTransNo = null,
+    string? YesReferenceNo = null,
+    string? Notes = null);
 
 public sealed record UpdatePatientRequest(
     string FirstName,

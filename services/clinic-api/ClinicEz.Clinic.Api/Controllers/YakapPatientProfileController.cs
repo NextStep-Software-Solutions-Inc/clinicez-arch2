@@ -35,6 +35,7 @@ public sealed class YakapPatientProfileController : ControllerBase
     private readonly IRepository<PatientReproductiveHistory> _reproductiveRepo;
     private readonly IRepository<NcdRiskAssessment> _ncdRepo;
     private readonly IRepository<PatientPhysicalExam>? _physicalExamRepo;
+    private readonly IRepository<PatientPhilHealthMembership>? _membershipRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IPhilHealthCatalogLookup _catalogLookup;
@@ -51,7 +52,8 @@ public sealed class YakapPatientProfileController : ControllerBase
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IPhilHealthCatalogLookup catalog,
-        IRepository<PatientPhysicalExam>? physicalExamRepo = null)
+        IRepository<PatientPhysicalExam>? physicalExamRepo = null,
+        IRepository<PatientPhilHealthMembership>? membershipRepo = null)
     {
         _catalogLookup = catalog;
         _patientRepo = patientRepo;
@@ -63,6 +65,7 @@ public sealed class YakapPatientProfileController : ControllerBase
         _reproductiveRepo = reproductiveRepo;
         _ncdRepo = ncdRepo;
         _physicalExamRepo = physicalExamRepo;
+        _membershipRepo = membershipRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
     }
@@ -147,6 +150,9 @@ public sealed class YakapPatientProfileController : ControllerBase
         var relPhysicalExam = _physicalExamRepo != null
             ? await _physicalExamRepo.Query(pe => pe.PatientId == patientId).FirstOrDefaultAsync(ct)
             : null;
+        var relMembership = _membershipRepo != null
+            ? await _membershipRepo.Query(m => m.PatientId == patientId && m.ClinicId == clinicId).FirstOrDefaultAsync(ct)
+            : null;
         var latestVitals = await _vitalsRepo.Query(v => v.PatientId == patientId)
             .OrderByDescending(v => v.CreatedAt)
             .FirstOrDefaultAsync(ct);
@@ -181,7 +187,49 @@ public sealed class YakapPatientProfileController : ControllerBase
             Code: ResolveConditionCode(f.PhilHealthMdiseaseCode, f.ConditionTitle),
             SpecificDesc: !string.IsNullOrWhiteSpace(f.SpecificDescription) ? f.SpecificDescription : f.ConditionTitle)).ToList();
 
-        var isDependentDefault = isPediatric;
+        var isDependentDefault = relMembership != null
+            ? relMembership.MemberType == PhilHealthMemberType.DD
+            : isPediatric;
+
+        var resolvedPatientPin = !string.IsNullOrWhiteSpace(patient.PhilHealthNumber)
+            ? patient.PhilHealthNumber
+            : (!string.IsNullOrWhiteSpace(relMembership?.MemberPin) ? relMembership.MemberPin : null);
+
+        var resolvedMemberType = relMembership != null
+            ? relMembership.MemberType.ToString()
+            : (isDependentDefault ? "DD" : "MM");
+
+        var resolvedMemberPin = relMembership != null
+            ? (isDependentDefault ? relMembership.PrincipalMemberPin : resolvedPatientPin)
+            : (isDependentDefault ? null : resolvedPatientPin);
+
+        var resolvedMemberLastName = relMembership != null && isDependentDefault
+            ? relMembership.PrincipalLastName
+            : patient.LastName;
+
+        var resolvedMemberFirstName = relMembership != null
+            ? (isDependentDefault ? relMembership.PrincipalFirstName : patient.FirstName)
+            : (isDependentDefault ? null : patient.FirstName);
+
+        var resolvedMemberMiddleName = relMembership != null
+            ? (isDependentDefault ? relMembership.PrincipalMiddleName : patient.MiddleName)
+            : (isDependentDefault ? null : patient.MiddleName);
+
+        var resolvedMemberSuffix = relMembership != null
+            ? (isDependentDefault ? relMembership.PrincipalSuffix : patient.Suffix)
+            : (isDependentDefault ? null : patient.Suffix);
+
+        var resolvedMemberBirthDate = relMembership != null
+            ? (isDependentDefault ? relMembership.PrincipalDateOfBirth?.ToString("yyyy-MM-dd") : patient.DateOfBirth.ToString("yyyy-MM-dd"))
+            : (isDependentDefault ? null : patient.DateOfBirth.ToString("yyyy-MM-dd"));
+
+        var resolvedDependentRelationship = relMembership != null
+            ? (isDependentDefault ? relMembership.DependentRelationship?.ToString() : null)
+            : (isDependentDefault ? "C" : null);
+
+        var resolvedAtc = !string.IsNullOrWhiteSpace(relMembership?.DefaultWalkInAtc)
+            ? relMembership.DefaultWalkInAtc
+            : "A";
 
         static string FormatYn(bool? val) => val switch
         {
@@ -230,16 +278,16 @@ public sealed class YakapPatientProfileController : ControllerBase
 
         var profile = new PhilHealthPatientProfileDto
         {
-            Pin = patient.PhilHealthNumber,
-            MemberPin = isDependentDefault ? null : patient.PhilHealthNumber,
-            MemberType = isDependentDefault ? "DD" : "MM",
-            MemberLastName = patient.LastName,
-            MemberFirstName = isDependentDefault ? null : patient.FirstName,
-            MemberMiddleName = isDependentDefault ? null : patient.MiddleName,
-            MemberSuffix = isDependentDefault ? null : patient.Suffix,
-            MemberBirthDate = isDependentDefault ? null : patient.DateOfBirth.ToString("yyyy-MM-dd"),
-            DependentRelationship = isDependentDefault ? "C" : null,
-            Atc = "A",
+            Pin = resolvedPatientPin,
+            MemberPin = resolvedMemberPin,
+            MemberType = resolvedMemberType,
+            MemberLastName = resolvedMemberLastName,
+            MemberFirstName = resolvedMemberFirstName,
+            MemberMiddleName = resolvedMemberMiddleName,
+            MemberSuffix = resolvedMemberSuffix,
+            MemberBirthDate = resolvedMemberBirthDate,
+            DependentRelationship = resolvedDependentRelationship,
+            Atc = resolvedAtc,
             IsWalkedIn = "Y",
             BloodType = BloodTypeParser.Format(patient.BloodType),
             MedicalHistories = defaultMedHistories,

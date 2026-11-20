@@ -255,4 +255,9 @@ public sealed class FacilitySettings : ClinicScopedEntity
     // ── Kiosk Intake Policies (M1/M3) ───────────────────────
     public bool IsKioskIntakeEnabled { get; set; } = false;
     public int KioskTokenVersion { get; set; } = 1;
+
+    // ── Health Screening & YAKAP FPE Policies ────────────────
+    public bool AllowNurseMidwifeYakapFpeFacilitator { get; set; } = false;
+    public Guid? DefaultHealthScreeningServiceItemId { get; set; }
+    public string? DefaultHealthScreeningServiceCode { get; set; } = "HEALTH-SCREEN";
 }

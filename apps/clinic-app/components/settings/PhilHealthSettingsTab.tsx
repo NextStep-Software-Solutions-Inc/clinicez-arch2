@@ -1,23 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Modal from '../ui/Modal';
+import { SkeletonList } from '../ui/Skeleton';
+import ErrorState from '../ui/ErrorState';
 import { Card, CardContent, CardHeader } from '../ui/Card';
-import Icon from '../ui/Icon';
 import PhilHealthCatalogSection from './PhilHealthCatalogSection';
+import { ToggleSwitch } from './AddEditFieldModal';
 import { theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 import { InfoRow } from './common';
-import { clinicService, ClinicSettingsRecord } from '../../services/clinicService';
+import { clinicService, ClinicSettingsRecord, ClinicServiceItem } from '../../services/clinicService';
 
 export interface PhilHealthSettingsTabProps {
   accreditationNumber: string;
   clinicName: string;
   settings?: ClinicSettingsRecord | null;
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
+  services?: ClinicServiceItem[];
+  servicesLoadError?: string | null;
+  showSkeletons?: boolean;
+  settingsLoadError?: string | null;
+  onRetrySettings?: () => Promise<void> | void;
+  onRefreshServices?: () => Promise<void>;
 }
 
 export default function PhilHealthSettingsTab({
@@ -25,6 +33,9 @@ export default function PhilHealthSettingsTab({
   clinicName,
   settings,
   onSettingsUpdated,
+  showSkeletons = false,
+  settingsLoadError = null,
+  onRetrySettings,
 }: PhilHealthSettingsTabProps) {
   const isConfigured = Boolean(settings?.isPhilHealthConfigured);
   const hasAccreditation = Boolean(accreditationNumber?.trim());
@@ -38,6 +49,46 @@ export default function PhilHealthSettingsTab({
   const [overrideModalVisible, setOverrideModalVisible] = useState(false);
   const [savingOverride, setSavingOverride] = useState(false);
   const [reverting, setReverting] = useState(false);
+  const [allowNurseMidwifeFpe, setAllowNurseMidwifeFpe] = useState<boolean>(
+    Boolean(settings?.allowNurseMidwifeYakapFpeFacilitator)
+  );
+  const [savingFacilitator, setSavingFacilitator] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      setAllowNurseMidwifeFpe(Boolean(settings.allowNurseMidwifeYakapFpeFacilitator));
+    }
+  }, [settings]);
+
+  const handleToggleNurseMidwifeFacilitator = useCallback(
+    async (nextVal: boolean) => {
+      if (savingFacilitator) return;
+      setAllowNurseMidwifeFpe(nextVal);
+      setSavingFacilitator(true);
+      try {
+        const [updated, err] = await clinicService.updateSettings({
+          allowNurseMidwifeYakapFpeFacilitator: nextVal,
+        });
+        if (err || !updated) {
+          setAllowNurseMidwifeFpe(!nextVal);
+          notify.error(err?.message || 'Could not update PhilHealth YAKAP FPE facilitator setting.');
+          return;
+        }
+        notify.success(
+          nextVal
+            ? 'Authorized Nurse/Midwife facilitator enabled for PhilHealth YAKAP FPE sign-off.'
+            : 'PhilHealth YAKAP FPE sign-off restricted to Physicians.'
+        );
+        onSettingsUpdated?.(updated);
+      } catch {
+        setAllowNurseMidwifeFpe(!nextVal);
+        notify.error('Failed to update PhilHealth YAKAP FPE facilitator setting.');
+      } finally {
+        setSavingFacilitator(false);
+      }
+    },
+    [onSettingsUpdated, savingFacilitator]
+  );
 
   // Override Modal form states
   const [formAccreditation, setFormAccreditation] = useState('');
@@ -276,6 +327,50 @@ export default function PhilHealthSettingsTab({
         </Card>
       )}
 
+      {/* PhilHealth YAKAP FPE Facilitator Authority */}
+      <Card testID="philhealth-yakap-fpe-facilitator-card">
+        <CardHeader
+          icon="heartPulse"
+          title="PhilHealth YAKAP FPE Facilitator Authority"
+          subtitle="Control whether authorized nurses or midwives can finalize and sign off PhilHealth YAKAP First Patient Encounters"
+          rightAction={
+            <Badge
+              label={allowNurseMidwifeFpe ? 'Nurse/Midwife Enabled' : 'Physician Sign-Off Only'}
+              variant={allowNurseMidwifeFpe ? 'success' : 'neutral'}
+              size="sm"
+            />
+          }
+        />
+        <CardContent>
+          {showSkeletons ? (
+            <SkeletonList rows={2} />
+          ) : settingsLoadError && !settings ? (
+            <ErrorState
+              compact
+              title="Settings unavailable"
+              message={settingsLoadError}
+              onRetry={onRetrySettings ? () => void onRetrySettings() : undefined}
+            />
+          ) : (
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleTextContainer}>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  Allow authorized Nurse/Midwife facilitator for PhilHealth YAKAP FPE
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  When disabled (default), YAKAP FPE screenings route from Nursing to a Physician for Station 3 Physical Exam and Station 4 Sign-Off. When enabled, authorized nurses and midwives can complete YAKAP FPE encounters as Facilitator Type H per PCAPI v2.0.
+                </ThemedText>
+              </View>
+              <ToggleSwitch
+                value={allowNurseMidwifeFpe}
+                onValueChange={handleToggleNurseMidwifeFacilitator}
+                accessibilityLabel="Allow authorized Nurse/Midwife facilitator for PhilHealth YAKAP FPE"
+              />
+            </View>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Official PhilHealth Master Catalog & Release Kits */}
       <PhilHealthCatalogSection />
 
@@ -398,5 +493,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: theme.spacing.sm,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  toggleTextContainer: {
+    flex: 1,
+    gap: theme.spacing.xs,
   },
 });

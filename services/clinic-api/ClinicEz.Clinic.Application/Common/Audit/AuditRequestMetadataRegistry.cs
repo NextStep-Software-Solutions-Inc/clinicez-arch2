@@ -57,7 +57,7 @@ public static class AuditRequestMetadataRegistry
             Category = category,
             Severity = severity,
             TargetEntityType = targetEntity,
-            TargetEntityIdGetter = CreatePropertyGetter(type, "Id", "InvoiceId", "PatientId", "AppointmentId", "ConsultationId", "QueueItemId", "StaffId", "RoleId", "RoomId", "NotificationId", "ResultId", "AllergyId", "TransmittalId", "LeaveId", "TemplateId", "PrescriptionItemId", "LabOrderId", "Token"),
+            TargetEntityIdGetter = CreatePropertyGetter(type, "Id", "HealthScreeningId", "InvoiceId", "PatientId", "AppointmentId", "ConsultationId", "QueueItemId", "StaffId", "RoleId", "RoomId", "NotificationId", "ResultId", "AllergyId", "TransmittalId", "LeaveId", "TemplateId", "PrescriptionItemId", "LabOrderId", "Token"),
             ResponseIdGetter = ExtractResponseId,
             PatientIdGetter = CreateGuidPropertyGetter(type, "PatientId"),
             PatientNameGetter = CreateStringPropertyGetter(type, "PatientName"),
@@ -272,6 +272,12 @@ public static class AuditRequestMetadataRegistry
                 return (ClinicAuditCategories.Clinical, "clinical.record_attachment.verified", ClinicAuditSeverities.Routine, "RecordAttachment", "Clinician verified authenticity of attached document");
             case "IntakePatientSharedFileCommand":
                 return (ClinicAuditCategories.Clinical, "clinical.shared_file.ingested", ClinicAuditSeverities.Routine, "RecordAttachment", "Ingested shared document from patient portal");
+            case "SaveHealthScreeningProgressCommand":
+                return (ClinicAuditCategories.Clinical, "clinical.health_screening.saved", ClinicAuditSeverities.Routine, "HealthScreening", "Saved health screening station progress");
+            case "CompleteHealthScreeningCommand":
+                return (ClinicAuditCategories.Clinical, "clinical.health_screening.completed", ClinicAuditSeverities.Routine, "HealthScreening", "Completed and signed off clinical health screening");
+            case "EscalateHealthScreeningCommand":
+                return (ClinicAuditCategories.Clinical, "clinical.health_screening.escalated", ClinicAuditSeverities.Urgent, "HealthScreening", "Escalated health screening to physician consultation");
 
             // Billing
             case "CreateInvoiceCommand":
@@ -290,6 +296,10 @@ public static class AuditRequestMetadataRegistry
                 return (ClinicAuditCategories.PhilHealth, "philhealth.submission.submitted", ClinicAuditSeverities.Routine, "YakapSubmission", "Transmitted PhilHealth Yakap 2.0 encrypted JSON payload");
             case "CancelYakapSubmissionCommand":
                 return (ClinicAuditCategories.PhilHealth, "philhealth.submission.cancelled", ClinicAuditSeverities.Emergency, "YakapSubmission", "Cancelled PhilHealth Yakap 2.0 submission");
+            case "UpsertPatientPhilHealthMembershipCommand":
+                return (ClinicAuditCategories.PhilHealth, "philhealth.membership.upserted", ClinicAuditSeverities.Routine, "PatientPhilHealthMembership", "Updated patient PhilHealth membership and sponsor details");
+            case "CreatePatientYakapEnlistmentCommand":
+                return (ClinicAuditCategories.PhilHealth, "philhealth.yakap_enlistment.created", ClinicAuditSeverities.Routine, "PatientYakapEnlistment", "Recorded annual PhilHealth YAKAP patient enlistment");
 
             // Auditing the Auditor
             case "GetAuditLogsQuery":

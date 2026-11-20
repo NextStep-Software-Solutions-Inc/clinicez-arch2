@@ -129,9 +129,12 @@ public enum PhilHealthDependentRelationship
     S,
     C,
     P,
+    D,
     Spouse = S,
     Child = C,
-    Parent = P
+    Parent = P,
+    DisabledDependent = D,
+    Disabled = D
 }
 
 public enum PhilHealthDeliveryType

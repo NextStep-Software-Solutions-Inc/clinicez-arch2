@@ -55,6 +55,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
     private readonly IRepository<ReferralLetter>? _referralRepo;
     private readonly IRepository<LabOrder>? _labOrderRepo;
     private readonly IRepository<ServiceItem>? _serviceItemRepo;
+    private readonly IRepository<HealthScreening>? _healthScreeningRepo;
 
     public GetClinicCensusReportQueryHandler(
         IRepository<QueueItem> queueRepo,
@@ -69,7 +70,8 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
         IRepository<MedicalCertificate>? medCertRepo = null,
         IRepository<ReferralLetter>? referralRepo = null,
         IRepository<LabOrder>? labOrderRepo = null,
-        IRepository<ServiceItem>? serviceItemRepo = null)
+        IRepository<ServiceItem>? serviceItemRepo = null,
+        IRepository<HealthScreening>? healthScreeningRepo = null)
     {
         _queueRepo = queueRepo;
         _patientRepo = patientRepo;
@@ -84,6 +86,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
         _referralRepo = referralRepo;
         _labOrderRepo = labOrderRepo;
         _serviceItemRepo = serviceItemRepo;
+        _healthScreeningRepo = healthScreeningRepo;
     }
 
     public async Task<ClinicCensusReportDto> Handle(GetClinicCensusReportQuery request, CancellationToken cancellationToken)
@@ -140,6 +143,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
         List<ReferralLetter> referrals = new();
         List<LabOrder> labOrders = new();
         List<ServiceItem> serviceItems = new();
+        List<HealthScreening> healthScreenings = new();
         Dictionary<Guid, DateTime> earliestLookup = new();
 
         FacilitySettings? settings = null;
@@ -261,6 +265,20 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                     .ToListAsync(cancellationToken);
             }
 
+            if (_healthScreeningRepo != null)
+            {
+                healthScreenings = await _healthScreeningRepo.Query(hs =>
+                        hs.ClinicId == _clinicContext.ClinicId &&
+                        !hs.IsDeleted &&
+                        hs.Status != HealthScreeningStatus.Cancelled &&
+                        (queueItemIds.Contains(hs.QueueItemId) ||
+                         (patientIds.Contains(hs.PatientId) &&
+                          (!hasStart || hs.ScreeningDateUtc >= startVal) &&
+                          (!hasEnd || hs.ScreeningDateUtc < endVal))))
+                    .OrderByDescending(hs => hs.ScreeningDateUtc)
+                    .ToListAsync(cancellationToken);
+            }
+
             // 4. Earliest Lifetime Check-in for New vs. Returning Patients
             var earliestVisits = await _queueRepo.Query(q => patientIds.Contains(q.PatientId))
                 .Select(q => new { q.PatientId, q.CheckInTime })
@@ -336,6 +354,10 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             .ToLookup(x => x.QueueId!.Value, x => x.Lab);
         var labByConsultId = labOrders.Where(o => !o.QueueItemId.HasValue && o.ConsultationId.HasValue).ToLookup(o => o.ConsultationId!.Value);
 
+        var screeningByQueueId = healthScreenings
+            .GroupBy(hs => hs.QueueItemId)
+            .ToDictionary(g => g.Key, g => g.First());
+
         // Optional Nurse Filter
         if (request.NurseId.HasValue)
         {
@@ -348,6 +370,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                 if (procs.Any(p => p.PerformedByStaffId == request.NurseId.Value)) matchedQueueIds.Add(q.Id);
                 var disps = dispByQueueId[q.Id];
                 if (disps.Any(d => d.DispensedByStaffId == request.NurseId.Value)) matchedQueueIds.Add(q.Id);
+                if (screeningByQueueId.TryGetValue(q.Id, out var hs) && hs.ScreenedByNurseId == request.NurseId.Value) matchedQueueIds.Add(q.Id);
             }
             queueItems = queueItems.Where(q => matchedQueueIds.Contains(q.Id)).ToList();
         }
@@ -377,6 +400,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             patientMap.TryGetValue(q.PatientId, out var patient);
             var vital = vitalsByQueueId[q.Id].FirstOrDefault();
             var consult = consultByQueueId[q.Id].FirstOrDefault();
+            screeningByQueueId.TryGetValue(q.Id, out var visitScreening);
             var procs = procByQueueId[q.Id].ToList();
             var visitInvoices = new List<Invoice>();
             visitInvoices.AddRange(invByQueueId[q.Id]);
@@ -440,9 +464,24 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             int prescriptionsCount = consult?.Prescriptions?.Count ?? 0;
 
             var servicesAvailed = new List<string>();
-            var baseServiceLabel = q.VisitType.ToDisplayLabel();
-            if (!string.IsNullOrWhiteSpace(baseServiceLabel))
-                servicesAvailed.Add(baseServiceLabel);
+            string? screeningServiceLabel = visitScreening == null
+                ? null
+                : (visitScreening.WorkflowMode == VisitWorkflowMode.YakapAvailment || visitScreening.ScreeningType == HealthScreeningType.YakapFpe
+                    ? "YAKAP Health Screening (FPE)"
+                    : "Health Screening");
+
+            if (visitScreening != null && q.VisitType == VisitType.PreventiveHealthAssessment)
+            {
+                servicesAvailed.Add(screeningServiceLabel!);
+            }
+            else
+            {
+                var baseServiceLabel = q.VisitType.ToDisplayLabel();
+                if (!string.IsNullOrWhiteSpace(baseServiceLabel))
+                    servicesAvailed.Add(baseServiceLabel);
+                if (screeningServiceLabel != null && !servicesAvailed.Contains(screeningServiceLabel))
+                    servicesAvailed.Add(screeningServiceLabel);
+            }
 
             if (visitDispensings.Count > 0)
                 servicesAvailed.Add("Medicine Dispensing");
@@ -516,7 +555,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             var vitalsSnapshot = vparts.Count > 0 ? string.Join(", ", vparts) : "No vitals recorded";
 
             // Doctor details & diagnoses
-            var attendingDoc = consult?.DoctorName ?? q.DoctorName;
+            var attendingDoc = consult?.DoctorName ?? q.DoctorName ?? visitScreening?.ExaminedByDoctorName;
             if (!string.IsNullOrWhiteSpace(attendingDoc) && !string.IsNullOrWhiteSpace(consult?.DoctorPrcLicense))
                 attendingDoc = $"{attendingDoc} (PRC: {consult.DoctorPrcLicense})";
 
@@ -645,6 +684,8 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                 disposition = consult.ClinicalDisposition;
             else if (!string.IsNullOrWhiteSpace(q.DischargeNotes))
                 disposition = q.DischargeNotes;
+            else if (visitScreening?.Disposition != null)
+                disposition = visitScreening.Disposition.Value.ToString();
             else if (q.Status == QueueStatus.Completed)
                 disposition = "Treated & Discharged";
             else
@@ -762,7 +803,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                 li.Category.Equals("NursingService", StringComparison.OrdinalIgnoreCase) &&
                 (li.Description.Contains("Vital", StringComparison.OrdinalIgnoreCase) ||
                  li.Description.Contains("Triage", StringComparison.OrdinalIgnoreCase)))
-                ?? ((q.VisitType == VisitType.PreventiveHealthAssessment && consult == null)
+                ?? ((q.VisitType == VisitType.PreventiveHealthAssessment && consult == null && visitScreening == null)
                     ? LookupCatalogPrice(null, "Vitals Check", "NursingService")
                     : 0m);
 
@@ -1276,7 +1317,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                 VisitType: Enum.IsDefined(q.VisitType) ? q.VisitType.ToString() : string.Empty,
                 ChiefComplaint: q.ChiefComplaint,
                 NurseAssessment: nurseAssessment,
-                AttendingNurse: vital?.RecordedByNurseName ?? visitDispensings.FirstOrDefault(d => d.Source == ClinicDispenseSource.NurseVitalsCheck)?.DispensedByStaffName ?? procs.FirstOrDefault()?.PerformedByStaffName ?? "—",
+                AttendingNurse: vital?.RecordedByNurseName ?? visitScreening?.ScreenedByNurseName ?? visitDispensings.FirstOrDefault(d => d.Source == ClinicDispenseSource.NurseVitalsCheck)?.DispensedByStaffName ?? procs.FirstOrDefault()?.PerformedByStaffName ?? "—",
                 VitalsSnapshot: vitalsSnapshot,
                 AttendingDoctor: string.IsNullOrWhiteSpace(attendingDoc) ? "—" : attendingDoc,
                 DoctorDiagnosis: docDiagnoses,
@@ -1334,7 +1375,14 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
         int medCertsIssued = items.Sum(i => i.MedicalCertificatesCount);
         int referralsIssued = items.Sum(i => i.ReferralsCount);
         int labRequisitionsIssued = items.Sum(i => i.LabRequisitionsCount);
-        int vitalsCheckVisits = items.Count(i => i.VisitType == nameof(VisitType.PreventiveHealthAssessment));
+        bool IsHealthScreeningItem(CensusItemDto i) =>
+            i.ServicesAvailed != null &&
+            (i.ServicesAvailed.Contains("Health Screening", StringComparer.OrdinalIgnoreCase) ||
+             i.ServicesAvailed.Contains("YAKAP Health Screening (FPE)", StringComparer.OrdinalIgnoreCase));
+        int healthScreeningVisits = items.Count(IsHealthScreeningItem);
+        int vitalsCheckVisits = items.Count(i =>
+            i.VisitType == nameof(VisitType.PreventiveHealthAssessment) &&
+            !IsHealthScreeningItem(i));
         int inClinicProcedureVisits = items.Count(i => i.ServicesAvailed != null && i.ServicesAvailed.Contains("In-Clinic Procedure"));
         int inClinicProceduresCount = Math.Max(inClinicProcedureVisits, totalProceduresPerformedCount);
 
@@ -1362,7 +1410,8 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             ReferralsIssued: referralsIssued,
             LabRequisitionsIssued: labRequisitionsIssued,
             VitalsCheckVisits: vitalsCheckVisits,
-            InClinicProceduresCount: inClinicProceduresCount
+            InClinicProceduresCount: inClinicProceduresCount,
+            HealthScreeningVisits: healthScreeningVisits
         );
 
         // 7. Aggregate Demographics Breakdown

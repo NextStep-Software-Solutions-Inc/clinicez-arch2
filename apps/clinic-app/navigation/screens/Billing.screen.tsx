@@ -46,7 +46,11 @@ import {
   InvoiceRecord,
   ClinicSettingsRecord,
   ClinicPatient,
+  HealthScreeningRecord,
+  PatientPhilHealthCoverageDto,
+  VisitWorkflowMode,
   getManilaTodayStr,
+  formatClinicDate,
   formatClinicDateTime,
   formatClinicTime,
 } from '../../services/clinicService';
@@ -77,6 +81,7 @@ interface BillingPatient {
   queueItemId?: string;
   queueNumber?: string;
   visitType?: string;
+  visitWorkflowMode?: VisitWorkflowMode;
   isDirectVisit?: boolean;
   doctorId?: string;
   doctorName?: string;
@@ -155,6 +160,7 @@ function toBillingPatient(
     queueItemId: item.id,
     queueNumber: item.queueNumber,
     visitType: item.visitType,
+    visitWorkflowMode: item.visitWorkflowMode,
     isDirectVisit: Boolean(item.isDirectVisit || item.queueNumber?.startsWith('DV-')),
     doctorId: item.doctorId,
     doctorName: item.doctorName,
@@ -239,6 +245,10 @@ export default function BillingScreen() {
   const [lastReceipt, setLastReceipt] = useState<ReceiptSummary | null>(null);
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
   const [currentPatientProfile, setCurrentPatientProfile] = useState<ClinicPatient | null>(null);
+  const [selectedHealthScreening, setSelectedHealthScreening] = useState<HealthScreeningRecord | null>(null);
+  const [yakapCoverage, setYakapCoverage] = useState<PatientPhilHealthCoverageDto | null>(null);
+  const [trackYakapCoPayment, setTrackYakapCoPayment] = useState(false);
+  const [yakapCoPaymentAmount, setYakapCoPaymentAmount] = useState('');
   const handledParamPatientRef = useRef<string | null>(null);
 
   // Defer / Promissory Note Modal State
@@ -355,6 +365,10 @@ export default function BillingScreen() {
     setPartialAmount('');
     setCashTendered('');
     setReferenceNumber('');
+    setSelectedHealthScreening(null);
+    setYakapCoverage(null);
+    setTrackYakapCoPayment(false);
+    setYakapCoPaymentAmount('');
 
     let initialItems: LineItemForm[] = [];
 
@@ -381,9 +395,11 @@ export default function BillingScreen() {
     }
 
     // Auto-detect and prefill Senior Citizen or PWD ID from patient profile
+    let loadedPatientProfile: ClinicPatient | null = null;
     try {
       const [patientData] = await clinicService.getPatientById(p.patientId);
       if (patientData) {
+        loadedPatientProfile = patientData;
         setCurrentPatientProfile(patientData);
         if (!p.activeInvoice) {
           if (patientData.seniorCitizenId) {
@@ -420,15 +436,35 @@ export default function BillingScreen() {
       }
     }
 
-    // Auto-rehydrate any unbilled in-clinic procedures or consultations for this visit
+    // Auto-rehydrate any unbilled in-clinic procedures, consultations, health screenings, or screening labs for this visit
     try {
-      const [[procsData], [consultsData]] = await Promise.all([
+      const shouldCheckScreening = Boolean(p.queueItemId || p.visitType === 'PreventiveHealthAssessment');
+      const [[procsData], [consultsData], [screeningsData], [labOrdersData]] = await Promise.all([
         clinicService.getProcedures(p.patientId),
         clinicService.getConsultations(p.patientId),
+        shouldCheckScreening
+          ? clinicService.getPatientHealthScreenings(p.patientId, p.queueItemId)
+          : Promise.resolve([null, null] as const),
+        shouldCheckScreening
+          ? clinicService.getLabOrders(p.patientId, undefined, undefined, { includeUnsigned: true })
+          : Promise.resolve([null, null] as const),
       ]);
 
       const updatedItems = [...initialItems];
       let addedCount = 0;
+
+      const draftCodeCounts = new Map<string, number>();
+      const draftNameCounts = new Map<string, number>();
+      for (const item of initialItems) {
+        if (item.code) {
+          const k = item.code.toLowerCase();
+          draftCodeCounts.set(k, (draftCodeCounts.get(k) || 0) + (item.qty || 1));
+        }
+        if (item.name) {
+          const k = item.name.toLowerCase();
+          draftNameCounts.set(k, (draftNameCounts.get(k) || 0) + (item.qty || 1));
+        }
+      }
 
       const visitConsultations = p.queueItemId
         ? (consultsData ?? []).filter((c) => c.queueItemId === p.queueItemId)
@@ -468,6 +504,149 @@ export default function BillingScreen() {
         addedCount++;
       }
 
+      // Resolve Health Screening episode for this visit (exclude Cancelled and EscalatedToConsultation)
+      const visitScreening = (screeningsData ?? []).find(
+        (s) =>
+          s.status !== 'Cancelled' &&
+          s.status !== 'EscalatedToConsultation' &&
+          (!p.queueItemId || s.queueItemId === p.queueItemId)
+      ) ?? null;
+      setSelectedHealthScreening(visitScreening);
+
+      const isYakapScreeningVisit =
+        visitScreening?.workflowMode === 'YakapAvailment' ||
+        (p.visitWorkflowMode === 'YakapAvailment' && p.visitType === 'PreventiveHealthAssessment');
+
+      const activeCatalog = services.filter((s) => s.isActive !== false);
+      const effectiveSettings = clinicSettings ?? settings;
+
+      if (isYakapScreeningVisit) {
+        const [covData] = await clinicService.getPatientPhilHealthCoverage(p.patientId);
+        if (covData) {
+          setYakapCoverage(covData);
+        }
+        if (!p.activeInvoice && !p.isAlreadyBilled) {
+          const hasExistingYakapItem = updatedItems.some(
+            (i) => i.code?.toUpperCase() === 'YAKAP-FPE'
+          );
+          if (!hasExistingYakapItem && updatedItems.length === 0) {
+            updatedItems.push({
+              id: `yakap-fpe-${visitScreening?.id || p.queueItemId || Date.now()}`,
+              code: 'YAKAP-FPE',
+              name: 'PhilHealth YAKAP Health Screening (FPE)',
+              category: 'Preventive',
+              price: 0,
+              qty: 1,
+              doctorId: visitScreening?.examinedByDoctorId || p.doctorId,
+              doctorName: visitScreening?.examinedByDoctorName || p.doctorName,
+            });
+          }
+          setDiscountType('PhilHealthKonsulta');
+          setDiscountId(covData?.philHealthNumber || loadedPatientProfile?.philHealthNumber || '');
+          setPaymentMethod('PhilHealthKonsulta');
+          setReferenceNumber(
+            visitScreening?.profilingTransNo ||
+            covData?.currentYearFpeStatus?.profilingTransNo ||
+            visitScreening?.philHealthAtc ||
+            ''
+          );
+          if (updatedItems.length > 0) {
+            setLineItems(consolidateLineItems(updatedItems));
+          }
+        }
+      } else if (visitScreening && visitScreening.workflowMode === 'Regular') {
+        const preferredCode = (effectiveSettings?.defaultHealthScreeningServiceCode || 'HEALTH-SCREEN')
+          .trim()
+          .toUpperCase();
+        const screeningSvc =
+          (visitScreening.serviceItemId
+            ? activeCatalog.find((s) => s.id === visitScreening.serviceItemId)
+            : undefined) ||
+          (effectiveSettings?.defaultHealthScreeningServiceItemId
+            ? activeCatalog.find((s) => s.id === effectiveSettings.defaultHealthScreeningServiceItemId)
+            : undefined) ||
+          activeCatalog.find((s) => s.code?.trim().toUpperCase() === preferredCode) ||
+          activeCatalog.find((s) => s.code?.trim().toUpperCase() === 'HEALTH-SCREEN') ||
+          activeCatalog.find((s) => s.name.toLowerCase().includes('health screening'));
+
+        const screeningCode = screeningSvc?.code || preferredCode || 'HEALTH-SCREEN';
+        const screeningName = screeningSvc?.name || 'Health Screening & Assessment';
+        const codeKey = screeningCode.toLowerCase();
+        const nameKey = screeningName.toLowerCase();
+        const draftCodeRem = draftCodeCounts.get(codeKey) || 0;
+        const draftNameRem = draftNameCounts.get(nameKey) || 0;
+        const paidCodeRem = paidItemCodeCounts.get(codeKey) || 0;
+        const paidNameRem = paidItemNameCounts.get(nameKey) || 0;
+
+        if (draftCodeRem > 0 || draftNameRem > 0) {
+          if (draftCodeRem > 0) draftCodeCounts.set(codeKey, draftCodeRem - 1);
+          if (draftNameRem > 0) draftNameCounts.set(nameKey, draftNameRem - 1);
+        } else if (paidCodeRem > 0 || paidNameRem > 0) {
+          if (paidCodeRem > 0) paidItemCodeCounts.set(codeKey, paidCodeRem - 1);
+          if (paidNameRem > 0) paidItemNameCounts.set(nameKey, paidNameRem - 1);
+        } else {
+          updatedItems.push({
+            id: `screening-${visitScreening.id}`,
+            code: screeningCode,
+            name: screeningName,
+            category: screeningSvc?.category || 'Consultation',
+            price: screeningSvc?.standardPrice ?? 0,
+            qty: 1,
+            doctorId: visitScreening.examinedByDoctorId || p.doctorId,
+            doctorName: visitScreening.examinedByDoctorName || p.doctorName,
+          });
+          addedCount++;
+        }
+      }
+
+      // Check ordered screening labs tied to this visit (Regular screening / PreventiveHealthAssessment)
+      if (!isYakapScreeningVisit && labOrdersData && labOrdersData.length > 0 && (visitScreening || p.visitType === 'PreventiveHealthAssessment')) {
+        const visitLabOrders = labOrdersData.filter(
+          (lo) => lo.status !== 'Cancelled' && (!p.queueItemId || lo.queueItemId === p.queueItemId)
+        );
+        for (const lo of visitLabOrders) {
+          for (const labItem of lo.items || []) {
+            if (labItem.status === 'Cancelled' || (labItem as any).isDoneOutsideFacility) continue;
+            const rawTestCode = ((labItem as any).testCode || '').trim();
+            const matchedSvc = activeCatalog.find(
+              (s) =>
+                (rawTestCode && s.code?.toLowerCase() === rawTestCode.toLowerCase()) ||
+                s.name.toLowerCase() === labItem.testName.toLowerCase()
+            );
+            const codeKey = (rawTestCode || matchedSvc?.code || '').toLowerCase();
+            const nameKey = labItem.testName.toLowerCase();
+
+            const draftCodeRem = codeKey ? (draftCodeCounts.get(codeKey) || 0) : 0;
+            const draftNameRem = draftNameCounts.get(nameKey) || 0;
+            if (draftCodeRem > 0 || draftNameRem > 0) {
+              if (codeKey && draftCodeRem > 0) draftCodeCounts.set(codeKey, draftCodeRem - 1);
+              if (draftNameRem > 0) draftNameCounts.set(nameKey, draftNameRem - 1);
+              continue;
+            }
+
+            const paidCodeRem = codeKey ? (paidItemCodeCounts.get(codeKey) || 0) : 0;
+            const paidNameRem = paidItemNameCounts.get(nameKey) || 0;
+            if (paidCodeRem > 0 || paidNameRem > 0) {
+              if (codeKey && paidCodeRem > 0) paidItemCodeCounts.set(codeKey, paidCodeRem - 1);
+              if (paidNameRem > 0) paidItemNameCounts.set(nameKey, paidNameRem - 1);
+              continue;
+            }
+
+            updatedItems.push({
+              id: `lab-${labItem.id || Date.now()}-${Math.random()}`,
+              code: rawTestCode || matchedSvc?.code || '',
+              name: labItem.testName,
+              category: labItem.category || matchedSvc?.category || 'Diagnostic',
+              price: (labItem as any).diagnosticFee ?? matchedSvc?.standardPrice ?? 0,
+              qty: 1,
+              doctorId: lo.orderedByDoctorId || visitScreening?.examinedByDoctorId || p.doctorId,
+              doctorName: lo.orderedByDoctorName || visitScreening?.examinedByDoctorName || p.doctorName,
+            });
+            addedCount++;
+          }
+        }
+      }
+
       // Check for ordered in-clinic procedures not yet in line items and not already paid for this visit
       if (procsData && procsData.length > 0) {
         const visitProcedures = procsData.filter((proc) => {
@@ -477,19 +656,6 @@ export default function BillingScreen() {
           }
           return false;
         });
-
-        const draftCodeCounts = new Map<string, number>();
-        const draftNameCounts = new Map<string, number>();
-        for (const item of initialItems) {
-          if (item.code) {
-            const k = item.code.toLowerCase();
-            draftCodeCounts.set(k, (draftCodeCounts.get(k) || 0) + (item.qty || 1));
-          }
-          if (item.name) {
-            const k = item.name.toLowerCase();
-            draftNameCounts.set(k, (draftNameCounts.get(k) || 0) + (item.qty || 1));
-          }
-        }
 
         for (const proc of visitProcedures) {
           const codeKey = proc.procedureCode?.toLowerCase();
@@ -538,16 +704,16 @@ export default function BillingScreen() {
           );
           setAllowDuplicate(true);
           notify.info(
-            `Detected ${addedCount} add-on unbilled procedure(s) for ${p.patientName}. Supplemental invoice enabled.`
+            `Detected ${addedCount} add-on unbilled item(s) for ${p.patientName}. Supplemental invoice enabled.`
           );
         } else {
-          notify.info(`Auto-populated ${addedCount} consultation & procedure service(s) for ${p.patientName}.`);
+          notify.info(`Auto-populated ${addedCount} visit service(s) for ${p.patientName}.`);
         }
       }
     } catch {
-      // Non-fatal if procedure lookup fails
+      // Non-fatal if procedure or screening lookup fails
     }
-  }, [services, clinicSettings, invoices]);
+  }, [services, clinicSettings, settings, invoices]);
 
   const handleSelectRegistryPatient = useCallback(async (patient: ClinicPatient) => {
     const openInv = invoices.find(
@@ -1315,6 +1481,10 @@ export default function BillingScreen() {
       setSelectedPatient(null);
       setActiveInvoice(null);
       setCurrentPatientProfile(null);
+      setSelectedHealthScreening(null);
+      setYakapCoverage(null);
+      setTrackYakapCoPayment(false);
+      setYakapCoPaymentAmount('');
       setLineItems([]);
       setCashTendered('');
       setReferenceNumber('');
@@ -1622,6 +1792,54 @@ export default function BillingScreen() {
     </Modal>
   );
 
+  const isSelectedYakapScreening = Boolean(
+    selectedHealthScreening?.workflowMode === 'YakapAvailment' ||
+      (selectedPatient?.visitWorkflowMode === 'YakapAvailment' &&
+        selectedPatient?.visitType === 'PreventiveHealthAssessment')
+  );
+
+  const activeYakapEnlistment = useMemo(() => {
+    if (!yakapCoverage?.enlistments?.length) return null;
+    const fpeEnlistmentId = yakapCoverage.currentYearFpeStatus?.enlistmentId;
+    return (
+      (fpeEnlistmentId
+        ? yakapCoverage.enlistments.find((e) => e.id === fpeEnlistmentId)
+        : undefined) || yakapCoverage.enlistments[0]
+    );
+  }, [yakapCoverage]);
+
+  const upsertYakapCoPaymentLineItem = (enabled: boolean, rawAmount: string) => {
+    const parsed = Math.max(0, parseFloat(rawAmount) || 0);
+    setLineItems((prev) => {
+      const withoutCopay = prev.filter((item) => item.code !== 'YAKAP-COPAY');
+      if (!enabled || parsed <= 0) {
+        return withoutCopay;
+      }
+      return [
+        ...withoutCopay,
+        {
+          id: 'yakap-copay',
+          code: 'YAKAP-COPAY',
+          name: 'YAKAP FPE Optional Co-Payment',
+          category: 'Co-Payment',
+          price: parsed,
+          qty: 1,
+          doctorId: selectedHealthScreening?.examinedByDoctorId || selectedPatient?.doctorId,
+          doctorName: selectedHealthScreening?.examinedByDoctorName || selectedPatient?.doctorName,
+        },
+      ];
+    });
+    if (enabled && parsed > 0) {
+      setDiscountType('None');
+      if (paymentMethod === 'PhilHealthKonsulta') {
+        setPaymentMethod('Cash');
+      }
+    } else {
+      setDiscountType('PhilHealthKonsulta');
+      setPaymentMethod('PhilHealthKonsulta');
+    }
+  };
+
   const renderInvoiceItems = () => (
     <Card>
       <CardHeader
@@ -1629,6 +1847,86 @@ export default function BillingScreen() {
         icon="receipt"
         rightAction={<Badge label={`${lineItems.length}`} variant="neutral" />}
       />
+
+      {isSelectedYakapScreening && (
+        <View style={styles.yakapCoveredBanner} testID="billing-yakap-fpe-banner">
+          <View style={styles.yakapCoveredHeader}>
+            <Badge
+              label="PhilHealth YAKAP FPE Covered (₱0.00)"
+              variant="success"
+              size="sm"
+              icon="shieldCheck"
+            />
+            {selectedHealthScreening?.profilingTransNo || yakapCoverage?.currentYearFpeStatus?.profilingTransNo ? (
+              <Badge
+                label={`Trans: ${selectedHealthScreening?.profilingTransNo || yakapCoverage?.currentYearFpeStatus?.profilingTransNo}`}
+                variant="primary"
+                size="sm"
+              />
+            ) : null}
+          </View>
+          <ThemedText variant="caption" color={theme.colors.successText}>
+            Annual PhilHealth YAKAP Health Screening (FPE) is covered at ₱0.00 capitation.
+            {selectedHealthScreening?.philHealthAtc
+              ? ` ATC: ${selectedHealthScreening.philHealthAtc}.`
+              : selectedHealthScreening?.isWalkedIn
+              ? ' Walk-In FPE.'
+              : ''}
+          </ThemedText>
+          {activeYakapEnlistment?.hasCoPayment ? (
+            <ThemedText variant="captionBold" color={theme.colors.successText}>
+              Enlistment Co-Payment Logged: {formatPeso(activeYakapEnlistment.coPaymentAmount ?? 0)}
+              {activeYakapEnlistment.coPaymentBalance != null
+                ? ` · Balance: ${formatPeso(activeYakapEnlistment.coPaymentBalance)}`
+                : ''}
+              {activeYakapEnlistment.coPaymentDate
+                ? ` · Date: ${formatClinicDate(activeYakapEnlistment.coPaymentDate)}`
+                : ''}
+            </ThemedText>
+          ) : null}
+          <View style={styles.yakapCopayRow}>
+            <Button
+              size="xs"
+              variant={trackYakapCoPayment ? 'primary' : 'outline'}
+              icon={trackYakapCoPayment ? 'check' : 'plus'}
+              title={trackYakapCoPayment ? 'Optional Co-Payment Enabled' : 'Track Optional Co-Payment'}
+              testID="yakap-copay-toggle"
+              onPress={() => {
+                const next = !trackYakapCoPayment;
+                setTrackYakapCoPayment(next);
+                if (!next) {
+                  setYakapCoPaymentAmount('');
+                  upsertYakapCoPaymentLineItem(false, '0');
+                } else {
+                  const defaultAmt =
+                    yakapCoPaymentAmount ||
+                    (activeYakapEnlistment?.coPaymentBalance && activeYakapEnlistment.coPaymentBalance > 0
+                      ? String(activeYakapEnlistment.coPaymentBalance)
+                      : '');
+                  setYakapCoPaymentAmount(defaultAmt);
+                  if (defaultAmt) {
+                    upsertYakapCoPaymentLineItem(true, defaultAmt);
+                  }
+                }
+              }}
+            />
+            {trackYakapCoPayment ? (
+              <View style={styles.yakapCopayInputWrap}>
+                <Input
+                  label="Optional Co-Payment (₱)"
+                  keyboardType="numeric"
+                  placeholder="0.00"
+                  value={yakapCoPaymentAmount}
+                  onChangeText={(val) => {
+                    setYakapCoPaymentAmount(val);
+                    upsertYakapCoPaymentLineItem(true, val);
+                  }}
+                />
+              </View>
+            ) : null}
+          </View>
+        </View>
+      )}
 
       {activeInvoice && (
         <View style={styles.soaHeaderBanner}>
@@ -2289,6 +2587,10 @@ export default function BillingScreen() {
           });
           setActiveInvoice(null);
           setCurrentPatientProfile(null);
+          setSelectedHealthScreening(null);
+          setYakapCoverage(null);
+          setTrackYakapCoPayment(false);
+          setYakapCoPaymentAmount('');
         }}
         accessibilityRole="tab"
         accessibilityState={{ selected: billingMode === 'retail' }}
@@ -3257,5 +3559,31 @@ const styles = StyleSheet.create({
   registrySearchHint: {
     paddingVertical: theme.spacing.sm,
     fontStyle: 'italic',
+  },
+  yakapCoveredBanner: {
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  yakapCoveredHeader: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  yakapCopayRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+  },
+  yakapCopayInputWrap: {
+    minWidth: 160,
+    flex: 1,
   },
 });

@@ -2444,7 +2444,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                 // 4. Primary Service Availed
                                 MainServiceCell(table.Cell()).Column(c =>
                                 {
-                                    var primaryLabel = ClinicCensusBreakdownResolver.MapVisitTypeToPrimaryServiceLabel(item.VisitType);
+                                    var primaryLabel = ClinicCensusBreakdownResolver.ResolvePrimaryServiceLabel(item);
                                     c.Item().Text(primaryLabel).FontSize(6.5f).Bold().FontColor("#0D6963");
                                     if (item.CalledTime.HasValue)
                                     {
