@@ -15,6 +15,9 @@ import {
   resolveStatusTokens,
   getAppointmentLocalDateTime,
   parseAppointmentTimestampMs,
+  isAppointmentTerminal,
+  isAppointmentOverdue,
+  formatOverdueElapsed,
 } from './calendarUtils';
 import { useClinicComms } from '../../context/ClinicCommsContext';
 import { useClinic } from '../../context/ClinicContext';
@@ -26,6 +29,8 @@ export interface AppointmentInspectionModalProps {
   onCheckIn?: (appointment: ExtendedAppointmentItem) => void;
   onReschedule?: (appointment: ExtendedAppointmentItem) => void;
   onCancel?: (appointment: ExtendedAppointmentItem) => void;
+  onMarkNoShow?: (appointment: ExtendedAppointmentItem, reason?: string) => void | boolean | Promise<void | boolean>;
+  onBookFollowUp?: (appointment: ExtendedAppointmentItem) => void;
   onReminderSent?: (appointment: ExtendedAppointmentItem) => void;
   onAppointmentSynced?: (appointment: ExtendedAppointmentItem) => void;
 }
@@ -107,6 +112,8 @@ export function AppointmentInspectionModal({
   onCheckIn,
   onReschedule,
   onCancel,
+  onMarkNoShow,
+  onBookFollowUp,
   onReminderSent,
   onAppointmentSynced,
 }: AppointmentInspectionModalProps) {
@@ -117,6 +124,9 @@ export function AppointmentInspectionModal({
   const clinicCtx = useClinic();
   const clinicTimeZoneId = clinicCtx?.settings?.timeZoneId ?? clinicCtx?.timeZoneId ?? 'Asia/Manila';
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
+  const [showNoShowConfirm, setShowNoShowConfirm] = useState<boolean>(false);
+  const [markingNoShow, setMarkingNoShow] = useState<boolean>(false);
+  const [lateVisitAction, setLateVisitAction] = useState<'checkin' | 'teleconsult' | null>(null);
   const [activeInvite, setActiveInvite] = useState<TeleconsultGuestInviteDto | null>(null);
   const [pinCopied, setPinCopied] = useState<boolean>(false);
   const pinCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -177,6 +187,9 @@ export function AppointmentInspectionModal({
   useEffect(() => {
     let cancelled = false;
     setShowCancelConfirm(false);
+    setShowNoShowConfirm(false);
+    setMarkingNoShow(false);
+    setLateVisitAction(null);
     setPinCopied(false);
 
     const targetAppointment = latestAppointmentRef.current;
@@ -201,7 +214,12 @@ export function AppointmentInspectionModal({
       targetAppointment?.serviceType === 'Teleconsult' ||
       targetAppointment?.serviceType === 'Teleconsultation';
 
-    if (visible && isAptTeleconsult && targetAppointment && targetAppointment.status !== 'Cancelled') {
+    if (
+      visible &&
+      isAptTeleconsult &&
+      targetAppointment &&
+      !isAppointmentTerminal(targetAppointment.status)
+    ) {
       const cached = getCachedAppointmentInvite(targetAppointment.id);
       if (cached) {
         setActiveInvite(cached);
@@ -321,6 +339,62 @@ export function AppointmentInspectionModal({
   const canCheckIn =
     (currentAppointment.status === 'Confirmed' || currentAppointment.status === 'Pending') &&
     !!onCheckIn;
+  const isTerminalStatus = isAppointmentTerminal(currentAppointment.status);
+  const isOverdue = isAppointmentOverdue(currentAppointment);
+  const isPastDateOverdue = isOverdue && isPastDate;
+  const overdueElapsedLabel = isOverdue ? formatOverdueElapsed(currentAppointment.scheduledAt) : '';
+  const canMarkNoShow =
+    isOverdue &&
+    (typeof onMarkNoShow === 'function' || typeof clinicService?.markAppointmentNoShow === 'function');
+
+  const launchTeleconsultWaitingRoom = () => {
+    onClose();
+    openTeleconsultWaitingRoom({
+      callId: currentAppointment.callId || currentAppointment.id,
+      appointmentId: currentAppointment.id,
+      patientId: currentAppointment.patientId,
+      patientName: currentAppointment.patientName || 'Patient',
+      clinicianName: currentAppointment.doctorName || 'Attending Physician',
+      scheduledTime: formattedScheduledAt || currentAppointment.scheduledAt,
+      paymentPolicy: currentAppointment.paymentPolicy || 'Prepaid',
+      paymentStatus: currentAppointment.paymentStatus || 'Pending',
+      isYakapExempt: false,
+      hasActiveYakapEnlistment: false,
+      initialInvite: activeInvite,
+    });
+  };
+
+  const handleConfirmNoShow = async () => {
+    if (markingNoShow) return;
+    setMarkingNoShow(true);
+    try {
+      if (onMarkNoShow) {
+        const result = await onMarkNoShow(currentAppointment);
+        if (result !== false) {
+          setShowNoShowConfirm(false);
+        }
+        return;
+      }
+      const [updated, err] = await clinicService.markAppointmentNoShow(currentAppointment.id);
+      if (err || !updated) {
+        notify.error(err?.message || 'Failed to mark appointment as no-show.');
+        return;
+      }
+      const merged: ExtendedAppointmentItem = {
+        ...currentAppointment,
+        ...updated,
+        status: updated.status ?? 'NoShow',
+      };
+      setCurrentAppointment(merged);
+      onAppointmentSynced?.(merged);
+      notify.success(`Marked ${currentAppointment.patientName} as No-Show.`);
+      setShowNoShowConfirm(false);
+    } catch {
+      notify.error('Failed to mark appointment as no-show.');
+    } finally {
+      setMarkingNoShow(false);
+    }
+  };
 
   const initials = getPatientInitials(currentAppointment.patientName);
   const isYakap = Boolean((currentAppointment as any).isYakapEligible);
@@ -531,8 +605,63 @@ export function AppointmentInspectionModal({
               ) : null}
             </View>
 
-            {/* Inline Payment Policy Switcher (Teleconsult) */}
-            {isTeleconsult && (
+            {/* Overdue Resolution Banner */}
+            {isOverdue ? (
+              <View
+                data-testid="overdue-appointment-banner"
+                testID="overdue-appointment-banner"
+                data-overdue-severity={isPastDateOverdue ? 'past-date' : 'same-day'}
+                role="alert"
+                style={[
+                  styles.overdueBanner,
+                  isPastDateOverdue ? styles.overdueBannerPastDate : styles.overdueBannerSameDay,
+                ]}
+              >
+                <Icon
+                  name={isPastDateOverdue ? 'alertCircle' : 'clock'}
+                  size={theme.sizes.iconMd}
+                  color={isPastDateOverdue ? theme.colors.emergencyText : theme.colors.warningText}
+                />
+                <View style={styles.overdueBannerTextWrap}>
+                  <ThemedText
+                    variant="smallBold"
+                    color={isPastDateOverdue ? theme.colors.emergencyText : theme.colors.warningText}
+                  >
+                    {isPastDateOverdue ? 'Unresolved Past-Date Appointment' : 'Appointment Overdue'}
+                  </ThemedText>
+                  <ThemedText
+                    variant="caption"
+                    color={isPastDateOverdue ? theme.colors.emergencyText : theme.colors.warningText}
+                  >
+                    {isPastDateOverdue
+                      ? `Scheduled date (${scheduledLocalDateStr}) has passed (${overdueElapsedLabel}). Reschedule to today, proceed late, or mark as no-show.`
+                      : `${overdueElapsedLabel} past scheduled time. Check in late, reschedule, or mark as no-show.`}
+                  </ThemedText>
+                </View>
+              </View>
+            ) : null}
+
+            {/* No-Show Audit Metadata Banner */}
+            {currentAppointment.status === 'NoShow' &&
+            (currentAppointment.updatedAt || currentAppointment.updatedBy) ? (
+              <View
+                data-testid="noshow-audit-metadata"
+                testID="noshow-audit-metadata"
+                style={styles.auditMetaBanner}
+              >
+                <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+                <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ flex: 1 }}>
+                  Marked as No-Show
+                  {currentAppointment.updatedBy ? ` by ${currentAppointment.updatedBy}` : ''}
+                  {currentAppointment.updatedAt
+                    ? ` on ${formatDateTimeDisplay(currentAppointment.updatedAt)}`
+                    : ''}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {/* Inline Payment Policy Switcher (Teleconsult - Active Appointments Only) */}
+            {isTeleconsult && !isTerminalStatus && (
               <View
                 data-testid="inline-policy-switcher"
                 testID="inline-policy-switcher"
@@ -572,7 +701,7 @@ export function AppointmentInspectionModal({
             )}
 
             {/* Guest Access PIN Card (Teleconsult) */}
-            {isTeleconsult && currentAppointment.status !== 'Cancelled' && activeInvite?.otp ? (
+            {!isTerminalStatus && isTeleconsult && currentAppointment.status !== 'Cancelled' && activeInvite?.otp ? (
               <View
                 data-testid="teleconsult-invite-pin-container"
                 testID="teleconsult-invite-pin-container"
@@ -884,7 +1013,8 @@ export function AppointmentInspectionModal({
             style={styles.footer}
           >
             <View style={styles.rightActionsRow}>
-              {isTeleconsult && currentAppointment.status !== 'Cancelled' ? (
+              {!isTerminalStatus ? (
+                isTeleconsult && currentAppointment.status !== 'Cancelled' ? (
                 <>
                   <Pressable
                     data-testid="btn-copy-patient-link"
@@ -938,20 +1068,11 @@ export function AppointmentInspectionModal({
                     accessibilityRole="button"
                     accessibilityLabel="Enter teleconsultation waiting room"
                     onPress={() => {
-                      onClose();
-                      openTeleconsultWaitingRoom({
-                        callId: currentAppointment.callId || currentAppointment.id,
-                        appointmentId: currentAppointment.id,
-                        patientId: currentAppointment.patientId,
-                        patientName: currentAppointment.patientName || 'Patient',
-                        clinicianName: currentAppointment.doctorName || 'Attending Physician',
-                        scheduledTime: formattedScheduledAt || currentAppointment.scheduledAt,
-                        paymentPolicy: currentAppointment.paymentPolicy || 'Prepaid',
-                        paymentStatus: currentAppointment.paymentStatus || 'Pending',
-                        isYakapExempt: false,
-                        hasActiveYakapEnlistment: false,
-                        initialInvite: activeInvite,
-                      });
+                      if (isPastDateOverdue) {
+                        setLateVisitAction('teleconsult');
+                        return;
+                      }
+                      launchTeleconsultWaitingRoom();
                     }}
                     style={({ pressed }) => [
                       styles.btn,
@@ -969,14 +1090,42 @@ export function AppointmentInspectionModal({
                     </ThemedText>
                   </Pressable>
                 </>
+                ) : null
               ) : null}
 
-              {onReschedule && currentAppointment.status !== 'Cancelled' ? (
+              {onReschedule && !isTerminalStatus ? (
                 <Pressable
                   data-testid="btn-drawer-reschedule"
                   testID="btn-drawer-reschedule"
                   accessibilityRole="button"
                   onPress={() => onReschedule(currentAppointment)}
+                  style={({ pressed }) => [
+                    styles.btn,
+                    isPastDateOverdue ? styles.btnRescheduleEmphasized : styles.btnSecondary,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Icon
+                    name="calendar"
+                    size={theme.sizes.iconSm}
+                    color={isPastDateOverdue ? theme.colors.primaryDark : theme.colors.text}
+                  />
+                  <ThemedText
+                    variant="smallBold"
+                    color={isPastDateOverdue ? theme.colors.primaryDark : theme.colors.text}
+                  >
+                    Reschedule
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+
+              {isTerminalStatus && onBookFollowUp ? (
+                <Pressable
+                  data-testid="btn-drawer-followup"
+                  testID="btn-drawer-followup"
+                  accessibilityRole="button"
+                  accessibilityLabel="Book follow-up appointment"
+                  onPress={() => onBookFollowUp(currentAppointment)}
                   style={({ pressed }) => [
                     styles.btn,
                     styles.btnSecondary,
@@ -986,15 +1135,39 @@ export function AppointmentInspectionModal({
                   <Icon
                     name="calendar"
                     size={theme.sizes.iconSm}
-                    color={theme.colors.text}
+                    color={theme.colors.primaryDark}
                   />
-                  <ThemedText variant="smallBold" color={theme.colors.text}>
-                    Reschedule
+                  <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+                    Book Follow-Up
                   </ThemedText>
                 </Pressable>
               ) : null}
 
-              {onCancel && currentAppointment.status !== 'Cancelled' ? (
+              {canMarkNoShow ? (
+                <Pressable
+                  data-testid="btn-drawer-noshow"
+                  testID="btn-drawer-noshow"
+                  accessibilityRole="button"
+                  accessibilityLabel="Mark appointment as no-show"
+                  onPress={() => setShowNoShowConfirm(true)}
+                  style={({ pressed }) => [
+                    styles.btn,
+                    styles.btnWarning,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Icon
+                    name="clock"
+                    size={theme.sizes.iconSm}
+                    color={theme.colors.warningText}
+                  />
+                  <ThemedText variant="smallBold" color={theme.colors.warningText}>
+                    Mark No-Show
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+
+              {onCancel && !isTerminalStatus ? (
                 <Pressable
                   data-testid="btn-drawer-cancel"
                   testID="btn-drawer-cancel"
@@ -1018,7 +1191,13 @@ export function AppointmentInspectionModal({
                   data-testid="btn-drawer-checkin"
                   testID="btn-drawer-checkin"
                   accessibilityRole="button"
-                  onPress={() => onCheckIn(currentAppointment)}
+                  onPress={() => {
+                    if (isPastDateOverdue) {
+                      setLateVisitAction('checkin');
+                      return;
+                    }
+                    onCheckIn(currentAppointment);
+                  }}
                   style={({ pressed }) => [
                     styles.btn,
                     styles.btnPrimary,
@@ -1075,6 +1254,102 @@ export function AppointmentInspectionModal({
             </ThemedText>
             <ThemedText variant="small" color={theme.colors.textMuted}>
               This action cannot be undone. The appointment will be marked as Cancelled.
+            </ThemedText>
+          </View>
+        </CustomModal>
+      ) : null}
+
+      {/* Mark No-Show Confirmation Alert Dialog */}
+      {showNoShowConfirm ? (
+        <CustomModal
+          visible={showNoShowConfirm}
+          onClose={() => !markingNoShow && setShowNoShowConfirm(false)}
+          title="Mark Appointment as No-Show?"
+          maxWidth={440}
+          testID="noshow-appointment-confirm-modal"
+          footer={
+            <>
+              <Button
+                title="Keep Open"
+                variant="ghost"
+                testID="btn-abort-noshow-appointment"
+                disabled={markingNoShow}
+                onPress={() => setShowNoShowConfirm(false)}
+              />
+              <Button
+                title="Confirm No-Show"
+                variant="danger"
+                testID="btn-confirm-noshow-appointment"
+                loading={markingNoShow}
+                disabled={markingNoShow}
+                onPress={handleConfirmNoShow}
+              />
+            </>
+          }
+        >
+          <View style={{ gap: theme.spacing.sm }}>
+            <ThemedText variant="body" color={theme.colors.text}>
+              Mark the overdue appointment for{' '}
+              <ThemedText variant="bodyBold">{currentAppointment.patientName}</ThemedText> as a No-Show?
+            </ThemedText>
+            <ThemedText variant="small" color={theme.colors.textMuted}>
+              The appointment will be closed as No-Show and any active guest consultation access will be revoked.
+            </ThemedText>
+          </View>
+        </CustomModal>
+      ) : null}
+
+      {/* Past-Date Overdue Late Visit Confirmation Dialog */}
+      {lateVisitAction ? (
+        <CustomModal
+          visible={!!lateVisitAction}
+          onClose={() => setLateVisitAction(null)}
+          title="Past-Date Appointment"
+          maxWidth={460}
+          testID="late-visit-confirm-modal"
+          footer={
+            <>
+              <Button
+                title="Cancel"
+                variant="ghost"
+                testID="btn-late-visit-cancel"
+                onPress={() => setLateVisitAction(null)}
+              />
+              <Button
+                title="Proceed Late"
+                variant="secondary"
+                testID="btn-late-visit-proceed"
+                onPress={() => {
+                  const action = lateVisitAction;
+                  setLateVisitAction(null);
+                  if (action === 'checkin') {
+                    onCheckIn?.(currentAppointment);
+                  } else if (action === 'teleconsult') {
+                    launchTeleconsultWaitingRoom();
+                  }
+                }}
+              />
+              {onReschedule ? (
+                <Button
+                  title="Reschedule to Today"
+                  variant="primary"
+                  testID="btn-late-visit-reschedule"
+                  onPress={() => {
+                    setLateVisitAction(null);
+                    onReschedule(currentAppointment);
+                  }}
+                />
+              ) : null}
+            </>
+          }
+        >
+          <View style={{ gap: theme.spacing.sm }}>
+            <ThemedText variant="body" color={theme.colors.text}>
+              This appointment was scheduled for{' '}
+              <ThemedText variant="bodyBold">{scheduledLocalDateStr}</ThemedText>. Proceed with late visit or reschedule to today?
+            </ThemedText>
+            <ThemedText variant="small" color={theme.colors.textMuted}>
+              Rescheduling moves the visit onto today&apos;s active schedule; proceeding late initiates care immediately under today&apos;s clinic workflow.
             </ThemedText>
           </View>
         </CustomModal>
@@ -1389,6 +1664,47 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.emergencyBg,
     borderWidth: 1,
     borderColor: theme.colors.emergencyBorder,
+  },
+  btnWarning: {
+    backgroundColor: theme.colors.warningBg,
+    borderWidth: 1,
+    borderColor: theme.colors.warningBorder,
+  },
+  btnRescheduleEmphasized: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary,
+  },
+  overdueBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+  },
+  overdueBannerSameDay: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+  },
+  overdueBannerPastDate: {
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  overdueBannerTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  auditMetaBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
   },
   btnTeleconsult: {
     backgroundColor: theme.colors.primarySubtle,

@@ -836,3 +836,64 @@ export function formatDateTitle(viewMode: CalendarViewMode, currentDate: Date): 
   }
   return `${startMonthStr} ${startDay} – ${endMonthStr} ${endDay}, ${endYear}`;
 }
+
+export function isAppointmentTerminal(status?: AppointmentStatus | string | null): boolean {
+  return status === 'Completed' || status === 'NoShow' || status === 'Cancelled';
+}
+
+export function isAppointmentOverdue(
+  appointment: Pick<ExtendedAppointmentItem, 'scheduledAt' | 'status'> | null | undefined,
+  now: Date = new Date()
+): boolean {
+  if (!appointment) return false;
+  if (appointment.status !== 'Pending' && appointment.status !== 'Confirmed') {
+    return false;
+  }
+  const scheduledMs = parseAppointmentTimestampMs(appointment.scheduledAt);
+  return Number.isFinite(scheduledMs) && scheduledMs < now.getTime();
+}
+
+export function isAppointmentPastDateOverdue(
+  appointment: Pick<ExtendedAppointmentItem, 'scheduledAt' | 'status'> | null | undefined,
+  timeZoneId: string = 'Asia/Manila',
+  now: Date = new Date()
+): boolean {
+  if (!isAppointmentOverdue(appointment, now) || !appointment) return false;
+  const scheduledLocal = getAppointmentLocalDateTime(appointment.scheduledAt, timeZoneId);
+  const todayLocal = getAppointmentLocalDateTime(now.toISOString(), timeZoneId);
+  return (
+    Boolean(scheduledLocal.dateStr) &&
+    Boolean(todayLocal.dateStr) &&
+    scheduledLocal.dateStr < todayLocal.dateStr
+  );
+}
+
+export function formatOverdueElapsed(scheduledAt: string, now: Date = new Date()): string {
+  const scheduledMs = parseAppointmentTimestampMs(scheduledAt);
+  if (!Number.isFinite(scheduledMs)) return 'Overdue';
+  const diffMs = now.getTime() - scheduledMs;
+  if (diffMs < 60_000) return 'Just past scheduled time';
+  const totalMins = Math.floor(diffMs / 60_000);
+  if (totalMins < 60) {
+    return `${totalMins} ${totalMins === 1 ? 'min' : 'mins'} overdue`;
+  }
+  const totalHours = Math.floor(totalMins / 60);
+  const remMins = totalMins % 60;
+  if (totalHours < 24) {
+    return remMins > 0 ? `${totalHours}h ${remMins}m overdue` : `${totalHours}h overdue`;
+  }
+  const totalDays = Math.floor(totalHours / 24);
+  return `${totalDays} ${totalDays === 1 ? 'day' : 'days'} overdue`;
+}
+
+export function getNextAvailableSlotForToday(now: Date = new Date()): { date: string; time: string } {
+  const safeNow = Number.isNaN(now.getTime()) ? new Date() : now;
+  const todayStr = getManilaTodayStr(safeNow);
+  const slotStepMs = 30 * 60_000;
+  const nextHalfHourMs = Math.ceil((safeNow.getTime() + 15 * 60_000) / slotStepMs) * slotStepMs;
+  const parts = getManilaTimeParts(new Date(nextHalfHourMs));
+  if (parts.dateStr !== todayStr) {
+    return { date: parts.dateStr, time: '09:00' };
+  }
+  return { date: parts.dateStr, time: parts.timeStr };
+}

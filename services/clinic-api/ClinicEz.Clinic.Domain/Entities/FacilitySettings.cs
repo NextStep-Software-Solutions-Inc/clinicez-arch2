@@ -224,6 +224,9 @@ public sealed class FacilitySettings : ClinicScopedEntity
     public bool AppointmentReminder24hEnabled { get; set; } = true;
     public bool AppointmentReminder2hEnabled { get; set; } = true;
     public bool EnableStaffAppointmentNotifications { get; set; } = true;
+    public bool EnableStaffMorningDigest { get; set; } = true;
+    public bool EnableStaffPreSlotReminders { get; set; } = true;
+    public bool EnableStaffOverdueAlerts { get; set; } = true;
 
     /// <summary>
     /// Optional clinic-level IANA timezone override (e.g. "Asia/Manila", "Asia/Singapore", "America/New_York").

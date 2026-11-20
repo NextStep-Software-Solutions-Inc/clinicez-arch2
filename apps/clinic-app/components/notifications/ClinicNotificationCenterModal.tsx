@@ -410,6 +410,8 @@ export default function ClinicNotificationCenterModal({
                       title={
                         isStat
                           ? 'Review STAT Result'
+                          : item.sourceType === 'AppointmentMorningDigest'
+                          ? "View Today's Schedule"
                           : item.category === 'Appointment'
                           ? 'View Appointment'
                           : 'View Details'

@@ -23,6 +23,7 @@ public sealed class StaffNotificationConfiguration : IEntityTypeConfiguration<St
             entity.HasKey(n => n.Id);
             entity.Property(n => n.TenantId).IsRequired().HasMaxLength(100);
             entity.HasIndex(n => new { n.ClinicId, n.IsRead, n.CreatedAt });
+            entity.HasIndex(n => new { n.ClinicId, n.SourceType, n.SourceId });
             entity.HasIndex(n => n.RecipientStaffId);
     }
 }

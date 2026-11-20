@@ -34,6 +34,15 @@ export default function AppointmentReminderSettingsCard({
   const [enableStaffAppointmentNotifications, setEnableStaffAppointmentNotifications] = useState<boolean>(
     settings?.enableStaffAppointmentNotifications ?? true
   );
+  const [enableStaffMorningDigest, setEnableStaffMorningDigest] = useState<boolean>(
+    settings?.enableStaffMorningDigest ?? true
+  );
+  const [enableStaffPreSlotReminders, setEnableStaffPreSlotReminders] = useState<boolean>(
+    settings?.enableStaffPreSlotReminders ?? true
+  );
+  const [enableStaffOverdueAlerts, setEnableStaffOverdueAlerts] = useState<boolean>(
+    settings?.enableStaffOverdueAlerts ?? true
+  );
   const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
@@ -42,6 +51,9 @@ export default function AppointmentReminderSettingsCard({
       setAppointmentReminder24hEnabled(settings.appointmentReminder24hEnabled ?? true);
       setAppointmentReminder2hEnabled(settings.appointmentReminder2hEnabled ?? true);
       setEnableStaffAppointmentNotifications(settings.enableStaffAppointmentNotifications ?? true);
+      setEnableStaffMorningDigest(settings.enableStaffMorningDigest ?? true);
+      setEnableStaffPreSlotReminders(settings.enableStaffPreSlotReminders ?? true);
+      setEnableStaffOverdueAlerts(settings.enableStaffOverdueAlerts ?? true);
     }
   }, [settings]);
 
@@ -51,12 +63,18 @@ export default function AppointmentReminderSettingsCard({
     const orig24h = settings.appointmentReminder24hEnabled ?? true;
     const orig2h = settings.appointmentReminder2hEnabled ?? true;
     const origStaff = settings.enableStaffAppointmentNotifications ?? true;
+    const origMorning = settings.enableStaffMorningDigest ?? true;
+    const origPreSlot = settings.enableStaffPreSlotReminders ?? true;
+    const origOverdue = settings.enableStaffOverdueAlerts ?? true;
 
     return (
       enableAppointmentReminders !== origMaster ||
       appointmentReminder24hEnabled !== orig24h ||
       appointmentReminder2hEnabled !== orig2h ||
-      enableStaffAppointmentNotifications !== origStaff
+      enableStaffAppointmentNotifications !== origStaff ||
+      enableStaffMorningDigest !== origMorning ||
+      enableStaffPreSlotReminders !== origPreSlot ||
+      enableStaffOverdueAlerts !== origOverdue
     );
   }, [
     settings,
@@ -64,6 +82,9 @@ export default function AppointmentReminderSettingsCard({
     appointmentReminder24hEnabled,
     appointmentReminder2hEnabled,
     enableStaffAppointmentNotifications,
+    enableStaffMorningDigest,
+    enableStaffPreSlotReminders,
+    enableStaffOverdueAlerts,
   ]);
 
   const handleSaveSettings = useCallback(async () => {
@@ -74,6 +95,9 @@ export default function AppointmentReminderSettingsCard({
         appointmentReminder24hEnabled,
         appointmentReminder2hEnabled,
         enableStaffAppointmentNotifications,
+        enableStaffMorningDigest,
+        enableStaffPreSlotReminders,
+        enableStaffOverdueAlerts,
       });
 
       if (err || !updated) {
@@ -93,6 +117,9 @@ export default function AppointmentReminderSettingsCard({
     appointmentReminder24hEnabled,
     appointmentReminder2hEnabled,
     enableStaffAppointmentNotifications,
+    enableStaffMorningDigest,
+    enableStaffPreSlotReminders,
+    enableStaffOverdueAlerts,
     onSettingsUpdated,
   ]);
 
@@ -211,7 +238,7 @@ export default function AppointmentReminderSettingsCard({
                   </ThemedText>
                 </View>
                 <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.toggleSubtitle}>
-                  Deliver in-clinic notification center alerts to attending physicians upon booking, rescheduling, or cancellation.
+                  Deliver in-clinic notification center alerts to attending physicians for booking updates, upcoming slots, and overdue appointments.
                 </ThemedText>
               </View>
               <View data-testid="switch-staff-notifications" testID="switch-staff-notifications">
@@ -220,6 +247,89 @@ export default function AppointmentReminderSettingsCard({
                   onValueChange={setEnableStaffAppointmentNotifications}
                   accessibilityLabel="Toggle Doctor / Staff Calendar Notifications"
                 />
+              </View>
+            </View>
+
+            {/* Granular Clinician Notification Cadence Sub-Group */}
+            <View
+              style={[
+                styles.subGroup,
+                !enableStaffAppointmentNotifications && styles.subGroupDisabled,
+              ]}
+              pointerEvents={enableStaffAppointmentNotifications ? 'auto' : 'none'}
+            >
+              <View style={styles.subGroupHeader}>
+                <View style={styles.iconWrap}>
+                  <Icon name="clock" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+                </View>
+                <View style={styles.subGroupInfo}>
+                  <ThemedText variant="bodyBold" color={theme.colors.text}>
+                    Automated Clinician Notification Cadence
+                  </ThemedText>
+                  <ThemedText variant="small" color={theme.colors.textSecondary}>
+                    Granular alerts for daily schedule digests, pre-slot reminders, and overdue escalations.
+                  </ThemedText>
+                </View>
+              </View>
+
+              {/* Day-of Morning Summary */}
+              <View style={styles.subToggleRow}>
+                <View style={styles.toggleInfo}>
+                  <ThemedText variant="bodyBold" color={theme.colors.text}>
+                    Day-of Morning Summary (8:00 AM)
+                  </ThemedText>
+                  <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.toggleSubtitle}>
+                    Send each physician a morning digest of today&apos;s scheduled visits, teleconsults, and pending confirmations.
+                  </ThemedText>
+                </View>
+                <View data-testid="switch-staff-morning-digest" testID="switch-staff-morning-digest">
+                  <ToggleSwitch
+                    value={enableStaffMorningDigest}
+                    onValueChange={setEnableStaffMorningDigest}
+                    disabled={!enableStaffAppointmentNotifications}
+                    accessibilityLabel="Toggle Day-of Morning Summary"
+                  />
+                </View>
+              </View>
+
+              {/* Pre-Appointment Reminder */}
+              <View style={styles.subToggleRow}>
+                <View style={styles.toggleInfo}>
+                  <ThemedText variant="bodyBold" color={theme.colors.text}>
+                    Pre-Appointment Reminder (15 min before)
+                  </ThemedText>
+                  <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.toggleSubtitle}>
+                    Alert the attending clinician 10–15 minutes before a slot starts so they can prepare or start teleconsultations on time.
+                  </ThemedText>
+                </View>
+                <View data-testid="switch-staff-pre-slot" testID="switch-staff-pre-slot">
+                  <ToggleSwitch
+                    value={enableStaffPreSlotReminders}
+                    onValueChange={setEnableStaffPreSlotReminders}
+                    disabled={!enableStaffAppointmentNotifications}
+                    accessibilityLabel="Toggle Pre-Appointment Reminder"
+                  />
+                </View>
+              </View>
+
+              {/* Overdue Escalation Alert */}
+              <View style={styles.subToggleRow}>
+                <View style={styles.toggleInfo}>
+                  <ThemedText variant="bodyBold" color={theme.colors.text}>
+                    Overdue Escalation Alert (15 min overdue)
+                  </ThemedText>
+                  <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.toggleSubtitle}>
+                    Send an urgent notification when a Pending or Confirmed appointment is 15+ minutes past its scheduled start time.
+                  </ThemedText>
+                </View>
+                <View data-testid="switch-staff-overdue" testID="switch-staff-overdue">
+                  <ToggleSwitch
+                    value={enableStaffOverdueAlerts}
+                    onValueChange={setEnableStaffOverdueAlerts}
+                    disabled={!enableStaffAppointmentNotifications}
+                    accessibilityLabel="Toggle Overdue Escalation Alert"
+                  />
+                </View>
               </View>
             </View>
 

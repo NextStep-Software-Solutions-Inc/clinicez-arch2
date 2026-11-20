@@ -97,7 +97,10 @@ public sealed record ClinicSettingsDto(
     DateOnly? DohLtoExpiryDate = null,
     bool AllowNurseMidwifeYakapFpeFacilitator = false,
     Guid? DefaultHealthScreeningServiceItemId = null,
-    string? DefaultHealthScreeningServiceCode = "HEALTH-SCREEN")
+    string? DefaultHealthScreeningServiceCode = "HEALTH-SCREEN",
+    bool EnableStaffMorningDigest = true,
+    bool EnableStaffPreSlotReminders = true,
+    bool EnableStaffOverdueAlerts = true)
 {
     public static ClinicSettingsDto FromEntity(FacilitySettings settings, bool isWorkspaceTeleconsultEntitled = false) => new(
         settings.Id,
@@ -191,5 +194,8 @@ public sealed record ClinicSettingsDto(
         DohLtoExpiryDate: settings.DohLtoExpiryDate,
         AllowNurseMidwifeYakapFpeFacilitator: settings.AllowNurseMidwifeYakapFpeFacilitator,
         DefaultHealthScreeningServiceItemId: settings.DefaultHealthScreeningServiceItemId,
-        DefaultHealthScreeningServiceCode: settings.DefaultHealthScreeningServiceCode);
+        DefaultHealthScreeningServiceCode: settings.DefaultHealthScreeningServiceCode,
+        EnableStaffMorningDigest: settings.EnableStaffMorningDigest,
+        EnableStaffPreSlotReminders: settings.EnableStaffPreSlotReminders,
+        EnableStaffOverdueAlerts: settings.EnableStaffOverdueAlerts);
 }

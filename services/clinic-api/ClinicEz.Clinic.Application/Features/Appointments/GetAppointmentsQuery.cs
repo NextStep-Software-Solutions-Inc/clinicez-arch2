@@ -50,7 +50,11 @@ public sealed record AppointmentDto(
     Guid? CallId = null,
     DateTime? AdmittedAtUtc = null,
     bool IsEmergencyOverride = false,
-    string? EmergencyOverrideReasonCode = null)
+    string? EmergencyOverrideReasonCode = null,
+    DateTime? UpdatedAt = null,
+    string? UpdatedBy = null,
+    DateTime? StaffPreSlotNotifiedAt = null,
+    DateTime? StaffOverdueNotifiedAt = null)
 {
     public static AppointmentDto From(Appointment a) => new(
         a.Id,
@@ -87,7 +91,11 @@ public sealed record AppointmentDto(
         a.CallId,
         a.AdmittedAtUtc,
         a.IsEmergencyOverride,
-        a.EmergencyOverrideReasonCode);
+        a.EmergencyOverrideReasonCode,
+        a.UpdatedAt,
+        a.UpdatedBy,
+        a.StaffPreSlotNotifiedAt,
+        a.StaffOverdueNotifiedAt);
 
     private static IReadOnlyList<ShareItemDto> ParseItems(string? json) =>
         string.IsNullOrWhiteSpace(json)
