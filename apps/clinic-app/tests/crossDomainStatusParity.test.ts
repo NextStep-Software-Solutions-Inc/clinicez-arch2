@@ -96,7 +96,7 @@ describe('Milestone 4: Cross-Domain Status & Action Matrix Alignment (Clinic App
   });
 
   describe('Action Matrix Alignment (getAvailableStaffActions)', () => {
-    it('Invited status provides Copy Link, Resend, and Revoke when token is valid and unexpired', () => {
+    it('Invited status provides Edit Details, Copy Link, Resend, and Revoke when token is valid and unexpired', () => {
       const future = new Date(Date.now() + 5 * 86400000).toISOString();
       const actions = getAvailableStaffActions({
         status: 'Invited',
@@ -104,10 +104,10 @@ describe('Milestone 4: Cross-Domain Status & Action Matrix Alignment (Clinic App
         invitationExpiresAt: future,
       });
 
-      expect(actions).toEqual(['copy-invite', 'resend-invite', 'revoke-invite']);
+      expect(actions).toEqual(['edit', 'copy-invite', 'resend-invite', 'revoke-invite']);
     });
 
-    it('Expired status provides Resend and Revoke, but excludes Copy Link', () => {
+    it('Expired status provides Edit Details, Resend and Revoke, but excludes Copy Link', () => {
       const past = new Date(Date.now() - 3600000).toISOString();
       const actions = getAvailableStaffActions({
         status: 'Invited',
@@ -115,7 +115,7 @@ describe('Milestone 4: Cross-Domain Status & Action Matrix Alignment (Clinic App
         invitationExpiresAt: past,
       });
 
-      expect(actions).toEqual(['resend-invite', 'revoke-invite']);
+      expect(actions).toEqual(['edit', 'resend-invite', 'revoke-invite']);
       expect(actions).not.toContain('copy-invite');
     });
 
@@ -168,7 +168,7 @@ describe('Milestone 4: Cross-Domain Status & Action Matrix Alignment (Clinic App
       expect(activeSelf).not.toContain('revoke-invite');
 
       const invitedSelf = getAvailableStaffActions({ status: 'Invited', invitationToken: 'tok_self', invitationExpiresAt: new Date(Date.now() + 100000).toISOString() }, { isSelf: true });
-      expect(invitedSelf).toEqual(['copy-invite', 'resend-invite']);
+      expect(invitedSelf).toEqual(['edit', 'copy-invite', 'resend-invite']);
       expect(invitedSelf).not.toContain('revoke-invite');
 
       const suspendedSelf = getAvailableStaffActions({ status: 'Suspended', isActive: false }, { isSelf: true });

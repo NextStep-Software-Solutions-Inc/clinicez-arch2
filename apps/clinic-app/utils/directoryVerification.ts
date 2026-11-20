@@ -92,20 +92,37 @@ export function isClinicianRole(role?: StaffRole | string | null): boolean {
 }
 
 /**
- * Mirrors ClinicEz.Shared.Common.PractitionerIdentity.NormalizePrc / IsValidPrcFormat.
+ * Returns true when a staff member has a pending invitation and has not yet
+ * accepted / set workstation credentials.
  */
-export function isValidPrcFormat(raw?: string | null): boolean {
-  if (!raw || !raw.trim()) return false;
+export function isPendingInvitedStaff(staff: Partial<StaffMember>): boolean {
+  return staff.status === 'Invited' && !staff.hasCredentials;
+}
+
+/**
+ * Mirrors ClinicEz.Shared.Common.PractitionerIdentity.NormalizePrc.
+ * Strips whitespace, dots, hyphens, and an optional leading "PRC" prefix, zero-pads
+ * purely numeric values up to 7 digits, and uppercases alphanumeric licenses.
+ */
+export function normalizePrcNumber(raw?: string | null): string | null {
+  if (!raw || !raw.trim()) return null;
   let cleaned = raw.trim().replace(/[\s.-]/g, '');
   if (/^PRC/i.test(cleaned)) {
     cleaned = cleaned.slice(3);
   }
-  if (!cleaned) return false;
+  if (!cleaned) return null;
   if (/^\d+$/.test(cleaned)) {
-    cleaned = cleaned.length <= 7 ? cleaned.padStart(7, '0') : cleaned;
-  } else {
-    cleaned = cleaned.toUpperCase();
+    return cleaned.length <= 7 ? cleaned.padStart(7, '0') : cleaned;
   }
+  return cleaned.toUpperCase();
+}
+
+/**
+ * Mirrors ClinicEz.Shared.Common.PractitionerIdentity.NormalizePrc / IsValidPrcFormat.
+ */
+export function isValidPrcFormat(raw?: string | null): boolean {
+  const cleaned = normalizePrcNumber(raw);
+  if (!cleaned) return false;
   if (cleaned.length < 5 || cleaned.length > 12) return false;
   if (!/^[A-Z0-9]+$/i.test(cleaned)) return false;
   const digits = cleaned.replace(/\D/g, '');
@@ -157,13 +174,47 @@ export function resolvePractitionerVerificationBadge(
 }
 
 /**
+ * Determines whether a row-level directory verification badge should be displayed.
+ * - Non-clinicians never show directory badges.
+ * - Pending Invited and inactive (Suspended/Revoked/deactivated) clinicians omit passive "Not Listed" badges.
+ * - Active Nurses omit passive "Not Listed" badges unless they opt in or have a non-Unverified status.
+ * - Active Doctors always display their directory verification status badge.
+ */
+export function shouldShowPractitionerDirectoryBadge(
+  staff: Partial<StaffMember>,
+): boolean {
+  if (!isClinicianRole(staff.role)) return false;
+  const isUnverified =
+    !staff.publicVerificationStatus || staff.publicVerificationStatus === 'Unverified';
+  if (
+    isUnverified &&
+    (isPendingInvitedStaff(staff) ||
+      staff.isActive === false ||
+      staff.status === 'Revoked' ||
+      staff.status === 'Suspended')
+  ) {
+    return false;
+  }
+  if (staff.role === 'Nurse' && !staff.isDirectoryOptIn && isUnverified) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Resolves row-level directory verification actions for an active Doctor or Nurse.
+ * Pending Invited staff cannot be submitted until they accept their invitation.
  */
 export function getPractitionerDirectoryActions(
   staff: Partial<StaffMember>,
 ): PractitionerDirectoryAction[] {
   if (!isClinicianRole(staff.role)) return [];
-  if (staff.isActive === false || staff.status === 'Revoked' || staff.status === 'Suspended') {
+  if (
+    staff.isActive === false ||
+    staff.status === 'Revoked' ||
+    staff.status === 'Suspended' ||
+    isPendingInvitedStaff(staff)
+  ) {
     return [];
   }
 

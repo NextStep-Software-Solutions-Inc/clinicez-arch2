@@ -61,6 +61,7 @@ describe('Milestone 4 Empirical Challenger: Tier 3 Boundary Timestamps & Action 
         invitationToken: 'tok_boundary_1ms',
         invitationExpiresAt: expiresAt,
       });
+      expect(actions).toContain('edit');
       expect(actions).toContain('copy-invite');
       expect(actions).toContain('resend-invite');
       expect(actions).toContain('revoke-invite');
@@ -93,22 +94,22 @@ describe('Milestone 4 Empirical Challenger: Tier 3 Boundary Timestamps & Action 
     const pastExpiry = new Date(Date.now() - 60000).toISOString();
     const futureExpiry = new Date(Date.now() + 60000).toISOString();
 
-    it('Invited status: has copy-invite, resend-invite, revoke-invite', () => {
+    it('Invited status: has edit, copy-invite, resend-invite, revoke-invite', () => {
       const actions = getAvailableStaffActions({
         status: 'Invited',
         invitationToken: 'tok_valid',
         invitationExpiresAt: futureExpiry,
       });
-      expect(actions).toEqual(['copy-invite', 'resend-invite', 'revoke-invite']);
+      expect(actions).toEqual(['edit', 'copy-invite', 'resend-invite', 'revoke-invite']);
     });
 
-    it('Expired status: strictly excludes copy-invite, keeps resend and revoke', () => {
+    it('Expired status: strictly excludes copy-invite, keeps edit, resend and revoke', () => {
       const actions = getAvailableStaffActions({
         status: 'Invited',
         invitationToken: 'tok_expired',
         invitationExpiresAt: pastExpiry,
       });
-      expect(actions).toEqual(['resend-invite', 'revoke-invite']);
+      expect(actions).toEqual(['edit', 'resend-invite', 'revoke-invite']);
       expect(actions).not.toContain('copy-invite');
     });
 

@@ -19,7 +19,7 @@ import PatientsScreen from './screens/Patients.screen';
 import ConsultationsScreen from './screens/Consultations.screen';
 import AppointmentsScreen from './screens/Appointments.screen';
 import BillingScreen from './screens/Billing.screen';
-import YakapScreen from './screens/Yakap.screen';
+import ToolsScreen from './screens/Tools.screen';
 import SettingsScreen from './screens/Settings.screen';
 import ProfileScreen from './screens/Profile.screen';
 import ResultReviewScreen from './screens/ResultReview.screen';
@@ -203,18 +203,20 @@ const Tab = createBottomTabNavigator({
         tabBarIcon: tabIcon('scan'),
       },
     },
-    Yakap: {
-      screen: YakapScreen,
+    Tools: {
+      screen: ToolsScreen,
       linking: {
-        path: 'yakap',
+        path: 'tools',
+        alias: ['yakap'],
         parse: {
           tab: String,
+          tool: String,
         },
       },
       options: {
-        title: 'PhilHealth Yakap',
-        tabBarLabel: 'PhilHealth',
-        tabBarIcon: tabIcon('yakap'),
+        title: 'Tools',
+        tabBarLabel: 'Tools',
+        tabBarIcon: tabIcon('tools'),
       },
     },
     Settings: {

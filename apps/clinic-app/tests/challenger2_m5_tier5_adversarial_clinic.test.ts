@@ -189,7 +189,7 @@ describe('Milestone 5 Tier 5: Adversarial Clinic App Frontend & Routing Suite', 
   // SUITE 3: Action Matrix Consistency across Invited, Expired, Active, Suspended, Revoked
   // =========================================================================
   describe('Suite 3: Action Matrix Consistency & Dynamic Gating (StaffManagementTab)', () => {
-    it('3.1 Invited state (unexpired + token present): Exposes Copy Link, Resend Email, Revoke', () => {
+    it('3.1 Invited state (unexpired + token present): Exposes Edit, Copy Link, Resend Email, Revoke', () => {
       const future = new Date(Date.now() + 5 * 86400000).toISOString();
       const actions = getAvailableStaffActions({
         status: 'Invited',
@@ -197,10 +197,10 @@ describe('Milestone 5 Tier 5: Adversarial Clinic App Frontend & Routing Suite', 
         invitationToken: 'tok_active_invite_123',
         isActive: false,
       });
-      expect(actions).toEqual(['copy-invite', 'resend-invite', 'revoke-invite']);
+      expect(actions).toEqual(['edit', 'copy-invite', 'resend-invite', 'revoke-invite']);
     });
 
-    it('3.2 Invited state without token: Omits copy-invite, provides Resend Email and Revoke', () => {
+    it('3.2 Invited state without token: Omits copy-invite, provides Edit, Resend Email and Revoke', () => {
       const future = new Date(Date.now() + 5 * 86400000).toISOString();
       const actions = getAvailableStaffActions({
         status: 'Invited',
@@ -209,11 +209,11 @@ describe('Milestone 5 Tier 5: Adversarial Clinic App Frontend & Routing Suite', 
         inviteUrl: undefined,
         isActive: false,
       });
-      expect(actions).toEqual(['resend-invite', 'revoke-invite']);
+      expect(actions).toEqual(['edit', 'resend-invite', 'revoke-invite']);
       expect(actions).not.toContain('copy-invite');
     });
 
-    it('3.3 Expired state (past expiration): Strictly strips copy-invite, provides Resend Email and Revoke', () => {
+    it('3.3 Expired state (past expiration): Strictly strips copy-invite, provides Edit, Resend Email and Revoke', () => {
       const past = new Date(Date.now() - 5000).toISOString();
       const actions = getAvailableStaffActions({
         status: 'Invited',
@@ -221,7 +221,7 @@ describe('Milestone 5 Tier 5: Adversarial Clinic App Frontend & Routing Suite', 
         invitationToken: 'tok_expired_999',
         isActive: false,
       });
-      expect(actions).toEqual(['resend-invite', 'revoke-invite']);
+      expect(actions).toEqual(['edit', 'resend-invite', 'revoke-invite']);
       expect(actions).not.toContain('copy-invite');
     });
 
@@ -232,7 +232,7 @@ describe('Milestone 5 Tier 5: Adversarial Clinic App Frontend & Routing Suite', 
         invitationToken: 'tok_flag_expired',
         isActive: false,
       });
-      expect(actions).toEqual(['resend-invite', 'revoke-invite']);
+      expect(actions).toEqual(['edit', 'resend-invite', 'revoke-invite']);
       expect(actions).not.toContain('copy-invite');
     });
 

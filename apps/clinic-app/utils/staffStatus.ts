@@ -64,8 +64,8 @@ export type StaffActionType =
 
 /**
  * Resolves available actions for a staff member adhering to the unified cross-domain action matrix:
- * - Invited: Copy Link (if not expired & has token/url), Resend Email, Revoke
- * - Expired: Resend Email, Revoke (no Copy Link)
+ * - Invited: Edit Details, Copy Link (if not expired & has token/url), Resend Email, Revoke
+ * - Expired: Edit Details, Resend Email, Revoke (no Copy Link)
  * - Active: Edit Details, Reset Password, Suspend, Revoke
  * - Suspended: Reactivate, Revoke, Remove
  * - Revoked: Re-invite, Remove
@@ -101,7 +101,7 @@ export function getAvailableStaffActions(
       (!!s.invitationExpiresAt &&
         new Date(s.invitationExpiresAt).getTime() < Date.now());
 
-    const actions: StaffActionType[] = [];
+    const actions: StaffActionType[] = ['edit'];
     if (!isExpired && (s.invitationToken || s.inviteUrl)) {
       actions.push('copy-invite');
     }

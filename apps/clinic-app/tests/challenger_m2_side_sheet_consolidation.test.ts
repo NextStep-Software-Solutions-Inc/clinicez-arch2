@@ -398,7 +398,7 @@ describe('Challenger M2: Milestone 2 Empirical & Adversarial Test Suite', () => 
         'Appointments',
         'Billing',
         'ResultReview',
-        'Yakap',
+        'Tools',
         'Audit',
         'Settings',
       ]);

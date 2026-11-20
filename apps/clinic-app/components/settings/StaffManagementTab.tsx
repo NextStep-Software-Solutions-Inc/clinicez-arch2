@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Image } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
@@ -10,7 +10,7 @@ import ErrorState from '../ui/ErrorState';
 import { SkeletonList } from '../ui/Skeleton';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import Icon, { IconName } from '../ui/Icon';
-import ActionMenu from '../ui/ActionMenu';
+import ActionMenu, { type ActionMenuItem } from '../ui/ActionMenu';
 import SegmentedControl from '../ui/SegmentedControl';
 import ValidatedDateInput from '../ui/ValidatedDateInput';
 import SignatureSpecimenModal from './SignatureSpecimenModal';
@@ -42,20 +42,35 @@ import { useStaff } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { DoctorRosterCalendarModal } from '../roster/DoctorRosterCalendarModal';
-import { resolveStaffBadge, getAvailableStaffActions } from '../../utils/staffStatus';
+import {
+  resolveStaffBadge,
+  getAvailableStaffActions,
+  type StaffActionType,
+} from '../../utils/staffStatus';
 import {
   getPractitionerDirectoryActions,
   isClinicianRole,
+  isPendingInvitedStaff,
   isStaffRecordReadyForVerification,
   PENDING_VERIFICATION_BUTTON_LABEL,
   pickVerificationEvidenceFile,
   resolvePractitionerVerificationBadge,
+  shouldShowPractitionerDirectoryBadge,
   toEvidenceFormData,
   validateClinicianDirectoryOptIn,
   type PickedEvidenceFile,
+  type PractitionerDirectoryAction,
 } from '../../utils/directoryVerification';
 import { EvidenceProofPreview } from './EvidenceProofPreview';
-import { buildStaffCreationPayload, validateStaffEmailNotInClinic } from '../../utils/staffManagement';
+import {
+  buildStaffCreationPayload,
+  filterStaffRoster,
+  getDuplicateStaffPrcWarning,
+  getStaffRosterStatusBucket,
+  normalizeStaffTitle,
+  validateStaffEmailNotInClinic,
+  type StaffStatusFilter,
+} from '../../utils/staffManagement';
 
 export const DUPLICATE_STAFF_EMAIL_ERROR =
   'This email address already belongs to an existing staff member in this clinic.';
@@ -98,6 +113,207 @@ export function validateAddStaffDuplicateEmail(
     return null;
   }
   return findDuplicateStaffByEmail(email, staffList) ? DUPLICATE_STAFF_EMAIL_ERROR : null;
+}
+
+export interface BuildStaffOverflowMenuParams {
+  staffMember: StaffMember;
+  actions: StaffActionType[];
+  directoryActions: PractitionerDirectoryAction[];
+  isPendingInvite: boolean;
+  isSubmittingVerification?: boolean;
+  inviteUrl?: string;
+  onSubmitVerification: () => void;
+  onResubmitPrc: () => void;
+  onWithdrawVerification: () => void;
+  onOpenRoster: () => void;
+  onOpenStamp: () => void;
+  onCopyInvite: () => void;
+  onResendInvite: () => void;
+  onReinviteStaff: () => void;
+  onResetPassword: () => void;
+  onReactivateStaff: () => void;
+  onSuspendStaff: () => void;
+  onRevokeInvite: () => void;
+  onRemoveStaff: () => void;
+}
+
+/**
+ * Builds grouped overflow menu items for a staff row so directory verification,
+ * doctor tools, account lifecycle, and destructive actions are cleanly separated.
+ */
+export function buildStaffOverflowMenuItems({
+  staffMember,
+  actions,
+  directoryActions,
+  isPendingInvite,
+  isSubmittingVerification = false,
+  inviteUrl,
+  onSubmitVerification,
+  onResubmitPrc,
+  onWithdrawVerification,
+  onOpenRoster,
+  onOpenStamp,
+  onCopyInvite,
+  onResendInvite,
+  onReinviteStaff,
+  onResetPassword,
+  onReactivateStaff,
+  onSuspendStaff,
+  onRevokeInvite,
+  onRemoveStaff,
+}: BuildStaffOverflowMenuParams): ActionMenuItem[] {
+  const verificationItems: ActionMenuItem[] = [];
+  if (directoryActions.includes('submit-verification')) {
+    verificationItems.push({
+      id: 'submit-verification',
+      label: 'Submit for Verification',
+      icon: 'shield',
+      hint: 'Submit PRC credentials for directory listing',
+      disabled: isSubmittingVerification,
+      onPress: onSubmitVerification,
+    });
+  }
+  if (directoryActions.includes('resubmit-prc')) {
+    verificationItems.push({
+      id: 'resubmit-prc',
+      label: 'Resubmit PRC',
+      icon: 'refresh',
+      hint: 'Update PRC details and resubmit for review',
+      disabled: isSubmittingVerification,
+      onPress: onResubmitPrc,
+    });
+  }
+  if (directoryActions.includes('withdraw-verification')) {
+    verificationItems.push({
+      id: 'withdraw-verification',
+      label: 'Withdraw Verification',
+      icon: 'undo',
+      hint: 'Withdraw pending directory verification',
+      disabled: isSubmittingVerification,
+      onPress: onWithdrawVerification,
+    });
+  }
+
+  const clinicalItems: ActionMenuItem[] = [];
+  if (staffMember.role === 'Doctor' && actions.includes('edit') && !isPendingInvite) {
+    clinicalItems.push(
+      {
+        id: 'roster',
+        label: 'Roster & Schedule',
+        icon: 'calendar',
+        hint: 'Configure weekly shifts & leaves',
+        onPress: onOpenRoster,
+      },
+      {
+        id: 'stamp',
+        label: 'View Doctor Stamp',
+        icon: 'eye',
+        hint: 'Preview credentials & signature imprint',
+        onPress: onOpenStamp,
+      }
+    );
+  }
+
+  const accountItems: ActionMenuItem[] = [];
+  if (actions.includes('copy-invite') && inviteUrl) {
+    accountItems.push({
+      id: 'copy-invite',
+      label: 'Copy Invite Link',
+      icon: 'copy',
+      hint: 'Copy direct invitation link',
+      onPress: onCopyInvite,
+    });
+  }
+  if (actions.includes('resend-invite')) {
+    accountItems.push({
+      id: 'resend-invite',
+      label: 'Resend Invitation Email',
+      icon: 'mail',
+      hint: 'Send a fresh invitation email',
+      onPress: onResendInvite,
+    });
+  }
+  if (actions.includes('reinvite-staff')) {
+    accountItems.push({
+      id: 'reinvite-staff',
+      label: 'Re-invite Staff Member',
+      icon: 'mail',
+      hint: 'Send a new 7-day invitation email',
+      onPress: onReinviteStaff,
+    });
+  }
+  if (actions.includes('reset-pwd')) {
+    accountItems.push({
+      id: 'reset-pwd',
+      label: 'Reset Password',
+      icon: 'key',
+      hint: 'Send reset email, link, or temporary password',
+      onPress: onResetPassword,
+    });
+  }
+  if (actions.includes('reactivate-staff')) {
+    accountItems.push({
+      id: 'reactivate-staff',
+      label: 'Reactivate Staff Member',
+      icon: 'checkCircle',
+      hint: 'Restore staff login access',
+      onPress: onReactivateStaff,
+    });
+  }
+
+  const destructiveItems: ActionMenuItem[] = [];
+  if (actions.includes('suspend-staff')) {
+    destructiveItems.push({
+      id: 'suspend-staff',
+      label: 'Suspend Staff Member',
+      icon: 'alert',
+      hint: 'Suspend access and active sessions',
+      destructive: true,
+      onPress: onSuspendStaff,
+    });
+  }
+  if (actions.includes('revoke-invite')) {
+    destructiveItems.push({
+      id: 'revoke-invite',
+      label: isPendingInvite ? 'Revoke Invitation' : 'Revoke Access',
+      icon: 'close',
+      hint: isPendingInvite ? 'Cancel invitation' : 'Mark as Revoked and terminate access',
+      destructive: true,
+      onPress: onRevokeInvite,
+    });
+  }
+  if (actions.includes('remove-staff')) {
+    destructiveItems.push({
+      id: 'remove-staff',
+      label: 'Remove from Facility',
+      icon: 'trash',
+      hint: 'Permanently remove from staff directory',
+      destructive: true,
+      onPress: onRemoveStaff,
+    });
+  }
+
+  const sections = [verificationItems, clinicalItems, accountItems, destructiveItems].filter(
+    (section) => section.length > 0
+  );
+
+  return sections.flatMap((section, sectionIdx) =>
+    section.map((item, itemIdx) =>
+      sectionIdx > 0 && itemIdx === 0 ? { ...item, dividerBefore: true } : item
+    )
+  );
+}
+
+function DuplicatePrcWarningBanner({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <View style={styles.prcWarningBox} testID="prc-duplicate-warning">
+      <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+      <ThemedText variant="caption" color={theme.colors.warningText} style={styles.flex1}>
+        {message}
+      </ThemedText>
+    </View>
+  );
 }
 
 interface StaffManagementTabProps {
@@ -238,6 +454,11 @@ export default function StaffManagementTab({
   const [submittingVerificationId, setSubmittingVerificationId] = useState<string | null>(null);
 
   const isEditingSelf = isSelf(editingStaff);
+  const isEditingPendingInvite = Boolean(editingStaff && isPendingInvitedStaff(editingStaff));
+  const duplicatePrcWarning = useMemo(
+    () => getDuplicateStaffPrcWarning(prc, staff, editingStaff?.id),
+    [prc, staff, editingStaff?.id]
+  );
   const isSystemAdminStaff = (s?: StaffMember | null) => {
     if (!s || !s.isActive) return false;
     return s.role === 'Admin' || s.roleName === 'Clinic Administrator';
@@ -301,6 +522,49 @@ export default function StaffManagementTab({
   const [rosterModalVisible, setRosterModalVisible] = useState(false);
   const [rosterDoctorId, setRosterDoctorId] = useState<string | undefined>(undefined);
   const doctors = (staff || []).filter((s) => s.role === 'Doctor' && s.isActive);
+
+  // In-list Search & Filter State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StaffStatusFilter>('all');
+  const [roleFilter, setRoleFilter] = useState<StaffRole | 'all'>('all');
+
+  const statusCounts = useMemo(() => {
+    const counts = { all: staff.length, active: 0, invited: 0, inactive: 0 };
+    for (const member of staff) {
+      counts[getStaffRosterStatusBucket(member)] += 1;
+    }
+    return counts;
+  }, [staff]);
+
+  const roleFilterOptions = useMemo(() => {
+    const counts = new Map<StaffRole, number>();
+    for (const member of staff) {
+      counts.set(member.role, (counts.get(member.role) ?? 0) + 1);
+    }
+    return (['Doctor', 'Nurse', 'Receptionist', 'Cashier', 'Admin'] as const)
+      .filter((r) => (counts.get(r) ?? 0) > 0)
+      .map((r) => ({ role: r, count: counts.get(r) ?? 0 }));
+  }, [staff]);
+
+  const filteredStaff = useMemo(
+    () =>
+      filterStaffRoster(staff, {
+        query: searchQuery,
+        status: statusFilter,
+        role: roleFilter,
+      }),
+    [staff, searchQuery, statusFilter, roleFilter]
+  );
+
+  const hasActiveFilters = Boolean(
+    searchQuery.trim() || statusFilter !== 'all' || roleFilter !== 'all'
+  );
+
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setRoleFilter('all');
+  };
 
   // Sort active rooms so Doctor sees Consultation rooms first and Nurse sees Triage/Treatment first
   const activeRoomsForRole = React.useMemo(() => {
@@ -628,8 +892,12 @@ export default function StaffManagementTab({
     }
 
     const clinicianAllowed = isClinicianRole(effectiveStaffRole);
-    const effectiveOptIn = clinicianAllowed && isDirectoryOptIn;
-    if (effectiveOptIn) {
+    const effectiveOptIn = clinicianAllowed
+      ? !isEditingPendingInvite
+        ? isDirectoryOptIn
+        : Boolean(editingStaff.isDirectoryOptIn)
+      : false;
+    if (!isEditingPendingInvite && effectiveOptIn) {
       const optInErr = validateClinicianDirectoryOptIn({
         role: effectiveStaffRole,
         prcLicenseNumber: prc,
@@ -659,8 +927,10 @@ export default function StaffManagementTab({
 
     const canHaveRoom = clinicianAllowed;
     const nextRoomIds = canHaveRoom ? assignedRoomIds : [];
+    const normalizedTitle = normalizeStaffTitle(title) || undefined;
 
     const needsVerificationSubmit =
+      !isEditingPendingInvite &&
       effectiveOptIn &&
       (!editingStaff.publicVerificationStatus ||
         editingStaff.publicVerificationStatus === 'Unverified' ||
@@ -668,24 +938,29 @@ export default function StaffManagementTab({
         editingStaff.publicVerificationStatus === 'Expired' ||
         editingStaff.publicVerificationStatus === 'Suspended');
     const prcChangedWhileVerified =
+      !isEditingPendingInvite &&
       effectiveOptIn &&
       editingStaff.publicVerificationStatus === 'Verified' &&
       (editingStaff.prcLicenseNumber ?? '').trim() !== prc.trim();
     const isPractitionerPending =
-      effectiveOptIn && editingStaff.publicVerificationStatus === 'PendingVerification';
+      !isEditingPendingInvite &&
+      effectiveOptIn &&
+      editingStaff.publicVerificationStatus === 'PendingVerification';
     const isFacilityPendingForStaff =
+      !isEditingPendingInvite &&
       effectiveOptIn &&
       !isPractitionerPending &&
       !needsVerificationSubmit &&
       !prcChangedWhileVerified &&
       platformVerificationStatus === 'PendingReview';
-    const shouldSyncPendingEdit = isPractitionerPending || isFacilityPendingForStaff;
+    const shouldSyncPendingEdit =
+      !isEditingPendingInvite && (isPractitionerPending || isFacilityPendingForStaff);
 
     const [updated, err] = await clinicService.updateStaff(editingStaff.id, {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       middleName: middleName.trim() || undefined,
-      title: title.trim() || undefined,
+      title: normalizedTitle,
       role: effectiveStaffRole,
       clinicRoleId: clinicRoleId || undefined,
       email: email.trim() || undefined,
@@ -696,7 +971,7 @@ export default function StaffManagementTab({
       philHealthPan: effectiveStaffRole === 'Doctor' ? pan.trim() || undefined : undefined,
       specialty: specialty.trim() || undefined,
       assignedRoomIds: nextRoomIds,
-      isActive: isEditingSelf ? editingStaff.isActive : isActiveStaff,
+      isActive: isEditingSelf || isEditingPendingInvite ? editingStaff.isActive : isActiveStaff,
       signatureSpecimen: effectiveStaffRole === 'Doctor' ? signatureSpecimen : undefined,
       defaultSignatureMode: effectiveStaffRole === 'Doctor' ? defaultSignatureMode : undefined,
       isDirectoryOptIn: effectiveOptIn,
@@ -754,7 +1029,7 @@ export default function StaffManagementTab({
         return;
       }
       finalUpdated = submitted;
-    } else if (!effectiveOptIn && editingStaff.isDirectoryOptIn && editingStaff.publicVerificationStatus && editingStaff.publicVerificationStatus !== 'Unverified') {
+    } else if (!isEditingPendingInvite && !effectiveOptIn && editingStaff.isDirectoryOptIn && editingStaff.publicVerificationStatus && editingStaff.publicVerificationStatus !== 'Unverified') {
       const [withdrawn] = await clinicService.withdrawStaffVerification(updated.id);
       if (withdrawn) {
         finalUpdated = withdrawn;
@@ -842,7 +1117,7 @@ export default function StaffManagementTab({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       middleName: middleName.trim() || undefined,
-      title: title.trim() || undefined,
+      title: normalizeStaffTitle(title) || undefined,
       role,
       clinicRoleId: clinicRoleId || undefined,
       email: deliveryPayload.email,
@@ -1263,6 +1538,22 @@ export default function StaffManagementTab({
     const activeRole = mode === 'edit' && isEditingSelf && editingStaff ? editingStaff.role : role;
     if (!isClinicianRole(activeRole)) return null;
 
+    if (mode === 'edit' && isEditingPendingInvite) {
+      return (
+        <View style={styles.directorySection} testID="clinician-directory-section">
+          <View style={styles.directoryTitleRow}>
+            <ThemedText variant="smallBold" color={theme.colors.text}>
+              Patient Directory Verification
+            </ThemedText>
+            <Badge label="Pending Invite" variant="purple" size="sm" icon="mail" />
+          </View>
+          <ThemedText variant="caption" color={theme.colors.textMuted}>
+            Directory verification becomes available once this staff member accepts their invitation and activates their account.
+          </ThemedText>
+        </View>
+      );
+    }
+
     const existingBadge =
       mode === 'edit' && editingStaff
         ? resolvePractitionerVerificationBadge(editingStaff.publicVerificationStatus)
@@ -1340,14 +1631,17 @@ export default function StaffManagementTab({
         ) : null}
 
         {activeRole === 'Nurse' ? (
-          <Input
-            label="PRC license number"
-            required={isDirectoryOptIn}
-            value={prc}
-            onChangeText={setPrc}
-            placeholder="e.g. 0412345"
-            helperText="Required when listing a Nurse in the patient directory."
-          />
+          <>
+            <Input
+              label="PRC license number"
+              required={isDirectoryOptIn}
+              value={prc}
+              onChangeText={setPrc}
+              placeholder="e.g. 0412345"
+              helperText="Required when listing a Nurse in the patient directory."
+            />
+            <DuplicatePrcWarningBanner message={duplicatePrcWarning} />
+          </>
         ) : null}
 
         {isDirectoryOptIn ? (
@@ -1445,7 +1739,7 @@ export default function StaffManagementTab({
     }
   };
 
-  const previewDoctorName = [title.trim(), firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
+  const previewDoctorName = [normalizeStaffTitle(title), firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
 
   return (
     <View style={styles.container}>
@@ -1497,320 +1791,246 @@ export default function StaffManagementTab({
               onAction={handleOpenAddModal}
             />
           ) : (
-            <View style={styles.staffList}>
-              {staff.map((s) => {
-                const fullName = `${s.title ? `${s.title} ` : ''}${s.firstName} ${s.lastName}`.trim();
-                const isSelfRow = isSelf(s);
-                const isExpired =
-                  s.isExpired ||
-                  (s.status === 'Invited' &&
-                    !!s.invitationExpiresAt &&
-                    new Date(s.invitationExpiresAt).getTime() < Date.now());
-                const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
-                const inviteUrl =
-                  s.inviteUrl ||
-                  (s.invitationToken
-                    ? (origin ? `${origin}/invitations/${s.invitationToken}` : `/invitations/${s.invitationToken}`)
-                    : '');
-                const staffBadge = resolveStaffBadge(s);
-                const actions = getAvailableStaffActions(
-                  { ...s, inviteUrl: inviteUrl || s.inviteUrl },
-                  { isSelf: isSelfRow }
-                );
-                const isClinician = isClinicianRole(s.role);
-                const directoryBadge = isClinician
-                  ? resolvePractitionerVerificationBadge(s.publicVerificationStatus)
-                  : null;
-                const directoryActions = isClinician ? getPractitionerDirectoryActions(s) : [];
-                const isActionRequiredRow =
-                  isClinician &&
-                  (s.publicVerificationStatus === 'Rejected' ||
-                    s.publicVerificationStatus === 'Expired' ||
-                    s.publicVerificationStatus === 'Suspended');
-                const isSubmittingRow = submittingVerificationId === s.id;
+            <View style={styles.rosterContentStack}>
+              <View style={styles.filterToolbar} testID="staff-filter-toolbar">
+                <View style={styles.filterTopRow}>
+                  <Input
+                    containerStyle={isCompact ? styles.filterSearchInputMobile : styles.filterSearchInput}
+                    leftIcon="search"
+                    rightIcon={searchQuery ? 'close' : undefined}
+                    onRightIconPress={searchQuery ? () => setSearchQuery('') : undefined}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="Search name, email, or PRC..."
+                    accessibilityLabel="Search staff members"
+                    testID="staff-search-input"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterChipGroup}
+                  >
+                    <Chip
+                      label={`All (${statusCounts.all})`}
+                      active={statusFilter === 'all'}
+                      onPress={() => setStatusFilter('all')}
+                    />
+                    <Chip
+                      label={`Active (${statusCounts.active})`}
+                      active={statusFilter === 'active'}
+                      onPress={() => setStatusFilter('active')}
+                    />
+                    <Chip
+                      label={`Invited (${statusCounts.invited})`}
+                      active={statusFilter === 'invited'}
+                      onPress={() => setStatusFilter('invited')}
+                    />
+                    {statusCounts.inactive > 0 ? (
+                      <Chip
+                        label={`Inactive (${statusCounts.inactive})`}
+                        active={statusFilter === 'inactive'}
+                        onPress={() => setStatusFilter('inactive')}
+                      />
+                    ) : null}
+                  </ScrollView>
+                </View>
 
-                return (
-                  <View key={s.id} style={styles.staffItem}>
-                    <View style={styles.staffIdentityCol}>
-                      <View style={styles.staffNameRow}>
-                        <ThemedText variant="bodyBold">{fullName}</ThemedText>
-                        {isSelfRow ? (
-                          <Badge label="You" variant="info" size="sm" />
-                        ) : null}
-                        <Badge label={s.role} variant={s.role === 'Doctor' ? 'primary' : 'neutral'} size="sm" />
-                        {directoryBadge ? (
-                          <Badge
-                            label={directoryBadge.label}
-                            variant={directoryBadge.variant}
-                            size="sm"
-                            icon={directoryBadge.icon}
-                          />
-                        ) : null}
-                        {s.assignedRoomNames && s.assignedRoomNames.length > 0 ? (
-                          s.assignedRoomNames.map((roomName, idx) => (
-                            <Badge
-                              key={roomName}
-                              label={idx === 0 && s.assignedRoomNames!.length > 1 ? `${roomName} (Primary)` : roomName}
-                              variant={idx === 0 ? 'primary' : 'outline'}
-                              size="sm"
-                              icon="clinic"
-                            />
-                          ))
-                        ) : s.assignedRoomName ? (
-                          <Badge label={s.assignedRoomName} variant="primary" size="sm" icon="clinic" />
-                        ) : null}
-                        {s.roleName && s.roleName !== s.role ? (
-                          <Badge label={s.roleName} variant="purple" size="sm" />
-                        ) : null}
-                        <Badge
-                          label={staffBadge.label}
-                          variant={staffBadge.variant}
-                          size="sm"
-                          icon={staffBadge.icon}
-                        />
-                      </View>
+                {roleFilterOptions.length > 1 ? (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterChipGroup}
+                  >
+                    <Chip
+                      label="All Roles"
+                      active={roleFilter === 'all'}
+                      onPress={() => setRoleFilter('all')}
+                    />
+                    {roleFilterOptions.map(({ role: r, count }) => (
+                      <Chip
+                        key={r}
+                        label={`${r} (${count})`}
+                        active={roleFilter === r}
+                        onPress={() => setRoleFilter(r)}
+                      />
+                    ))}
+                  </ScrollView>
+                ) : null}
 
-                      <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        {[
-                          s.roleName,
-                          s.email ? s.email : 'No email',
-                          s.prcLicenseNumber ? `PRC ${s.prcLicenseNumber}` : null,
-                          isClinician && s.prcExpiryDate ? `Exp ${s.prcExpiryDate}` : null,
-                          s.ptrNumber ? `PTR ${s.ptrNumber}` : null,
-                          s.philHealthPan ? `PAN ${s.philHealthPan}` : null,
-                          s.s2LicenseNumber ? `S2 ${s.s2LicenseNumber}` : null,
-                          s.specialty,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </ThemedText>
-
-                      {isActionRequiredRow && s.publicVerificationReason ? (
-                        <ThemedText variant="caption" color={theme.colors.emergencyText}>
-                          Action required: {s.publicVerificationReason}
-                        </ThemedText>
-                      ) : null}
-                    </View>
-
-                    <View style={[styles.staffActionsCol, isCompact && styles.staffActionsColMobile]}>
-                      {directoryActions.includes('submit-verification') ? (
-                        <Button
-                          title="Submit for Verification"
-                          variant="outline"
-                          size="sm"
-                          loading={isSubmittingRow}
-                          disabled={isSubmittingRow}
-                          onPress={() => handleRowSubmitVerification(s)}
-                        />
-                      ) : null}
-                      {directoryActions.includes('resubmit-prc') ? (
-                        <Button
-                          title="Resubmit PRC"
-                          variant="outline"
-                          size="sm"
-                          loading={isSubmittingRow}
-                          disabled={isSubmittingRow}
-                          onPress={() => handleRowResubmitPrc(s)}
-                        />
-                      ) : null}
-                      {directoryActions.includes('withdraw-verification') ? (
-                        <Button
-                          title="Withdraw"
-                          variant="ghost"
-                          size="sm"
-                          loading={isSubmittingRow}
-                          disabled={isSubmittingRow}
-                          onPress={() => handleRowWithdrawVerification(s)}
-                        />
-                      ) : null}
-                      {actions.includes('edit') ? (
-                        <Button
-                          title="Edit"
-                          icon="edit"
-                          variant="ghost"
-                          size="sm"
-                          style={isCompact ? styles.flexBtn : undefined}
-                          onPress={() => handleOpenEditModal(s)}
-                        />
-                      ) : null}
-                      {actions.length === 0 && s.status === 'Revoked' ? (
-                        <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.revokedText}>
-                          Revoked
-                        </ThemedText>
-                      ) : actions.length > 0 || directoryActions.length > 0 ? (
-                        <ActionMenu
-                          align="right"
-                          triggerAriaLabel={`More actions for ${fullName}`}
-                          items={[
-                            ...(directoryActions.includes('submit-verification')
-                              ? [
-                                  {
-                                    id: 'submit-verification',
-                                    label: 'Submit for Verification',
-                                    icon: 'shield' as const,
-                                    hint: 'Submit PRC credentials for directory listing',
-                                    onPress: () => handleRowSubmitVerification(s),
-                                  },
-                                ]
-                              : []),
-                            ...(directoryActions.includes('resubmit-prc')
-                              ? [
-                                  {
-                                    id: 'resubmit-prc',
-                                    label: 'Resubmit PRC',
-                                    icon: 'refresh' as const,
-                                    hint: 'Update PRC details and resubmit for review',
-                                    onPress: () => handleRowResubmitPrc(s),
-                                  },
-                                ]
-                              : []),
-                            ...(directoryActions.includes('withdraw-verification')
-                              ? [
-                                  {
-                                    id: 'withdraw-verification',
-                                    label: 'Withdraw',
-                                    icon: 'undo' as const,
-                                    hint: 'Withdraw pending directory verification',
-                                    onPress: () => handleRowWithdrawVerification(s),
-                                  },
-                                ]
-                              : []),
-                            ...(s.role === 'Doctor' && actions.includes('edit')
-                              ? [
-                                  {
-                                    id: 'roster',
-                                    label: 'Roster & Schedule',
-                                    icon: 'calendar' as const,
-                                    hint: 'Configure weekly shifts & leaves',
-                                    onPress: () => {
-                                      setRosterDoctorId(s.id);
-                                      setRosterModalVisible(true);
-                                    },
-                                  },
-                                  {
-                                    id: 'stamp',
-                                    label: 'View Doctor Stamp',
-                                    icon: 'eye' as const,
-                                    hint: 'Preview credentials & signature imprint',
-                                    onPress: () => setStampModalStaff(s),
-                                  },
-                                ]
-                              : []),
-                            ...(actions.includes('copy-invite') && inviteUrl
-                              ? [
-                                  {
-                                    id: 'copy-invite',
-                                    label: 'Copy Invite Link',
-                                    icon: 'copy' as const,
-                                    hint: 'Copy direct invitation link',
-                                    onPress: () =>
-                                      copyToClipboard(inviteUrl, 'Invitation link copied to clipboard!'),
-                                  },
-                                ]
-                              : []),
-                            ...(actions.includes('resend-invite')
-                              ? [
-                                  {
-                                    id: 'resend-invite',
-                                    label: 'Resend Invitation Email',
-                                    icon: 'mail' as const,
-                                    hint: 'Send a fresh invitation email',
-                                    onPress: () => handleResendInvite(s),
-                                  },
-                                ]
-                              : []),
-                            ...(actions.includes('reinvite-staff')
-                              ? [
-                                  {
-                                    id: 'reinvite-staff',
-                                    label: 'Re-invite Staff Member',
-                                    icon: 'mail' as const,
-                                    hint: 'Send a new 7-day invitation email',
-                                    onPress: () => handleReinviteStaff(s),
-                                  },
-                                ]
-                              : []),
-                            ...(actions.includes('reset-pwd')
-                              ? [
-                                  {
-                                    id: 'reset-pwd',
-                                    label: 'Reset Password',
-                                    icon: 'key' as const,
-                                    hint: 'Send reset email, link, or temporary password',
-                                    dividerBefore: s.role === 'Doctor',
-                                    onPress: () => {
-                                      setResetModalStaff(s);
-                                      setResetDeliveryMode('email');
-                                      setCustomResetPassword(generateRandomPassword());
-                                      setResetError(null);
-                                    },
-                                  },
-                                ]
-                              : []),
-                            ...(actions.includes('reactivate-staff')
-                              ? [
-                                  {
-                                    id: 'reactivate-staff',
-                                    label: 'Reactivate Staff Member',
-                                    icon: 'checkCircle' as const,
-                                    hint: 'Restore staff login access',
-                                    dividerBefore: s.role === 'Doctor',
-                                    onPress: () => handleReactivateStaff(s),
-                                  },
-                                ]
-                              : []),
-                            ...(actions.includes('suspend-staff')
-                              ? [
-                                  {
-                                    id: 'suspend-staff',
-                                    label: 'Suspend Staff Member',
-                                    icon: 'alert' as const,
-                                    hint: 'Suspend access and active sessions',
-                                    destructive: true,
-                                    dividerBefore: true,
-                                    onPress: () => handleSuspendStaff(s),
-                                  },
-                                ]
-                              : []),
-                            ...(actions.includes('revoke-invite')
-                              ? [
-                                  {
-                                    id: 'revoke-invite',
-                                    label:
-                                      s.status === 'Invited' && !s.hasCredentials
-                                        ? 'Revoke Invitation'
-                                        : 'Revoke Access',
-                                    icon: 'close' as const,
-                                    hint:
-                                      s.status === 'Invited' && !s.hasCredentials
-                                        ? 'Cancel invitation'
-                                        : 'Mark as Revoked and terminate access',
-                                    destructive: true,
-                                    dividerBefore: !actions.includes('suspend-staff'),
-                                    onPress: () => handleRevokeInvite(s),
-                                  },
-                                ]
-                              : []),
-                            ...(actions.includes('remove-staff')
-                              ? [
-                                  {
-                                    id: 'remove-staff',
-                                    label: 'Remove from Facility',
-                                    icon: 'trash' as const,
-                                    hint: 'Permanently remove from staff directory',
-                                    destructive: true,
-                                    dividerBefore: !actions.includes('revoke-invite'),
-                                    onPress: () => handleRemoveStaff(s),
-                                  },
-                                ]
-                              : []),
-                          ]}
-                        />
-                      ) : null}
-                    </View>
+                {hasActiveFilters ? (
+                  <View style={styles.filterSummaryRow} testID="staff-filter-summary">
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      Showing {filteredStaff.length} of {staff.length} staff members
+                    </ThemedText>
+                    <Button
+                      title="Clear filters"
+                      variant="ghost"
+                      size="xs"
+                      onPress={handleClearFilters}
+                      testID="btn-clear-staff-filters"
+                    />
                   </View>
-                );
-              })}
+                ) : null}
+              </View>
+
+              {filteredStaff.length === 0 ? (
+                <EmptyState
+                  icon="search"
+                  title="No matching staff members"
+                  description="Try adjusting your search query or clearing the active filters."
+                  actionTitle="Clear filters"
+                  onAction={handleClearFilters}
+                  actionTestID="btn-empty-clear-staff-filters"
+                />
+              ) : (
+                <View style={styles.staffList}>
+                  {filteredStaff.map((s) => {
+                    const fullName = `${s.title ? `${s.title} ` : ''}${s.firstName} ${s.lastName}`.trim();
+                    const isSelfRow = isSelf(s);
+                    const isPendingInvite = isPendingInvitedStaff(s);
+                    const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+                    const inviteUrl =
+                      s.inviteUrl ||
+                      (s.invitationToken
+                        ? (origin ? `${origin}/invitations/${s.invitationToken}` : `/invitations/${s.invitationToken}`)
+                        : '');
+                    const staffBadge = resolveStaffBadge(s);
+                    const actions = getAvailableStaffActions(
+                      { ...s, inviteUrl: inviteUrl || s.inviteUrl },
+                      { isSelf: isSelfRow }
+                    );
+                    const isClinician = isClinicianRole(s.role);
+                    const directoryBadge = shouldShowPractitionerDirectoryBadge(s)
+                      ? resolvePractitionerVerificationBadge(s.publicVerificationStatus)
+                      : null;
+                    const directoryActions = isClinician ? getPractitionerDirectoryActions(s) : [];
+                    const isActionRequiredRow =
+                      isClinician &&
+                      !isPendingInvite &&
+                      (s.publicVerificationStatus === 'Rejected' ||
+                        s.publicVerificationStatus === 'Expired' ||
+                        s.publicVerificationStatus === 'Suspended');
+                    const isSubmittingRow = submittingVerificationId === s.id;
+                    const menuItems = buildStaffOverflowMenuItems({
+                      staffMember: s,
+                      actions,
+                      directoryActions,
+                      isPendingInvite,
+                      isSubmittingVerification: isSubmittingRow,
+                      inviteUrl,
+                      onSubmitVerification: () => handleRowSubmitVerification(s),
+                      onResubmitPrc: () => handleRowResubmitPrc(s),
+                      onWithdrawVerification: () => handleRowWithdrawVerification(s),
+                      onOpenRoster: () => {
+                        setRosterDoctorId(s.id);
+                        setRosterModalVisible(true);
+                      },
+                      onOpenStamp: () => setStampModalStaff(s),
+                      onCopyInvite: () => copyToClipboard(inviteUrl, 'Invitation link copied to clipboard!'),
+                      onResendInvite: () => handleResendInvite(s),
+                      onReinviteStaff: () => handleReinviteStaff(s),
+                      onResetPassword: () => {
+                        setResetModalStaff(s);
+                        setResetDeliveryMode('email');
+                        setCustomResetPassword(generateRandomPassword());
+                        setResetError(null);
+                      },
+                      onReactivateStaff: () => handleReactivateStaff(s),
+                      onSuspendStaff: () => handleSuspendStaff(s),
+                      onRevokeInvite: () => handleRevokeInvite(s),
+                      onRemoveStaff: () => handleRemoveStaff(s),
+                    });
+
+                    return (
+                      <View key={s.id} style={styles.staffItem}>
+                        <View style={styles.staffIdentityCol}>
+                          <View style={styles.staffNameRow}>
+                            <ThemedText variant="bodyBold">{fullName}</ThemedText>
+                            {isSelfRow ? (
+                              <Badge label="You" variant="info" size="sm" />
+                            ) : null}
+                            <Badge label={s.role} variant="neutral" size="sm" />
+                            <Badge
+                              label={staffBadge.label}
+                              variant={staffBadge.variant}
+                              size="sm"
+                              icon={staffBadge.icon}
+                            />
+                            {directoryBadge ? (
+                              <Badge
+                                label={directoryBadge.label}
+                                variant={directoryBadge.variant}
+                                size="sm"
+                                icon={directoryBadge.icon}
+                              />
+                            ) : null}
+                            {s.assignedRoomNames && s.assignedRoomNames.length > 0 ? (
+                              s.assignedRoomNames.map((roomName, idx) => (
+                                <Badge
+                                  key={roomName}
+                                  label={idx === 0 && s.assignedRoomNames!.length > 1 ? `${roomName} (Primary)` : roomName}
+                                  variant={idx === 0 ? 'primary' : 'outline'}
+                                  size="sm"
+                                  icon="clinic"
+                                />
+                              ))
+                            ) : s.assignedRoomName ? (
+                              <Badge label={s.assignedRoomName} variant="primary" size="sm" icon="clinic" />
+                            ) : null}
+                          </View>
+
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            {[
+                              s.roleName,
+                              s.email ? s.email : 'No email',
+                              s.prcLicenseNumber ? `PRC ${s.prcLicenseNumber}` : null,
+                              isClinician && s.prcExpiryDate ? `Exp ${s.prcExpiryDate}` : null,
+                              s.ptrNumber ? `PTR ${s.ptrNumber}` : null,
+                              s.philHealthPan ? `PAN ${s.philHealthPan}` : null,
+                              s.s2LicenseNumber ? `S2 ${s.s2LicenseNumber}` : null,
+                              s.specialty,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </ThemedText>
+
+                          {isActionRequiredRow && s.publicVerificationReason ? (
+                            <ThemedText variant="caption" color={theme.colors.emergencyText}>
+                              Action required: {s.publicVerificationReason}
+                            </ThemedText>
+                          ) : null}
+                        </View>
+
+                        <View style={[styles.staffActionsCol, isCompact && styles.staffActionsColMobile]}>
+                          {actions.includes('edit') ? (
+                            <Button
+                              title="Edit"
+                              icon="edit"
+                              variant="ghost"
+                              size="sm"
+                              style={isCompact ? styles.flexBtn : undefined}
+                              onPress={() => handleOpenEditModal(s)}
+                            />
+                          ) : null}
+                          {menuItems.length === 0 && s.status === 'Revoked' ? (
+                            <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.revokedText}>
+                              Revoked
+                            </ThemedText>
+                          ) : menuItems.length > 0 ? (
+                            <ActionMenu
+                              align="right"
+                              triggerAriaLabel={`More actions for ${fullName}`}
+                              items={menuItems}
+                            />
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
             </View>
           )}
         </CardContent>
@@ -1954,7 +2174,8 @@ export default function StaffManagementTab({
             label="Title"
             value={title}
             onChangeText={setTitle}
-            placeholder="Title (optional)"
+            onBlur={() => setTitle((prev) => normalizeStaffTitle(prev))}
+            placeholder="e.g. Dr., RN"
           />
           <Input
             containerStyle={styles.flexWide}
@@ -2008,6 +2229,7 @@ export default function StaffManagementTab({
                 placeholder="PhilHealth accreditation number"
               />
             </View>
+            <DuplicatePrcWarningBanner message={duplicatePrcWarning} />
             <View style={styles.formRow}>
               <Input
                 containerStyle={styles.flexWide}
@@ -2316,7 +2538,7 @@ export default function StaffManagementTab({
       {editingStaff ? (() => {
         const editEffectiveRole = isEditingSelf ? editingStaff.role : role;
         const editClinicianAllowed = isClinicianRole(editEffectiveRole);
-        const editOptIn = editClinicianAllowed && isDirectoryOptIn;
+        const editOptIn = editClinicianAllowed && !isEditingPendingInvite && isDirectoryOptIn;
         const editNeedsSubmit =
           editOptIn &&
           (!editingStaff.publicVerificationStatus ||
@@ -2495,7 +2717,8 @@ export default function StaffManagementTab({
               label="Title"
               value={title}
               onChangeText={setTitle}
-              placeholder="Title (optional)"
+              onBlur={() => setTitle((prev) => normalizeStaffTitle(prev))}
+              placeholder="e.g. Dr., RN"
             />
             <Input
               containerStyle={styles.flexWide}
@@ -2550,32 +2773,46 @@ export default function StaffManagementTab({
           </View>
 
           {/* Active Status Row */}
-          <View style={styles.activeStatusRow}>
-            <View style={styles.flex1}>
-              <ThemedText variant="smallBold" color={theme.colors.text}>
-                Staff Account Status
-              </ThemedText>
-              <ThemedText variant="caption" color={theme.colors.textMuted}>
-                {isEditingSelf
-                  ? 'Active: you cannot deactivate your own workstation account.'
-                  : isSoleActiveAdmin
-                  ? 'Active: primary administrator. Cannot deactivate the only active Clinic Administrator.'
-                  : isActiveStaff
-                  ? 'Active: staff member can be assigned consultations and access workstation.'
-                  : 'Deactivated: staff member cannot log in or be assigned.'}
-              </ThemedText>
+          {isEditingPendingInvite ? (
+            <View style={styles.activeStatusRow} testID="edit-pending-invite-status">
+              <View style={styles.flex1}>
+                <ThemedText variant="smallBold" color={theme.colors.text}>
+                  Staff Account Status
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Invitation pending: this staff member has not set up their login yet. Use Revoke Invitation from the row menu to cancel.
+                </ThemedText>
+              </View>
+              <Badge label="Invited" variant="purple" size="sm" icon="mail" />
             </View>
-            <Button
-              title={isActiveStaff ? 'Active' : 'Deactivated'}
-              variant={isActiveStaff ? 'success' : 'danger'}
-              size="sm"
-              disabled={isEditingSelf || isSoleActiveAdmin}
-              onPress={() => {
-                if (isEditingSelf || isSoleActiveAdmin) return;
-                setIsActiveStaff((prev) => !prev);
-              }}
-            />
-          </View>
+          ) : (
+            <View style={styles.activeStatusRow}>
+              <View style={styles.flex1}>
+                <ThemedText variant="smallBold" color={theme.colors.text}>
+                  Staff Account Status
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  {isEditingSelf
+                    ? 'Active: you cannot deactivate your own workstation account.'
+                    : isSoleActiveAdmin
+                    ? 'Active: primary administrator. Cannot deactivate the only active Clinic Administrator.'
+                    : isActiveStaff
+                    ? 'Active: staff member can be assigned consultations and access workstation.'
+                    : 'Deactivated: staff member cannot log in or be assigned.'}
+                </ThemedText>
+              </View>
+              <Button
+                title={isActiveStaff ? 'Active' : 'Deactivated'}
+                variant={isActiveStaff ? 'success' : 'danger'}
+                size="sm"
+                disabled={isEditingSelf || isSoleActiveAdmin}
+                onPress={() => {
+                  if (isEditingSelf || isSoleActiveAdmin) return;
+                  setIsActiveStaff((prev) => !prev);
+                }}
+              />
+            </View>
+          )}
 
           {role === 'Doctor' ? (
             <>
@@ -2596,6 +2833,7 @@ export default function StaffManagementTab({
                   placeholder="PhilHealth accreditation number"
                 />
               </View>
+              <DuplicatePrcWarningBanner message={duplicatePrcWarning} />
               <View style={styles.formRow}>
                 <Input
                   containerStyle={styles.flexWide}
@@ -3164,6 +3402,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.sm,
   },
+  rosterContentStack: {
+    gap: theme.spacing.md,
+  },
+  filterToolbar: {
+    gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.sm,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  filterTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  filterSearchInput: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 240,
+  },
+  filterSearchInputMobile: {
+    width: '100%',
+  },
+  filterChipGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  filterSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
   staffList: {
     gap: theme.spacing.sm,
   },
@@ -3419,6 +3691,16 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     padding: theme.spacing.sm,
     backgroundColor: theme.colors.warningBg,
+    borderRadius: theme.radii.sm,
+  },
+  prcWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.warningBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.warningBorder,
     borderRadius: theme.radii.sm,
   },
   prcProofRow: {
