@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useCashierComms } from '../context/CashierCommsContext';
+import { countActiveUnreadConversations } from '@clinicez/comms-sdk/core';
 import { useConversations } from '@clinicez/comms-sdk/react';
 import { lightColors, radiusScale, spaceScale, sizes, fontSizeScale } from '@clinicez/design-tokens';
 
@@ -8,9 +9,7 @@ export function CashierChatTrigger() {
   const { toggleChat } = useCashierComms();
   const { conversations } = useConversations();
 
-  const totalUnread = useMemo(() => {
-    return conversations.reduce((acc, c) => acc + ((c as any).unreadCount || 0), 0);
-  }, [conversations]);
+  const totalUnread = useMemo(() => countActiveUnreadConversations(conversations), [conversations]);
 
   return (
     <Pressable

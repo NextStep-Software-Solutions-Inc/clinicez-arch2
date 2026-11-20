@@ -21,16 +21,21 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
   canWriteInternalNotes = false,
   isLoading = false,
   error = null,
+  isArchived = false,
+  archivedBannerText,
+  isReadOnly = false,
+  readOnlyBanner,
   className = ''
 }) => {
   const [inputText, setInputText] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const effectiveReadOnly = Boolean(isReadOnly || isArchived);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || isSubmitting) return;
+    if (effectiveReadOnly || !inputText.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
@@ -313,47 +318,71 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
         </div>
       )}
 
-      {/* Input Bar */}
-      <form onSubmit={handleSend} className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
-        {canWriteInternalNotes && (
-          <div className="mb-2">
-            <button
-              type="button"
-              onClick={() => setIsInternal((prev) => !prev)}
-              className={`min-h-[44px] px-3 rounded text-xs font-semibold transition-colors ${
-                isInternal
-                  ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-300'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-              }`}
+      {/* Input Bar or Archived Read-Only Banner */}
+      {effectiveReadOnly ? (
+        readOnlyBanner !== undefined && readOnlyBanner !== null ? (
+          typeof readOnlyBanner === 'string' || typeof readOnlyBanner === 'number' ? (
+            <div
+              data-testid="message-thread-archived-banner"
+              role="status"
+              className="px-4 py-3 bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 text-center text-xs font-semibold text-slate-500 dark:text-slate-400"
             >
-              {isInternal ? 'Internal Note Mode: ACTIVE' : 'Internal Note'}
+              {readOnlyBanner}
+            </div>
+          ) : (
+            readOnlyBanner
+          )
+        ) : (
+          <div
+            data-testid="message-thread-archived-banner"
+            role="status"
+            className="px-4 py-3 bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 text-center text-xs font-semibold text-slate-500 dark:text-slate-400"
+          >
+            {archivedBannerText ?? 'This conversation is closed and archived. Message history is read-only.'}
+          </div>
+        )
+      ) : (
+        <form onSubmit={handleSend} className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+          {canWriteInternalNotes && (
+            <div className="mb-2">
+              <button
+                type="button"
+                onClick={() => setIsInternal((prev) => !prev)}
+                className={`min-h-[44px] px-3 rounded text-xs font-semibold transition-colors ${
+                  isInternal
+                    ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-300'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                }`}
+              >
+                {isInternal ? 'Internal Note Mode: ACTIVE' : 'Internal Note'}
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-end gap-2">
+            <textarea
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder={isInternal ? 'Type internal note for care team...' : 'Type message...'}
+              rows={2}
+              className={`flex-1 p-2.5 rounded border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal-700 ${
+                isInternal
+                  ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100'
+                  : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100'
+              }`}
+              aria-label="Message text input"
+            />
+
+            <button
+              type="submit"
+              disabled={!inputText.trim() || isSubmitting}
+              className="min-h-[44px] px-5 rounded bg-teal-700 text-white text-sm font-semibold hover:bg-teal-800 disabled:opacity-50 transition-colors"
+            >
+              Send
             </button>
           </div>
-        )}
-
-        <div className="flex items-end gap-2">
-          <textarea
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder={isInternal ? 'Type internal note for care team...' : 'Type message...'}
-            rows={2}
-            className={`flex-1 p-2.5 rounded border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal-700 ${
-              isInternal
-                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100'
-                : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100'
-            }`}
-            aria-label="Message text input"
-          />
-
-          <button
-            type="submit"
-            disabled={!inputText.trim() || isSubmitting}
-            className="min-h-[44px] px-5 rounded bg-teal-700 text-white text-sm font-semibold hover:bg-teal-800 disabled:opacity-50 transition-colors"
-          >
-            Send
-          </button>
-        </div>
-      </form>
+        </form>
+      )}
     </div>
   );
 };

@@ -6,7 +6,10 @@ import {
   useConversation,
   useSendMessage,
 } from '@clinicez/comms-sdk/react';
-import { resolveConversationDisplayTitle } from '@clinicez/comms-sdk/core';
+import {
+  filterConversationsByScopeAndQuery,
+  resolveConversationDisplayTitle,
+} from '@clinicez/comms-sdk/core';
 import {
   ChatDrawer,
   MessageThread,
@@ -22,14 +25,21 @@ import { useAuth } from './AuthGate';
 
 interface ActiveThreadViewProps {
   conversationId: string;
+  initialIsArchived?: boolean;
   onBack: () => void;
   currentUserId: string;
 }
 
-function ActiveThreadView({ conversationId, onBack, currentUserId }: ActiveThreadViewProps) {
+function ActiveThreadView({
+  conversationId,
+  initialIsArchived,
+  onBack,
+  currentUserId,
+}: ActiveThreadViewProps) {
   const { conversation, messages, isLoading, error, acknowledgeMessage } = useConversation(conversationId);
   const { sendMessage, resendMessage } = useSendMessage();
   const [privacyBlur, setPrivacyBlur] = useState(false);
+  const isArchived = conversation?.status === 'Closed' || Boolean(initialIsArchived);
 
   const handleSend = useCallback(
     async (text: string, isInternal: boolean) => {
@@ -72,6 +82,11 @@ function ActiveThreadView({ conversationId, onBack, currentUserId }: ActiveThrea
         <Text style={styles.threadTitle} numberOfLines={1}>
           {conversation?.title || 'Billing Inquiry'}
         </Text>
+        {isArchived && (
+          <View style={styles.archivedHeaderBadge} testID="thread-archived-badge">
+            <Text style={styles.archivedHeaderBadgeText}>Closed / Archived</Text>
+          </View>
+        )}
       </View>
 
       <MessageThread
@@ -91,6 +106,8 @@ function ActiveThreadView({ conversationId, onBack, currentUserId }: ActiveThrea
         onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
         showHeader={false}
         canWriteInternalNotes={true}
+        isArchived={isArchived}
+        isReadOnly={isArchived}
         isLoading={isLoading}
         error={error ? error.message : null}
       />
@@ -114,31 +131,20 @@ export default function CashierChatModal() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const chatItems: ChatDrawerItem[] = useMemo(() => {
-    return conversations
-      .filter((c) => {
-        if (selectedScope !== 'All' && c.scope !== selectedScope) return false;
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          const displayTitle = resolveConversationDisplayTitle(c).toLowerCase();
-          return (
-            displayTitle.includes(q) ||
-            Boolean(c.title?.toLowerCase().includes(q)) ||
-            Boolean(c.lastMessageSnippet?.toLowerCase().includes(q))
-          );
-        }
-        return true;
-      })
-      .map((c) => ({
+    return filterConversationsByScopeAndQuery(conversations, selectedScope, searchQuery).map(
+      (c) => ({
         id: c.id,
         scope: c.scope as ChatDrawerItem['scope'],
         title: resolveConversationDisplayTitle(c),
         lastMessageSnippet: c.lastMessageSnippet ?? undefined,
         lastMessageAtUtc: c.lastMessageAtUtc ?? undefined,
-        unreadCount: (c as any).unreadCount ?? 0,
+        unreadCount: c.unreadCount ?? 0,
         urgentCount: c.priority === 'Urgent' ? 1 : 0,
         isEmergency: c.priority === 'Critical',
         isActive: c.id === activeConversationId,
-      }));
+        isArchived: c.status === 'Closed',
+      }),
+    );
   }, [conversations, selectedScope, searchQuery, activeConversationId]);
 
   const connectionStateDisplay =
@@ -178,6 +184,9 @@ export default function CashierChatModal() {
             {activeConversationId ? (
               <ActiveThreadView
                 conversationId={activeConversationId}
+                initialIsArchived={
+                  conversations.find((c) => c.id === activeConversationId)?.status === 'Closed'
+                }
                 onBack={() => setActiveConversationId(undefined)}
                 currentUserId={user?.id || 'cashier-staff'}
               />
@@ -289,5 +298,18 @@ const styles = StyleSheet.create({
     fontSize: fontSizeScale.md,
     fontWeight: '700',
     color: lightColors.text,
+  },
+  archivedHeaderBadge: {
+    backgroundColor: lightColors.surfaceSubtle,
+    borderColor: lightColors.border,
+    borderWidth: 1,
+    borderRadius: radiusScale.xs,
+    paddingHorizontal: spaceScale.xs,
+    paddingVertical: 2,
+  },
+  archivedHeaderBadgeText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '600',
+    color: lightColors.textMuted,
   },
 });

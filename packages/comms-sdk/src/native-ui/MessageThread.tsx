@@ -47,6 +47,8 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   onLoadMoreHistory,
   isArchived = false,
   archivedBannerText,
+  isReadOnly = false,
+  readOnlyBanner,
   noticeBannerText,
   colors,
   shadows: shadowsProp,
@@ -66,6 +68,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   const [isInternal, setIsInternal] = useState(false);
   const [peekingMessageId, setPeekingMessageId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const effectiveReadOnly = Boolean(isReadOnly || isArchived);
 
   const scrollViewRef = useRef<ScrollView>(null);
   const isNearBottomRef = useRef(true);
@@ -113,7 +116,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   };
 
   const handleSend = async () => {
-    if (isArchived || !inputText.trim() || isSubmitting) return;
+    if (effectiveReadOnly || !inputText.trim() || isSubmitting) return;
     setIsSubmitting(true);
     try {
       await onSendMessage(inputText.trim(), isInternal);
@@ -492,16 +495,30 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
       )}
 
       {/* Input Bar or Archived Read-Only Banner */}
-      {isArchived ? (
-        <View
-          style={styles.archivedBanner}
-          testID="message-thread-archived-banner"
-          accessibilityRole="text"
-        >
-          <Text style={styles.archivedBannerText}>
-            {archivedBannerText ?? 'This conversation is closed and archived. Message history is read-only.'}
-          </Text>
-        </View>
+      {effectiveReadOnly ? (
+        readOnlyBanner !== undefined && readOnlyBanner !== null ? (
+          typeof readOnlyBanner === 'string' || typeof readOnlyBanner === 'number' ? (
+            <View
+              style={styles.archivedBanner}
+              testID="message-thread-archived-banner"
+              accessibilityRole="text"
+            >
+              <Text style={styles.archivedBannerText}>{readOnlyBanner}</Text>
+            </View>
+          ) : (
+            readOnlyBanner
+          )
+        ) : (
+          <View
+            style={styles.archivedBanner}
+            testID="message-thread-archived-banner"
+            accessibilityRole="text"
+          >
+            <Text style={styles.archivedBannerText}>
+              {archivedBannerText ?? 'This conversation is closed and archived. Message history is read-only.'}
+            </Text>
+          </View>
+        )
       ) : (
         <View style={styles.inputContainer}>
           {canWriteInternalNotes && (

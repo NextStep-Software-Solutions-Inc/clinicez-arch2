@@ -107,6 +107,8 @@ export interface MessageThreadProps {
   onLoadMoreHistory?: () => void;
   isArchived?: boolean;
   archivedBannerText?: string;
+  isReadOnly?: boolean;
+  readOnlyBanner?: React.ReactNode;
   noticeBannerText?: string;
   colors?: CommsThemeColors;
   shadows?: CommsThemeShadows;

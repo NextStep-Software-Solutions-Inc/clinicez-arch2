@@ -69,7 +69,7 @@ export function useConversations(
         const headers = await resolveCommsAuthHeaders(activeTicket, refreshTicket);
         const params = new URLSearchParams();
         if (facilityId) params.append('facilityId', facilityId);
-        if (scope && scope !== 'All' && !Array.isArray(scope)) {
+        if (scope && scope !== 'All' && scope !== 'Archived' && !Array.isArray(scope)) {
           params.append('scope', scope);
         }
         const queryString = params.toString();
@@ -437,9 +437,19 @@ export function useConversations(
   }, [client, refresh, staffId]);
 
   // Filtering conversations
+  // Note: when scope is undefined or 'All', Closed threads remain in `conversations`
+  // so drawer hosts can populate the client-side 'Archived' tab, while unread counts
+  // below exclude Closed threads unless scope === 'Archived'.
   const filteredConversations = useMemo(() => {
+    const explicitlyIncludesClosed =
+      filter.status === 'Closed' ||
+      (Array.isArray(filter.status) && filter.status.includes('Closed'));
+
     return conversations.filter((c) => {
-      if (scope && scope !== 'All') {
+      if (scope === 'Archived') {
+        if (c.status !== 'Closed') return false;
+      } else if (scope && scope !== 'All') {
+        if (!explicitlyIncludesClosed && c.status === 'Closed') return false;
         if (Array.isArray(scope)) {
           if (!scope.includes(c.scope)) return false;
         } else if (c.scope !== scope) {
@@ -477,17 +487,21 @@ export function useConversations(
       PatientFacility: 0
     };
     for (const c of filteredConversations) {
+      if (scope !== 'Archived' && c.status === 'Closed') continue;
       const u = c.unreadCount ?? 0;
       if (u > 0 && counts[c.scope] !== undefined) {
         counts[c.scope] += u;
       }
     }
     return counts;
-  }, [filteredConversations]);
+  }, [filteredConversations, scope]);
 
   const totalUnreadCount = useMemo(() => {
-    return filteredConversations.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
-  }, [filteredConversations]);
+    return filteredConversations.reduce((sum, c) => {
+      if (scope !== 'Archived' && c.status === 'Closed') return sum;
+      return sum + (c.unreadCount ?? 0);
+    }, 0);
+  }, [filteredConversations, scope]);
 
   return {
     conversations: filteredConversations,

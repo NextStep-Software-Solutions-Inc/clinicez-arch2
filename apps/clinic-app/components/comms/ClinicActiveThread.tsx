@@ -191,7 +191,8 @@ export default function ClinicActiveThread({
       : rawTitle.trim()
   );
   const [privacyBlur, setPrivacyBlur] = useState(false);
-  const isArchived = conversation?.status === 'Closed';
+  const isArchived =
+    conversation?.status === 'Closed' || initialConversation?.status === 'Closed';
   const resolvedParticipantMuted = useMemo(() => {
     const participants = conversation?.participants as ThreadParticipantLike[] | undefined;
     const self = participants?.find(
@@ -314,6 +315,7 @@ export default function ClinicActiveThread({
 
   // Speed response 1-tap reply
   const handleSendSpeedReply = async (pillText: string) => {
+    if (isArchived) return;
     try {
       await handleSendMessage(pillText, false);
     } catch (err: unknown) {
@@ -507,6 +509,7 @@ export default function ClinicActiveThread({
   };
 
   const handlePostHandoffNote = async () => {
+    if (isArchived) return;
     try {
       await handleSendMessage(handoffSummaryContent, true);
       setIsHandoffModalOpen(false);
@@ -557,10 +560,19 @@ export default function ClinicActiveThread({
           {isLoading && !conversation?.scope ? (
             <View style={styles.skeletonSubtitle} />
           ) : (
-            <View style={styles.scopeBadge}>
-              <ThemedText variant="captionBold" color={theme.colors.primary} style={styles.scopeBadgeText}>
-                {getCategoryLabel(conversation?.scope)}
-              </ThemedText>
+            <View style={styles.headerBadgesRow}>
+              <View style={styles.scopeBadge}>
+                <ThemedText variant="captionBold" color={theme.colors.primary} style={styles.scopeBadgeText}>
+                  {getCategoryLabel(conversation?.scope)}
+                </ThemedText>
+              </View>
+              {isArchived && (
+                <View style={styles.archivedBadge} testID="clinic-active-thread-archived-badge">
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.scopeBadgeText}>
+                    Closed / Archived
+                  </ThemedText>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -692,6 +704,21 @@ export default function ClinicActiveThread({
             await acknowledgeMessage(msgId);
           }}
           isArchived={isArchived}
+          isReadOnly={isArchived}
+          readOnlyBanner={
+            isArchived ? (
+              <View
+                style={styles.readOnlyBanner}
+                testID="message-thread-archived-banner"
+                accessibilityRole="text"
+              >
+                <Icon name="archive" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.readOnlyBannerText}>
+                  This conversation is closed and archived. Message history is read-only.
+                </ThemedText>
+              </View>
+            ) : undefined
+          }
           privacyBlurEnabled={privacyBlur}
           onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
           showHeader={false}
@@ -963,12 +990,14 @@ export default function ClinicActiveThread({
               onPress={handleCopyHandoff}
               style={styles.modalFooterBtn}
             />
-            <Button
-              title="Post to Thread"
-              variant="secondary"
-              onPress={handlePostHandoffNote}
-              style={styles.modalFooterBtn}
-            />
+            {!isArchived && (
+              <Button
+                title="Post to Thread"
+                variant="secondary"
+                onPress={handlePostHandoffNote}
+                style={styles.modalFooterBtn}
+              />
+            )}
             <Button
               title="Close"
               variant="primary"
@@ -1044,6 +1073,13 @@ function createStyles() {
     threadTitle: {
       flexShrink: 1,
     },
+    headerBadgesRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: theme.spacing.xs,
+      marginTop: 1,
+    },
     scopeBadge: {
       alignSelf: 'flex-start',
       backgroundColor: theme.colors.primarySubtle,
@@ -1052,11 +1088,34 @@ function createStyles() {
       paddingHorizontal: 4,
       paddingVertical: 0,
       borderRadius: theme.radii.xs,
-      marginTop: 1,
+    },
+    archivedBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: theme.colors.surfaceSubtle,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.border,
+      paddingHorizontal: 4,
+      paddingVertical: 0,
+      borderRadius: theme.radii.xs,
     },
     scopeBadgeText: {
       fontSize: theme.typography.caption.fontSize,
       lineHeight: 14,
+    },
+    readOnlyBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+      backgroundColor: theme.colors.surfaceSubtle,
+      borderTopWidth: theme.sizes.borderWidth,
+      borderTopColor: theme.colors.border,
+    },
+    readOnlyBannerText: {
+      textAlign: 'center',
+      flexShrink: 1,
     },
     headerRightControls: {
       flexDirection: 'row',

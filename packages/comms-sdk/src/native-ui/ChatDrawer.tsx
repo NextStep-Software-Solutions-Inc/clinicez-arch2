@@ -82,7 +82,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         >
           {renderSearchIcon ? renderSearchIcon() : <Text style={styles.iconText}>•</Text>}
         </TouchableOpacity>
-        {items.some((i) => i.unreadCount > 0) && (
+        {items.some((i) => !i.isArchived && i.unreadCount > 0) && (
           <View style={styles.collapsedBadge}>
             <Text style={styles.collapsedBadgeText}>•</Text>
           </View>
@@ -178,6 +178,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       ) : items.length === 0 ? (
         renderEmptyState ? (
           renderEmptyState()
+        ) : selectedScope === 'Archived' ? (
+          <View style={styles.stateContainer}>
+            <Text style={styles.emptyTitle}>No Archived Conversations</Text>
+            <Text style={styles.emptySubtitle}>No closed or archived conversations found.</Text>
+          </View>
         ) : (
           <View style={styles.stateContainer}>
             <Text style={styles.emptyTitle}>No Conversations</Text>
@@ -236,7 +241,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                       <Text
                         style={[
                           styles.cardTitle,
-                          item.unreadCount > 0 && styles.cardTitleUnread,
+                          !item.isArchived && item.unreadCount > 0 && styles.cardTitleUnread,
                           isActive && styles.cardTitleActive,
                         ]}
                         numberOfLines={1}
@@ -267,7 +272,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                       <Text
                         style={[
                           styles.cardSnippet,
-                          item.unreadCount > 0 && styles.cardSnippetUnread,
+                          !item.isArchived && item.unreadCount > 0 && styles.cardSnippetUnread,
                         ]}
                         numberOfLines={2}
                       >
@@ -275,11 +280,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                       </Text>
                     )}
 
-                    {(item.isArchived || item.isMuted || item.isEmergency || (item.urgentCount !== undefined && item.urgentCount > 0) || item.unreadCount > 0) && (
+                    {(item.isArchived || item.isMuted || item.isEmergency || (item.urgentCount !== undefined && item.urgentCount > 0) || (!item.isArchived && item.unreadCount > 0)) && (
                       <View style={styles.cardMeta}>
                         {item.isArchived && (
                           <View style={styles.archivedBadge} testID={`badge-archived-${item.id}`}>
-                            <Text style={styles.archivedBadgeText}>Archived</Text>
+                            <Text style={styles.archivedBadgeText}>Closed / Archived</Text>
                           </View>
                         )}
                         {item.isMuted && (
@@ -297,7 +302,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                             <Text style={styles.urgentBadgeText}>Urgent</Text>
                           </View>
                         )}
-                        {item.unreadCount > 0 && (
+                        {!item.isArchived && item.unreadCount > 0 && (
                           <View style={styles.unreadBadge}>
                             <Text style={styles.unreadBadgeText}>{item.unreadCount}</Text>
                           </View>

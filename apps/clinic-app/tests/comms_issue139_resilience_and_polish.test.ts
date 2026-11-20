@@ -108,6 +108,8 @@ mock.module('@react-navigation/native', () => ({
 }));
 
 let mockCommsEnabled = true;
+let mockHeaderConversations: any[] = [];
+let mockHeaderUnreadFallback = 0;
 const mockClinicComms = {
   isChatDrawerOpen: false,
   toggleChatDrawer: mock(() => {}),
@@ -135,8 +137,8 @@ mock.module('@clinicez/comms-sdk/react', () => {
     CommsContext: React.createContext(dummyCtx),
     useCommsContext: () => ({ facilityId: 'fac-1' }),
     useConversations: () => ({
-      conversations: [],
-      unreadCount: 0,
+      conversations: mockHeaderConversations,
+      unreadCount: mockHeaderUnreadFallback,
       isLoading: false,
       error: null,
       refresh: mock(() => Promise.resolve()),
@@ -220,6 +222,8 @@ const { isCommsEnabled } = await import('../services/runtimeConfig');
 describe('Issue #139: Comms Domain Resolution, Feature Gating & Pill Polish', () => {
   beforeEach(() => {
     mockCommsEnabled = true;
+    mockHeaderConversations = [];
+    mockHeaderUnreadFallback = 0;
   });
 
   describe('Part 1: Runtime Settings & Configuration Gates', () => {
@@ -280,6 +284,26 @@ describe('Issue #139: Comms Domain Resolution, Feature Gating & Pill Polish', ()
       mockCommsEnabled = false;
       const html = renderToStaticMarkup(React.createElement(ClinicHeaderBar, {}));
       expect(html).not.toContain('aria-label="Communications"');
+    });
+
+    test('2.3: CommsChatButton excludes Closed and TeleconsultCall unread counts (#212)', () => {
+      mockCommsEnabled = true;
+      mockHeaderUnreadFallback = 14;
+      mockHeaderConversations = [
+        { id: 'c1', scope: 'Direct', status: 'Submitted', unreadCount: 3 },
+        { id: 'c2', scope: 'Facility', status: 'Closed', unreadCount: 6 },
+        {
+          id: 'c3',
+          scope: 'StaffContext',
+          contextType: 'TeleconsultCall',
+          status: 'Submitted',
+          unreadCount: 5,
+        },
+      ];
+      const html = renderToStaticMarkup(React.createElement(ClinicHeaderBar, {}));
+      expect(html).toContain('Communications, 3 unread');
+      expect(html).toContain('>3<');
+      expect(html).not.toContain('>14<');
     });
   });
 

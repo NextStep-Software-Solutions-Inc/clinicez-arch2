@@ -106,7 +106,8 @@ export type ConversationScopeFilter =
   | 'Branch'
   | 'Direct'
   | 'StaffContext'
-  | 'PatientFacility';
+  | 'PatientFacility'
+  | 'Archived';
 
 export interface ConversationsFilterOptions {
   category?: MessageCategory;
