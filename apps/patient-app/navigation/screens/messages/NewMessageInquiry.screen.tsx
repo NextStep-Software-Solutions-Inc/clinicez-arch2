@@ -165,7 +165,8 @@ export default function NewMessageInquiryScreen() {
       if (result.canceled || !result.assets || result.assets.length === 0) return;
 
       const file = result.assets[0];
-      if (file.size && file.size > 15 * 1024 * 1024) {
+      const fileSize = file.size ?? file.file?.size;
+      if (fileSize && fileSize > 15 * 1024 * 1024) {
         dialog.alert('File Too Large', 'Maximum file size is 15 MB.');
         return;
       }
@@ -174,8 +175,9 @@ export default function NewMessageInquiryScreen() {
       const uploaded = await communicationsService.uploadAttachment(getToken, {
         uri: file.uri,
         name: file.name,
-        type: file.mimeType ?? 'application/octet-stream',
-        size: file.size,
+        type: file.mimeType || file.file?.type || 'application/octet-stream',
+        size: fileSize,
+        file: file.file,
       });
 
       setAttachments((prev) => [...prev, uploaded]);
