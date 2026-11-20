@@ -356,9 +356,25 @@ export function resolveToolsRouteIntent(params?: {
     };
   }
 
+  // Explicit directory tab ignores any stale tool param
+  if (rawTab === 'directory') {
+    return {
+      tab: 'directory',
+    };
+  }
+
   // Direct tool ID passed in ?tool=
   const toolMatch = findToolById(rawTool);
   if (toolMatch) {
+    if (
+      rawTab &&
+      (ALL_TOOLS_TABS as readonly string[]).includes(rawTab) &&
+      rawTab !== toolMatch.tab
+    ) {
+      return {
+        tab: rawTab as ClinicToolsTab,
+      };
+    }
     return {
       tab: toolMatch.tab,
       tool: toolMatch.id,

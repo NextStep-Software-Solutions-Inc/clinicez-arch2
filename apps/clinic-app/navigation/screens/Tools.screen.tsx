@@ -52,6 +52,12 @@ const LEGACY_TAB_VALUE_ALIASES: Record<string, ClinicToolsTab> = {
   masterlist: 'yakap',
 };
 
+const TOOLS_QUERY_PARAM_ALIASES = ['section'] as const;
+
+const TOOLS_CLEANUP_PARAMS_BY_VALUE: Partial<Record<ClinicToolsTab, readonly string[]>> = {
+  directory: ['tool'],
+};
+
 const toolsPathnameMatcher = (p: string) => {
   const lower = (p || '').toLowerCase();
   return lower.includes('tools') || lower.includes('yakap');
@@ -137,10 +143,11 @@ export default function ToolsScreen({ route: routeProp }: ToolsScreenProps = {})
     storageKey: 'clinicez_tools_active_tab',
     allowedValues: ALL_TOOLS_TABS,
     defaultValue: resolvedIntent.tab ?? 'directory',
-    routeParam: resolvedIntent.tab ?? routeParams?.tab,
+    routeParam: routeParams?.tab ?? resolvedIntent.tab,
     queryParam: 'tab',
-    queryParamAliases: ['section'],
+    queryParamAliases: TOOLS_QUERY_PARAM_ALIASES,
     valueAliases: LEGACY_TAB_VALUE_ALIASES,
+    cleanupParamsByValue: TOOLS_CLEANUP_PARAMS_BY_VALUE,
     navigation,
     pathnameMatcher: toolsPathnameMatcher,
   });
@@ -160,15 +167,16 @@ export default function ToolsScreen({ route: routeProp }: ToolsScreenProps = {})
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshSignal, setRefreshSignal] = useState(0);
 
-  // Sync legacy/direct route params if they change while mounted
+  // Align activeTool with the active category tab when navigating directly to a tab without ?tool=
   useEffect(() => {
-    if (resolvedIntent.tool) {
-      setActiveTool(resolvedIntent.tool);
+    if (activeTab === 'directory') return;
+    const currentDef = findToolById(activeTool);
+    if (currentDef?.tab === activeTab) return;
+    const fallbackTool = getDefaultToolForTab(activeTab, accessibleTools);
+    if (fallbackTool !== activeTool) {
+      setActiveTool(fallbackTool);
     }
-    if (resolvedIntent.tab) {
-      setActiveTab(resolvedIntent.tab);
-    }
-  }, [resolvedIntent.tab, resolvedIntent.tool, setActiveTab, setActiveTool]);
+  }, [activeTab, activeTool, accessibleTools, setActiveTool]);
 
   const handleSelectTab = useCallback(
     (nextTab: ClinicToolsTab) => {

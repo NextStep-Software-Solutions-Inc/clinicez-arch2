@@ -323,77 +323,117 @@ export function usePersistedTab<T extends string>(
   const navigationRef = useRef(navigation);
   navigationRef.current = navigation;
 
+  const storageKeyRef = useRef(storageKey);
+  storageKeyRef.current = storageKey;
+
+  const allowedValuesRef = useRef(allowedValues);
+  allowedValuesRef.current = allowedValues;
+
+  const defaultValueRef = useRef(defaultValue);
+  defaultValueRef.current = defaultValue;
+
+  const queryParamRef = useRef(queryParam);
+  queryParamRef.current = queryParam;
+
+  const queryParamAliasesRef = useRef(queryParamAliases);
+  queryParamAliasesRef.current = queryParamAliases;
+
+  const valueAliasesRef = useRef(valueAliases);
+  valueAliasesRef.current = valueAliases;
+
+  const syncUrlRef = useRef(syncUrl);
+  syncUrlRef.current = syncUrl;
+
+  const clearUrlOnInactiveRef = useRef(clearUrlOnInactive);
+  clearUrlOnInactiveRef.current = clearUrlOnInactive;
+
+  const omitDefaultFromUrlRef = useRef(omitDefaultFromUrl);
+  omitDefaultFromUrlRef.current = omitDefaultFromUrl;
+
+  const effectiveAllowEmptyRef = useRef(effectiveAllowEmpty);
+  effectiveAllowEmptyRef.current = effectiveAllowEmpty;
+
+  const cleanupParamsByValueRef = useRef(cleanupParamsByValue);
+  cleanupParamsByValueRef.current = cleanupParamsByValue;
+
+  const cleanupParamsRef = useRef(cleanupParams);
+  cleanupParamsRef.current = cleanupParams;
+
   const prevRouteParamRef = useRef<string | null | undefined>(routeParam);
   const pendingSyncedValuesRef = useRef<T[]>([]);
   const didHydrateSyncRef = useRef(false);
   const prevSyncUrlRef = useRef(syncUrl);
 
-  const getCleanupKeys = useCallback(
-    (targetVal: T): string[] => {
-      const keys: string[] = [];
-      if (queryParamAliases && queryParamAliases.length > 0) {
-        keys.push(...queryParamAliases);
-      }
-      if (cleanupParams && cleanupParams.length > 0) {
-        keys.push(...cleanupParams);
-      }
-      if (cleanupParamsByValue && cleanupParamsByValue[targetVal]) {
-        keys.push(...cleanupParamsByValue[targetVal]!);
-      }
-      return keys;
-    },
-    [cleanupParams, cleanupParamsByValue, queryParamAliases],
-  );
+  const getCleanupKeys = useCallback((targetVal: T): string[] => {
+    const keys: string[] = [];
+    const aliases = queryParamAliasesRef.current;
+    if (aliases && aliases.length > 0) {
+      keys.push(...aliases);
+    }
+    const flatCleanup = cleanupParamsRef.current;
+    if (flatCleanup && flatCleanup.length > 0) {
+      keys.push(...flatCleanup);
+    }
+    const byValue = cleanupParamsByValueRef.current;
+    if (byValue && byValue[targetVal]) {
+      keys.push(...byValue[targetVal]!);
+    }
+    return keys;
+  }, []);
 
   // Handle syncUrl transitions (e.g. parent tab switches so this child becomes active or inactive)
   useEffect(() => {
     if (prevSyncUrlRef.current === syncUrl) return;
     prevSyncUrlRef.current = syncUrl;
 
+    const currentQueryParam = queryParamRef.current;
     if (syncUrl) {
-      const shouldOmit = Boolean(omitDefaultFromUrl && valueRef.current === defaultValue);
+      const shouldOmit = Boolean(
+        omitDefaultFromUrlRef.current && valueRef.current === defaultValueRef.current,
+      );
       syncSearchParamsAndHistory({
-        queryParam,
+        queryParam: currentQueryParam,
         value: valueRef.current,
         omitValue: shouldOmit,
         cleanupParams: getCleanupKeys(valueRef.current),
         pathnameMatcher: pathnameMatcherRef.current,
         navigation: navigationRef.current,
       });
-    } else if (clearUrlOnInactive && queryParam) {
-      const inactiveParams = [queryParam, ...(queryParamAliases ?? [])];
+    } else if (clearUrlOnInactiveRef.current && currentQueryParam) {
+      const inactiveParams = [currentQueryParam, ...(queryParamAliasesRef.current ?? [])];
       syncSearchParamsAndHistory({
         cleanupParams: inactiveParams,
         pathnameMatcher: pathnameMatcherRef.current,
         navigation: navigationRef.current,
       });
     }
-  }, [
-    clearUrlOnInactive,
-    defaultValue,
-    getCleanupKeys,
-    omitDefaultFromUrl,
-    queryParam,
-    queryParamAliases,
-    syncUrl,
-  ]);
+  }, [clearUrlOnInactive, getCleanupKeys, queryParam, syncUrl]);
 
   // Persist initial deep-linked / hydrated value so subsequent bare refreshes preserve it
   useEffect(() => {
     if (didHydrateSyncRef.current) return;
     didHydrateSyncRef.current = true;
-    if (storageKey) {
-      const stored = normalizePersistedTabValue(getSessionItem(storageKey), allowedValues, valueAliases, effectiveAllowEmpty);
-      if (stored !== valueRef.current && (valueRef.current !== defaultValue || stored !== null)) {
-        setSessionItem(storageKey, valueRef.current);
+    const currentStorageKey = storageKeyRef.current;
+    const currentQueryParam = queryParamRef.current;
+    if (currentStorageKey) {
+      const stored = normalizePersistedTabValue(
+        getSessionItem(currentStorageKey),
+        allowedValuesRef.current,
+        valueAliasesRef.current,
+        effectiveAllowEmptyRef.current,
+      );
+      if (stored !== valueRef.current && (valueRef.current !== defaultValueRef.current || stored !== null)) {
+        setSessionItem(currentStorageKey, valueRef.current);
       }
     }
-    if (syncUrl) {
-      const shouldOmit = Boolean(omitDefaultFromUrl && valueRef.current === defaultValue);
+    if (syncUrlRef.current) {
+      const shouldOmit = Boolean(
+        omitDefaultFromUrlRef.current && valueRef.current === defaultValueRef.current,
+      );
       const cleanup = getCleanupKeys(valueRef.current);
-      if (queryParam || cleanup.length > 0) {
+      if (currentQueryParam || cleanup.length > 0) {
         syncSearchParamsAndHistory({
-          queryParam,
+          queryParam: currentQueryParam,
           value: valueRef.current,
           omitValue: shouldOmit,
           cleanupParams: cleanup,
@@ -401,27 +441,15 @@ export function usePersistedTab<T extends string>(
           navigation: navigationRef.current,
         });
       }
-    } else if (clearUrlOnInactive && queryParam) {
-      const inactiveParams = [queryParam, ...(queryParamAliases ?? [])];
+    } else if (clearUrlOnInactiveRef.current && currentQueryParam) {
+      const inactiveParams = [currentQueryParam, ...(queryParamAliasesRef.current ?? [])];
       syncSearchParamsAndHistory({
         cleanupParams: inactiveParams,
         pathnameMatcher: pathnameMatcherRef.current,
         navigation: navigationRef.current,
       });
     }
-  }, [
-    allowedValues,
-    clearUrlOnInactive,
-    defaultValue,
-    effectiveAllowEmpty,
-    getCleanupKeys,
-    omitDefaultFromUrl,
-    queryParam,
-    queryParamAliases,
-    storageKey,
-    syncUrl,
-    valueAliases,
-  ]);
+  }, [getCleanupKeys, queryParam, storageKey, syncUrl]);
 
   // React to genuine external route param transitions without ping-ponging on local clicks
   useEffect(() => {
@@ -429,7 +457,12 @@ export function usePersistedTab<T extends string>(
       return;
     }
     prevRouteParamRef.current = routeParam;
-    const incoming = normalizePersistedTabValue(routeParam, allowedValues, valueAliases, effectiveAllowEmpty);
+    const incoming = normalizePersistedTabValue(
+      routeParam,
+      allowedValuesRef.current,
+      valueAliasesRef.current,
+      effectiveAllowEmptyRef.current,
+    );
     if (!incoming) return;
 
     const pendingIdx = pendingSyncedValuesRef.current.indexOf(incoming);
@@ -442,13 +475,15 @@ export function usePersistedTab<T extends string>(
       const prev = valueRef.current;
       valueRef.current = incoming;
       setValueState(incoming);
-      if (storageKey) {
-        setSessionItem(storageKey, incoming);
+      if (storageKeyRef.current) {
+        setSessionItem(storageKeyRef.current, incoming);
       }
-      if (syncUrl) {
-        const shouldOmit = Boolean(omitDefaultFromUrl && incoming === defaultValue);
+      if (syncUrlRef.current) {
+        const shouldOmit = Boolean(
+          omitDefaultFromUrlRef.current && incoming === defaultValueRef.current,
+        );
         syncSearchParamsAndHistory({
-          queryParam,
+          queryParam: queryParamRef.current,
           value: incoming,
           omitValue: shouldOmit,
           cleanupParams: getCleanupKeys(incoming),
@@ -457,35 +492,44 @@ export function usePersistedTab<T extends string>(
         });
       }
       onPersistRef.current?.(incoming, prev);
+    } else if (routeParam !== incoming && syncUrlRef.current) {
+      const shouldOmit = Boolean(
+        omitDefaultFromUrlRef.current && incoming === defaultValueRef.current,
+      );
+      syncSearchParamsAndHistory({
+        queryParam: queryParamRef.current,
+        value: incoming,
+        omitValue: shouldOmit,
+        cleanupParams: getCleanupKeys(incoming),
+        pathnameMatcher: pathnameMatcherRef.current,
+        navigation: navigationRef.current,
+      });
     }
-  }, [
-    allowedValues,
-    defaultValue,
-    effectiveAllowEmpty,
-    getCleanupKeys,
-    omitDefaultFromUrl,
-    queryParam,
-    routeParam,
-    storageKey,
-    syncUrl,
-    valueAliases,
-  ]);
+  }, [getCleanupKeys, routeParam]);
 
   const setPersistedValue = useCallback(
     (updater: T | ((prev: T) => T)) => {
       const prev = valueRef.current;
       const rawNext = typeof updater === 'function' ? (updater as (p: T) => T)(prev) : updater;
-      const validated = normalizePersistedTabValue(rawNext, allowedValues, valueAliases, effectiveAllowEmpty) ?? prev;
+      const validated =
+        normalizePersistedTabValue(
+          rawNext,
+          allowedValuesRef.current,
+          valueAliasesRef.current,
+          effectiveAllowEmptyRef.current,
+        ) ?? prev;
       valueRef.current = validated;
       pendingSyncedValuesRef.current = [...pendingSyncedValuesRef.current.slice(-4), validated];
       setValueState(validated);
-      if (storageKey) {
-        setSessionItem(storageKey, validated);
+      if (storageKeyRef.current) {
+        setSessionItem(storageKeyRef.current, validated);
       }
-      if (syncUrl) {
-        const shouldOmit = Boolean(omitDefaultFromUrl && validated === defaultValue);
+      if (syncUrlRef.current) {
+        const shouldOmit = Boolean(
+          omitDefaultFromUrlRef.current && validated === defaultValueRef.current,
+        );
         syncSearchParamsAndHistory({
-          queryParam,
+          queryParam: queryParamRef.current,
           value: validated,
           omitValue: shouldOmit,
           cleanupParams: getCleanupKeys(validated),
@@ -497,17 +541,7 @@ export function usePersistedTab<T extends string>(
         onPersistRef.current?.(validated, prev);
       }
     },
-    [
-      allowedValues,
-      defaultValue,
-      effectiveAllowEmpty,
-      getCleanupKeys,
-      omitDefaultFromUrl,
-      queryParam,
-      storageKey,
-      syncUrl,
-      valueAliases,
-    ],
+    [getCleanupKeys],
   );
 
   return [value, setPersistedValue];
