@@ -538,26 +538,27 @@ describe('Multi-Screen Tab & Filter Persistence Suite', () => {
     expect(currentHref).toContain('scope=all');
     r1.unmount();
 
-    // Yakap
-    currentHref = 'http://localhost:8081/yakap';
+    // Tools (including legacy PhilHealth Yakap tab aliases)
+    currentHref = 'http://localhost:8081/tools';
     const y1 = createHookHarness(
       () => {
         const [activeTab, setActiveTab] = usePersistedTab({
-          storageKey: 'clinicez_yakap_active_tab',
-          allowedValues: ['pin-checker', 'gamot', 'masterlist'],
-          defaultValue: 'pin-checker',
+          storageKey: 'clinicez_tools_active_tab',
+          allowedValues: ['directory', 'yakap', 'calculators', 'lookups', 'operations'],
+          defaultValue: 'directory',
           queryParam: 'tab',
-          pathnameMatcher: (p: string) => p.includes('yakap'),
+          valueAliases: { 'pin-checker': 'yakap', gamot: 'yakap', masterlist: 'yakap' },
+          pathnameMatcher: (p: string) => p.includes('tools') || p.includes('yakap'),
         });
         return { activeTab, setActiveTab };
       },
       {},
     );
-    expect(y1.result.activeTab).toBe('pin-checker');
-    y1.result.setActiveTab('gamot');
+    expect(y1.result.activeTab).toBe('directory');
+    y1.result.setActiveTab('calculators');
     y1.rerender();
-    expect(y1.result.activeTab).toBe('gamot');
-    expect(currentHref).toContain('tab=gamot');
+    expect(y1.result.activeTab).toBe('calculators');
+    expect(currentHref).toContain('tab=calculators');
     y1.unmount();
   });
 
@@ -821,7 +822,7 @@ describe('Multi-Screen Tab & Filter Persistence Suite', () => {
       'Appointments.screen.tsx',
       'Billing.screen.tsx',
       'ResultReview.screen.tsx',
-      'Yakap.screen.tsx',
+      'Tools.screen.tsx',
     ];
 
     for (const s of screens) {

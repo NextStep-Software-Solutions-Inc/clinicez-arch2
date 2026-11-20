@@ -249,6 +249,22 @@ export function resolveSearchNavigation(item: SearchItem): SearchNavigationResol
       };
       break;
 
+    case 'Tools':
+      destinationRoute = 'Tools';
+      destinationParams = {
+        tab: params.tab,
+        tool: params.tool,
+      };
+      break;
+
+    case 'Yakap':
+      destinationRoute = 'Tools';
+      destinationParams = {
+        tab: 'yakap',
+        tool: params.tool || params.tab,
+      };
+      break;
+
     case 'Settings':
       destinationRoute = 'Settings';
       destinationParams = {

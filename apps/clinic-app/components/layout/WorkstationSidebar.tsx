@@ -35,7 +35,7 @@ export const WORKSTATION_NAV_ITEMS: NavItem[] = [
   { key: 'Appointments', label: 'Appointments', icon: 'appointments', permission: PERMISSIONS.appointmentsRead, roles: ['Doctor', 'Nurse', 'Receptionist', 'Admin'] },
   { key: 'Billing', label: 'Billing', icon: 'billing', permission: PERMISSIONS.billingRead, roles: ['Cashier', 'Receptionist', 'Admin'] },
   { key: 'ResultReview', label: 'Result review', icon: 'lab', permission: PERMISSIONS.labOrdersRead, roles: ['Doctor', 'Admin'] },
-  { key: 'Yakap', label: 'PhilHealth Yakap', icon: 'yakap', permission: PERMISSIONS.yakapRead, roles: ['Doctor', 'Admin'] },
+  { key: 'Tools', label: 'Tools', icon: 'tools' },
   { key: 'Audit', label: 'Audit Log', icon: 'scroll', permission: PERMISSIONS.auditRead, roles: ['Admin'] },
   { key: 'Settings', label: 'Settings', icon: 'settings', permission: PERMISSIONS.settingsRead, roles: ['Admin'] },
 ];
