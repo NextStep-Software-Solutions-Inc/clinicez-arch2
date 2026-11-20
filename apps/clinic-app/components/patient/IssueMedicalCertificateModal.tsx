@@ -11,6 +11,10 @@ import {
 } from '../../services/clinicService';
 import { openDocument } from '../../services/documentOpener';
 import { notify } from '../../utils/feedback';
+import {
+  getDocumentIssuanceOutcome,
+  normalizeActiveQueueItemId,
+} from '../../utils/visitDocumentDrafts';
 
 export type FitnessStatus =
   | 'FitToWork'
@@ -117,7 +121,7 @@ export default function IssueMedicalCertificateModal({
 
     setSubmitting(true);
     try {
-      let effectiveQueueItemId = queueItemId;
+      let effectiveQueueItemId = normalizeActiveQueueItemId(queueItemId);
 
       if (!effectiveQueueItemId) {
         const [directVisit, visitErr] = await clinicService.ensureDirectVisit({
@@ -157,11 +161,18 @@ export default function IssueMedicalCertificateModal({
         throw certErr || new Error('Failed to issue medical certificate.');
       }
 
-      notify.success(`Medical certificate issued successfully (${cert.certificateNumber || ''})`);
+      const outcome = getDocumentIssuanceOutcome('medical-certificate', cert, cert.certificateNumber);
+      if (outcome.toastKind === 'info') {
+        notify.info(outcome.message);
+      } else {
+        notify.success(outcome.message);
+      }
       onSuccess?.(cert);
 
-      const pdfUrl = clinicService.getMedicalCertificatePdfUrl(cert.id);
-      openDocument(pdfUrl).catch(() => {});
+      if (outcome.shouldOpenPdf) {
+        const pdfUrl = clinicService.getMedicalCertificatePdfUrl(cert.id);
+        openDocument(pdfUrl).catch(() => {});
+      }
 
       onClose();
     } catch (e: any) {
