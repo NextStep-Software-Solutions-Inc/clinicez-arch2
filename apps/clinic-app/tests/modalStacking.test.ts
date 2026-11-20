@@ -927,10 +927,12 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
       );
       expect(openScreeningMarkup).toContain('Health Screening &amp; Preventive Assessment');
       expect(openScreeningMarkup).toContain('Elena Gomez');
-      expect(openScreeningMarkup).toContain('1. Vitals &amp; Vision');
-      expect(openScreeningMarkup).toContain('2. History &amp; Risk');
-      expect(openScreeningMarkup).toContain('3. Physical Exam &amp; Labs');
-      expect(openScreeningMarkup).toContain('4. Summary &amp; Sign-Off');
+      expect(openScreeningMarkup).toContain('Vitals &amp; Vision');
+      expect(openScreeningMarkup).toContain('History &amp; Risk');
+      expect(openScreeningMarkup).toContain('Physical Exam &amp; Labs');
+      expect(openScreeningMarkup).toContain('Summary &amp; Sign-Off');
+      expect(openScreeningMarkup).toContain('Intake &amp; PhilPEN');
+      expect(openScreeningMarkup).toContain('Disposition');
     });
 
     test('R4: Multi-level sub-modals layer on top and preserve parent intact on close', () => {
@@ -1272,7 +1274,8 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
           })
         );
         expect(screeningMarkup).toContain('Health Screening &amp; Preventive Assessment');
-        expect(screeningMarkup).toContain('1. Vitals &amp; Vision');
+        expect(screeningMarkup).toContain('Vitals &amp; Vision');
+        expect(screeningMarkup).toContain('Nurse / Triage');
 
         // Dormant sub-modals inside PhilHealthCoverageModal and HealthScreeningModal produce NO body appends
         expect(appendCount).toBe(0);

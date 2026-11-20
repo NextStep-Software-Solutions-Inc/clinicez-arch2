@@ -59,6 +59,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
     private readonly IRepository<ClinicDispensingLog>? _dispensingLogRepo;
     private readonly IRepository<QueueItem>? _queueRepo;
     private readonly IRepository<HealthScreening>? _healthScreeningRepo;
+    private readonly IRepository<PatientFamilyHistory>? _familyHistoryRepo;
 
     public GetPatientChartQueryHandler(
         IRepository<ConsultationEncounter> consultationRepo,
@@ -86,7 +87,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         IRepository<PatientMedicalHistory>? problemRepo = null,
         IRepository<ClinicDispensingLog>? dispensingLogRepo = null,
         IRepository<QueueItem>? queueRepo = null,
-        IRepository<HealthScreening>? healthScreeningRepo = null)
+        IRepository<HealthScreening>? healthScreeningRepo = null,
+        IRepository<PatientFamilyHistory>? familyHistoryRepo = null)
     {
         _consultationRepo = consultationRepo;
         _triageRepo = triageRepo;
@@ -113,6 +115,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         _dispensingLogRepo = dispensingLogRepo;
         _queueRepo = queueRepo;
         _healthScreeningRepo = healthScreeningRepo;
+        _familyHistoryRepo = familyHistoryRepo;
     }
 
     public async Task<PatientChartDto> Handle(GetPatientChartQuery request, CancellationToken cancellationToken)
@@ -254,6 +257,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         }
 
         List<PatientMedicalHistoryDto>? medicalHistoryDtos = null;
+        List<PatientPastMedicalHistoryDto>? pastMedicalHistoryDtos = null;
         var problemDtos = new List<PatientProblemDto>();
         if (_medicalHistoryRepo != null)
         {
@@ -281,6 +285,22 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 m.RecordedByStaffId,
                 m.RecordedByStaffName
             )).ToList();
+
+            pastMedicalHistoryDtos = medHistories
+                .Where(m => m.Category == MedicalHistoryCategory.MedicalHistory)
+                .OrderBy(m => m.ConditionTitle)
+                .Select(m => new PatientPastMedicalHistoryDto(
+                    m.Id,
+                    m.PatientId,
+                    m.ConditionTitle,
+                    m.PhilHealthMdiseaseCode,
+                    m.Icd10Code,
+                    m.SpecificDescription,
+                    m.OnsetDate,
+                    m.Status == ProblemStatus.Resolved,
+                    m.ClinicalNotes,
+                    m.UpdatedAt ?? m.CreatedAt))
+                .ToList();
 
             problemDtos = medHistories
                 .Where(p => p.Category == MedicalHistoryCategory.ProblemListItem)
@@ -1002,6 +1022,29 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 .ToList();
         }
 
+        List<PatientFamilyHistoryDto>? familyHistoryDtos = null;
+        if (_familyHistoryRepo != null)
+        {
+            var famHistories = await _familyHistoryRepo.Query(f => f.PatientId == request.PatientId)
+                .AsNoTracking()
+                .OrderBy(f => f.ConditionTitle)
+                .ToListAsync(cancellationToken);
+
+            familyHistoryDtos = famHistories.Select(f => new PatientFamilyHistoryDto(
+                f.Id,
+                f.PatientId,
+                f.ConditionTitle,
+                f.PhilHealthMdiseaseCode,
+                f.Icd10Code,
+                f.SpecificDescription,
+                f.Relationship.ToString(),
+                f.ClinicalNotes,
+                f.UpdatedAt ?? f.CreatedAt)).ToList();
+        }
+
+        var personalMedNotes = patient != null ? GetCustomFieldString(patient, "personal_medical_history_notes") : null;
+        var familyMedNotes = patient != null ? GetCustomFieldString(patient, "family_medical_history_notes") : null;
+
         return new PatientChartDto(
             request.PatientId,
             patientName,
@@ -1020,6 +1063,10 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             allergyDtos,
             immunizationDtos,
             attachmentDtos,
+            PastMedicalHistories: pastMedicalHistoryDtos,
+            PersonalMedicalHistoryNotes: personalMedNotes,
+            FamilyHistories: familyHistoryDtos,
+            FamilyMedicalHistoryNotes: familyMedNotes,
             PhysicalExamProfile: physicalExamDto,
             DentalTeeth: dentalToothDtos,
             DentalProcedures: procedureDtos.Where(p => p.Category == "Dental" || p.ToothNumber.HasValue).ToList(),

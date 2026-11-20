@@ -688,6 +688,9 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
       getTriage: async () => [null, null],
       getLabOrders: async () => [[], null],
       getServices: async () => [[], null],
+      getPastMedicalHistories: async () => [{ items: [], personalMedicalHistoryNotes: null }, null],
+      getFamilyHistories: async () => [{ items: [], familyMedicalHistoryNotes: null }, null],
+      getPatientById: async () => [null, null],
       ensureDirectVisit: async (payload: any) => {
         callLog.ensureDirectVisit.push(payload);
         return [{ id: 'q-dv-1', queueNumber: 'DV-001', status: 'Triaged', ...payload }, null];
@@ -1206,6 +1209,243 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
           expect(container.textContent).not.toContain('ATC-PATIENT-A');
         }
       );
+    });
+
+    test('2.7 Connected stepper reflects genuine progress: pre-existing historical PE never falsely marks Step 3 done, and Station 1 save resumes on Station 2', async () => {
+      (clinicService as any).getPatientPhysicalExam = async () => [
+        {
+          id: 'pe-historical-prev-visit',
+          genSurveyId: '1',
+          skinId: '1',
+          heentId: '1',
+          chestId: '1',
+          heartId: '1',
+          abdomenId: '1',
+          neuroId: '1',
+          guId: '1',
+          rectalId: '1',
+        },
+        null,
+      ];
+      (clinicService as any).getPatientHealthScreenings = async () => [
+        [
+          {
+            id: 'hs-inprogress-1',
+            patientId: sampleAdultFemale.id,
+            queueItemId: 'q-resume-1',
+            screeningType: 'AnnualPhysicalExam',
+            workflowMode: 'Regular',
+            status: 'InProgress',
+            patientVitalsId: 'vit-saved-1',
+            patientPhysicalExamId: null,
+            screeningDateUtc: '2026-11-20T03:00:00Z',
+          },
+        ],
+        null,
+      ];
+      (clinicService as any).getTriage = async () => [
+        { id: 'vit-saved-1', queueItemId: 'q-resume-1', bloodPressureSystolic: 118, bloodPressureDiastolic: 76 },
+        null,
+      ];
+
+      await withMountedDom(
+        React.createElement(HealthScreeningModal, {
+          visible: true,
+          patient: sampleAdultFemale,
+          queueItemId: 'q-resume-1',
+          onClose: () => {},
+        }),
+        async ({ container }) => {
+          // Resuming an InProgress screening with saved vitals opens directly at Station 2
+          expect(findByTestId(container, 'screening-station-2')).not.toBeNull();
+          expect(findByTestId(container, 'screening-step-1')?.textContent).toContain('Completed');
+          expect(findByTestId(container, 'screening-step-2')?.textContent).toContain('Current · Intake & PhilPEN');
+          // Historical PE from prior visits must NOT falsely mark Step 3 as Completed
+          expect(findByTestId(container, 'screening-step-3')?.textContent).toContain('Physician');
+          expect(findByTestId(container, 'screening-step-3')?.textContent).not.toContain('Completed');
+          expect(findByTestId(container, 'screening-step-4')?.textContent).toContain('Disposition');
+          expect(findByTestId(container, 'screening-step-4')?.textContent).not.toContain('Completed');
+        }
+      );
+    });
+
+    test('2.8 Pre-fills Personal & Family Medical History from API, chart Problems, alerts, and 998 Others with ZERO writes on open', async () => {
+      (clinicService as any).getPastMedicalHistories = async () => [
+        {
+          items: [
+            {
+              id: 'pmh-1',
+              patientId: sampleAdultFemale.id,
+              conditionTitle: 'Hypertension',
+              philHealthMdiseaseCode: '011',
+              isResolved: false,
+              createdAt: '2026-01-01T00:00:00Z',
+            },
+            {
+              id: 'pmh-2',
+              patientId: sampleAdultFemale.id,
+              conditionTitle: 'Others',
+              philHealthMdiseaseCode: '998',
+              specificDescription: 'PCOS',
+              isResolved: false,
+              createdAt: '2026-01-01T00:00:00Z',
+            },
+          ],
+          personalMedicalHistoryNotes: 'Controlled on Losartan',
+        },
+        null,
+      ];
+      (clinicService as any).getFamilyHistories = async () => [
+        {
+          items: [
+            {
+              id: 'fam-1',
+              patientId: sampleAdultFemale.id,
+              conditionTitle: 'Diabetes Mellitus',
+              philHealthMdiseaseCode: '006',
+              createdAt: '2026-01-01T00:00:00Z',
+            },
+          ],
+          familyMedicalHistoryNotes: 'Mother T2DM',
+        },
+        null,
+      ];
+      (clinicService as any).getPatientChart = async () => [
+        {
+          patientId: sampleAdultFemale.id,
+          patientName: sampleAdultFemale.fullName,
+          allergies: [],
+          problems: [
+            {
+              id: 'prob-1',
+              icd10Code: 'I10',
+              problemTitle: 'Hypertension',
+              status: 'Active',
+            },
+          ],
+          immunizations: [],
+          vitalsHistory: [],
+          consultations: [],
+          labOrdersHistory: [],
+          proceduresHistory: [],
+          invoicesHistory: [],
+          healthScreenings: [],
+          socialHistory: null,
+          reproductiveHistory: null,
+          latestNcdAssessment: null,
+        },
+        null,
+      ];
+
+      const patientWithAlert: any = {
+        ...sampleAdultFemale,
+        alerts: 'Asthma flare-up risk',
+      };
+
+      await withMountedDom(
+        React.createElement(HealthScreeningModal, {
+          visible: true,
+          patient: patientWithAlert,
+          onClose: () => {},
+        }),
+        async ({ container }) => {
+          await React.act(async () => {
+            clickNode(findByTestId(container, 'screening-step-2'));
+            await flushMicrotasks();
+          });
+
+          expect(findByTestId(container, 'screening-station-2')).not.toBeNull();
+          expect(container.textContent).toContain('Pre-filled from Chart');
+          expect(findByTestId(container, 'screening-clinical-alerts-banner')?.textContent).toContain(
+            'Asthma flare-up risk'
+          );
+          expect(findByTestId(container, 'pmh-chip-01')).not.toBeNull();
+          expect(findByTestId(container, 'fam-chip-02')).not.toBeNull();
+
+          const otherWrapper = findByTestId(container, 'pmh-other-desc-input');
+          const otherInput = otherWrapper?.querySelector('input') ?? otherWrapper;
+          expect(otherInput?.value || otherInput?.getAttribute('value')).toBe('PCOS');
+          const inputValues = container
+            .querySelectorAll('input')
+            .map((el) => el.value || el.getAttribute('value') || '');
+          expect(inputValues).toContain('Controlled on Losartan');
+          expect(inputValues).toContain('Mother T2DM');
+          expect(callLog.saveHealthScreeningProgress.length).toBe(0);
+        }
+      );
+    });
+
+    test('2.9 Refresh draft recovery preserves active step and unsaved Station 2 edits via sessionStorage and clears on explicit Cancel', async () => {
+      const storageMap = new Map<string, string>();
+      const prevSessionStorage = (globalThis as any).sessionStorage;
+      (globalThis as any).sessionStorage = {
+        getItem: (k: string) => storageMap.get(k) ?? null,
+        setItem: (k: string, v: string) => storageMap.set(k, String(v)),
+        removeItem: (k: string) => storageMap.delete(k),
+        clear: () => storageMap.clear(),
+      };
+
+      try {
+        await withMountedDom(
+          React.createElement(HealthScreeningModal, {
+            visible: true,
+            patient: sampleAdultFemale,
+            onClose: () => {},
+          }),
+          async ({ container }) => {
+            await React.act(async () => {
+              clickNode(findByTestId(container, 'screening-step-2'));
+              await flushMicrotasks();
+            });
+
+            const notesInput = container
+              .querySelectorAll('input')
+              .find((el) => el.getAttribute('placeholder')?.includes('Optional clinical details'));
+            expect(notesInput).toBeDefined();
+            await React.act(async () => {
+              changeInput(notesInput, 'Unsaved intake draft after refresh');
+              await flushMicrotasks();
+            });
+            expect(storageMap.size).toBeGreaterThan(0);
+          }
+        );
+
+        // Simulated browser reload remounts HealthScreeningModal with visible=true
+        await withMountedDom(
+          React.createElement(HealthScreeningModal, {
+            visible: true,
+            patient: sampleAdultFemale,
+            onClose: () => {},
+          }),
+          async ({ container }) => {
+            expect(findByTestId(container, 'screening-draft-restored-banner')).not.toBeNull();
+            expect(findByTestId(container, 'screening-station-2')).not.toBeNull();
+            const restoredNotesInput = container
+              .querySelectorAll('input')
+              .find((el) => el.getAttribute('placeholder')?.includes('Optional clinical details'));
+            expect(restoredNotesInput?.value || restoredNotesInput?.getAttribute('value')).toBe(
+              'Unsaved intake draft after refresh'
+            );
+
+            // Clicking Cancel explicitly clears draft storage
+            const cancelBtn = container
+              .querySelectorAll('button')
+              .find((b) => b.textContent === 'Cancel');
+            expect(cancelBtn).toBeDefined();
+            await React.act(async () => {
+              clickNode(cancelBtn!);
+              await flushMicrotasks();
+            });
+            expect(storageMap.size).toBe(0);
+          }
+        );
+      } finally {
+        if (prevSessionStorage === undefined) {
+          delete (globalThis as any).sessionStorage;
+        } else {
+          (globalThis as any).sessionStorage = prevSessionStorage;
+        }
+      }
     });
   });
 

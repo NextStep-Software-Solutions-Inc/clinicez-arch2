@@ -460,4 +460,109 @@ public class GetPatientChartQueryHandlerTests
         encounter2.DentalFindings.Should().Contain(d => d.ToothNumber == 21 && d.Status == ToothStatus.Healthy);
         encounter2.DentalFindings.Should().Contain(d => d.ToothNumber == 36 && d.Status == ToothStatus.Missing);
     }
+
+    [Fact]
+    public async Task Handle_PopulatesPastMedicalHistoriesFamilyHistoriesAndNotes()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var medHistoryRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
+        var famHistoryRepo = TestDbHelper.CreateRepository<PatientFamilyHistory>(context, sieve);
+
+        var patientId = Guid.NewGuid();
+        await patientRepo.AddAsync(new Patient
+        {
+            Id = patientId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-2026-00501",
+            FirstName = "Bea",
+            LastName = "Abellana",
+            DateOfBirth = new DateOnly(1985, 11, 18),
+            Sex = BiologicalSex.Female,
+            ContactNumber = "09194319725",
+            CustomFields = new Dictionary<string, object?>
+            {
+                ["personal_medical_history_notes"] = "Controlled hypertension since 2022",
+                ["family_medical_history_notes"] = "Maternal diabetes mellitus"
+            }
+        }, CancellationToken.None);
+
+        await medHistoryRepo.AddAsync(new PatientMedicalHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            Category = MedicalHistoryCategory.MedicalHistory,
+            ConditionTitle = "Hypertension",
+            PhilHealthMdiseaseCode = "011",
+            Status = ProblemStatus.Active,
+            RecordedByStaffId = Guid.NewGuid(),
+            RecordedByStaffName = "RN Myshin Amper"
+        }, CancellationToken.None);
+
+        await medHistoryRepo.AddAsync(new PatientMedicalHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            Category = MedicalHistoryCategory.ProblemListItem,
+            ConditionTitle = "Peptic Ulcer",
+            PhilHealthMdiseaseCode = "012",
+            Icd10Code = "K27",
+            Status = ProblemStatus.Active,
+            RecordedByStaffId = Guid.NewGuid(),
+            RecordedByStaffName = "Dr. Andre Amamio"
+        }, CancellationToken.None);
+
+        await famHistoryRepo.AddAsync(new PatientFamilyHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ConditionTitle = "Diabetes Mellitus",
+            PhilHealthMdiseaseCode = "006",
+            Relationship = FamilyRelationship.Mother,
+            ClinicalNotes = "Mother"
+        }, CancellationToken.None);
+
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new GetPatientChartQueryHandler(
+            consultRepo, triageRepo, procRepo, labRepo, invoiceRepo, _clinicContext,
+            patientRepo: patientRepo,
+            medicalHistoryRepo: medHistoryRepo,
+            familyHistoryRepo: famHistoryRepo);
+
+        // Act
+        var chart = await handler.Handle(new GetPatientChartQuery(patientId), CancellationToken.None);
+
+        // Assert
+        chart.PastMedicalHistories.Should().NotBeNull();
+        chart.PastMedicalHistories!.Should().HaveCount(1);
+        chart.PastMedicalHistories![0].ConditionTitle.Should().Be("Hypertension");
+        chart.PastMedicalHistories![0].PhilHealthMdiseaseCode.Should().Be("011");
+
+        chart.Problems.Should().NotBeNull();
+        chart.Problems!.Should().HaveCount(1);
+        chart.Problems![0].ProblemTitle.Should().Be("Peptic Ulcer");
+
+        chart.FamilyHistories.Should().NotBeNull();
+        chart.FamilyHistories!.Should().HaveCount(1);
+        chart.FamilyHistories![0].ConditionTitle.Should().Be("Diabetes Mellitus");
+        chart.FamilyHistories![0].PhilHealthMdiseaseCode.Should().Be("006");
+        chart.FamilyHistories![0].Relationship.Should().Be("Mother");
+
+        chart.PersonalMedicalHistoryNotes.Should().Be("Controlled hypertension since 2022");
+        chart.FamilyMedicalHistoryNotes.Should().Be("Maternal diabetes mellitus");
+    }
 }

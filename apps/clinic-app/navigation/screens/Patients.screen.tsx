@@ -190,6 +190,55 @@ export const isMyPatient = (p: ClinicPatient, currentStaff: StaffMember | null |
   );
 };
 
+const ACTIVE_SCREENING_MODAL_KEY = 'clinicez_patients_active_health_screening_modal';
+const ACTIVE_SCREENING_MODAL_TTL_MS = 12 * 60 * 60 * 1000;
+
+interface ActiveHealthScreeningModalSession {
+  patientId: string;
+  queueItemId: string | null;
+  initialTrack: 'Regular' | 'YakapAvailment';
+  allowDuplicateActive: boolean;
+  updatedAt: number;
+}
+
+function readActiveScreeningModalSession(): ActiveHealthScreeningModalSession | null {
+  try {
+    if (typeof sessionStorage === 'undefined') return null;
+    const raw = sessionStorage.getItem(ACTIVE_SCREENING_MODAL_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ActiveHealthScreeningModalSession;
+    if (
+      parsed?.patientId &&
+      typeof parsed.updatedAt === 'number' &&
+      Date.now() - parsed.updatedAt <= ACTIVE_SCREENING_MODAL_TTL_MS
+    ) {
+      return parsed;
+    }
+    sessionStorage.removeItem(ACTIVE_SCREENING_MODAL_KEY);
+  } catch {
+    // Ignore storage access errors
+  }
+  return null;
+}
+
+function writeActiveScreeningModalSession(session: ActiveHealthScreeningModalSession): void {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    sessionStorage.setItem(ACTIVE_SCREENING_MODAL_KEY, JSON.stringify(session));
+  } catch {
+    // Ignore storage access errors
+  }
+}
+
+function clearActiveScreeningModalSession(): void {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    sessionStorage.removeItem(ACTIVE_SCREENING_MODAL_KEY);
+  } catch {
+    // Ignore storage access errors
+  }
+}
+
 export type PatientsScreenProps = StaticScreenProps<
   | {
       openPatientId?: string;
@@ -573,6 +622,33 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [healthScreeningQueueItemId, setHealthScreeningQueueItemId] = useState<string | null>(null);
   const [healthScreeningAllowDuplicateActive, setHealthScreeningAllowDuplicateActive] = useState(false);
   const [healthScreeningInitialTrack, setHealthScreeningInitialTrack] = useState<'Regular' | 'YakapAvailment'>('Regular');
+
+  // Reopen active Health Screening modal across browser refresh if still in progress
+  useEffect(() => {
+    const savedSession = readActiveScreeningModalSession();
+    if (!savedSession) return;
+    let cancelled = false;
+    clinicService
+      .getPatientById?.(savedSession.patientId)
+      .then(([loadedPatient]) => {
+        if (cancelled) return;
+        if (loadedPatient) {
+          setHealthScreeningPatient(loadedPatient);
+          setHealthScreeningQueueItemId(savedSession.queueItemId ?? null);
+          setHealthScreeningAllowDuplicateActive(Boolean(savedSession.allowDuplicateActive));
+          setHealthScreeningInitialTrack(savedSession.initialTrack || 'Regular');
+          setHealthScreeningModalVisible(true);
+        } else {
+          clearActiveScreeningModalSession();
+        }
+      })
+      .catch(() => {
+        // Non-blocking: leave screen usable if patient fetch fails
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Edit Patient Demographics state
   const [editPatientModalVisible, setEditPatientModalVisible] = useState(false);
@@ -1717,6 +1793,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     track: 'Regular' | 'YakapAvailment' = 'Regular'
   ) => {
     resolveActiveVisitForAction(patient, 'Health Screening', (queueItemId, forceSeparateVisit) => {
+      writeActiveScreeningModalSession({
+        patientId: patient.id,
+        queueItemId,
+        initialTrack: track,
+        allowDuplicateActive: Boolean(forceSeparateVisit),
+        updatedAt: Date.now(),
+      });
       setHealthScreeningPatient(patient);
       setHealthScreeningQueueItemId(queueItemId);
       setHealthScreeningAllowDuplicateActive(Boolean(forceSeparateVisit));
@@ -3149,6 +3232,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       <HealthScreeningModal
         visible={healthScreeningModalVisible}
         onClose={() => {
+          clearActiveScreeningModalSession();
           setHealthScreeningModalVisible(false);
           setHealthScreeningPatient(null);
           setHealthScreeningQueueItemId(null);
@@ -3159,7 +3243,21 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         queueItemId={healthScreeningQueueItemId}
         initialTrack={healthScreeningInitialTrack}
         allowDuplicateActive={healthScreeningAllowDuplicateActive}
+        onSessionQueueLinked={(linkedQueueItemId: string) => {
+          const current = readActiveScreeningModalSession();
+          if (current) {
+            writeActiveScreeningModalSession({
+              ...current,
+              queueItemId: linkedQueueItemId,
+              updatedAt: Date.now(),
+            });
+          }
+        }}
         onSuccess={(screening: HealthScreeningDetailRecord) => {
+          const isTerminal = screening.status === 'Completed' || screening.status === 'Cancelled';
+          if (isTerminal) {
+            clearActiveScreeningModalSession();
+          }
           // Keep modal open on Station 4 completion so user sees completion banner & MedCert CTA.
           if (screening.queueItemId && screening.patientId) {
             const isTerminal = screening.status === 'Completed' || screening.status === 'Cancelled';
@@ -3217,6 +3315,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           }
         }}
         onIssueMedCert={({ patient: targetPatient, queueItemId }) => {
+          clearActiveScreeningModalSession();
           setHealthScreeningModalVisible(false);
           setHealthScreeningPatient(null);
           setHealthScreeningQueueItemId(null);
@@ -3228,6 +3327,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           setMedCertModalVisible(true);
         }}
         onEscalateToConsultation={({ patient: targetPatient, queueItemId, workflowMode }) => {
+          clearActiveScreeningModalSession();
           setHealthScreeningModalVisible(false);
           setHealthScreeningPatient(null);
           setHealthScreeningQueueItemId(null);

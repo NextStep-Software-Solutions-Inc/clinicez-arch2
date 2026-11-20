@@ -65,7 +65,9 @@ import {
   PHILHEALTH_MDISEASES_CONDITIONS,
   getLockedPersonalConditionCodes,
   isNoneHistoryEntry,
+  reconcilePersonalHistoryWithClinicalRecords,
 } from '../chart/ClinicalHistoryTab';
+import { hasKnownAllergies } from '../patient/PatientDirectoryCard';
 import OrganSystemsExamSection, {
   DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
   type OrganSystemDef,
@@ -101,6 +103,7 @@ export interface HealthScreeningModalProps {
   initialTrack?: 'Regular' | 'YakapAvailment';
   allowDuplicateActive?: boolean;
   onSuccess?: (screening: HealthScreeningDetailRecord) => void;
+  onSessionQueueLinked?: (queueItemId: string) => void;
   onEscalateToConsultation?: (params: {
     patient: ClinicPatient;
     queueItemId: string;
@@ -114,12 +117,246 @@ export interface HealthScreeningModalProps {
 
 type StationStep = 1 | 2 | 3 | 4;
 
-const STATION_STEPS: Array<{ step: StationStep; label: string; shortLabel: string; icon: IconName }> = [
-  { step: 1, label: '1. Vitals & Vision', shortLabel: '1. Vitals', icon: 'activity' },
-  { step: 2, label: '2. History & Risk', shortLabel: '2. History', icon: 'clipboard' },
-  { step: 3, label: '3. Physical Exam & Labs', shortLabel: '3. PE & Labs', icon: 'stethoscope' },
-  { step: 4, label: '4. Summary & Sign-Off', shortLabel: '4. Sign-Off', icon: 'checkCircle' },
+const STATION_STEPS: Array<{
+  step: StationStep;
+  title: string;
+  shortTitle: string;
+  roleHint: string;
+  icon: IconName;
+}> = [
+  { step: 1, title: 'Vitals & Vision', shortTitle: 'Vitals', roleHint: 'Nurse / Triage', icon: 'activity' },
+  { step: 2, title: 'History & Risk', shortTitle: 'History', roleHint: 'Intake & PhilPEN', icon: 'clipboard' },
+  { step: 3, title: 'Physical Exam & Labs', shortTitle: 'PE & Labs', roleHint: 'Physician', icon: 'stethoscope' },
+  { step: 4, title: 'Summary & Sign-Off', shortTitle: 'Sign-Off', roleHint: 'Disposition', icon: 'file' },
 ];
+
+const HEALTH_SCREENING_DRAFT_PREFIX = 'clinicez_health_screening_draft:';
+const HEALTH_SCREENING_DRAFT_TTL_MS = 12 * 60 * 60 * 1000;
+
+interface HealthScreeningDraftSnapshot {
+  version: 1;
+  patientId: string;
+  queueItemId?: string | null;
+  screeningId?: string | null;
+  activeStep: StationStep;
+  screeningType: HealthScreeningType;
+  workflowMode: 'Regular' | 'YakapAvailment';
+  philHealthAtc: string;
+  isWalkedIn: boolean;
+  serviceDeliveryMethod: YakapServiceDeliveryMethod;
+  vitalsForm: VitalsFormState;
+  vitalsEdited: boolean;
+  pastMedicalItems: PatientPastMedicalHistory[];
+  familyMedicalItems: PatientFamilyHistory[];
+  medicalHistoryNotes: string;
+  familyHistoryNotes: string;
+  historyEdited: boolean;
+  socialHistory: Partial<PatientSocialHistory>;
+  socialEdited: boolean;
+  reproHistory: Partial<PatientReproductiveHistory>;
+  reproEdited: boolean;
+  ncdAnswers: Record<string, boolean | string | null>;
+  ncdFbsMgDl: string;
+  ncdFbsDate: string;
+  ncdTotalCholMgDl: string;
+  ncdTotalCholDate: string;
+  ncdUrineKetonesValue: string;
+  ncdUrineKetonesDate: string;
+  ncdUrineProteinValue: string;
+  ncdUrineProteinDate: string;
+  ncdEdited: boolean;
+  nurseScreeningNotes: string;
+  peValues: OrganSystemsExamValues;
+  peEdited: boolean;
+  adultRoutineCodes: string[];
+  pediatricRoutineCodes: string[];
+  prenatalRoutineCodes: string[];
+  breastCancerSelected: boolean;
+  cervicalCancerSelected: boolean;
+  colorectalCancerSelected: boolean;
+  prostateCancerSelected: boolean;
+  disposition: HealthScreeningDisposition;
+  clinicalImpression: string;
+  preventiveCounselingNotes: string;
+  recommendedFollowUpDate: string;
+  step2Saved: boolean;
+  updatedAt: number;
+}
+
+function getScreeningDraftStorageKey(patientId: string, queueId?: string | null): string {
+  return `${HEALTH_SCREENING_DRAFT_PREFIX}${patientId}:${queueId || 'direct'}`;
+}
+
+function getWebSessionStorage(): Storage | null {
+  try {
+    if (typeof sessionStorage !== 'undefined') return sessionStorage;
+  } catch {
+    // Ignore restricted frame access
+  }
+  return null;
+}
+
+function readScreeningDraft(patientId: string, queueId?: string | null): HealthScreeningDraftSnapshot | null {
+  const storage = getWebSessionStorage();
+  if (!storage) return null;
+  const candidateKeys = queueId
+    ? [getScreeningDraftStorageKey(patientId, queueId), getScreeningDraftStorageKey(patientId, null)]
+    : [getScreeningDraftStorageKey(patientId, null)];
+  for (const key of candidateKeys) {
+    try {
+      const raw = storage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as HealthScreeningDraftSnapshot;
+      if (
+        parsed?.version === 1 &&
+        parsed.patientId === patientId &&
+        typeof parsed.updatedAt === 'number' &&
+        Date.now() - parsed.updatedAt <= HEALTH_SCREENING_DRAFT_TTL_MS
+      ) {
+        return parsed;
+      }
+      storage.removeItem(key);
+    } catch {
+      // Ignore malformed draft payload
+    }
+  }
+  return null;
+}
+
+function writeScreeningDraft(snapshot: HealthScreeningDraftSnapshot): void {
+  const storage = getWebSessionStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(
+      getScreeningDraftStorageKey(snapshot.patientId, snapshot.queueItemId),
+      JSON.stringify(snapshot)
+    );
+  } catch {
+    // Ignore quota errors
+  }
+}
+
+function clearScreeningDraft(patientId?: string | null, queueId?: string | null): void {
+  const storage = getWebSessionStorage();
+  if (!storage || !patientId) return;
+  try {
+    storage.removeItem(getScreeningDraftStorageKey(patientId, null));
+    if (queueId) {
+      storage.removeItem(getScreeningDraftStorageKey(patientId, queueId));
+    }
+  } catch {
+    // Ignore storage cleanup errors
+  }
+}
+
+function normalizeConditionRecords(
+  items: PatientPastMedicalHistory[],
+  catalogConditions: { code: string; description: string }[]
+): PatientPastMedicalHistory[] {
+  const clean: PatientPastMedicalHistory[] = [];
+  const seenCodes = new Set<string>();
+  for (const item of items) {
+    if (!item || isNoneHistoryEntry(item.philHealthMdiseaseCode, item.conditionTitle)) continue;
+    const explicitCode = item.philHealthMdiseaseCode?.trim();
+    const matchedCatalog =
+      (explicitCode ? catalogConditions.find((c) => c.code === explicitCode) : undefined) ??
+      catalogConditions.find(
+        (c) => c.description.trim().toLowerCase() === item.conditionTitle?.trim().toLowerCase()
+      );
+    const resolvedCode = matchedCatalog?.code || explicitCode || '998';
+    if (resolvedCode !== '998' && seenCodes.has(resolvedCode)) continue;
+    seenCodes.add(resolvedCode);
+    clean.push({
+      ...item,
+      philHealthMdiseaseCode: resolvedCode,
+      conditionTitle:
+        resolvedCode === '998'
+          ? item.conditionTitle || 'Others'
+          : matchedCatalog?.description || item.conditionTitle,
+    });
+  }
+  return clean;
+}
+
+function normalizeFamilyConditionRecords(
+  items: PatientFamilyHistory[],
+  catalogConditions: { code: string; description: string }[]
+): PatientFamilyHistory[] {
+  const clean: PatientFamilyHistory[] = [];
+  const seenCodes = new Set<string>();
+  for (const item of items) {
+    if (!item || isNoneHistoryEntry(item.philHealthMdiseaseCode, item.conditionTitle)) continue;
+    const explicitCode = item.philHealthMdiseaseCode?.trim();
+    const matchedCatalog =
+      (explicitCode ? catalogConditions.find((c) => c.code === explicitCode) : undefined) ??
+      catalogConditions.find(
+        (c) => c.description.trim().toLowerCase() === item.conditionTitle?.trim().toLowerCase()
+      );
+    const resolvedCode = matchedCatalog?.code || explicitCode || '998';
+    if (resolvedCode !== '998' && seenCodes.has(resolvedCode)) continue;
+    seenCodes.add(resolvedCode);
+    clean.push({
+      ...item,
+      philHealthMdiseaseCode: resolvedCode,
+      conditionTitle:
+        resolvedCode === '998'
+          ? item.conditionTitle || 'Others'
+          : matchedCatalog?.description || item.conditionTitle,
+    });
+  }
+  return clean;
+}
+
+function parseChronicConditionsToPastMedicalItems(
+  chronicConditions: string | undefined,
+  patientId: string,
+  catalogConditions: { code: string; description: string }[]
+): PatientPastMedicalHistory[] {
+  if (!chronicConditions || isNoneHistoryEntry(null, chronicConditions)) return [];
+  const items: PatientPastMedicalHistory[] = [];
+  const seen = new Set<string>();
+  const otherParts: string[] = [];
+
+  for (const rawToken of chronicConditions.split(',')) {
+    const token = rawToken.trim();
+    if (!token || isNoneHistoryEntry(null, token)) continue;
+    const match = catalogConditions.find((c) => {
+      if (c.code === '998' || isNoneHistoryEntry(c.code, c.description)) return false;
+      const desc = c.description.toLowerCase();
+      const lower = token.toLowerCase();
+      return lower === desc || lower.includes(desc) || desc.includes(lower);
+    });
+    if (match) {
+      if (!seen.has(match.code)) {
+        seen.add(match.code);
+        items.push({
+          id: `chart-chronic-${match.code}`,
+          patientId,
+          conditionTitle: match.description,
+          philHealthMdiseaseCode: match.code,
+          isResolved: false,
+          createdAt: '',
+        });
+      }
+    } else {
+      otherParts.push(token);
+    }
+  }
+
+  if (otherParts.length > 0) {
+    items.push({
+      id: 'chart-chronic-998',
+      patientId,
+      conditionTitle: 'Others',
+      philHealthMdiseaseCode: '998',
+      specificDescription: otherParts.join(', '),
+      isResolved: false,
+      createdAt: '',
+    });
+  }
+
+  return items;
+}
 
 const REGULAR_PURPOSES: Array<{ value: HealthScreeningType; label: string }> = [
   { value: 'AnnualPhysicalExam', label: 'Annual Physical Exam (APE)' },
@@ -208,6 +445,7 @@ export default function HealthScreeningModal({
   initialTrack = 'Regular',
   allowDuplicateActive = false,
   onSuccess,
+  onSessionQueueLinked,
   onEscalateToConsultation,
   onIssueMedCert,
 }: HealthScreeningModalProps) {
@@ -353,11 +591,17 @@ export default function HealthScreeningModal({
   const [recommendedFollowUpDate, setRecommendedFollowUpDate] = useState(getDefaultFollowUpDate);
   const [medCertModalOpen, setMedCertModalOpen] = useState(false);
 
+  const [step2Saved, setStep2Saved] = useState(false);
+  const [restoredDraftFromRefresh, setRestoredDraftFromRefresh] = useState(false);
+  const [prefilledHistoryCount, setPrefilledHistoryCount] = useState(0);
+
   const loadRequestIdRef = useRef(0);
+  const hydratedRef = useRef(false);
 
   const resetScreeningState = useCallback(() => {
     const defaultMode: 'Regular' | 'YakapAvailment' =
       initialTrack === 'YakapAvailment' ? 'YakapAvailment' : 'Regular';
+    hydratedRef.current = false;
     setLoadError(null);
     setSaving(false);
     setActiveStep(1);
@@ -441,13 +685,21 @@ export default function HealthScreeningModal({
     setPreventiveCounselingNotes('');
     setRecommendedFollowUpDate(getDefaultFollowUpDate());
     setMedCertModalOpen(false);
+    setStep2Saved(false);
+    setRestoredDraftFromRefresh(false);
+    setPrefilledHistoryCount(0);
   }, [initialScreeningId, initialTrack, queueItemId]);
 
   const cohort = useMemo(() => resolveCohort(patient), [patient]);
+  const mdiseasesCatalogRef = useRef(mdiseasesCatalog);
+  mdiseasesCatalogRef.current = mdiseasesCatalog;
+  const latestPatientRef = useRef<ClinicPatient | null>(patient);
+  latestPatientRef.current = patient;
+  const loadedSessionKeyRef = useRef<string | null>(null);
 
   // Hydrate all read-only data when modal opens (ZERO writes on open)
   const loadModalData = useCallback(
-    async (targetPatient: ClinicPatient) => {
+    async (targetPatient: ClinicPatient, options?: { ignoreDraft?: boolean }) => {
       const requestId = ++loadRequestIdRef.current;
       resetScreeningState();
       setLoading(true);
@@ -460,6 +712,8 @@ export default function HealthScreeningModal({
 
         const [
           [chartData, chartErr],
+          [medHistoryData],
+          [famHistoryData],
           [screeningsList],
           [specificScreening],
           [peData],
@@ -468,6 +722,14 @@ export default function HealthScreeningModal({
           [coverageData],
         ] = await Promise.all([
           clinicService.getPatientChart(targetPatient.id),
+          (
+            clinicService.getPastMedicalHistories?.(targetPatient.id) ??
+            Promise.resolve([null, null] as const)
+          ).catch(() => [null, null] as const),
+          (
+            clinicService.getFamilyHistories?.(targetPatient.id) ??
+            Promise.resolve([null, null] as const)
+          ).catch(() => [null, null] as const),
           clinicService.getPatientHealthScreenings(
             targetPatient.id,
             queueItemId ?? undefined
@@ -499,13 +761,106 @@ export default function HealthScreeningModal({
           return;
         }
 
+        const activeCatalog =
+          mdiseasesCatalogRef.current.length > 0
+            ? mdiseasesCatalogRef.current
+            : PHILHEALTH_MDISEASES_CONDITIONS;
+
+        const resolvedAllergies: PatientAllergyRecord[] =
+          chartData?.allergies && chartData.allergies.length > 0
+            ? chartData.allergies
+            : targetPatient.structuredAllergies ?? [];
+        setAllergies(resolvedAllergies);
+
+        const rawPastItems: PatientPastMedicalHistory[] =
+          medHistoryData?.items && medHistoryData.items.length > 0
+            ? medHistoryData.items
+            : chartData?.pastMedicalHistories && chartData.pastMedicalHistories.length > 0
+              ? chartData.pastMedicalHistories
+              : targetPatient.pastMedicalHistories && targetPatient.pastMedicalHistories.length > 0
+                ? targetPatient.pastMedicalHistories.map((m, idx) => ({
+                    id: m.id || `patient-pmh-${idx}`,
+                    patientId: targetPatient.id,
+                    conditionTitle: m.conditionTitle,
+                    philHealthMdiseaseCode: m.philHealthMdiseaseCode ?? null,
+                    icd10Code: m.icd10Code ?? null,
+                    specificDescription: m.specificDescription ?? null,
+                    diagnosisDate: m.onsetDate ?? null,
+                    isResolved: Boolean(m.isResolved),
+                    clinicalNotes: m.clinicalNotes ?? null,
+                    createdAt: '',
+                  }))
+                : parseChronicConditionsToPastMedicalItems(
+                    targetPatient.chronicConditions,
+                    targetPatient.id,
+                    activeCatalog
+                  );
+
+        const normalizedPast = normalizeConditionRecords(rawPastItems, activeCatalog);
+        const seedCodes = normalizedPast
+          .map((m) => m.philHealthMdiseaseCode)
+          .filter((c): c is string => Boolean(c));
+        const seedOtherDesc =
+          normalizedPast.find((m) => m.philHealthMdiseaseCode === '998')?.specificDescription ?? '';
+
+        const reconciled = reconcilePersonalHistoryWithClinicalRecords({
+          selectedCodes: seedCodes,
+          otherDesc: seedOtherDesc,
+          problems: chartData?.problems ?? [],
+          allergies: resolvedAllergies,
+          catalogConditions: activeCatalog,
+        });
+
+        const hydratedPastMedical: PatientPastMedicalHistory[] = [];
+        for (const code of reconciled.codes) {
+          const existing = normalizedPast.find((m) => m.philHealthMdiseaseCode === code);
+          if (existing) {
+            hydratedPastMedical.push(
+              code === '998' && reconciled.otherDesc
+                ? { ...existing, specificDescription: reconciled.otherDesc }
+                : existing
+            );
+          } else {
+            const cat = activeCatalog.find((c) => c.code === code);
+            hydratedPastMedical.push({
+              id: `chart-prefill-${code}`,
+              patientId: targetPatient.id,
+              conditionTitle: cat?.description || (code === '998' ? 'Others' : code),
+              philHealthMdiseaseCode: code,
+              specificDescription: code === '998' ? reconciled.otherDesc || null : null,
+              isResolved: false,
+              createdAt: '',
+            });
+          }
+        }
+
+        const rawFamilyItems: PatientFamilyHistory[] =
+          famHistoryData?.items && famHistoryData.items.length > 0
+            ? famHistoryData.items
+            : chartData?.familyHistories ?? [];
+        const hydratedFamilyMedical = normalizeFamilyConditionRecords(rawFamilyItems, activeCatalog);
+
+        const resolvedMedicalNotes =
+          medHistoryData?.personalMedicalHistoryNotes ??
+          chartData?.personalMedicalHistoryNotes ??
+          targetPatient.personalMedicalHistoryNotes ??
+          '';
+        const resolvedFamilyNotes =
+          famHistoryData?.familyMedicalHistoryNotes ??
+          chartData?.familyMedicalHistoryNotes ??
+          targetPatient.familyMedicalHistoryNotes ??
+          '';
+
+        setPastMedicalItems(hydratedPastMedical);
+        setFamilyMedicalItems(hydratedFamilyMedical);
+        setMedicalHistoryNotes(resolvedMedicalNotes);
+        setFamilyHistoryNotes(resolvedFamilyNotes);
+        setPrefilledHistoryCount(
+          hydratedPastMedical.length + hydratedFamilyMedical.length + resolvedAllergies.length
+        );
+
         if (chartData) {
           setChart(chartData);
-          setAllergies(chartData.allergies ?? []);
-          setPastMedicalItems(chartData.pastMedicalHistories ?? []);
-          setFamilyMedicalItems(chartData.familyHistories ?? []);
-          setMedicalHistoryNotes(chartData.personalMedicalHistoryNotes ?? '');
-          setFamilyHistoryNotes(chartData.familyMedicalHistoryNotes ?? '');
           if (chartData.socialHistory) {
             setSocialHistory(chartData.socialHistory);
           } else {
@@ -601,11 +956,6 @@ export default function HealthScreeningModal({
           }
         } else {
           setChart(null);
-          setAllergies([]);
-          setPastMedicalItems([]);
-          setFamilyMedicalItems([]);
-          setMedicalHistoryNotes('');
-          setFamilyHistoryNotes('');
           setSocialHistory(createDefaultSocialHistory());
           setReproHistory(createDefaultReproHistory());
           setImmunizations([]);
@@ -736,10 +1086,101 @@ export default function HealthScreeningModal({
           }
           setProfilingTransNo(matchedScreening.profilingTransNo ?? null);
 
-          if (matchedScreening.status === 'AwaitingDoctor') {
-            setActiveStep(3);
-          } else {
-            setActiveStep(1);
+          const serverStep2Saved =
+            matchedScreening.status === 'AwaitingDoctor' ||
+            matchedScreening.status === 'Completed' ||
+            Boolean(matchedScreening.ncdRiskAssessmentId);
+          setStep2Saved(serverStep2Saved);
+
+          let serverStep: StationStep = 1;
+          if (matchedScreening.status === 'Completed') {
+            serverStep = 4;
+          } else if (matchedScreening.status === 'AwaitingDoctor') {
+            serverStep = 3;
+          } else if (matchedScreening.patientPhysicalExamId) {
+            serverStep = 4;
+          } else if (matchedScreening.patientVitalsId) {
+            serverStep = 2;
+          }
+
+          setVitalsEdited(false);
+          setAllergyEdited(false);
+          setHistoryEdited(false);
+          setSocialEdited(false);
+          setReproEdited(false);
+          setImmunizationsEdited(false);
+          setNcdEdited(false);
+          setPeEdited(false);
+
+          const resolvedDraftQueueId = matchedScreening.queueItemId ?? queueItemId ?? null;
+          let draftApplied = false;
+          if (matchedScreening.status === 'Completed') {
+            clearScreeningDraft(targetPatient.id, resolvedDraftQueueId);
+          } else if (!options?.ignoreDraft) {
+            const draft = readScreeningDraft(targetPatient.id, resolvedDraftQueueId);
+            if (draft) {
+              draftApplied = true;
+              setActiveStep(draft.activeStep);
+              setScreeningType(draft.screeningType);
+              setWorkflowMode(draft.workflowMode);
+              setPhilHealthAtc(draft.philHealthAtc);
+              setIsWalkedIn(draft.isWalkedIn);
+              setServiceDeliveryMethod(draft.serviceDeliveryMethod);
+              setStep2Saved((prev) => prev || Boolean(draft.step2Saved));
+              if (draft.vitalsEdited) {
+                setVitalsForm(draft.vitalsForm);
+                setVitalsEdited(true);
+              }
+              if (draft.historyEdited) {
+                setPastMedicalItems(normalizeConditionRecords(draft.pastMedicalItems, activeCatalog));
+                setFamilyMedicalItems(
+                  normalizeFamilyConditionRecords(draft.familyMedicalItems, activeCatalog)
+                );
+                setMedicalHistoryNotes(draft.medicalHistoryNotes);
+                setFamilyHistoryNotes(draft.familyHistoryNotes);
+                setHistoryEdited(true);
+              }
+              if (draft.socialEdited) {
+                setSocialHistory(draft.socialHistory);
+                setSocialEdited(true);
+              }
+              if (draft.reproEdited) {
+                setReproHistory(draft.reproHistory);
+                setReproEdited(true);
+              }
+              if (draft.ncdEdited) {
+                setNcdAnswers(draft.ncdAnswers);
+                setNcdFbsMgDl(draft.ncdFbsMgDl);
+                setNcdFbsDate(draft.ncdFbsDate);
+                setNcdTotalCholMgDl(draft.ncdTotalCholMgDl);
+                setNcdTotalCholDate(draft.ncdTotalCholDate);
+                setNcdUrineKetonesValue(draft.ncdUrineKetonesValue);
+                setNcdUrineKetonesDate(draft.ncdUrineKetonesDate);
+                setNcdUrineProteinValue(draft.ncdUrineProteinValue);
+                setNcdUrineProteinDate(draft.ncdUrineProteinDate);
+                setNcdEdited(true);
+              }
+              setNurseScreeningNotes(draft.nurseScreeningNotes);
+              if (draft.peEdited) {
+                setPeValues(draft.peValues);
+                setPeEdited(true);
+              }
+              setAdultRoutineCodes(draft.adultRoutineCodes);
+              setPediatricRoutineCodes(draft.pediatricRoutineCodes);
+              setPrenatalRoutineCodes(draft.prenatalRoutineCodes);
+              setBreastCancerSelected(draft.breastCancerSelected);
+              setCervicalCancerSelected(draft.cervicalCancerSelected);
+              setColorectalCancerSelected(draft.colorectalCancerSelected);
+              setProstateCancerSelected(draft.prostateCancerSelected);
+              setDisposition(draft.disposition);
+              setClinicalImpression(draft.clinicalImpression);
+              setPreventiveCounselingNotes(draft.preventiveCounselingNotes);
+              setRecommendedFollowUpDate(draft.recommendedFollowUpDate);
+              setRestoredDraftFromRefresh(true);
+            }
+          }
+          if (!draftApplied) {
+            setActiveStep(serverStep);
           }
         } else {
           setScreeningId(null);
@@ -754,26 +1195,95 @@ export default function HealthScreeningModal({
           );
           setPhilHealthAtc(defaultWalkInAtc);
           setScreeningPhysicalExamId(null);
-          setActiveStep(1);
+          setStep2Saved(false);
+
+          setVitalsEdited(false);
+          setAllergyEdited(false);
+          setHistoryEdited(false);
+          setSocialEdited(false);
+          setReproEdited(false);
+          setImmunizationsEdited(false);
+          setNcdEdited(false);
+          setPeEdited(false);
+
+          let draftApplied = false;
+          if (!options?.ignoreDraft) {
+            const draft = readScreeningDraft(targetPatient.id, queueItemId ?? null);
+            if (draft) {
+              draftApplied = true;
+              setActiveStep(draft.activeStep);
+              setScreeningType(draft.screeningType);
+              setWorkflowMode(draft.workflowMode);
+              setPhilHealthAtc(draft.philHealthAtc);
+              setIsWalkedIn(draft.isWalkedIn);
+              setServiceDeliveryMethod(draft.serviceDeliveryMethod);
+              setStep2Saved(Boolean(draft.step2Saved));
+              if (draft.vitalsEdited) {
+                setVitalsForm(draft.vitalsForm);
+                setVitalsEdited(true);
+              }
+              if (draft.historyEdited) {
+                setPastMedicalItems(normalizeConditionRecords(draft.pastMedicalItems, activeCatalog));
+                setFamilyMedicalItems(
+                  normalizeFamilyConditionRecords(draft.familyMedicalItems, activeCatalog)
+                );
+                setMedicalHistoryNotes(draft.medicalHistoryNotes);
+                setFamilyHistoryNotes(draft.familyHistoryNotes);
+                setHistoryEdited(true);
+              }
+              if (draft.socialEdited) {
+                setSocialHistory(draft.socialHistory);
+                setSocialEdited(true);
+              }
+              if (draft.reproEdited) {
+                setReproHistory(draft.reproHistory);
+                setReproEdited(true);
+              }
+              if (draft.ncdEdited) {
+                setNcdAnswers(draft.ncdAnswers);
+                setNcdFbsMgDl(draft.ncdFbsMgDl);
+                setNcdFbsDate(draft.ncdFbsDate);
+                setNcdTotalCholMgDl(draft.ncdTotalCholMgDl);
+                setNcdTotalCholDate(draft.ncdTotalCholDate);
+                setNcdUrineKetonesValue(draft.ncdUrineKetonesValue);
+                setNcdUrineKetonesDate(draft.ncdUrineKetonesDate);
+                setNcdUrineProteinValue(draft.ncdUrineProteinValue);
+                setNcdUrineProteinDate(draft.ncdUrineProteinDate);
+                setNcdEdited(true);
+              }
+              setNurseScreeningNotes(draft.nurseScreeningNotes);
+              if (draft.peEdited) {
+                setPeValues(draft.peValues);
+                setPeEdited(true);
+              }
+              setAdultRoutineCodes(draft.adultRoutineCodes);
+              setPediatricRoutineCodes(draft.pediatricRoutineCodes);
+              setPrenatalRoutineCodes(draft.prenatalRoutineCodes);
+              setBreastCancerSelected(draft.breastCancerSelected);
+              setCervicalCancerSelected(draft.cervicalCancerSelected);
+              setColorectalCancerSelected(draft.colorectalCancerSelected);
+              setProstateCancerSelected(draft.prostateCancerSelected);
+              setDisposition(draft.disposition);
+              setClinicalImpression(draft.clinicalImpression);
+              setPreventiveCounselingNotes(draft.preventiveCounselingNotes);
+              setRecommendedFollowUpDate(draft.recommendedFollowUpDate);
+              setRestoredDraftFromRefresh(true);
+            }
+          }
+          if (!draftApplied) {
+            setActiveStep(1);
+          }
         }
 
         const patientCohort = resolveCohort(targetPatient);
         setActiveCohortTab(patientCohort.isPediatric ? 'pediatric' : 'adult');
-
-        setVitalsEdited(false);
-        setAllergyEdited(false);
-        setHistoryEdited(false);
-        setSocialEdited(false);
-        setReproEdited(false);
-        setImmunizationsEdited(false);
-        setNcdEdited(false);
-        setPeEdited(false);
       } catch (e: any) {
         if (requestId === loadRequestIdRef.current) {
           setLoadError(e?.message || 'Failed to load health screening data.');
         }
       } finally {
         if (requestId === loadRequestIdRef.current) {
+          hydratedRef.current = true;
           setLoading(false);
         }
       }
@@ -781,14 +1291,175 @@ export default function HealthScreeningModal({
     [hasPhilHealthAccreditation, initialScreeningId, initialTrack, queueItemId, resetScreeningState]
   );
 
+  const sessionKey =
+    visible && patient
+      ? `${patient.id}:${initialScreeningId ?? ''}:${queueItemId ?? ''}:${initialTrack}`
+      : null;
+
   useEffect(() => {
-    if (visible && patient) {
-      void loadModalData(patient);
-    } else if (!visible) {
+    if (sessionKey && latestPatientRef.current) {
+      if (loadedSessionKeyRef.current === sessionKey) {
+        return;
+      }
+      loadedSessionKeyRef.current = sessionKey;
+      void loadModalData(latestPatientRef.current);
+    } else {
+      loadedSessionKeyRef.current = null;
       loadRequestIdRef.current++;
       resetScreeningState();
     }
-  }, [visible, patient, loadModalData, resetScreeningState]);
+  }, [sessionKey, loadModalData, resetScreeningState]);
+
+  const initialDefaultMode: 'Regular' | 'YakapAvailment' =
+    initialTrack === 'YakapAvailment' ? 'YakapAvailment' : 'Regular';
+  const initialDefaultType: HealthScreeningType =
+    initialDefaultMode === 'YakapAvailment' ? 'YakapFpe' : 'AnnualPhysicalExam';
+
+  // Auto-save unsaved screening progress to tab-scoped sessionStorage so browser refresh preserves edits
+  useEffect(() => {
+    if (
+      !visible ||
+      !patient ||
+      loading ||
+      loadError ||
+      !hydratedRef.current ||
+      completedScreening ||
+      screeningStatus === 'Completed'
+    ) {
+      return;
+    }
+
+    const hasDraftState =
+      vitalsEdited ||
+      historyEdited ||
+      socialEdited ||
+      reproEdited ||
+      ncdEdited ||
+      peEdited ||
+      nurseScreeningNotes.trim().length > 0 ||
+      clinicalImpression.trim().length > 0 ||
+      preventiveCounselingNotes.trim().length > 0 ||
+      philHealthAtc.trim().length > 0 ||
+      activeStep > 1 ||
+      workflowMode !== initialDefaultMode ||
+      screeningType !== initialDefaultType;
+
+    if (!hasDraftState) return;
+
+    writeScreeningDraft({
+      version: 1,
+      patientId: patient.id,
+      queueItemId: activeQueueItemId,
+      screeningId,
+      activeStep,
+      screeningType,
+      workflowMode,
+      philHealthAtc,
+      isWalkedIn,
+      serviceDeliveryMethod,
+      vitalsForm,
+      vitalsEdited,
+      pastMedicalItems,
+      familyMedicalItems,
+      medicalHistoryNotes,
+      familyHistoryNotes,
+      historyEdited,
+      socialHistory,
+      socialEdited,
+      reproHistory,
+      reproEdited,
+      ncdAnswers,
+      ncdFbsMgDl,
+      ncdFbsDate,
+      ncdTotalCholMgDl,
+      ncdTotalCholDate,
+      ncdUrineKetonesValue,
+      ncdUrineKetonesDate,
+      ncdUrineProteinValue,
+      ncdUrineProteinDate,
+      ncdEdited,
+      nurseScreeningNotes,
+      peValues,
+      peEdited,
+      adultRoutineCodes,
+      pediatricRoutineCodes,
+      prenatalRoutineCodes,
+      breastCancerSelected,
+      cervicalCancerSelected,
+      colorectalCancerSelected,
+      prostateCancerSelected,
+      disposition,
+      clinicalImpression,
+      preventiveCounselingNotes,
+      recommendedFollowUpDate,
+      step2Saved,
+      updatedAt: Date.now(),
+    });
+  }, [
+    visible,
+    patient,
+    loading,
+    loadError,
+    completedScreening,
+    screeningStatus,
+    activeQueueItemId,
+    screeningId,
+    activeStep,
+    screeningType,
+    workflowMode,
+    philHealthAtc,
+    isWalkedIn,
+    serviceDeliveryMethod,
+    vitalsForm,
+    vitalsEdited,
+    pastMedicalItems,
+    familyMedicalItems,
+    medicalHistoryNotes,
+    familyHistoryNotes,
+    historyEdited,
+    socialHistory,
+    socialEdited,
+    reproHistory,
+    reproEdited,
+    ncdAnswers,
+    ncdFbsMgDl,
+    ncdFbsDate,
+    ncdTotalCholMgDl,
+    ncdTotalCholDate,
+    ncdUrineKetonesValue,
+    ncdUrineKetonesDate,
+    ncdUrineProteinValue,
+    ncdUrineProteinDate,
+    ncdEdited,
+    nurseScreeningNotes,
+    peValues,
+    peEdited,
+    adultRoutineCodes,
+    pediatricRoutineCodes,
+    prenatalRoutineCodes,
+    breastCancerSelected,
+    cervicalCancerSelected,
+    colorectalCancerSelected,
+    prostateCancerSelected,
+    disposition,
+    clinicalImpression,
+    preventiveCounselingNotes,
+    recommendedFollowUpDate,
+    step2Saved,
+    initialDefaultMode,
+    initialDefaultType,
+  ]);
+
+  const handleResetDraftToSaved = useCallback(() => {
+    if (!patient) return;
+    clearScreeningDraft(patient.id, activeQueueItemId);
+    void loadModalData(patient, { ignoreDraft: true });
+  }, [patient, activeQueueItemId, loadModalData]);
+
+  const handleExplicitClose = useCallback(() => {
+    clearScreeningDraft(patient?.id, queueItemIdRef.current);
+    onClose();
+  }, [patient?.id, onClose]);
 
   // Station 1 live anthropometrics & red-flag detection
   const bmiEval = useMemo(
@@ -938,8 +1609,10 @@ export default function HealthScreeningModal({
     }
     queueItemIdRef.current = visit.id;
     setActiveQueueItemId(visit.id);
+    clearScreeningDraft(patient.id, null);
+    onSessionQueueLinked?.(visit.id);
     return visit.id;
-  }, [patient, workflowMode, screeningType, allowDuplicateActive]);
+  }, [patient, workflowMode, screeningType, allowDuplicateActive, onSessionQueueLinked]);
 
   const buildProgressPayload = useCallback(
     (overrides?: {
@@ -960,7 +1633,7 @@ export default function HealthScreeningModal({
         sendToDoctor: overrides?.sendToDoctor,
         patientVitalsId: overrides?.patientVitalsId ?? patientVitalsId ?? undefined,
         patientPhysicalExamId:
-          overrides?.patientPhysicalExamId ?? patientPhysicalExamId ?? undefined,
+          overrides?.patientPhysicalExamId ?? screeningPhysicalExamId ?? undefined,
         ncdRiskAssessmentId:
           overrides?.ncdRiskAssessmentId ?? ncdRiskAssessmentId ?? undefined,
         serviceItemId:
@@ -992,7 +1665,7 @@ export default function HealthScreeningModal({
       workflowMode,
       allowDuplicateActive,
       patientVitalsId,
-      patientPhysicalExamId,
+      screeningPhysicalExamId,
       ncdRiskAssessmentId,
       clinicSettings?.defaultHealthScreeningServiceItemId,
       nurseScreeningNotes,
@@ -1461,9 +2134,11 @@ export default function HealthScreeningModal({
         }
         setScreeningId(saved.id);
         setScreeningStatus(saved.status);
+        setStep2Saved(true);
         onSuccess?.(saved);
 
         if (sendToDoctor) {
+          clearScreeningDraft(patient.id, qId);
           notify.success('Health screening saved and routed to Physician (Awaiting Doctor PE).');
           onClose();
         } else {
@@ -1583,6 +2258,7 @@ export default function HealthScreeningModal({
           });
         }
 
+        clearScreeningDraft(patient.id, qId);
         notify.success('Visit escalated to Physician Consultation with recorded vitals intact.');
         onClose();
         onEscalateToConsultation?.({
@@ -1774,6 +2450,11 @@ export default function HealthScreeningModal({
         return;
       }
 
+      if (peId) {
+        setScreeningPhysicalExamId(peId);
+      }
+      setStep2Saved(true);
+      clearScreeningDraft(patient.id, qId);
       setScreeningStatus(completed.status);
       setProfilingTransNo(completed.profilingTransNo ?? null);
       setCompletedScreening(completed);
@@ -2099,7 +2780,7 @@ export default function HealthScreeningModal({
   return (
     <Modal
       visible={visible}
-      onClose={onClose}
+      onClose={handleExplicitClose}
       title="Health Screening & Preventive Assessment"
       subtitle={`${patient.fullName} · ${cohort.label} · ${
         activeQueueItemId ? `Visit Linked` : 'Direct Visit — creates on save'
@@ -2125,7 +2806,7 @@ export default function HealthScreeningModal({
       footer={
         completedScreening ? (
           <View style={styles.footerBar}>
-            <Button title="Done" variant="outline" onPress={onClose} />
+            <Button title="Done" variant="outline" onPress={handleExplicitClose} />
             {activeQueueItemId ? (
               <Button
                 title="Issue Medical Certificate / Fit-to-Work"
@@ -2133,7 +2814,7 @@ export default function HealthScreeningModal({
                 variant="primary"
                 onPress={() => {
                   if (onIssueMedCert) {
-                    onClose();
+                    handleExplicitClose();
                     onIssueMedCert({ patient, queueItemId: activeQueueItemId });
                   } else {
                     setMedCertModalOpen(true);
@@ -2145,7 +2826,7 @@ export default function HealthScreeningModal({
           </View>
         ) : (
           <View style={styles.footerBar}>
-            <Button title="Cancel" variant="ghost" onPress={onClose} disabled={saving} />
+            <Button title="Cancel" variant="ghost" onPress={handleExplicitClose} disabled={saving} />
 
             <View style={styles.footerActionsRight}>
               {activeStep > 1 ? (
@@ -2249,10 +2930,27 @@ export default function HealthScreeningModal({
         <ErrorState
           title="Could not load Health Screening"
           message={loadError}
-          onRetry={() => loadModalData(patient)}
+          onRetry={() => loadModalData(patient, { ignoreDraft: true })}
         />
       ) : (
         <View style={styles.container}>
+          {restoredDraftFromRefresh ? (
+            <View style={styles.draftRestoredBanner} testID="screening-draft-restored-banner">
+              <View style={styles.draftRestoredTextRow}>
+                <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.infoText} />
+                <ThemedText variant="small" color={theme.colors.infoText} style={styles.flexOne}>
+                  Unsaved screening progress restored after page refresh.
+                </ThemedText>
+              </View>
+              <Button
+                title="Reset to Saved"
+                variant="ghost"
+                size="xs"
+                onPress={handleResetDraftToSaved}
+                testID="screening-reset-draft-btn"
+              />
+            </View>
+          ) : null}
           {/* Program Bar: Screening Track + Purpose + YAKAP Intake Strip */}
           <View style={styles.programBar}>
             {showTrackToggle ? (
@@ -2393,48 +3091,107 @@ export default function HealthScreeningModal({
               </View>
             )}
 
-            {/* 4-Step Interactive Station Stepper */}
+            {/* 4-Step Connected Station Workflow Stepper */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.stepperRow}
             >
-              {STATION_STEPS.map((st) => {
+              {STATION_STEPS.map((st, idx) => {
                 const isActive = activeStep === st.step;
                 const isDone =
-                  (st.step === 1 && Boolean(patientVitalsId)) ||
+                  (st.step === 1 && (Boolean(patientVitalsId) || Boolean(screeningId))) ||
                   (st.step === 2 &&
-                    (screeningStatus === 'AwaitingDoctor' || screeningStatus === 'Completed')) ||
-                  (st.step === 3 && Boolean(screeningPhysicalExamId || peEdited)) ||
+                    (step2Saved ||
+                      screeningStatus === 'AwaitingDoctor' ||
+                      screeningStatus === 'Completed')) ||
+                  (st.step === 3 &&
+                    (Boolean(screeningPhysicalExamId) ||
+                      peEdited ||
+                      screeningStatus === 'Completed')) ||
                   (st.step === 4 && screeningStatus === 'Completed');
 
+                const statusLabel = isDone
+                  ? isActive
+                    ? 'Completed · Active'
+                    : 'Completed'
+                  : isActive
+                    ? `Current · ${st.roleHint}`
+                    : st.roleHint;
+
                 return (
-                  <Pressable
-                    key={st.step}
-                    onPress={() => setActiveStep(st.step)}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: isActive }}
-                    style={[styles.stepPill, isActive && styles.stepPillActive]}
-                    testID={`screening-step-${st.step}`}
-                  >
-                    <Icon
-                      name={isDone && !isActive ? 'checkCircle' : st.icon}
-                      size={theme.sizes.iconSm}
-                      color={
-                        isActive
-                          ? theme.colors.primary
-                          : isDone
-                            ? theme.colors.successText
-                            : theme.colors.textMuted
-                      }
-                    />
-                    <ThemedText
-                      variant={isActive ? 'smallBold' : 'small'}
-                      color={isActive ? theme.colors.primary : theme.colors.textSecondary}
+                  <React.Fragment key={st.step}>
+                    <Pressable
+                      onPress={() => setActiveStep(st.step)}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: isActive }}
+                      style={[
+                        styles.stepNodeCard,
+                        isDone && !isActive && styles.stepNodeCardDone,
+                        isActive && styles.stepNodeCardActive,
+                      ]}
+                      testID={`screening-step-${st.step}`}
                     >
-                      {isCompact ? st.shortLabel : st.label}
-                    </ThemedText>
-                  </Pressable>
+                      <View
+                        style={[
+                          styles.stepCircle,
+                          isDone && styles.stepCircleDone,
+                          isActive && styles.stepCircleActive,
+                        ]}
+                      >
+                        {isDone && !isActive ? (
+                          <Icon name="check" size={theme.sizes.iconSm} color={theme.colors.onPrimary} />
+                        ) : (
+                          <ThemedText
+                            variant="captionBold"
+                            color={
+                              isActive || isDone
+                                ? theme.colors.onPrimary
+                                : theme.colors.textMuted
+                            }
+                          >
+                            {st.step}
+                          </ThemedText>
+                        )}
+                      </View>
+                      <View style={styles.stepTextCol}>
+                        <ThemedText
+                          variant={isActive ? 'smallBold' : 'small'}
+                          color={
+                            isActive
+                              ? theme.colors.primary
+                              : isDone
+                                ? theme.colors.text
+                                : theme.colors.textSecondary
+                          }
+                          numberOfLines={1}
+                        >
+                          {isCompact ? st.shortTitle : st.title}
+                        </ThemedText>
+                        <ThemedText
+                          variant="caption"
+                          color={
+                            isActive
+                              ? theme.colors.primary
+                              : isDone
+                                ? theme.colors.successText
+                                : theme.colors.textMuted
+                          }
+                          numberOfLines={1}
+                        >
+                          {statusLabel}
+                        </ThemedText>
+                      </View>
+                    </Pressable>
+                    {idx < STATION_STEPS.length - 1 ? (
+                      <View
+                        style={[
+                          styles.stepConnector,
+                          isDone && styles.stepConnectorDone,
+                        ]}
+                      />
+                    ) : null}
+                  </React.Fragment>
                 );
               })}
             </ScrollView>
@@ -2520,6 +3277,14 @@ export default function HealthScreeningModal({
                     onPress={() => setAllergyModalOpen(true)}
                   />
                 </View>
+                {patient.alerts?.trim() || chart?.demographics?.alerts?.trim() ? (
+                  <View style={styles.warningCallout} testID="screening-clinical-alerts-banner">
+                    <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+                    <ThemedText variant="small" color={theme.colors.warningText} style={styles.flexOne}>
+                      Clinical Alert: {patient.alerts?.trim() || chart?.demographics?.alerts?.trim()}
+                    </ThemedText>
+                  </View>
+                ) : null}
                 {allergies.length > 0 ? (
                   <AllergyPillList
                     allergies={allergies.map((a) => ({
@@ -2534,6 +3299,12 @@ export default function HealthScreeningModal({
                     }))}
                     onRemove={handleRemoveAllergy}
                   />
+                ) : hasKnownAllergies(patient.allergies) ? (
+                  <View style={styles.infoBanner} testID="screening-legacy-allergies-banner">
+                    <ThemedText variant="small" color={theme.colors.infoText}>
+                      Recorded on Patient Profile: {patient.allergies}. Use "Add / Manage Allergies" to formalize into structured allergy entries.
+                    </ThemedText>
+                  </View>
                 ) : (
                   <ThemedText variant="small" color={theme.colors.textMuted}>
                     No known allergies recorded on chart.
@@ -2553,6 +3324,14 @@ export default function HealthScreeningModal({
                       variant={historyEdited ? 'warning' : 'routine'}
                       size="sm"
                     />
+                    {prefilledHistoryCount > 0 && !historyEdited ? (
+                      <Badge
+                        label={`Pre-filled from Chart (${prefilledHistoryCount})`}
+                        variant="primary"
+                        size="sm"
+                        icon="clipboard"
+                      />
+                    ) : null}
                   </View>
                 </View>
 
@@ -2561,10 +3340,10 @@ export default function HealthScreeningModal({
                 </ThemedText>
                 <View style={styles.chipRow}>
                   {diseaseList.map((item) => {
-                    const selected = pastMedicalItems.some(
-                      (m) => m.philHealthMdiseaseCode === item.code
-                    );
                     const isLocked = lockedPersonalCodes.has(item.code);
+                    const selected =
+                      isLocked ||
+                      pastMedicalItems.some((m) => m.philHealthMdiseaseCode === item.code);
                     return (
                       <Pressable
                         key={`pmh-${item.code}`}
@@ -2574,6 +3353,7 @@ export default function HealthScreeningModal({
                           selected && styles.chipSuccess,
                           isLocked && styles.chipLocked,
                         ]}
+                        testID={`pmh-chip-${item.code}`}
                       >
                         <Icon
                           name={isLocked ? 'lock' : selected ? 'check' : 'plus'}
@@ -2590,6 +3370,44 @@ export default function HealthScreeningModal({
                     );
                   })}
                 </View>
+
+                {lockedPersonalCodes.has('998') ||
+                pastMedicalItems.some((m) => m.philHealthMdiseaseCode === '998') ? (
+                  <Input
+                    label="Specify Other Personal Condition"
+                    value={
+                      pastMedicalItems.find((m) => m.philHealthMdiseaseCode === '998')
+                        ?.specificDescription ?? ''
+                    }
+                    onChangeText={(txt) => {
+                      setHistoryEdited(true);
+                      setPastMedicalItems((prev) => {
+                        const has998 = prev.some((m) => m.philHealthMdiseaseCode === '998');
+                        if (has998) {
+                          return prev.map((m) =>
+                            m.philHealthMdiseaseCode === '998'
+                              ? { ...m, specificDescription: txt }
+                              : m
+                          );
+                        }
+                        return [
+                          ...prev,
+                          {
+                            id: 'draft-998',
+                            patientId: patient.id,
+                            conditionTitle: 'Others',
+                            philHealthMdiseaseCode: '998',
+                            specificDescription: txt,
+                            isResolved: false,
+                            createdAt: new Date().toISOString(),
+                          },
+                        ];
+                      });
+                    }}
+                    placeholder="Enter specific condition"
+                    testID="pmh-other-desc-input"
+                  />
+                ) : null}
 
                 <Input
                   label="Personal Medical History Notes"
@@ -2614,6 +3432,7 @@ export default function HealthScreeningModal({
                         key={`fam-${item.code}`}
                         onPress={() => toggleFamilyDisease(item.code, item.description)}
                         style={[styles.purposeChip, selected && styles.chipSuccess]}
+                        testID={`fam-chip-${item.code}`}
                       >
                         <Icon
                           name={selected ? 'check' : 'plus'}
@@ -2630,6 +3449,28 @@ export default function HealthScreeningModal({
                     );
                   })}
                 </View>
+
+                {familyMedicalItems.some((f) => f.philHealthMdiseaseCode === '998') ? (
+                  <Input
+                    label="Specify Other Family Condition"
+                    value={
+                      familyMedicalItems.find((f) => f.philHealthMdiseaseCode === '998')
+                        ?.specificDescription ?? ''
+                    }
+                    onChangeText={(txt) => {
+                      setHistoryEdited(true);
+                      setFamilyMedicalItems((prev) =>
+                        prev.map((f) =>
+                          f.philHealthMdiseaseCode === '998'
+                            ? { ...f, specificDescription: txt }
+                            : f
+                        )
+                      );
+                    }}
+                    placeholder="Enter specific family condition"
+                    testID="fam-other-desc-input"
+                  />
+                ) : null}
 
                 <Input
                   label="Family History Notes"
@@ -4181,26 +5022,85 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.warningBorder,
     backgroundColor: theme.colors.warningBg,
   },
-  stepperRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-  },
-  stepPill: {
+  draftRestoredBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radii.full,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.infoBorder,
+    backgroundColor: theme.colors.infoBg,
+  },
+  draftRestoredTextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flex: 1,
+    minWidth: 200,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexGrow: 1,
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+  },
+  stepNodeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.lg,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceSubtle,
+    minWidth: 148,
   },
-  stepPillActive: {
+  stepNodeCardDone: {
+    borderColor: theme.colors.successBorder,
+    backgroundColor: theme.colors.successBg,
+  },
+  stepNodeCardActive: {
     borderColor: theme.colors.primary,
     backgroundColor: theme.colors.surface,
     ...theme.shadows.brandSubtle,
+  },
+  stepCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: theme.radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderDark,
+    backgroundColor: theme.colors.surface,
+  },
+  stepCircleDone: {
+    borderColor: theme.colors.success,
+    backgroundColor: theme.colors.success,
+  },
+  stepCircleActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary,
+  },
+  stepTextCol: {
+    gap: 1,
+  },
+  stepConnector: {
+    height: 2,
+    width: 20,
+    minWidth: 12,
+    flexShrink: 1,
+    backgroundColor: theme.colors.borderDark,
+    borderRadius: theme.radii.full,
+  },
+  stepConnectorDone: {
+    backgroundColor: theme.colors.success,
   },
   stationBody: {
     gap: theme.spacing.lg,
