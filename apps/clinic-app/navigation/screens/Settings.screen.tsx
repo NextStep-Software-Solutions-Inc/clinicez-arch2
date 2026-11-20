@@ -45,6 +45,7 @@ import LicenseSystemTab from '../../components/settings/LicenseSystemTab';
 import SecuritySection from '../../components/settings/SecuritySection';
 import AppUpdatesSettingsCard from '../../components/settings/AppUpdatesSettingsCard';
 import WorkstationNodeDevSection from '../../components/settings/cards/WorkstationNodeDevSection';
+import WorkstationSessionPolicyCard from '../../components/settings/cards/WorkstationSessionPolicyCard';
 import { Card, CardContent } from '../../components/ui/Card';
 import { SkeletonList } from '../../components/ui/Skeleton';
 import {
@@ -1052,14 +1053,21 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
 
       case 'rbac':
         return (
-          <AccessControlTab
-            roles={roles}
-            onRefreshRoles={async () => {
-              const [fresh] = await clinicService.getRoles();
-              if (fresh) setRoles(fresh);
-            }}
-            loading={showSkeletons}
-          />
+          <View style={styles.licenseStack}>
+            <WorkstationSessionPolicyCard
+              settings={settings}
+              showSkeletons={showSkeletons}
+              onSettingsUpdated={handleSettingsUpdated}
+            />
+            <AccessControlTab
+              roles={roles}
+              onRefreshRoles={async () => {
+                const [fresh] = await clinicService.getRoles();
+                if (fresh) setRoles(fresh);
+              }}
+              loading={showSkeletons}
+            />
+          </View>
         );
 
       case 'services':

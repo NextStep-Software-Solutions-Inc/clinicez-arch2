@@ -25,6 +25,9 @@ mock.module('../services/secureStorage', () => ({
   },
 }));
 
+const deleteCalls: Array<{ url: string; config: any }> = [];
+let nextDeleteResponse: ((url: string, config: any) => Promise<any>) | null = null;
+
 mock.module('axios', () => ({
   default: {
     post: async (url: string, body: any, config: any) => {
@@ -34,25 +37,46 @@ mock.module('axios', () => ({
       }
       return { data: { data: null } };
     },
+    delete: async (url: string, config: any) => {
+      deleteCalls.push({ url, config });
+      if (nextDeleteResponse) {
+        return nextDeleteResponse(url, config);
+      }
+      return { data: { data: null } };
+    },
     get: async () => ({ data: { data: null } }),
   },
 }));
+
+const {
+  registerActiveSessionBusyCheck,
+  registerBeforeLockHook,
+  isActiveSessionBusy,
+} = await import('../services/sessionHooks');
 
 const {
   __resetAuthChannelForTests,
   broadcastActivity,
   changePassword,
   getAccessToken,
+  getLockedSession,
   getSessionSnapshot,
   idleLogout,
+  lockSession,
   login,
   logout,
   onSessionExpired,
   onSessionIdleExpired,
+  onSessionLocked,
+  onSessionUnlocked,
   refreshSession,
+  removeQuickUnlockPin,
   restoreSession,
+  setQuickUnlockPin,
   subscribeRemoteActivity,
   subscribeSession,
+  unlockWithPassword,
+  unlockWithPin,
 } = await import('../services/authSession');
 
 const sampleUser = {
@@ -103,17 +127,31 @@ class MockBroadcastChannel {
 describe('authSession web multi-tab & native dual-mode', () => {
   const origBroadcastChannel = (globalThis as any).BroadcastChannel;
   const origNavigator = (globalThis as any).navigator;
+  const origWindow = (globalThis as any).window;
+  const sessionStoreMap = new Map<string, string>();
 
   beforeEach(async () => {
     mockPlatform.OS = 'web';
     secureStoreMap.clear();
+    sessionStoreMap.clear();
     postCalls.length = 0;
+    deleteCalls.length = 0;
     nextPostResponse = null;
+    nextDeleteResponse = null;
     MockBroadcastChannel.instances = [];
     (globalThis as any).BroadcastChannel = MockBroadcastChannel;
+    (globalThis as any).window = {
+      ...(origWindow ?? {}),
+      sessionStorage: {
+        getItem: (k: string) => sessionStoreMap.get(k) ?? null,
+        setItem: (k: string, v: string) => { sessionStoreMap.set(k, v); },
+        removeItem: (k: string) => { sessionStoreMap.delete(k); },
+      },
+    };
     __resetAuthChannelForTests();
     await logout();
     postCalls.length = 0;
+    deleteCalls.length = 0;
     MockBroadcastChannel.instances.forEach((c) => (c.posted = []));
   });
 
@@ -121,6 +159,7 @@ describe('authSession web multi-tab & native dual-mode', () => {
     __resetAuthChannelForTests();
     (globalThis as any).BroadcastChannel = origBroadcastChannel;
     (globalThis as any).navigator = origNavigator;
+    (globalThis as any).window = origWindow;
   });
 
   test('web login sends X-Client-Platform: web, withCredentials: true, and does not persist refresh token in secureStorage', async () => {
@@ -469,5 +508,203 @@ describe('authSession web multi-tab & native dual-mode', () => {
     unsub();
     expect(getSessionSnapshot().user?.id).toBe('staff-2');
     expect(seenIds).toEqual(['staff-2']);
+  });
+
+  test('lockSession flushes beforeLock hooks before clearing accessToken, marks sessionStorage, calls /auth/lock, and broadcasts session-locked', async () => {
+    const peerChannel = new MockBroadcastChannel('clinicez-auth');
+    const received: any[] = [];
+    peerChannel.onmessage = (e) => received.push(e.data);
+
+    let lockedInfoSeen: any = null;
+    onSessionLocked((info) => {
+      lockedInfoSeen = info;
+    });
+
+    nextPostResponse = async () => ({ data: { data: makeTokens('lock-access-1', null) } });
+    await login('reyes@clinic.test', 'Pass123!');
+    postCalls.length = 0;
+
+    let tokenDuringHook: string | null = null;
+    const unreg = registerBeforeLockHook(() => {
+      tokenDuringHook = getAccessToken();
+    });
+
+    const serverLockedPayload = {
+      staffId: 'staff-1',
+      name: 'Dr. Reyes',
+      email: 'reyes@clinic.test',
+      role: 'Doctor',
+      roleName: null,
+      clinicName: 'Metro Clinic',
+      hasQuickUnlockPin: true,
+      allowStaffPinUnlock: true,
+      lockedAtUtc: new Date().toISOString(),
+      lockExpiresAtUtc: new Date(Date.now() + 8 * 3_600_000).toISOString(),
+    };
+
+    nextPostResponse = async () => ({ data: { data: serverLockedPayload } });
+    const result = await lockSession();
+    unreg();
+    onSessionLocked(null);
+
+    expect(tokenDuringHook).toBe('lock-access-1');
+    expect(getAccessToken()).toBeNull();
+    expect(result?.staffId).toBe('staff-1');
+    expect(lockedInfoSeen?.staffId).toBe('staff-1');
+    expect(sessionStoreMap.get('clinicez.auth.workstationLocked')).toBe('1');
+    expect(postCalls.some((c) => c.url.includes('/auth/lock'))).toBe(true);
+    expect(received.some((m) => m?.type === 'session-locked' && m?.lockedSession?.staffId === 'staff-1')).toBe(true);
+  });
+
+  test('restoreSession returns workstationLocked on HTTP 423 SESSION_LOCKED without issuing accessToken (prevents F5 bypass)', async () => {
+    const lockedPayload = {
+      staffId: 'staff-1',
+      name: 'Dr. Reyes',
+      email: 'reyes@clinic.test',
+      role: 'Doctor',
+      roleName: null,
+      clinicName: 'Metro Clinic',
+      hasQuickUnlockPin: true,
+      allowStaffPinUnlock: true,
+      lockedAtUtc: new Date().toISOString(),
+      lockExpiresAtUtc: new Date(Date.now() + 8 * 3_600_000).toISOString(),
+    };
+
+    nextPostResponse = async () => {
+      throw {
+        isAxiosError: true,
+        response: {
+          status: 423,
+          data: {
+            succeeded: false,
+            errorCode: 'SESSION_LOCKED',
+            message: 'Workstation is locked.',
+            data: lockedPayload,
+          },
+        },
+      };
+    };
+
+    const outcome = await restoreSession();
+    expect(outcome.state).toBe('workstationLocked');
+    if (outcome.state === 'workstationLocked') {
+      expect(outcome.lockedSession.email).toBe('reyes@clinic.test');
+    }
+    expect(getAccessToken()).toBeNull();
+    expect(getLockedSession()?.staffId).toBe('staff-1');
+  });
+
+  test('unlockWithPin restores accessToken, clears lock flag, and broadcasts session-unlocked; 5-strike lockout clears session', async () => {
+    const peerChannel = new MockBroadcastChannel('clinicez-auth');
+    const received: any[] = [];
+    peerChannel.onmessage = (e) => received.push(e.data);
+
+    let unlockedUser: any = null;
+    onSessionUnlocked((u) => {
+      unlockedUser = u;
+    });
+
+    sessionStoreMap.set('clinicez.auth.workstationLocked', '1');
+    nextPostResponse = async () => ({ data: { data: makeTokens('unlocked-access-1', null) } });
+
+    const [user, err] = await unlockWithPin('246810');
+    expect(err).toBeNull();
+    expect(user?.id).toBe('staff-1');
+    expect(getAccessToken()).toBe('unlocked-access-1');
+    expect(getLockedSession()).toBeNull();
+    expect(sessionStoreMap.has('clinicez.auth.workstationLocked')).toBe(false);
+    expect(unlockedUser?.id).toBe('staff-1');
+    expect(received.some((m) => m?.type === 'session-unlocked' && m?.accessToken === 'unlocked-access-1')).toBe(true);
+
+    // 5-strike PIN lockout returns 401 INVALIDTOKEN and triggers onSessionExpired
+    let expiredFired = false;
+    onSessionExpired(() => {
+      expiredFired = true;
+    });
+    nextPostResponse = async () => {
+      throw {
+        isAxiosError: true,
+        response: {
+          status: 401,
+          data: {
+            succeeded: false,
+            errorCode: 'INVALIDTOKEN',
+            message: 'Too many incorrect PIN attempts. Sign in with your password.',
+          },
+        },
+      };
+    };
+    const [failUser, failErr] = await unlockWithPin('111222');
+    onSessionExpired(null);
+    onSessionUnlocked(null);
+
+    expect(failUser).toBeNull();
+    expect(failErr?.status).toBe(401);
+    expect(expiredFired).toBe(true);
+    expect(getAccessToken()).toBeNull();
+  });
+
+  test('unlockWithPassword restores session and clears lock marker', async () => {
+    sessionStoreMap.set('clinicez.auth.workstationLocked', '1');
+    nextPostResponse = async () => ({ data: { data: makeTokens('pw-unlock-access', null) } });
+
+    const [user, err] = await unlockWithPassword('StrongPass123!');
+    expect(err).toBeNull();
+    expect(user?.id).toBe('staff-1');
+    expect(getAccessToken()).toBe('pw-unlock-access');
+    expect(sessionStoreMap.has('clinicez.auth.workstationLocked')).toBe(false);
+  });
+
+  test('setQuickUnlockPin and removeQuickUnlockPin update user hasQuickUnlockPin snapshot', async () => {
+    nextPostResponse = async () => ({ data: { data: makeTokens('pin-mgmt-access', null) } });
+    await login('reyes@clinic.test', 'StrongPass123!');
+    postCalls.length = 0;
+
+    nextPostResponse = async () => ({ data: { data: { ...sampleUser, hasQuickUnlockPin: true } } });
+    const [setUser, setErr] = await setQuickUnlockPin('StrongPass123!', '246810');
+    expect(setErr).toBeNull();
+    expect(setUser?.hasQuickUnlockPin).toBe(true);
+    expect(getSessionSnapshot().user?.hasQuickUnlockPin).toBe(true);
+
+    nextDeleteResponse = async () => ({ data: { data: { ...sampleUser, hasQuickUnlockPin: false } } });
+    const [remUser, remErr] = await removeQuickUnlockPin('StrongPass123!');
+    expect(remErr).toBeNull();
+    expect(remUser?.hasQuickUnlockPin).toBe(false);
+    expect(getSessionSnapshot().user?.hasQuickUnlockPin).toBe(false);
+    expect(deleteCalls.some((c) => c.url.includes('/auth/pin'))).toBe(true);
+  });
+
+  test('idleLogout broadcasts idle reason BEFORE calling /auth/logout to prevent cross-tab 401 notice race', async () => {
+    const events: string[] = [];
+    const peerChannel = new MockBroadcastChannel('clinicez-auth');
+    peerChannel.onmessage = (e) => {
+      if (e.data?.type === 'session-cleared') {
+        events.push(`broadcast:${e.data.reason}`);
+      }
+    };
+
+    nextPostResponse = async () => ({ data: { data: makeTokens('race-access', null) } });
+    await login('reyes@clinic.test', 'Pass123!');
+    postCalls.length = 0;
+
+    nextPostResponse = async (url: string) => {
+      events.push(`http:${url}`);
+      return { data: { data: null } };
+    };
+
+    await idleLogout();
+    expect(events[0]).toBe('broadcast:idle');
+    expect(events[1]).toContain('http:');
+    expect(events[1]).toContain('/auth/logout');
+  });
+
+  test('registerActiveSessionBusyCheck reports active clinical work cleanly', () => {
+    let busy = true;
+    const unreg = registerActiveSessionBusyCheck(() => busy);
+    expect(isActiveSessionBusy()).toBe(true);
+    busy = false;
+    expect(isActiveSessionBusy()).toBe(false);
+    unreg();
+    expect(isActiveSessionBusy()).toBe(false);
   });
 });

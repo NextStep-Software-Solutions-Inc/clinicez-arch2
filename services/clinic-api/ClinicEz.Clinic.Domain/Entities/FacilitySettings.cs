@@ -260,4 +260,14 @@ public sealed class FacilitySettings : ClinicScopedEntity
     public bool AllowNurseMidwifeYakapFpeFacilitator { get; set; } = false;
     public Guid? DefaultHealthScreeningServiceItemId { get; set; }
     public string? DefaultHealthScreeningServiceCode { get; set; } = "HEALTH-SCREEN";
+
+    // ── Workstation Session Lock & Timeout Policies ──────────
+    /// <summary>Minutes of inactivity before workstation locks (0 disables auto-lock; 5..120 when enabled).</summary>
+    public int IdleLockMinutes { get; set; } = 15;
+
+    /// <summary>Maximum hours a locked session remains eligible for Quick-Unlock PIN / password unlock before requiring full sign-in.</summary>
+    public int MaxLockedSessionHours { get; set; } = 8;
+
+    /// <summary>Whether clinic staff may configure a 6-digit Quick-Unlock PIN on workstations.</summary>
+    public bool AllowStaffPinUnlock { get; set; } = true;
 }

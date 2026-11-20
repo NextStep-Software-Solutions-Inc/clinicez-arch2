@@ -2077,6 +2077,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("AllowStaffPinUnlock")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("AppointmentReminder24hEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -2234,6 +2239,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<int>("IdleLockMinutes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(15);
+
                     b.Property<string>("InvoicePrefix")
                         .IsRequired()
                         .HasColumnType("text");
@@ -2326,6 +2336,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("LtoEvidenceObjectKey")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<int>("MaxLockedSessionHours")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(8);
 
                     b.Property<int>("MaxStaffLimit")
                         .HasColumnType("integer");
@@ -8429,6 +8444,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTime?>("LockedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid?>("ReplacedByTokenId")
                         .HasColumnType("uuid");
 
@@ -8864,6 +8882,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<int>("FailedLoginCount")
                         .HasColumnType("integer");
 
+                    b.Property<int>("FailedPinAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -8951,6 +8974,13 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasDefaultValue("Unverified");
+
+                    b.Property<string>("QuickUnlockPinHash")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("QuickUnlockPinSetAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Role")
                         .IsRequired()

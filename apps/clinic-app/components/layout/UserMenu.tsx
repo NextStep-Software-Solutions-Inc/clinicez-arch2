@@ -46,7 +46,7 @@ export default function UserMenu({
   onNavigate,
   currentRoute,
 }: UserMenuProps) {
-  const { state: authState, user, offline } = useAuth();
+  const { state: authState, user, offline, lockWorkstation } = useAuth();
   const { current: staffCurrent, loading: staffLoading } = useStaff();
   const { isDark, toggleDarkMode } = useThemeMode();
   const navigation = useNavigation<any>();
@@ -114,6 +114,35 @@ export default function UserMenu({
 
   const quickToggleLabel = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
   const quickToggleIcon: IconName = isDark ? 'sun' : 'moon';
+  const canQuickLock = !offline && typeof lockWorkstation === 'function';
+
+  const lockButton = canQuickLock ? (
+    compact ? (
+      <Button
+        variant="outline"
+        size="sm"
+        icon="lock"
+        iconOnly
+        accessibilityLabel="Lock workstation screen"
+        tooltip="Lock screen"
+        testID="user-menu-lock-button"
+        onPress={() => void lockWorkstation()}
+        style={styles.compactToggleBtn}
+      />
+    ) : (
+      <Button
+        title="Lock screen"
+        variant="subtle"
+        size="xs"
+        icon="lock"
+        accessibilityLabel="Lock workstation screen"
+        tooltip="Lock screen for privacy"
+        testID="user-menu-lock-button"
+        onPress={() => void lockWorkstation()}
+        style={variant === 'card' ? styles.quickToggleCardBtn : styles.quickTogglePillBtn}
+      />
+    )
+  ) : null;
 
   const profileButton = (
     <Pressable
@@ -215,6 +244,7 @@ export default function UserMenu({
     >
       {compact && variant === 'pill' ? (
         <>
+          {lockButton}
           {quickToggleButton}
           {profileButton}
         </>
@@ -222,6 +252,7 @@ export default function UserMenu({
         <>
           {profileButton}
           {quickToggleButton}
+          {lockButton}
         </>
       )}
     </View>

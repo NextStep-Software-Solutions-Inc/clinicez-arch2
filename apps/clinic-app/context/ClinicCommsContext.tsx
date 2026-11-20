@@ -3,6 +3,7 @@ import { CommsProvider } from '@clinicez/comms-sdk/react';
 import type { CommsTicketResponse } from '@clinicez/comms-sdk/react';
 import { clinicApiClient } from '../services/apiClient';
 import { getSetting, isCommsEnabled as isCommsConfigEnabled } from '../services/runtimeConfig';
+import { registerActiveSessionBusyCheck } from '../services/sessionHooks';
 import { useAuth } from './AuthContext';
 import { useClinic } from './ClinicContext';
 import { useStaff, formatStaffName } from './StaffContext';
@@ -133,6 +134,13 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
   const [onOpenConsultationChart, setOnOpenConsultationChart] = useState<
     ((appointmentId?: string, patientId?: string) => void) | null
   >(null);
+  const teleconsultSessionRef = useRef<TeleconsultSessionParams | null>(teleconsultSession);
+  teleconsultSessionRef.current = teleconsultSession;
+
+  // Defer workstation auto-lock while an active teleconsultation room/call is open.
+  useEffect(() => {
+    return registerActiveSessionBusyCheck(() => teleconsultSessionRef.current !== null);
+  }, []);
 
   useEffect(() => {
     if (!user?.id) {

@@ -440,4 +440,136 @@ public class AuthControllerTests
         var setCookie = _controller.HttpContext.Response.Headers.SetCookie.ToString();
         setCookie.Should().Contain($"{AuthController.RefreshCookieName}=case-refresh-token");
     }
+
+    [Fact]
+    public async Task Refresh_WhenSessionLocked_Returns423WithLockedSession_AndPreservesCookie()
+    {
+        _controller.HttpContext.Request.Headers["X-Client-Platform"] = "web";
+        _controller.HttpContext.Request.Headers.Cookie = $"{AuthController.RefreshCookieName}=locked-cookie-token";
+
+        var locked = new LockedSessionDto(
+            Guid.NewGuid(),
+            "Dr. Reyes",
+            "reyes@clinic.test",
+            "Doctor",
+            null,
+            "Test Clinic",
+            true,
+            true,
+            DateTime.UtcNow.AddMinutes(-5),
+            DateTime.UtcNow.AddHours(8));
+
+        _auth.RefreshAsync("locked-cookie-token", Arg.Any<CancellationToken>())
+            .Returns(AuthOutcome.Locked(locked));
+
+        var result = await _controller.Refresh(null, CancellationToken.None) as ObjectResult;
+
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be(StatusCodes.Status423Locked);
+        var response = result.Value as ApiResponse<LockedSessionDto>;
+        response.Should().NotBeNull();
+        response!.Succeeded.Should().BeFalse();
+        response.ErrorCode.Should().Be("SESSION_LOCKED");
+        response.Data!.Email.Should().Be("reyes@clinic.test");
+
+        var setCookie = _controller.HttpContext.Response.Headers.SetCookie.ToString();
+        setCookie.Should().NotContain($"{AuthController.RefreshCookieName}=;");
+    }
+
+    [Fact]
+    public async Task Lock_WebClient_CallsLockSession_AndReturns200LockedSession()
+    {
+        _controller.HttpContext.Request.Headers["X-Client-Platform"] = "web";
+        _controller.HttpContext.Request.Headers.Cookie = $"{AuthController.RefreshCookieName}=active-cookie-token";
+
+        var locked = new LockedSessionDto(
+            Guid.NewGuid(),
+            "Dr. Reyes",
+            "reyes@clinic.test",
+            "Doctor",
+            null,
+            "Test Clinic",
+            true,
+            true,
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddHours(8));
+
+        _auth.LockSessionAsync("active-cookie-token", Arg.Any<CancellationToken>())
+            .Returns(AuthOutcome.Locked(locked));
+
+        var result = await _controller.Lock(null, CancellationToken.None) as ObjectResult;
+
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be(StatusCodes.Status200OK);
+        var response = result.Value as ApiResponse<LockedSessionDto>;
+        response!.Succeeded.Should().BeTrue();
+        response.Data!.HasQuickUnlockPin.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UnlockPin_WebClient_Success_SetsRotatedCookie_AndOmitsRefreshToken()
+    {
+        _controller.HttpContext.Request.Headers["X-Client-Platform"] = "web";
+        _controller.HttpContext.Request.IsHttps = true;
+        _controller.HttpContext.Request.Headers.Cookie = $"{AuthController.RefreshCookieName}=locked-cookie";
+
+        _auth.UnlockWithPinAsync("locked-cookie", "246810", Arg.Any<CancellationToken>())
+            .Returns(AuthOutcome.Success(SampleTokens("unlocked-refresh-456")));
+
+        var result = await _controller.UnlockPin(new UnlockPinRequest("246810"), CancellationToken.None) as ObjectResult;
+
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be(StatusCodes.Status200OK);
+        var response = result.Value as ApiResponse<AuthTokensDto>;
+        response!.Data!.AccessToken.Should().Be("access-token");
+        response.Data.RefreshToken.Should().BeNull();
+
+        var setCookie = _controller.HttpContext.Response.Headers.SetCookie.ToString();
+        setCookie.Should().Contain($"{AuthController.RefreshCookieName}=unlocked-refresh-456");
+    }
+
+    [Fact]
+    public async Task UnlockPin_WebClient_InvalidTokenLockout_ClearsCookie()
+    {
+        _controller.HttpContext.Request.Headers["X-Client-Platform"] = "web";
+        _controller.HttpContext.Request.Headers.Cookie = $"{AuthController.RefreshCookieName}=locked-cookie";
+
+        _auth.UnlockWithPinAsync("locked-cookie", "999999", Arg.Any<CancellationToken>())
+            .Returns(AuthOutcome.Fail(AuthFailure.InvalidToken, "Too many incorrect PIN attempts. Sign in with your password."));
+
+        var result = await _controller.UnlockPin(new UnlockPinRequest("999999"), CancellationToken.None) as ObjectResult;
+
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
+        var setCookie = _controller.HttpContext.Response.Headers.SetCookie.ToString();
+        setCookie.Should().Contain($"{AuthController.RefreshCookieName}=;");
+    }
+
+    [Fact]
+    public async Task SetAndRemovePin_Authorized_ReturnsUpdatedUser()
+    {
+        var staffId = Guid.NewGuid();
+        _controller.HttpContext.User = new ClaimsPrincipal(
+            new ClaimsIdentity(new[] { new Claim(ClinicClaimTypes.Subject, staffId.ToString()) }, "TestAuth"));
+
+        var updated = new AuthUserDto(
+            staffId, "Dr. Reyes", "Doctor", null, Guid.NewGuid(), "tenant-1", "Clinic",
+            new[] { "patients:read" }, false, "reyes@clinic.test", HasQuickUnlockPin: true,
+            SessionPolicy: new SessionPolicyDto(15, 8, true));
+
+        _auth.SetQuickUnlockPinAsync(staffId, Arg.Any<SetQuickUnlockPinRequest>(), Arg.Any<CancellationToken>())
+            .Returns((updated, AuthFailure.None, (string?)null));
+
+        var setRes = await _controller.SetQuickUnlockPin(new SetQuickUnlockPinRequest("Pass123!", "246810"), CancellationToken.None) as ObjectResult;
+        setRes!.StatusCode.Should().Be(StatusCodes.Status200OK);
+        ((ApiResponse<AuthUserDto>)setRes.Value!).Data!.HasQuickUnlockPin.Should().BeTrue();
+
+        var cleared = updated with { HasQuickUnlockPin = false };
+        _auth.RemoveQuickUnlockPinAsync(staffId, Arg.Any<RemoveQuickUnlockPinRequest>(), Arg.Any<CancellationToken>())
+            .Returns((cleared, AuthFailure.None, (string?)null));
+
+        var delRes = await _controller.RemoveQuickUnlockPin(new RemoveQuickUnlockPinRequest("Pass123!"), CancellationToken.None) as ObjectResult;
+        delRes!.StatusCode.Should().Be(StatusCodes.Status200OK);
+        ((ApiResponse<AuthUserDto>)delRes.Value!).Data!.HasQuickUnlockPin.Should().BeFalse();
+    }
 }
