@@ -322,6 +322,7 @@ mock.module('../../utils/alertSounds', () => ({
 
 let events = new CommsEventEmitter();
 let mockConversations: any[] = [];
+let mockUnreadCountOverride: number | null = null;
 let mockActiveHookConv: any = null;
 const markReadCalls: string[] = [];
 const muteCalls: Array<{ id: string; isMuted: boolean }> = [];
@@ -341,7 +342,9 @@ mock.module('@clinicez/comms-sdk/react', () => ({
   }),
   useConversations: () => ({
     conversations: mockConversations,
-    unreadCount: mockConversations.reduce((s, c) => s + (c.unreadCount || 0), 0),
+    unreadCount:
+      mockUnreadCountOverride ??
+      mockConversations.reduce((s, c) => s + (c.unreadCount || 0), 0),
     isLoading: false,
     error: null,
     refresh: async () => {},
@@ -433,6 +436,7 @@ function collectElementsByType(node: any, results: any[] = []): any[] {
 describe('Comms Drawer Archive, Unread Reset, Mute Suppression & Department Guard (#212, #158, #182)', () => {
   beforeEach(() => {
     events = new CommsEventEmitter();
+    mockUnreadCountOverride = null;
     mockActiveConversationId = undefined;
     mockActiveHookConv = null;
     markReadCalls.length = 0;
@@ -490,6 +494,7 @@ describe('Comms Drawer Archive, Unread Reset, Mute Suppression & Department Guar
   });
 
   afterEach(() => {
+    mockUnreadCountOverride = null;
     mockActiveConversationId = undefined;
     mockActiveHookConv = null;
   });
@@ -800,5 +805,204 @@ describe('Comms Drawer Archive, Unread Reset, Mute Suppression & Department Guar
     });
     expect(openedCharts).toEqual(['pat-42']);
     careHarness.unmount();
+  });
+
+  test('#212: ClinicChatDrawerHost excludes Closed and TeleconsultCall from Conversations tab unread badge and drops unread count on Close & Archive', async () => {
+    mockConversations = [
+      ...mockConversations.map((c) =>
+        c.id === 'conv-archived-1' ? { ...c, unreadCount: 5 } : c
+      ),
+    ];
+
+    const harness = createClinicHookHarness(() => ClinicChatDrawerHost());
+    renderToStaticMarkup(harness.result.current);
+    const nodes = collectElementsByType(harness.result.current);
+    const convTab = nodes.find(
+      (n) => n.props?.accessibilityRole === 'tab' && n.props?.accessibilityState?.selected === true
+    );
+    expect(convTab).toBeDefined();
+
+    // Active unread = conv-direct-open (2) + conv-care-team (1) = 3 (excludes conv-teleconsult-call=4 and conv-archived-1=5)
+    const tabHtml = renderToStaticMarkup(convTab);
+    expect(tabHtml).toContain('Conversations');
+    expect(tabHtml).toContain('>3<');
+    expect(tabHtml).not.toContain('>12<');
+
+    // Open conv-direct-open and trigger Close & Archive -> activeUnreadCount drops from 3 to 1 immediately
+    await act(async () => {
+      capturedChatDrawerProps.onSelectConversation('conv-direct-open');
+    });
+    harness.rerender();
+    const threadNodes = collectElementsByType(harness.result.current);
+    const activeThreadEl = threadNodes.find((n) => typeof n.props?.onCloseAndArchive === 'function');
+    expect(activeThreadEl).toBeDefined();
+
+    const originalFetch = globalThis.fetch;
+    const prevCommsUrl = process.env.EXPO_PUBLIC_COMMS_API_URL;
+    process.env.EXPO_PUBLIC_COMMS_API_URL = 'https://comms.local';
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ ok: true }), { status: 200 })) as any;
+    try {
+      await act(async () => {
+        await activeThreadEl.props.onCloseAndArchive('conv-direct-open');
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (prevCommsUrl === undefined) {
+        delete process.env.EXPO_PUBLIC_COMMS_API_URL;
+      } else {
+        process.env.EXPO_PUBLIC_COMMS_API_URL = prevCommsUrl;
+      }
+    }
+
+    harness.rerender();
+    const updatedNodes = collectElementsByType(harness.result.current);
+    const updatedTab = updatedNodes.find((n) => n.props?.accessibilityRole === 'tab');
+    const updatedTabHtml = renderToStaticMarkup(updatedTab);
+    expect(updatedTabHtml).toContain('>1<');
+    harness.unmount();
+  });
+
+  test('#212: ClinicChatDrawerHost renders "No Archived Conversations" without CTA and supports search inside Archived scope', async () => {
+    // 1. Empty Archived state without Start Conversation CTA
+    mockConversations = mockConversations.filter((c) => c.status !== 'Closed');
+    const emptyHarness = createClinicHookHarness(() => ClinicChatDrawerHost());
+    renderToStaticMarkup(emptyHarness.result.current);
+
+    await act(async () => {
+      capturedChatDrawerProps.onSelectScope('Archived');
+    });
+    const emptyHtml = renderToStaticMarkup(emptyHarness.result.current);
+    expect(emptyHtml).toContain('No Archived Conversations');
+    expect(emptyHtml).not.toContain('Start Conversation');
+    emptyHarness.unmount();
+
+    // 2. Search within Archived scope
+    mockConversations = [
+      {
+        id: 'conv-arch-pharm',
+        scope: 'Facility',
+        status: 'Closed',
+        title: 'Pharmacy Shift Archive',
+        lastMessageSnippet: 'Stock verified',
+        unreadCount: 0,
+        participants: [],
+      },
+      {
+        id: 'conv-arch-lab',
+        scope: 'Facility',
+        status: 'Closed',
+        title: 'Lab Handoff Archive',
+        lastMessageSnippet: 'Specimen processed',
+        unreadCount: 0,
+        participants: [],
+      },
+    ];
+    const searchHarness = createClinicHookHarness(() => ClinicChatDrawerHost());
+    renderToStaticMarkup(searchHarness.result.current);
+    await act(async () => {
+      capturedChatDrawerProps.onSelectScope('Archived');
+      capturedChatDrawerProps.onSearchChange('Pharmacy');
+    });
+    renderToStaticMarkup(searchHarness.result.current);
+    expect(capturedChatDrawerProps.items.map((i: any) => i.id)).toEqual(['conv-arch-pharm']);
+    searchHarness.unmount();
+  });
+
+  test('#212: ClinicActiveThread renders Closed / Archived badge, hides Close & Archive, and passes isReadOnly & readOnlyBanner even if hookConv is stale', () => {
+    const staleHookConv = {
+      id: 'conv-stale-arch',
+      tenantId: 't1',
+      facilityId: 'c1',
+      scope: 'Facility' as const,
+      kind: 'General' as const,
+      title: 'Triage Channel',
+      status: 'Submitted' as const,
+      isEmergencyConfirmed: false,
+      isLocalOnly: false,
+      reopenCount: 0,
+      messageCount: 1,
+      lastSeq: 1,
+      createdAtUtc: '2026-11-10T00:00:00Z',
+      createdBy: 'staff-curr',
+      participants: [],
+    };
+    mockActiveHookConv = staleHookConv;
+
+    const closedInitialConv = { ...staleHookConv, status: 'Closed' as const };
+    const html = renderToStaticMarkup(
+      React.createElement(ClinicActiveThread, {
+        conversationId: 'conv-stale-arch',
+        initialConversation: closedInitialConv,
+        initialActionMenuOpen: true,
+        onBack: () => {},
+        currentUserId: 'staff-curr',
+      }),
+    );
+
+    expect(html).toContain('Closed / Archived');
+    expect(html).not.toContain('+ Vitals Charted');
+    expect(html).not.toContain('Close &amp; Archive');
+    expect(html).not.toContain('Close & Archive');
+    expect(capturedMessageThreadProps.isReadOnly).toBe(true);
+    expect(capturedMessageThreadProps.isArchived).toBe(true);
+    expect(capturedMessageThreadProps.readOnlyBanner).toBeDefined();
+    expect(html).toContain('This conversation is closed and archived. Message history is read-only.');
+  });
+
+  test('#212: ClinicChatDrawerHost falls back to unreadCount when conversations is empty, while preserving R4 exclusions for Closed and TeleconsultCall', () => {
+    // 1. Empty conversations + unreadCount fallback -> renders >5< on Conversations tab
+    mockConversations = [];
+    mockUnreadCountOverride = 5;
+
+    const fallbackHarness = createClinicHookHarness(() => ClinicChatDrawerHost());
+    renderToStaticMarkup(fallbackHarness.result.current);
+    const fallbackNodes = collectElementsByType(fallbackHarness.result.current);
+    const fallbackConvTab = fallbackNodes.find(
+      (n) => n.props?.accessibilityRole === 'tab' && n.props?.accessibilityState?.selected === true
+    );
+    expect(fallbackConvTab).toBeDefined();
+    const fallbackTabHtml = renderToStaticMarkup(fallbackConvTab);
+    expect(fallbackTabHtml).toContain('Conversations');
+    expect(fallbackTabHtml).toContain('>5<');
+    fallbackHarness.unmount();
+
+    // 2. Non-empty conversations containing only Closed (5) and TeleconsultCall (4) with unreadCount: 9 -> renders 0 (no badge)
+    mockConversations = [
+      {
+        id: 'conv-only-closed',
+        scope: 'Facility',
+        status: 'Closed',
+        title: 'Closed Thread',
+        unreadCount: 5,
+        participants: [],
+      },
+      {
+        id: 'conv-only-teleconsult',
+        scope: 'StaffContext',
+        contextType: 'TeleconsultCall',
+        contextId: 'call-101',
+        status: 'Submitted',
+        title: 'Teleconsult Chat',
+        unreadCount: 4,
+        participants: [],
+      },
+    ];
+    mockUnreadCountOverride = 9;
+
+    const excludedHarness = createClinicHookHarness(() => ClinicChatDrawerHost());
+    renderToStaticMarkup(excludedHarness.result.current);
+    const excludedNodes = collectElementsByType(excludedHarness.result.current);
+    const excludedConvTab = excludedNodes.find(
+      (n) => n.props?.accessibilityRole === 'tab' && n.props?.accessibilityState?.selected === true
+    );
+    expect(excludedConvTab).toBeDefined();
+    const excludedTabHtml = renderToStaticMarkup(excludedConvTab);
+    expect(excludedTabHtml).toContain('Conversations');
+    expect(excludedTabHtml).not.toContain('>9<');
+    expect(excludedTabHtml).not.toContain('>5<');
+    expect(excludedTabHtml).not.toContain('>4<');
+    expect(excludedTabHtml).not.toContain('>0<');
+    excludedHarness.unmount();
   });
 });

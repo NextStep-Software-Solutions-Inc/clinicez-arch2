@@ -58,6 +58,10 @@ export interface WebMessageThreadProps {
   canWriteInternalNotes?: boolean;
   isLoading?: boolean;
   error?: string | null;
+  isArchived?: boolean;
+  archivedBannerText?: string;
+  isReadOnly?: boolean;
+  readOnlyBanner?: React.ReactNode;
   className?: string;
 }
 

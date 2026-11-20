@@ -244,6 +244,148 @@ public sealed class SendAppointmentReminderCommandTests
         result.LastReminderSentAt.Should().Be(nowUtc);
     }
 
+    [Theory]
+    [InlineData(AppointmentStatus.Pending)]
+    [InlineData(AppointmentStatus.Confirmed)]
+    [InlineData(AppointmentStatus.CheckedIn)]
+    [InlineData(AppointmentStatus.InConsultation)]
+    public async Task Handle_WhenSameDayLateActiveTeleconsultAcrossActiveStatusesInAsiaManila_AllowsManualReminder(AppointmentStatus status)
+    {
+        // 2026-11-18 16:30 UTC == 2026-11-19 00:30 Asia/Manila
+        // 2026-11-18 16:05 UTC == 2026-11-19 00:05 Asia/Manila (25 mins late, SAME calendar day Nov 19)
+        var nowUtc = new DateTime(2026, 11, 18, 16, 30, 0, DateTimeKind.Utc);
+        var scheduledAtUtc = new DateTime(2026, 11, 18, 16, 5, 0, DateTimeKind.Utc);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var dispatcher = Substitute.For<IAppointmentNotificationDispatcher>();
+
+        await settingsRepo.AddAsync(new FacilitySettings
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            ClinicName = "Manila Telehealth Clinic",
+            TimeZoneId = "Asia/Manila"
+        });
+
+        var appointment = new Appointment
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Melchora Aquino",
+            ScheduledAt = scheduledAtUtc,
+            Status = status,
+            AppointmentType = AppointmentType.Teleconsult
+        };
+        await repo.AddAsync(appointment);
+        await uow.SaveChangesAsync();
+
+        var handler = new SendAppointmentReminderCommandHandler(
+            repo, uow, _clinicContext, dispatcher, settingsRepo: settingsRepo, timeProvider: new FixedTimeProvider(nowUtc));
+
+        var result = await handler.Handle(new SendAppointmentReminderCommand(appointment.Id), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result.Status.Should().Be(status);
+        result.IsTeleconsult.Should().BeTrue();
+        result.LastReminderType.Should().Be("manual");
+        result.LastReminderSentAt.Should().Be(nowUtc);
+        await dispatcher.Received(1).DispatchAlertAsync(
+            Arg.Is<Appointment>(a => a.Id == appointment.Id),
+            AppointmentAlertKinds.ManualReminder,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenSymmetricAsiaManilaBoundary_PreviousUtcDateSameManilaDay_AllowsManualReminder()
+    {
+        // 2026-11-19 15:00 UTC == 2026-11-19 23:00 Asia/Manila (Nov 19 in Manila)
+        // 2026-11-18 17:00 UTC == 2026-11-19 01:00 Asia/Manila (previous UTC date Nov 18, SAME Manila calendar day Nov 19!)
+        var nowUtc = new DateTime(2026, 11, 19, 15, 0, 0, DateTimeKind.Utc);
+        var scheduledAtUtc = new DateTime(2026, 11, 18, 17, 0, 0, DateTimeKind.Utc);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var dispatcher = Substitute.For<IAppointmentNotificationDispatcher>();
+
+        await settingsRepo.AddAsync(new FacilitySettings
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            ClinicName = "Manila Family Clinic",
+            TimeZoneId = "Asia/Manila"
+        });
+
+        var appointment = new Appointment
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Marcelo H. Del Pilar",
+            ScheduledAt = scheduledAtUtc,
+            Status = AppointmentStatus.Confirmed
+        };
+        await repo.AddAsync(appointment);
+        await uow.SaveChangesAsync();
+
+        var handler = new SendAppointmentReminderCommandHandler(
+            repo, uow, _clinicContext, dispatcher, settingsRepo: settingsRepo, timeProvider: new FixedTimeProvider(nowUtc));
+
+        var result = await handler.Handle(new SendAppointmentReminderCommand(appointment.Id), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result.LastReminderType.Should().Be("manual");
+        result.LastReminderSentAt.Should().Be(nowUtc);
+        await dispatcher.Received(1).DispatchAlertAsync(
+            Arg.Is<Appointment>(a => a.Id == appointment.Id),
+            AppointmentAlertKinds.ManualReminder,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAndGetById_WhenAppointmentIsSoftDeleted_ThrowsNotFoundException()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var dispatcher = Substitute.For<IAppointmentNotificationDispatcher>();
+
+        var nowUtc = new DateTime(2026, 11, 19, 4, 0, 0, DateTimeKind.Utc);
+        var softDeleted = new Appointment
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Soft Deleted Patient",
+            ScheduledAt = nowUtc.AddHours(4),
+            Status = AppointmentStatus.Confirmed,
+            IsDeleted = true
+        };
+        await repo.AddAsync(softDeleted);
+        await uow.SaveChangesAsync();
+
+        var remindHandler = new SendAppointmentReminderCommandHandler(
+            repo, uow, _clinicContext, dispatcher, settingsRepo: settingsRepo, timeProvider: new FixedTimeProvider(nowUtc));
+        var getByIdHandler = new GetAppointmentByIdQueryHandler(repo, _clinicContext);
+
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            remindHandler.Handle(new SendAppointmentReminderCommand(softDeleted.Id), CancellationToken.None));
+
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            getByIdHandler.Handle(new GetAppointmentByIdQuery(softDeleted.Id), CancellationToken.None));
+
+        await dispatcher.DidNotReceive().DispatchAlertAsync(
+            Arg.Any<Appointment>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task GetAppointmentByIdQueryHandler_WhenExistsInClinic_ReturnsAppointmentDto()
     {

@@ -88,7 +88,7 @@ export default function ClinicChatDrawerHost() {
 
   const {
     conversations,
-    unreadCount,
+    unreadCount = 0,
     isLoading,
     error,
     refresh: refreshConversations,
@@ -96,6 +96,18 @@ export default function ClinicChatDrawerHost() {
     markConversationRead,
     setConversationMuted,
   } = useConversations();
+
+  const activeUnreadCount = useMemo(() => {
+    if (!Array.isArray(conversations) || conversations.length === 0) {
+      return unreadCount ?? 0;
+    }
+    return conversations.reduce((sum, c) => {
+      if (removedConversationIds.has(c.id)) return sum;
+      if (locallyArchivedIds.has(c.id) || c.status === 'Closed') return sum;
+      if (c.scope === 'StaffContext' && c.contextType === 'TeleconsultCall') return sum;
+      return sum + (c.unreadCount ?? 0);
+    }, 0);
+  }, [conversations, unreadCount, removedConversationIds, locallyArchivedIds]);
 
   const mutedConversationIds = useMemo(() => {
     const ids = new Set<string>();
@@ -614,10 +626,10 @@ export default function ClinicChatDrawerHost() {
               >
                 Conversations
               </ThemedText>
-              {unreadCount > 0 ? (
+              {activeUnreadCount > 0 ? (
                 <View style={styles.tabUnreadBadge}>
                   <ThemedText variant="badge" color={theme.colors.onPrimary}>
-                    {unreadCount > 99 ? '99+' : unreadCount}
+                    {activeUnreadCount > 99 ? '99+' : activeUnreadCount}
                   </ThemedText>
                 </View>
               ) : null}
@@ -733,25 +745,41 @@ export default function ClinicChatDrawerHost() {
                   return <Icon name="message" size={16} color={theme.colors.primary} />;
               }
             }}
-            renderEmptyState={() => (
-              <View style={styles.emptyContainer}>
-                <View style={styles.emptyIconBadge}>
-                  <Icon name="message" size={28} color={theme.colors.primary} />
+            renderEmptyState={() =>
+              selectedScope === 'Archived' ? (
+                <View style={styles.emptyContainer}>
+                  <View style={styles.emptyArchivedIconBadge}>
+                    <Icon name="archive" size={28} color={theme.colors.textMuted} />
+                  </View>
+                  <ThemedText variant="bodyBold" style={styles.emptyTitle}>
+                    No Archived Conversations
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.emptySubtitle}>
+                    {searchQuery.trim()
+                      ? 'No archived conversations match your search.'
+                      : 'Closed and archived conversations will appear here.'}
+                  </ThemedText>
                 </View>
-                <ThemedText variant="bodyBold" style={styles.emptyTitle}>
-                  No Conversations
-                </ThemedText>
-                <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.emptySubtitle}>
-                  No messages match your selected filter.
-                </ThemedText>
-                <Button
-                  title="Start Conversation"
-                  variant="primary"
-                  onPress={handleNewConversation}
-                  style={styles.emptyButton}
-                />
-              </View>
-            )}
+              ) : (
+                <View style={styles.emptyContainer}>
+                  <View style={styles.emptyIconBadge}>
+                    <Icon name="message" size={28} color={theme.colors.primary} />
+                  </View>
+                  <ThemedText variant="bodyBold" style={styles.emptyTitle}>
+                    No Conversations
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.emptySubtitle}>
+                    No messages match your selected filter.
+                  </ThemedText>
+                  <Button
+                    title="Start Conversation"
+                    variant="primary"
+                    onPress={handleNewConversation}
+                    style={styles.emptyButton}
+                  />
+                </View>
+              )
+            }
           />
         )}
       </View>
@@ -1032,6 +1060,17 @@ function createStyles() {
       height: 56,
       borderRadius: theme.radii.full,
       backgroundColor: theme.colors.primaryLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: theme.spacing.md,
+    },
+    emptyArchivedIconBadge: {
+      width: 56,
+      height: 56,
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.surfaceSubtle,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.border,
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: theme.spacing.md,

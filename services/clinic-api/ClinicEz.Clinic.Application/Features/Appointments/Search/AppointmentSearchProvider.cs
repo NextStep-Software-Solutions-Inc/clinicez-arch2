@@ -81,6 +81,7 @@ public sealed class AppointmentSearchProvider : ISearchProvider
             AppointmentStatus.CheckedIn or AppointmentStatus.InConsultation => ("Active", SearchBadgeVariant.Urgent),
             AppointmentStatus.Completed => ("Completed", SearchBadgeVariant.Routine),
             AppointmentStatus.Cancelled => ("Cancelled", SearchBadgeVariant.Neutral),
+            AppointmentStatus.NoShow => ("No Show", SearchBadgeVariant.Neutral),
             _ => (status.ToString(), SearchBadgeVariant.Routine)
         };
 }

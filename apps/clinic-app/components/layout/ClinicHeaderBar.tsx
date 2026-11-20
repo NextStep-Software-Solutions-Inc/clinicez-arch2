@@ -44,7 +44,7 @@ export interface ClinicHeaderBarProps {
 
 function CommsChatButtonContent() {
   const { toggleChatDrawer } = useClinicComms();
-  const { unreadCount } = useConversations();
+  const { conversations, unreadCount } = useConversations();
   const { user, can } = useAuth();
   const { facilityId } = useCommsContext();
   const [isHovered, setIsHovered] = useState(false);
@@ -62,12 +62,23 @@ function CommsChatButtonContent() {
   const triageCount = canViewTriage ? pendingCount : 0;
   const hasUrgent = canViewTriage && urgentCount > 0;
 
+  const activeUnreadCount = useMemo(() => {
+    if (!Array.isArray(conversations) || conversations.length === 0) {
+      return unreadCount;
+    }
+    return conversations.reduce((sum, c) => {
+      if (c.status === 'Closed') return sum;
+      if (c.scope === 'StaffContext' && c.contextType === 'TeleconsultCall') return sum;
+      return sum + (c.unreadCount ?? 0);
+    }, 0);
+  }, [conversations, unreadCount]);
+
   const a11yLabel = useMemo(() => {
     const parts = ['Communications'];
-    if (unreadCount > 0) parts.push(`${unreadCount} unread`);
+    if (activeUnreadCount > 0) parts.push(`${activeUnreadCount} unread`);
     if (triageCount > 0) parts.push(`${triageCount} pending triage${hasUrgent ? ' (urgent)' : ''}`);
     return parts.join(', ');
-  }, [unreadCount, triageCount, hasUrgent]);
+  }, [activeUnreadCount, triageCount, hasUrgent]);
 
   return (
     <Pressable
@@ -116,10 +127,10 @@ function CommsChatButtonContent() {
           ]}
         />
       ) : null}
-      {unreadCount > 0 ? (
+      {activeUnreadCount > 0 ? (
         <View style={[styles.badgePill, { backgroundColor: theme.colors.primary }]}>
           <ThemedText variant="badge" color={theme.colors.onPrimary}>
-            {unreadCount > 99 ? '99+' : unreadCount}
+            {activeUnreadCount > 99 ? '99+' : activeUnreadCount}
           </ThemedText>
         </View>
       ) : null}

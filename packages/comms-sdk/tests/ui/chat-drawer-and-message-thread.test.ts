@@ -23,12 +23,18 @@ mock.module('react-native', () => ({
 
 let ChatDrawer: any;
 let MessageThread: any;
+let WebChatDrawer: any;
+let WebMessageThread: any;
 
 beforeAll(async () => {
   const drawerMod = await import('../../src/native-ui/ChatDrawer');
   ChatDrawer = drawerMod.ChatDrawer;
   const threadMod = await import('../../src/native-ui/MessageThread');
   MessageThread = threadMod.MessageThread;
+  const webDrawerMod = await import('../../src/web-ui/ChatDrawer');
+  WebChatDrawer = webDrawerMod.ChatDrawer;
+  const webThreadMod = await import('../../src/web-ui/MessageThread');
+  WebMessageThread = webThreadMod.MessageThread;
 });
 
 function getTextContent(element: any): string {
@@ -127,7 +133,7 @@ describe('Native UI ChatDrawer & MessageThread (#212, #213, #158)', () => {
 
     const badgeText = findElement(
       archivedBadge,
-      (el) => el.type === 'span' && getTextContent(el).trim() === 'Archived'
+      (el) => el.type === 'span' && getTextContent(el).trim() === 'Closed / Archived'
     );
     expect(badgeText).not.toBeNull();
     expect(badgeText.props.style.color).toBe(lightColors.textMuted);
@@ -296,5 +302,219 @@ describe('Native UI ChatDrawer & MessageThread (#212, #213, #158)', () => {
     );
     expect(getTextContent(customBanner)).toContain('Archived clinical thread — read only.');
     customBannerHarness.unmount();
+  });
+
+  it('ChatDrawer renders "No Archived Conversations" without CTA and excludes archived items from collapsed/card unread badges (#212)', () => {
+    const emptyArchivedHarness = createHookHarness(() =>
+      ChatDrawer({
+        items: [],
+        selectedScope: 'Archived',
+        onSelectScope: () => {},
+        onSelectConversation: () => {},
+        searchQuery: '',
+        onSearchChange: () => {},
+        onNewConversation: () => {},
+        colors: lightColors,
+        shadows: createShadows(lightColors)
+      })
+    );
+
+    const emptyText = getTextContent(emptyArchivedHarness.result.current);
+    expect(emptyText).toContain('No Archived Conversations');
+    expect(emptyText).not.toContain('Start Conversation');
+    emptyArchivedHarness.unmount();
+
+    const archivedUnreadItems: ChatDrawerItem[] = [
+      {
+        id: 'conv-arch-unread',
+        scope: 'Direct',
+        title: 'Closed Consult',
+        unreadCount: 5,
+        isArchived: true
+      }
+    ];
+
+    const collapsedHarness = createHookHarness(() =>
+      ChatDrawer({
+        items: archivedUnreadItems,
+        selectedScope: 'Archived',
+        onSelectScope: () => {},
+        onSelectConversation: () => {},
+        searchQuery: '',
+        onSearchChange: () => {},
+        isCollapsed: true,
+        onToggleCollapse: () => {},
+        colors: lightColors,
+        shadows: createShadows(lightColors)
+      })
+    );
+
+    // Collapsed dot must not render when only archived items have unreadCount > 0
+    const collapsedSpans = findAllElements(
+      collapsedHarness.result.current,
+      (el) => el.type === 'span' && getTextContent(el).trim() === '•'
+    );
+    // Only the expand button fallback icon should render (1), not a second badge dot
+    expect(collapsedSpans.length).toBe(1);
+    collapsedHarness.unmount();
+
+    // Expanded view must also suppress unread pill on archived card
+    const expandedHarness = createHookHarness(() =>
+      ChatDrawer({
+        items: archivedUnreadItems,
+        selectedScope: 'Archived',
+        onSelectScope: () => {},
+        onSelectConversation: () => {},
+        searchQuery: '',
+        onSearchChange: () => {},
+        colors: lightColors,
+        shadows: createShadows(lightColors)
+      })
+    );
+    const unreadPillText = findElement(
+      expandedHarness.result.current,
+      (el) => el.type === 'span' && getTextContent(el).trim() === '5'
+    );
+    expect(unreadPillText).toBeNull();
+    expandedHarness.unmount();
+  });
+
+  it('MessageThread supports isReadOnly and custom readOnlyBanner ReactNode (#212)', () => {
+    const customBannerNode = React.createElement(
+      'div',
+      { testID: 'custom-readonly-banner' },
+      'Custom read-only clinical archive notice'
+    );
+
+    const harness = createHookHarness(() =>
+      MessageThread({
+        conversationId: 'conv-ro-1',
+        conversationTitle: 'Closed Consult',
+        conversationScope: 'Direct',
+        messages: [],
+        currentUserId: 'doc-1',
+        onSendMessage: async () => {},
+        onResendMessage: async () => {},
+        privacyBlurEnabled: false,
+        onTogglePrivacyBlur: () => {},
+        isReadOnly: true,
+        readOnlyBanner: customBannerNode,
+        colors: lightColors,
+        shadows: createShadows(lightColors)
+      })
+    );
+
+    const inputs = findAllElements(
+      harness.result.current,
+      (el) => el.props?.accessibilityLabel === 'Message input field'
+    );
+    expect(inputs.length).toBe(0);
+
+    const customBanner = findElement(
+      harness.result.current,
+      (el) => el.props?.testID === 'custom-readonly-banner'
+    );
+    expect(customBanner).not.toBeNull();
+    expect(getTextContent(customBanner)).toContain('Custom read-only clinical archive notice');
+    harness.unmount();
+  });
+
+  it('Web UI ChatDrawer & MessageThread support Archived scope, Closed / Archived badge, empty state, and isReadOnly (#212)', () => {
+    let selectedScope: ConversationScopeFilter = 'All';
+    const items: ChatDrawerItem[] = [
+      {
+        id: 'web-arch-1',
+        scope: 'Facility',
+        title: 'Closed Facility Thread',
+        lastMessageSnippet: 'Closed last week',
+        unreadCount: 3,
+        isArchived: true
+      }
+    ];
+
+    const webDrawerHarness = createHookHarness(() =>
+      WebChatDrawer({
+        isOpen: true,
+        onClose: () => {},
+        items,
+        selectedScope,
+        onSelectScope: (next: ConversationScopeFilter) => {
+          selectedScope = next;
+        },
+        onSelectConversation: () => {},
+        searchQuery: '',
+        onSearchChange: () => {},
+        onNewConversation: () => {}
+      })
+    );
+
+    const archivedTab = findElement(
+      webDrawerHarness.result.current,
+      (el) => el.type === 'button' && el.props?.role === 'tab' && getTextContent(el).trim() === 'Archived'
+    );
+    expect(archivedTab).not.toBeNull();
+    archivedTab.props.onClick();
+    expect(selectedScope).toBe('Archived');
+
+    const archivedBadge = findElement(
+      webDrawerHarness.result.current,
+      (el) => el.props?.['data-testid'] === 'badge-archived-web-arch-1'
+    );
+    expect(archivedBadge).not.toBeNull();
+    expect(getTextContent(archivedBadge).trim()).toBe('Closed / Archived');
+
+    // Unread pill suppressed for archived web item
+    const unreadPill = findElement(
+      webDrawerHarness.result.current,
+      (el) => el.type === 'span' && getTextContent(el).trim() === '3'
+    );
+    expect(unreadPill).toBeNull();
+    webDrawerHarness.unmount();
+
+    // Empty Archived state without CTA
+    const webEmptyArchived = createHookHarness(() =>
+      WebChatDrawer({
+        isOpen: true,
+        onClose: () => {},
+        items: [],
+        selectedScope: 'Archived',
+        onSelectScope: () => {},
+        onSelectConversation: () => {},
+        searchQuery: '',
+        onSearchChange: () => {},
+        onNewConversation: () => {}
+      })
+    );
+    const emptyText = getTextContent(webEmptyArchived.result.current);
+    expect(emptyText).toContain('No Archived Conversations');
+    expect(emptyText).not.toContain('Start Conversation');
+    webEmptyArchived.unmount();
+
+    // Web MessageThread read-only mode
+    const webThreadHarness = createHookHarness(() =>
+      WebMessageThread({
+        conversationId: 'web-arch-1',
+        conversationTitle: 'Closed Facility Thread',
+        conversationScope: 'Facility',
+        messages: [],
+        currentUserId: 'doc-1',
+        onSendMessage: async () => {},
+        onResendMessage: async () => {},
+        privacyBlurEnabled: false,
+        onTogglePrivacyBlur: () => {},
+        isReadOnly: true
+      })
+    );
+    const forms = findAllElements(webThreadHarness.result.current, (el) => el.type === 'form');
+    expect(forms.length).toBe(0);
+    const banner = findElement(
+      webThreadHarness.result.current,
+      (el) => el.props?.['data-testid'] === 'message-thread-archived-banner'
+    );
+    expect(banner).not.toBeNull();
+    expect(getTextContent(banner)).toContain(
+      'This conversation is closed and archived. Message history is read-only.'
+    );
+    webThreadHarness.unmount();
   });
 });

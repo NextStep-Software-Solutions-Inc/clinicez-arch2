@@ -122,6 +122,31 @@ export interface AppointmentLocalDateTime {
 }
 
 /**
+ * Parses an appointment scheduledAt timestamp into epoch milliseconds.
+ * Naive ISO timestamps without 'Z' or an explicit UTC offset are normalized as Asia/Manila (+08:00).
+ */
+export function parseAppointmentTimestampMs(scheduledAt?: string | null): number {
+  if (!scheduledAt) {
+    return Number.NaN;
+  }
+
+  const trimmed = scheduledAt.trim();
+  if (!trimmed) {
+    return Number.NaN;
+  }
+
+  const normalized =
+    trimmed.includes('T') &&
+    !trimmed.endsWith('Z') &&
+    !trimmed.endsWith('z') &&
+    !/[+-]\d{2}:?\d{2}$/.test(trimmed)
+      ? `${trimmed}+08:00`
+      : trimmed;
+
+  return new Date(normalized).getTime();
+}
+
+/**
  * Resolves UTC ISO or local scheduledAt timestamp into clinic local timezone (default Asia/Manila, UTC+8).
  */
 export function getAppointmentLocalDateTime(
@@ -132,14 +157,8 @@ export function getAppointmentLocalDateTime(
     return { dateStr: '', timeStr: '', formattedTime: '' };
   }
 
-  let d: Date;
-  if (scheduledAt.includes('T') && !scheduledAt.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(scheduledAt)) {
-    d = new Date(`${scheduledAt}+08:00`);
-  } else {
-    d = new Date(scheduledAt);
-  }
-
-  if (isNaN(d.getTime())) {
+  const timestampMs = parseAppointmentTimestampMs(scheduledAt);
+  if (!Number.isFinite(timestampMs)) {
     const [dPart = '', tPart = ''] = scheduledAt.split('T');
     const timeClean = tPart.slice(0, 5);
     return {
@@ -148,6 +167,8 @@ export function getAppointmentLocalDateTime(
       formattedTime: timeClean ? formatTime12(timeClean) : '',
     };
   }
+
+  const d = new Date(timestampMs);
 
   if (timeZoneId === 'Asia/Manila') {
     const manilaMs = d.getTime() + 8 * 60 * 60 * 1000;

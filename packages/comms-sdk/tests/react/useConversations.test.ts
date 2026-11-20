@@ -683,4 +683,126 @@ describe('useConversations Hook Backend Wireup', () => {
 
     harness.unmount();
   });
+
+  it('supports Archived scope without sending ?scope=Archived and excludes Closed threads from active scopes and unread counts (#212)', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchUrls: string[] = [];
+
+    const mockConversations = [
+      {
+        id: 'conv-open-direct',
+        tenantId: 'tenant-100',
+        facilityId: 'facility-50',
+        scope: 'Direct',
+        kind: 'Direct',
+        title: 'Dr. Santos',
+        status: 'Submitted',
+        isEmergencyConfirmed: false,
+        isLocalOnly: false,
+        reopenCount: 0,
+        messageCount: 2,
+        unreadCount: 2,
+        lastSeq: 2,
+        createdAtUtc: new Date().toISOString(),
+        createdBy: 'staff-nurse-1',
+        participants: []
+      },
+      {
+        id: 'conv-closed-direct',
+        tenantId: 'tenant-100',
+        facilityId: 'facility-50',
+        scope: 'Direct',
+        kind: 'Direct',
+        title: 'Closed Direct Consult',
+        status: 'Closed',
+        isEmergencyConfirmed: false,
+        isLocalOnly: false,
+        reopenCount: 0,
+        messageCount: 5,
+        unreadCount: 4,
+        lastSeq: 5,
+        createdAtUtc: new Date().toISOString(),
+        createdBy: 'staff-nurse-1',
+        participants: []
+      },
+      {
+        id: 'conv-closed-facility',
+        tenantId: 'tenant-100',
+        facilityId: 'facility-50',
+        scope: 'Facility',
+        kind: 'General',
+        title: 'Closed Pharmacy Channel',
+        status: 'Closed',
+        isEmergencyConfirmed: false,
+        isLocalOnly: false,
+        reopenCount: 0,
+        messageCount: 3,
+        unreadCount: 7,
+        lastSeq: 3,
+        createdAtUtc: new Date().toISOString(),
+        createdBy: 'staff-nurse-1',
+        participants: []
+      }
+    ];
+
+    globalThis.fetch = (async (url: string) => {
+      fetchUrls.push(url);
+      return new Response(JSON.stringify(mockConversations), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }) as any;
+
+    try {
+      const client = new MockCommsClient();
+      const store = new OptimisticStore();
+      const mockContext = createMockContext(client, store, 'https://comms.local');
+      const contextMap = new Map();
+      contextMap.set(CommsContext, mockContext);
+
+      // 1. useConversations('Archived') -> must NOT pass scope=Archived, returns only Closed threads
+      const archivedHarness = createHookHarness(() => useConversations('Archived'), {
+        contextValues: contextMap
+      });
+      await archivedHarness.result.current.refresh();
+      const archivedUrl = fetchUrls[fetchUrls.length - 1];
+      expect(archivedUrl).toContain('facilityId=facility-50');
+      expect(archivedUrl).not.toContain('scope=Archived');
+      expect(archivedHarness.result.current.conversations.map((c) => c.id)).toEqual([
+        'conv-closed-direct',
+        'conv-closed-facility'
+      ]);
+      archivedHarness.unmount();
+
+      // 2. useConversations('Direct') -> excludes Closed threads from conversations and unreadCount
+      const directHarness = createHookHarness(() => useConversations('Direct'), {
+        contextValues: contextMap
+      });
+      await directHarness.result.current.refresh();
+      expect(directHarness.result.current.conversations.map((c) => c.id)).toEqual([
+        'conv-open-direct'
+      ]);
+      expect(directHarness.result.current.unreadCount).toBe(2);
+      expect(directHarness.result.current.unreadCountsByScope.Direct).toBe(2);
+      directHarness.unmount();
+
+      // 3. useConversations() (undefined scope, used by drawer hosts) -> keeps Closed threads in conversations
+      //    for client-side 'Archived' tab, while excluding Closed from unreadCount and unreadCountsByScope
+      const allHarness = createHookHarness(() => useConversations(), {
+        contextValues: contextMap
+      });
+      await allHarness.result.current.refresh();
+      expect(allHarness.result.current.conversations.map((c) => c.id)).toEqual([
+        'conv-open-direct',
+        'conv-closed-direct',
+        'conv-closed-facility'
+      ]);
+      expect(allHarness.result.current.unreadCount).toBe(2);
+      expect(allHarness.result.current.unreadCountsByScope.Direct).toBe(2);
+      expect(allHarness.result.current.unreadCountsByScope.Facility).toBe(0);
+      allHarness.unmount();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

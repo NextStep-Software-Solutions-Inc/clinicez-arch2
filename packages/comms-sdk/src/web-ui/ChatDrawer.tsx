@@ -1,14 +1,15 @@
 import React from 'react';
 import { lightColors } from '@clinicez/design-tokens';
 import { ConversationScopeFilter, WebChatDrawerProps } from './types';
-import { CloseIcon, LoaderIcon, AlertCircleIcon, MessageSquareIcon } from './icons';
+import { CloseIcon, LoaderIcon, AlertCircleIcon, MessageSquareIcon, ArchiveIcon } from './icons';
 
 const SCOPES: ConversationScopeFilter[] = [
   'All',
   'PatientFacility',
   'StaffContext',
   'Facility',
-  'Direct'
+  'Direct',
+  'Archived'
 ];
 
 export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
@@ -139,22 +140,32 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
           <p className="text-xs text-slate-500">{error}</p>
         </div>
       ) : items.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-500">
-          <MessageSquareIcon size={32} className="mb-2 text-slate-400" />
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-            No Conversations
-          </p>
-          <p className="text-xs text-slate-400 mb-4">No communication threads match this view.</p>
-          {onNewConversation && (
-            <button
-              type="button"
-              onClick={onNewConversation}
-              className="min-h-[44px] px-4 rounded bg-teal-700 text-white text-xs font-semibold hover:bg-teal-800"
-            >
-              Start Conversation
-            </button>
-          )}
-        </div>
+        selectedScope === 'Archived' ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-500">
+            <ArchiveIcon size={32} className="mb-2 text-slate-400" />
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              No Archived Conversations
+            </p>
+            <p className="text-xs text-slate-400">No closed or archived conversations found.</p>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-500">
+            <MessageSquareIcon size={32} className="mb-2 text-slate-400" />
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              No Conversations
+            </p>
+            <p className="text-xs text-slate-400 mb-4">No communication threads match this view.</p>
+            {onNewConversation && (
+              <button
+                type="button"
+                onClick={onNewConversation}
+                className="min-h-[44px] px-4 rounded bg-teal-700 text-white text-xs font-semibold hover:bg-teal-800"
+              >
+                Start Conversation
+              </button>
+            )}
+          </div>
+        )
       ) : (
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800" role="list">
           {items.map((item) => {
@@ -197,6 +208,22 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
                 )}
 
                 <div className="flex items-center gap-1.5">
+                  {item.isArchived && (
+                    <span
+                      data-testid={`badge-archived-${item.id}`}
+                      className="px-1.5 py-0.5 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                    >
+                      Closed / Archived
+                    </span>
+                  )}
+                  {item.isMuted && (
+                    <span
+                      data-testid={`badge-muted-${item.id}`}
+                      className="px-1.5 py-0.5 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                    >
+                      Muted
+                    </span>
+                  )}
                   {item.isEmergency && (
                     <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200 border border-red-200 dark:border-red-800">
                       Emergency
@@ -207,7 +234,7 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
                       Urgent
                     </span>
                   )}
-                  {item.unreadCount > 0 && (
+                  {!item.isArchived && item.unreadCount > 0 && (
                     <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-bold bg-teal-700 text-white">
                       {item.unreadCount}
                     </span>

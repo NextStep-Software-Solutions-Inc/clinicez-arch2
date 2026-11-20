@@ -193,41 +193,52 @@ const origGetAppointment = clinicService.getAppointment;
 const origGetAppointments = clinicService.getAppointments;
 const origGetCustomFields = clinicService.getCustomFields;
 const origEndTeleconsultCall = clinicService.endTeleconsultCall;
-
-clinicService.updateSettings = async (payload: any) => {
-  lastUpdatedSettingsPayload = payload;
-  return [{ id: 'settings-1', ...payload }, null];
-};
-
-clinicService.sendAppointmentReminder = async (id: string) => {
-  lastRemindedAppointmentId = id;
-  return [
-    {
-      id,
-      clinicId: 'clinic-1',
-      patientId: 'pat-1',
-      patientName: 'Maria Santos',
-      scheduledAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-      durationMinutes: 30,
-      status: 'Confirmed',
-      createdAt: '2026-10-20T08:00:00Z',
-      reminder24hSent: true,
-      reminder24hSentAt: '2026-10-20T10:00:00Z',
-      reminder2hSent: false,
-      reminder2hSentAt: null,
-      lastReminderSentAt: '2026-10-20T10:00:00Z',
-      lastReminderType: 'manual',
-    },
-    null,
-  ];
-};
+const origCreateTeleconsultGuestInvite = clinicService.createTeleconsultGuestInvite;
 
 let mockGetAppointmentResult: [any, any] = [null, null];
 let getAppointmentCalls: string[] = [];
-clinicService.getAppointment = async (id: string) => {
-  getAppointmentCalls.push(id);
-  return mockGetAppointmentResult;
+
+const installDefaultServiceMocks = () => {
+  clinicService.updateSettings = async (payload: any) => {
+    lastUpdatedSettingsPayload = payload;
+    return [{ id: 'settings-1', ...payload }, null];
+  };
+
+  clinicService.sendAppointmentReminder = async (id: string) => {
+    lastRemindedAppointmentId = id;
+    return [
+      {
+        id,
+        clinicId: 'clinic-1',
+        patientId: 'pat-1',
+        patientName: 'Maria Santos',
+        scheduledAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        durationMinutes: 30,
+        status: 'Confirmed',
+        createdAt: '2026-10-20T08:00:00Z',
+        reminder24hSent: true,
+        reminder24hSentAt: '2026-10-20T10:00:00Z',
+        reminder2hSent: false,
+        reminder2hSentAt: null,
+        lastReminderSentAt: '2026-10-20T10:00:00Z',
+        lastReminderType: 'manual',
+      },
+      null,
+    ];
+  };
+
+  clinicService.getAppointment = async (id: string) => {
+    getAppointmentCalls.push(id);
+    return mockGetAppointmentResult;
+  };
+
+  clinicService.getAppointments = origGetAppointments;
+  clinicService.getCustomFields = origGetCustomFields;
+  clinicService.endTeleconsultCall = origEndTeleconsultCall;
+  clinicService.createTeleconsultGuestInvite = async () => [null, null];
 };
+
+installDefaultServiceMocks();
 
 const realCommsReact = require('../../../packages/comms-sdk/src/react');
 mock.module('@clinicez/comms-sdk/react', () => ({
@@ -351,6 +362,7 @@ describe('Milestone 5: Calendar Appointment Push Notifications & Reminders', () 
     lastRemindedAppointmentId = null;
     getAppointmentCalls = [];
     mockGetAppointmentResult = [null, null];
+    installDefaultServiceMocks();
     delete (globalThis as any).__mockClinicContext;
   });
 
@@ -860,6 +872,379 @@ describe('Milestone 5: Calendar Appointment Push Notifications & Reminders', () 
       expect(html).toContain('data-disabled="false"');
     });
 
+    test('#211: Same-day late active Teleconsult appointment keeps both Send Push Reminder and Teleconsult enabled', async () => {
+      (globalThis as any).__mockClinicContext = { settings: { timeZoneId: 'Asia/Manila' } };
+      const { dateStr: todayManila } = getAppointmentLocalDateTime(
+        new Date().toISOString(),
+        'Asia/Manila',
+      );
+      const sameDayEarlierIso = new Date(`${todayManila}T00:00:00.000+08:00`).toISOString();
+      const sameDayLateTeleAppt: ExtendedAppointmentItem = {
+        ...appointmentScheduled,
+        id: 'appt-sameday-late-tele-1',
+        status: 'Confirmed',
+        appointmentType: 'Teleconsult',
+        isTeleconsult: true,
+        callId: 'call-sameday-late-1',
+        scheduledAt: sameDayEarlierIso,
+      };
+
+      clinicService.getAppointment = async () => [sameDayLateTeleAppt, null];
+      clinicService.createTeleconsultGuestInvite = async () => [null, null];
+
+      const harness = createLocalHookHarness(
+        (props: any) => AppointmentInspectionModal(props),
+        {
+          visible: true,
+          appointment: sameDayLateTeleAppt,
+          onClose: () => {},
+        },
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const html = renderToStaticMarkup(harness.result.current);
+      expect(html).toContain('Not sent (Past schedule)');
+      expect(html).toContain('data-testid="btn-send-push-reminder"');
+      expect(html).toContain('data-testid="btn-drawer-teleconsult"');
+
+      const sendBtn = findNodeByTestId(harness.result.current, 'btn-send-push-reminder');
+      expect(sendBtn).not.toBeNull();
+      expect(sendBtn.props.disabled).toBe(false);
+
+      const teleBtn = findNodeByTestId(harness.result.current, 'btn-drawer-teleconsult');
+      expect(teleBtn).not.toBeNull();
+      expect(Boolean(teleBtn.props.disabled)).toBe(false);
+      expect(typeof teleBtn.props.onPress).toBe('function');
+
+      harness.unmount();
+    });
+
+    test('#211: Naive-ISO scheduledAt (without Z/offset) is normalized as Asia/Manila (+08:00) for past-schedule label', () => {
+      (globalThis as any).__mockClinicContext = { settings: { timeZoneId: 'Asia/Manila' } };
+      const origNow = Date.now;
+      // 2026-11-20T02:00:00.000Z == 2026-11-20 10:00:00 Asia/Manila
+      Date.now = () => Date.parse('2026-11-20T02:00:00.000Z');
+      try {
+        // 09:30 naive ISO -> 09:30+08:00 (01:30Z), which is 30m in the past.
+        // Without +08:00 normalization on a UTC machine, this would parse as 09:30Z (7.5h in the future!).
+        const pastNaiveAppt: ExtendedAppointmentItem = {
+          ...appointmentScheduled,
+          id: 'appt-naive-past',
+          scheduledAt: '2026-11-20T09:30:00',
+        };
+        const htmlPast = renderToStaticMarkup(
+          React.createElement(AppointmentInspectionModal, {
+            visible: true,
+            appointment: pastNaiveAppt,
+            onClose: () => {},
+          }),
+        );
+        expect(htmlPast).toContain('Not sent (Past schedule)');
+        expect(htmlPast).not.toContain('Scheduled (24h advance)');
+
+        // 10:30 naive ISO -> 10:30+08:00 (02:30Z), 30m in the future.
+        const futureNaiveAppt: ExtendedAppointmentItem = {
+          ...appointmentScheduled,
+          id: 'appt-naive-future',
+          scheduledAt: '2026-11-20T10:30:00',
+        };
+        const htmlFuture = renderToStaticMarkup(
+          React.createElement(AppointmentInspectionModal, {
+            visible: true,
+            appointment: futureNaiveAppt,
+            onClose: () => {},
+          }),
+        );
+        expect(htmlFuture).toContain('Scheduled (24h advance)');
+        expect(htmlFuture).toContain('Scheduled (2h advance)');
+        expect(htmlFuture).not.toContain('Not sent (Past schedule)');
+      } finally {
+        Date.now = origNow;
+      }
+    });
+
+    test('#210: AppointmentInspectionModal handles HTTP 409 Conflict, displays server message, syncs getAppointment & onAppointmentSynced, and disables Send Push Reminder', async () => {
+      const syncedList: ExtendedAppointmentItem[] = [];
+      const staleAppt: ExtendedAppointmentItem = {
+        ...appointmentScheduled,
+        id: 'appt-sync-409',
+        status: 'Confirmed',
+      };
+      const serverNoShowAppt: ExtendedAppointmentItem = {
+        ...staleAppt,
+        status: 'NoShow',
+      };
+
+      let fetchStep = 0;
+      clinicService.getAppointment = async (id: string) => {
+        getAppointmentCalls.push(id);
+        fetchStep += 1;
+        return [fetchStep === 1 ? staleAppt : serverNoShowAppt, null];
+      };
+      clinicService.sendAppointmentReminder = async () => [
+        null,
+        { status: 409, message: "Cannot send reminder for an appointment with status 'NoShow'." },
+      ];
+
+      const harness = createLocalHookHarness(
+        (props: any) => AppointmentInspectionModal(props),
+        {
+          visible: true,
+          appointment: staleAppt,
+          onClose: () => {},
+          onAppointmentSynced: (synced: ExtendedAppointmentItem) => {
+            syncedList.push(synced);
+          },
+        },
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(getAppointmentCalls).toEqual(['appt-sync-409']);
+      expect(syncedList).toHaveLength(1);
+
+      const sendBtn = findNodeByTestId(harness.result.current, 'btn-send-push-reminder');
+      expect(sendBtn).not.toBeNull();
+      expect(sendBtn.props.disabled).toBe(false);
+
+      await sendBtn.props.onPress();
+      await Promise.resolve();
+
+      expect(lastErrorNotification).toBe(
+        "Cannot send reminder for an appointment with status 'NoShow'.",
+      );
+      expect(lastSuccessNotification).toBeNull();
+      expect(getAppointmentCalls).toEqual(['appt-sync-409', 'appt-sync-409']);
+      expect(syncedList[syncedList.length - 1].status).toBe('NoShow');
+
+      const refreshedSendBtn = findNodeByTestId(harness.result.current, 'btn-send-push-reminder');
+      expect(refreshedSendBtn.props.disabled).toBe(true);
+      expect(renderToStaticMarkup(harness.result.current)).toContain('data-disabled="true"');
+      harness.unmount();
+    });
+
+    test('#210: Falls back to syncing terminal status from 400/409 error message when getAppointment fails during recovery', async () => {
+      // Case A: 400 with getAppointment returning 503 error on refetch -> infers NoShow
+      const syncedList400: ExtendedAppointmentItem[] = [];
+      const appt400: ExtendedAppointmentItem = {
+        ...appointmentScheduled,
+        id: 'appt-fallback-400',
+        status: 'Confirmed',
+      };
+      let step400 = 0;
+      clinicService.getAppointment = async (id: string) => {
+        getAppointmentCalls.push(id);
+        step400 += 1;
+        if (step400 === 1) return [appt400, null];
+        return [null, { status: 503, message: 'Service unavailable' }];
+      };
+      clinicService.sendAppointmentReminder = async () => [
+        null,
+        { status: 400, message: "Cannot send reminder for an appointment with status 'NoShow'." },
+      ];
+
+      const harness400 = createLocalHookHarness(
+        (props: any) => AppointmentInspectionModal(props),
+        {
+          visible: true,
+          appointment: appt400,
+          onClose: () => {},
+          onAppointmentSynced: (synced: ExtendedAppointmentItem) => {
+            syncedList400.push(synced);
+          },
+        },
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const btn400 = findNodeByTestId(harness400.result.current, 'btn-send-push-reminder');
+      await btn400.props.onPress();
+      await Promise.resolve();
+
+      expect(lastErrorNotification).toBe(
+        "Cannot send reminder for an appointment with status 'NoShow'.",
+      );
+      expect(syncedList400[syncedList400.length - 1].status).toBe('NoShow');
+      expect(findNodeByTestId(harness400.result.current, 'btn-send-push-reminder').props.disabled).toBe(true);
+      harness400.unmount();
+
+      // Case B: 409 with getAppointment throwing network error on refetch -> infers Cancelled
+      const syncedList409: ExtendedAppointmentItem[] = [];
+      const appt409: ExtendedAppointmentItem = {
+        ...appointmentScheduled,
+        id: 'appt-fallback-409',
+        status: 'Confirmed',
+      };
+      let step409 = 0;
+      clinicService.getAppointment = async (id: string) => {
+        getAppointmentCalls.push(id);
+        step409 += 1;
+        if (step409 === 1) return [appt409, null];
+        throw new Error('Network error');
+      };
+      clinicService.sendAppointmentReminder = async () => [
+        null,
+        { status: 409, message: "Cannot send reminder for an appointment with status 'Cancelled'." },
+      ];
+
+      const harness409 = createLocalHookHarness(
+        (props: any) => AppointmentInspectionModal(props),
+        {
+          visible: true,
+          appointment: appt409,
+          onClose: () => {},
+          onAppointmentSynced: (synced: ExtendedAppointmentItem) => {
+            syncedList409.push(synced);
+          },
+        },
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const btn409 = findNodeByTestId(harness409.result.current, 'btn-send-push-reminder');
+      await btn409.props.onPress();
+      await Promise.resolve();
+
+      expect(lastErrorNotification).toBe(
+        "Cannot send reminder for an appointment with status 'Cancelled'.",
+      );
+      expect(syncedList409[syncedList409.length - 1].status).toBe('Cancelled');
+      expect(findNodeByTestId(harness409.result.current, 'btn-send-push-reminder').props.disabled).toBe(true);
+      harness409.unmount();
+    });
+
+    test('#210: Fallback status inference syncs explicit affirmative status phrases and rejects negated/incidental 400/409 messages when getAppointment fails', async () => {
+      const affirmativeCases: Array<{ status: number; message: string; expected: 'Completed' | 'Cancelled' | 'NoShow' }> = [
+        {
+          status: 400,
+          message: "Cannot send reminder for an appointment with status 'NoShow'.",
+          expected: 'NoShow',
+        },
+        {
+          status: 409,
+          message: 'Appointment is already cancelled.',
+          expected: 'Cancelled',
+        },
+        {
+          status: 400,
+          message: "Cannot send reminder for an appointment with status 'Completed'.",
+          expected: 'Completed',
+        },
+        {
+          status: 409,
+          message: 'Appointment was marked as No Show',
+          expected: 'NoShow',
+        },
+        {
+          status: 409,
+          message: 'already cancelled',
+          expected: 'Cancelled',
+        },
+        {
+          status: 400,
+          message: "Cannot send reminder for an appointment with status 'Cancelled'.",
+          expected: 'Cancelled',
+        },
+      ];
+
+      for (let i = 0; i < affirmativeCases.length; i++) {
+        const tc = affirmativeCases[i];
+        const syncedList: ExtendedAppointmentItem[] = [];
+        const appt: ExtendedAppointmentItem = {
+          ...appointmentScheduled,
+          id: `appt-affirmative-${i}`,
+          status: 'Confirmed',
+        };
+        let step = 0;
+        clinicService.getAppointment = async (id: string) => {
+          getAppointmentCalls.push(id);
+          step += 1;
+          if (step === 1) return [appt, null];
+          return [null, { status: 503, message: 'Service unavailable' }];
+        };
+        clinicService.sendAppointmentReminder = async () => [null, { status: tc.status, message: tc.message }];
+
+        const harness = createLocalHookHarness(
+          (props: any) => AppointmentInspectionModal(props),
+          {
+            visible: true,
+            appointment: appt,
+            onClose: () => {},
+            onAppointmentSynced: (synced: ExtendedAppointmentItem) => {
+              syncedList.push(synced);
+            },
+          },
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+
+        const btn = findNodeByTestId(harness.result.current, 'btn-send-push-reminder');
+        await btn.props.onPress();
+        await Promise.resolve();
+
+        expect(lastErrorNotification).toBe(tc.message);
+        expect(syncedList[syncedList.length - 1].status).toBe(tc.expected);
+        expect(findNodeByTestId(harness.result.current, 'btn-send-push-reminder').props.disabled).toBe(true);
+        harness.unmount();
+      }
+
+      const negatedOrIncidentalCases: Array<{ status: number; message: string }> = [
+        { status: 400, message: 'Patient intake is not completed.' },
+        { status: 400, message: 'Reminder dispatch could not be completed.' },
+        { status: 409, message: 'Appointment must not be Cancelled to proceed.' },
+        { status: 409, message: 'Appointment must not Cancelled to proceed.' },
+        { status: 400, message: 'Previous workflow step was completed, cannot notify.' },
+        { status: 409, message: 'Previous notification job was cancelled.' },
+      ];
+
+      for (let i = 0; i < negatedOrIncidentalCases.length; i++) {
+        const tc = negatedOrIncidentalCases[i];
+        const syncedList: ExtendedAppointmentItem[] = [];
+        const appt: ExtendedAppointmentItem = {
+          ...appointmentScheduled,
+          id: `appt-negated-${i}`,
+          status: 'Confirmed',
+        };
+        let step = 0;
+        clinicService.getAppointment = async (id: string) => {
+          getAppointmentCalls.push(id);
+          step += 1;
+          if (step === 1) return [appt, null];
+          return [null, { status: 503, message: 'Service unavailable' }];
+        };
+        clinicService.sendAppointmentReminder = async () => [null, { status: tc.status, message: tc.message }];
+
+        const harness = createLocalHookHarness(
+          (props: any) => AppointmentInspectionModal(props),
+          {
+            visible: true,
+            appointment: appt,
+            onClose: () => {},
+            onAppointmentSynced: (synced: ExtendedAppointmentItem) => {
+              syncedList.push(synced);
+            },
+          },
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(syncedList).toHaveLength(1);
+        expect(syncedList[0].status).toBe('Confirmed');
+
+        const btn = findNodeByTestId(harness.result.current, 'btn-send-push-reminder');
+        await btn.props.onPress();
+        await Promise.resolve();
+
+        expect(lastErrorNotification).toBe(tc.message);
+        // Must NOT overwrite Confirmed status or invoke onAppointmentSynced with Completed/Cancelled/NoShow
+        expect(syncedList).toHaveLength(1);
+        expect(findNodeByTestId(harness.result.current, 'btn-send-push-reminder').props.disabled).toBe(false);
+        expect(renderToStaticMarkup(harness.result.current)).toContain('Confirmed');
+        harness.unmount();
+      }
+    });
+
     test('#210: AppointmentInspectionModal refetches getAppointment on open and syncs on 400 error', async () => {
       const syncedList: ExtendedAppointmentItem[] = [];
       const staleAppt: ExtendedAppointmentItem = {
@@ -1129,6 +1514,7 @@ describe('Milestone 5: Calendar Appointment Push Notifications & Reminders', () 
     clinicService.getAppointments = origGetAppointments;
     clinicService.getCustomFields = origGetCustomFields;
     clinicService.endTeleconsultCall = origEndTeleconsultCall;
+    clinicService.createTeleconsultGuestInvite = origCreateTeleconsultGuestInvite;
     delete (globalThis as any).__mockClinicContext;
   });
 });
