@@ -114,6 +114,8 @@ public sealed class RescheduleAppointmentCommandHandler : IRequestHandler<Resche
         appointment.Reminder2hSent = false;
         appointment.Reminder24hSentAt = null;
         appointment.Reminder2hSentAt = null;
+        appointment.StaffPreSlotNotifiedAt = null;
+        appointment.StaffOverdueNotifiedAt = null;
 
         if (!string.IsNullOrWhiteSpace(request.Reason))
         {

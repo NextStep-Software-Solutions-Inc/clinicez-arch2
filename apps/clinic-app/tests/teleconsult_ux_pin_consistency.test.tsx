@@ -401,7 +401,10 @@ describe('Teleconsultation UX Polish & 6-Digit PIN Consistency (Clinic App)', ()
       };
       clinicService.getTeleconsultStatus = async () => [null, null];
 
-      const appt = buildTeleconsultAppointment({ id: 'appt-pin-1' });
+      const appt = buildTeleconsultAppointment({
+        id: 'appt-pin-1',
+        scheduledAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      });
       const harness = createHookHarness(
         (props: any) => AppointmentInspectionModal(props),
         {

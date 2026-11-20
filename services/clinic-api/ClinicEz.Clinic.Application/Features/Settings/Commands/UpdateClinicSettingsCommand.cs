@@ -86,7 +86,10 @@ public sealed record UpdateClinicSettingsCommand(
     bool? AllowNurseMidwifeYakapFpeFacilitator = null,
     Guid? DefaultHealthScreeningServiceItemId = null,
     string? DefaultHealthScreeningServiceCode = null,
-    bool ClearDefaultHealthScreeningServiceItemId = false) : IRequest<ClinicSettingsDto>;
+    bool ClearDefaultHealthScreeningServiceItemId = false,
+    bool? EnableStaffMorningDigest = null,
+    bool? EnableStaffPreSlotReminders = null,
+    bool? EnableStaffOverdueAlerts = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -331,6 +334,15 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
 
         if (request.EnableStaffAppointmentNotifications.HasValue)
             settings.EnableStaffAppointmentNotifications = request.EnableStaffAppointmentNotifications.Value;
+
+        if (request.EnableStaffMorningDigest.HasValue)
+            settings.EnableStaffMorningDigest = request.EnableStaffMorningDigest.Value;
+
+        if (request.EnableStaffPreSlotReminders.HasValue)
+            settings.EnableStaffPreSlotReminders = request.EnableStaffPreSlotReminders.Value;
+
+        if (request.EnableStaffOverdueAlerts.HasValue)
+            settings.EnableStaffOverdueAlerts = request.EnableStaffOverdueAlerts.Value;
 
         if (request.TimeZoneId != null)
         {

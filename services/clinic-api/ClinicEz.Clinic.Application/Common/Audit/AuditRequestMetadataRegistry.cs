@@ -212,6 +212,8 @@ public static class AuditRequestMetadataRegistry
                 return (ClinicAuditCategories.Appointments, "appointments.appointment.rescheduled", ClinicAuditSeverities.Routine, "Appointment", "Rescheduled existing clinic appointment slot");
             case "CancelAppointmentCommand":
                 return (ClinicAuditCategories.Appointments, "appointments.appointment.cancelled", ClinicAuditSeverities.Urgent, "Appointment", "Cancelled booked clinic appointment");
+            case "MarkAppointmentNoShowCommand":
+                return (ClinicAuditCategories.Appointments, "appointments.appointment.no_show", ClinicAuditSeverities.Urgent, "Appointment", "Marked booked clinic appointment as no-show");
             case "CheckInPatientCommand":
                 return (ClinicAuditCategories.Queue, "queue.patient.checked_in", ClinicAuditSeverities.Routine, "QueueItem", "Checked in patient and generated queue ticket");
             case "CallQueueItemCommand":

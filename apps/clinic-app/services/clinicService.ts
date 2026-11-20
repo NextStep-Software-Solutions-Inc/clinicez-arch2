@@ -1005,6 +1005,10 @@ export interface AppointmentItem {
   reminder2hSentAt?: string | null;
   lastReminderSentAt?: string | null;
   lastReminderType?: string | null;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+  staffPreSlotNotifiedAt?: string | null;
+  staffOverdueNotifiedAt?: string | null;
 
   // Teleconsultation properties (Milestone 2 & Milestone 5)
   appointmentType?: 'InPerson' | 'Teleconsult' | string;
@@ -3534,6 +3538,9 @@ export interface ClinicSettingsRecord {
   appointmentReminder24hEnabled?: boolean;
   appointmentReminder2hEnabled?: boolean;
   enableStaffAppointmentNotifications?: boolean;
+  enableStaffMorningDigest?: boolean;
+  enableStaffPreSlotReminders?: boolean;
+  enableStaffOverdueAlerts?: boolean;
 
   // Regional Timezone, Date & Time Format Overrides (null/undefined = inherit from WorkspaceProfile)
   timeZoneId?: string | null;
@@ -5123,6 +5130,10 @@ export const clinicService = {
 
   async cancelAppointment(id: string, reason?: string) {
     return clinicApiClient.put<AppointmentItem>(`/appointments/${id}/cancel`, { reason });
+  },
+
+  async markAppointmentNoShow(id: string, reason?: string) {
+    return clinicApiClient.put<AppointmentItem>(`/appointments/${id}/no-show`, { reason });
   },
 
   async sendAppointmentReminder(id: string) {

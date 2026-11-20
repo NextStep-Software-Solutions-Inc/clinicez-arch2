@@ -86,6 +86,18 @@ public sealed class AppointmentsController : ControllerBase
         return Ok(ApiResponse<AppointmentDto>.Success(result, "Appointment cancelled successfully."));
     }
 
+    [HttpPut("{id:guid}/no-show")]
+    [HasPermission(ClinicPermissions.AppointmentsManage)]
+    public async Task<ActionResult<ApiResponse<AppointmentDto>>> MarkAppointmentNoShow(
+        Guid id,
+        [FromBody] MarkAppointmentNoShowRequest? request,
+        CancellationToken ct)
+    {
+        var command = new MarkAppointmentNoShowCommand(id, request?.Reason);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<AppointmentDto>.Success(result, "Appointment marked as no-show."));
+    }
+
     [HttpPost("{id:guid}/remind")]
     [HasPermission(ClinicPermissions.AppointmentsManage)]
     public async Task<ActionResult<ApiResponse<AppointmentDto>>> SendAppointmentReminder(
@@ -104,3 +116,5 @@ public sealed record RescheduleAppointmentRequest(
     string? Reason = null);
 
 public sealed record CancelAppointmentRequest(string? Reason);
+
+public sealed record MarkAppointmentNoShowRequest(string? Reason = null);
