@@ -15,40 +15,22 @@
 
 import { randomUUID } from 'expo-crypto';
 import { api, ApiError } from '../api/apiClient';
-import type { CommsTicketResponse } from '@clinicez/comms-sdk';
+import type {
+  CommsAttachmentReference,
+  CommsTicketResponse,
+  DeliveryState,
+  MessageCategory,
+  RequestStatus,
+  TriageDisposition,
+} from '@clinicez/comms-sdk';
 
-export interface CommsAttachmentReference {
-  fileKey: string;
-  fileName: string;
-  contentType: string;
-  sizeBytes: number;
-  hashSha256?: string;
-}
-
-export type MessageCategory =
-  | 'Medical'
-  | 'Billing'
-  | 'PrescriptionRefill'
-  | 'LabInquiry'
-  | 'General';
-
-export type RequestStatus =
-  | 'Submitted'
-  | 'WithTriage'
-  | 'Routed'
-  | 'Closed';
-
-export type TriageDisposition =
-  | 'Answered'
-  | 'NeedsVisit'
-  | 'Declined'
-  | 'Routed';
-
-export type DeliveryState =
-  | 'Sending'
-  | 'Waiting'
-  | 'Received'
-  | 'NotReceived';
+export type {
+  CommsAttachmentReference,
+  DeliveryState,
+  MessageCategory,
+  RequestStatus,
+  TriageDisposition,
+};
 
 export interface PatientMessageAttachmentDto {
   id: string;

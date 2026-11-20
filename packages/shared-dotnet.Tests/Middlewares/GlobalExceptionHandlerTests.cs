@@ -307,4 +307,88 @@ public class GlobalExceptionHandlerTests
         resolved.Should().NotBeNullOrWhiteSpace();
         context.TraceIdentifier.Should().Be(resolved);
     }
+
+    [Fact]
+    public async Task TryHandleAsync_BadHttpRequestWithJsonException_MapsTo400WithFieldAndNoInternalNamespaceLeak()
+    {
+        var logger = Substitute.For<ILogger<GlobalExceptionHandler>>();
+        var handler = new GlobalExceptionHandler(logger);
+        var (context, stream) = CreateHttpContext("TRACE-JSON-ENUM-400");
+
+        var jsonEx = new JsonException(
+            "The JSON value could not be converted to ClinicEz.Shared.Interop.Contracts.MessageCategory.",
+            path: "$.category",
+            lineNumber: 0,
+            bytePositionInLine: 24);
+        var badEx = new BadHttpRequestException(
+            "Failed to read parameter \"SubmitPatientInquiryRequest request\" from the request body as JSON.",
+            StatusCodes.Status400BadRequest,
+            jsonEx);
+
+        var handled = await handler.TryHandleAsync(context, badEx, CancellationToken.None);
+
+        handled.Should().BeTrue();
+        context.Response.StatusCode.Should().Be((int)HttpStatusCode.BadRequest);
+
+        var payload = await ReadResponseAsync(stream);
+        payload.Should().NotBeNull();
+        payload!.Succeeded.Should().BeFalse();
+        payload.ErrorCode.Should().Be("BAD_REQUEST");
+        payload.TraceId.Should().Be("TRACE-JSON-ENUM-400");
+        payload.Message.Should().Be("Invalid value for field 'category'.");
+        payload.Message.Should().NotContain("ClinicEz.Shared");
+        payload.Errors.Should().ContainSingle();
+        payload.Errors[0].Field.Should().Be("category");
+        payload.Errors[0].Code.Should().Be("INVALID_JSON");
+        payload.Errors[0].Message.Should().Be("Invalid value for field 'category'.");
+    }
+
+    [Theory]
+    [InlineData(StatusCodes.Status400BadRequest, "BAD_REQUEST")]
+    [InlineData(StatusCodes.Status415UnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE")]
+    public async Task TryHandleAsync_PlainBadHttpRequestException_MapsToClientStatusCode(
+        int expectedStatus,
+        string expectedErrorCode)
+    {
+        var handler = new GlobalExceptionHandler();
+        var (context, stream) = CreateHttpContext("TRACE-BAD-HTTP");
+
+        var badEx = new BadHttpRequestException("Malformed request payload.", expectedStatus);
+
+        var handled = await handler.TryHandleAsync(context, badEx, CancellationToken.None);
+
+        handled.Should().BeTrue();
+        context.Response.StatusCode.Should().Be(expectedStatus);
+
+        var payload = await ReadResponseAsync(stream);
+        payload.Should().NotBeNull();
+        payload!.Succeeded.Should().BeFalse();
+        payload.ErrorCode.Should().Be(expectedErrorCode);
+        payload.TraceId.Should().Be("TRACE-BAD-HTTP");
+        payload.Message.Should().Be("Malformed request payload.");
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_DirectJsonException_MapsTo400BadRequest()
+    {
+        var handler = new GlobalExceptionHandler();
+        var (context, stream) = CreateHttpContext("TRACE-DIRECT-JSON");
+
+        var jsonEx = new JsonException("Unexpected end of JSON input.");
+
+        var handled = await handler.TryHandleAsync(context, jsonEx, CancellationToken.None);
+
+        handled.Should().BeTrue();
+        context.Response.StatusCode.Should().Be((int)HttpStatusCode.BadRequest);
+
+        var payload = await ReadResponseAsync(stream);
+        payload.Should().NotBeNull();
+        payload!.Succeeded.Should().BeFalse();
+        payload.ErrorCode.Should().Be("BAD_REQUEST");
+        payload.TraceId.Should().Be("TRACE-DIRECT-JSON");
+        payload.Message.Should().Be("Invalid JSON in request body.");
+        payload.Errors.Should().ContainSingle();
+        payload.Errors[0].Code.Should().Be("INVALID_JSON");
+        payload.Errors[0].Field.Should().BeNull();
+    }
 }
