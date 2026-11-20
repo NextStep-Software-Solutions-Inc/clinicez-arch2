@@ -411,6 +411,131 @@ public class TwoTierPublishingFlowTests
     }
 
     [Fact]
+    public async Task Tier2_ClinicAlreadyVerifiedAndPublished_WhenPortalGrantsEligibilityLater_AutoConvergesPatientDirectoryWithoutManualRepublish()
+    {
+        await using var cell = new TestCell();
+        var clinic = await cell.ProvisionAsync(Fac.Clinic(TenantId, $"Auto Converge Clinic {Guid.NewGuid():N}"));
+
+        // Seed readiness + Clinic has already published and holds Verified status, while Portal eligibility is still false
+        await SeedClinicReadinessAsync(cell, clinic, isWorkspaceEligible: false);
+        await cell.Clinic.DbAsync(async db =>
+        {
+            var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinic.Id);
+            settings.IsDirectoryPublished = true;
+            settings.PlatformVerificationStatus = PlatformVerificationStatus.Verified;
+            await db.SaveChangesAsync();
+            return 0;
+        });
+
+        // Before Portal grants eligibility, patient catalog does not expose the clinic
+        ((await QueryPatientClinicAsync(cell, clinic.Id))?.IsPublic ?? false).Should().BeFalse();
+        (await SearchPatientClinicsAsync(cell)).Items.Should().NotContain(c => c.Id == clinic.Id);
+
+        // Portal grants workspace discovery eligibility (and confirms Verified status)
+        await SendPortalDirectoryUpdateAsync(cell, clinic, isWorkspaceEligible: true, isPlatformVerified: true);
+        await cell.PumpAsync();
+
+        // Without manual clinic-app toggle cycling, clinic-api must auto-dispatch its published snapshot to patient-api
+        var converged = await QueryPatientClinicAsync(cell, clinic.Id);
+        converged.Should().NotBeNull();
+        converged!.IsWorkspaceEligible.Should().BeTrue();
+        converged.IsDirectoryPublished.Should().BeTrue();
+        converged.IsPlatformVerified.Should().BeTrue();
+        converged.IsPublic.Should().BeTrue();
+
+        var search = await SearchPatientClinicsAsync(cell);
+        search.Items.Should().Contain(c => c.Id == clinic.Id);
+
+        foreach (var host in cell.Hosts)
+        {
+            await host.AssertNothingStuckAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Tier2_FacilityHeartbeat_WithVerificationStatusDrift_SelfHealsClinicAndPatientDirectoryToPublic()
+    {
+        await using var cell = new TestCell();
+        var tenantGuid = Guid.NewGuid();
+        var clinic = await cell.ProvisionAsync(Fac.Clinic(tenantGuid.ToString(), $"Drifted Verification Clinic {Guid.NewGuid():N}"));
+
+        // Clinic is eligible and published, but holds stale PendingReview verification status
+        await SeedClinicReadinessAsync(cell, clinic, isWorkspaceEligible: true);
+        await cell.Clinic.DbAsync(async db =>
+        {
+            var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinic.Id);
+            settings.IsDirectoryPublished = true;
+            settings.PlatformVerificationStatus = PlatformVerificationStatus.PendingReview;
+            await db.SaveChangesAsync();
+            return 0;
+        });
+
+        (await SearchPatientClinicsAsync(cell)).Items.Should().NotContain(c => c.Id == clinic.Id);
+
+        // Portal holds authoritative state: Eligible = true, Verified
+        await using var portalDb = new PortalDbContext(new DbContextOptionsBuilder<PortalDbContext>()
+            .UseInMemoryDatabase($"e2e-portal-verif-drift-{Guid.NewGuid():N}").Options);
+
+        var portalTenant = new PortalTenant { Id = tenantGuid, Name = "Verification Drift WS", TenantSlug = "verif-drift-ws" };
+        var portalFacility = new PortalFacility
+        {
+            Id = clinic.Id,
+            TenantId = tenantGuid,
+            Name = clinic.Name,
+            Slug = "verif-drift-clinic",
+            FacilityType = FacilityType.Clinic,
+            IsPatientDiscoveryEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
+            Status = FacilityStatus.Active
+        };
+        portalDb.Tenants.Add(portalTenant);
+        portalDb.Facilities.Add(portalFacility);
+        await portalDb.SaveChangesAsync();
+
+        var capturingPublisher = new CapturingPublisher();
+        var provisioningPublisher = new FacilityProvisioningPublisher(portalDb, capturingPublisher);
+        var handler = new FacilityHeartbeatHandler(portalDb, TimeProvider.System, provisioningPublisher, NullLogger<FacilityHeartbeatHandler>.Instance);
+
+        var payload = new FacilityHeartbeatPayload
+        {
+            AppVersion = "2.0.0",
+            IsWorkspaceEligible = true, // eligibility in sync, only verification drifted
+            PlatformVerificationStatus = PlatformVerificationStatus.PendingReview,
+            ClockUtc = DateTime.UtcNow
+        };
+        var heartbeatEnvelope = InteropEnvelope.Create(InteropTypes.FacilityHeartbeat, clinic.Party, Party.Portal, Guid.NewGuid(), payload);
+
+        await handler.HandleAsync(payload, new InteropMessageContext(heartbeatEnvelope), CancellationToken.None);
+
+        capturingPublisher.Sent.Should().HaveCount(2);
+        capturingPublisher.Sent.Should().OnlyContain(e => e.Type == InteropTypes.FacilityDirectoryUpdated);
+
+        // Relay Portal's self-healing envelopes across the real Hub & pump clinic-api -> patient-api
+        var sendResults = await cell.Hub.NewSdk(InteropServices.Portal).SendAsync(capturingPublisher.Sent, CancellationToken.None);
+        sendResults.Should().OnlyContain(r => r.Status == SendResult.Accepted);
+        await cell.PumpAsync();
+
+        var clinicSettings = await cell.Clinic.DbAsync(async db =>
+            await db.Settings.IgnoreQueryFilters().AsNoTracking().SingleAsync(s => s.ClinicId == clinic.Id));
+        clinicSettings.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.Verified);
+
+        var patientClinic = await QueryPatientClinicAsync(cell, clinic.Id);
+        patientClinic.Should().NotBeNull();
+        patientClinic!.IsWorkspaceEligible.Should().BeTrue();
+        patientClinic.IsPlatformVerified.Should().BeTrue();
+        patientClinic.IsDirectoryPublished.Should().BeTrue();
+        patientClinic.IsPublic.Should().BeTrue();
+
+        var search = await SearchPatientClinicsAsync(cell);
+        search.Items.Should().Contain(c => c.Id == clinic.Id);
+
+        foreach (var host in cell.Hosts)
+        {
+            await host.AssertNothingStuckAsync();
+        }
+    }
+
+    [Fact]
     public async Task Tier2_FacilityHeartbeat_WithMismatchedWorkspaceEligibility_TriggersPortalSelfHealingConvergence()
     {
         await using var cell = new TestCell();

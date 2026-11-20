@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Infrastructure.Messaging.Handlers;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
@@ -96,6 +97,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
             existingSettings.TenantSlug = message.TenantSlug ?? existingSettings.TenantSlug;
             existingSettings.FacilitySlug = message.Slug ?? existingSettings.FacilitySlug;
             existingSettings.IsWorkspaceEligible = message.IsWorkspaceEligible ?? false;
+            ApplyPlatformVerification(existingSettings, message);
 
             if (message.BranchId != null)
             {
@@ -146,6 +148,12 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                 existingSettings.LetterheadAddress = message.Address;
             if (string.IsNullOrWhiteSpace(existingSettings.LetterheadContact) && !string.IsNullOrWhiteSpace(message.ContactNumber))
                 existingSettings.LetterheadContact = message.ContactNumber;
+
+            await DirectoryInteropSyncHelper.EnqueueDirectorySnapshotIfVerifiedAndPublishedAsync(
+                _dbContext,
+                _publisher,
+                existingSettings,
+                ct);
         }
         else
         {
@@ -176,6 +184,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "SystemProvisioning"
             };
+            ApplyPlatformVerification(newSettings, message);
 
             if (message.IsBranchPhilHealthAccredited && !string.IsNullOrWhiteSpace(message.BranchPhilHealthAccreditationNumber))
             {
@@ -208,5 +217,30 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
             });
 
         await _dbContext.SaveChangesAsync(ct);
+    }
+
+    private static void ApplyPlatformVerification(FacilitySettings target, FacilityCreatedEvent message)
+    {
+        if (message.PlatformVerificationStatus.HasValue)
+        {
+            target.PlatformVerificationStatus = message.PlatformVerificationStatus.Value;
+        }
+        else if (message.IsPlatformVerified.HasValue)
+        {
+            target.PlatformVerificationStatus = message.IsPlatformVerified.Value
+                ? PlatformVerificationStatus.Verified
+                : PlatformVerificationStatus.Unverified;
+        }
+
+        if (target.PlatformVerificationStatus == PlatformVerificationStatus.Verified)
+        {
+            target.VerificationRejectionReason = null;
+        }
+        else if (message.VerificationRejectionReason != null)
+        {
+            target.VerificationRejectionReason = string.IsNullOrWhiteSpace(message.VerificationRejectionReason)
+                ? null
+                : message.VerificationRejectionReason.Trim();
+        }
     }
 }
