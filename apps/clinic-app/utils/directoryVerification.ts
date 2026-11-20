@@ -13,6 +13,9 @@ export const PENDING_VERIFICATION_CONFLICT_CODE = 'verification_request_not_pend
 export const PENDING_VERIFICATION_BUTTON_LABEL = 'Save & Update Submission';
 export const PENDING_VERIFICATION_HELPER_NOTE =
   'Updates your active pending verification application';
+export const RESUBMIT_VERIFICATION_BUTTON_LABEL = 'Save & Resubmit for Verification';
+export const REGULATED_PRC_REVERIFICATION_NOTICE =
+  'Updating PRC credentials or proof requires re-verification by Platform Governance.';
 
 export function isPendingVerificationConflictError(
   err?: Pick<ApiError, 'status' | 'errorCode'> | null,
@@ -127,6 +130,43 @@ export function isValidPrcFormat(raw?: string | null): boolean {
   if (!/^[A-Z0-9]+$/i.test(cleaned)) return false;
   const digits = cleaned.replace(/\D/g, '');
   return digits.length >= 4;
+}
+
+/**
+ * Mirrors ClinicEz.Clinic.Application.Common.Helpers.ClinicianDirectoryValidationHelper.HasRegulatedPrcCredentialsChanged.
+ * Returns true if PRC license number (normalized), PRC expiry date, or PRC proof document changed.
+ */
+export function hasRegulatedPrcCredentialsChanged(input: {
+  previousPrcLicenseNumber?: string | null;
+  nextPrcLicenseNumber?: string | null;
+  previousPrcExpiryDate?: string | null;
+  nextPrcExpiryDate?: string | null;
+  previousPrcEvidenceObjectKey?: string | null;
+  nextPrcEvidenceObjectKey?: string | null;
+  hasPickedProofFile?: boolean;
+}): boolean {
+  const prevPrc =
+    normalizePrcNumber(input.previousPrcLicenseNumber) ??
+    (input.previousPrcLicenseNumber ?? '').trim().toUpperCase();
+  const nextPrc =
+    normalizePrcNumber(input.nextPrcLicenseNumber) ??
+    (input.nextPrcLicenseNumber ?? '').trim().toUpperCase();
+  if (prevPrc !== nextPrc) {
+    return true;
+  }
+
+  if ((input.previousPrcExpiryDate ?? '').trim() !== (input.nextPrcExpiryDate ?? '').trim()) {
+    return true;
+  }
+
+  if (input.hasPickedProofFile) {
+    return true;
+  }
+
+  return (
+    (input.previousPrcEvidenceObjectKey ?? '').trim() !==
+    (input.nextPrcEvidenceObjectKey ?? '').trim()
+  );
 }
 
 /**

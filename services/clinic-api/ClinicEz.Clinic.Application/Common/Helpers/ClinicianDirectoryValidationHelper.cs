@@ -78,4 +78,27 @@ public static class ClinicianDirectoryValidationHelper
         var nextNormalized = PractitionerIdentity.NormalizePrc(updatedPrc) ?? updatedPrc?.Trim();
         return !string.Equals(prevNormalized, nextNormalized, StringComparison.OrdinalIgnoreCase);
     }
+
+    public static bool HasRegulatedPrcCredentialsChanged(
+        string? previousPrc,
+        string? updatedPrc,
+        DateOnly? previousExpiry,
+        DateOnly? updatedExpiry,
+        string? previousProofKey,
+        string? updatedProofKey)
+    {
+        if (HasPrcLicenseChanged(previousPrc, updatedPrc))
+        {
+            return true;
+        }
+
+        if (previousExpiry != updatedExpiry)
+        {
+            return true;
+        }
+
+        var prevKey = string.IsNullOrWhiteSpace(previousProofKey) ? null : previousProofKey.Trim();
+        var nextKey = string.IsNullOrWhiteSpace(updatedProofKey) ? null : updatedProofKey.Trim();
+        return !string.Equals(prevKey, nextKey, StringComparison.Ordinal);
+    }
 }

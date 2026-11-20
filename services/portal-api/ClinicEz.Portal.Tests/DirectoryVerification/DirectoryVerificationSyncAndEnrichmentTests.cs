@@ -2410,4 +2410,118 @@ public sealed class DirectoryVerificationSyncAndEnrichmentTests : IDisposable
         Assert.False(pracDetail.IsPhilHealthAccredited);
         Assert.Null(pracDetail.PhilHealthAccreditationNumber);
     }
+
+    [Fact]
+    public async Task PrcUpdateResubmission_OnApprovedPractitioner_CreatesPendingReviewResubmissionAndPreservesApprovedHistory()
+    {
+        var staffId = Guid.NewGuid();
+        var sub3Id = Guid.NewGuid();
+        var oldExpiry = new DateOnly(2028, 5, 1);
+        const string oldProof = "tenants/t/clinics/c/verification/prc/doc/sub3-proof.pdf";
+
+        var pracHandler = new PractitionerVerificationRequestedHandler(
+            _context,
+            _clock,
+            NullLogger<PractitionerVerificationRequestedHandler>.Instance,
+            NewNotifications(),
+            new FixedFrontendUrl("https://portal.clinicez.test"));
+
+        var initialPayload = new PractitionerVerificationRequestedPayload
+        {
+            RequestId = sub3Id,
+            TenantId = _tenant.Id.ToString(),
+            FacilityId = _facility.Id,
+            FacilityName = _facility.Name,
+            ClinicStaffMemberId = staffId,
+            RequestKind = "Initial",
+            ProfessionKind = "Doctor",
+            FirstName = "Justine Mae",
+            LastName = "Tabasan",
+            Title = "Dr.",
+            SubmittedPrcLicenseNo = "0123456",
+            NormalizedPrcLicenseNo = "0123456",
+            PrcExpiryDate = oldExpiry,
+            PrcEvidenceObjectKey = oldProof,
+            VerificationContact = "justine@gammacare.ph",
+            Specialty = "Family Medicine",
+            SubmittedByClinicUserId = "user_admin_1",
+            SubmittedByDisplayName = "Clinic Admin",
+            SubmittedAtUtc = _clock.GetUtcNow().UtcDateTime
+        };
+
+        await pracHandler.HandleAsync(
+            initialPayload,
+            new InteropMessageContext(InteropEnvelope.Create(InteropTypes.PractitionerVerificationRequested, FacilityParty(), Party.Portal, sub3Id, initialPayload)),
+            CancellationToken.None);
+
+        await new ApproveVerificationRequestCommandHandler(
+                _context, TestSupport.ProvisioningPublisher(_context), new InteropPublisher(_context), _clock)
+            .Handle(new ApproveVerificationRequestCommand(sub3Id, "admin_1", "Admin One", "Approved initial credentials"), CancellationToken.None);
+
+        var emailsBeforeResubmit = _emailSender.Sent.Count;
+
+        // Approved practitioner keeps same PRC # and name, but replaces PRC proof and expiry -> PrcUpdate
+        _clock.Advance(TimeSpan.FromHours(2));
+        var sub4Id = Guid.NewGuid();
+        var newExpiry = new DateOnly(2031, 5, 1);
+        const string newProof = "tenants/t/clinics/c/verification/prc/doc/sub4-proof.pdf";
+        var updatePayload = initialPayload with
+        {
+            RequestId = sub4Id,
+            RequestKind = "PrcUpdate",
+            PrcExpiryDate = newExpiry,
+            PrcEvidenceObjectKey = newProof,
+            SubmittedAtUtc = _clock.GetUtcNow().UtcDateTime
+        };
+
+        await pracHandler.HandleAsync(
+            updatePayload,
+            new InteropMessageContext(InteropEnvelope.Create(InteropTypes.PractitionerVerificationRequested, FacilityParty(), Party.Portal, sub4Id, updatePayload)),
+            CancellationToken.None);
+
+        Assert.Equal(emailsBeforeResubmit, _emailSender.Sent.Count);
+
+        var allReqs = await _context.PractitionerVerificationRequests
+            .Where(r => r.FacilityId == _facility.Id && r.ClinicStaffMemberId == staffId)
+            .OrderBy(r => r.SubmissionNumber)
+            .ToListAsync();
+        Assert.Equal(2, allReqs.Count);
+
+        // Submission #1 (prior approved) remains completely immutable
+        Assert.Equal("Approved", allReqs[0].Status);
+        Assert.Equal(oldProof, allReqs[0].PrcEvidenceObjectKey);
+        Assert.Equal(oldExpiry, allReqs[0].PrcExpiryDate);
+        Assert.Contains(oldProof, allReqs[0].SubmittedSnapshotJson);
+
+        // New resubmission is PendingReview with RequestKind = "Resubmission" (NOT AwaitingOtp)
+        Assert.Equal(2, allReqs[1].SubmissionNumber);
+        Assert.Equal("Resubmission", allReqs[1].RequestKind);
+        Assert.Equal("PendingReview", allReqs[1].Status);
+        Assert.Null(allReqs[1].OtpTokenHash);
+        Assert.Equal(newProof, allReqs[1].PrcEvidenceObjectKey);
+        Assert.Equal(newExpiry, allReqs[1].PrcExpiryDate);
+
+        var detail = await new GetVerificationRequestDetailQueryHandler(_context)
+            .Handle(new GetVerificationRequestDetailQuery(sub4Id), CancellationToken.None);
+        Assert.NotNull(detail);
+        Assert.Equal("Resubmission", detail.RequestKind);
+        Assert.Equal("PendingReview", detail.Status);
+        Assert.Equal(2, detail.SubmissionHistory.Count);
+        Assert.Contains(detail.SubmissionHistory, h => h.Id == sub3Id && h.Status == "Approved");
+        Assert.Contains(detail.SubmissionHistory, h => h.Id == sub4Id && h.Status == "PendingReview" && h.RequestKind == "Resubmission");
+        Assert.NotNull(detail.ResubmissionDiff);
+        Assert.True(detail.ResubmissionDiff.PrcProofUpdated);
+        Assert.Equal("Approved", detail.ResubmissionDiff.PreviousStatus);
+        Assert.Contains(detail.ResubmissionDiff.ChangedFields, c => c.FieldKey == "prcExpiryDate");
+
+        // Governance can approve the new resubmission cleanly
+        var approval2 = await new ApproveVerificationRequestCommandHandler(
+                _context, TestSupport.ProvisioningPublisher(_context), new InteropPublisher(_context), _clock)
+            .Handle(new ApproveVerificationRequestCommand(sub4Id, "admin_1", "Admin One", "Approved renewed PRC proof"), CancellationToken.None);
+        Assert.Equal("Approved", approval2.Status);
+
+        var canonical = await _context.Practitioners.SingleAsync(p => p.NormalizedPrcLicenseNo == "0123456");
+        Assert.Equal(newExpiry, canonical.PrcExpiryDate);
+        Assert.Equal(sub4Id, canonical.LatestVerificationRequestId);
+    }
 }
