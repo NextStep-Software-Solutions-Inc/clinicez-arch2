@@ -27,6 +27,7 @@ import {
   YakapMasterlistAssignment,
 } from '../../services/clinicService';
 import type { YakapSubTool } from './toolsCatalog';
+import { FilterChip } from './ToolsUiHelpers';
 
 export interface PhilHealthYakapToolsSectionProps {
   activeTool: YakapSubTool;
@@ -36,9 +37,9 @@ export interface PhilHealthYakapToolsSectionProps {
 }
 
 const SUB_TOOL_OPTIONS: Array<{ value: YakapSubTool; label: string; icon: 'yakap' | 'pill' | 'patients' }> = [
-  { value: 'pin-checker', label: 'PIN check', icon: 'yakap' },
-  { value: 'gamot', label: 'GAMOT and UPSC', icon: 'pill' },
-  { value: 'masterlist', label: 'Masterlist', icon: 'patients' },
+  { value: 'pin-checker', label: 'PIN Check', icon: 'yakap' },
+  { value: 'gamot', label: 'GAMOT & UPSC', icon: 'pill' },
+  { value: 'masterlist', label: 'Patient List', icon: 'patients' },
 ];
 
 /** Share of the annual allocation below which the remaining balance is flagged. */
@@ -189,7 +190,9 @@ export default function PhilHealthYakapToolsSection({
       setPinValidationResult({
         isValid,
         formatted,
-        error: isValid ? undefined : `Invalid check digit. Expected ${checkDigit}, got ${actualCheck}.`,
+        error: isValid
+          ? undefined
+          : 'This 12-digit PhilHealth number failed validation. Please double-check the digits for typos.',
       });
     }
     setIsValidatingPin(false);
@@ -255,8 +258,8 @@ export default function PhilHealthYakapToolsSection({
       <Card>
         <EmptyState
           icon="lock"
-          title="PhilHealth Yakap access required"
-          description="Your current role does not include PhilHealth Yakap permissions (yakap:read). Contact a clinic administrator if you need access."
+          title="PhilHealth Yakap access restricted"
+          description="Ask a clinic administrator to enable PhilHealth Yakap access for your account."
         />
       </Card>
     );
@@ -267,7 +270,11 @@ export default function PhilHealthYakapToolsSection({
 
   const renderPinChecker = () => (
     <Card>
-      <CardHeader title="PIN check" subtitle="Verify a PhilHealth Identification Number (PIN)." icon="yakap" />
+      <CardHeader
+        title="PhilHealth PIN Check"
+        subtitle="Check if a 12-digit PhilHealth number (PIN) is valid."
+        icon="yakap"
+      />
 
       <View style={rowStyle}>
         <View style={styles.flexFill}>
@@ -316,7 +323,7 @@ export default function PhilHealthYakapToolsSection({
             </ThemedText>
           ) : (
             <ThemedText variant="small" color={theme.colors.successText}>
-              The PIN&apos;s check digit is valid.
+              Valid 12-digit PhilHealth number.
             </ThemedText>
           )}
         </View>
@@ -332,8 +339,8 @@ export default function PhilHealthYakapToolsSection({
     return (
       <Card>
         <CardHeader
-          title="GAMOT benefit balance"
-          subtitle="Look up a member's annual outpatient medicine allocation."
+          title="GAMOT Medicine Benefits"
+          subtitle="Look up a member’s yearly outpatient medicine balance."
           icon="pill"
         />
         <View style={rowStyle}>
@@ -430,8 +437,8 @@ export default function PhilHealthYakapToolsSection({
   const renderUpscCard = () => (
     <Card>
       <CardHeader
-        title="UPSC verifier"
-        subtitle="Check a Unique Prescription Security Code before dispensing."
+        title="Prescription Security Code (UPSC) Check"
+        subtitle="Verify a patient’s prescription security code before dispensing."
         icon="key"
       />
       <View style={rowStyle}>
@@ -528,11 +535,10 @@ export default function PhilHealthYakapToolsSection({
 
           <View style={styles.chipRow}>
             {categories.map((cat) => (
-              <Button
+              <FilterChip
                 key={cat}
-                size="sm"
-                variant={formularyCategory === cat ? 'primary' : 'secondary'}
-                title={cat === 'all' ? 'All' : cat}
+                label={cat === 'all' ? 'All' : cat}
+                active={formularyCategory === cat}
                 onPress={() => setFormularyCategory(cat)}
               />
             ))}
@@ -576,17 +582,17 @@ export default function PhilHealthYakapToolsSection({
   const renderMasterlist = () => (
     <Card>
       <CardHeader
-        title="Catchment masterlist"
-        subtitle="Beneficiaries assigned to this clinic under PhilHealth Yakap."
+        title="Assigned Patient Masterlist"
+        subtitle="Patients assigned to this clinic under PhilHealth Yakap."
         icon="patients"
       />
 
       <View style={rowStyle}>
         <View style={styles.flexFill}>
-          <Input label="HCI accreditation number" value={hciNumber} onChangeText={setHciOverride} />
+          <Input label="Clinic accreditation number (HCI)" value={hciNumber} onChangeText={setHciOverride} />
         </View>
         <View style={styles.flexFill}>
-          <Input label="Cipher key" value={cipherKey} onChangeText={setCipherKey} secureTextEntry />
+          <Input label="PhilHealth decryption key (Cipher key)" value={cipherKey} onChangeText={setCipherKey} secureTextEntry />
         </View>
       </View>
 
@@ -609,7 +615,7 @@ export default function PhilHealthYakapToolsSection({
         <EmptyState
           icon="patients"
           title="No assigned patients"
-          description="The registry returned no beneficiaries for this accreditation number."
+          description="No assigned patients were returned for this accreditation number."
         />
       ) : masterlistItems.length > 0 ? (
         <View>

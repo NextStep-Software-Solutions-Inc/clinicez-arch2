@@ -24,6 +24,7 @@ import {
 } from '../../services/clinicService';
 import { locationService } from '../../services/locationService';
 import type { LookupSubTool } from './toolsCatalog';
+import { FilterChip } from './ToolsUiHelpers';
 
 export interface MedicalLookupsSectionProps {
   activeTool: LookupSubTool;
@@ -311,8 +312,8 @@ export default function MedicalLookupsSection({
         <Card>
           <EmptyState
             icon="lock"
-            title="Clinical consultation permission required"
-            description="ICD-10 lookup requires consultations:read permission. Contact an administrator if you need access."
+            title="Access restricted"
+            description="Ask a clinic administrator to enable diagnosis lookup access for your account."
           />
         </Card>
       );
@@ -322,7 +323,7 @@ export default function MedicalLookupsSection({
       <Card>
         <CardHeader
           title="ICD-10 Diagnosis Lookup"
-          subtitle="Search official ICD-10 diagnosis codes and descriptions from the clinic library."
+          subtitle="Search official ICD-10 diagnosis codes and descriptions."
           icon="search"
           rightAction={
             icdResults.length > 0 ? (
@@ -335,7 +336,7 @@ export default function MedicalLookupsSection({
           <View style={styles.flexFill}>
             <Input
               leftIcon="search"
-              placeholder="Search ICD-10 code or condition (e.g. I10, diabetes, pneumonia)..."
+              placeholder="Search code or condition (e.g. I10, diabetes, pneumonia)..."
               value={icdQuery}
               onChangeText={setIcdQuery}
               autoCapitalize="none"
@@ -353,11 +354,10 @@ export default function MedicalLookupsSection({
 
         <View style={styles.chipRow}>
           {QUICK_ICD10_TERMS.map((item) => (
-            <Button
+            <FilterChip
               key={item.code}
-              size="sm"
-              variant="secondary"
-              title={item.label}
+              label={item.label}
+              active={icdQuery.trim().toUpperCase().startsWith(item.code)}
               onPress={() => setIcdQuery(item.code)}
             />
           ))}
@@ -417,8 +417,8 @@ export default function MedicalLookupsSection({
         <Card>
           <EmptyState
             icon="lock"
-            title="Services catalog permission required"
-            description="Viewing clinic services and pricing requires services:read permission."
+            title="Access restricted"
+            description="Ask a clinic administrator to enable service pricing access for your account."
           />
         </Card>
       );
@@ -427,8 +427,8 @@ export default function MedicalLookupsSection({
     return (
       <Card>
         <CardHeader
-          title="Clinic Services & Pricing Reference"
-          subtitle="Read-only fee schedule for consultations, laboratory tests, procedures, and PhilHealth coverage."
+          title="Clinic Services & Pricing"
+          subtitle="Read-only fee list for consultations, lab tests, procedures, and PhilHealth coverage."
           icon="tag"
           rightAction={
             servicesLoading || servicesError ? undefined : (
@@ -464,11 +464,10 @@ export default function MedicalLookupsSection({
 
             <View style={styles.chipRow}>
               {serviceCategories.map((cat) => (
-                <Button
+                <FilterChip
                   key={cat}
-                  size="sm"
-                  variant={serviceCategory === cat ? 'primary' : 'secondary'}
-                  title={cat === 'all' ? 'All' : cat}
+                  label={cat === 'all' ? 'All' : cat}
+                  active={serviceCategory === cat}
                   onPress={() => setServiceCategory(cat)}
                 />
               ))}
@@ -522,8 +521,8 @@ export default function MedicalLookupsSection({
   const renderPsgc = () => (
     <Card>
       <CardHeader
-        title="PSGC Philippine Address Lookup"
-        subtitle="Look up official 10-digit Philippine Standard Geographic Codes (Region, Province, City/Municipality, Barangay)."
+        title="Philippine Address & PSGC Lookup"
+        subtitle="Find official 10-digit Philippine address codes (Region, Province, City/Municipality, Barangay)."
         icon="mapPin"
       />
 

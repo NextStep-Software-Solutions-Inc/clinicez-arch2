@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { Platform, View, StyleSheet, Pressable, type PressableStateCallbackType } from 'react-native';
 import {
   Badge,
   Button,
@@ -35,6 +35,7 @@ import {
 } from '@utils/clinicalCalculators';
 import { clinicService, type PediatricZScoreResult } from '../../services/clinicService';
 import type { CalculatorSubTool } from './toolsCatalog';
+import { CalculatorWorkbench, LabeledControl, PreviewCard } from './ToolsUiHelpers';
 
 export interface ClinicalCalculatorsSectionProps {
   activeTool: CalculatorSubTool;
@@ -42,17 +43,26 @@ export interface ClinicalCalculatorsSectionProps {
   canAccessPediatricZScore: boolean;
 }
 
+type HoverState = PressableStateCallbackType & { hovered?: boolean };
+
 const CALCULATOR_OPTIONS: Array<{
   value: CalculatorSubTool;
   label: string;
   icon: 'scale' | 'heartPulse' | 'baby' | 'calendar' | 'syringe';
 }> = [
-  { value: 'bmi-bsa', label: 'BMI & BSA', icon: 'scale' },
-  { value: 'philpen', label: 'PHILPEN CVD', icon: 'heartPulse' },
-  { value: 'pediatric-zscore', label: 'Pediatric Z-Score', icon: 'baby' },
-  { value: 'ob-edd', label: 'OB EDD / AOG', icon: 'calendar' },
-  { value: 'dosing-egfr', label: 'Dosing & eGFR', icon: 'syringe' },
+  { value: 'bmi-bsa', label: 'BMI & Body Size', icon: 'scale' },
+  { value: 'philpen', label: 'Heart Risk (PHILPEN)', icon: 'heartPulse' },
+  { value: 'pediatric-zscore', label: 'Child Growth', icon: 'baby' },
+  { value: 'ob-edd', label: 'Due Date (EDD)', icon: 'calendar' },
+  { value: 'dosing-egfr', label: 'Dosing & Kidney', icon: 'syringe' },
 ];
+
+const PRESET_DISPLAY_META: Record<string, { name: string; schedule: string }> = {
+  paracetamol: { name: 'Paracetamol', schedule: '15 mg/kg/dose · every 6h' },
+  ibuprofen: { name: 'Ibuprofen', schedule: '10 mg/kg/dose · every 8h' },
+  amoxicillin: { name: 'Amoxicillin', schedule: '45 mg/kg/day · twice daily' },
+  cefalexin: { name: 'Cefalexin', schedule: '50 mg/kg/day · 3x daily' },
+};
 
 function parsePositiveFloat(raw: string): number | undefined {
   const n = Number(raw.trim());
@@ -67,16 +77,16 @@ function parseNonNegativeFloat(raw: string): number | undefined {
 function riskBandMeta(band: RiskBandType): { label: string; range: string; variant: BadgeVariant } {
   switch (band) {
     case 'BandE':
-      return { label: 'Band E · Critical Risk', range: '≥ 40%', variant: 'emergency' };
+      return { label: 'Band E · Critical Risk', range: '40% or higher', variant: 'emergency' };
     case 'BandD':
-      return { label: 'Band D · Very High Risk', range: '30% to < 40%', variant: 'urgent' };
+      return { label: 'Band D · Very High Risk', range: '30% to under 40%', variant: 'urgent' };
     case 'BandC':
-      return { label: 'Band C · High Risk', range: '20% to < 30%', variant: 'warning' };
+      return { label: 'Band C · High Risk', range: '20% to under 30%', variant: 'warning' };
     case 'BandB':
-      return { label: 'Band B · Moderate Risk', range: '10% to < 20%', variant: 'info' };
+      return { label: 'Band B · Moderate Risk', range: '10% to under 20%', variant: 'info' };
     case 'BandA':
     default:
-      return { label: 'Band A · Low Risk', range: '< 10%', variant: 'routine' };
+      return { label: 'Band A · Low Risk', range: 'Under 10%', variant: 'routine' };
   }
 }
 
@@ -137,8 +147,10 @@ export default function ClinicalCalculatorsSection({
   onSelectTool,
   canAccessPediatricZScore,
 }: ClinicalCalculatorsSectionProps) {
-  const { isCompact } = useBreakpoint();
-  const rowStyle = isCompact ? styles.inputCol : styles.inputRow;
+  const { isCompact, width } = useBreakpoint();
+  const twoColWorkbench = !isCompact && width >= 860;
+  const inputGroupStyle = isCompact ? styles.inputCol : styles.inputWrapRow;
+  const inputCellStyle = isCompact ? styles.fullWidth : styles.inputCell;
 
   // ── 1. BMI & BSA State ────────────────────────────────────────────────────
   const [bmiUnit, setBmiUnit] = useState<'metric' | 'imperial'>('metric');
@@ -191,7 +203,11 @@ export default function ClinicalCalculatorsSection({
       parsePositiveFloat(cvdSbp) ||
       parsePositiveFloat(cvdDbp) ||
       cvdPriorAnginaMi ||
-      cvdPriorStrokeTia,
+      cvdPriorStrokeTia ||
+      cvdSevereChestPain ||
+      cvdTransientNeuro ||
+      cvdSmoker ||
+      cvdDiabetes,
   );
 
   const philpenResult = useMemo(() => {
@@ -289,6 +305,7 @@ export default function ClinicalCalculatorsSection({
   const [concMg, setConcMg] = useState('250');
   const [concMl, setConcMl] = useState('5');
   const [maxDailyMg, setMaxDailyMg] = useState('');
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [activePresetNote, setActivePresetNote] = useState<string | null>(null);
 
   const pediatricDoseResult = useMemo(() => {
@@ -331,11 +348,11 @@ export default function ClinicalCalculatorsSection({
   const renderBmiBsa = () => (
     <Card>
       <CardHeader
-        title="BMI & Body Surface Area (BSA)"
-        subtitle="Computes WHO Global and Asia-Pacific BMI cutoffs, Mosteller & Du Bois BSA, and Devine Ideal Body Weight."
+        title="BMI & Body Size (BSA)"
+        subtitle="Calculates BMI (Global & Asia-Pacific ranges), Body Surface Area, and ideal body weight."
         icon="scale"
         rightAction={
-          weightInput || heightCmInput || heightFtInput ? (
+          weightInput || heightCmInput || heightFtInput || heightInInput ? (
             <Button
               title="Reset"
               size="sm"
@@ -351,120 +368,137 @@ export default function ClinicalCalculatorsSection({
         }
       />
 
-      <View style={styles.controlsRow}>
-        <SegmentedControl
-          options={[
-            { value: 'metric', label: 'Metric (kg / cm)' },
-            { value: 'imperial', label: 'Imperial (lb / ft)' },
-          ]}
-          value={bmiUnit}
-          onChange={(v) => setBmiUnit(v)}
-        />
-        <SegmentedControl
-          options={[
-            { value: 'unspecified', label: 'Sex: Any' },
-            { value: 'male', label: 'Male' },
-            { value: 'female', label: 'Female' },
-          ]}
-          value={bmiSex}
-          onChange={(v) => setBmiSex(v)}
-        />
-      </View>
+      <CalculatorWorkbench
+        twoColumn={twoColWorkbench}
+        inputs={
+          <View style={styles.inputsStack}>
+            <View style={styles.controlsRow}>
+              <LabeledControl label="Units">
+                <SegmentedControl
+                  options={[
+                    { value: 'metric', label: 'Metric (kg / cm)' },
+                    { value: 'imperial', label: 'Imperial (lb / ft)' },
+                  ]}
+                  value={bmiUnit}
+                  onChange={(v) => setBmiUnit(v)}
+                />
+              </LabeledControl>
+              <LabeledControl label="Sex (for ideal weight)">
+                <SegmentedControl
+                  options={[
+                    { value: 'unspecified', label: 'Any' },
+                    { value: 'male', label: 'Male' },
+                    { value: 'female', label: 'Female' },
+                  ]}
+                  value={bmiSex}
+                  onChange={(v) => setBmiSex(v)}
+                />
+              </LabeledControl>
+            </View>
 
-      <View style={rowStyle}>
-        <View style={styles.flexFill}>
-          <Input
-            label={bmiUnit === 'metric' ? 'Weight (kg)' : 'Weight (lb)'}
-            placeholder={bmiUnit === 'metric' ? 'e.g. 65' : 'e.g. 143'}
-            value={weightInput}
-            onChangeText={setWeightInput}
-            keyboardType="numeric"
-          />
-        </View>
-        {bmiUnit === 'metric' ? (
-          <View style={styles.flexFill}>
-            <Input
-              label="Height (cm)"
-              placeholder="e.g. 165"
-              value={heightCmInput}
-              onChangeText={setHeightCmInput}
-              keyboardType="numeric"
-            />
+            <View style={inputGroupStyle}>
+              <View style={inputCellStyle}>
+                <Input
+                  label={bmiUnit === 'metric' ? 'Weight (kg)' : 'Weight (lb)'}
+                  placeholder={bmiUnit === 'metric' ? 'e.g. 65' : 'e.g. 143'}
+                  value={weightInput}
+                  onChangeText={setWeightInput}
+                  keyboardType="numeric"
+                />
+              </View>
+              {bmiUnit === 'metric' ? (
+                <View style={inputCellStyle}>
+                  <Input
+                    label="Height (cm)"
+                    placeholder="e.g. 165"
+                    value={heightCmInput}
+                    onChangeText={setHeightCmInput}
+                    keyboardType="numeric"
+                  />
+                </View>
+              ) : (
+                <>
+                  <View style={inputCellStyle}>
+                    <Input
+                      label="Height (ft)"
+                      placeholder="e.g. 5"
+                      value={heightFtInput}
+                      onChangeText={setHeightFtInput}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={inputCellStyle}>
+                    <Input
+                      label="Inches (in)"
+                      placeholder="e.g. 5"
+                      value={heightInInput}
+                      onChangeText={setHeightInInput}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </>
+              )}
+            </View>
           </View>
-        ) : (
-          <>
-            <View style={styles.flexFill}>
-              <Input
-                label="Height (ft)"
-                placeholder="e.g. 5"
-                value={heightFtInput}
-                onChangeText={setHeightFtInput}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={styles.flexFill}>
-              <Input
-                label="Inches (in)"
-                placeholder="e.g. 5"
-                value={heightInInput}
-                onChangeText={setHeightInInput}
-                keyboardType="numeric"
-              />
-            </View>
-          </>
-        )}
-      </View>
+        }
+        results={
+          bmiResult ? (
+            <View style={styles.resultStack}>
+              <View style={styles.statsRow}>
+                <StatCard
+                  label="Body Mass Index (BMI)"
+                  value={`${bmiResult.bmi.toFixed(1)}`}
+                  subtext="kg/m²"
+                  icon="scale"
+                  style={styles.statCardCompact}
+                />
+                <StatCard
+                  label="Body Surface Area (BSA)"
+                  value={`${bmiResult.bsaMosteller.toFixed(2)} m²`}
+                  subtext={`Alt. (Du Bois): ${bmiResult.bsaDuBois.toFixed(2)} m²`}
+                  icon="ruler"
+                  style={styles.statCardCompact}
+                />
+                {bmiResult.idealBodyWeightKg !== null ? (
+                  <StatCard
+                    label="Ideal Body Weight"
+                    value={`${bmiResult.idealBodyWeightKg.toFixed(1)} kg`}
+                    subtext={bmiSex === 'male' ? 'Adult Male (Devine)' : 'Adult Female (Devine)'}
+                    icon="patient"
+                    style={styles.statCardCompact}
+                  />
+                ) : null}
+              </View>
 
-      {bmiResult ? (
-        <View style={styles.resultStack}>
-          <View style={styles.statsRow}>
-            <StatCard
-              label="Body Mass Index (BMI)"
-              value={`${bmiResult.bmi.toFixed(1)}`}
-              subtext="kg/m²"
+              <View style={styles.classificationBox}>
+                <View style={styles.spreadRow}>
+                  <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
+                    Asia-Pacific Range (Philippines)
+                  </ThemedText>
+                  <Badge label={bmiResult.asiaPacific.label} variant={bmiResult.asiaPacific.tone} />
+                </View>
+                <View style={styles.spreadRow}>
+                  <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
+                    WHO Global Range
+                  </ThemedText>
+                  <Badge label={bmiResult.whoGlobal.label} variant={bmiResult.whoGlobal.tone} />
+                </View>
+              </View>
+            </View>
+          ) : (
+            <PreviewCard
               icon="scale"
-              style={styles.statCard}
+              title="BMI & Body Size Results"
+              subtitle="Updates automatically as soon as weight and height are entered."
+              bullets={[
+                'Body Mass Index with Asia-Pacific & WHO Global categories',
+                'Body Surface Area using Mosteller & Du Bois formulas',
+                'Ideal adult weight when sex is chosen',
+              ]}
             />
-            <StatCard
-              label="BSA (Mosteller)"
-              value={`${bmiResult.bsaMosteller.toFixed(2)} m²`}
-              subtext={`Du Bois: ${bmiResult.bsaDuBois.toFixed(2)} m²`}
-              icon="ruler"
-              style={styles.statCard}
-            />
-            {bmiResult.idealBodyWeightKg !== null ? (
-              <StatCard
-                label="Ideal Body Weight (Devine)"
-                value={`${bmiResult.idealBodyWeightKg.toFixed(1)} kg`}
-                subtext={bmiSex === 'male' ? 'Adult Male' : 'Adult Female'}
-                icon="patient"
-                style={styles.statCard}
-              />
-            ) : null}
-          </View>
-
-          <View style={styles.classificationBox}>
-            <View style={styles.spreadRow}>
-              <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
-                WHO Asia-Pacific (Philippines)
-              </ThemedText>
-              <Badge label={bmiResult.asiaPacific.label} variant={bmiResult.asiaPacific.tone} />
-            </View>
-            <View style={styles.spreadRow}>
-              <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
-                WHO Global Standard
-              </ThemedText>
-              <Badge label={bmiResult.whoGlobal.label} variant={bmiResult.whoGlobal.tone} />
-            </View>
-          </View>
-        </View>
-      ) : (
-        <EmptyState
-          icon="scale"
-          title="Enter weight and height"
-          description="Results update automatically with WHO Global, WHO Asia-Pacific, and Mosteller/Du Bois BSA values."
-        />
-      )}
+          )
+        }
+      />
     </Card>
   );
 
@@ -474,8 +508,8 @@ export default function ClinicalCalculatorsSection({
     return (
       <Card>
         <CardHeader
-          title="PHILPEN 10-Year CVD Risk Calculator"
-          subtitle="WHO/ISH & DOH PHILPEN protocol aligned with PhilHealth Yakap (lib_ncdq Q17) risk bands A–E."
+          title="Heart & Stroke Risk (PHILPEN)"
+          subtitle="DOH PHILPEN 10-year heart and stroke risk check (Bands A–E)."
           icon="heartPulse"
           rightAction={
             hasCvdInputs ? (
@@ -502,158 +536,193 @@ export default function ClinicalCalculatorsSection({
           }
         />
 
-        <View style={rowStyle}>
-          <View style={styles.flexFill}>
-            <Input
-              label="Age (years)"
-              placeholder="e.g. 56"
-              value={cvdAge}
-              onChangeText={setCvdAge}
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={styles.flexFill}>
-            <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.fieldLabel}>
-              Sex
-            </ThemedText>
-            <SegmentedControl
-              options={[
-                { value: 'Male', label: 'Male' },
-                { value: 'Female', label: 'Female' },
-              ]}
-              value={cvdSex}
-              onChange={setCvdSex}
-            />
-          </View>
-        </View>
-
-        <View style={rowStyle}>
-          <View style={styles.flexFill}>
-            <Input
-              label="Systolic BP (mmHg)"
-              placeholder="e.g. 140"
-              value={cvdSbp}
-              onChangeText={setCvdSbp}
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={styles.flexFill}>
-            <Input
-              label="Diastolic BP (mmHg)"
-              placeholder="e.g. 90"
-              value={cvdDbp}
-              onChangeText={setCvdDbp}
-              keyboardType="numeric"
-            />
-          </View>
-        </View>
-
-        <View style={rowStyle}>
-          <View style={styles.flexFill}>
-            <Input
-              label="Total Cholesterol (mg/dL)"
-              placeholder="Optional — falls back to BMI"
-              value={cvdCholesterol}
-              onChangeText={setCvdCholesterol}
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={styles.flexFill}>
-            <Input
-              label="BMI (kg/m²)"
-              placeholder="Used if no cholesterol lab"
-              value={cvdBmi}
-              onChangeText={setCvdBmi}
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={styles.flexFill}>
-            <Input
-              label="Fasting Blood Sugar (mg/dL)"
-              placeholder="Optional (≥126 flags DM)"
-              value={cvdFbs}
-              onChangeText={setCvdFbs}
-              keyboardType="numeric"
-            />
-          </View>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-            Risk Factors & Clinical Overrides
-          </ThemedText>
-          <View style={styles.chipRow}>
-            <ToggleChip label="Current smoker" active={cvdSmoker} onPress={() => setCvdSmoker((v) => !v)} />
-            <ToggleChip label="Diagnosed diabetes" active={cvdDiabetes} onPress={() => setCvdDiabetes((v) => !v)} />
-            <ToggleChip
-              label="Prior angina / heart attack"
-              active={cvdPriorAnginaMi}
-              danger
-              onPress={() => setCvdPriorAnginaMi((v) => !v)}
-            />
-            <ToggleChip
-              label="Prior stroke / TIA"
-              active={cvdPriorStrokeTia}
-              danger
-              onPress={() => setCvdPriorStrokeTia((v) => !v)}
-            />
-            <ToggleChip
-              label="Severe chest pain > 30 min"
-              active={cvdSevereChestPain}
-              danger
-              onPress={() => setCvdSevereChestPain((v) => !v)}
-            />
-            <ToggleChip
-              label="Transient neuro deficits"
-              active={cvdTransientNeuro}
-              danger
-              onPress={() => setCvdTransientNeuro((v) => !v)}
-            />
-          </View>
-        </View>
-
-        {philpenResult && bandInfo ? (
-          <View
-            style={[
-              styles.resultBox,
-              philpenResult.riskBand === 'BandE'
-                ? styles.resultBoxEmergency
-                : philpenResult.riskBand === 'BandD' || philpenResult.riskBand === 'BandC'
-                  ? styles.resultBoxWarning
-                  : styles.resultBoxValid,
-            ]}
-          >
-            <View style={styles.spreadRow}>
-              <View style={styles.resultHeader}>
-                <Badge label={bandInfo.label} variant={bandInfo.variant} />
-                <Badge label={`10-yr risk: ${philpenResult.calculatedScorePercent.toFixed(1)}% (${bandInfo.range})`} variant="neutral" size="sm" />
+        <CalculatorWorkbench
+          twoColumn={twoColWorkbench}
+          inputs={
+            <View style={styles.inputsStack}>
+              <View style={inputGroupStyle}>
+                <View style={inputCellStyle}>
+                  <Input
+                    label="Age (years)"
+                    placeholder="e.g. 56"
+                    value={cvdAge}
+                    onChangeText={setCvdAge}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={inputCellStyle}>
+                  <LabeledControl label="Sex">
+                    <SegmentedControl
+                      options={[
+                        { value: 'Male', label: 'Male' },
+                        { value: 'Female', label: 'Female' },
+                      ]}
+                      value={cvdSex}
+                      onChange={setCvdSex}
+                    />
+                  </LabeledControl>
+                </View>
               </View>
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                Score: {philpenResult.totalPoints} pts
-              </ThemedText>
+
+              <View style={inputGroupStyle}>
+                <View style={inputCellStyle}>
+                  <Input
+                    label="Systolic BP (mmHg)"
+                    placeholder="e.g. 140"
+                    value={cvdSbp}
+                    onChangeText={setCvdSbp}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={inputCellStyle}>
+                  <Input
+                    label="Diastolic BP (mmHg)"
+                    placeholder="e.g. 90"
+                    value={cvdDbp}
+                    onChangeText={setCvdDbp}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <View style={inputGroupStyle}>
+                <View style={inputCellStyle}>
+                  <Input
+                    label="Total Cholesterol (mg/dL)"
+                    placeholder="Optional (uses BMI)"
+                    value={cvdCholesterol}
+                    onChangeText={setCvdCholesterol}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={inputCellStyle}>
+                  <Input
+                    label="BMI (kg/m²)"
+                    placeholder="Used if cholesterol blank"
+                    value={cvdBmi}
+                    onChangeText={setCvdBmi}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={inputCellStyle}>
+                  <Input
+                    label="Fasting Blood Sugar (mg/dL)"
+                    placeholder="Optional (126+ = high)"
+                    value={cvdFbs}
+                    onChangeText={setCvdFbs}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  Risk Factors & History
+                </ThemedText>
+                <View style={styles.chipRow}>
+                  <ToggleChip label="Current smoker" active={cvdSmoker} onPress={() => setCvdSmoker((v) => !v)} />
+                  <ToggleChip label="Diagnosed diabetes" active={cvdDiabetes} onPress={() => setCvdDiabetes((v) => !v)} />
+                  <ToggleChip
+                    label="Prior angina / heart attack"
+                    active={cvdPriorAnginaMi}
+                    danger
+                    onPress={() => setCvdPriorAnginaMi((v) => !v)}
+                  />
+                  <ToggleChip
+                    label="Prior stroke / TIA"
+                    active={cvdPriorStrokeTia}
+                    danger
+                    onPress={() => setCvdPriorStrokeTia((v) => !v)}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.redFlagBox}>
+                <View style={styles.redFlagHeader}>
+                  <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+                  <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
+                    Urgent Warning Symptoms (Immediate Elevation)
+                  </ThemedText>
+                </View>
+                <View style={styles.chipRow}>
+                  <ToggleChip
+                    label="Severe chest pain > 30 min"
+                    active={cvdSevereChestPain}
+                    danger
+                    onPress={() => setCvdSevereChestPain((v) => !v)}
+                  />
+                  <ToggleChip
+                    label="Sudden weakness, numbness, or speech trouble"
+                    active={cvdTransientNeuro}
+                    danger
+                    onPress={() => setCvdTransientNeuro((v) => !v)}
+                  />
+                </View>
+              </View>
             </View>
+          }
+          results={
+            philpenResult && bandInfo ? (
+              <View
+                style={[
+                  styles.resultBox,
+                  philpenResult.riskBand === 'BandE'
+                    ? styles.resultBoxEmergency
+                    : philpenResult.riskBand === 'BandD' || philpenResult.riskBand === 'BandC'
+                      ? styles.resultBoxWarning
+                      : styles.resultBoxValid,
+                ]}
+              >
+                <View style={styles.spreadRow}>
+                  <Badge label={bandInfo.label} variant={bandInfo.variant} />
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                    Score: {philpenResult.totalPoints} pts
+                  </ThemedText>
+                </View>
 
-            {philpenResult.crisisOverrideApplied && philpenResult.overrideReason ? (
-              <ThemedText variant="smallBold" color={theme.colors.emergencyText}>
-                {philpenResult.overrideReason}
-              </ThemedText>
-            ) : null}
+                <View style={styles.statsRow}>
+                  <StatCard
+                    label="10-Year Risk Estimate"
+                    value={`${philpenResult.calculatedScorePercent.toFixed(1)}%`}
+                    subtext={`Range: ${bandInfo.range}`}
+                    icon="heartPulse"
+                    style={styles.statCardCompact}
+                  />
+                </View>
 
-            <ThemedText variant="small">{philpenResult.managementRecommendation}</ThemedText>
+                {philpenResult.crisisOverrideApplied && philpenResult.overrideReason ? (
+                  <ThemedText variant="smallBold" color={theme.colors.emergencyText}>
+                    {philpenResult.overrideReason}
+                  </ThemedText>
+                ) : null}
 
-            {philpenResult.usedBmiFallback ? (
-              <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Computed using WHO non-laboratory BMI fallback (no total cholesterol value entered).
-              </ThemedText>
-            ) : null}
-          </View>
-        ) : (
-          <EmptyState
-            icon="heartPulse"
-            title="Enter patient age, blood pressure, or CVD history"
-            description="Computes the statutory DOH PHILPEN 10-year cardiovascular risk band and management guidance."
-          />
-        )}
+                <View style={styles.recommendationBlock}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                    Recommended Next Steps
+                  </ThemedText>
+                  <ThemedText variant="small">{philpenResult.managementRecommendation}</ThemedText>
+                </View>
+
+                {philpenResult.usedBmiFallback ? (
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Estimated using BMI because total cholesterol was not entered.
+                  </ThemedText>
+                ) : null}
+              </View>
+            ) : (
+              <PreviewCard
+                icon="heartPulse"
+                title="10-Year Risk Band (A–E)"
+                subtitle="Enter patient age, blood pressure, or heart history on the left."
+                bullets={[
+                  'Scores 10-year heart attack and stroke risk from Band A (< 10%) to Band E (40%+)',
+                  'Automatically flags hypertensive crises and urgent warning symptoms',
+                  'Provides clear clinical follow-up guidance',
+                ]}
+              />
+            )
+          }
+        />
       </Card>
     );
   };
@@ -664,8 +733,8 @@ export default function ClinicalCalculatorsSection({
         <Card>
           <EmptyState
             icon="lock"
-            title="Clinical patient read permission required"
-            description="Pediatric Growth Z-Score lookup requires patients:read permission on the clinic server."
+            title="Access restricted"
+            description="Ask a clinic administrator to enable patient record access for your account."
           />
         </Card>
       );
@@ -674,172 +743,185 @@ export default function ClinicalCalculatorsSection({
     return (
       <Card>
         <CardHeader
-          title="Pediatric Growth Z-Score (WHO 0–59 Months)"
-          subtitle="Computes WHO Weight-for-Age, Length/Height-for-Age, and Weight-for-Length Z-scores using the clinic server tables."
+          title="Child Growth Check (WHO 0–59 Months)"
+          subtitle="WHO weight and height growth check for children aged 0–59 months."
           icon="baby"
+          rightAction={
+            zResult || zDob || zWeight || zLength ? (
+              <Button
+                title="Reset"
+                size="sm"
+                variant="ghost"
+                onPress={() => {
+                  setZDob('');
+                  setZWeight('');
+                  setZLength('');
+                  setZResult(null);
+                  setZError(null);
+                }}
+              />
+            ) : undefined
+          }
         />
 
-        <View style={rowStyle}>
-          <View style={styles.flexFill}>
-            <ValidatedDateInput
-              label="Date of birth"
-              placeholder="YYYY-MM-DD"
-              value={zDob}
-              onChangeText={(val) => {
-                setZDob(val);
-                setZError(null);
-              }}
-              boundaryMode="pastOrToday"
-            />
-          </View>
-          <View style={styles.flexFill}>
-            <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.fieldLabel}>
-              Sex
-            </ThemedText>
-            <SegmentedControl
-              options={[
-                { value: 'Male', label: 'Male' },
-                { value: 'Female', label: 'Female' },
-              ]}
-              value={zSex}
-              onChange={setZSex}
-            />
-          </View>
-        </View>
-
-        <View style={rowStyle}>
-          <View style={styles.flexFill}>
-            <Input
-              label="Weight (kg)"
-              placeholder="e.g. 10.4"
-              value={zWeight}
-              onChangeText={setZWeight}
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={styles.flexFill}>
-            <Input
-              label="Length / Height (cm)"
-              placeholder="e.g. 79.5"
-              value={zLength}
-              onChangeText={setZLength}
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={styles.flexFill}>
-            <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.fieldLabel}>
-              Posture
-            </ThemedText>
-            <SegmentedControl
-              options={[
-                { value: 'recumbent', label: 'Recumbent (<2y)' },
-                { value: 'standing', label: 'Standing (≥2y)' },
-              ]}
-              value={zPosture}
-              onChange={setZPosture}
-            />
-          </View>
-        </View>
-
-        <View style={styles.actionsRow}>
-          <Button
-            title="Calculate WHO Z-Score"
-            icon="calculator"
-            variant="primary"
-            loading={zLoading}
-            onPress={handleCalculateZScore}
-          />
-          {zResult || zDob || zWeight || zLength ? (
-            <Button
-              title="Reset"
-              variant="ghost"
-              onPress={() => {
-                setZDob('');
-                setZWeight('');
-                setZLength('');
-                setZResult(null);
-                setZError(null);
-              }}
-            />
-          ) : null}
-        </View>
-
-        {zLoading ? (
-          <SkeletonList rows={3} rowHeight={theme.sizes.controlMd} />
-        ) : zError ? (
-          <ErrorState
-            compact
-            title="Unable to compute Z-Score"
-            message={zError}
-            onRetry={handleCalculateZScore}
-          />
-        ) : zResult ? (
-          <View style={styles.resultStack}>
-            <View style={styles.statsRow}>
-              <StatCard
-                label="Age"
-                value={`${zResult.ageInMonths} mo`}
-                subtext={`Adjusted len: ${zResult.adjustedLengthHeightCm.toFixed(1)} cm`}
-                icon="baby"
-                style={styles.statCard}
-              />
-              {zResult.weightForAgeZScore !== undefined ? (
-                <StatCard
-                  label="Weight-for-Age (WAZ)"
-                  value={zResult.weightForAgeZScore.toFixed(2)}
-                  subtext="SD"
-                  icon="scale"
-                  style={styles.statCard}
-                />
-              ) : null}
-              {zResult.heightForAgeZScore !== undefined ? (
-                <StatCard
-                  label="Height-for-Age (HAZ)"
-                  value={zResult.heightForAgeZScore.toFixed(2)}
-                  subtext="SD"
-                  icon="ruler"
-                  style={styles.statCard}
-                />
-              ) : null}
-              {zResult.weightForHeightZScore !== undefined ? (
-                <StatCard
-                  label="Weight-for-Height (WHZ)"
-                  value={zResult.weightForHeightZScore.toFixed(2)}
-                  subtext="SD"
-                  icon="activity"
-                  style={styles.statCard}
-                />
-              ) : null}
-            </View>
-
-            <View style={styles.classificationBox}>
-              <View style={styles.spreadRow}>
-                <ThemedText variant="bodyBold">WHO / PhilHealth Assessment</ThemedText>
-                {zResult.philHealthZScoreCategory ? (
-                  <Badge
-                    label={
-                      zResult.philHealthZScoreCode
-                        ? `${zResult.philHealthZScoreCategory} (${zResult.philHealthZScoreCode})`
-                        : zResult.philHealthZScoreCategory
-                    }
-                    variant={zScoreTone(zResult.weightForHeightZScore ?? zResult.weightForAgeZScore)}
+        <CalculatorWorkbench
+          twoColumn={twoColWorkbench}
+          inputs={
+            <View style={styles.inputsStack}>
+              <View style={inputGroupStyle}>
+                <View style={inputCellStyle}>
+                  <ValidatedDateInput
+                    label="Date of birth"
+                    placeholder="YYYY-MM-DD"
+                    value={zDob}
+                    onChangeText={(val) => {
+                      setZDob(val);
+                      setZError(null);
+                    }}
+                    boundaryMode="pastOrToday"
                   />
-                ) : null}
+                </View>
+                <View style={inputCellStyle}>
+                  <LabeledControl label="Sex">
+                    <SegmentedControl
+                      options={[
+                        { value: 'Male', label: 'Male' },
+                        { value: 'Female', label: 'Female' },
+                      ]}
+                      value={zSex}
+                      onChange={setZSex}
+                    />
+                  </LabeledControl>
+                </View>
               </View>
-              {zResult.interpretation ? (
-                <ThemedText variant="small" color={theme.colors.textSecondary}>
-                  {zResult.interpretation}
-                </ThemedText>
-              ) : null}
+
+              <View style={inputGroupStyle}>
+                <View style={inputCellStyle}>
+                  <Input
+                    label="Weight (kg)"
+                    placeholder="e.g. 10.4"
+                    value={zWeight}
+                    onChangeText={setZWeight}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={inputCellStyle}>
+                  <Input
+                    label="Length / Height (cm)"
+                    placeholder="e.g. 79.5"
+                    value={zLength}
+                    onChangeText={setZLength}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <LabeledControl label="Measurement Position">
+                <SegmentedControl
+                  options={[
+                    { value: 'recumbent', label: 'Lying down (< 2 yrs)' },
+                    { value: 'standing', label: 'Standing (2+ yrs)' },
+                  ]}
+                  value={zPosture}
+                  onChange={setZPosture}
+                />
+              </LabeledControl>
+
+              <View style={styles.actionsRow}>
+                <Button
+                  title="Check Child Growth"
+                  icon="calculator"
+                  variant="primary"
+                  loading={zLoading}
+                  onPress={handleCalculateZScore}
+                />
+              </View>
             </View>
-          </View>
-        ) : (
-          <EmptyState
-            icon="baby"
-            title="Ready to assess child growth"
-            description="Enter date of birth, weight, and length/height to calculate WHO Z-scores and PhilHealth classification."
-          />
-        )}
+          }
+          results={
+            zLoading ? (
+              <SkeletonList rows={3} rowHeight={theme.sizes.controlMd} />
+            ) : zError ? (
+              <ErrorState
+                compact
+                title="Unable to check child growth"
+                message={zError}
+                onRetry={handleCalculateZScore}
+              />
+            ) : zResult ? (
+              <View style={styles.resultStack}>
+                <View style={styles.statsRow}>
+                  <StatCard
+                    label="Child Age"
+                    value={`${zResult.ageInMonths} mo`}
+                    subtext={`Adjusted length/height: ${zResult.adjustedLengthHeightCm.toFixed(1)} cm`}
+                    icon="baby"
+                    style={styles.statCardCompact}
+                  />
+                  {zResult.weightForAgeZScore !== undefined ? (
+                    <StatCard
+                      label="Weight-for-Age"
+                      value={zResult.weightForAgeZScore.toFixed(2)}
+                      subtext="Z-score (SD)"
+                      icon="scale"
+                      style={styles.statCardCompact}
+                    />
+                  ) : null}
+                  {zResult.heightForAgeZScore !== undefined ? (
+                    <StatCard
+                      label="Length/Height-for-Age"
+                      value={zResult.heightForAgeZScore.toFixed(2)}
+                      subtext="Z-score (SD)"
+                      icon="ruler"
+                      style={styles.statCardCompact}
+                    />
+                  ) : null}
+                  {zResult.weightForHeightZScore !== undefined ? (
+                    <StatCard
+                      label="Weight-for-Length/Height"
+                      value={zResult.weightForHeightZScore.toFixed(2)}
+                      subtext="Z-score (SD)"
+                      icon="activity"
+                      style={styles.statCardCompact}
+                    />
+                  ) : null}
+                </View>
+
+                <View style={styles.classificationBox}>
+                  <View style={styles.spreadRow}>
+                    <ThemedText variant="bodyBold">Growth Classification</ThemedText>
+                    {zResult.philHealthZScoreCategory ? (
+                      <Badge
+                        label={
+                          zResult.philHealthZScoreCode
+                            ? `${zResult.philHealthZScoreCategory} (${zResult.philHealthZScoreCode})`
+                            : zResult.philHealthZScoreCategory
+                        }
+                        variant={zScoreTone(zResult.weightForHeightZScore ?? zResult.weightForAgeZScore)}
+                      />
+                    ) : null}
+                  </View>
+                  {zResult.interpretation ? (
+                    <ThemedText variant="small" color={theme.colors.textSecondary}>
+                      {zResult.interpretation}
+                    </ThemedText>
+                  ) : null}
+                </View>
+              </View>
+            ) : (
+              <PreviewCard
+                icon="baby"
+                title="WHO Growth Assessment"
+                subtitle="Enter date of birth, weight, and height, then tap Check Child Growth."
+                bullets={[
+                  'Weight-for-Age, Height-for-Age, and Weight-for-Height percentiles',
+                  'Automatic length adjustment based on lying or standing posture',
+                  'Official WHO & PhilHealth growth classification',
+                ]}
+              />
+            )
+          }
+        />
       </Card>
     );
   };
@@ -847,8 +929,8 @@ export default function ClinicalCalculatorsSection({
   const renderObEdd = () => (
     <Card>
       <CardHeader
-        title="OB Estimated Due Date (EDD) & Gestational Age (AOG)"
-        subtitle="Naegele’s rule with menstrual cycle adjustment, trimester tracking, and key prenatal milestones."
+        title="Pregnancy Due Date & Weeks (EDD / AOG)"
+        subtitle="Estimates due date, weeks pregnant, trimester, and checkup milestones based on last period."
         icon="calendar"
         rightAction={
           lmpDate ? (
@@ -866,410 +948,491 @@ export default function ClinicalCalculatorsSection({
         }
       />
 
-      <View style={rowStyle}>
-        <View style={styles.flexFill}>
-          <ValidatedDateInput
-            label="Last Menstrual Period (LMP)"
-            placeholder="YYYY-MM-DD"
-            value={lmpDate}
-            onChangeText={setLmpDate}
-            boundaryMode="pastOrToday"
-          />
-        </View>
-        <View style={styles.flexFill}>
-          <Input
-            label="Cycle length (days)"
-            placeholder="28"
-            value={cycleLength}
-            onChangeText={setCycleLength}
-            keyboardType="numeric"
-          />
-        </View>
-        <View style={styles.flexFill}>
-          <ValidatedDateInput
-            label="Reference date"
-            placeholder="YYYY-MM-DD"
-            value={refDate}
-            onChangeText={setRefDate}
-            boundaryMode="any"
-          />
-        </View>
-      </View>
-
-      {obResult ? (
-        <View style={styles.resultStack}>
-          <View style={styles.statsRow}>
-            <StatCard
-              label="Estimated Due Date (EDD)"
-              value={obResult.eddDateStr}
-              subtext={
-                obResult.daysRemaining >= 0
-                  ? `${obResult.daysRemaining} days remaining`
-                  : `${Math.abs(obResult.daysRemaining)} days past EDD`
-              }
-              icon="calendar"
-              style={styles.statCard}
+      <CalculatorWorkbench
+        twoColumn={twoColWorkbench}
+        inputs={
+          <View style={styles.inputsStack}>
+            <ValidatedDateInput
+              label="Last Menstrual Period (LMP)"
+              placeholder="YYYY-MM-DD"
+              value={lmpDate}
+              onChangeText={setLmpDate}
+              boundaryMode="pastOrToday"
             />
-            <StatCard
-              label="Gestational Age (AOG)"
-              value={obResult.aogFormatted}
-              subtext={`${obResult.aogTotalDays} total days`}
-              icon="clock"
-              style={styles.statCard}
-            />
-            <StatCard
-              label="Estimated Conception"
-              value={obResult.conceptionDateStr}
-              subtext={`${obResult.cycleLengthDays}-day cycle`}
-              icon="heartPulse"
-              style={styles.statCard}
-            />
-          </View>
-
-          <View style={styles.classificationBox}>
-            <View style={styles.spreadRow}>
-              <ThemedText variant="bodyBold">Pregnancy Progress ({obResult.progressPercent}%)</ThemedText>
-              <Badge label={obResult.trimesterLabel} variant={obResult.trimesterTone} />
-            </View>
-            <ProgressBar progress={obResult.progressPercent} color={theme.colors.primary} />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <ThemedText variant="bodyBold">Prenatal Milestones</ThemedText>
-            {obResult.milestones.map((m) => (
-              <View key={m.weeks} style={styles.listRow}>
-                <View style={styles.flexFill}>
-                  <ThemedText variant="bodyBold">
-                    Week {m.weeks} · {m.label}
-                  </ThemedText>
-                </View>
-                <View style={styles.milestoneEnd}>
-                  <ThemedText variant="smallBold">{m.dateStr}</ThemedText>
-                  <Badge
-                    label={m.reached ? 'Reached' : 'Upcoming'}
-                    variant={m.reached ? 'success' : 'neutral'}
-                    size="sm"
-                  />
-                </View>
+            <View style={inputGroupStyle}>
+              <View style={inputCellStyle}>
+                <Input
+                  label="Cycle length (days)"
+                  placeholder="28"
+                  value={cycleLength}
+                  onChangeText={setCycleLength}
+                  keyboardType="numeric"
+                />
               </View>
-            ))}
-          </View>
-        </View>
-      ) : (
-        <EmptyState
-          icon="calendar"
-          title="Enter Last Menstrual Period (LMP)"
-          description="Automatically computes EDD, current AOG in weeks and days, trimester, and target milestone dates."
-        />
-      )}
-    </Card>
-  );
-
-  const renderDosingAndEgfr = () => (
-    <View style={styles.resultStack}>
-      <SegmentedControl
-        options={[
-          { value: 'pediatric', label: 'Pediatric Weight-Based Dosing', icon: 'syringe' },
-          { value: 'egfr', label: 'Renal Function (CKD-EPI 2021 & CrCl)', icon: 'droplet' },
-        ]}
-        value={dosingSubMode}
-        onChange={setDosingSubMode}
-      />
-
-      {dosingSubMode === 'pediatric' ? (
-        <Card>
-          <CardHeader
-            title="Pediatric Weight-Based Dosing Calculator"
-            subtitle="Compute single dose and daily total in mg and suspension mL with max daily cap checks."
-            icon="syringe"
-            rightAction={
-              doseWeight || doseMgPerKg ? (
-                <Button
-                  title="Reset"
-                  size="sm"
-                  variant="ghost"
-                  onPress={() => {
-                    setDoseWeight('');
-                    setDoseMgPerKg('');
-                    setMaxDailyMg('');
-                    setActivePresetNote(null);
-                  }}
-                />
-              ) : undefined
-            }
-          />
-
-          <View style={styles.fieldGroup}>
-            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-              Quick Reference Presets (Clinician to Verify Indication)
-            </ThemedText>
-            <View style={styles.chipRow}>
-              {PEDIATRIC_DOSE_PRESETS.map((preset) => (
-                <Button
-                  key={preset.id}
-                  size="sm"
-                  variant="secondary"
-                  title={preset.label}
-                  onPress={() => {
-                    setDoseMgPerKg(String(preset.doseMgPerKg));
-                    setDoseMode(preset.mode);
-                    setDosesPerDay(String(preset.dosesPerDay) as '1' | '2' | '3' | '4');
-                    setConcMg(String(preset.concentrationMg));
-                    setConcMl(String(preset.concentrationMl));
-                    setMaxDailyMg(String(preset.maxDailyDoseMg));
-                    setActivePresetNote(preset.note);
-                  }}
-                />
-              ))}
-            </View>
-            {activePresetNote ? (
-              <ThemedText variant="caption" color={theme.colors.textMuted}>
-                {activePresetNote}
-              </ThemedText>
-            ) : null}
-          </View>
-
-          <View style={rowStyle}>
-            <View style={styles.flexFill}>
-              <Input
-                label="Child weight (kg)"
-                placeholder="e.g. 14"
-                value={doseWeight}
-                onChangeText={setDoseWeight}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={styles.flexFill}>
-              <Input
-                label={doseMode === 'perDay' ? 'Target dose (mg/kg/day)' : 'Target dose (mg/kg/dose)'}
-                placeholder="e.g. 45"
-                value={doseMgPerKg}
-                onChangeText={setDoseMgPerKg}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
-
-          <View style={styles.controlsRow}>
-            <SegmentedControl
-              options={[
-                { value: 'perDay', label: 'mg/kg/day (divided)' },
-                { value: 'perDose', label: 'mg/kg/dose' },
-              ]}
-              value={doseMode}
-              onChange={setDoseMode}
-            />
-            <SegmentedControl
-              options={[
-                { value: '1', label: 'OD (q24h)' },
-                { value: '2', label: 'BID (q12h)' },
-                { value: '3', label: 'TID (q8h)' },
-                { value: '4', label: 'QID (q6h)' },
-              ]}
-              value={dosesPerDay}
-              onChange={setDosesPerDay}
-            />
-          </View>
-
-          <View style={rowStyle}>
-            <View style={styles.flexFill}>
-              <Input
-                label="Suspension strength (mg)"
-                placeholder="e.g. 250"
-                value={concMg}
-                onChangeText={setConcMg}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={styles.flexFill}>
-              <Input
-                label="Per volume (mL)"
-                placeholder="e.g. 5"
-                value={concMl}
-                onChangeText={setConcMl}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={styles.flexFill}>
-              <Input
-                label="Max daily cap (mg/day)"
-                placeholder="Optional safety cap"
-                value={maxDailyMg}
-                onChangeText={setMaxDailyMg}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
-
-          {pediatricDoseResult ? (
-            <View style={styles.resultStack}>
-              {pediatricDoseResult.exceedsMaxDaily ? (
-                <View style={[styles.resultBox, styles.resultBoxEmergency]}>
-                  <View style={styles.resultHeader}>
-                    <Badge label="Exceeds Max Daily Dose" variant="emergency" icon="alertCircle" />
-                  </View>
-                  <ThemedText variant="small" color={theme.colors.emergencyText}>
-                    Calculated daily total ({pediatricDoseResult.dailyTotalMg} mg/day) exceeds the cap (
-                    {pediatricDoseResult.cappedDailyTotalMg} mg/day). Capped single dose:{' '}
-                    {pediatricDoseResult.cappedSingleDoseMg} mg
-                    {pediatricDoseResult.cappedSingleDoseMl !== null
-                      ? ` (${pediatricDoseResult.cappedSingleDoseMl} mL)`
-                      : ''}{' '}
-                    every {pediatricDoseResult.intervalHours}h.
-                  </ThemedText>
-                </View>
-              ) : null}
-
-              <View style={styles.statsRow}>
-                <StatCard
-                  label={`Single Dose (q${pediatricDoseResult.intervalHours}h)`}
-                  value={`${pediatricDoseResult.singleDoseMg} mg`}
-                  subtext={
-                    pediatricDoseResult.singleDoseMl !== null
-                      ? `${pediatricDoseResult.singleDoseMl} mL per dose`
-                      : `${pediatricDoseResult.dosesPerDay}x daily`
-                  }
-                  icon="syringe"
-                  style={styles.statCard}
-                />
-                <StatCard
-                  label="Total Daily Dose"
-                  value={`${pediatricDoseResult.dailyTotalMg} mg/day`}
-                  subtext={
-                    pediatricDoseResult.dailyTotalMl !== null
-                      ? `${pediatricDoseResult.dailyTotalMl} mL / day`
-                      : `${pediatricDoseResult.dosesPerDay} doses / day`
-                  }
-                  icon="pill"
-                  style={styles.statCard}
+              <View style={inputCellStyle}>
+                <ValidatedDateInput
+                  label="Reference date"
+                  placeholder="YYYY-MM-DD"
+                  value={refDate}
+                  onChangeText={setRefDate}
+                  boundaryMode="any"
                 />
               </View>
             </View>
-          ) : (
-            <EmptyState
-              icon="syringe"
-              title="Enter weight and target mg/kg dose"
-              description="Or tap a quick reference preset above, then enter the child’s weight in kg."
-            />
-          )}
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader
-            title="Renal Function: CKD-EPI 2021 eGFR & Cockcroft-Gault CrCl"
-            subtitle="Race-free CKD-EPI 2021 equation for adult CKD staging (≥18y) plus Cockcroft-Gault CrCl for drug dosing."
-            icon="droplet"
-            rightAction={
-              scrValue || renalAge || renalWeight ? (
-                <Button
-                  title="Reset"
-                  size="sm"
-                  variant="ghost"
-                  onPress={() => {
-                    setScrValue('');
-                    setRenalAge('');
-                    setRenalWeight('');
-                  }}
-                />
-              ) : undefined
-            }
-          />
-
-          <View style={styles.controlsRow}>
-            <SegmentedControl
-              options={[
-                { value: 'mg/dL', label: 'Serum Cr (mg/dL)' },
-                { value: 'umol/L', label: 'Serum Cr (µmol/L)' },
-              ]}
-              value={scrUnit}
-              onChange={setScrUnit}
-            />
-            <SegmentedControl
-              options={[
-                { value: 'male', label: 'Male' },
-                { value: 'female', label: 'Female' },
-              ]}
-              value={renalSex}
-              onChange={setRenalSex}
-            />
           </View>
-
-          <View style={rowStyle}>
-            <View style={styles.flexFill}>
-              <Input
-                label={`Serum Creatinine (${scrUnit})`}
-                placeholder={scrUnit === 'mg/dL' ? 'e.g. 1.1' : 'e.g. 97'}
-                value={scrValue}
-                onChangeText={setScrValue}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={styles.flexFill}>
-              <Input
-                label="Age (years, ≥18)"
-                placeholder="e.g. 54"
-                value={renalAge}
-                onChangeText={setRenalAge}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={styles.flexFill}>
-              <Input
-                label="Weight (kg, optional for CrCl)"
-                placeholder="e.g. 68"
-                value={renalWeight}
-                onChangeText={setRenalWeight}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
-
-          {renalResult ? (
+        }
+        results={
+          obResult ? (
             <View style={styles.resultStack}>
               <View style={styles.statsRow}>
                 <StatCard
-                  label="eGFR (CKD-EPI 2021)"
-                  value={`${renalResult.egfrCkdEpi2021}`}
-                  subtext="mL/min/1.73 m²"
-                  icon="droplet"
-                  style={styles.statCard}
+                  label="Estimated Due Date (EDD)"
+                  value={obResult.eddDateStr}
+                  subtext={
+                    obResult.daysRemaining >= 0
+                      ? `${obResult.daysRemaining} days remaining`
+                      : `${Math.abs(obResult.daysRemaining)} days past due date`
+                  }
+                  icon="calendar"
+                  style={styles.statCardCompact}
                 />
-                {renalResult.cockcroftGaultCrCl !== null ? (
-                  <StatCard
-                    label="Cockcroft-Gault CrCl"
-                    value={`${renalResult.cockcroftGaultCrCl}`}
-                    subtext="mL/min (for renal dosing)"
-                    icon="activity"
-                    style={styles.statCard}
-                  />
-                ) : null}
+                <StatCard
+                  label="Weeks Pregnant (AOG)"
+                  value={obResult.aogFormatted}
+                  subtext={`${obResult.aogTotalDays} total days`}
+                  icon="clock"
+                  style={styles.statCardCompact}
+                />
+                <StatCard
+                  label="Estimated Conception"
+                  value={obResult.conceptionDateStr}
+                  subtext={`${obResult.cycleLengthDays}-day cycle`}
+                  icon="heartPulse"
+                  style={styles.statCardCompact}
+                />
               </View>
 
               <View style={styles.classificationBox}>
                 <View style={styles.spreadRow}>
-                  <ThemedText variant="bodyBold">KDIGO GFR Category</ThemedText>
-                  <Badge
-                    label={`${renalResult.kdigoStage} · ${renalResult.kdigoLabel}`}
-                    variant={renalResult.kdigoTone}
-                  />
+                  <ThemedText variant="bodyBold">Pregnancy Progress ({obResult.progressPercent}%)</ThemedText>
+                  <Badge label={obResult.trimesterLabel} variant={obResult.trimesterTone} />
                 </View>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Normalized Serum Creatinine: {renalResult.creatinineMgDl.toFixed(2)} mg/dL. Confirm chronicity
-                  (&gt;3 months) and albuminuria for formal CKD staging.
-                </ThemedText>
+                <ProgressBar progress={obResult.progressPercent} color={theme.colors.primary} />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <ThemedText variant="bodyBold">Prenatal Milestones</ThemedText>
+                {obResult.milestones.map((m) => (
+                  <View key={m.weeks} style={styles.listRow}>
+                    <View style={styles.flexFill}>
+                      <ThemedText variant="smallBold">
+                        Week {m.weeks} · {m.label}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.milestoneEnd}>
+                      <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                        {m.dateStr}
+                      </ThemedText>
+                      <Badge
+                        label={m.reached ? 'Reached' : 'Upcoming'}
+                        variant={m.reached ? 'success' : 'neutral'}
+                        size="xs"
+                      />
+                    </View>
+                  </View>
+                ))}
               </View>
             </View>
           ) : (
-            <EmptyState
-              icon="droplet"
-              title="Enter serum creatinine and adult age (≥18)"
-              description="Add body weight to simultaneously estimate Cockcroft-Gault creatinine clearance."
+            <PreviewCard
+              icon="calendar"
+              title="Due Date & Prenatal Timeline"
+              subtitle="Enter the Last Menstrual Period (LMP) date to calculate."
+              bullets={[
+                'Estimated due date adjusted for cycle length',
+                'Current gestational age in weeks and days plus trimester badge',
+                'Key prenatal checkup and ultrasound scan dates',
+              ]}
             />
-          )}
-        </Card>
-      )}
-    </View>
+          )
+        }
+      />
+    </Card>
   );
+
+  const renderDosingAndEgfr = () => {
+    const hasPediatricInputs = Boolean(doseWeight || doseMgPerKg || maxDailyMg);
+    const hasRenalInputs = Boolean(scrValue || renalAge || renalWeight);
+
+    const handleResetDosing = () => {
+      if (dosingSubMode === 'pediatric') {
+        setDoseWeight('');
+        setDoseMgPerKg('');
+        setMaxDailyMg('');
+        setSelectedPresetId(null);
+        setActivePresetNote(null);
+      } else {
+        setScrValue('');
+        setRenalAge('');
+        setRenalWeight('');
+      }
+    };
+
+    const showReset = dosingSubMode === 'pediatric' ? hasPediatricInputs : hasRenalInputs;
+
+    return (
+      <Card>
+        <CardHeader
+          title={
+            dosingSubMode === 'pediatric'
+              ? 'Child Weight-Based Dosing'
+              : 'Adult Kidney Function (eGFR & CrCl)'
+          }
+          subtitle={
+            dosingSubMode === 'pediatric'
+              ? 'Calculate single dose and daily total in mg and liquid mL, with daily safety limit checks.'
+              : 'Estimates kidney filtration (eGFR) and drug-dosing clearance (ages 18+).'
+          }
+          icon={dosingSubMode === 'pediatric' ? 'syringe' : 'droplet'}
+          rightAction={
+            <View style={styles.headerToolbarActions}>
+              <SegmentedControl
+                options={[
+                  { value: 'pediatric', label: 'Child Dosing', icon: 'syringe' },
+                  { value: 'egfr', label: 'Adult Kidney', icon: 'droplet' },
+                ]}
+                value={dosingSubMode}
+                onChange={setDosingSubMode}
+              />
+              {showReset ? (
+                <Button title="Reset" size="sm" variant="ghost" onPress={handleResetDosing} />
+              ) : null}
+            </View>
+          }
+        />
+
+        {dosingSubMode === 'pediatric' ? (
+          <CalculatorWorkbench
+            twoColumn={twoColWorkbench}
+            inputs={
+              <View style={styles.inputsStack}>
+                <View style={styles.fieldGroup}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                    Common Medicine Presets (Confirm before prescribing)
+                  </ThemedText>
+                  <View style={styles.presetGrid}>
+                    {PEDIATRIC_DOSE_PRESETS.map((preset) => {
+                      const display = PRESET_DISPLAY_META[preset.id];
+                      const isSelected = selectedPresetId === preset.id;
+                      return (
+                        <Pressable
+                          key={preset.id}
+                          onPress={() => {
+                            setDoseMgPerKg(String(preset.doseMgPerKg));
+                            setDoseMode(preset.mode);
+                            setDosesPerDay(String(preset.dosesPerDay) as '1' | '2' | '3' | '4');
+                            setConcMg(String(preset.concentrationMg));
+                            setConcMl(String(preset.concentrationMl));
+                            setMaxDailyMg(String(preset.maxDailyDoseMg));
+                            setSelectedPresetId(preset.id);
+                            setActivePresetNote(preset.note);
+                          }}
+                          accessibilityRole="button"
+                          style={(state: HoverState) => [
+                            styles.presetChip,
+                            isSelected && styles.presetChipActive,
+                            !isSelected && state.hovered && styles.presetChipHover,
+                            state.pressed && styles.presetChipPressed,
+                          ]}
+                        >
+                          <ThemedText
+                            variant="smallBold"
+                            color={isSelected ? theme.colors.primaryDark : theme.colors.text}
+                          >
+                            {display?.name ?? preset.label}
+                          </ThemedText>
+                          <ThemedText
+                            variant="caption"
+                            color={isSelected ? theme.colors.primaryDark : theme.colors.textMuted}
+                          >
+                            {display?.schedule ?? ''}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {activePresetNote ? (
+                    <View style={styles.presetNoteBox}>
+                      <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                      <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flexFill}>
+                        {activePresetNote}
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={inputGroupStyle}>
+                  <View style={inputCellStyle}>
+                    <Input
+                      label="Child weight (kg)"
+                      placeholder="e.g. 14"
+                      value={doseWeight}
+                      onChangeText={setDoseWeight}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={inputCellStyle}>
+                    <Input
+                      label={doseMode === 'perDay' ? 'Target dose (mg/kg/day)' : 'Target dose (mg/kg/dose)'}
+                      placeholder="e.g. 45"
+                      value={doseMgPerKg}
+                      onChangeText={(val) => {
+                        setDoseMgPerKg(val);
+                        setSelectedPresetId(null);
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.controlsRow}>
+                  <LabeledControl label="Dose Type">
+                    <SegmentedControl
+                      options={[
+                        { value: 'perDay', label: 'mg/kg/day (daily total)' },
+                        { value: 'perDose', label: 'mg/kg/dose (each)' },
+                      ]}
+                      value={doseMode}
+                      onChange={setDoseMode}
+                    />
+                  </LabeledControl>
+                  <LabeledControl label="Schedule">
+                    <SegmentedControl
+                      options={[
+                        { value: '1', label: 'Once daily (24h)' },
+                        { value: '2', label: 'Twice daily (12h)' },
+                        { value: '3', label: '3x daily (8h)' },
+                        { value: '4', label: '4x daily (6h)' },
+                      ]}
+                      value={dosesPerDay}
+                      onChange={(val) => {
+                        setDosesPerDay(val);
+                        setSelectedPresetId(null);
+                      }}
+                    />
+                  </LabeledControl>
+                </View>
+
+                <View style={inputGroupStyle}>
+                  <View style={styles.concentrationGroup}>
+                    <View style={styles.concentrationInput}>
+                      <Input
+                        label="Medicine strength (mg)"
+                        placeholder="e.g. 250"
+                        value={concMg}
+                        onChangeText={setConcMg}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={styles.slashDivider}>
+                      <ThemedText variant="h3" color={theme.colors.textMuted}>
+                        /
+                      </ThemedText>
+                    </View>
+                    <View style={styles.concentrationInput}>
+                      <Input
+                        label="Liquid volume (mL)"
+                        placeholder="e.g. 5"
+                        value={concMl}
+                        onChangeText={setConcMl}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                  <View style={inputCellStyle}>
+                    <Input
+                      label="Daily safety limit (mg/day)"
+                      placeholder="Optional daily max"
+                      value={maxDailyMg}
+                      onChangeText={setMaxDailyMg}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+              </View>
+            }
+            results={
+              pediatricDoseResult ? (
+                <View style={styles.resultStack}>
+                  {pediatricDoseResult.exceedsMaxDaily ? (
+                    <View style={[styles.resultBox, styles.resultBoxEmergency]}>
+                      <View style={styles.resultHeader}>
+                        <Badge label="Exceeds Daily Safety Limit" variant="emergency" icon="alertCircle" />
+                      </View>
+                      <ThemedText variant="small" color={theme.colors.emergencyText}>
+                        Calculated daily total ({pediatricDoseResult.dailyTotalMg} mg/day) exceeds the limit (
+                        {pediatricDoseResult.cappedDailyTotalMg} mg/day). Capped single dose:{' '}
+                        {pediatricDoseResult.cappedSingleDoseMg} mg
+                        {pediatricDoseResult.cappedSingleDoseMl !== null
+                          ? ` (${pediatricDoseResult.cappedSingleDoseMl} mL)`
+                          : ''}{' '}
+                        every {pediatricDoseResult.intervalHours}h.
+                      </ThemedText>
+                    </View>
+                  ) : null}
+
+                  <View style={styles.statsRow}>
+                    <StatCard
+                      label={`Single Dose (every ${pediatricDoseResult.intervalHours}h)`}
+                      value={`${pediatricDoseResult.singleDoseMg} mg`}
+                      subtext={
+                        pediatricDoseResult.singleDoseMl !== null
+                          ? `${pediatricDoseResult.singleDoseMl} mL per dose`
+                          : `${pediatricDoseResult.dosesPerDay}x daily`
+                      }
+                      icon="syringe"
+                      style={styles.statCardCompact}
+                    />
+                    <StatCard
+                      label="Total Daily Dose"
+                      value={`${pediatricDoseResult.dailyTotalMg} mg/day`}
+                      subtext={
+                        pediatricDoseResult.dailyTotalMl !== null
+                          ? `${pediatricDoseResult.dailyTotalMl} mL / day`
+                          : `${pediatricDoseResult.dosesPerDay} doses / day`
+                      }
+                      icon="pill"
+                      style={styles.statCardCompact}
+                    />
+                  </View>
+                </View>
+              ) : (
+                <PreviewCard
+                  icon="syringe"
+                  title="Weight-Based Dose Results"
+                  subtitle="Pick a medicine preset or enter target dose and child weight."
+                  bullets={[
+                    'Exact single dose in mg and liquid volume in mL',
+                    'Total daily medicine amount matched to your schedule',
+                    'Automatic safety alert if daily max dose is exceeded',
+                  ]}
+                />
+              )
+            }
+          />
+        ) : (
+          <CalculatorWorkbench
+            twoColumn={twoColWorkbench}
+            inputs={
+              <View style={styles.inputsStack}>
+                <View style={styles.controlsRow}>
+                  <LabeledControl label="Creatinine Unit">
+                    <SegmentedControl
+                      options={[
+                        { value: 'mg/dL', label: 'mg/dL' },
+                        { value: 'umol/L', label: 'µmol/L' },
+                      ]}
+                      value={scrUnit}
+                      onChange={setScrUnit}
+                    />
+                  </LabeledControl>
+                  <LabeledControl label="Sex">
+                    <SegmentedControl
+                      options={[
+                        { value: 'male', label: 'Male' },
+                        { value: 'female', label: 'Female' },
+                      ]}
+                      value={renalSex}
+                      onChange={setRenalSex}
+                    />
+                  </LabeledControl>
+                </View>
+
+                <View style={inputGroupStyle}>
+                  <View style={inputCellStyle}>
+                    <Input
+                      label={`Serum Creatinine (${scrUnit})`}
+                      placeholder={scrUnit === 'mg/dL' ? 'e.g. 1.1' : 'e.g. 97'}
+                      value={scrValue}
+                      onChangeText={setScrValue}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={inputCellStyle}>
+                    <Input
+                      label="Age (years, 18+)"
+                      placeholder="e.g. 54"
+                      value={renalAge}
+                      onChangeText={setRenalAge}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={inputCellStyle}>
+                    <Input
+                      label="Weight (kg, optional)"
+                      placeholder="For CrCl dosing"
+                      value={renalWeight}
+                      onChangeText={setRenalWeight}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+              </View>
+            }
+            results={
+              renalResult ? (
+                <View style={styles.resultStack}>
+                  <View style={styles.statsRow}>
+                    <StatCard
+                      label="Kidney Filtration (eGFR)"
+                      value={`${renalResult.egfrCkdEpi2021}`}
+                      subtext="mL/min/1.73 m²"
+                      icon="droplet"
+                      style={styles.statCardCompact}
+                    />
+                    {renalResult.cockcroftGaultCrCl !== null ? (
+                      <StatCard
+                        label="Creatinine Clearance (CrCl)"
+                        value={`${renalResult.cockcroftGaultCrCl}`}
+                        subtext="mL/min (for drug dosing)"
+                        icon="activity"
+                        style={styles.statCardCompact}
+                      />
+                    ) : null}
+                  </View>
+
+                  <View style={styles.classificationBox}>
+                    <View style={styles.spreadRow}>
+                      <ThemedText variant="bodyBold">Kidney Stage (KDIGO)</ThemedText>
+                      <Badge
+                        label={`${renalResult.kdigoStage} · ${renalResult.kdigoLabel}`}
+                        variant={renalResult.kdigoTone}
+                      />
+                    </View>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      CKD-EPI 2021 & Cockcroft-Gault · Converted creatinine: {renalResult.creatinineMgDl.toFixed(2)}{' '}
+                      mg/dL. Repeat tests after 3+ months and check urine protein before confirming long-term kidney stage.
+                    </ThemedText>
+                  </View>
+                </View>
+              ) : (
+                <PreviewCard
+                  icon="droplet"
+                  title="Adult Kidney Results"
+                  subtitle="Enter serum creatinine and adult age (18+) to calculate."
+                  bullets={[
+                    'Estimated kidney filtration rate (eGFR)',
+                    'Kidney stage classification (G1 to G5)',
+                    'Drug-dosing creatinine clearance (CrCl) when weight is added',
+                  ]}
+                />
+              )
+            }
+          />
+        )}
+      </Card>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -1295,29 +1458,62 @@ const styles = StyleSheet.create({
   flexFill: {
     flex: 1,
   },
+  fullWidth: {
+    width: '100%',
+  },
+  inputsStack: {
+    gap: theme.spacing.md,
+  },
+  headerToolbarActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
   controlsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.md,
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
-  inputRow: {
+  inputWrapRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: theme.spacing.md,
     alignItems: 'flex-end',
+  },
+  inputCell: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 190,
+    minWidth: 185,
   },
   inputCol: {
     flexDirection: 'column',
     gap: theme.spacing.md,
+  },
+  concentrationGroup: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: theme.spacing.xs,
+    flexGrow: 1.4,
+    flexShrink: 1,
+    minWidth: 220,
+  },
+  concentrationInput: {
+    flex: 1,
+    minWidth: 90,
+  },
+  slashDivider: {
+    height: theme.sizes.controlMd,
+    justifyContent: 'center',
+    paddingHorizontal: theme.spacing.xs,
   },
   actionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
     alignItems: 'center',
-  },
-  fieldLabel: {
-    marginBottom: theme.spacing.xs,
   },
   fieldGroup: {
     gap: theme.spacing.sm,
@@ -1326,6 +1522,62 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
+  },
+  redFlagBox: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergencyBorder,
+    backgroundColor: theme.colors.emergencySubtle,
+    gap: theme.spacing.sm,
+  },
+  redFlagHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  presetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  presetChip: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSubtle,
+    gap: theme.spacing.xs / 2,
+    flexGrow: 1,
+    flexBasis: 165,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+        transition: 'background-color 140ms ease, border-color 140ms ease',
+      } as any,
+    }),
+  },
+  presetChipActive: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+  },
+  presetChipHover: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.primaryBorder,
+  },
+  presetChipPressed: {
+    opacity: 0.88,
+  },
+  presetNoteBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
   },
   toggleChip: {
     flexDirection: 'row',
@@ -1336,7 +1588,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.full,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceSubtle,
+    backgroundColor: theme.colors.surface,
   },
   toggleChipActive: {
     backgroundColor: theme.colors.primaryLight,
@@ -1354,9 +1606,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: theme.spacing.md,
   },
-  statCard: {
+  statCardCompact: {
     flex: 1,
-    minWidth: theme.sizes.sidebarWidth,
+    minWidth: 145,
   },
   classificationBox: {
     padding: theme.spacing.md,
@@ -1365,6 +1617,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceMuted,
     gap: theme.spacing.sm,
+  },
+  recommendationBlock: {
+    gap: theme.spacing.xs,
   },
   resultBox: {
     padding: theme.spacing.md,

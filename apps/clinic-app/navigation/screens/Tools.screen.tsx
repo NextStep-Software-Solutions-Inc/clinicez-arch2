@@ -249,10 +249,7 @@ export default function ToolsScreen({ route: routeProp }: ToolsScreenProps = {})
       : (getDefaultToolForTab('operations', accessibleTools) as OperationsSubTool);
 
   return (
-    <ResponsiveLayout
-      headerTitle="Tools"
-      headerSubtitle="Clinic utility directory, calculators, lookups & PhilHealth Yakap"
-    >
+    <ResponsiveLayout headerTitle="Tools">
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -346,6 +343,9 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xl,
     paddingBottom: theme.spacing['4xl'],
     gap: theme.spacing.lg,
+    width: '100%',
+    maxWidth: theme.sizes.contentMaxWidth,
+    alignSelf: 'center',
   },
   tabScroll: {
     flexGrow: 0,
@@ -362,11 +362,13 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs + 2,
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
+    borderTopLeftRadius: theme.radii.md,
+    borderTopRightRadius: theme.radii.md,
     borderBottomWidth: theme.spacing.xs / 2,
     borderBottomColor: theme.colors.transparent,
   },
   tabButtonActive: {
     borderBottomColor: theme.colors.primary,
-    ...theme.shadows.brandSubtle,
+    backgroundColor: theme.colors.primarySubtle,
   },
 });
