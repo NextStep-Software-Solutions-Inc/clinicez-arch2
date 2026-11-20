@@ -51,5 +51,21 @@ public sealed class UpdateClinicSettingsCommandValidator : AbstractValidator<Upd
                 .OverridePropertyName(nameof(UpdateClinicSettingsCommand.DefaultHealthScreeningServiceCode))
                 .WithMessage("DefaultHealthScreeningServiceCode must not exceed 50 characters.");
         });
+
+        When(x => x.IdleLockMinutes.HasValue, () =>
+        {
+            RuleFor(x => x.IdleLockMinutes!.Value)
+                .Must(m => m == 0 || (m >= 5 && m <= 120))
+                .OverridePropertyName(nameof(UpdateClinicSettingsCommand.IdleLockMinutes))
+                .WithMessage("IdleLockMinutes must be 0 (off) or between 5 and 120 minutes.");
+        });
+
+        When(x => x.MaxLockedSessionHours.HasValue, () =>
+        {
+            RuleFor(x => x.MaxLockedSessionHours!.Value)
+                .InclusiveBetween(1, 24)
+                .OverridePropertyName(nameof(UpdateClinicSettingsCommand.MaxLockedSessionHours))
+                .WithMessage("MaxLockedSessionHours must be between 1 and 24 hours.");
+        });
     }
 }

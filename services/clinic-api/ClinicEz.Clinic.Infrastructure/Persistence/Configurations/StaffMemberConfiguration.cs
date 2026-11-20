@@ -58,6 +58,9 @@ public sealed class StaffMemberConfiguration : IEntityTypeConfiguration<StaffMem
             entity.Property(e => e.PreferencesJson).HasColumnType("text");
 
             entity.Property(e => e.PasswordHash).HasMaxLength(500);
+            entity.Property(e => e.QuickUnlockPinHash).HasMaxLength(500);
+            entity.Property(e => e.QuickUnlockPinSetAtUtc);
+            entity.Property(e => e.FailedPinAttempts).HasDefaultValue(0);
             entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50).HasDefaultValue(StaffAccountStatus.Active).HasSentinel((StaffAccountStatus)0);
             entity.Property(e => e.InvitationToken).HasMaxLength(128);
 

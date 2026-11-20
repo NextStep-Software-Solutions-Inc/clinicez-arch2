@@ -23,6 +23,7 @@ public sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refresh
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.LockedAtUtc);
             entity.Property(e => e.DeviceLabel).HasMaxLength(150);
             entity.HasIndex(e => e.TokenHash)
                 .IsUnique()

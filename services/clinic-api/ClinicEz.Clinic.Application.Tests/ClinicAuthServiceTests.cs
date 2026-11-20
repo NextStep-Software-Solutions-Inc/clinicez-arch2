@@ -684,5 +684,131 @@ public class ClinicAuthServiceTests
         outcome.Failure.Should().Be(AuthFailure.NotFound);
         outcome.Message.Should().Contain("No staff member matching this email address was found in this facility.");
     }
+
+    [Fact]
+    public async Task LockAndUnlockWithPin_BlocksRefreshWhileLocked_AndUnlocksWithRotatedTokens()
+    {
+        var f = await CreateAsync();
+        var boot = (await f.Service.BootstrapAsync(Bootstrap(f))).Tokens!;
+        boot.User.HasQuickUnlockPin.Should().BeFalse();
+        boot.User.SessionPolicy.Should().NotBeNull();
+        boot.User.SessionPolicy!.IdleLockMinutes.Should().Be(15);
+
+        // Weak PINs rejected
+        var weak = await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest(StrongPassword, "123456"));
+        weak.User.Should().BeNull();
+        weak.Failure.Should().Be(AuthFailure.WeakPassword);
+
+        // Wrong password rejected
+        var badPass = await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest("wrong-password", "246810"));
+        badPass.User.Should().BeNull();
+        badPass.Failure.Should().Be(AuthFailure.InvalidCredentials);
+
+        // Valid 6-digit PIN accepted
+        var setOk = await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest(StrongPassword, "246810"));
+        setOk.User.Should().NotBeNull();
+        setOk.User!.HasQuickUnlockPin.Should().BeTrue();
+
+        // Lock session -> RefreshAsync returns SessionLocked without tokens (blocks F5 bypass)
+        var locked = await f.Service.LockSessionAsync(boot.RefreshToken);
+        locked.Failure.Should().Be(AuthFailure.SessionLocked);
+        locked.Tokens.Should().BeNull();
+        locked.LockedSession.Should().NotBeNull();
+        locked.LockedSession!.HasQuickUnlockPin.Should().BeTrue();
+
+        var refreshWhileLocked = await f.Service.RefreshAsync(boot.RefreshToken);
+        refreshWhileLocked.Ok.Should().BeFalse();
+        refreshWhileLocked.Failure.Should().Be(AuthFailure.SessionLocked);
+        refreshWhileLocked.Tokens.Should().BeNull();
+
+        // Unlock with valid PIN rotates refresh token and clears lock
+        var unlocked = await f.Service.UnlockWithPinAsync(boot.RefreshToken, "246810");
+        unlocked.Ok.Should().BeTrue(unlocked.Message);
+        unlocked.Tokens!.RefreshToken.Should().NotBe(boot.RefreshToken);
+        unlocked.Tokens.User.HasQuickUnlockPin.Should().BeTrue();
+
+        // Subsequent silent refresh succeeds normally
+        var postUnlockRefresh = await f.Service.RefreshAsync(unlocked.Tokens.RefreshToken);
+        postUnlockRefresh.Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UnlockWithPin_FiveWrongAttempts_RevokesSessionFamily()
+    {
+        var f = await CreateAsync();
+        var boot = (await f.Service.BootstrapAsync(Bootstrap(f))).Tokens!;
+        await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest(StrongPassword, "357913"));
+        await f.Service.LockSessionAsync(boot.RefreshToken);
+
+        for (var i = 1; i <= 4; i++)
+        {
+            var attempt = await f.Service.UnlockWithPinAsync(boot.RefreshToken, "111222");
+            attempt.Ok.Should().BeFalse();
+            attempt.Failure.Should().Be(AuthFailure.InvalidCredentials);
+            attempt.Message.Should().Contain($"{5 - i} attempt");
+        }
+
+        // 5th wrong attempt revokes the refresh token family
+        var fifth = await f.Service.UnlockWithPinAsync(boot.RefreshToken, "111222");
+        fifth.Ok.Should().BeFalse();
+        fifth.Failure.Should().Be(AuthFailure.InvalidToken);
+
+        // Even the real PIN cannot unlock the revoked family
+        var withRealPin = await f.Service.UnlockWithPinAsync(boot.RefreshToken, "357913");
+        withRealPin.Ok.Should().BeFalse();
+        withRealPin.Failure.Should().Be(AuthFailure.InvalidToken);
+    }
+
+    [Fact]
+    public async Task UnlockWithPin_ExpiredLockWindow_OrDisabledByClinic_Rejected()
+    {
+        var f = await CreateAsync();
+        var boot = (await f.Service.BootstrapAsync(Bootstrap(f))).Tokens!;
+        await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest(StrongPassword, "357913"));
+        await f.Service.LockSessionAsync(boot.RefreshToken);
+
+        // When clinic disables PIN unlock, PIN attempt fails and password unlock still succeeds
+        var settings = await f.Db.Settings.SingleAsync();
+        settings.AllowStaffPinUnlock = false;
+        await f.Db.SaveChangesAsync();
+
+        var disabledAttempt = await f.Service.UnlockWithPinAsync(boot.RefreshToken, "357913");
+        disabledAttempt.Ok.Should().BeFalse();
+        disabledAttempt.Failure.Should().Be(AuthFailure.InvalidRequest);
+
+        var pwUnlock = await f.Service.UnlockWithPasswordAsync(boot.RefreshToken, StrongPassword);
+        pwUnlock.Ok.Should().BeTrue(pwUnlock.Message);
+
+        // Lock past MaxLockedSessionHours -> both refresh and unlock fail & revoke
+        settings.AllowStaffPinUnlock = true;
+        settings.MaxLockedSessionHours = 4;
+        await f.Db.SaveChangesAsync();
+
+        await f.Service.LockSessionAsync(pwUnlock.Tokens!.RefreshToken);
+        var stored = await f.Db.RefreshTokens.IgnoreQueryFilters().FirstAsync(t => t.RevokedAt == null);
+        stored.LockedAtUtc = DateTime.UtcNow.AddHours(-5);
+        await f.Db.SaveChangesAsync();
+
+        var expiredRefresh = await f.Service.RefreshAsync(pwUnlock.Tokens.RefreshToken);
+        expiredRefresh.Ok.Should().BeFalse();
+        expiredRefresh.Failure.Should().Be(AuthFailure.InvalidToken);
+    }
+
+    [Fact]
+    public async Task RemoveQuickUnlockPin_AndAdminReset_ClearStoredPin()
+    {
+        var f = await CreateAsync();
+        var boot = (await f.Service.BootstrapAsync(Bootstrap(f))).Tokens!;
+        await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest(StrongPassword, "357913"));
+
+        var removed = await f.Service.RemoveQuickUnlockPinAsync(boot.User.Id, new RemoveQuickUnlockPinRequest(StrongPassword));
+        removed.User!.HasQuickUnlockPin.Should().BeFalse();
+
+        // Re-set PIN then trigger admin temp password reset -> PIN cleared
+        await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest(StrongPassword, "357913"));
+        await f.Service.SetTemporaryPasswordAsync(boot.User.Id, "Temp-Strong-Pass-99");
+        var reloaded = await f.Db.StaffMembers.IgnoreQueryFilters().SingleAsync();
+        reloaded.QuickUnlockPinHash.Should().BeNull();
+    }
 }
 

@@ -123,6 +123,7 @@ import {
 import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhilHealthCatalog';
 import { formatDispenseFormLabel, parseMedicineSelection } from '@utils/medicineParser';
 import { syncSubjectiveWithToggledSymptoms } from '@utils/subjectiveNarrative';
+import { registerBeforeLockHook } from '../../services/sessionHooks';
 import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
 import { useClinic } from '../../context/ClinicContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
@@ -1753,8 +1754,12 @@ export default function ConsultationsScreen() {
       window.addEventListener('beforeunload', handlePageUnload);
       window.addEventListener('visibilitychange', handleVisibilityChange);
     }
+    const unregisterBeforeLock = registerBeforeLockHook(() => {
+      flushPendingSnapshot(true);
+    });
 
     return () => {
+      unregisterBeforeLock();
       if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
         window.removeEventListener('pagehide', handlePageUnload);
         window.removeEventListener('beforeunload', handlePageUnload);

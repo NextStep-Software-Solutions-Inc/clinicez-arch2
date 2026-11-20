@@ -136,7 +136,15 @@ export function serializeAudioPreferences(prefs: UserAudioPreferences): string {
 export default function ProfileScreen({ route: propRoute }: ProfileScreenProps = {}) {
   const navigation = useOptionalNavigation();
   const navRoute = useOptionalRoute();
-  const { state: authState, user, offline, logout, changePassword } = useAuth();
+  const {
+    state: authState,
+    user,
+    offline,
+    logout,
+    changePassword,
+    setQuickUnlockPin,
+    removeQuickUnlockPin,
+  } = useAuth();
   const { current: staffCurrent, loading: staffLoading, reload: reloadStaff } = useStaff();
   const { facilityName, planTier, primaryColorHex, loading: clinicLoading } = useClinic();
   const { serverLabel, serverUrl, changeServer } = useConnection();
@@ -1093,6 +1101,10 @@ export default function ProfileScreen({ route: propRoute }: ProfileScreenProps =
             planTier={planTier}
             showSkeletons={showProfileSkeletons}
             clinicLoading={isClinicMetaLoading}
+            hasQuickUnlockPin={Boolean(user?.hasQuickUnlockPin)}
+            allowStaffPinUnlock={user?.sessionPolicy?.allowStaffPinUnlock ?? true}
+            onSetQuickUnlockPin={setQuickUnlockPin}
+            onRemoveQuickUnlockPin={removeQuickUnlockPin}
             onChangeCurrentPassword={setCurrentPassword}
             onChangeNewPassword={setNewPassword}
             onChangeConfirmPassword={setConfirmPassword}

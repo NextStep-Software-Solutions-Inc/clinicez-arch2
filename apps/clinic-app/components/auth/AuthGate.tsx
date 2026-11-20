@@ -13,6 +13,8 @@ import LoginScreen from './LoginScreen';
 import FirstAdminSetupScreen from './FirstAdminSetupScreen';
 import ChangePasswordScreen from './ChangePasswordScreen';
 import OfflineUnlockScreen from './OfflineUnlockScreen';
+import WorkstationLockScreen from './WorkstationLockScreen';
+import IdleWarningModal from './IdleWarningModal';
 import SetPinScreen from './SetPinScreen';
 import InvitationAcceptScreen from './InvitationAcceptScreen';
 
@@ -35,7 +37,17 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 function AuthGateContent({ children }: { children: React.ReactNode }) {
-  const { state, offline, user, accountSwitchAlert, acknowledgeAccountSwitch, logout } = useAuth();
+  const {
+    state,
+    offline,
+    user,
+    idleWarningSecondsLeft,
+    extendIdleSession,
+    lockWorkstation,
+    accountSwitchAlert,
+    acknowledgeAccountSwitch,
+    logout,
+  } = useAuth();
   const [pinPrompt, setPinPrompt] = useState(false);
   const [inviteToken, setInviteToken] = useState<string | null>(() => {
     if (typeof window !== 'undefined' && window.location?.pathname) {
@@ -116,10 +128,18 @@ function AuthGateContent({ children }: { children: React.ReactNode }) {
       return <FirstAdminSetupScreen />;
     case 'locked':
       return <OfflineUnlockScreen />;
+    case 'workstationLocked':
+      return <WorkstationLockScreen />;
     case 'mustChangePassword':
       return (
         <>
           <ChangePasswordScreen />
+          <IdleWarningModal
+            visible={idleWarningSecondsLeft !== null}
+            secondsRemaining={idleWarningSecondsLeft}
+            onStaySignedIn={extendIdleSession}
+            onLockNow={() => void lockWorkstation()}
+          />
           <AccountSwitchSafetyModal
             alert={accountSwitchAlert}
             onContinue={acknowledgeAccountSwitch}
@@ -149,6 +169,12 @@ function AuthGateContent({ children }: { children: React.ReactNode }) {
       return (
         <>
           <React.Fragment key={user?.id ?? 'signed-in'}>{children}</React.Fragment>
+          <IdleWarningModal
+            visible={idleWarningSecondsLeft !== null}
+            secondsRemaining={idleWarningSecondsLeft}
+            onStaySignedIn={extendIdleSession}
+            onLockNow={() => void lockWorkstation()}
+          />
           <AccountSwitchSafetyModal
             alert={accountSwitchAlert}
             onContinue={acknowledgeAccountSwitch}

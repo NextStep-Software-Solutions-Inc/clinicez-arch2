@@ -119,6 +119,11 @@ public sealed class StaffMember : ClinicScopedEntity
     public DateTime? LockoutEnd { get; set; }
     public DateTime? LastLoginAt { get; set; }
 
+    /// <summary>PBKDF2 hash of the staff member's 6-digit workstation quick-unlock PIN (null if unset).</summary>
+    public string? QuickUnlockPinHash { get; set; }
+    public DateTime? QuickUnlockPinSetAtUtc { get; set; }
+    public int FailedPinAttempts { get; set; }
+
     /// <summary>Incremented to revoke all issued access tokens and refresh tokens for this staff member.</summary>
     public int TokenVersion { get; set; }
 }

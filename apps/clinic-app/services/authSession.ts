@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { ApiError, extractApiError, ensureApiPrefix, resolveTenantContext, getStoredTenantSlug, getStoredFacilitySlug, type ApiResponse } from '@shared/safe';
 import { deleteSecureItem, getSecureItem, setSecureItem } from './secureStorage';
 import { getApiBaseUrl, getOfflineGraceHours } from './runtimeConfig';
+import { runBeforeLockHooks } from './sessionHooks';
 
 /**
  * Facility-local session manager (no identity provider, no internet requirement).
@@ -10,9 +11,15 @@ import { getApiBaseUrl, getOfflineGraceHours } from './runtimeConfig';
  * The clinic server issues a short-lived access token plus a rotating refresh token. This module owns them:
  *  - the access token lives in memory only;
  *  - the refresh token and a cached copy of the signed-in user live in secure storage
- *    (Keychain/Keystore on native, tab-scoped sessionStorage on web);
+ *    (Keychain/Keystore on native, HttpOnly cookie managed by clinic-api on web);
  *  - refreshes are single-flight so a burst of 401s triggers exactly one rotation.
  */
+
+export interface SessionPolicy {
+  idleLockMinutes: number;
+  maxLockedSessionHours: number;
+  allowStaffPinUnlock: boolean;
+}
 
 export interface AuthUser {
   id: string;
@@ -25,6 +32,21 @@ export interface AuthUser {
   clinicName: string;
   permissions: string[];
   mustChangePassword: boolean;
+  hasQuickUnlockPin?: boolean;
+  sessionPolicy?: SessionPolicy | null;
+}
+
+export interface LockedSessionInfo {
+  staffId: string;
+  name: string;
+  email?: string | null;
+  role: string;
+  roleName?: string | null;
+  clinicName: string;
+  hasQuickUnlockPin: boolean;
+  allowStaffPinUnlock: boolean;
+  lockedAtUtc: string;
+  lockExpiresAtUtc: string;
 }
 
 export interface AuthTokens {
@@ -53,14 +75,39 @@ export interface SessionSnapshot {
 const REFRESH_KEY = 'clinicez.auth.refresh';
 const USER_KEY = 'clinicez.auth.user';
 const LAST_ONLINE_KEY = 'clinicez.auth.lastOnline';
+const WORKSTATION_LOCKED_KEY = 'clinicez.auth.workstationLocked';
 const EXPIRY_SKEW_MS = 30_000;
 const AUTH_CHANNEL_NAME = 'clinicez-auth';
 const REFRESH_LOCK_NAME = 'clinicez.auth.refresh';
 
 const isWeb = (): boolean => Platform.OS === 'web';
 
+function setWorkstationLockedFlag(locked: boolean): void {
+  if (!isWeb() || typeof window === 'undefined' || !window.sessionStorage) return;
+  try {
+    if (locked) {
+      window.sessionStorage.setItem(WORKSTATION_LOCKED_KEY, '1');
+    } else {
+      window.sessionStorage.removeItem(WORKSTATION_LOCKED_KEY);
+    }
+  } catch {
+    // Ignore restricted storage errors.
+  }
+}
+
+function hasWorkstationLockedFlag(): boolean {
+  if (!isWeb() || typeof window === 'undefined' || !window.sessionStorage) return false;
+  try {
+    return window.sessionStorage.getItem(WORKSTATION_LOCKED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 type AuthBroadcastMessage =
   | { type: 'session-refreshed'; accessToken: string; accessTokenExpiresAtUtc: string; user: AuthUser }
+  | { type: 'session-locked'; lockedSession: LockedSessionInfo }
+  | { type: 'session-unlocked'; accessToken: string; accessTokenExpiresAtUtc: string; user: AuthUser }
   | { type: 'session-cleared'; reason?: 'logout' | 'expired' | 'idle' }
   | { type: 'activity'; timestamp: number };
 
@@ -69,19 +116,34 @@ let authChannelBound = false;
 
 function handleBroadcastMessage(data: AuthBroadcastMessage | null | undefined) {
   if (!data || typeof data !== 'object') return;
-  if (data.type === 'session-refreshed') {
+  if (data.type === 'session-refreshed' || data.type === 'session-unlocked') {
     accessToken = data.accessToken;
     accessExpiresAt = Date.parse(data.accessTokenExpiresAtUtc) || Date.now() + 10 * 60_000;
     user = data.user;
+    lockedSession = null;
     offline = false;
+    setWorkstationLockedFlag(false);
     emit();
+    if (data.type === 'session-unlocked') {
+      sessionUnlockedHandler?.(data.user);
+    }
+  } else if (data.type === 'session-locked') {
+    accessToken = null;
+    accessExpiresAt = 0;
+    lockedSession = data.lockedSession;
+    offline = false;
+    setWorkstationLockedFlag(true);
+    emit();
+    sessionLockedHandler?.(data.lockedSession);
   } else if (data.type === 'session-cleared') {
-    const hadSession = user !== null || accessToken !== null;
+    const hadSession = user !== null || accessToken !== null || lockedSession !== null;
     accessToken = null;
     accessExpiresAt = 0;
     refreshToken = null;
     user = null;
+    lockedSession = null;
     offline = false;
+    setWorkstationLockedFlag(false);
     emit();
     if (hadSession) {
       if (data.reason === 'idle') sessionIdleHandler?.();
@@ -135,6 +197,8 @@ let accessToken: string | null = null;
 let accessExpiresAt = 0;
 let refreshToken: string | null = null;
 let user: AuthUser | null = null;
+let lockedSession: LockedSessionInfo | null = null;
+let lastRefreshLockedSession: LockedSessionInfo | null = null;
 let offline = false;
 let refreshInFlight: Promise<boolean> | null = null;
 let lastNetworkFailureAt = 0;
@@ -146,6 +210,8 @@ type ActivityListener = (timestamp: number) => void;
 const activityListeners = new Set<ActivityListener>();
 let sessionExpiredHandler: (() => void) | null = null;
 let sessionIdleHandler: (() => void) | null = null;
+let sessionLockedHandler: ((info: LockedSessionInfo) => void) | null = null;
+let sessionUnlockedHandler: ((signedIn: AuthUser) => void) | null = null;
 
 function snapshot(): SessionSnapshot {
   return { user, offline };
@@ -177,6 +243,10 @@ export function getSessionSnapshot(): SessionSnapshot {
   return snapshot();
 }
 
+export function getLockedSession(): LockedSessionInfo | null {
+  return lockedSession;
+}
+
 /** Called when the server rejects the refresh token (revoked, expired, reuse detected). */
 export function onSessionExpired(handler: (() => void) | null) {
   sessionExpiredHandler = handler;
@@ -185,6 +255,16 @@ export function onSessionExpired(handler: (() => void) | null) {
 /** Called when the web workstation logs out automatically due to inactivity. */
 export function onSessionIdleExpired(handler: (() => void) | null) {
   sessionIdleHandler = handler;
+}
+
+/** Called when the workstation enters locked state locally or from a peer tab. */
+export function onSessionLocked(handler: ((info: LockedSessionInfo) => void) | null) {
+  sessionLockedHandler = handler;
+}
+
+/** Called when a peer tab unlocks the workstation. */
+export function onSessionUnlocked(handler: ((signedIn: AuthUser) => void) | null) {
+  sessionUnlockedHandler = handler;
 }
 
 export function getAccessToken(): string | null {
@@ -230,7 +310,53 @@ async function post<T>(path: string, body: unknown, authorized = false): Promise
   }
 }
 
-async function persist(tokens: AuthTokens, fallbackEmail?: string | null) {
+async function deleteWithBody<T>(path: string, body: unknown, authorized = false): Promise<AuthResult<T>> {
+  try {
+    const response = await axios.delete<ApiResponse<T>>(`${apiRoot()}${path}`, {
+      timeout: 15000,
+      withCredentials: isWeb(),
+      data: body,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Client-Platform': Platform.OS,
+        ...tenantHeaders(),
+        ...(authorized && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+    });
+    return [response.data?.data ?? null, null];
+  } catch (error) {
+    return [null, toApiError(error)];
+  }
+}
+
+function extractLockedSessionFromAxiosError(error: unknown): LockedSessionInfo | null {
+  const resp = (error as any)?.response;
+  if (resp?.status === 423 && resp?.data?.errorCode === 'SESSION_LOCKED' && resp?.data?.data) {
+    return resp.data.data as LockedSessionInfo;
+  }
+  return null;
+}
+
+function buildFallbackLockedSession(currentUser: AuthUser | null): LockedSessionInfo | null {
+  if (!currentUser) return null;
+  const maxHours = Math.min(24, Math.max(1, currentUser.sessionPolicy?.maxLockedSessionHours ?? 8));
+  const lockedAt = new Date();
+  const expiresAt = new Date(lockedAt.getTime() + maxHours * 3_600_000);
+  return {
+    staffId: currentUser.id,
+    name: currentUser.name,
+    email: currentUser.email ?? null,
+    role: currentUser.role,
+    roleName: currentUser.roleName ?? null,
+    clinicName: currentUser.clinicName,
+    hasQuickUnlockPin: Boolean(currentUser.hasQuickUnlockPin),
+    allowStaffPinUnlock: currentUser.sessionPolicy?.allowStaffPinUnlock ?? true,
+    lockedAtUtc: lockedAt.toISOString(),
+    lockExpiresAtUtc: expiresAt.toISOString(),
+  };
+}
+
+async function persist(tokens: AuthTokens, fallbackEmail?: string | null, broadcastType: 'session-refreshed' | 'session-unlocked' = 'session-refreshed') {
   const resolvedEmail = tokens.user.email ?? fallbackEmail ?? user?.email ?? null;
   const normalizedUser: AuthUser = resolvedEmail
     ? { ...tokens.user, email: resolvedEmail }
@@ -238,13 +364,16 @@ async function persist(tokens: AuthTokens, fallbackEmail?: string | null) {
   accessToken = tokens.accessToken;
   accessExpiresAt = Date.parse(tokens.accessTokenExpiresAtUtc) || Date.now() + 10 * 60_000;
   user = normalizedUser;
+  lockedSession = null;
+  lastRefreshLockedSession = null;
   offline = false;
+  setWorkstationLockedFlag(false);
 
   if (isWeb()) {
     // Web refresh tokens live in an HttpOnly cookie managed by clinic-api; never store them in sessionStorage.
     refreshToken = null;
     broadcastAuth({
-      type: 'session-refreshed',
+      type: broadcastType,
       accessToken: tokens.accessToken,
       accessTokenExpiresAtUtc: tokens.accessTokenExpiresAtUtc,
       user: normalizedUser,
@@ -265,7 +394,10 @@ async function clearSession(reason: 'none' | 'expired' | 'idle' = 'none') {
   accessExpiresAt = 0;
   refreshToken = null;
   user = null;
+  lockedSession = null;
+  lastRefreshLockedSession = null;
   offline = false;
+  setWorkstationLockedFlag(false);
   await deleteSecureItem(REFRESH_KEY);
   await deleteSecureItem(USER_KEY);
   await deleteSecureItem(LAST_ONLINE_KEY);
@@ -365,16 +497,50 @@ export async function changePassword(currentPassword: string, newPassword: strin
   return [user!, null];
 }
 
+async function postRefreshRequest(body: unknown): Promise<{
+  tokens: AuthTokens | null;
+  locked: LockedSessionInfo | null;
+  error: ApiError | null;
+}> {
+  try {
+    const response = await axios.post<ApiResponse<AuthTokens>>(`${apiRoot()}/auth/refresh`, body, {
+      timeout: 15000,
+      withCredentials: isWeb(),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Client-Platform': Platform.OS,
+        ...tenantHeaders(),
+      },
+    });
+    return { tokens: response.data?.data ?? null, locked: null, error: null };
+  } catch (error) {
+    const locked = extractLockedSessionFromAxiosError(error);
+    return { tokens: null, locked, error: toApiError(error) };
+  }
+}
+
 async function executeRefresh(): Promise<boolean> {
+  lastRefreshLockedSession = null;
+
   if (isWeb()) {
     // Another tab may have refreshed and broadcast a fresh access token while we waited on the Web Lock.
     if (accessToken && Date.now() < accessExpiresAt - EXPIRY_SKEW_MS) {
       return true;
     }
-    const [tokens, error] = await post<AuthTokens>('/auth/refresh', {});
+    const { tokens, locked, error } = await postRefreshRequest({});
     if (tokens) {
       await persist(tokens);
       return true;
+    }
+    if (locked) {
+      accessToken = null;
+      accessExpiresAt = 0;
+      lockedSession = locked;
+      lastRefreshLockedSession = locked;
+      setWorkstationLockedFlag(true);
+      emit();
+      sessionLockedHandler?.(locked);
+      return false;
     }
     if (error && error.status !== 0 && error.status >= 400 && error.status < 500) {
       await clearSession('expired');
@@ -385,10 +551,19 @@ async function executeRefresh(): Promise<boolean> {
   }
 
   if (!refreshToken) return false;
-  const [tokens, error] = await post<AuthTokens>('/auth/refresh', { refreshToken });
+  const { tokens, locked, error } = await postRefreshRequest({ refreshToken });
   if (tokens) {
     await persist(tokens);
     return true;
+  }
+  if (locked) {
+    accessToken = null;
+    accessExpiresAt = 0;
+    lockedSession = locked;
+    lastRefreshLockedSession = locked;
+    emit();
+    sessionLockedHandler?.(locked);
+    return false;
   }
   if (error && error.status !== 0 && error.status >= 400 && error.status < 500) {
     await clearSession('expired');
@@ -400,7 +575,8 @@ async function executeRefresh(): Promise<boolean> {
 
 /**
  * Rotates the refresh token. Returns true when a fresh access token is available.
- * A definitive rejection (401/400) ends the session; a network failure leaves it intact so the caller can retry.
+ * A definitive rejection (401/400) ends the session; a 423 SESSION_LOCKED retains the lock screen;
+ * a network failure leaves the session intact so the caller can retry.
  */
 export function refreshSession(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
@@ -418,6 +594,7 @@ export function refreshSession(): Promise<boolean> {
 
 /** Makes sure a valid access token exists (refreshing when it is about to expire). */
 export async function ensureFreshToken(): Promise<boolean> {
+  if (lockedSession) return false;
   if (accessToken && Date.now() < accessExpiresAt - EXPIRY_SKEW_MS) return true;
   // Don't make every request wait on a dead network while the server is unreachable.
   if (Date.now() - lastNetworkFailureAt < NETWORK_RETRY_BACKOFF_MS) return false;
@@ -426,20 +603,31 @@ export async function ensureFreshToken(): Promise<boolean> {
 
 export type RestoreOutcome =
   | { state: 'signedIn'; user: AuthUser }
+  | { state: 'workstationLocked'; lockedSession: LockedSessionInfo }
   | { state: 'offline'; user: AuthUser; lastOnlineAt: number }
   | { state: 'signedOut' };
 
 /**
- * Restores a previous session on app start. If the server cannot be reached and the device was online within the
- * offline grace window, the cached user is returned as `offline` so the app can ask for a PIN/biometric unlock
- * instead of a password.
+ * Restores a previous session on app start. If the server reports the workstation is locked (423 SESSION_LOCKED),
+ * returns `workstationLocked` with zero access token so reloading (`F5`) cannot bypass the lock screen.
+ * On native, if the server cannot be reached within the offline grace window, returns `offline` for local unlock.
  */
 export async function restoreSession(): Promise<RestoreOutcome> {
   if (isWeb()) {
+    if (hasWorkstationLockedFlag()) {
+      const locked = await lockSession();
+      if (locked) {
+        return { state: 'workstationLocked', lockedSession: locked };
+      }
+      return { state: 'signedOut' };
+    }
     // Web uses an HttpOnly session cookie sent automatically via withCredentials.
     // A fresh tab has empty JS memory, so try refreshing directly (no sessionStorage token needed).
     if (await refreshSession()) {
       return { state: 'signedIn', user: user! };
+    }
+    if (lastRefreshLockedSession) {
+      return { state: 'workstationLocked', lockedSession: lastRefreshLockedSession };
     }
     return { state: 'signedOut' };
   }
@@ -452,6 +640,9 @@ export async function restoreSession(): Promise<RestoreOutcome> {
   refreshToken = storedRefresh;
   if (await refreshSession()) {
     return { state: 'signedIn', user: user! };
+  }
+  if (lastRefreshLockedSession) {
+    return { state: 'workstationLocked', lockedSession: lastRefreshLockedSession };
   }
 
   // refreshSession clears everything on a definitive rejection.
@@ -481,31 +672,150 @@ export async function resumeOnline(): Promise<boolean> {
   return refreshSession();
 }
 
+/**
+ * Locks the workstation cleanly: flushes registered drafts while the access token is still valid,
+ * clears the in-memory access token, notifies peer tabs, and marks the refresh session locked on the server.
+ */
+export async function lockSession(): Promise<LockedSessionInfo | null> {
+  runBeforeLockHooks();
+
+  const previousUser = user;
+  const fallbackLocked = lockedSession ?? buildFallbackLockedSession(previousUser);
+  const token = refreshToken;
+
+  accessToken = null;
+  accessExpiresAt = 0;
+  offline = false;
+  setWorkstationLockedFlag(true);
+
+  const body = isWeb() ? {} : token ? { refreshToken: token } : {};
+  const [serverLocked, error] = await post<LockedSessionInfo>('/auth/lock', body);
+
+  if (error && error.status !== 0 && error.status >= 400 && error.status < 500) {
+    await clearSession('expired');
+    return null;
+  }
+
+  const effectiveLocked = serverLocked ?? fallbackLocked;
+  if (!effectiveLocked) {
+    await clearSession('none');
+    return null;
+  }
+
+  lockedSession = effectiveLocked;
+  emit();
+  if (isWeb()) {
+    broadcastAuth({ type: 'session-locked', lockedSession: effectiveLocked });
+  }
+  sessionLockedHandler?.(effectiveLocked);
+  return effectiveLocked;
+}
+
+export async function unlockWithPin(pin: string): Promise<AuthResult<AuthUser>> {
+  const body = isWeb() ? { pin: pin.trim() } : { pin: pin.trim(), refreshToken };
+  const [tokens, error] = await post<AuthTokens>('/auth/unlock-pin', body);
+  if (error || !tokens) {
+    if (error && error.status === 401 && error.errorCode?.toUpperCase() === 'INVALIDTOKEN') {
+      await clearSession('expired');
+    }
+    return [null, error ?? new ApiError('Unlock failed.', 0)];
+  }
+  await persist(tokens, tokens.user.email ?? lockedSession?.email ?? null, 'session-unlocked');
+  sessionUnlockedHandler?.(user!);
+  return [user!, null];
+}
+
+export async function unlockWithPassword(password: string): Promise<AuthResult<AuthUser>> {
+  const body = isWeb() ? { password } : { password, refreshToken };
+  const [tokens, error] = await post<AuthTokens>('/auth/unlock-password', body);
+  if (error || !tokens) {
+    if (error && error.status === 401 && error.errorCode?.toUpperCase() === 'INVALIDTOKEN') {
+      await clearSession('expired');
+    }
+    return [null, error ?? new ApiError('Unlock failed.', 0)];
+  }
+  await persist(tokens, tokens.user.email ?? lockedSession?.email ?? null, 'session-unlocked');
+  sessionUnlockedHandler?.(user!);
+  return [user!, null];
+}
+
+export async function setQuickUnlockPin(currentPassword: string, pin: string): Promise<AuthResult<AuthUser>> {
+  if (!(await ensureFreshToken())) return [null, new ApiError('Your session has expired. Sign in again.', 401)];
+  const [updatedUser, error] = await post<AuthUser>('/auth/pin', { currentPassword, pin: pin.trim() }, true);
+  if (error || !updatedUser) return [null, error ?? new ApiError('Could not save quick-unlock PIN.', 0)];
+  user = { ...updatedUser, email: updatedUser.email ?? user?.email ?? null };
+  if (!isWeb()) {
+    await setSecureItem(USER_KEY, JSON.stringify(user));
+  } else if (accessToken) {
+    broadcastAuth({
+      type: 'session-refreshed',
+      accessToken,
+      accessTokenExpiresAtUtc: new Date(accessExpiresAt).toISOString(),
+      user,
+    });
+  }
+  emit();
+  return [user, null];
+}
+
+export async function removeQuickUnlockPin(currentPassword: string): Promise<AuthResult<AuthUser>> {
+  if (!(await ensureFreshToken())) return [null, new ApiError('Your session has expired. Sign in again.', 401)];
+  const [updatedUser, error] = await deleteWithBody<AuthUser>('/auth/pin', { currentPassword }, true);
+  if (error || !updatedUser) return [null, error ?? new ApiError('Could not remove quick-unlock PIN.', 0)];
+  user = { ...updatedUser, email: updatedUser.email ?? user?.email ?? null };
+  if (!isWeb()) {
+    await setSecureItem(USER_KEY, JSON.stringify(user));
+  } else if (accessToken) {
+    broadcastAuth({
+      type: 'session-refreshed',
+      accessToken,
+      accessTokenExpiresAtUtc: new Date(accessExpiresAt).toISOString(),
+      user,
+    });
+  }
+  emit();
+  return [user, null];
+}
+
+export function updateSessionPolicy(policy: SessionPolicy): void {
+  if (!user) return;
+  user = { ...user, sessionPolicy: policy };
+  if (isWeb() && accessToken) {
+    broadcastAuth({
+      type: 'session-refreshed',
+      accessToken,
+      accessTokenExpiresAtUtc: new Date(accessExpiresAt).toISOString(),
+      user,
+    });
+  } else if (!isWeb()) {
+    void setSecureItem(USER_KEY, JSON.stringify(user));
+  }
+  emit();
+}
+
 export async function logout(): Promise<void> {
+  const token = refreshToken;
+  await clearSession('none');
   if (isWeb()) {
     // Best effort: revoke server-side cookie session, but never block sign-out on connectivity.
     await post('/auth/logout', {});
-  } else {
-    const token = refreshToken;
-    if (token) {
-      // Best effort: revoke server-side, but never block sign-out on connectivity.
-      await post('/auth/logout', { refreshToken: token });
-    }
+  } else if (token) {
+    // Best effort: revoke server-side, but never block sign-out on connectivity.
+    await post('/auth/logout', { refreshToken: token });
   }
-  await clearSession('none');
 }
 
 /** Signs out all open web tabs after prolonged user inactivity. */
 export async function idleLogout(): Promise<void> {
+  const token = refreshToken;
+  // Clear and broadcast 'idle' BEFORE revoking on the server so peer tabs/polls cannot race
+  // into /auth/refresh and overwrite the inactivity reason with a generic 401 expiration notice.
+  await clearSession('idle');
   if (isWeb()) {
     await post('/auth/logout', {});
-  } else {
-    const token = refreshToken;
-    if (token) {
-      await post('/auth/logout', { refreshToken: token });
-    }
+  } else if (token) {
+    await post('/auth/logout', { refreshToken: token });
   }
-  await clearSession('idle');
 }
 
 /** Local sign-out without contacting the server (e.g. offline lock or forgotten PIN). */

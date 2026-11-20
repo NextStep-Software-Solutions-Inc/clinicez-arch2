@@ -3578,6 +3578,11 @@ export interface ClinicSettingsRecord {
   allowNurseMidwifeYakapFpeFacilitator?: boolean;
   defaultHealthScreeningServiceItemId?: string | null;
   defaultHealthScreeningServiceCode?: string | null;
+
+  // Workstation Session Lock & Timeout Policies
+  idleLockMinutes?: number;
+  maxLockedSessionHours?: number;
+  allowStaffPinUnlock?: boolean;
 }
 
 export interface DocumentSignatoryItemConfig {

@@ -28,6 +28,16 @@ public interface IClinicAuthService
 
     Task<AuthOutcome> RefreshAsync(string? refreshToken, CancellationToken ct = default);
 
+    Task<AuthOutcome> LockSessionAsync(string? refreshToken, CancellationToken ct = default);
+
+    Task<AuthOutcome> UnlockWithPinAsync(string? refreshToken, string? pin, CancellationToken ct = default);
+
+    Task<AuthOutcome> UnlockWithPasswordAsync(string? refreshToken, string? password, CancellationToken ct = default);
+
+    Task<(AuthUserDto? User, AuthFailure Failure, string? Message)> SetQuickUnlockPinAsync(Guid staffId, SetQuickUnlockPinRequest request, CancellationToken ct = default);
+
+    Task<(AuthUserDto? User, AuthFailure Failure, string? Message)> RemoveQuickUnlockPinAsync(Guid staffId, RemoveQuickUnlockPinRequest request, CancellationToken ct = default);
+
     Task LogoutAsync(string? refreshToken, CancellationToken ct = default);
 
     Task<AuthOutcome> BootstrapAsync(BootstrapRequest request, CancellationToken ct = default);
@@ -55,6 +65,8 @@ public interface IClinicAuthService
 public sealed class ClinicAuthService : IClinicAuthService
 {
     private static readonly Guid LegacyDefaultClinicId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private const int PinLength = 6;
+    private const int MaxFailedPinAttempts = 5;
 
     // Pre-computed hash used to equalise timing for unknown accounts.
     private readonly string _dummyHash;
@@ -164,12 +176,198 @@ public sealed class ClinicAuthService : IClinicAuthService
 
     public async Task<AuthOutcome> RefreshAsync(string? refreshToken, CancellationToken ct = default)
     {
+        var (context, error) = await ValidateRefreshTokenAsync(refreshToken, ct);
+        if (error is not null) return error;
+
+        var (stored, staff, resolved, now) = context!;
+        if (stored.LockedAtUtc is { } lockedAt)
+        {
+            var lockExpiresAt = GetLockExpiryUtc(lockedAt, resolved.Settings);
+            if (now >= lockExpiresAt)
+            {
+                await RevokeFamilyAsync(stored.FamilyId, now, ct);
+                return AuthOutcome.Fail(AuthFailure.InvalidToken, "Your locked session has expired. Please sign in again.");
+            }
+            return AuthOutcome.Locked(BuildLockedSession(staff, resolved.Settings, lockedAt, lockExpiresAt));
+        }
+
+        var issued = await IssueTokensAsync(staff, resolved, stored.FamilyId, stored.DeviceLabel, ct, replacing: stored);
+        return AuthOutcome.Success(issued);
+    }
+
+    public async Task<AuthOutcome> LockSessionAsync(string? refreshToken, CancellationToken ct = default)
+    {
+        var (context, error) = await ValidateRefreshTokenAsync(refreshToken, ct);
+        if (error is not null) return error;
+
+        var (stored, staff, resolved, now) = context!;
+        if (stored.LockedAtUtc is null)
+        {
+            stored.LockedAtUtc = now;
+            await _db.SaveChangesAsync(ct);
+        }
+
+        var lockedAt = stored.LockedAtUtc.Value;
+        var lockExpiresAt = GetLockExpiryUtc(lockedAt, resolved.Settings);
+        if (now >= lockExpiresAt)
+        {
+            await RevokeFamilyAsync(stored.FamilyId, now, ct);
+            return AuthOutcome.Fail(AuthFailure.InvalidToken, "Your locked session has expired. Please sign in again.");
+        }
+
+        return AuthOutcome.Locked(BuildLockedSession(staff, resolved.Settings, lockedAt, lockExpiresAt));
+    }
+
+    public async Task<AuthOutcome> UnlockWithPinAsync(string? refreshToken, string? pin, CancellationToken ct = default)
+    {
+        var (context, error) = await ValidateRefreshTokenAsync(refreshToken, ct);
+        if (error is not null) return error;
+
+        var (stored, staff, resolved, now) = context!;
+        if (!resolved.Settings.AllowStaffPinUnlock)
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "Quick-unlock PIN is disabled by your clinic administrator. Use your password.");
+
+        if (string.IsNullOrEmpty(staff.QuickUnlockPinHash))
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "No quick-unlock PIN is set for this account. Use your password.");
+
+        var lockAnchor = stored.LockedAtUtc ?? stored.CreatedAt;
+        if (now >= GetLockExpiryUtc(lockAnchor, resolved.Settings))
+        {
+            await RevokeFamilyAsync(stored.FamilyId, now, ct);
+            return AuthOutcome.Fail(AuthFailure.InvalidToken, "Your locked session has expired. Please sign in again.");
+        }
+
+        var trimmedPin = pin?.Trim() ?? string.Empty;
+        if (trimmedPin.Length != PinLength || !trimmedPin.All(char.IsAsciiDigit) || !_hasher.Verify(staff.QuickUnlockPinHash, trimmedPin))
+        {
+            staff.FailedPinAttempts++;
+            if (staff.FailedPinAttempts >= MaxFailedPinAttempts)
+            {
+                staff.FailedPinAttempts = 0;
+                await RevokeFamilyAsync(stored.FamilyId, now, ct);
+                _logger.LogWarning("[Auth] Refresh family revoked for staff {StaffId} after {Attempts} failed PIN attempts.", staff.Id, MaxFailedPinAttempts);
+                return AuthOutcome.Fail(AuthFailure.InvalidToken, "Too many incorrect PIN attempts. Sign in with your password.");
+            }
+            await _db.SaveChangesAsync(ct);
+            var remaining = MaxFailedPinAttempts - staff.FailedPinAttempts;
+            return AuthOutcome.Fail(AuthFailure.InvalidCredentials, $"Incorrect PIN. {remaining} attempt{(remaining == 1 ? "" : "s")} left.");
+        }
+
+        staff.FailedPinAttempts = 0;
+        staff.FailedLoginCount = 0;
+        staff.LockoutEnd = null;
+        staff.LastLoginAt = now;
+
+        var issued = await IssueTokensAsync(staff, resolved, stored.FamilyId, stored.DeviceLabel, ct, replacing: stored);
+        return AuthOutcome.Success(issued);
+    }
+
+    public async Task<AuthOutcome> UnlockWithPasswordAsync(string? refreshToken, string? password, CancellationToken ct = default)
+    {
+        var (context, error) = await ValidateRefreshTokenAsync(refreshToken, ct);
+        if (error is not null) return error;
+
+        var (stored, staff, resolved, now) = context!;
+        if (string.IsNullOrEmpty(staff.PasswordHash) || string.IsNullOrEmpty(password))
+            return AuthOutcome.Fail(AuthFailure.InvalidCredentials, "Enter your password.");
+
+        if (staff.LockoutEnd is { } lockoutEnd && lockoutEnd > now)
+            return AuthOutcome.Fail(AuthFailure.AccountLocked, "Account is temporarily locked. Try again later.");
+
+        if (!_hasher.Verify(staff.PasswordHash, password))
+        {
+            staff.FailedLoginCount++;
+            if (staff.FailedLoginCount >= Options.MaxFailedLoginAttempts)
+            {
+                staff.LockoutEnd = now.AddMinutes(Options.LockoutMinutes);
+                staff.FailedLoginCount = 0;
+                await RevokeFamilyAsync(stored.FamilyId, now, ct);
+                _logger.LogWarning("[Auth] Staff {StaffId} locked out after repeated failed unlock attempts.", staff.Id);
+                return AuthOutcome.Fail(AuthFailure.InvalidToken, "Too many incorrect password attempts. Please sign in again later.");
+            }
+            await _db.SaveChangesAsync(ct);
+            return AuthOutcome.Fail(AuthFailure.InvalidCredentials, "Incorrect password.");
+        }
+
+        staff.FailedLoginCount = 0;
+        staff.FailedPinAttempts = 0;
+        staff.LockoutEnd = null;
+        staff.LastLoginAt = now;
+
+        var issued = await IssueTokensAsync(staff, resolved, stored.FamilyId, stored.DeviceLabel, ct, replacing: stored);
+        return AuthOutcome.Success(issued);
+    }
+
+    public async Task<(AuthUserDto? User, AuthFailure Failure, string? Message)> SetQuickUnlockPinAsync(
+        Guid staffId,
+        SetQuickUnlockPinRequest request,
+        CancellationToken ct = default)
+    {
+        var staff = await _db.StaffMembers.IgnoreQueryFilters()
+            .Include(s => s.ClinicRole)
+            .FirstOrDefaultAsync(s => s.Id == staffId && !s.IsDeleted && s.IsActive, ct);
+        if (staff is null || string.IsNullOrEmpty(staff.PasswordHash))
+            return (null, AuthFailure.NotFound, "Account not found.");
+
+        if (string.IsNullOrEmpty(request.CurrentPassword) || !_hasher.Verify(staff.PasswordHash, request.CurrentPassword))
+            return (null, AuthFailure.InvalidCredentials, "Current password is incorrect.");
+
+        var resolved = await ResolveByClinicAsync(staff.ClinicId, ct);
+        if (resolved is null)
+            return (null, AuthFailure.WorkspaceNotFound, "Workspace was not found or is not activated.");
+
+        if (!resolved.Settings.AllowStaffPinUnlock)
+            return (null, AuthFailure.InvalidRequest, "Quick-unlock PIN is disabled by your clinic administrator.");
+
+        var pin = request.Pin?.Trim() ?? string.Empty;
+        if (IsWeakOrInvalidPin(pin))
+            return (null, AuthFailure.WeakPassword, $"Choose a {PinLength}-digit PIN that is not a simple sequence or repeated digit.");
+
+        staff.QuickUnlockPinHash = _hasher.Hash(pin);
+        staff.QuickUnlockPinSetAtUtc = DateTime.UtcNow;
+        staff.FailedPinAttempts = 0;
+        await _db.SaveChangesAsync(ct);
+
+        return (ToUser(staff, resolved.Settings), AuthFailure.None, null);
+    }
+
+    public async Task<(AuthUserDto? User, AuthFailure Failure, string? Message)> RemoveQuickUnlockPinAsync(
+        Guid staffId,
+        RemoveQuickUnlockPinRequest request,
+        CancellationToken ct = default)
+    {
+        var staff = await _db.StaffMembers.IgnoreQueryFilters()
+            .Include(s => s.ClinicRole)
+            .FirstOrDefaultAsync(s => s.Id == staffId && !s.IsDeleted && s.IsActive, ct);
+        if (staff is null || string.IsNullOrEmpty(staff.PasswordHash))
+            return (null, AuthFailure.NotFound, "Account not found.");
+
+        if (string.IsNullOrEmpty(request.CurrentPassword) || !_hasher.Verify(staff.PasswordHash, request.CurrentPassword))
+            return (null, AuthFailure.InvalidCredentials, "Current password is incorrect.");
+
+        var resolved = await ResolveByClinicAsync(staff.ClinicId, ct);
+        if (resolved is null)
+            return (null, AuthFailure.WorkspaceNotFound, "Workspace was not found or is not activated.");
+
+        staff.QuickUnlockPinHash = null;
+        staff.QuickUnlockPinSetAtUtc = null;
+        staff.FailedPinAttempts = 0;
+        await _db.SaveChangesAsync(ct);
+
+        return (ToUser(staff, resolved.Settings), AuthFailure.None, null);
+    }
+
+    private sealed record ValidatedRefreshContext(RefreshToken Stored, StaffMember Staff, ResolvedWorkspace Resolved, DateTime NowUtc);
+
+    private async Task<(ValidatedRefreshContext? Context, AuthOutcome? Error)> ValidateRefreshTokenAsync(string? refreshToken, CancellationToken ct)
+    {
         if (string.IsNullOrWhiteSpace(refreshToken))
-            return AuthOutcome.Fail(AuthFailure.InvalidToken, "Invalid refresh token.");
+            return (null, AuthOutcome.Fail(AuthFailure.InvalidToken, "Invalid refresh token."));
 
         var hash = _tokens.HashRefreshToken(refreshToken.Trim());
         var stored = await _db.RefreshTokens.IgnoreQueryFilters().FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
-        if (stored is null) return AuthOutcome.Fail(AuthFailure.InvalidToken, "Invalid refresh token.");
+        if (stored is null)
+            return (null, AuthOutcome.Fail(AuthFailure.InvalidToken, "Invalid refresh token."));
 
         var now = DateTime.UtcNow;
         if (stored.RevokedAt is not null)
@@ -177,25 +375,55 @@ public sealed class ClinicAuthService : IClinicAuthService
             // A rotated/revoked token was presented again: assume theft and revoke the whole family.
             await RevokeFamilyAsync(stored.FamilyId, now, ct);
             _logger.LogWarning("[Auth] Refresh token reuse detected for staff {StaffId}; family revoked.", stored.StaffMemberId);
-            return AuthOutcome.Fail(AuthFailure.InvalidToken, "Invalid refresh token.");
+            return (null, AuthOutcome.Fail(AuthFailure.InvalidToken, "Invalid refresh token."));
         }
 
-        if (stored.ExpiresAt <= now) return AuthOutcome.Fail(AuthFailure.InvalidToken, "Refresh token expired.");
+        if (stored.ExpiresAt <= now)
+            return (null, AuthOutcome.Fail(AuthFailure.InvalidToken, "Refresh token expired."));
 
         var staff = await _db.StaffMembers.IgnoreQueryFilters()
             .Include(s => s.ClinicRole)
             .FirstOrDefaultAsync(s => s.Id == stored.StaffMemberId && !s.IsDeleted, ct);
         if (staff is null || !staff.IsActive)
-            return AuthOutcome.Fail(AuthFailure.InvalidToken, "Invalid refresh token.");
+            return (null, AuthOutcome.Fail(AuthFailure.InvalidToken, "Invalid refresh token."));
 
         var resolved = await ResolveByClinicAsync(staff.ClinicId, ct);
-        if (resolved is null) return AuthOutcome.Fail(AuthFailure.WorkspaceNotFound, "Workspace was not found or is not activated.");
+        if (resolved is null)
+            return (null, AuthOutcome.Fail(AuthFailure.WorkspaceNotFound, "Workspace was not found or is not activated."));
 
         var gate = CheckLicense(resolved);
-        if (gate is not null) return gate;
+        if (gate is not null) return (null, gate);
 
-        var issued = await IssueTokensAsync(staff, resolved, stored.FamilyId, stored.DeviceLabel, ct, replacing: stored);
-        return AuthOutcome.Success(issued);
+        return (new ValidatedRefreshContext(stored, staff, resolved, now), null);
+    }
+
+    private static DateTime GetLockExpiryUtc(DateTime lockedAtUtc, FacilitySettings settings) =>
+        lockedAtUtc.AddHours(Math.Clamp(settings.MaxLockedSessionHours, 1, 24));
+
+    private static LockedSessionDto BuildLockedSession(StaffMember staff, FacilitySettings settings, DateTime lockedAtUtc, DateTime lockExpiresAtUtc) => new(
+        staff.Id,
+        $"{staff.FirstName} {staff.LastName}".Trim(),
+        staff.Email,
+        staff.Role.ToString(),
+        staff.ClinicRole?.Name,
+        settings.ClinicName,
+        !string.IsNullOrEmpty(staff.QuickUnlockPinHash),
+        settings.AllowStaffPinUnlock,
+        lockedAtUtc,
+        lockExpiresAtUtc);
+
+    private static bool IsWeakOrInvalidPin(string pin)
+    {
+        if (pin.Length != PinLength || !pin.All(char.IsAsciiDigit)) return true;
+        if (pin.All(c => c == pin[0])) return true;
+        var ascending = true;
+        var descending = true;
+        for (var i = 1; i < pin.Length; i++)
+        {
+            if (pin[i] != pin[i - 1] + 1) ascending = false;
+            if (pin[i] != pin[i - 1] - 1) descending = false;
+        }
+        return ascending || descending;
     }
 
     public async Task LogoutAsync(string? refreshToken, CancellationToken ct = default)
@@ -446,6 +674,9 @@ public sealed class ClinicAuthService : IClinicAuthService
         staff.PasswordHash = _hasher.Hash(request.NewPassword);
         staff.MustChangePassword = false;
         staff.FailedLoginCount = 0;
+        staff.FailedPinAttempts = 0;
+        staff.QuickUnlockPinHash = null;
+        staff.QuickUnlockPinSetAtUtc = null;
         staff.LockoutEnd = null;
         staff.LastLoginAt = now;
         staff.TokenVersion++;
@@ -487,6 +718,7 @@ public sealed class ClinicAuthService : IClinicAuthService
 
         staff.PasswordHash = _hasher.Hash(request.NewPassword!);
         staff.MustChangePassword = false;
+        staff.FailedPinAttempts = 0;
         staff.TokenVersion++;
         await RevokeAllRefreshTokensAsync(staff.Id, DateTime.UtcNow, ct, save: false);
         _accessCache.Invalidate(staff.Id);
@@ -516,6 +748,9 @@ public sealed class ClinicAuthService : IClinicAuthService
         staff.PasswordHash = _hasher.Hash(temporaryPassword!);
         staff.MustChangePassword = true;
         staff.FailedLoginCount = 0;
+        staff.FailedPinAttempts = 0;
+        staff.QuickUnlockPinHash = null;
+        staff.QuickUnlockPinSetAtUtc = null;
         staff.LockoutEnd = null;
         staff.TokenVersion++;
         await RevokeAllRefreshTokensAsync(staff.Id, DateTime.UtcNow, ct, save: false);
@@ -544,7 +779,7 @@ public sealed class ClinicAuthService : IClinicAuthService
         if (staff is null) return null;
 
         var resolved = await ResolveByClinicAsync(staff.ClinicId, ct);
-        return ToUser(staff, resolved?.Settings.ClinicName ?? string.Empty);
+        return ToUser(staff, resolved?.Settings);
     }
 
     public async Task<ClinicStaffInvitationDetailsDto?> GetInvitationDetailsAsync(string token, CancellationToken ct = default)
@@ -721,20 +956,27 @@ public sealed class ClinicAuthService : IClinicAuthService
         }
 
         await _db.SaveChangesAsync(ct);
-        return new AuthTokensDto(access.Token, rawRefresh, access.ExpiresAtUtc, refreshExpires, ToUser(staff, resolved.Settings.ClinicName));
+        return new AuthTokensDto(access.Token, rawRefresh, access.ExpiresAtUtc, refreshExpires, ToUser(staff, resolved.Settings));
     }
 
-    private static AuthUserDto ToUser(StaffMember staff, string clinicName) => new(
+    private static AuthUserDto ToUser(StaffMember staff, FacilitySettings? settings) => new(
         staff.Id,
         $"{staff.FirstName} {staff.LastName}".Trim(),
         staff.Role.ToString(),
         staff.ClinicRole?.Name,
         staff.ClinicId,
         staff.TenantId,
-        clinicName,
+        settings?.ClinicName ?? string.Empty,
         StaffPermissions.For(staff),
         staff.MustChangePassword,
-        staff.Email);
+        staff.Email,
+        !string.IsNullOrEmpty(staff.QuickUnlockPinHash),
+        settings is null
+            ? null
+            : new SessionPolicyDto(
+                settings.IdleLockMinutes,
+                Math.Clamp(settings.MaxLockedSessionHours, 1, 24),
+                settings.AllowStaffPinUnlock));
 
     private async Task RevokeFamilyAsync(Guid familyId, DateTime now, CancellationToken ct)
     {

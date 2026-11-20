@@ -100,7 +100,10 @@ public sealed record ClinicSettingsDto(
     string? DefaultHealthScreeningServiceCode = "HEALTH-SCREEN",
     bool EnableStaffMorningDigest = true,
     bool EnableStaffPreSlotReminders = true,
-    bool EnableStaffOverdueAlerts = true)
+    bool EnableStaffOverdueAlerts = true,
+    int IdleLockMinutes = 15,
+    int MaxLockedSessionHours = 8,
+    bool AllowStaffPinUnlock = true)
 {
     public static ClinicSettingsDto FromEntity(FacilitySettings settings, bool isWorkspaceTeleconsultEntitled = false) => new(
         settings.Id,
@@ -197,5 +200,8 @@ public sealed record ClinicSettingsDto(
         DefaultHealthScreeningServiceCode: settings.DefaultHealthScreeningServiceCode,
         EnableStaffMorningDigest: settings.EnableStaffMorningDigest,
         EnableStaffPreSlotReminders: settings.EnableStaffPreSlotReminders,
-        EnableStaffOverdueAlerts: settings.EnableStaffOverdueAlerts);
+        EnableStaffOverdueAlerts: settings.EnableStaffOverdueAlerts,
+        IdleLockMinutes: settings.IdleLockMinutes,
+        MaxLockedSessionHours: settings.MaxLockedSessionHours,
+        AllowStaffPinUnlock: settings.AllowStaffPinUnlock);
 }

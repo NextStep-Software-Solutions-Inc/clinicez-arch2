@@ -94,6 +94,10 @@ public sealed class FacilitySettingsConfiguration : IEntityTypeConfiguration<Fac
             entity.Property(e => e.DefaultHealthScreeningServiceItemId);
             entity.Property(e => e.DefaultHealthScreeningServiceCode).HasMaxLength(50);
 
+            entity.Property(e => e.IdleLockMinutes).HasDefaultValue(15);
+            entity.Property(e => e.MaxLockedSessionHours).HasDefaultValue(8);
+            entity.Property(e => e.AllowStaffPinUnlock).HasDefaultValue(true);
+
             entity.HasIndex(e => new { e.TenantId, e.ClinicId })
                 .IsUnique()
                 .HasFilter("\"IsDeleted\" = false");

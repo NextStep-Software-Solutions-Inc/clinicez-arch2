@@ -105,6 +105,74 @@ public sealed class AuthController : ControllerBase
         return ToResult(outcome);
     }
 
+    [HttpPost("lock")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Lock([FromBody] RefreshRequest? request, CancellationToken ct)
+    {
+        var outcome = await _auth.LockSessionAsync(ResolveRefreshToken(request), ct);
+        if (outcome.Failure == AuthFailure.SessionLocked && outcome.LockedSession is not null)
+        {
+            return Ok(ApiResponse<LockedSessionDto>.Success(outcome.LockedSession, "Workstation locked."));
+        }
+        if (!outcome.Ok && IsWebClient && outcome.Failure == AuthFailure.InvalidToken)
+        {
+            ClearRefreshCookie();
+        }
+        return ToResult(outcome);
+    }
+
+    [HttpPost("unlock-pin")]
+    [AllowAnonymous]
+    public async Task<IActionResult> UnlockPin([FromBody] UnlockPinRequest? request, CancellationToken ct)
+    {
+        var token = ResolveRefreshToken(request is null ? null : new RefreshRequest(request.RefreshToken));
+        var outcome = await _auth.UnlockWithPinAsync(token, request?.Pin, ct);
+        if (!outcome.Ok && IsWebClient && outcome.Failure == AuthFailure.InvalidToken)
+        {
+            ClearRefreshCookie();
+        }
+        return ToResult(outcome);
+    }
+
+    [HttpPost("unlock-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> UnlockPassword([FromBody] UnlockPasswordRequest? request, CancellationToken ct)
+    {
+        var token = ResolveRefreshToken(request is null ? null : new RefreshRequest(request.RefreshToken));
+        var outcome = await _auth.UnlockWithPasswordAsync(token, request?.Password, ct);
+        if (!outcome.Ok && IsWebClient && outcome.Failure == AuthFailure.InvalidToken)
+        {
+            ClearRefreshCookie();
+        }
+        return ToResult(outcome);
+    }
+
+    [HttpPost("pin")]
+    [Authorize]
+    public async Task<IActionResult> SetQuickUnlockPin([FromBody] SetQuickUnlockPinRequest request, CancellationToken ct)
+    {
+        if (!TryGetStaffId(out var staffId)) return Unauthorized();
+        var (user, failure, message) = await _auth.SetQuickUnlockPinAsync(staffId, request, ct);
+        if (user is not null)
+        {
+            return Ok(ApiResponse<AuthUserDto>.Success(user, "Quick-unlock PIN saved."));
+        }
+        return ToFailureResult(failure, message);
+    }
+
+    [HttpDelete("pin")]
+    [Authorize]
+    public async Task<IActionResult> RemoveQuickUnlockPin([FromBody] RemoveQuickUnlockPinRequest request, CancellationToken ct)
+    {
+        if (!TryGetStaffId(out var staffId)) return Unauthorized();
+        var (user, failure, message) = await _auth.RemoveQuickUnlockPinAsync(staffId, request, ct);
+        if (user is not null)
+        {
+            return Ok(ApiResponse<AuthUserDto>.Success(user, "Quick-unlock PIN removed."));
+        }
+        return ToFailureResult(failure, message);
+    }
+
     [HttpPost("logout")]
     [AllowAnonymous]
     public async Task<IActionResult> Logout([FromBody] RefreshRequest? request, CancellationToken ct)
@@ -190,11 +258,26 @@ public sealed class AuthController : ControllerBase
             return Ok(ApiResponse<AuthTokensDto>.Success(tokens));
         }
 
-        var status = outcome.Failure switch
+        if (outcome.Failure == AuthFailure.SessionLocked && outcome.LockedSession is not null)
+        {
+            var lockedResponse = ApiResponse<LockedSessionDto>.Fail(
+                outcome.Message ?? "Workstation is locked.",
+                "SESSION_LOCKED");
+            lockedResponse.Data = outcome.LockedSession;
+            return StatusCode(StatusCodes.Status423Locked, lockedResponse);
+        }
+
+        return ToFailureResult(outcome.Failure, outcome.Message, outcome.Errors);
+    }
+
+    private IActionResult ToFailureResult(AuthFailure failure, string? message, System.Collections.Generic.IReadOnlyList<string>? errorList = null)
+    {
+        var status = failure switch
         {
             AuthFailure.InvalidCredentials => StatusCodes.Status401Unauthorized,
             AuthFailure.InvalidToken => StatusCodes.Status401Unauthorized,
             AuthFailure.AccountLocked => StatusCodes.Status423Locked,
+            AuthFailure.SessionLocked => StatusCodes.Status423Locked,
             AuthFailure.WorkspaceNotFound => StatusCodes.Status404NotFound,
             AuthFailure.NotFound => StatusCodes.Status404NotFound,
             AuthFailure.ActivationRequired => StatusCodes.Status403Forbidden,
@@ -203,8 +286,16 @@ public sealed class AuthController : ControllerBase
             _ => StatusCodes.Status400BadRequest
         };
 
-        var errors = outcome.Errors?.Select(e => new ApiFieldError("Password", outcome.Failure.ToString().ToUpperInvariant(), e)).ToArray();
-        return StatusCode(status, ApiResponse<object>.Fail(outcome.Message ?? "Request failed.", errors));
+        var code = failure switch
+        {
+            AuthFailure.AccountLocked => "ACCOUNT_LOCKED",
+            AuthFailure.SessionLocked => "SESSION_LOCKED",
+            _ => failure.ToString().ToUpperInvariant()
+        };
+
+        var errors = errorList?.Select(e => new ApiFieldError("Password", code, e)).ToArray();
+        var response = ApiResponse<object>.Fail(message ?? "Request failed.", errors, code);
+        return StatusCode(status, response);
     }
 }
 

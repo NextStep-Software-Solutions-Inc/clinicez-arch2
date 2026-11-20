@@ -442,6 +442,13 @@ export const SETTINGS_SECTION_CATALOG: SettingsGroupDefinition[] = [
           'admin',
           'privileges',
           'authority',
+          'session',
+          'timeout',
+          'idle',
+          'inactivity',
+          'lock',
+          'pin',
+          'quick unlock',
         ],
       },
       {

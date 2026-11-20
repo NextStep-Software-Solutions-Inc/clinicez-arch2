@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
@@ -8,6 +8,8 @@ import Input from '../ui/Input';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Skeleton, SkeletonList } from '../ui/Skeleton';
 import { theme } from '../../constants/theme';
+import { PIN_LENGTH, isWeakPin } from '../../services/pinCrypto';
+import { notify } from '../../utils/feedback';
 
 export interface ProfileSecurityTabProps {
   currentPassword: string;
@@ -22,6 +24,10 @@ export interface ProfileSecurityTabProps {
   planTier?: string | null;
   showSkeletons?: boolean;
   clinicLoading?: boolean;
+  hasQuickUnlockPin?: boolean;
+  allowStaffPinUnlock?: boolean;
+  onSetQuickUnlockPin?: (currentPassword: string, pin: string) => Promise<string | null>;
+  onRemoveQuickUnlockPin?: (currentPassword: string) => Promise<string | null>;
   onChangeCurrentPassword: (value: string) => void;
   onChangeNewPassword: (value: string) => void;
   onChangeConfirmPassword: (value: string) => void;
@@ -42,6 +48,10 @@ export default function ProfileSecurityTab({
   planTier,
   showSkeletons = false,
   clinicLoading = false,
+  hasQuickUnlockPin = false,
+  allowStaffPinUnlock = true,
+  onSetQuickUnlockPin,
+  onRemoveQuickUnlockPin,
   onChangeCurrentPassword,
   onChangeNewPassword,
   onChangeConfirmPassword,
@@ -52,6 +62,65 @@ export default function ProfileSecurityTab({
   const cleanServerLabel = (serverLabel ?? '').trim();
   const cleanServerUrl = (serverUrl ?? '').trim();
   const cleanFacility = (facilityName ?? '').trim();
+
+  const [pinMode, setPinMode] = useState<'idle' | 'set' | 'remove'>('idle');
+  const [pinPassword, setPinPassword] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+
+  const resetPinForm = () => {
+    setPinMode('idle');
+    setPinPassword('');
+    setNewPin('');
+    setConfirmPin('');
+    setPinError(null);
+  };
+
+  const handleSavePin = async () => {
+    if (!onSetQuickUnlockPin) return;
+    if (!pinPassword) {
+      setPinError('Enter your current password to verify your identity.');
+      return;
+    }
+    if (isWeakPin(newPin)) {
+      setPinError(`Choose a ${PIN_LENGTH}-digit PIN that is not a simple sequence or repeated digit.`);
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setPinError('The two PINs do not match.');
+      return;
+    }
+    setPinBusy(true);
+    setPinError(null);
+    const err = await onSetQuickUnlockPin(pinPassword, newPin);
+    setPinBusy(false);
+    if (err) {
+      setPinError(err);
+      return;
+    }
+    notify.success('Workstation Quick-Unlock PIN saved.');
+    resetPinForm();
+  };
+
+  const handleRemovePin = async () => {
+    if (!onRemoveQuickUnlockPin) return;
+    if (!pinPassword) {
+      setPinError('Enter your current password to remove your PIN.');
+      return;
+    }
+    setPinBusy(true);
+    setPinError(null);
+    const err = await onRemoveQuickUnlockPin(pinPassword);
+    setPinBusy(false);
+    if (err) {
+      setPinError(err);
+      return;
+    }
+    notify.success('Workstation Quick-Unlock PIN removed.');
+    resetPinForm();
+  };
 
   return (
     <View style={styles.tabContainer}>
@@ -139,7 +208,197 @@ export default function ProfileSecurityTab({
         </CardContent>
       </Card>
 
-      {/* Card 2: Server Connection Summary (No Offline PIN/Biometrics or OTA stubs on Web) */}
+      {/* Card 2: Workstation Quick-Unlock PIN */}
+      <Card>
+        <CardContent style={styles.cardBody}>
+          <View style={styles.splitRow}>
+            <View style={styles.contextColumn}>
+              <View style={styles.iconTile}>
+                <Icon name="lock" size={theme.sizes.iconMd} color={theme.colors.primary} />
+              </View>
+              <View style={styles.titleBadgeRow}>
+                <ThemedText variant="h3" color={theme.colors.text}>
+                  Quick-Unlock PIN
+                </ThemedText>
+                <Badge
+                  label={
+                    !allowStaffPinUnlock
+                      ? 'Disabled by admin'
+                      : hasQuickUnlockPin
+                        ? 'Active'
+                        : 'Not set'
+                  }
+                  variant={
+                    !allowStaffPinUnlock
+                      ? 'neutral'
+                      : hasQuickUnlockPin
+                        ? 'success'
+                        : 'neutral'
+                  }
+                  size="sm"
+                />
+              </View>
+              <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                Resume a locked clinic workstation quickly with a 6-digit PIN instead of re-typing your full password. Five wrong attempts automatically sign out the session.
+              </ThemedText>
+            </View>
+
+            <View style={styles.formColumn}>
+              {showSkeletons ? (
+                <SkeletonList rows={2} />
+              ) : !allowStaffPinUnlock ? (
+                <ThemedText variant="small" color={theme.colors.textSecondary}>
+                  Quick-Unlock PINs are currently disabled in your clinic security settings. Unlocking a locked workstation requires your account password.
+                </ThemedText>
+              ) : pinMode === 'set' ? (
+                <>
+                  {pinError ? (
+                    <View style={styles.errorBox}>
+                      <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+                      <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex1}>
+                        {pinError}
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                  <Input
+                    label="Current password"
+                    value={pinPassword}
+                    onChangeText={(val) => {
+                      setPinPassword(val);
+                      if (pinError) setPinError(null);
+                    }}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    placeholder="Confirm your current password"
+                    testID="quick-pin-current-password"
+                  />
+                  <View style={styles.gridRow}>
+                    <Input
+                      containerStyle={styles.colHalf}
+                      label={`New ${PIN_LENGTH}-digit PIN`}
+                      value={newPin}
+                      onChangeText={(val) => {
+                        setNewPin(val.replace(/\D/g, '').slice(0, PIN_LENGTH));
+                        if (pinError) setPinError(null);
+                      }}
+                      keyboardType="number-pad"
+                      secureTextEntry
+                      maxLength={PIN_LENGTH}
+                      placeholder="6 digits"
+                      helperText="Avoid repeating or sequential digits."
+                      testID="quick-pin-new"
+                    />
+                    <Input
+                      containerStyle={styles.colHalf}
+                      label="Confirm PIN"
+                      value={confirmPin}
+                      onChangeText={(val) => {
+                        setConfirmPin(val.replace(/\D/g, '').slice(0, PIN_LENGTH));
+                        if (pinError) setPinError(null);
+                      }}
+                      keyboardType="number-pad"
+                      secureTextEntry
+                      maxLength={PIN_LENGTH}
+                      placeholder="Re-type 6-digit PIN"
+                      testID="quick-pin-confirm"
+                    />
+                  </View>
+                  <View style={styles.pinActionsRow}>
+                    <Button
+                      title="Cancel"
+                      variant="secondary"
+                      size="sm"
+                      onPress={resetPinForm}
+                      disabled={pinBusy}
+                    />
+                    <Button
+                      title={hasQuickUnlockPin ? 'Update PIN' : 'Save PIN'}
+                      variant="primary"
+                      size="sm"
+                      icon="lock"
+                      loading={pinBusy}
+                      disabled={offline || !onSetQuickUnlockPin}
+                      onPress={() => void handleSavePin()}
+                      testID="quick-pin-save"
+                    />
+                  </View>
+                </>
+              ) : pinMode === 'remove' ? (
+                <>
+                  {pinError ? (
+                    <View style={styles.errorBox}>
+                      <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+                      <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex1}>
+                        {pinError}
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                  <Input
+                    label="Current password"
+                    value={pinPassword}
+                    onChangeText={(val) => {
+                      setPinPassword(val);
+                      if (pinError) setPinError(null);
+                    }}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    placeholder="Confirm password to remove PIN"
+                    testID="quick-pin-remove-password"
+                  />
+                  <View style={styles.pinActionsRow}>
+                    <Button
+                      title="Cancel"
+                      variant="secondary"
+                      size="sm"
+                      onPress={resetPinForm}
+                      disabled={pinBusy}
+                    />
+                    <Button
+                      title="Remove PIN"
+                      variant="danger"
+                      size="sm"
+                      loading={pinBusy}
+                      disabled={offline || !onRemoveQuickUnlockPin}
+                      onPress={() => void handleRemovePin()}
+                      testID="quick-pin-confirm-remove"
+                    />
+                  </View>
+                </>
+              ) : (
+                <View style={styles.pinActionsRow}>
+                  <Button
+                    title={hasQuickUnlockPin ? 'Change 6-digit PIN' : 'Set 6-digit PIN'}
+                    variant="primary"
+                    size="sm"
+                    icon="lock"
+                    disabled={offline || !onSetQuickUnlockPin}
+                    onPress={() => {
+                      setPinError(null);
+                      setPinMode('set');
+                    }}
+                    testID="quick-pin-open-setup"
+                  />
+                  {hasQuickUnlockPin ? (
+                    <Button
+                      title="Remove PIN"
+                      variant="secondary"
+                      size="sm"
+                      disabled={offline || !onRemoveQuickUnlockPin}
+                      onPress={() => {
+                        setPinError(null);
+                        setPinMode('remove');
+                      }}
+                      testID="quick-pin-open-remove"
+                    />
+                  ) : null}
+                </View>
+              )}
+            </View>
+          </View>
+        </CardContent>
+      </Card>
+
+      {/* Card 3: Server Connection Summary */}
       <Card>
         <CardHeader
           icon="wifi"
@@ -282,6 +541,19 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    paddingTop: theme.spacing.xs,
+  },
+  titleBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  pinActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    gap: theme.spacing.sm,
     paddingTop: theme.spacing.xs,
   },
   connectionBody: {

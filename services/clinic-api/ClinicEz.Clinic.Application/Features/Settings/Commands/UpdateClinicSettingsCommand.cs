@@ -89,7 +89,10 @@ public sealed record UpdateClinicSettingsCommand(
     bool ClearDefaultHealthScreeningServiceItemId = false,
     bool? EnableStaffMorningDigest = null,
     bool? EnableStaffPreSlotReminders = null,
-    bool? EnableStaffOverdueAlerts = null) : IRequest<ClinicSettingsDto>;
+    bool? EnableStaffOverdueAlerts = null,
+    int? IdleLockMinutes = null,
+    int? MaxLockedSessionHours = null,
+    bool? AllowStaffPinUnlock = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -439,6 +442,23 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.DefaultHealthScreeningServiceCode = string.IsNullOrWhiteSpace(request.DefaultHealthScreeningServiceCode)
                 ? null
                 : request.DefaultHealthScreeningServiceCode.Trim();
+
+        if (request.IdleLockMinutes.HasValue)
+        {
+            var mins = request.IdleLockMinutes.Value;
+            if (mins == 0 || (mins >= 5 && mins <= 120))
+                settings.IdleLockMinutes = mins;
+        }
+
+        if (request.MaxLockedSessionHours.HasValue)
+        {
+            var hours = request.MaxLockedSessionHours.Value;
+            if (hours >= 1 && hours <= 24)
+                settings.MaxLockedSessionHours = hours;
+        }
+
+        if (request.AllowStaffPinUnlock.HasValue)
+            settings.AllowStaffPinUnlock = request.AllowStaffPinUnlock.Value;
 
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";

@@ -17,6 +17,7 @@ public sealed class RefreshToken : ClinicScopedEntity
 
     public DateTime ExpiresAt { get; set; }
     public DateTime? RevokedAt { get; set; }
+    public DateTime? LockedAtUtc { get; set; }
     public Guid? ReplacedByTokenId { get; set; }
     public string? DeviceLabel { get; set; }
 }
