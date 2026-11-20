@@ -18,6 +18,7 @@ public static class DependencyInjection
         services.AddOpenApi();
 
         services.AddExceptionHandler<GlobalExceptionHandler>();
+        services.Configure<Microsoft.AspNetCore.Routing.RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
         services.AddProblemDetails();
 
         services.AddAuthorization();

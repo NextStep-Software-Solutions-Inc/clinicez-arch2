@@ -98,10 +98,12 @@ public sealed class ResendPatientMessageCommandHandler : IRequestHandler<ResendP
             RetentionDeadlineUtc: retentionDeadline
         );
 
+        var targetFacilityType = CommunicationCommandRules.ResolveFacilityType(conversation.HomeFacilityType);
+
         _publisher.Enqueue(
             InteropTypes.CommsMessageSubmit,
             Party.ForPatient(conversation.PatientId.ToString()),
-            Party.ForFacility(conversation.HomeTenantId, conversation.HomeFacilityId, FacilityType.Clinic, InteropServices.Comms),
+            Party.ForFacility(conversation.HomeTenantId, conversation.HomeFacilityId, targetFacilityType, InteropServices.Comms),
             conversation.Id,
             payload
         );

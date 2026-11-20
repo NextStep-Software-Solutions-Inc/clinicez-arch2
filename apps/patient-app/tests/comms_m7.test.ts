@@ -28,7 +28,7 @@ describe('Milestone M7: Patient Comms & Teleconsultation', () => {
           facilityId: 'fac-1',
           facilityName: 'Metro Health Clinic',
           homeFacilityType: 'Clinic',
-          category: 'Medical',
+          category: 'PostVisitFollowUp',
           subject: 'Lab Results Inquiry',
           status: 'Routed',
           unreadCount: 1,
@@ -43,8 +43,8 @@ describe('Milestone M7: Patient Comms & Teleconsultation', () => {
           facilityName: 'Mercury Rx Hub',
           homeFacilityType: 'Pharmacy',
           category: 'PrescriptionRefill',
+          status: 'WithTriage',
           subject: 'Amlodipine 10mg refill',
-          status: 'Triage',
           unreadCount: 0,
           lastMessageAtUtc: new Date().toISOString(),
           lastMessagePreview: 'Order confirmed and ready for pickup.',
@@ -87,13 +87,13 @@ describe('Milestone M7: Patient Comms & Teleconsultation', () => {
         facilityId: 'fac-1',
         facilityType: 'Clinic',
         facilityName: 'Main Clinic',
-        category: 'Medical',
+        category: 'PostVisitFollowUp',
         contentText: 'I have a mild rash on my arm.',
         isEmergencyConfirmed: false,
       });
 
       expect(requestedPath).toBe('/patient/requests');
-      expect(requestBody.category).toBe('Medical');
+      expect(requestBody.category).toBe('PostVisitFollowUp');
       expect(requestBody.isEmergencyConfirmed).toBe(false);
       expect(response.conversationId).toBe('c-new');
       expect(response.isEmergencyRedirect).toBe(false);
@@ -292,6 +292,49 @@ describe('Milestone M7: Patient Comms & Teleconsultation', () => {
       // Filter chips uniform with other screens (FilterChipBar with facility filter)
       expect(content).toContain('FilterChipBar');
       expect(content).toContain('All Facilities');
+    });
+
+    it('enforces Issue #181 invariants: canonical SDK MessageCategory, zero placeholder grants, and <=1000 combined content length', () => {
+      const servicePath = path.resolve(
+        import.meta.dir,
+        '../services/comms/communicationsService.ts',
+      );
+      const serviceContent = fs.readFileSync(servicePath, 'utf8');
+      expect(serviceContent).toContain("from '@clinicez/comms-sdk'");
+      expect(serviceContent).not.toContain("'LabInquiry'");
+      expect(serviceContent).not.toContain("| 'Medical'");
+      expect(serviceContent).not.toContain("| 'General'");
+
+      const inquiryPath = path.resolve(
+        import.meta.dir,
+        '../navigation/screens/messages/NewMessageInquiry.screen.tsx',
+      );
+      const inquiryContent = fs.readFileSync(inquiryPath, 'utf8');
+
+      // Canonical categories match backend MessageCategory contract
+      expect(inquiryContent).toContain("id: 'PostVisitFollowUp'");
+      expect(inquiryContent).toContain("id: 'PrescriptionRefill'");
+      expect(inquiryContent).toContain("id: 'LabResultQuestion'");
+      expect(inquiryContent).toContain("id: 'Billing'");
+      expect(inquiryContent).toContain("id: 'Scheduling'");
+      expect(inquiryContent).toContain("id: 'Other'");
+      expect(inquiryContent).not.toContain("id: 'Medical'");
+      expect(inquiryContent).not.toContain("id: 'LabInquiry'");
+      expect(inquiryContent).not.toContain("id: 'General'");
+
+      // Placeholder grant fallbacks removed and submission gated on activeGrant
+      expect(inquiryContent).not.toContain('default-tenant');
+      expect(inquiryContent).not.toContain('default-facility');
+      expect(inquiryContent).not.toContain('Connected Primary Clinic');
+      expect(inquiryContent).toContain('No Connected Facility Found');
+      expect(inquiryContent).toContain('if (!activeGrant)');
+      expect(inquiryContent).toContain('!activeGrant');
+
+      // Character limits aligned with PatientMessage.ContentText HasMaxLength(1000)
+      expect(inquiryContent).toContain('MAX_SUBJECT_LENGTH = 100');
+      expect(inquiryContent).toContain('MAX_MESSAGE_LENGTH = 850');
+      expect(inquiryContent).toContain('MAX_COMBINED_CONTENT_LENGTH = 1000');
+      expect(inquiryContent).not.toContain('maxLength={2000}');
     });
   });
 });
