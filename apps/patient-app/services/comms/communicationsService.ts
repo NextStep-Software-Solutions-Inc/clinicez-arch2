@@ -13,9 +13,22 @@
  * - Active communication eligibility grants retrieval
  */
 
+import { Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { api, ApiError } from '../api/apiClient';
 import type { CommsTicketResponse } from '@clinicez/comms-sdk';
+
+export interface CommsUploadFileInput {
+  uri: string;
+  name: string;
+  type: string;
+  size?: number;
+  /** Browser File/Blob provided by expo-document-picker on web. */
+  file?: Blob | File;
+}
+
+const MAX_ATTACHMENT_SIZE_BYTES = 15 * 1024 * 1024;
+const WEB_FETCHABLE_URI_PATTERN = /^(blob:|data:|https?:)/i;
 
 export interface CommsAttachmentReference {
   fileKey: string;
@@ -161,6 +174,33 @@ export interface SubmitMessageRequest {
   contentText: string;
   clientMessageId?: string;
   attachments?: CommsAttachmentReference[];
+}
+
+// ── Attachment Multipart Helpers ──────────────────────────────────────────────
+
+/** Builds a standardized HTTP 413 error when an attachment exceeds the 15 MB limit. */
+function createFileSizeExceededError(): ApiError {
+  return new ApiError('File size exceeds 15 MB limit.', 413, [
+    { field: 'file', code: 'FILE_SIZE_EXCEEDED', message: 'File size exceeds 15 MB limit.' },
+  ]);
+}
+
+/** Builds a standardized HTTP 400 error when a selected browser file cannot be read. */
+function createFileReadError(message: string): ApiError {
+  return new ApiError(message, 400, [
+    { field: 'file', code: 'FILE_READ_FAILED', message },
+  ]);
+}
+
+/** Preserves original bytes while populating a concrete MIME type when the Blob lacks one. */
+function ensureBlobContentType(blob: Blob, fallbackContentType: string): Blob {
+  if (
+    (!blob.type || blob.type === 'application/octet-stream') &&
+    fallbackContentType !== 'application/octet-stream'
+  ) {
+    return blob.slice(0, blob.size, fallbackContentType);
+  }
+  return blob;
 }
 
 // ── Service Implementation ───────────────────────────────────────────────────
@@ -317,20 +357,50 @@ export const communicationsService = {
    */
   async uploadAttachment(
     getToken: () => Promise<string | null>,
-    file: { uri: string; name: string; type: string; size?: number },
+    file: CommsUploadFileInput,
   ): Promise<CommsAttachmentReference> {
-    if (file.size && file.size > 15 * 1024 * 1024) {
-      throw new ApiError('File size exceeds 15 MB limit.', 413, [
-        { field: 'file', code: 'FILE_SIZE_EXCEEDED', message: 'File size exceeds 15 MB limit.' },
-      ]);
+    const hasBrowserBlob = typeof Blob !== 'undefined' && file.file instanceof Blob;
+    const declaredSize = file.size ?? (hasBrowserBlob ? file.file!.size : undefined);
+
+    if (declaredSize !== undefined && declaredSize > MAX_ATTACHMENT_SIZE_BYTES) {
+      throw createFileSizeExceededError();
     }
 
     const formData = new FormData();
-    formData.append('file', {
-      uri: file.uri,
-      name: file.name,
-      type: file.type,
-    } as any);
+    const contentType = file.type || 'application/octet-stream';
+
+    if (hasBrowserBlob) {
+      formData.append('file', ensureBlobContentType(file.file!, contentType), file.name);
+    } else if (Platform.OS === 'web') {
+      if (!file.uri || !WEB_FETCHABLE_URI_PATTERN.test(file.uri)) {
+        throw createFileReadError('Unable to read selected file in browser.');
+      }
+
+      let response: Response;
+      try {
+        response = await fetch(file.uri);
+      } catch {
+        throw createFileReadError(`Unable to read selected file "${file.name}".`);
+      }
+
+      if (!response.ok) {
+        throw createFileReadError(
+          `Unable to read selected file "${file.name}" (HTTP ${response.status}).`,
+        );
+      }
+
+      const rawBlob = await response.blob();
+      if (rawBlob.size > MAX_ATTACHMENT_SIZE_BYTES) {
+        throw createFileSizeExceededError();
+      }
+
+      formData.append('file', ensureBlobContentType(rawBlob, contentType), file.name);
+    } else {
+      formData.append(
+        'file',
+        { uri: file.uri, name: file.name, type: contentType } as unknown as Blob,
+      );
+    }
 
     return api.postForm<CommsAttachmentReference>(
       getToken,
