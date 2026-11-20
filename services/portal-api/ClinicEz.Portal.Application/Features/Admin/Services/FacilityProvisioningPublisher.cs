@@ -53,9 +53,18 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
         }
 
         var isBranchAccredited = branch is not null && branch.IsPhilHealthAccredited && !string.IsNullOrWhiteSpace(branch.PhilHealthAccreditationNumber);
+        var platformVerificationStatus = facilityCreated.PlatformVerificationStatus ?? trackedFacility?.PlatformVerificationStatus;
+        var isPlatformVerified = facilityCreated.IsPlatformVerified
+            ?? (trackedFacility is not null
+                ? trackedFacility.PlatformVerificationStatus == PlatformVerificationStatus.Verified
+                : (bool?)null);
 
         var licensedEvent = facilityCreated with
         {
+            IsWorkspaceEligible = facilityCreated.IsWorkspaceEligible ?? trackedFacility?.IsPatientDiscoveryEligible,
+            PlatformVerificationStatus = platformVerificationStatus,
+            IsPlatformVerified = isPlatformVerified,
+            VerificationRejectionReason = facilityCreated.VerificationRejectionReason ?? trackedFacility?.RejectionReason,
             BranchId = branch?.Id ?? facilityCreated.BranchId,
             BranchName = branch?.Name ?? facilityCreated.BranchName,
             BranchPhilHealthAccreditationNumber = branch?.PhilHealthAccreditationNumber ?? facilityCreated.BranchPhilHealthAccreditationNumber,

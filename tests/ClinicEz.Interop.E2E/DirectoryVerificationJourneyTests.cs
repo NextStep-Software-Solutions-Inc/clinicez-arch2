@@ -815,4 +815,106 @@ public sealed class DirectoryVerificationJourneyTests
         await cell.Patient.AssertNothingStuckAsync();
         await portal.AssertNothingStuckAsync();
     }
+
+    [Fact]
+    public async Task FunctionalCheck4_ApprovedPractitionerRegulatedPrcEdit_CreatesPendingReviewResubmission_PreservesApprovedSnapshot_AndReApproves()
+    {
+        await using var cell = new TestCell();
+        using var portal = new PortalVerificationHost(cell.Hub);
+
+        var clinic = await ProvisionClinicAsync(cell, portal, "resubmit-care", "Resubmit Care Clinic", isPatientDiscoveryEligible: true);
+        await SeedClinicOperationalSetupAsync(cell, clinic, "DOH-LTO-2026-999", "verification/lto/resubmit-clinic.pdf");
+
+        var initialExpiry = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1));
+        const string initialProof = "verification/prc/tabasan-v1.pdf";
+        var doctor = await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new CreateStaffMemberCommand(
+            FirstName: "Justine Mae",
+            LastName: "Tabasan",
+            MiddleName: null,
+            Title: "Dr.",
+            Role: StaffRole.Doctor,
+            ClinicRoleId: null,
+            Email: "justine@resubmitcare.ph",
+            PhoneNumber: null,
+            PrcLicenseNumber: "0123456",
+            PtrNumber: null,
+            S2LicenseNumber: null,
+            Specialty: "Family Medicine",
+            InitialPassword: "ClinicPass2026!",
+            IsDirectoryOptIn: true,
+            PrcExpiryDate: initialExpiry,
+            PrcEvidenceObjectKey: initialProof,
+            VerificationContact: "justine@resubmitcare.ph",
+            PublicBio: "Primary care doctor."));
+
+        await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new PublishClinicToDirectoryCommand(true));
+        await Cell.PumpAsync([cell.Clinic, cell.Patient, portal]);
+
+        var facReq = await portal.DbAsync(db => db.FacilityVerificationRequests.SingleAsync(r => r.FacilityId == clinic.Id));
+        await portal.SendAsync(new ApproveVerificationRequestCommand(facReq.Id, "admin_1", "Verifier One", "Initial approval"));
+        await Cell.PumpAsync([cell.Clinic, cell.Patient, portal]);
+
+        var afterInitialApprove = await cell.Clinic.DbAsync(db => db.StaffMembers.IgnoreQueryFilters().FirstAsync(s => s.Id == doctor.Id));
+        afterInitialApprove.PublicVerificationStatus.Should().Be(PractitionerVerificationLevel.Verified);
+
+        // 1. Bio-only edit keeps Verified and creates no new submission in Governance
+        await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new UpdateStaffMemberCommand(
+            doctor.Id, "Justine Mae", "Tabasan", null, "Dr.", StaffRole.Doctor, null, "justine@resubmitcare.ph", null,
+            "0123456", null, null, "Family Medicine", true,
+            IsDirectoryOptIn: true,
+            PrcExpiryDate: initialExpiry,
+            PrcEvidenceObjectKey: initialProof,
+            VerificationContact: "justine@resubmitcare.ph",
+            PublicBio: "Updated biography only."));
+        await Cell.PumpAsync([cell.Clinic, cell.Patient, portal]);
+
+        (await portal.DbAsync(db => db.PractitionerVerificationRequests.CountAsync(r => r.ClinicStaffMemberId == doctor.Id)))
+            .Should().Be(1);
+
+        // 2. Replacing PRC proof & expiry transitions staff to PendingVerification and creates Submission #2 Resubmission (PendingReview)
+        var renewedExpiry = initialExpiry.AddYears(2);
+        const string renewedProof = "verification/prc/tabasan-v2.pdf";
+        var updatedDto = await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new UpdateStaffMemberCommand(
+            doctor.Id, "Justine Mae", "Tabasan", null, "Dr.", StaffRole.Doctor, null, "justine@resubmitcare.ph", null,
+            "0123456", null, null, "Family Medicine", true,
+            IsDirectoryOptIn: true,
+            PrcExpiryDate: renewedExpiry,
+            PrcEvidenceObjectKey: renewedProof,
+            VerificationContact: "justine@resubmitcare.ph",
+            PublicBio: "Updated biography only."));
+
+        updatedDto.PublicVerificationStatus.Should().Be(PractitionerVerificationLevel.PendingVerification);
+        await Cell.PumpAsync([cell.Clinic, cell.Patient, portal]);
+
+        var portalSubmissions = await portal.DbAsync(db =>
+            db.PractitionerVerificationRequests
+                .Where(r => r.FacilityId == clinic.Id && r.ClinicStaffMemberId == doctor.Id)
+                .OrderBy(r => r.SubmissionNumber)
+                .ToListAsync());
+
+        portalSubmissions.Should().HaveCount(2);
+        portalSubmissions[0].Status.Should().Be("Approved");
+        portalSubmissions[0].PrcEvidenceObjectKey.Should().Be(initialProof);
+        portalSubmissions[0].PrcExpiryDate.Should().Be(initialExpiry);
+
+        portalSubmissions[1].SubmissionNumber.Should().Be(2);
+        portalSubmissions[1].RequestKind.Should().Be("Resubmission");
+        portalSubmissions[1].Status.Should().Be("PendingReview");
+        portalSubmissions[1].PrcEvidenceObjectKey.Should().Be(renewedProof);
+        portalSubmissions[1].PrcExpiryDate.Should().Be(renewedExpiry);
+
+        // 3. Governance approves Submission #2 -> practitioner returns to Verified with renewed expiry & proof
+        await portal.SendAsync(new ApproveVerificationRequestCommand(portalSubmissions[1].Id, "admin_1", "Verifier One", "Approved renewed PRC proof"));
+        await Cell.PumpAsync([cell.Clinic, cell.Patient, portal]);
+
+        var finalStaff = await cell.Clinic.DbAsync(db => db.StaffMembers.IgnoreQueryFilters().FirstAsync(s => s.Id == doctor.Id));
+        finalStaff.PublicVerificationStatus.Should().Be(PractitionerVerificationLevel.Verified);
+        finalStaff.PrcExpiryDate.Should().Be(renewedExpiry);
+        finalStaff.PrcEvidenceObjectKey.Should().Be(renewedProof);
+
+        await AssertAllHubEnvelopesAreObjectKeyOnlyAndCompactAsync(cell.Hub);
+        await cell.Clinic.AssertNothingStuckAsync();
+        await cell.Patient.AssertNothingStuckAsync();
+        await portal.AssertNothingStuckAsync();
+    }
 }

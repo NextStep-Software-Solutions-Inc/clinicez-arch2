@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { api } from '../services/api/apiClient';
+import { Platform } from 'react-native';
+import { api, ApiError } from '../services/api/apiClient';
 import {
   communicationsService,
   type PatientConversationDto,
@@ -11,12 +12,20 @@ import {
 describe('Milestone M7: Patient Comms & Teleconsultation', () => {
   const originalApiGet = api.get;
   const originalApiPost = api.post;
+  const originalApiPostForm = api.postForm;
   const originalApiDelete = api.delete;
+  const originalFetch = globalThis.fetch;
+  const originalPlatformOS = Platform.OS;
+  const originalFormDataAppend = FormData.prototype.append;
 
   afterEach(() => {
     api.get = originalApiGet;
     api.post = originalApiPost;
+    api.postForm = originalApiPostForm;
     api.delete = originalApiDelete;
+    globalThis.fetch = originalFetch;
+    (Platform as { OS: string }).OS = originalPlatformOS;
+    FormData.prototype.append = originalFormDataAppend;
   });
 
   describe('communicationsService REST Contracts', () => {
@@ -28,7 +37,7 @@ describe('Milestone M7: Patient Comms & Teleconsultation', () => {
           facilityId: 'fac-1',
           facilityName: 'Metro Health Clinic',
           homeFacilityType: 'Clinic',
-          category: 'Medical',
+          category: 'PostVisitFollowUp',
           subject: 'Lab Results Inquiry',
           status: 'Routed',
           unreadCount: 1,
@@ -43,8 +52,8 @@ describe('Milestone M7: Patient Comms & Teleconsultation', () => {
           facilityName: 'Mercury Rx Hub',
           homeFacilityType: 'Pharmacy',
           category: 'PrescriptionRefill',
+          status: 'WithTriage',
           subject: 'Amlodipine 10mg refill',
-          status: 'Triage',
           unreadCount: 0,
           lastMessageAtUtc: new Date().toISOString(),
           lastMessagePreview: 'Order confirmed and ready for pickup.',
@@ -87,13 +96,13 @@ describe('Milestone M7: Patient Comms & Teleconsultation', () => {
         facilityId: 'fac-1',
         facilityType: 'Clinic',
         facilityName: 'Main Clinic',
-        category: 'Medical',
+        category: 'PostVisitFollowUp',
         contentText: 'I have a mild rash on my arm.',
         isEmergencyConfirmed: false,
       });
 
       expect(requestedPath).toBe('/patient/requests');
-      expect(requestBody.category).toBe('Medical');
+      expect(requestBody.category).toBe('PostVisitFollowUp');
       expect(requestBody.isEmergencyConfirmed).toBe(false);
       expect(response.conversationId).toBe('c-new');
       expect(response.isEmergencyRedirect).toBe(false);
@@ -152,6 +161,301 @@ describe('Milestone M7: Patient Comms & Teleconsultation', () => {
       expect(requestedPath).toBe('/patient/conversations/c-1/messages/m-failed/resend');
       expect(res.id).toBe('m-failed');
       expect(res.deliveryState).toBe('Received');
+    });
+  });
+
+  describe('communicationsService.uploadAttachment Cross-Platform Multipart', () => {
+    it('appends browser File/Blob directly on web preserving PNG magic bytes without re-encoding', async () => {
+      (Platform as { OS: string }).OS = 'web';
+
+      const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+      const browserFile = new File([pngBytes], 'lab_scan.png', { type: 'image/png' });
+
+      let postedPath = '';
+      let postedFormData: FormData | null = null;
+      api.postForm = (async (_getToken: any, reqPath: string, form: FormData) => {
+        postedPath = reqPath;
+        postedFormData = form;
+        return {
+          fileKey: 'comms/attachments/p-1/scan.png',
+          fileName: 'lab_scan.png',
+          contentType: 'image/png',
+          sizeBytes: pngBytes.byteLength,
+        };
+      }) as typeof api.postForm;
+
+      const result = await communicationsService.uploadAttachment(async () => 'mock-jwt', {
+        uri: 'blob:http://localhost:8081/1234',
+        name: 'lab_scan.png',
+        type: 'image/png',
+        size: pngBytes.byteLength,
+        file: browserFile,
+      });
+
+      expect(postedPath).toBe('/patient/communications/attachments');
+      expect(postedFormData).not.toBeNull();
+      const part = postedFormData!.get('file');
+      expect(typeof part).not.toBe('string');
+      expect(part instanceof Blob).toBe(true);
+      const uploadedBlob = part as File;
+      expect(uploadedBlob.name).toBe('lab_scan.png');
+      expect(uploadedBlob.type).toBe('image/png');
+      expect(new Uint8Array(await uploadedBlob.arrayBuffer())).toEqual(pngBytes);
+      expect(result.fileName).toBe('lab_scan.png');
+    });
+
+    it('appends PDF File directly on web without altering PDF bytes', async () => {
+      (Platform as { OS: string }).OS = 'web';
+
+      const pdfBytes = new TextEncoder().encode('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF');
+      const pdfFile = new File([pdfBytes], 'prescription.pdf', { type: 'application/pdf' });
+
+      let postedFormData: FormData | null = null;
+      api.postForm = (async (_getToken: any, _reqPath: string, form: FormData) => {
+        postedFormData = form;
+        return {
+          fileKey: 'comms/attachments/p-1/rx.pdf',
+          fileName: 'prescription.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: pdfBytes.byteLength,
+        };
+      }) as typeof api.postForm;
+
+      await communicationsService.uploadAttachment(async () => 'mock-jwt', {
+        uri: 'blob:http://localhost:8081/pdf-1',
+        name: 'prescription.pdf',
+        type: 'application/pdf',
+        size: pdfBytes.byteLength,
+        file: pdfFile,
+      });
+
+      const part = postedFormData!.get('file') as File;
+      expect(part instanceof Blob).toBe(true);
+      expect(part.name).toBe('prescription.pdf');
+      expect(part.type).toBe('application/pdf');
+      expect(new Uint8Array(await part.arrayBuffer())).toEqual(pdfBytes);
+    });
+
+    it('preserves explicit MIME type when web Blob has missing or generic type', async () => {
+      (Platform as { OS: string }).OS = 'web';
+
+      const pdfBytes = new TextEncoder().encode('%PDF-1.7\n');
+      const untypedBlob = new Blob([pdfBytes]);
+
+      let postedFormData: FormData | null = null;
+      api.postForm = (async (_getToken: any, _reqPath: string, form: FormData) => {
+        postedFormData = form;
+        return {
+          fileKey: 'comms/attachments/p-1/untyped.pdf',
+          fileName: 'untyped.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: pdfBytes.byteLength,
+        };
+      }) as typeof api.postForm;
+
+      await communicationsService.uploadAttachment(async () => 'mock-jwt', {
+        uri: 'blob:http://localhost:8081/untyped',
+        name: 'untyped.pdf',
+        type: 'application/pdf',
+        file: untypedBlob,
+      });
+
+      const part = postedFormData!.get('file') as File;
+      expect(part instanceof Blob).toBe(true);
+      expect(part.type).toBe('application/pdf');
+      expect(part.name).toBe('untyped.pdf');
+      expect(new Uint8Array(await part.arrayBuffer())).toEqual(pdfBytes);
+    });
+
+    it('fetches blob URI fallback on web when file.file is omitted', async () => {
+      (Platform as { OS: string }).OS = 'web';
+
+      const pdfBytes = new TextEncoder().encode('%PDF-1.4\nfallback\n');
+      let fetchedUrl = '';
+      globalThis.fetch = (async (input: RequestInfo | URL) => {
+        fetchedUrl = String(input);
+        return new Response(pdfBytes, {
+          status: 200,
+          headers: { 'Content-Type': 'application/pdf' },
+        });
+      }) as typeof globalThis.fetch;
+
+      let postedFormData: FormData | null = null;
+      api.postForm = (async (_getToken: any, _reqPath: string, form: FormData) => {
+        postedFormData = form;
+        return {
+          fileKey: 'comms/attachments/p-1/rx.pdf',
+          fileName: 'rx.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: pdfBytes.byteLength,
+        };
+      }) as typeof api.postForm;
+
+      await communicationsService.uploadAttachment(async () => 'mock-jwt', {
+        uri: 'blob:http://localhost:8081/abc',
+        name: 'rx.pdf',
+        type: 'application/pdf',
+      });
+
+      expect(fetchedUrl).toBe('blob:http://localhost:8081/abc');
+      const part = postedFormData!.get('file') as File;
+      expect(part instanceof Blob).toBe(true);
+      expect(part.name).toBe('rx.pdf');
+      expect(new Uint8Array(await part.arrayBuffer())).toEqual(pdfBytes);
+    });
+
+    it('fails fast on web with FILE_READ_FAILED for non-fetchable URIs or failed fetch without calling postForm', async () => {
+      (Platform as { OS: string }).OS = 'web';
+
+      let postFormCalled = false;
+      api.postForm = (async () => {
+        postFormCalled = true;
+        return {} as any;
+      }) as typeof api.postForm;
+
+      try {
+        await communicationsService.uploadAttachment(async () => 'mock-jwt', {
+          uri: '/local/file.pdf',
+          name: 'file.pdf',
+          type: 'application/pdf',
+        });
+        expect(true).toBe(false);
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        const apiErr = err as ApiError;
+        expect(apiErr.status).toBe(400);
+        expect(apiErr.errors[0]?.code).toBe('FILE_READ_FAILED');
+      }
+      expect(postFormCalled).toBe(false);
+
+      globalThis.fetch = (async () => new Response(null, { status: 404 })) as typeof globalThis.fetch;
+      try {
+        await communicationsService.uploadAttachment(async () => 'mock-jwt', {
+          uri: 'blob:http://localhost:8081/missing',
+          name: 'missing.pdf',
+          type: 'application/pdf',
+        });
+        expect(true).toBe(false);
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        const apiErr = err as ApiError;
+        expect(apiErr.status).toBe(400);
+        expect(apiErr.errors[0]?.code).toBe('FILE_READ_FAILED');
+      }
+      expect(postFormCalled).toBe(false);
+    });
+
+    it('rejects files over 15 MB both pre-flight and after web blob fetch without calling postForm', async () => {
+      (Platform as { OS: string }).OS = 'web';
+
+      let postFormCalled = false;
+      api.postForm = (async () => {
+        postFormCalled = true;
+        return {} as any;
+      }) as typeof api.postForm;
+
+      try {
+        await communicationsService.uploadAttachment(async () => 'mock-jwt', {
+          uri: 'blob:http://localhost:8081/huge',
+          name: 'huge.pdf',
+          type: 'application/pdf',
+          size: 15 * 1024 * 1024 + 1,
+        });
+        expect(true).toBe(false);
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        const apiErr = err as ApiError;
+        expect(apiErr.status).toBe(413);
+        expect(apiErr.errors[0]?.code).toBe('FILE_SIZE_EXCEEDED');
+      }
+      expect(postFormCalled).toBe(false);
+
+      const oversizedBytes = new Uint8Array(15 * 1024 * 1024 + 1);
+      globalThis.fetch = (async () =>
+        new Response(oversizedBytes, {
+          status: 200,
+          headers: { 'Content-Type': 'application/pdf' },
+        })) as typeof globalThis.fetch;
+
+      try {
+        await communicationsService.uploadAttachment(async () => 'mock-jwt', {
+          uri: 'blob:http://localhost:8081/huge-fetched',
+          name: 'huge-fetched.pdf',
+          type: 'application/pdf',
+        });
+        expect(true).toBe(false);
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        const apiErr = err as ApiError;
+        expect(apiErr.status).toBe(413);
+        expect(apiErr.errors[0]?.code).toBe('FILE_SIZE_EXCEEDED');
+      }
+      expect(postFormCalled).toBe(false);
+    });
+
+    it('preserves React Native { uri, name, type } descriptor on iOS and Android without calling fetch', async () => {
+      for (const nativeOs of ['ios', 'android'] as const) {
+        (Platform as { OS: string }).OS = nativeOs;
+
+        let fetchCalled = false;
+        globalThis.fetch = (async () => {
+          fetchCalled = true;
+          return new Response();
+        }) as typeof globalThis.fetch;
+
+        const appendedCalls: { field: string; value: unknown }[] = [];
+        FormData.prototype.append = function (field: string, value: unknown) {
+          appendedCalls.push({ field, value });
+        } as typeof FormData.prototype.append;
+
+        let postedPath = '';
+        api.postForm = (async (_getToken: any, reqPath: string) => {
+          postedPath = reqPath;
+          return {
+            fileKey: 'comms/attachments/p-1/photo.jpg',
+            fileName: 'photo.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 1024,
+          };
+        }) as typeof api.postForm;
+
+        try {
+          await communicationsService.uploadAttachment(async () => 'mock-jwt', {
+            uri: 'file:///cache/photo.jpg',
+            name: 'photo.jpg',
+            type: 'image/jpeg',
+            size: 1024,
+          });
+        } finally {
+          FormData.prototype.append = originalFormDataAppend;
+          globalThis.fetch = originalFetch;
+          (Platform as { OS: string }).OS = originalPlatformOS;
+        }
+
+        expect(fetchCalled).toBe(false);
+        expect(postedPath).toBe('/patient/communications/attachments');
+        expect(appendedCalls).toEqual([
+          {
+            field: 'file',
+            value: {
+              uri: 'file:///cache/photo.jpg',
+              name: 'photo.jpg',
+              type: 'image/jpeg',
+            },
+          },
+        ]);
+      }
+    });
+
+    it('verifies NewMessageInquiryScreen forwards DocumentPicker file.file and keeps text-only messages working', () => {
+      const screenPath = path.resolve(
+        import.meta.dir,
+        '../navigation/screens/messages/NewMessageInquiry.screen.tsx',
+      );
+      const source = fs.readFileSync(screenPath, 'utf8');
+      expect(source).toContain('file: file.file');
+      expect(source).toContain('attachments: attachments.length > 0 ? attachments : undefined');
+      expect(source).not.toMatch(/\bAlert\b/);
     });
   });
 
@@ -292,6 +596,49 @@ describe('Milestone M7: Patient Comms & Teleconsultation', () => {
       // Filter chips uniform with other screens (FilterChipBar with facility filter)
       expect(content).toContain('FilterChipBar');
       expect(content).toContain('All Facilities');
+    });
+
+    it('enforces Issue #181 invariants: canonical SDK MessageCategory, zero placeholder grants, and <=1000 combined content length', () => {
+      const servicePath = path.resolve(
+        import.meta.dir,
+        '../services/comms/communicationsService.ts',
+      );
+      const serviceContent = fs.readFileSync(servicePath, 'utf8');
+      expect(serviceContent).toContain("from '@clinicez/comms-sdk'");
+      expect(serviceContent).not.toContain("'LabInquiry'");
+      expect(serviceContent).not.toContain("| 'Medical'");
+      expect(serviceContent).not.toContain("| 'General'");
+
+      const inquiryPath = path.resolve(
+        import.meta.dir,
+        '../navigation/screens/messages/NewMessageInquiry.screen.tsx',
+      );
+      const inquiryContent = fs.readFileSync(inquiryPath, 'utf8');
+
+      // Canonical categories match backend MessageCategory contract
+      expect(inquiryContent).toContain("id: 'PostVisitFollowUp'");
+      expect(inquiryContent).toContain("id: 'PrescriptionRefill'");
+      expect(inquiryContent).toContain("id: 'LabResultQuestion'");
+      expect(inquiryContent).toContain("id: 'Billing'");
+      expect(inquiryContent).toContain("id: 'Scheduling'");
+      expect(inquiryContent).toContain("id: 'Other'");
+      expect(inquiryContent).not.toContain("id: 'Medical'");
+      expect(inquiryContent).not.toContain("id: 'LabInquiry'");
+      expect(inquiryContent).not.toContain("id: 'General'");
+
+      // Placeholder grant fallbacks removed and submission gated on activeGrant
+      expect(inquiryContent).not.toContain('default-tenant');
+      expect(inquiryContent).not.toContain('default-facility');
+      expect(inquiryContent).not.toContain('Connected Primary Clinic');
+      expect(inquiryContent).toContain('No Connected Facility Found');
+      expect(inquiryContent).toContain('if (!activeGrant)');
+      expect(inquiryContent).toContain('!activeGrant');
+
+      // Character limits aligned with PatientMessage.ContentText HasMaxLength(1000)
+      expect(inquiryContent).toContain('MAX_SUBJECT_LENGTH = 100');
+      expect(inquiryContent).toContain('MAX_MESSAGE_LENGTH = 850');
+      expect(inquiryContent).toContain('MAX_COMBINED_CONTENT_LENGTH = 1000');
+      expect(inquiryContent).not.toContain('maxLength={2000}');
     });
   });
 });

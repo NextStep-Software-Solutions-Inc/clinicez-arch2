@@ -120,9 +120,23 @@ public sealed class PractitionerVerificationRequestedHandler(
             ? null
             : DirectoryVerificationHelper.FormatDisplayName(matched.Title, matched.FirstName, matched.LastName);
 
+        var rawRequestKind = payload.RequestKind?.Trim();
+        var isPrcUpdateKind = string.Equals(rawRequestKind, "PrcUpdate", StringComparison.OrdinalIgnoreCase);
+        var normalizedRequestKind = string.IsNullOrWhiteSpace(rawRequestKind)
+            ? "Initial"
+            : isPrcUpdateKind
+                ? "Resubmission"
+                : rawRequestKind;
+        var hasPriorApprovalAtFacility = priorForStaff.Any(r => r.Status == "Approved");
+        var requiresGovernanceReview = isPrcUpdateKind || hasPriorApprovalAtFacility;
+
         if (matched is not null && matched.VerificationStatus == PractitionerVerificationLevel.Verified)
         {
-            if (PractitionerIdentity.IsCompatibleNameMatch(matched.FirstName, matched.LastName, payload.FirstName, payload.LastName))
+            if (!PractitionerIdentity.IsCompatibleNameMatch(matched.FirstName, matched.LastName, payload.FirstName, payload.LastName))
+            {
+                hasNameMismatch = true;
+            }
+            else if (!requiresGovernanceReview)
             {
                 status = "AwaitingOtp";
                 rawTokenForEmail = TokenGenerator.GenerateSecureToken(32);
@@ -172,10 +186,6 @@ public sealed class PractitionerVerificationRequestedHandler(
 
                 affiliationId = affiliation.Id;
             }
-            else
-            {
-                hasNameMismatch = true;
-            }
         }
 
         var snapshot = new PractitionerRequestSnapshot(
@@ -183,7 +193,7 @@ public sealed class PractitionerVerificationRequestedHandler(
             FacilityId: facility.Id,
             FacilityName: string.IsNullOrWhiteSpace(payload.FacilityName) ? facility.Name : payload.FacilityName,
             ClinicStaffMemberId: payload.ClinicStaffMemberId,
-            RequestKind: string.IsNullOrWhiteSpace(payload.RequestKind) ? "Initial" : payload.RequestKind.Trim(),
+            RequestKind: normalizedRequestKind,
             ProfessionKind: professionKind,
             FirstName: payload.FirstName,
             LastName: payload.LastName,

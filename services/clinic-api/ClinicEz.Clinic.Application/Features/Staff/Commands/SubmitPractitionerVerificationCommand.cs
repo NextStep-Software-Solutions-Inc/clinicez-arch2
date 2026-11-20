@@ -79,7 +79,9 @@ public sealed class SubmitPractitionerVerificationCommandHandler : IRequestHandl
             staff.PrcEvidenceObjectKey,
             staff.VerificationContact);
 
-        var requestKind = staff.CanonicalProviderId.HasValue || !string.IsNullOrWhiteSpace(staff.PublicVerificationReason)
+        var requestKind = staff.CanonicalProviderId.HasValue
+            || staff.PublicVerificationStatus == PractitionerVerificationLevel.Verified
+            || !string.IsNullOrWhiteSpace(staff.PublicVerificationReason)
             ? "Resubmission"
             : "Initial";
 

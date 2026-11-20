@@ -124,9 +124,22 @@ public sealed class FacilityVerificationRequestedHandler(
             ? payload.LtoEvidenceObjectKey.Trim()
             : facility.LtoEvidenceObjectKey;
 
-        var snapshotPayload = string.IsNullOrWhiteSpace(payload.ContactEmail) && !string.IsNullOrWhiteSpace(facility.ContactEmail)
-            ? payload with { ContactEmail = facility.ContactEmail.Trim() }
-            : payload;
+        var (normalizedContactNumber, normalizedContactEmail) = DirectoryVerificationHelper.NormalizeFacilityContacts(
+            payload.ContactNumber,
+            payload.ContactEmail);
+
+        var legacyPhoneEmail = DirectoryVerificationHelper.IsPureEmailAddress(facility.ContactNumber)
+            ? facility.ContactNumber!.Trim()
+            : null;
+
+        var snapshotContactEmail = normalizedContactEmail
+            ?? (string.IsNullOrWhiteSpace(facility.ContactEmail) ? legacyPhoneEmail : facility.ContactEmail.Trim());
+
+        var snapshotPayload = payload with
+        {
+            ContactNumber = normalizedContactNumber,
+            ContactEmail = snapshotContactEmail
+        };
 
         var facilityReq = new FacilityVerificationRequest
         {
@@ -158,12 +171,14 @@ public sealed class FacilityVerificationRequestedHandler(
             facility.Classification = payload.Classification.Trim();
         if (!string.IsNullOrWhiteSpace(payload.OperatingHours))
             facility.OperatingHours = payload.OperatingHours.Trim();
-        if (!string.IsNullOrWhiteSpace(payload.ContactNumber))
-            facility.ContactNumber = payload.ContactNumber.Trim();
-        else if (maxSubmission > 0)
+        if (!string.IsNullOrWhiteSpace(normalizedContactNumber))
+            facility.ContactNumber = normalizedContactNumber;
+        else if (maxSubmission > 0 || legacyPhoneEmail is not null)
             facility.ContactNumber = null;
-        if (!string.IsNullOrWhiteSpace(payload.ContactEmail))
-            facility.ContactEmail = payload.ContactEmail.Trim();
+        if (!string.IsNullOrWhiteSpace(normalizedContactEmail))
+            facility.ContactEmail = normalizedContactEmail;
+        else if (string.IsNullOrWhiteSpace(facility.ContactEmail) && legacyPhoneEmail is not null)
+            facility.ContactEmail = legacyPhoneEmail;
         if (!string.IsNullOrWhiteSpace(payload.PhilHealthAccreditationNumber))
             facility.PhilHealthAccreditationNumber = payload.PhilHealthAccreditationNumber.Trim();
         else if (!payload.IsPhilHealthAccredited || maxSubmission > 0)

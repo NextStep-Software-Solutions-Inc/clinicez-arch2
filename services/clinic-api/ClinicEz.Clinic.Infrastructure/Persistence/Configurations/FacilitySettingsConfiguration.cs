@@ -81,6 +81,9 @@ public sealed class FacilitySettingsConfiguration : IEntityTypeConfiguration<Fac
             entity.Property(e => e.AppointmentReminder24hEnabled).HasDefaultValue(true);
             entity.Property(e => e.AppointmentReminder2hEnabled).HasDefaultValue(true);
             entity.Property(e => e.EnableStaffAppointmentNotifications).HasDefaultValue(true);
+            entity.Property(e => e.EnableStaffMorningDigest).HasDefaultValue(true);
+            entity.Property(e => e.EnableStaffPreSlotReminders).HasDefaultValue(true);
+            entity.Property(e => e.EnableStaffOverdueAlerts).HasDefaultValue(true);
             entity.Property(e => e.EnableTeleconsultation).HasDefaultValue(false);
 
             entity.Property(e => e.TimeZoneId).HasMaxLength(100);

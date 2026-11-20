@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Clinic.Infrastructure.Messaging.Handlers;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Documents.Security;
@@ -21,10 +22,11 @@ using Microsoft.Extensions.Logging;
 namespace ClinicEz.Clinic.Infrastructure.Services;
 
 /// <summary>
-/// Background service executing on application boot to idempotently backfill portal projections:
+/// Background service executing on application boot to idempotently backfill portal and directory projections:
 /// 1. Facility join settings with 4-char clinic discriminator.
 /// 2. Active Manila queue board snapshots (zero-PHI).
 /// 3. Document attestations for recent (last 365 days) issued documents.
+/// 4. Verified and published live directory snapshots to <c>patient-api</c>.
 /// </summary>
 public sealed class ClinicPortalStartupBackfillHostedService : BackgroundService
 {
@@ -39,7 +41,10 @@ public sealed class ClinicPortalStartupBackfillHostedService : BackgroundService
         _logger = logger;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => BackfillAsync(stoppingToken);
+
+    /// <summary>Executes all portal/directory startup backfill phases once. Public for tests.</summary>
+    public async Task BackfillAsync(CancellationToken stoppingToken)
     {
         try
         {
@@ -395,6 +400,13 @@ public sealed class ClinicPortalStartupBackfillHostedService : BackgroundService
                             ItemCount = invoice.LineItems.Count
                         });
                 }
+
+                // Phase 4: Self-heal live patient directory snapshot for verified & published clinics
+                await DirectoryInteropSyncHelper.EnqueueDirectorySnapshotIfVerifiedAndPublishedAsync(
+                    db,
+                    publisher,
+                    clinic,
+                    stoppingToken);
             }
 
             await db.SaveChangesAsync(stoppingToken);

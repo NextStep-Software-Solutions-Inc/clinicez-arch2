@@ -197,8 +197,18 @@ public sealed class ClinicApiEndpointsIntegrationTests : IAsyncLifetime
         builder.Services.AddSingleton(Substitute.For<IPharmacyGamotGateway>());
         builder.Services.AddSingleton(Substitute.For<IPatientRecordGateway>());
         builder.Services.AddSingleton(Substitute.For<ILabResultIntake>());
-        builder.Services.AddSingleton(Substitute.For<IClinicStorageService>());
-        builder.Services.AddSingleton(Substitute.For<IClinicEncryptionService>());
+        var storage = Substitute.For<IClinicStorageService>();
+        storage.SaveEncryptedFileAsync(Arg.Any<string>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.ArgAt<string>(0));
+        builder.Services.AddSingleton(storage);
+        var encryption = Substitute.For<IClinicEncryptionService>();
+        encryption.EncryptAsync(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var bytes = ci.ArgAt<byte[]>(0);
+                return new ClinicEncryptedPayload(bytes, "iv", "tag", "hash", bytes.Length, "{\"k\":\"wrapped\"}");
+            });
+        builder.Services.AddSingleton(encryption);
         builder.Services.AddSingleton(Substitute.For<IClinicDocumentPdfService>());
         builder.Services.AddSingleton(Substitute.For<IClinicCensusExcelService>());
         builder.Services.AddSingleton(Substitute.For<ISampleDocumentGenerator>());
@@ -498,5 +508,96 @@ public sealed class ClinicApiEndpointsIntegrationTests : IAsyncLifetime
             newScheduledAt = "2026-11-19T16:45:00"
         }));
         validReschedResp.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task StaffStageOnlyPrcProofAndUpdate_PreservesVerifiedUntilResubmit_AndTransitionsOnPut()
+    {
+        var doctorId = Guid.NewGuid();
+        var originalKey = $"tenants/{TenantId}/clinics/{_clinicId:D}/verification/prc/{doctorId:D}/old-proof.pdf";
+        var originalExpiry = new DateOnly(2028, 6, 15);
+        await DbAsync(async db =>
+        {
+            db.Settings.Add(new FacilitySettings
+            {
+                TenantId = TenantId,
+                ClinicId = _clinicId,
+                ClinicName = "StageOnly Test Clinic"
+            });
+            db.StaffMembers.Add(new StaffMember
+            {
+                Id = doctorId,
+                TenantId = TenantId,
+                ClinicId = _clinicId,
+                FirstName = "Justine Mae",
+                LastName = "Tabasan",
+                Role = StaffRole.Doctor,
+                PrcLicenseNumber = "0123456",
+                PrcExpiryDate = originalExpiry,
+                PrcEvidenceObjectKey = originalKey,
+                VerificationContact = "justine@clinic.ph",
+                IsDirectoryOptIn = true,
+                CanonicalProviderId = Guid.NewGuid(),
+                PublicVerificationStatus = PractitionerVerificationLevel.Verified,
+                IsActive = true
+            });
+            await Task.CompletedTask;
+        });
+
+        // 1. Upload replacement PRC proof with ?stageOnly=true -> returns new objectKey without mutating staff
+        using var form = new MultipartFormDataContent();
+        var fileBytes = "%PDF-1.4\nnew-prc-proof"u8.ToArray();
+        var fileContent = new ByteArrayContent(fileBytes);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        form.Add(fileContent, "file", "new-prc.pdf");
+
+        var uploadReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/staff/{doctorId}/prc-proof?stageOnly=true")
+        {
+            Content = form
+        };
+        uploadReq.Headers.Add("X-Test-StaffId", _adminStaffId.ToString());
+        var uploadResp = await _client.SendAsync(uploadReq);
+        uploadResp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        string stagedKey;
+        using (var doc = JsonDocument.Parse(await uploadResp.Content.ReadAsStringAsync()))
+        {
+            stagedKey = doc.RootElement.GetProperty("data").GetProperty("objectKey").GetString()!;
+        }
+        stagedKey.Should().NotBeNullOrWhiteSpace();
+        stagedKey.Should().NotBe(originalKey);
+
+        var getBeforeSaveResp = await _client.SendAsync(CreateRequest(
+            HttpMethod.Get,
+            $"/api/v1/staff/{doctorId}",
+            permissions: $"{ClinicPermissions.StaffRead},{ClinicPermissions.StaffManage}"));
+        getBeforeSaveResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        using (var doc = JsonDocument.Parse(await getBeforeSaveResp.Content.ReadAsStringAsync()))
+        {
+            var data = doc.RootElement.GetProperty("data");
+            data.GetProperty("prcEvidenceObjectKey").GetString().Should().Be(originalKey);
+            data.GetProperty("publicVerificationStatus").GetString().Should().Be("Verified");
+        }
+
+        // 2. PUT /api/v1/staff/{id} commits staged key and transitions Verified -> PendingVerification
+        var putResp = await _client.SendAsync(CreateRequest(HttpMethod.Put, $"/api/v1/staff/{doctorId}", new
+        {
+            firstName = "Justine Mae",
+            lastName = "Tabasan",
+            role = "Doctor",
+            prcLicenseNumber = "0123456",
+            isActive = true,
+            isDirectoryOptIn = true,
+            prcExpiryDate = "2028-06-15",
+            prcEvidenceObjectKey = stagedKey,
+            verificationContact = "justine@clinic.ph"
+        }));
+        putResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        using (var doc = JsonDocument.Parse(await putResp.Content.ReadAsStringAsync()))
+        {
+            var data = doc.RootElement.GetProperty("data");
+            data.GetProperty("prcEvidenceObjectKey").GetString().Should().Be(stagedKey);
+            data.GetProperty("publicVerificationStatus").GetString().Should().Be("PendingVerification");
+        }
     }
 }

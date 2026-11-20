@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ClinicEz.Clinic.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261120093739_AddWorkstationLockAndSessionPolicy")]
-    partial class AddWorkstationLockAndSessionPolicy
+    [Migration("20261120083017_AddStaffAppointmentCadenceAndDeduplication")]
+    partial class AddStaffAppointmentCadenceAndDeduplication
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -185,6 +185,12 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<DateTime?>("StaffOverdueNotifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("StaffPreSlotNotifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -225,6 +231,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("Status", "ScheduledAt", "Reminder24hSent");
 
                     b.HasIndex("Status", "ScheduledAt", "Reminder2hSent");
+
+                    b.HasIndex("Status", "ScheduledAt", "StaffOverdueNotifiedAt");
+
+                    b.HasIndex("Status", "ScheduledAt", "StaffPreSlotNotifiedAt");
 
                     b.HasIndex("ClinicId", "DoctorId", "ScheduledAt", "EndTimeUtc");
 
@@ -2080,11 +2090,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
-                    b.Property<bool>("AllowStaffPinUnlock")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
                     b.Property<bool>("AppointmentReminder24hEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -2217,6 +2222,21 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("EnableStaffMorningDigest")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("EnableStaffOverdueAlerts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("EnableStaffPreSlotReminders")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("EnableStatAudioAlert")
                         .HasColumnType("boolean");
 
@@ -2241,11 +2261,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("FacilitySlug")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
-
-                    b.Property<int>("IdleLockMinutes")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(15);
 
                     b.Property<string>("InvoicePrefix")
                         .IsRequired()
@@ -2339,11 +2354,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("LtoEvidenceObjectKey")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
-
-                    b.Property<int>("MaxLockedSessionHours")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(8);
 
                     b.Property<int>("MaxStaffLimit")
                         .HasColumnType("integer");
@@ -8447,9 +8457,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<DateTime?>("LockedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid?>("ReplacedByTokenId")
                         .HasColumnType("uuid");
 
@@ -8885,11 +8892,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<int>("FailedLoginCount")
                         .HasColumnType("integer");
 
-                    b.Property<int>("FailedPinAttempts")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -8977,13 +8979,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasDefaultValue("Unverified");
-
-                    b.Property<string>("QuickUnlockPinHash")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime?>("QuickUnlockPinSetAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -9129,6 +9124,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("RecipientStaffId");
 
                     b.HasIndex("ClinicId", "IsRead", "CreatedAt");
+
+                    b.HasIndex("ClinicId", "SourceType", "SourceId");
 
                     b.ToTable("StaffNotifications", "public");
                 });

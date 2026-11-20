@@ -182,6 +182,12 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<DateTime?>("StaffOverdueNotifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("StaffPreSlotNotifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -222,6 +228,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("Status", "ScheduledAt", "Reminder24hSent");
 
                     b.HasIndex("Status", "ScheduledAt", "Reminder2hSent");
+
+                    b.HasIndex("Status", "ScheduledAt", "StaffOverdueNotifiedAt");
+
+                    b.HasIndex("Status", "ScheduledAt", "StaffPreSlotNotifiedAt");
 
                     b.HasIndex("ClinicId", "DoctorId", "ScheduledAt", "EndTimeUtc");
 
@@ -2210,6 +2220,21 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasDefaultValue(true);
 
                     b.Property<bool>("EnableStaffAppointmentNotifications")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("EnableStaffMorningDigest")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("EnableStaffOverdueAlerts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("EnableStaffPreSlotReminders")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
@@ -9126,6 +9151,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("RecipientStaffId");
 
                     b.HasIndex("ClinicId", "IsRead", "CreatedAt");
+
+                    b.HasIndex("ClinicId", "SourceType", "SourceId");
 
                     b.ToTable("StaffNotifications", "public");
                 });

@@ -176,7 +176,10 @@ const {
   PENDING_VERIFICATION_BUTTON_LABEL,
   PENDING_VERIFICATION_CONFLICT_CODE,
   PENDING_VERIFICATION_HELPER_NOTE,
+  REGULATED_PRC_REVERIFICATION_NOTICE,
+  RESUBMIT_VERIFICATION_BUTTON_LABEL,
   buildDohLtoSettingsPayload,
+  hasRegulatedPrcCredentialsChanged,
   isPendingVerificationConflictError,
 } = await import('../utils/directoryVerification');
 const { validateDateString } = await import('../components/ui/ValidatedDateInput');
@@ -2057,6 +2060,278 @@ describe('Issues 217 & 218 — clinic-app Pending Verification Sync & DOH LTO Ex
       clinicService.createService = origCreateService;
       clinicService.updateService = origUpdateService;
       clinicService.updatePendingDirectoryVerification = origUpdatePendingDir;
+    }
+  });
+
+  test('12. Issue 225 — hasRegulatedPrcCredentialsChanged & clinicService.uploadStaffPrcProof stageOnly query param', async () => {
+    expect(
+      hasRegulatedPrcCredentialsChanged({
+        previousPrcLicenseNumber: 'PRC-0123456',
+        nextPrcLicenseNumber: '123456',
+        previousPrcExpiryDate: '2029-01-01',
+        nextPrcExpiryDate: '2029-01-01',
+        previousPrcEvidenceObjectKey: 'prc/old.pdf',
+        nextPrcEvidenceObjectKey: 'prc/old.pdf',
+        hasPickedProofFile: false,
+      }),
+    ).toBe(false);
+
+    expect(
+      hasRegulatedPrcCredentialsChanged({
+        previousPrcLicenseNumber: '0123456',
+        nextPrcLicenseNumber: '0999888',
+        previousPrcExpiryDate: '2029-01-01',
+        nextPrcExpiryDate: '2029-01-01',
+        previousPrcEvidenceObjectKey: 'prc/old.pdf',
+        nextPrcEvidenceObjectKey: 'prc/old.pdf',
+      }),
+    ).toBe(true);
+
+    expect(
+      hasRegulatedPrcCredentialsChanged({
+        previousPrcLicenseNumber: '0123456',
+        nextPrcLicenseNumber: '0123456',
+        previousPrcExpiryDate: '2029-01-01',
+        nextPrcExpiryDate: '2030-06-30',
+        previousPrcEvidenceObjectKey: 'prc/old.pdf',
+        nextPrcEvidenceObjectKey: 'prc/old.pdf',
+      }),
+    ).toBe(true);
+
+    expect(
+      hasRegulatedPrcCredentialsChanged({
+        previousPrcLicenseNumber: '0123456',
+        nextPrcLicenseNumber: '0123456',
+        previousPrcExpiryDate: '2029-01-01',
+        nextPrcExpiryDate: '2029-01-01',
+        previousPrcEvidenceObjectKey: 'prc/old.pdf',
+        nextPrcEvidenceObjectKey: 'prc/new.pdf',
+      }),
+    ).toBe(true);
+
+    expect(
+      hasRegulatedPrcCredentialsChanged({
+        previousPrcLicenseNumber: '0123456',
+        nextPrcLicenseNumber: '0123456',
+        previousPrcExpiryDate: '2029-01-01',
+        nextPrcExpiryDate: '2029-01-01',
+        previousPrcEvidenceObjectKey: 'prc/old.pdf',
+        nextPrcEvidenceObjectKey: 'prc/old.pdf',
+        hasPickedProofFile: true,
+      }),
+    ).toBe(true);
+
+    const postUrls: string[] = [];
+    clinicApiClient.post = (async (url: string) => {
+      postUrls.push(url);
+      return [{ objectKey: 'staged-key' } as any, null];
+    }) as any;
+
+    await clinicService.uploadStaffPrcProof('staff-225', new FormData(), undefined, {
+      stageOnly: true,
+    });
+    expect(postUrls).toEqual(['/staff/staff-225/prc-proof?stageOnly=true']);
+  });
+
+  test('13. Issue 225 — Approved practitioner requires Save & Resubmit for Verification on PRC license/expiry/proof changes, preserves Save Changes for bio-only edits', async () => {
+    const origUpdateStaff = clinicService.updateStaff;
+    const origUploadPrc = clinicService.uploadStaffPrcProof;
+    const origSubmitVerification = clinicService.submitStaffVerification;
+
+    try {
+      const approvedDoctor: any = {
+        id: 'doc-approved-225',
+        tenantId: 't-1',
+        clinicId: 'c-1',
+        firstName: 'Justine Mae',
+        lastName: 'Tabasan',
+        title: 'Dr.',
+        role: 'Doctor',
+        email: 'justine@clinic.ph',
+        prcLicenseNumber: '0123456',
+        prcExpiryDate: '2029-05-01',
+        prcEvidenceObjectKey: 'tenants/t-1/clinics/c-1/verification/prc/doc-approved-225/old.pdf',
+        verificationContact: 'justine@clinic.ph',
+        publicBio: 'Family physician',
+        isDirectoryOptIn: true,
+        publicVerificationStatus: 'Verified',
+        isActive: true,
+        status: 'Active',
+        createdAt: '2026-01-01T00:00:00Z',
+      };
+
+      let staffState: any[] = [approvedDoctor];
+      const uploadCalls: Array<{ staffId: string; opts: any }> = [];
+      const updatePayloads: any[] = [];
+      let submitCalls = 0;
+
+      clinicService.uploadStaffPrcProof = (async (staffId: string, _form: any, _name?: any, opts?: any) => {
+        uploadCalls.push({ staffId, opts });
+        return [{ objectKey: 'tenants/t-1/clinics/c-1/verification/prc/doc-approved-225/new.pdf' }, null];
+      }) as any;
+
+      clinicService.updateStaff = (async (_id: string, payload: any) => {
+        updatePayloads.push(payload);
+        const regulatedChanged = hasRegulatedPrcCredentialsChanged({
+          previousPrcLicenseNumber: staffState[0].prcLicenseNumber,
+          nextPrcLicenseNumber: payload.prcLicenseNumber,
+          previousPrcExpiryDate: staffState[0].prcExpiryDate,
+          nextPrcExpiryDate: payload.prcExpiryDate,
+          previousPrcEvidenceObjectKey: staffState[0].prcEvidenceObjectKey,
+          nextPrcEvidenceObjectKey: payload.prcEvidenceObjectKey,
+        });
+        return [
+          {
+            ...staffState[0],
+            prcLicenseNumber: payload.prcLicenseNumber,
+            prcExpiryDate: payload.prcExpiryDate,
+            prcEvidenceObjectKey: payload.prcEvidenceObjectKey,
+            publicBio: payload.publicBio,
+            publicVerificationStatus: regulatedChanged ? 'PendingVerification' : 'Verified',
+          },
+          null,
+        ];
+      }) as any;
+
+      clinicService.submitStaffVerification = (async () => {
+        submitCalls += 1;
+        return [staffState[0], null];
+      }) as any;
+
+      const makeProps = (): any => ({
+        staff: staffState,
+        setStaff: (updater: any) => {
+          staffState = typeof updater === 'function' ? updater(staffState) : updater;
+          harness.rerender(makeProps());
+        },
+        roles: [],
+        staffLoadError: null,
+        showSkeletons: false,
+        activeStaffCount: 1,
+        maxStaffSeats: 10,
+        onRefreshStaff: async () => {},
+        showAddModal: false,
+        setShowAddModal: () => {},
+        onStaffAdded: async () => {},
+        platformVerificationStatus: 'Verified',
+        onRefreshVerificationState: async () => {},
+      });
+
+      const harness = createLocalHookHarness((props: any) => StaffManagementTab(props), makeProps());
+
+      const openEditModal = () => {
+        const editBtn = findNode(
+          harness.result.current,
+          (el) => el?.props?.title === 'Edit' && typeof el?.props?.onPress === 'function',
+        );
+        expect(editBtn).not.toBeNull();
+        editBtn.props.onPress();
+      };
+
+      const findPrimaryCta = (title: string) =>
+        findNode(
+          harness.result.current,
+          (el) => el?.props?.title === title && typeof el?.props?.onPress === 'function',
+        );
+
+      // 1) Bio-only edit keeps "Save Changes", shows no re-verification notice, and keeps Verified
+      openEditModal();
+      expect(findNodeByTestId(harness.result.current, 'staff-prc-reverification-notice')).toBeNull();
+      expect(findPrimaryCta('Save Changes')).not.toBeNull();
+      expect(findPrimaryCta(RESUBMIT_VERIFICATION_BUTTON_LABEL)).toBeNull();
+
+      findNode(
+        harness.result.current,
+        (el) => el?.props?.label === 'Public Bio' && typeof el?.props?.onChangeText === 'function',
+      ).props.onChangeText('Senior family physician');
+
+      expect(findNodeByTestId(harness.result.current, 'staff-prc-reverification-notice')).toBeNull();
+      expect(findPrimaryCta('Save Changes')).not.toBeNull();
+      await findPrimaryCta('Save Changes').props.onPress();
+
+      expect(updatePayloads).toHaveLength(1);
+      expect(updatePayloads[0].publicBio).toBe('Senior family physician');
+      expect(submitCalls).toBe(0);
+      expect(staffState[0].publicVerificationStatus).toBe('Verified');
+
+      // 2) PRC License # edit triggers notice & CTA switch; reverting restores Save Changes
+      openEditModal();
+      const prcInput = findNode(
+        harness.result.current,
+        (el) => el?.props?.label === 'PRC license number' && typeof el?.props?.onChangeText === 'function',
+      );
+      prcInput.props.onChangeText('0999888');
+      const noticeForPrc = findNodeByTestId(harness.result.current, 'staff-prc-reverification-notice');
+      expect(noticeForPrc).not.toBeNull();
+      expect(JSON.stringify(noticeForPrc)).toContain(REGULATED_PRC_REVERIFICATION_NOTICE);
+      expect(findPrimaryCta(RESUBMIT_VERIFICATION_BUTTON_LABEL)).not.toBeNull();
+
+      prcInput.props.onChangeText('0123456');
+      expect(findNodeByTestId(harness.result.current, 'staff-prc-reverification-notice')).toBeNull();
+      expect(findPrimaryCta('Save Changes')).not.toBeNull();
+
+      // 3) PRC Expiry Date edit triggers notice & CTA switch
+      const expiryInput = findNodeByTestId(harness.result.current, 'input-prc-expiry-edit');
+      expiryInput.props.onChangeText('2031-12-31');
+      expect(findNodeByTestId(harness.result.current, 'staff-prc-reverification-notice')).not.toBeNull();
+      expect(findPrimaryCta(RESUBMIT_VERIFICATION_BUTTON_LABEL)).not.toBeNull();
+
+      // Revert expiry, then test Replace PRC Proof (stageOnly: true) + Cancel does NOT mutate staff
+      expiryInput.props.onChangeText('2029-05-01');
+      expect(findNodeByTestId(harness.result.current, 'staff-prc-reverification-notice')).toBeNull();
+
+      mockPickedDocumentResult = {
+        canceled: false,
+        assets: [
+          {
+            name: 'renewed-prc.pdf',
+            size: 1024,
+            mimeType: 'application/pdf',
+            uri: 'file:///renewed-prc.pdf',
+          },
+        ],
+      };
+      await findNodeByTestId(harness.result.current, 'btn-upload-prc-proof-edit').props.onPress();
+      expect(uploadCalls).toEqual([{ staffId: 'doc-approved-225', opts: { stageOnly: true } }]);
+      expect(staffState[0].prcEvidenceObjectKey).toBe(
+        'tenants/t-1/clinics/c-1/verification/prc/doc-approved-225/old.pdf',
+      );
+      expect(findNodeByTestId(harness.result.current, 'staff-prc-reverification-notice')).not.toBeNull();
+      expect(findPrimaryCta(RESUBMIT_VERIFICATION_BUTTON_LABEL)).not.toBeNull();
+
+      // Cancel discards staged proof without mutating staff
+      findPrimaryCta('Cancel').props.onPress();
+      expect(staffState[0].prcEvidenceObjectKey).toBe(
+        'tenants/t-1/clinics/c-1/verification/prc/doc-approved-225/old.pdf',
+      );
+      expect(staffState[0].publicVerificationStatus).toBe('Verified');
+
+      // 4) Re-open, replace PRC proof + expiry, and click Save & Resubmit for Verification
+      openEditModal();
+      await findNodeByTestId(harness.result.current, 'btn-upload-prc-proof-edit').props.onPress();
+      findNodeByTestId(harness.result.current, 'input-prc-expiry-edit').props.onChangeText('2032-08-15');
+      const resubmitBtn = findPrimaryCta(RESUBMIT_VERIFICATION_BUTTON_LABEL);
+      expect(resubmitBtn).not.toBeNull();
+      await resubmitBtn.props.onPress();
+
+      expect(updatePayloads).toHaveLength(2);
+      expect(updatePayloads[1].prcExpiryDate).toBe('2032-08-15');
+      expect(updatePayloads[1].prcEvidenceObjectKey).toBe(
+        'tenants/t-1/clinics/c-1/verification/prc/doc-approved-225/new.pdf',
+      );
+      expect(staffState[0].publicVerificationStatus).toBe('PendingVerification');
+      expect(staffState[0].prcEvidenceObjectKey).toBe(
+        'tenants/t-1/clinics/c-1/verification/prc/doc-approved-225/new.pdf',
+      );
+      expect(submitCalls).toBe(0);
+
+      harness.unmount();
+    } finally {
+      mockPickedDocumentResult = { canceled: true, assets: null };
+      resetFeedbackState();
+      clinicService.updateStaff = origUpdateStaff;
+      clinicService.uploadStaffPrcProof = origUploadPrc;
+      clinicService.submitStaffVerification = origSubmitVerification;
     }
   });
 });

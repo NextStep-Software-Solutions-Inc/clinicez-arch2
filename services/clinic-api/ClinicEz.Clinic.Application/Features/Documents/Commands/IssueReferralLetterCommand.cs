@@ -114,31 +114,23 @@ public sealed class IssueReferralLetterCommandHandler : IRequestHandler<IssueRef
             }
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var datePrefix = today.ToString("yyyyMMdd");
-
-        var count = await _referralRepo.Query()
-            .CountAsync(r => r.ReferralDate == today, ct);
-
-        var refNumber = $"REF-{datePrefix}-{(count + 1):D4}";
-
         var issuedAt = DateTime.UtcNow;
         var doctor = _staffRepo != null ? await _staffRepo.GetByIdAsync(request.ReferringDoctorId, ct) : null;
         var prcNumber = doctor?.PrcLicenseNumber ?? "PRC-DOCTOR";
 
-        if (isPendingConsultationSignOff && resolvedConsultationId.HasValue)
+        if (isPendingConsultationSignOff && (resolvedConsultationId.HasValue || resolvedQueueItemId.HasValue))
         {
             var existingDraft = await _referralRepo.Query(r =>
                     r.ClinicId == _clinicContext.ClinicId &&
                     !r.IsSigned &&
-                    (r.ConsultationId == resolvedConsultationId.Value ||
+                    ((resolvedConsultationId.HasValue && r.ConsultationId == resolvedConsultationId.Value) ||
                      (resolvedQueueItemId.HasValue && r.QueueItemId == resolvedQueueItemId.Value)))
                 .OrderByDescending(r => r.CreatedAt)
                 .FirstOrDefaultAsync(ct);
 
             if (existingDraft != null)
             {
-                existingDraft.ConsultationId = resolvedConsultationId;
+                existingDraft.ConsultationId = resolvedConsultationId ?? existingDraft.ConsultationId;
                 existingDraft.QueueItemId ??= resolvedQueueItemId;
                 existingDraft.PatientId = request.PatientId;
                 existingDraft.PatientName = request.PatientName.Trim();
@@ -187,6 +179,14 @@ public sealed class IssueReferralLetterCommandHandler : IRequestHandler<IssueRef
                     existingDraft.QueueItemId);
             }
         }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var datePrefix = today.ToString("yyyyMMdd");
+
+        var count = await _referralRepo.Query()
+            .CountAsync(r => r.ReferralDate == today, ct);
+
+        var refNumber = $"REF-{datePrefix}-{(count + 1):D4}";
 
         var referral = new ReferralLetter
         {

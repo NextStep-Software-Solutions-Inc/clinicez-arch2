@@ -131,7 +131,10 @@ public sealed class DocumentsController : ControllerBase
         CancellationToken ct)
     {
         var result = await _sender.Send(command, ct);
-        return Ok(ApiResponse<MedicalCertificateDto>.Success(result, "Medical certificate issued and locked successfully."));
+        var message = result.IsSigned
+            ? "Medical certificate issued and locked successfully."
+            : "Medical certificate saved as draft pending consultation sign-off.";
+        return Ok(ApiResponse<MedicalCertificateDto>.Success(result, message));
     }
 
     [HttpGet("medical-certificates")]
@@ -153,7 +156,10 @@ public sealed class DocumentsController : ControllerBase
         CancellationToken ct)
     {
         var result = await _sender.Send(command, ct);
-        return Ok(ApiResponse<ReferralLetterDto>.Success(result, "Clinical referral letter issued successfully."));
+        var message = result.IsSigned
+            ? "Clinical referral letter issued successfully."
+            : "Clinical referral letter saved as draft pending consultation sign-off.";
+        return Ok(ApiResponse<ReferralLetterDto>.Success(result, message));
     }
 
     [HttpGet("referrals")]

@@ -61,6 +61,8 @@ public sealed class SubmitPatientMessageCommandHandler : IRequestHandler<SubmitP
             throw new ValidationException("Cannot send a message to a closed conversation.");
         }
 
+        CommunicationCommandRules.ValidateContentText(request.ContentText);
+
         var callerPatient = await _patientRepo.GetByClerkUserIdWithDetailsAsync(request.ClerkUserId, ct);
         var senderName = callerPatient != null
             ? $"{callerPatient.FirstName} {callerPatient.LastName}".Trim()
@@ -143,10 +145,12 @@ public sealed class SubmitPatientMessageCommandHandler : IRequestHandler<SubmitP
             RetentionDeadlineUtc: retentionDeadline
         );
 
+        var targetFacilityType = CommunicationCommandRules.ResolveFacilityType(conversation.HomeFacilityType);
+
         _publisher.Enqueue(
             InteropTypes.CommsMessageSubmit,
             Party.ForPatient(conversation.PatientId.ToString()),
-            Party.ForFacility(conversation.HomeTenantId, conversation.HomeFacilityId, FacilityType.Clinic, InteropServices.Comms),
+            Party.ForFacility(conversation.HomeTenantId, conversation.HomeFacilityId, targetFacilityType, InteropServices.Comms),
             conversation.Id,
             payload
         );

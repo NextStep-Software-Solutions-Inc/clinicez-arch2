@@ -87,6 +87,9 @@ public sealed record UpdateClinicSettingsCommand(
     Guid? DefaultHealthScreeningServiceItemId = null,
     string? DefaultHealthScreeningServiceCode = null,
     bool ClearDefaultHealthScreeningServiceItemId = false,
+    bool? EnableStaffMorningDigest = null,
+    bool? EnableStaffPreSlotReminders = null,
+    bool? EnableStaffOverdueAlerts = null,
     int? IdleLockMinutes = null,
     int? MaxLockedSessionHours = null,
     bool? AllowStaffPinUnlock = null) : IRequest<ClinicSettingsDto>;
@@ -148,6 +151,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         var prevAccreditationNumber = settings.AccreditationNumber;
         var prevIsPhilHealthConfigured = settings.IsPhilHealthConfigured;
         var prevEnableTeleconsultation = settings.EnableTeleconsultation;
+        var prevIsJoinEnabled = settings.IsJoinEnabled;
+        var prevJoinCode = settings.JoinCode;
 
         if (!string.IsNullOrWhiteSpace(request.ClinicName))
             settings.ClinicName = request.ClinicName.Trim();
@@ -335,6 +340,15 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.EnableStaffAppointmentNotifications.HasValue)
             settings.EnableStaffAppointmentNotifications = request.EnableStaffAppointmentNotifications.Value;
 
+        if (request.EnableStaffMorningDigest.HasValue)
+            settings.EnableStaffMorningDigest = request.EnableStaffMorningDigest.Value;
+
+        if (request.EnableStaffPreSlotReminders.HasValue)
+            settings.EnableStaffPreSlotReminders = request.EnableStaffPreSlotReminders.Value;
+
+        if (request.EnableStaffOverdueAlerts.HasValue)
+            settings.EnableStaffOverdueAlerts = request.EnableStaffOverdueAlerts.Value;
+
         if (request.TimeZoneId != null)
         {
             var trimmed = request.TimeZoneId.Trim();
@@ -463,6 +477,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             prevIsPhilHealthConfigured != settings.IsPhilHealthConfigured ||
             prevEnableTeleconsultation != settings.EnableTeleconsultation;
 
+        var joinGatingChanged =
+            prevIsJoinEnabled != settings.IsJoinEnabled ||
+            !string.Equals(prevJoinCode, settings.JoinCode, StringComparison.Ordinal);
+
         if (!request.SkipPendingVerificationSync
             && directoryFieldsChanged
             && _directorySyncService != null
@@ -474,6 +492,14 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
                 _clinicContext.StaffId?.ToString(),
                 _clinicContext.StaffName,
                 ct);
+        }
+        else if ((directoryFieldsChanged || joinGatingChanged)
+            && _directorySyncService != null
+            && settings.PlatformVerificationStatus == PlatformVerificationStatus.Verified
+            && settings.IsDirectoryPublished)
+        {
+            await _directorySyncService.EnqueueDirectoryUpdateAsync(settings, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
         }
 
         var isWorkspaceEntitled = false;

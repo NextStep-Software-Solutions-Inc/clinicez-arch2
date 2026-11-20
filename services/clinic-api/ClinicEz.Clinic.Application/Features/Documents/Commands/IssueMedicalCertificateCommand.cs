@@ -172,19 +172,19 @@ public sealed class IssueMedicalCertificateCommandHandler : IRequestHandler<Issu
             }
         }
 
-        if (isPendingConsultationSignOff && resolvedConsultationId.HasValue)
+        if (isPendingConsultationSignOff && (resolvedConsultationId.HasValue || resolvedQueueItemId.HasValue))
         {
             var existingDraft = await _medCertRepo.Query(m =>
                     m.ClinicId == _clinicContext.ClinicId &&
                     !m.IsSigned &&
-                    (m.ConsultationId == resolvedConsultationId.Value ||
+                    ((resolvedConsultationId.HasValue && m.ConsultationId == resolvedConsultationId.Value) ||
                      (resolvedQueueItemId.HasValue && m.QueueItemId == resolvedQueueItemId.Value)))
                 .OrderByDescending(m => m.CreatedAt)
                 .FirstOrDefaultAsync(ct);
 
             if (existingDraft != null)
             {
-                existingDraft.ConsultationId = resolvedConsultationId;
+                existingDraft.ConsultationId = resolvedConsultationId ?? existingDraft.ConsultationId;
                 existingDraft.QueueItemId ??= resolvedQueueItemId;
                 existingDraft.PatientId = request.PatientId;
                 existingDraft.PatientName = request.PatientName.Trim();

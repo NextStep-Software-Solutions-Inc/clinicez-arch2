@@ -86,6 +86,9 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
             relationshipToPatient = dependent?.RelationshipToManager ?? "Guardian";
         }
 
+        // 2b. Validate Message Content
+        CommunicationCommandRules.ValidateContentText(request.ContentText);
+
         // 3. Active Eligibility Grant Check
         var now = DateTime.UtcNow;
         var grant = await _commsRepo.GetActiveGrantAsync(targetPatientId, request.FacilityId, now, ct);
@@ -93,6 +96,11 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
         {
             throw new ValidationException("No active communication eligibility grant found for this facility.");
         }
+
+        var resolvedTenantId = !string.IsNullOrWhiteSpace(request.TenantId) ? request.TenantId : grant.TenantId;
+        var resolvedFacilityType = !string.IsNullOrWhiteSpace(request.FacilityType) ? request.FacilityType : grant.FacilityType;
+        var resolvedFacilityName = !string.IsNullOrWhiteSpace(request.FacilityName) ? request.FacilityName : grant.FacilityName;
+        var targetFacilityType = CommunicationCommandRules.ResolveFacilityType(resolvedFacilityType);
 
         // 4. Create Local PatientConversation Replica
         var conversationId = Guid.NewGuid();
@@ -103,10 +111,10 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
         {
             Id = conversationId,
             PatientId = targetPatientId,
-            HomeTenantId = request.TenantId,
+            HomeTenantId = resolvedTenantId,
             HomeFacilityId = request.FacilityId,
-            HomeFacilityType = request.FacilityType,
-            FacilityName = request.FacilityName,
+            HomeFacilityType = resolvedFacilityType,
+            FacilityName = resolvedFacilityName,
             Category = request.Category,
             Subject = request.Category.ToString(),
             Status = RequestStatus.Submitted,
@@ -160,9 +168,9 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
         // 5. Enqueue Outbound Interop Envelope: comms.request.submit
         var payload = new CommsRequestSubmitPayload(
             RequestId: conversationId,
-            TenantId: request.TenantId,
+            TenantId: resolvedTenantId,
             FacilityId: request.FacilityId,
-            FacilityType: request.FacilityType,
+            FacilityType: resolvedFacilityType,
             PatientId: targetPatientId,
             SubmittingAccountId: isDependent ? callerPatient.Id : null,
             Relationship: isDependent ? relationshipToPatient : null,
@@ -176,7 +184,7 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
         _publisher.Enqueue(
             InteropTypes.CommsRequestSubmit,
             Party.ForPatient(targetPatientId.ToString()),
-            Party.ForFacility(request.TenantId, request.FacilityId, FacilityType.Clinic, InteropServices.Comms),
+            Party.ForFacility(resolvedTenantId, request.FacilityId, targetFacilityType, InteropServices.Comms),
             conversationId,
             payload
         );
@@ -187,5 +195,32 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
             IsEmergencyRedirect: false,
             RedirectMessage: null,
             ConversationId: conversationId);
+    }
+}
+
+internal static class CommunicationCommandRules
+{
+    public const int MaxContentLength = 1000;
+
+    /// <summary>Validates patient communication text against persistence and domain constraints.</summary>
+    public static void ValidateContentText(string? contentText)
+    {
+        if (string.IsNullOrWhiteSpace(contentText))
+        {
+            throw new ValidationException("Message text cannot be empty.");
+        }
+
+        if (contentText.Length > MaxContentLength)
+        {
+            throw new ValidationException($"Message content exceeds maximum allowed length of {MaxContentLength} characters.");
+        }
+    }
+
+    /// <summary>Parses a facility type string into <see cref="FacilityType"/> with a Clinic fallback.</summary>
+    public static FacilityType ResolveFacilityType(string? facilityType)
+    {
+        return Enum.TryParse<FacilityType>(facilityType, ignoreCase: true, out var parsedType)
+            ? parsedType
+            : FacilityType.Clinic;
     }
 }

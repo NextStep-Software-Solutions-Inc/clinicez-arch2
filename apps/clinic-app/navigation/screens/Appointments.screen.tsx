@@ -62,6 +62,8 @@ import {
   AppointmentRescheduleModal,
   getManilaTodayStr,
   getManilaTimeParts,
+  getAppointmentLocalDateTime,
+  isAppointmentOverdue,
   toDateString,
   parseDateOnly,
   formatDateString,
@@ -608,24 +610,58 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     }
   }, [route?.params?.tab, navigation]);
 
-  // Deep-link from Global Search Provider: appointmentId
+  // Deep-link from Global Search Provider or Staff Notification Center: appointmentId
   useEffect(() => {
     const aptId = route?.params?.appointmentId;
     if (!aptId) return;
+    let cancelled = false;
+    const tzId = settings?.timeZoneId ?? 'Asia/Manila';
+
+    const openResolvedAppointment = (found: AppointmentItem) => {
+      if (cancelled) return;
+      if (!route?.params?.date) {
+        const { dateStr } = getAppointmentLocalDateTime(found.scheduledAt, tzId);
+        if (dateStr) {
+          setCurrentDate(dateStr);
+        }
+      }
+      setInspectedAppointment(found);
+      navigation.setParams?.({ appointmentId: undefined });
+    };
+
     const match = appointments.find((a) => a.id === aptId);
     if (match) {
-      setInspectedAppointment(match);
-      navigation.setParams?.({ appointmentId: undefined });
+      openResolvedAppointment(match);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (typeof clinicService?.getAppointment === 'function') {
+      clinicService
+        .getAppointment(aptId)
+        .then(([found]) => {
+          if (found) {
+            openResolvedAppointment(found);
+          } else if (!loading && typeof clinicService?.getAppointments === 'function') {
+            clinicService.getAppointments().then(([allApts]) => {
+              const fallback = allApts?.find((a) => a.id === aptId);
+              if (fallback) openResolvedAppointment(fallback);
+            });
+          }
+        })
+        .catch(() => {});
     } else if (!loading) {
       clinicService.getAppointments().then(([allApts]) => {
         const found = allApts?.find((a) => a.id === aptId);
-        if (found) {
-          setInspectedAppointment(found);
-          navigation.setParams?.({ appointmentId: undefined });
-        }
+        if (found) openResolvedAppointment(found);
       });
     }
-  }, [route?.params?.appointmentId, appointments, loading, navigation]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [route?.params?.appointmentId, route?.params?.date, appointments, loading, navigation, settings?.timeZoneId, setCurrentDate]);
 
 
 
@@ -788,6 +824,44 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     );
     notify.success(`Appointment for ${item.patientName} was cancelled.`);
   };
+
+  const executeMarkNoShow = async (item: AppointmentItem, reason?: string): Promise<boolean> => {
+    const [updated, err] = await clinicService.markAppointmentNoShow(item.id, reason);
+    if (err) {
+      notify.error(err.message || 'The appointment could not be marked as no-show.');
+      return false;
+    }
+    const nextItem: AppointmentItem = {
+      ...item,
+      ...(updated ?? {}),
+      status: (updated?.status ?? 'NoShow') as AppointmentStatus,
+    };
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === item.id ? { ...a, ...nextItem } : a))
+    );
+    setInspectedAppointment((prev) =>
+      prev && prev.id === item.id ? { ...prev, ...nextItem } : prev
+    );
+    notify.success(`Appointment for ${item.patientName} was marked as No-Show.`);
+    return true;
+  };
+
+  const handleBookFollowUp = useCallback(
+    async (item: AppointmentItem) => {
+      setInspectedAppointment(null);
+      const preselected = buildPreselectedPatientFromRoute({
+        patientId: item.patientId,
+        patientName: item.patientName,
+      });
+      if (preselected) {
+        openBookModal(preselected);
+        return;
+      }
+      const [patient] = await clinicService.getPatientById(item.patientId);
+      openBookModal(patient ?? null);
+    },
+    [openBookModal],
+  );
 
   const handleCancelAppointment = (item: AppointmentItem) => {
     setCancelingAppointment(item);
@@ -1419,12 +1493,15 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
           setInspectedAppointment(null);
           executeCancelAppointment(appt);
         }}
+        onMarkNoShow={executeMarkNoShow}
+        onBookFollowUp={handleBookFollowUp}
       />
 
       {/* Appointment Reschedule Modal */}
       <AppointmentRescheduleModal
         visible={!!rescheduleAppointment}
         appointment={rescheduleAppointment}
+        defaultToToday={isAppointmentOverdue(rescheduleAppointment)}
         doctors={activeDoctors.map((d) => ({ id: d.id, name: formatStaffName(d) }))}
         onClose={() => setRescheduleAppointment(null)}
         onSuccess={(updated) => {

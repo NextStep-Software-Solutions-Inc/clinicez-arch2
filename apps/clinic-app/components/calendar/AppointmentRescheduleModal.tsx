@@ -23,6 +23,8 @@ import type { ExtendedAppointmentItem } from './types';
 import {
   extractAppointmentScheduleError,
   getAppointmentLocalDateTime,
+  getNextAvailableSlotForToday,
+  isAppointmentOverdue,
   manilaDateTimeToUtcIso,
   validateFutureManilaDateTime,
 } from './calendarUtils';
@@ -35,6 +37,24 @@ export interface AppointmentRescheduleModalProps {
   onSubmitReschedule?: (newDate: string, newTime: string, reason: string, doctorId?: string) => void;
   conflictError?: string | null;
   doctors?: Array<{ id: string; name: string }>;
+  defaultToToday?: boolean;
+}
+
+function resolveInitialRescheduleSlot(
+  appointment: ExtendedAppointmentItem | null,
+  defaultToToday: boolean
+): { date: string; time: string } {
+  if (defaultToToday && appointment && isAppointmentOverdue(appointment)) {
+    return getNextAvailableSlotForToday();
+  }
+  if (!appointment?.scheduledAt) {
+    return { date: '', time: '09:00' };
+  }
+  const { dateStr, timeStr } = getAppointmentLocalDateTime(appointment.scheduledAt);
+  return {
+    date: dateStr || appointment.scheduledAt.split('T')[0] || '',
+    time: timeStr || '09:00',
+  };
 }
 
 export function AppointmentRescheduleModal({
@@ -45,17 +65,14 @@ export function AppointmentRescheduleModal({
   onSubmitReschedule,
   conflictError: externalConflictError,
   doctors,
+  defaultToToday = false,
 }: AppointmentRescheduleModalProps) {
-  const [newDate, setNewDate] = useState<string>(() => {
-    if (!appointment?.scheduledAt) return '';
-    const { dateStr } = getAppointmentLocalDateTime(appointment.scheduledAt);
-    return dateStr || appointment.scheduledAt.split('T')[0] || '';
-  });
-  const [newTime, setNewTime] = useState<string>(() => {
-    if (!appointment?.scheduledAt) return '09:00';
-    const { timeStr } = getAppointmentLocalDateTime(appointment.scheduledAt);
-    return timeStr || '09:00';
-  });
+  const [newDate, setNewDate] = useState<string>(
+    () => resolveInitialRescheduleSlot(appointment, defaultToToday).date
+  );
+  const [newTime, setNewTime] = useState<string>(
+    () => resolveInitialRescheduleSlot(appointment, defaultToToday).time
+  );
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(
     () => appointment?.doctorId || null
   );
@@ -74,10 +91,7 @@ export function AppointmentRescheduleModal({
 
   useEffect(() => {
     if (appointment) {
-      const scheduled = appointment.scheduledAt || '';
-      const { dateStr, timeStr } = getAppointmentLocalDateTime(scheduled);
-      const initDate = dateStr || scheduled.split('T')[0] || '';
-      const initTime = timeStr || '09:00';
+      const { date: initDate, time: initTime } = resolveInitialRescheduleSlot(appointment, defaultToToday);
       const initDocId = appointment.doctorId || null;
 
       setNewDate(initDate);
@@ -95,7 +109,7 @@ export function AppointmentRescheduleModal({
         reason: '',
       };
     }
-  }, [appointment, visible]);
+  }, [appointment, visible, defaultToToday]);
 
   let staffDoctors: Array<{ id: string; name: string }> = [];
   try {

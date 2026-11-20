@@ -10,6 +10,10 @@ import {
 } from '../../services/clinicService';
 import { openDocument } from '../../services/documentOpener';
 import { notify } from '../../utils/feedback';
+import {
+  getDocumentIssuanceOutcome,
+  normalizeActiveQueueItemId,
+} from '../../utils/visitDocumentDrafts';
 
 export type ReferralUrgency = 'Routine' | 'Urgent' | 'Emergency';
 
@@ -120,7 +124,7 @@ export default function IssueReferralLetterModal({
 
     setSubmitting(true);
     try {
-      let effectiveQueueItemId = queueItemId;
+      let effectiveQueueItemId = normalizeActiveQueueItemId(queueItemId);
 
       if (!effectiveQueueItemId && !consultationId) {
         const [directVisit, visitErr] = await clinicService.ensureDirectVisit({
@@ -142,6 +146,7 @@ export default function IssueReferralLetterModal({
         patientId: patient.id,
         patientName: patient.fullName,
         consultationId: consultationId || undefined,
+        queueItemId: effectiveQueueItemId || undefined,
         referringDoctorId: doctorId || currentStaff?.id || '',
         referringDoctorName: doctorName || currentName || 'Referring Physician',
         referredToDoctor: referredToDoctor.trim() || undefined,
@@ -159,11 +164,18 @@ export default function IssueReferralLetterModal({
         throw letterErr || new Error('Failed to issue referral letter.');
       }
 
-      notify.success(`Referral letter issued successfully (${letter.referralNumber || ''})`);
+      const outcome = getDocumentIssuanceOutcome('referral-letter', letter, letter.referralNumber);
+      if (outcome.toastKind === 'info') {
+        notify.info(outcome.message);
+      } else {
+        notify.success(outcome.message);
+      }
       onSuccess?.(letter);
 
-      const pdfUrl = clinicService.getReferralLetterPdfUrl(letter.id);
-      openDocument(pdfUrl).catch(() => {});
+      if (outcome.shouldOpenPdf) {
+        const pdfUrl = clinicService.getReferralLetterPdfUrl(letter.id);
+        openDocument(pdfUrl).catch(() => {});
+      }
 
       onClose();
     } catch (e: any) {

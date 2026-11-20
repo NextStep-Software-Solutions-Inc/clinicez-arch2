@@ -189,8 +189,15 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
 
         var triggeredPrcUpdateResubmission = false;
         if (wasVerified
+            && staff.IsDirectoryOptIn
             && ClinicianDirectoryValidationHelper.IsClinicianRole(staff.Role)
-            && ClinicianDirectoryValidationHelper.HasPrcLicenseChanged(previousPrc, staff.PrcLicenseNumber))
+            && ClinicianDirectoryValidationHelper.HasRegulatedPrcCredentialsChanged(
+                previousPrc,
+                staff.PrcLicenseNumber,
+                prevExpiry,
+                staff.PrcExpiryDate,
+                prevProofKey,
+                staff.PrcEvidenceObjectKey))
         {
             if (!PractitionerIdentity.IsValidPrcFormat(staff.PrcLicenseNumber))
             {

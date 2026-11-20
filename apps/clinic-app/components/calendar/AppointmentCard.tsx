@@ -10,6 +10,8 @@ import {
   resolveStatusTokens,
   formatTime12,
   getAppointmentLocalDateTime,
+  isAppointmentOverdue,
+  isAppointmentTerminal,
 } from './calendarUtils';
 
 export interface AppointmentCardProps {
@@ -44,6 +46,14 @@ export function AppointmentCard({
     hasLegacyTeleconsultService;
 
   const { formattedTime } = getAppointmentLocalDateTime(appointment.scheduledAt);
+  const isTerminal = isAppointmentTerminal(appointment.status);
+  const isOverdue = isAppointmentOverdue(appointment);
+  const canCheckInQuick = Boolean(
+    onCheckIn && (appointment.status === 'Confirmed' || appointment.status === 'Pending')
+  );
+  const canRescheduleQuick = Boolean(onReschedule && !isTerminal);
+  const canCancelQuick = Boolean(onCancel && !isTerminal);
+  const hasQuickActions = canCheckInQuick || canRescheduleQuick || canCancelQuick;
 
   // Compact variant: for MonthView day cells
   if (variant === 'compact') {
@@ -81,6 +91,16 @@ export function AppointmentCard({
             {formattedTime ? `${formattedTime} ` : ''}
             {appointment.patientName}
           </ThemedText>
+          {isOverdue ? (
+            <View
+              data-testid="card-overdue-badge"
+              testID="card-overdue-badge"
+              style={styles.compactOverdueBadge}
+            >
+              <Icon name="clock" size={10} color={theme.colors.warningText} />
+            </View>
+          ) : null}
+
           {isTeleconsult ? (
             <View data-testid="card-teleconsult-badge" testID="card-teleconsult-badge">
               <Icon name="video" size={10} color={urgencyTokens.badgeText} />
@@ -166,6 +186,21 @@ export function AppointmentCard({
               {statusTokens.label}
             </ThemedText>
           </View>
+          {isOverdue ? (
+            <View
+              data-testid="card-overdue-badge"
+              testID="card-overdue-badge"
+              style={styles.timelineOverdueBadge}
+            >
+              <ThemedText
+                variant="caption"
+                color={theme.colors.warningText}
+                style={{ fontWeight: '700' }}
+              >
+                Overdue
+              </ThemedText>
+            </View>
+          ) : null}
           {isTeleconsult ? (
             <View
               data-testid="card-teleconsult-badge"
@@ -276,6 +311,23 @@ export function AppointmentCard({
           </ThemedText>
         </View>
 
+        {isOverdue ? (
+          <View
+            data-testid="card-overdue-badge"
+            testID="card-overdue-badge"
+            style={styles.overdueBadge}
+          >
+            <Icon name="clock" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+            <ThemedText
+              variant="caption"
+              color={theme.colors.warningText}
+              style={{ fontWeight: '700' }}
+            >
+              Overdue
+            </ThemedText>
+          </View>
+        ) : null}
+
         {isTeleconsult ? (
           <View
             data-testid="card-teleconsult-badge"
@@ -339,90 +391,91 @@ export function AppointmentCard({
       ) : null}
 
       {/* Action buttons row */}
-      <View style={styles.actionsRow}>
-        {onCheckIn &&
-        (appointment.status === 'Confirmed' || appointment.status === 'Pending') ? (
-          <Pressable
-            data-testid={`btn-checkin-${appointment.id}`}
-            testID={`btn-checkin-${appointment.id}`}
-            accessibilityRole="button"
-            onPress={(e) => {
-              e.stopPropagation();
-              onCheckIn(appointment);
-            }}
-            style={({ pressed }) => [
-              styles.actionBtn,
-              styles.actionBtnPrimary,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Icon
-              name="check"
-              size={theme.sizes.iconSm}
-              color={theme.colors.onPrimary}
-            />
-            <ThemedText
-              variant="captionBold"
-              color={theme.colors.onPrimary}
+      {hasQuickActions ? (
+        <View style={styles.actionsRow}>
+          {canCheckInQuick ? (
+            <Pressable
+              data-testid={`btn-checkin-${appointment.id}`}
+              testID={`btn-checkin-${appointment.id}`}
+              accessibilityRole="button"
+              onPress={(e) => {
+                e.stopPropagation();
+                onCheckIn!(appointment);
+              }}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.actionBtnPrimary,
+                pressed && styles.pressed,
+              ]}
             >
-              Check In
-            </ThemedText>
-          </Pressable>
-        ) : null}
+              <Icon
+                name="check"
+                size={theme.sizes.iconSm}
+                color={theme.colors.onPrimary}
+              />
+              <ThemedText
+                variant="captionBold"
+                color={theme.colors.onPrimary}
+              >
+                Check In
+              </ThemedText>
+            </Pressable>
+          ) : null}
 
-        {onReschedule && appointment.status !== 'Cancelled' ? (
-          <Pressable
-            data-testid={`btn-reschedule-${appointment.id}`}
-            testID={`btn-reschedule-${appointment.id}`}
-            accessibilityRole="button"
-            onPress={(e) => {
-              e.stopPropagation();
-              onReschedule(appointment);
-            }}
-            style={({ pressed }) => [
-              styles.actionBtn,
-              styles.actionBtnSecondary,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Icon
-              name="calendar"
-              size={theme.sizes.iconSm}
-              color={theme.colors.textSecondary}
-            />
-            <ThemedText
-              variant="captionBold"
-              color={theme.colors.textSecondary}
+          {canRescheduleQuick ? (
+            <Pressable
+              data-testid={`btn-reschedule-${appointment.id}`}
+              testID={`btn-reschedule-${appointment.id}`}
+              accessibilityRole="button"
+              onPress={(e) => {
+                e.stopPropagation();
+                onReschedule!(appointment);
+              }}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.actionBtnSecondary,
+                pressed && styles.pressed,
+              ]}
             >
-              Reschedule
-            </ThemedText>
-          </Pressable>
-        ) : null}
+              <Icon
+                name="calendar"
+                size={theme.sizes.iconSm}
+                color={theme.colors.textSecondary}
+              />
+              <ThemedText
+                variant="captionBold"
+                color={theme.colors.textSecondary}
+              >
+                Reschedule
+              </ThemedText>
+            </Pressable>
+          ) : null}
 
-        {onCancel && appointment.status !== 'Cancelled' ? (
-          <Pressable
-            data-testid={`btn-cancel-${appointment.id}`}
-            testID={`btn-cancel-${appointment.id}`}
-            accessibilityRole="button"
-            onPress={(e) => {
-              e.stopPropagation();
-              onCancel(appointment);
-            }}
-            style={({ pressed }) => [
-              styles.actionBtn,
-              styles.actionBtnGhost,
-              pressed && styles.pressed,
-            ]}
-          >
-            <ThemedText
-              variant="caption"
-              color={theme.colors.emergencyText}
+          {canCancelQuick ? (
+            <Pressable
+              data-testid={`btn-cancel-${appointment.id}`}
+              testID={`btn-cancel-${appointment.id}`}
+              accessibilityRole="button"
+              onPress={(e) => {
+                e.stopPropagation();
+                onCancel!(appointment);
+              }}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.actionBtnGhost,
+                pressed && styles.pressed,
+              ]}
             >
-              Cancel
-            </ThemedText>
-          </Pressable>
-        ) : null}
-      </View>
+              <ThemedText
+                variant="caption"
+                color={theme.colors.emergencyText}
+              >
+                Cancel
+              </ThemedText>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -562,6 +615,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 2,
     borderRadius: theme.radii.xs,
+  },
+  overdueBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.colors.warningBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.warningBorder,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+    borderRadius: theme.radii.sm,
+  },
+  timelineOverdueBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.warningBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.warningBorder,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: theme.radii.xs,
+  },
+  compactOverdueBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.warningBg,
+    borderRadius: theme.radii.xs,
+    paddingHorizontal: 2,
+    paddingVertical: 1,
   },
 });
 

@@ -23,6 +23,8 @@ export interface AdministrativeDocumentsTabProps {
   referralLetters?: ReferralLetterRecord[];
   isLoading?: boolean;
   onRefreshChart?: () => void;
+  onMedicalCertificateIssued?: (cert: MedicalCertificateRecord) => void;
+  onReferralLetterIssued?: (letter: ReferralLetterRecord) => void;
 }
 
 export type DocumentFilterType = 'ALL' | 'CERTIFICATES' | 'REFERRALS';
@@ -58,12 +60,24 @@ export default function AdministrativeDocumentsTab({
   referralLetters = [],
   isLoading = false,
   onRefreshChart,
+  onMedicalCertificateIssued,
+  onReferralLetterIssued,
 }: AdministrativeDocumentsTabProps) {
   const { dateFormat, timeZoneId } = useClinic();
   const [filterType, setFilterType] = useState<DocumentFilterType>('ALL');
   const [actioningDocId, setActioningDocId] = useState<string | null>(null);
   const [issueModalVisible, setIssueModalVisible] = useState(false);
   const [referralModalVisible, setReferralModalVisible] = useState(false);
+
+  const handleMedicalCertificateSuccess = (cert: MedicalCertificateRecord) => {
+    onMedicalCertificateIssued?.(cert);
+    onRefreshChart?.();
+  };
+
+  const handleReferralLetterSuccess = (letter: ReferralLetterRecord) => {
+    onReferralLetterIssued?.(letter);
+    onRefreshChart?.();
+  };
 
   const totalCerts = medicalCertificates.length;
   const totalReferrals = referralLetters.length;
@@ -413,14 +427,14 @@ export default function AdministrativeDocumentsTab({
           onClose={() => setIssueModalVisible(false)}
           patient={patient ?? null}
           queueItemId={queueItemId}
-          onSuccess={() => onRefreshChart?.()}
+          onSuccess={handleMedicalCertificateSuccess}
         />
         <IssueReferralLetterModal
           visible={referralModalVisible}
           onClose={() => setReferralModalVisible(false)}
           patient={patient ?? null}
           queueItemId={queueItemId}
-          onSuccess={() => onRefreshChart?.()}
+          onSuccess={handleReferralLetterSuccess}
         />
       </View>
     );
@@ -469,14 +483,14 @@ export default function AdministrativeDocumentsTab({
         onClose={() => setIssueModalVisible(false)}
         patient={patient ?? null}
         queueItemId={queueItemId}
-        onSuccess={() => onRefreshChart?.()}
+        onSuccess={handleMedicalCertificateSuccess}
       />
       <IssueReferralLetterModal
         visible={referralModalVisible}
         onClose={() => setReferralModalVisible(false)}
         patient={patient ?? null}
         queueItemId={queueItemId}
-        onSuccess={() => onRefreshChart?.()}
+        onSuccess={handleReferralLetterSuccess}
       />
     </ScrollView>
   );

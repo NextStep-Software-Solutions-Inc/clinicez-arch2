@@ -31,7 +31,23 @@ export interface PatientSummary {
 
 // ── Sub-entity types ──────────────────────────────────────────────────────────
 
-export interface GovernmentIdItem { id: string; clientId: string; idType: string; idNumber: string; issuedAt: string | null; expiresAt: string | null; updatedAt: string | null }
+export interface GovernmentIdItem {
+    id: string;
+    clientId: string;
+    idType: string;
+    idNumber: string;
+    issuedAt: string | null;
+    expiresAt: string | null;
+    updatedAt: string | null;
+    philhealthCategory?: string | null;
+    sponsorPin?: string | null;
+    sponsorLastName?: string | null;
+    sponsorFirstName?: string | null;
+    sponsorMiddleName?: string | null;
+    sponsorSuffix?: string | null;
+    sponsorDob?: string | null;
+    sponsorRelationship?: string | null;
+}
 export interface AddressItem {
     id: string;
     clientId: string;
@@ -385,6 +401,14 @@ export interface UpdateGovernmentIdInput {
     idNumber: string;
     issuedAt?: string | null;
     expiresAt?: string | null;
+    philhealthCategory?: string | null;
+    sponsorPin?: string | null;
+    sponsorLastName?: string | null;
+    sponsorFirstName?: string | null;
+    sponsorMiddleName?: string | null;
+    sponsorSuffix?: string | null;
+    sponsorDob?: string | null;
+    sponsorRelationship?: string | null;
 }
 
 export async function getPatientGovernmentIds(
@@ -399,7 +423,7 @@ export async function updatePatientGovernmentIds(
     patientId: string,
     governmentIds: UpdateGovernmentIdInput[],
 ): Promise<GovernmentIdItem[]> {
-    return api.put<GovernmentIdItem[]>(getToken, `/patients/${patientId}/government-ids`, { governmentIds });
+    return api.put<GovernmentIdItem[]>(getToken, `/patients/${patientId}/government-ids`, { items: governmentIds });
 }
 
 export interface AddressInput {

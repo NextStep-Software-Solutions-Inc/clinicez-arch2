@@ -1020,6 +1020,89 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
         Assert.Equal("2030-01-15", afterSetJson.GetProperty("dohLtoExpiryDate").GetString());
     }
 
+    [Fact]
+    public async Task Issue227_SuspendAndReinstatePractitionerEndpoints_EnforceReasonRbacAndSyncQueueLifecycle()
+    {
+        // Approve initial facility + Dr. Jose Rizal so canonical Practitioner record exists
+        var approveReq = AsUser(HttpMethod.Post, $"/api/v1/admin/verification-queue/{_facReqId}/approve", "clerk_verifier");
+        approveReq.Content = JsonContent.Create(new { notes = "Verified LTO & PRC" });
+        var approveRes = await _client.SendAsync(approveReq);
+        Assert.Equal(HttpStatusCode.OK, approveRes.StatusCode);
+        var approveJson = await approveRes.Content.ReadFromJsonAsync<JsonElement>();
+        var pracId = approveJson.GetProperty("approvedPractitionerIds")[0].GetGuid();
+
+        // Seed an open PendingReview practitioner resubmission for the same verified practitioner
+        var openResubId = Guid.NewGuid();
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.PractitionerVerificationRequests.Add(new PractitionerVerificationRequest
+            {
+                Id = openResubId,
+                TenantId = _tenantId,
+                FacilityId = _facilityId,
+                ClinicStaffMemberId = Guid.NewGuid(),
+                PractitionerId = pracId,
+                SubmissionNumber = 6,
+                CorrelationId = openResubId.ToString(),
+                RequestKind = "Resubmission",
+                ProfessionKind = "Doctor",
+                SubmittedPrcLicenseNo = "0088112",
+                NormalizedPrcLicenseNo = "0088112",
+                SubmittedSnapshotJson = "{}",
+                Status = "PendingReview",
+                SubmittedAtUtc = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // 1. Suspend without compliance reason -> 400 BadRequest
+        var blankSuspendReq = AsUser(HttpMethod.Post, $"/api/v1/admin/practitioners/{pracId}/suspend", "clerk_super_admin");
+        blankSuspendReq.Content = JsonContent.Create(new { reason = "   " });
+        var blankSuspendRes = await _client.SendAsync(blankSuspendReq);
+        Assert.Equal(HttpStatusCode.BadRequest, blankSuspendRes.StatusCode);
+
+        // 2. Suspend with compliance reason -> 200 OK & closes open PendingReview request
+        var validSuspendReq = AsUser(HttpMethod.Post, $"/api/v1/admin/practitioners/{pracId}/suspend", "clerk_super_admin");
+        validSuspendReq.Content = JsonContent.Create(new { reason = "Compliance audit hold" });
+        var validSuspendRes = await _client.SendAsync(validSuspendReq);
+        Assert.Equal(HttpStatusCode.OK, validSuspendRes.StatusCode);
+        var suspendJson = await validSuspendRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(1, suspendJson.GetProperty("closedPendingRequestsCount").GetInt32());
+
+        var detailAfterSuspendRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{openResubId}", "clerk_verifier"));
+        Assert.Equal(HttpStatusCode.OK, detailAfterSuspendRes.StatusCode);
+        var detailAfterSuspend = await detailAfterSuspendRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Rejected", detailAfterSuspend.GetProperty("status").GetString());
+        Assert.Equal(pracId, detailAfterSuspend.GetProperty("canonicalPractitionerId").GetGuid());
+        Assert.Equal("Suspended", detailAfterSuspend.GetProperty("canonicalPractitionerStatus").GetString());
+
+        // 3. Reinstate RBAC & validation: verifier -> 403; blank reason -> 400; super_admin -> 200; duplicate -> 409
+        var verifierReinstateReq = AsUser(HttpMethod.Post, $"/api/v1/admin/practitioners/{pracId}/reinstate", "clerk_verifier");
+        verifierReinstateReq.Content = JsonContent.Create(new { reason = "Cleared" });
+        var verifierReinstateRes = await _client.SendAsync(verifierReinstateReq);
+        Assert.Equal(HttpStatusCode.Forbidden, verifierReinstateRes.StatusCode);
+
+        var blankReinstateReq = AsUser(HttpMethod.Post, $"/api/v1/admin/practitioners/{pracId}/reinstate", "clerk_super_admin");
+        blankReinstateReq.Content = JsonContent.Create(new { reason = "" });
+        var blankReinstateRes = await _client.SendAsync(blankReinstateReq);
+        Assert.Equal(HttpStatusCode.BadRequest, blankReinstateRes.StatusCode);
+
+        var okReinstateReq = AsUser(HttpMethod.Post, $"/api/v1/admin/practitioners/{pracId}/reinstate", "clerk_super_admin");
+        okReinstateReq.Content = JsonContent.Create(new { reason = "Compliance hold lifted" });
+        var okReinstateRes = await _client.SendAsync(okReinstateReq);
+        Assert.Equal(HttpStatusCode.OK, okReinstateRes.StatusCode);
+
+        var detailAfterReinstateRes = await _client.SendAsync(AsUser(HttpMethod.Get, $"/api/v1/admin/verification-queue/{openResubId}", "clerk_verifier"));
+        var detailAfterReinstate = await detailAfterReinstateRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Verified", detailAfterReinstate.GetProperty("canonicalPractitionerStatus").GetString());
+
+        var dupReinstateReq = AsUser(HttpMethod.Post, $"/api/v1/admin/practitioners/{pracId}/reinstate", "clerk_super_admin");
+        dupReinstateReq.Content = JsonContent.Create(new { reason = "Duplicate" });
+        var dupReinstateRes = await _client.SendAsync(dupReinstateReq);
+        Assert.Equal(HttpStatusCode.Conflict, dupReinstateRes.StatusCode);
+    }
+
     private sealed class HeaderTestAuthHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger,

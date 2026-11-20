@@ -98,6 +98,9 @@ public sealed record ClinicSettingsDto(
     bool AllowNurseMidwifeYakapFpeFacilitator = false,
     Guid? DefaultHealthScreeningServiceItemId = null,
     string? DefaultHealthScreeningServiceCode = "HEALTH-SCREEN",
+    bool EnableStaffMorningDigest = true,
+    bool EnableStaffPreSlotReminders = true,
+    bool EnableStaffOverdueAlerts = true,
     int IdleLockMinutes = 15,
     int MaxLockedSessionHours = 8,
     bool AllowStaffPinUnlock = true)
@@ -195,6 +198,9 @@ public sealed record ClinicSettingsDto(
         AllowNurseMidwifeYakapFpeFacilitator: settings.AllowNurseMidwifeYakapFpeFacilitator,
         DefaultHealthScreeningServiceItemId: settings.DefaultHealthScreeningServiceItemId,
         DefaultHealthScreeningServiceCode: settings.DefaultHealthScreeningServiceCode,
+        EnableStaffMorningDigest: settings.EnableStaffMorningDigest,
+        EnableStaffPreSlotReminders: settings.EnableStaffPreSlotReminders,
+        EnableStaffOverdueAlerts: settings.EnableStaffOverdueAlerts,
         IdleLockMinutes: settings.IdleLockMinutes,
         MaxLockedSessionHours: settings.MaxLockedSessionHours,
         AllowStaffPinUnlock: settings.AllowStaffPinUnlock);

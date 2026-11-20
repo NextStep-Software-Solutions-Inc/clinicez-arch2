@@ -40,5 +40,7 @@ public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointm
             entity.HasIndex(e => new { e.ClinicId, e.DoctorId, e.ScheduledAt, e.EndTimeUtc });
             entity.HasIndex(e => new { e.Status, e.ScheduledAt, e.Reminder24hSent });
             entity.HasIndex(e => new { e.Status, e.ScheduledAt, e.Reminder2hSent });
+            entity.HasIndex(e => new { e.Status, e.ScheduledAt, e.StaffPreSlotNotifiedAt });
+            entity.HasIndex(e => new { e.Status, e.ScheduledAt, e.StaffOverdueNotifiedAt });
     }
 }

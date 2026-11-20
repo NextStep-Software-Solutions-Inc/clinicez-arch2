@@ -150,16 +150,94 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
+export function isEmailAddressValue(value?: string | null): boolean {
+  if (!value) return false;
+  const trimmed = value.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+
+export interface PractitionerGovernanceTarget {
+  practitionerId: string;
+  status: "Verified" | "Suspended";
+  displayName: string | null;
+}
+
+export function resolvePractitionerGovernanceTarget(
+  detail?: VerificationRequestDetailDto | null,
+): PractitionerGovernanceTarget | null {
+  if (!detail || detail.kind !== "Practitioner") return null;
+
+  const primary = detail.childPractitionerRequests[0] ?? null;
+  const snapshotName = [
+    readSnapshotField(detail.snapshot, "title"),
+    readSnapshotField(detail.snapshot, "firstName"),
+    readSnapshotField(detail.snapshot, "lastName"),
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const childName = primary
+    ? [primary.title, primary.firstName, primary.lastName].filter(Boolean).join(" ")
+    : "";
+  const fallbackName = childName || snapshotName || null;
+
+  const canonicalStatus = detail.canonicalPractitionerStatus ?? null;
+  if (
+    detail.canonicalPractitionerId &&
+    (canonicalStatus === "Verified" || canonicalStatus === "Suspended")
+  ) {
+    return {
+      practitionerId: detail.canonicalPractitionerId,
+      status: canonicalStatus,
+      displayName: fallbackName,
+    };
+  }
+
+  const candidateByChildId = primary?.practitionerId
+    ? detail.prcMatchCandidates.find(
+        (c) =>
+          c.practitionerId === primary.practitionerId &&
+          (c.verificationStatus === "Verified" || c.verificationStatus === "Suspended"),
+      )
+    : undefined;
+
+  const matchedCandidate =
+    candidateByChildId ??
+    detail.prcMatchCandidates.find(
+      (c) => c.verificationStatus === "Verified" || c.verificationStatus === "Suspended",
+    );
+
+  if (
+    matchedCandidate &&
+    (matchedCandidate.verificationStatus === "Verified" ||
+      matchedCandidate.verificationStatus === "Suspended")
+  ) {
+    const candName = [matchedCandidate.title, matchedCandidate.firstName, matchedCandidate.lastName]
+      .filter(Boolean)
+      .join(" ");
+    return {
+      practitionerId: matchedCandidate.practitionerId,
+      status: matchedCandidate.verificationStatus,
+      displayName: fallbackName || candName || null,
+    };
+  }
+
+  return null;
+}
+
 function CandidateCard({
   candidate,
   canRevoke,
   suspendingId,
-  onSuspend,
+  reinstatingId,
+  onRequestSuspend,
+  onRequestReinstate,
 }: {
   candidate: PrcMatchCandidateDto;
   canRevoke: boolean;
   suspendingId: string | null;
-  onSuspend: (practitionerId: string) => void;
+  reinstatingId: string | null;
+  onRequestSuspend: (candidate: PrcMatchCandidateDto) => void;
+  onRequestReinstate: (candidate: PrcMatchCandidateDto) => void;
 }) {
   const fullName = [candidate.title, candidate.firstName, candidate.lastName]
     .filter(Boolean)
@@ -209,7 +287,7 @@ function CandidateCard({
           <button
             type="button"
             disabled={suspendingId === candidate.practitionerId}
-            onClick={() => onSuspend(candidate.practitionerId)}
+            onClick={() => onRequestSuspend(candidate)}
             className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold text-red-600 dark:text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-colors cursor-pointer disabled:opacity-50"
           >
             {suspendingId === candidate.practitionerId ? (
@@ -218,6 +296,22 @@ function CandidateCard({
               <IconBan className="h-3 w-3" />
             )}
             <span>Suspend Practitioner</span>
+          </button>
+        </div>
+      ) : canRevoke && candidate.verificationStatus === "Suspended" ? (
+        <div className="pt-1 flex justify-end">
+          <button
+            type="button"
+            disabled={reinstatingId === candidate.practitionerId}
+            onClick={() => onRequestReinstate(candidate)}
+            className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold text-primary border border-primary/30 hover:bg-primary-subtle transition-colors cursor-pointer disabled:opacity-50"
+          >
+            {reinstatingId === candidate.practitionerId ? (
+              <IconLoader className="h-3 w-3 animate-spin" />
+            ) : (
+              <IconShieldCheck className="h-3 w-3" />
+            )}
+            <span>Reinstate Practitioner</span>
           </button>
         </div>
       ) : null}
@@ -459,6 +553,14 @@ function ChildPractitionerRow({
   );
 }
 
+interface GovernanceConfirmDialogState {
+  mode: "suspend" | "reinstate";
+  practitionerId: string;
+  practitionerName: string;
+  reason: string;
+  fromCandidateCard: boolean;
+}
+
 function useVerificationDetailController({
   requestId,
   profile,
@@ -478,6 +580,14 @@ function useVerificationDetailController({
   const [rejectReason, setRejectReason] = useState("");
   const [rejectValidationError, setRejectValidationError] = useState<string | null>(null);
   const [suspendReason, setSuspendReason] = useState("");
+  const [suspendValidationError, setSuspendValidationError] = useState<string | null>(null);
+  const [reinstateReason, setReinstateReason] = useState("");
+  const [reinstateValidationError, setReinstateValidationError] = useState<string | null>(null);
+  const [governanceConfirmDialog, setGovernanceConfirmDialog] =
+    useState<GovernanceConfirmDialogState | null>(null);
+  const [confirmModalValidationError, setConfirmModalValidationError] = useState<string | null>(
+    null,
+  );
   const [approveBundled, setApproveBundled] = useState(true);
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>(() =>
     (initialDetail?.childPractitionerRequests ?? [])
@@ -487,6 +597,7 @@ function useVerificationDetailController({
 
   const [submittingAction, setSubmittingAction] = useState<"approve" | "reject" | null>(null);
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
+  const [reinstatingId, setReinstatingId] = useState<string | null>(null);
 
   const allowVerify = canVerifyDirectory(profile);
   const allowRevoke = canRevokeDirectoryVerification(profile);
@@ -507,6 +618,11 @@ function useVerificationDetailController({
       setRejectReason("");
       setRejectValidationError(null);
       setSuspendReason("");
+      setSuspendValidationError(null);
+      setReinstateReason("");
+      setReinstateValidationError(null);
+      setGovernanceConfirmDialog(null);
+      setConfirmModalValidationError(null);
     } catch (err: unknown) {
       setError(extractErrorMessage(err, "Unable to load verification request."));
     } finally {
@@ -596,20 +712,109 @@ function useVerificationDetailController({
     }
   };
 
-  const handleSuspendPractitioner = async (practitionerId: string) => {
+  const practitionerGovernanceTarget = useMemo(
+    () => resolvePractitionerGovernanceTarget(detail),
+    [detail],
+  );
+  const isPractitionerSuspended = practitionerGovernanceTarget?.status === "Suspended";
+
+  const requestSuspendFromPanel = (practitionerId: string, practitionerName: string) => {
     if (!allowRevoke) return;
-    setSuspendingId(practitionerId);
+    const trimmed = suspendReason.trim();
+    if (!trimmed) {
+      setSuspendValidationError("Compliance reason is required to suspend a practitioner.");
+      return;
+    }
+    setSuspendValidationError(null);
+    setConfirmModalValidationError(null);
+    setGovernanceConfirmDialog({
+      mode: "suspend",
+      practitionerId,
+      practitionerName,
+      reason: trimmed,
+      fromCandidateCard: false,
+    });
+  };
+
+  const requestReinstateFromPanel = (practitionerId: string, practitionerName: string) => {
+    if (!allowRevoke) return;
+    const trimmed = reinstateReason.trim();
+    if (!trimmed) {
+      setReinstateValidationError(
+        "Compliance clearance reason is required to reinstate a practitioner.",
+      );
+      return;
+    }
+    setReinstateValidationError(null);
+    setConfirmModalValidationError(null);
+    setGovernanceConfirmDialog({
+      mode: "reinstate",
+      practitionerId,
+      practitionerName,
+      reason: trimmed,
+      fromCandidateCard: false,
+    });
+  };
+
+  const requestCandidateGovernanceAction = (
+    mode: "suspend" | "reinstate",
+    candidate: PrcMatchCandidateDto,
+  ) => {
+    if (!allowRevoke) return;
+    const fullName =
+      [candidate.title, candidate.firstName, candidate.lastName].filter(Boolean).join(" ") ||
+      candidate.normalizedPrcLicenseNo;
+    setConfirmModalValidationError(null);
+    setGovernanceConfirmDialog({
+      mode,
+      practitionerId: candidate.practitionerId,
+      practitionerName: fullName,
+      reason: mode === "suspend" ? suspendReason.trim() : reinstateReason.trim(),
+      fromCandidateCard: true,
+    });
+  };
+
+  const confirmGovernanceAction = async () => {
+    if (!allowRevoke || !governanceConfirmDialog) return;
+    const trimmed = governanceConfirmDialog.reason.trim();
+    if (!trimmed) {
+      setConfirmModalValidationError(
+        governanceConfirmDialog.mode === "suspend"
+          ? "Compliance reason is required to suspend a practitioner."
+          : "Compliance clearance reason is required to reinstate a practitioner.",
+      );
+      return;
+    }
+
+    setConfirmModalValidationError(null);
+    const { mode, practitionerId } = governanceConfirmDialog;
+    if (mode === "suspend") {
+      setSuspendingId(practitionerId);
+      try {
+        await verificationService.suspendPractitioner(practitionerId, { reason: trimmed });
+        toast.success("Practitioner verification suspended across affiliated clinics.");
+        setGovernanceConfirmDialog(null);
+        await loadDetail();
+        onActionCompleted?.();
+      } catch (err: unknown) {
+        toast.error(extractErrorMessage(err, "Failed to suspend practitioner."));
+      } finally {
+        setSuspendingId(null);
+      }
+      return;
+    }
+
+    setReinstatingId(practitionerId);
     try {
-      await verificationService.suspendPractitioner(practitionerId, {
-        reason: suspendReason.trim() || undefined,
-      });
-      toast.success("Practitioner verification suspended across affiliated clinics.");
+      await verificationService.reinstatePractitioner(practitionerId, { reason: trimmed });
+      toast.success("Practitioner verification reinstated across affiliated clinics.");
+      setGovernanceConfirmDialog(null);
       await loadDetail();
       onActionCompleted?.();
     } catch (err: unknown) {
-      toast.error(extractErrorMessage(err, "Failed to suspend practitioner."));
+      toast.error(extractErrorMessage(err, "Failed to reinstate practitioner."));
     } finally {
-      setSuspendingId(null);
+      setReinstatingId(null);
     }
   };
 
@@ -628,13 +833,6 @@ function useVerificationDetailController({
 
   const pendingChildren =
     detail?.childPractitionerRequests.filter((c) => c.status === "PendingReview") ?? [];
-
-  const standalonePractitionerId =
-    detail?.kind === "Practitioner"
-      ? detail.childPractitionerRequests[0]?.practitionerId ??
-        detail.prcMatchCandidates.find((c) => c.verificationStatus === "Verified")?.practitionerId ??
-        null
-      : null;
 
   const canApprove = Boolean(detail && detail.status === "PendingReview" && allowVerify);
   const canReject = Boolean(
@@ -658,15 +856,29 @@ function useVerificationDetailController({
     setRejectValidationError,
     suspendReason,
     setSuspendReason,
+    suspendValidationError,
+    setSuspendValidationError,
+    reinstateReason,
+    setReinstateReason,
+    reinstateValidationError,
+    setReinstateValidationError,
+    governanceConfirmDialog,
+    setGovernanceConfirmDialog,
+    confirmModalValidationError,
+    setConfirmModalValidationError,
     approveBundled,
     setApproveBundled,
     selectedChildIds,
     handleToggleChild,
     submittingAction,
     suspendingId,
+    reinstatingId,
     handleApprove,
     handleReject,
-    handleSuspendPractitioner,
+    requestSuspendFromPanel,
+    requestReinstateFromPanel,
+    requestCandidateGovernanceAction,
+    confirmGovernanceAction,
     fetchLtoEvidence,
     fetchPrcEvidence,
     operatingHours,
@@ -681,7 +893,8 @@ function useVerificationDetailController({
     services,
     availabilities,
     pendingChildren,
-    standalonePractitionerId,
+    practitionerGovernanceTarget,
+    isPractitionerSuspended,
   };
 }
 
@@ -713,15 +926,29 @@ function VerificationDetailMetadataAndActions({
     setRejectValidationError,
     suspendReason,
     setSuspendReason,
+    suspendValidationError,
+    setSuspendValidationError,
+    reinstateReason,
+    setReinstateReason,
+    reinstateValidationError,
+    setReinstateValidationError,
+    governanceConfirmDialog,
+    setGovernanceConfirmDialog,
+    confirmModalValidationError,
+    setConfirmModalValidationError,
     approveBundled,
     setApproveBundled,
     selectedChildIds,
     handleToggleChild,
     submittingAction,
     suspendingId,
+    reinstatingId,
     handleApprove,
     handleReject,
-    handleSuspendPractitioner,
+    requestSuspendFromPanel,
+    requestReinstateFromPanel,
+    requestCandidateGovernanceAction,
+    confirmGovernanceAction,
     fetchLtoEvidence,
     fetchPrcEvidence,
     operatingHours,
@@ -736,13 +963,35 @@ function VerificationDetailMetadataAndActions({
     services,
     availabilities,
     pendingChildren,
-    standalonePractitionerId,
+    practitionerGovernanceTarget,
+    isPractitionerSuspended,
   } = controller;
 
   const [showAllServices, setShowAllServices] = useState(initialShowAllServices);
   useEffect(() => {
     setShowAllServices(initialShowAllServices);
   }, [detail.id, initialShowAllServices]);
+
+  useEffect(() => {
+    if (
+      !governanceConfirmDialog ||
+      typeof window === "undefined" ||
+      typeof window.addEventListener !== "function"
+    ) {
+      return;
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !suspendingId && !reinstatingId) {
+        setGovernanceConfirmDialog(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      if (typeof window.removeEventListener === "function") {
+        window.removeEventListener("keydown", onKeyDown);
+      }
+    };
+  }, [governanceConfirmDialog, suspendingId, reinstatingId, setGovernanceConfirmDialog]);
 
   const diff = detail.resubmissionDiff ?? null;
   const changedFieldsMap = useMemo(() => indexChangedFields(diff), [diff]);
@@ -776,8 +1025,13 @@ function VerificationDetailMetadataAndActions({
     detail.dohLtoExpiryDate ?? readSnapshotField(detail.snapshot, "dohLtoExpiryDate");
   const ltoExpiryDisplay = getLicenseExpiryDisplay(dohLtoExpiryDate);
 
-  const resolvedPhone = detail.clinicContactNumber ?? contactNumber;
-  const resolvedEmail = detail.clinicContactEmail ?? contactEmail;
+  const rawPhoneCandidates = [detail.clinicContactNumber, contactNumber];
+  const resolvedPhone =
+    rawPhoneCandidates.find((value) => Boolean(value?.trim()) && !isEmailAddressValue(value)) ??
+    null;
+  const fallbackEmailFromPhone =
+    rawPhoneCandidates.find((value) => isEmailAddressValue(value)) ?? null;
+  const resolvedEmail = detail.clinicContactEmail ?? contactEmail ?? fallbackEmailFromPhone;
 
   const philHealthNo =
     detail.philHealthAccreditationNumber ??
@@ -1319,7 +1573,11 @@ function VerificationDetailMetadataAndActions({
                 candidate={cand}
                 canRevoke={allowRevoke}
                 suspendingId={suspendingId}
-                onSuspend={handleSuspendPractitioner}
+                reinstatingId={reinstatingId}
+                onRequestSuspend={(candidate) => requestCandidateGovernanceAction("suspend", candidate)}
+                onRequestReinstate={(candidate) =>
+                  requestCandidateGovernanceAction("reinstate", candidate)
+                }
               />
             ))}
           </div>
@@ -1457,13 +1715,25 @@ function VerificationDetailMetadataAndActions({
               </div>
             ) : null}
 
+            {canApprove && isPractitionerSuspended ? (
+              <div
+                role="alert"
+                className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-300 flex items-start gap-2"
+              >
+                <IconAlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  Practitioner verification is currently suspended across clinics. Reinstate the practitioner before approving, or reject this submission.
+                </span>
+              </div>
+            ) : null}
+
             <div className="flex flex-wrap items-center gap-2 pt-1">
               {canApprove ? (
                 <button
                   type="button"
-                  disabled={submittingAction !== null}
+                  disabled={submittingAction !== null || isPractitionerSuspended}
                   onClick={handleApprove}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-primary hover:bg-primary-hover transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-primary hover:bg-primary-hover transition-colors shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submittingAction === "approve" ? (
                     <IconLoader className="h-3.5 w-3.5 animate-spin" />
@@ -1493,34 +1763,239 @@ function VerificationDetailMetadataAndActions({
           </div>
         ) : null}
 
-        {allowRevoke && standalonePractitionerId ? (
-          <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-3 space-y-2.5">
-            <div className="text-xs font-bold text-red-600 dark:text-red-400">
-              Revoke / Suspend Verification
+        {allowRevoke && practitionerGovernanceTarget ? (
+          practitionerGovernanceTarget.status === "Suspended" ? (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-3 space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="text-xs font-bold text-red-600 dark:text-red-400">
+                  Practitioner Verification Suspended
+                </div>
+                <VerificationStatusBadge status="Suspended" />
+              </div>
+              <p className="text-[11px] text-text-secondary leading-relaxed">
+                This practitioner&apos;s directory verification is currently suspended across affiliated clinics. Reinstate verification only after compliance clearance.
+              </p>
+              <div className="space-y-1.5">
+                <label htmlFor="reinstate-reason" className="block text-xs font-semibold text-text">
+                  Compliance Reinstatement Reason *
+                </label>
+                <textarea
+                  id="reinstate-reason"
+                  value={reinstateReason}
+                  onChange={(e) => {
+                    setReinstateReason(e.target.value);
+                    if (reinstateValidationError) setReinstateValidationError(null);
+                  }}
+                  placeholder="Required reason for reinstating practitioner verification..."
+                  rows={2}
+                  className={`w-full px-3 py-2 text-xs rounded-xl bg-background border text-text placeholder:text-text-muted focus:outline-hidden focus:ring-1 ${
+                    reinstateValidationError
+                      ? "border-red-500 focus:ring-red-500"
+                      : "border-border focus:ring-primary"
+                  }`}
+                />
+                {reinstateValidationError ? (
+                  <p className="text-[11px] font-medium text-red-600 dark:text-red-400">
+                    {reinstateValidationError}
+                  </p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                disabled={reinstatingId === practitionerGovernanceTarget.practitionerId}
+                onClick={() =>
+                  requestReinstateFromPanel(
+                    practitionerGovernanceTarget.practitionerId,
+                    practitionerGovernanceTarget.displayName || practitionerName || "Practitioner",
+                  )
+                }
+                className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {reinstatingId === practitionerGovernanceTarget.practitionerId ? (
+                  <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <IconShieldCheck className="h-3.5 w-3.5" />
+                )}
+                <span>Reinstate Practitioner Across Clinics</span>
+              </button>
             </div>
-            <textarea
-              value={suspendReason}
-              onChange={(e) => setSuspendReason(e.target.value)}
-              placeholder="Optional compliance reason for practitioner suspension..."
-              rows={2}
-              className="w-full px-3 py-2 text-xs rounded-xl bg-background border border-border text-text placeholder:text-text-muted focus:outline-hidden focus:ring-1 focus:ring-red-500"
-            />
-            <button
-              type="button"
-              disabled={suspendingId === standalonePractitionerId}
-              onClick={() => handleSuspendPractitioner(standalonePractitionerId)}
-              className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors cursor-pointer disabled:opacity-50"
-            >
-              {suspendingId === standalonePractitionerId ? (
-                <IconLoader className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <IconBan className="h-3.5 w-3.5" />
-              )}
-              <span>Suspend Practitioner Across Clinics</span>
-            </button>
-          </div>
+          ) : (
+            <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-3 space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="text-xs font-bold text-red-600 dark:text-red-400">
+                  Revoke / Suspend Verification
+                </div>
+                <VerificationStatusBadge status="Verified" />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="suspend-reason" className="block text-xs font-semibold text-text">
+                  Compliance Suspension Reason *
+                </label>
+                <textarea
+                  id="suspend-reason"
+                  value={suspendReason}
+                  onChange={(e) => {
+                    setSuspendReason(e.target.value);
+                    if (suspendValidationError) setSuspendValidationError(null);
+                  }}
+                  placeholder="Required compliance reason for practitioner suspension..."
+                  rows={2}
+                  className={`w-full px-3 py-2 text-xs rounded-xl bg-background border text-text placeholder:text-text-muted focus:outline-hidden focus:ring-1 ${
+                    suspendValidationError
+                      ? "border-red-500 focus:ring-red-500"
+                      : "border-border focus:ring-red-500"
+                  }`}
+                />
+                {suspendValidationError ? (
+                  <p className="text-[11px] font-medium text-red-600 dark:text-red-400">
+                    {suspendValidationError}
+                  </p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                disabled={suspendingId === practitionerGovernanceTarget.practitionerId}
+                onClick={() =>
+                  requestSuspendFromPanel(
+                    practitionerGovernanceTarget.practitionerId,
+                    practitionerGovernanceTarget.displayName || practitionerName || "Practitioner",
+                  )
+                }
+                className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {suspendingId === practitionerGovernanceTarget.practitionerId ? (
+                  <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <IconBan className="h-3.5 w-3.5" />
+                )}
+                <span>Suspend Practitioner Across Clinics</span>
+              </button>
+            </div>
+          )
         ) : null}
       </div>
+
+      {governanceConfirmDialog ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => {
+            if (!suspendingId && !reinstatingId) setGovernanceConfirmDialog(null);
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-label={
+            governanceConfirmDialog.mode === "suspend"
+              ? "Confirm practitioner suspension"
+              : "Confirm practitioner reinstatement"
+          }
+        >
+          <div
+            className="w-full max-w-md bg-surface border border-border rounded-2xl shadow-2xl p-6 text-text space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`p-3 rounded-xl ${
+                  governanceConfirmDialog.mode === "suspend"
+                    ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                    : "bg-primary-subtle text-primary"
+                }`}
+              >
+                {governanceConfirmDialog.mode === "suspend" ? (
+                  <IconBan className="h-5 w-5" />
+                ) : (
+                  <IconShieldCheck className="h-5 w-5" />
+                )}
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-text">
+                  {governanceConfirmDialog.mode === "suspend"
+                    ? "Confirm Practitioner Suspension"
+                    : "Confirm Practitioner Reinstatement"}
+                </h3>
+                <p className="text-xs text-text-muted">
+                  {governanceConfirmDialog.practitionerName}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              {governanceConfirmDialog.mode === "suspend"
+                ? "Suspending this practitioner revokes their public directory verification across all affiliated clinics and automatically closes any open Pending Review or Awaiting Confirmation submissions."
+                : "Reinstating this practitioner restores Verified directory status and reactivates suspended clinic affiliations across the platform."}
+            </p>
+
+            <div className="space-y-1.5">
+              <label htmlFor="governance-confirm-reason" className="block text-xs font-semibold text-text">
+                {governanceConfirmDialog.mode === "suspend"
+                  ? "Compliance Suspension Reason *"
+                  : "Compliance Reinstatement Reason *"}
+              </label>
+              <textarea
+                id="governance-confirm-reason"
+                value={governanceConfirmDialog.reason}
+                onChange={(e) => {
+                  const nextReason = e.target.value;
+                  setGovernanceConfirmDialog((prev) =>
+                    prev ? { ...prev, reason: nextReason } : null,
+                  );
+                  if (confirmModalValidationError) setConfirmModalValidationError(null);
+                }}
+                placeholder={
+                  governanceConfirmDialog.mode === "suspend"
+                    ? "Enter compliance reason for suspension..."
+                    : "Enter compliance clearance reason for reinstatement..."
+                }
+                rows={2}
+                className={`w-full px-3 py-2 text-xs rounded-xl bg-surface-muted border text-text placeholder:text-text-muted focus:outline-hidden focus:ring-1 ${
+                  confirmModalValidationError
+                    ? "border-red-500 focus:ring-red-500"
+                    : "border-border focus:ring-primary"
+                }`}
+              />
+              {confirmModalValidationError ? (
+                <p className="text-[11px] font-medium text-red-600 dark:text-red-400">
+                  {confirmModalValidationError}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
+              <button
+                type="button"
+                disabled={Boolean(suspendingId || reinstatingId)}
+                onClick={() => setGovernanceConfirmDialog(null)}
+                className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(suspendingId || reinstatingId)}
+                onClick={() => void confirmGovernanceAction()}
+                className={`inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white rounded-xl transition-colors cursor-pointer shadow-xs disabled:opacity-50 ${
+                  governanceConfirmDialog.mode === "suspend"
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-primary hover:bg-primary-hover"
+                }`}
+              >
+                {suspendingId || reinstatingId ? (
+                  <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                ) : governanceConfirmDialog.mode === "suspend" ? (
+                  <IconBan className="h-3.5 w-3.5" />
+                ) : (
+                  <IconShieldCheck className="h-3.5 w-3.5" />
+                )}
+                <span>
+                  {governanceConfirmDialog.mode === "suspend"
+                    ? "Confirm Suspension"
+                    : "Confirm Reinstatement"}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -1675,6 +2150,11 @@ export function VerificationDetailWorkspace({
                 </span>
                 <VerificationKindBadge kind={detail.kind} />
                 <VerificationStatusBadge status={detail.status} />
+                {detail.kind === "Practitioner" &&
+                controller.practitionerGovernanceTarget?.status === "Suspended" &&
+                detail.status !== "Suspended" ? (
+                  <VerificationStatusBadge status="Suspended" />
+                ) : null}
               </div>
               <h1 className="text-2xl font-bold tracking-tight text-text truncate">
                 {detail.facilityName}
@@ -1867,6 +2347,11 @@ export function VerificationReviewDrawer({
                 </span>
                 <VerificationKindBadge kind={detail.kind} />
                 <VerificationStatusBadge status={detail.status} />
+                {detail.kind === "Practitioner" &&
+                controller.practitionerGovernanceTarget?.status === "Suspended" &&
+                detail.status !== "Suspended" ? (
+                  <VerificationStatusBadge status="Suspended" />
+                ) : null}
               </div>
               <h2 className="text-base font-bold text-text truncate">{detail.facilityName}</h2>
               <div className="flex items-center gap-1.5 flex-wrap text-xs text-text-muted">

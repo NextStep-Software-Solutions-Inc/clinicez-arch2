@@ -54,6 +54,8 @@ public sealed class Appointment : ClinicScopedEntity
     public DateTime? Reminder2hSentAt { get; set; }
     public DateTime? LastReminderSentAt { get; set; }
     public string? LastReminderType { get; set; }
+    public DateTime? StaffPreSlotNotifiedAt { get; set; }
+    public DateTime? StaffOverdueNotifiedAt { get; set; }
 
     // ── Teleconsultation & Prepayment Gate Extensions (Milestone M4) ────────────
     public AppointmentType AppointmentType { get; set; } = AppointmentType.InPerson;

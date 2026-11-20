@@ -1376,4 +1376,234 @@ public class ConsultationDraftPersistenceTests
         var survivingQueue = await db.QueueItems.SingleAsync(q => q.Id == directQueueItem.Id);
         survivingQueue.Status.Should().Be(QueueStatus.Waiting);
     }
+
+    [Fact]
+    public async Task IssueDocuments_DuringInConsultVisitWithoutSavedEncounter_DeduplicatesByQueueItemId_AndSignsSingleRecordOnConsultSignOff()
+    {
+        var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patient = Phase3TestKit.NewPatient(_clinicId, TenantId);
+        var patientName = FormatPatientName(patient);
+        db.Patients.Add(patient);
+
+        var otherPatient = Phase3TestKit.NewPatient(_clinicId, TenantId);
+        var otherPatientName = FormatPatientName(otherPatient);
+        db.Patients.Add(otherPatient);
+
+        var inConsultQueueItem = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            ClinicId = _clinicId,
+            PatientId = patient.Id,
+            PatientName = patientName,
+            QueueNumber = "C-223-01",
+            SequenceNumber = 1,
+            QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            VisitType = VisitType.RoutineCheckup,
+            IsDirectVisit = false,
+            Status = QueueStatus.InConsultation,
+            CheckInTime = DateTime.UtcNow
+        };
+        db.QueueItems.Add(inConsultQueueItem);
+
+        var completedDirectQueueItem = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            ClinicId = _clinicId,
+            PatientId = otherPatient.Id,
+            PatientName = otherPatientName,
+            QueueNumber = "DV-223-02",
+            SequenceNumber = 2,
+            QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            VisitType = VisitType.RoutineCheckup,
+            IsDirectVisit = true,
+            Status = QueueStatus.Completed,
+            CheckInTime = DateTime.UtcNow,
+            CompletedTime = DateTime.UtcNow
+        };
+        db.QueueItems.Add(completedDirectQueueItem);
+        await uow.SaveChangesAsync();
+
+        var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
+        var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
+        var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(db, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
+        var apptRepo = TestDbHelper.CreateRepository<Appointment>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
+        var config = new ConfigurationBuilder().Build();
+        var security = new DocumentSecurityService();
+        var identity = Substitute.For<IClinicIdentityProvider>();
+        var docPublisher = Substitute.For<IPatientDocumentPublisher>();
+
+        var medCertHandler = new IssueMedicalCertificateCommandHandler(
+            medCertRepo, uow, _clinicContext, identity, docPublisher, security, config, consultRepo, queueRepo);
+
+        // No ConsultationEncounter exists yet -> ConsultationId is null, QueueItemId is InConsultation
+        var cert1 = await medCertHandler.Handle(new IssueMedicalCertificateCommand(
+            PatientId: patient.Id,
+            PatientName: patientName,
+            ConsultationId: null,
+            DoctorId: _doctorId,
+            DoctorName: "Dr. Elena Cruz",
+            PrcLicenseNumber: "PRC-777001",
+            PtrNumber: "PTR-888001",
+            Diagnosis: "Acute Upper Respiratory Infection",
+            ClinicalFindings: "Mild pharyngeal erythema",
+            FitnessStatus: "UnfitToWork",
+            RecommendedRestDays: 2,
+            Purpose: "Employment",
+            Remarks: "Initial vault draft",
+            QueueItemId: inConsultQueueItem.Id), CancellationToken.None);
+
+        var cert2 = await medCertHandler.Handle(new IssueMedicalCertificateCommand(
+            PatientId: patient.Id,
+            PatientName: patientName,
+            ConsultationId: null,
+            DoctorId: _doctorId,
+            DoctorName: "Dr. Elena Cruz",
+            PrcLicenseNumber: "PRC-777001",
+            PtrNumber: "PTR-888001",
+            Diagnosis: "Acute Bronchitis",
+            ClinicalFindings: "Scattered rhonchi",
+            FitnessStatus: "UnfitToWork",
+            RecommendedRestDays: 4,
+            Purpose: "Updated HR clearance",
+            Remarks: "Updated vault draft",
+            QueueItemId: inConsultQueueItem.Id), CancellationToken.None);
+
+        cert1.IsSigned.Should().BeFalse();
+        cert2.IsSigned.Should().BeFalse();
+        cert2.Id.Should().Be(cert1.Id);
+        cert2.CertificateNumber.Should().Be(cert1.CertificateNumber);
+        cert2.Diagnosis.Should().Be("Acute Bronchitis");
+        cert2.RecommendedRestDays.Should().Be(4);
+        cert2.Purpose.Should().Be("Updated HR clearance");
+        cert2.QueueItemId.Should().Be(inConsultQueueItem.Id);
+        (await db.MedicalCertificates.CountAsync(m => m.QueueItemId == inConsultQueueItem.Id)).Should().Be(1);
+
+        // Confirm sequence number was NOT burned by the duplicate submission
+        var otherCert = await medCertHandler.Handle(new IssueMedicalCertificateCommand(
+            PatientId: otherPatient.Id,
+            PatientName: otherPatientName,
+            ConsultationId: null,
+            DoctorId: _doctorId,
+            DoctorName: "Dr. Elena Cruz",
+            PrcLicenseNumber: "PRC-777001",
+            PtrNumber: null,
+            Diagnosis: "Fit for work",
+            ClinicalFindings: null,
+            QueueItemId: completedDirectQueueItem.Id), CancellationToken.None);
+        otherCert.IsSigned.Should().BeTrue();
+        otherCert.CertificateNumber.Should().EndWith("-0002");
+
+        var referralHandler = new IssueReferralLetterCommandHandler(
+            referralRepo, uow, _clinicContext, security, staffRepo, consultRepo, queueRepo);
+
+        var ref1 = await referralHandler.Handle(new IssueReferralLetterCommand(
+            PatientId: patient.Id,
+            PatientName: patientName,
+            ConsultationId: null,
+            ReferringDoctorId: _doctorId,
+            ReferringDoctorName: "Dr. Elena Cruz",
+            ReferredToDoctor: null,
+            ReferredToFacility: "Lung Center",
+            ReferredDepartment: "Pulmonology",
+            Urgency: "Routine",
+            ReasonForReferral: "Initial evaluation",
+            ProvisionalDiagnosis: "Acute Bronchitis",
+            ClinicalSummary: "Initial summary",
+            QueueItemId: inConsultQueueItem.Id), CancellationToken.None);
+
+        var ref2 = await referralHandler.Handle(new IssueReferralLetterCommand(
+            PatientId: patient.Id,
+            PatientName: patientName,
+            ConsultationId: null,
+            ReferringDoctorId: _doctorId,
+            ReferringDoctorName: "Dr. Elena Cruz",
+            ReferredToDoctor: "Dr. Reyes",
+            ReferredToFacility: "Philippine General Hospital",
+            ReferredDepartment: "Pulmonary Medicine",
+            Urgency: "Urgent",
+            ReasonForReferral: "Persistent bronchospasm",
+            ProvisionalDiagnosis: "Acute Bronchitis",
+            ClinicalSummary: "Updated summary",
+            QueueItemId: inConsultQueueItem.Id), CancellationToken.None);
+
+        ref1.IsSigned.Should().BeFalse();
+        ref2.IsSigned.Should().BeFalse();
+        ref2.Id.Should().Be(ref1.Id);
+        ref2.ReferralNumber.Should().Be(ref1.ReferralNumber);
+        ref2.ReferredToFacility.Should().Be("Philippine General Hospital");
+        ref2.Urgency.Should().Be("Urgent");
+        ref2.QueueItemId.Should().Be(inConsultQueueItem.Id);
+        (await db.ReferralLetters.CountAsync(r => r.QueueItemId == inConsultQueueItem.Id)).Should().Be(1);
+
+        var otherRef = await referralHandler.Handle(new IssueReferralLetterCommand(
+            PatientId: otherPatient.Id,
+            PatientName: otherPatientName,
+            ConsultationId: null,
+            ReferringDoctorId: _doctorId,
+            ReferringDoctorName: "Dr. Elena Cruz",
+            ReferredToDoctor: null,
+            ReferredToFacility: "General Hospital",
+            ReferredDepartment: "Internal Medicine",
+            Urgency: "Routine",
+            ReasonForReferral: "Routine consult",
+            ProvisionalDiagnosis: "Hypertension",
+            ClinicalSummary: "BP follow-up",
+            QueueItemId: completedDirectQueueItem.Id), CancellationToken.None);
+        otherRef.IsSigned.Should().BeTrue();
+        otherRef.ReferralNumber.Should().EndWith("-0002");
+
+        // Now create and sign the consultation encounter; only the single draft cert & referral should link and sign
+        var createHandler = new CreateConsultationCommandHandler(consultRepo, queueRepo, uow, _clinicContext, staffRepo);
+        var draft = await createHandler.Handle(new CreateConsultationCommand(
+            PatientId: patient.Id,
+            PatientName: patientName,
+            DoctorId: _doctorId,
+            DoctorName: "Dr. Elena Cruz",
+            QueueItemId: inConsultQueueItem.Id,
+            Subjective: "Cough x 4 days",
+            Objective: "Scattered rhonchi",
+            Assessment: "Acute Bronchitis",
+            Plan: "Bronchodilator and rest",
+            DoctorPrcLicense: "PRC-777001"), CancellationToken.None);
+
+        var signHandler = new SignConsultationCommandHandler(
+            consultRepo,
+            staffRepo,
+            queueRepo,
+            apptRepo,
+            patientRepo,
+            uow,
+            _clinicContext,
+            identity,
+            Substitute.For<IPatientAppointmentPublisher>(),
+            Substitute.For<IPrescriptionPublisher>(),
+            Substitute.For<IClaimSlipService>(),
+            docPublisher,
+            configuration: config,
+            medCertRepository: medCertRepo,
+            referralRepository: referralRepo,
+            documentSecurityService: security);
+
+        var signedEncounter = await signHandler.Handle(new SignConsultationCommand(draft.Id, PrcLicenseNumber: "PRC-777001"), CancellationToken.None);
+        signedEncounter.IsSigned.Should().BeTrue();
+
+        var signedMedCert = await db.MedicalCertificates.SingleAsync(m => m.QueueItemId == inConsultQueueItem.Id);
+        signedMedCert.Id.Should().Be(cert1.Id);
+        signedMedCert.ConsultationId.Should().Be(draft.Id);
+        signedMedCert.IsSigned.Should().BeTrue();
+        signedMedCert.SignedAt.Should().NotBeNull();
+        signedMedCert.SecurityDigest.Should().NotBeNullOrWhiteSpace();
+
+        var signedReferral = await db.ReferralLetters.SingleAsync(r => r.QueueItemId == inConsultQueueItem.Id);
+        signedReferral.Id.Should().Be(ref1.Id);
+        signedReferral.ConsultationId.Should().Be(draft.Id);
+        signedReferral.IsSigned.Should().BeTrue();
+        signedReferral.SignedAt.Should().NotBeNull();
+        signedReferral.SecurityDigest.Should().NotBeNullOrWhiteSpace();
+    }
 }
