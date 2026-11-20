@@ -33,10 +33,19 @@ public class FacilityHeartbeatHandlerTests : IDisposable
         _context.Dispose();
     }
 
-    private Task BeatAsync(Party from, string version = "1.4.2", bool? isWorkspaceEligible = null)
+    private Task BeatAsync(
+        Party from,
+        string version = "1.4.2",
+        bool? isWorkspaceEligible = null,
+        PlatformVerificationStatus? verificationStatus = null)
     {
         var publisher = TestSupport.ProvisioningPublisher(_context);
-        var payload = new FacilityHeartbeatPayload { AppVersion = version, IsWorkspaceEligible = isWorkspaceEligible };
+        var payload = new FacilityHeartbeatPayload
+        {
+            AppVersion = version,
+            IsWorkspaceEligible = isWorkspaceEligible,
+            PlatformVerificationStatus = verificationStatus
+        };
         return new FacilityHeartbeatHandler(_context, _clock, publisher, NullLogger<FacilityHeartbeatHandler>.Instance)
             .HandleAsync(
                 payload,
@@ -140,6 +149,61 @@ public class FacilityHeartbeatHandlerTests : IDisposable
         await BeatAsync(Self(), "1.4.2", isWorkspaceEligible: false);
 
         outboxMessages = TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated);
+        Assert.Empty(outboxMessages);
+    }
+
+    [Fact]
+    public async Task Heartbeat_WithVerificationStatusDrift_TriggersSelfHealingDirectoryUpdate()
+    {
+        _facility.IsPatientDiscoveryEligible = true;
+        _facility.PlatformVerificationStatus = PlatformVerificationStatus.Verified;
+        await _context.SaveChangesAsync();
+
+        // Eligibility matches, but Clinic reports stale PendingReview verification status
+        await BeatAsync(Self(), "1.4.2", isWorkspaceEligible: true, verificationStatus: PlatformVerificationStatus.PendingReview);
+
+        var outboxMessages = TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated);
+        Assert.Equal(2, outboxMessages.Count);
+        Assert.All(outboxMessages, msg =>
+        {
+            var payload = msg.GetPayload<FacilityCreatedEvent>();
+            Assert.True(payload.IsWorkspaceEligible);
+            Assert.True(payload.IsPlatformVerified);
+            Assert.Equal(PlatformVerificationStatus.Verified, payload.PlatformVerificationStatus);
+        });
+    }
+
+    [Fact]
+    public async Task Heartbeat_WithVerificationSuspensionDrift_TriggersSelfHealingDirectoryUpdate()
+    {
+        _facility.IsPatientDiscoveryEligible = true;
+        _facility.PlatformVerificationStatus = PlatformVerificationStatus.Suspended;
+        _facility.RejectionReason = "Expired DOH LTO";
+        await _context.SaveChangesAsync();
+
+        await BeatAsync(Self(), "1.4.2", isWorkspaceEligible: true, verificationStatus: PlatformVerificationStatus.Verified);
+
+        var outboxMessages = TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated);
+        Assert.Equal(2, outboxMessages.Count);
+        Assert.All(outboxMessages, msg =>
+        {
+            var payload = msg.GetPayload<FacilityCreatedEvent>();
+            Assert.False(payload.IsPlatformVerified);
+            Assert.Equal(PlatformVerificationStatus.Suspended, payload.PlatformVerificationStatus);
+            Assert.Equal("Expired DOH LTO", payload.VerificationRejectionReason);
+        });
+    }
+
+    [Fact]
+    public async Task Heartbeat_InSyncEligibilityAndVerification_ProducesZeroRedundantOutboxMessages()
+    {
+        _facility.IsPatientDiscoveryEligible = true;
+        _facility.PlatformVerificationStatus = PlatformVerificationStatus.Verified;
+        await _context.SaveChangesAsync();
+
+        await BeatAsync(Self(), "1.4.2", isWorkspaceEligible: true, verificationStatus: PlatformVerificationStatus.Verified);
+
+        var outboxMessages = TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated);
         Assert.Empty(outboxMessages);
     }
 }

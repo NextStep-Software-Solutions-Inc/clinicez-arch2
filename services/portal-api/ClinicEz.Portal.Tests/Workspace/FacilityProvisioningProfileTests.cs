@@ -240,5 +240,47 @@ public class FacilityProvisioningProfileTests : IDisposable
         Assert.False(directoryEvent.ReplaceProvidersSnapshot);
         Assert.Null(directoryEvent.Providers);
     }
+
+    [Fact]
+    public async Task StageProvisionedAsync_PreservesEligibilityAndVerificationOnLicenseEvents_WhenCallerOmitsThem()
+    {
+        var facilityId = Guid.NewGuid();
+        var facility = new Facility
+        {
+            Id = facilityId,
+            TenantId = _tenant.Id,
+            Name = "Reconciled Verified Clinic",
+            Slug = "reconciled-verified-clinic",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Active,
+            IsPatientDiscoveryEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified
+        };
+        _context.Facilities.Add(facility);
+        await _context.SaveChangesAsync();
+
+        // Simulate ActivateFacility / FacilityProvisioningReconciliationJob passing minimal event with nulls
+        await _publisher.StageProvisionedAsync(_tenant, new FacilityCreatedEvent
+        {
+            TenantId = _tenant.Id.ToString(),
+            TenantSlug = Slug,
+            FacilityType = FacilityType.Clinic,
+            ResourceId = facilityId,
+            Name = facility.Name,
+            Slug = facility.Slug,
+            LicenseToken = "reissued-token"
+        }, CancellationToken.None);
+        await _context.SaveChangesAsync();
+
+        var licenseMessages = TestSupport.Outbox(_context, InteropTypes.FacilityLicenseIssued);
+        Assert.Equal(3, licenseMessages.Count);
+        Assert.All(licenseMessages, msg =>
+        {
+            var p = msg.GetPayload<FacilityCreatedEvent>();
+            Assert.True(p.IsWorkspaceEligible);
+            Assert.True(p.IsPlatformVerified);
+            Assert.Equal(PlatformVerificationStatus.Verified, p.PlatformVerificationStatus);
+        });
+    }
 }
 

@@ -52,6 +52,12 @@ public sealed class ClinicLicenseStore : IFacilityLicenseStore, IFacilityRegistr
     public async Task<IReadOnlyList<FacilityRegistryEntry>> ListAsync(CancellationToken ct) =>
         await _db.Settings.IgnoreQueryFilters().AsNoTracking()
             .Where(s => !s.IsDeleted)
-            .Select(s => new FacilityRegistryEntry(s.TenantId, s.ClinicId, FacilityType.Clinic, s.LicenseExpiresAt, s.IsWorkspaceEligible))
+            .Select(s => new FacilityRegistryEntry(
+                s.TenantId,
+                s.ClinicId,
+                FacilityType.Clinic,
+                s.LicenseExpiresAt,
+                s.IsWorkspaceEligible,
+                s.PlatformVerificationStatus))
             .ToListAsync(ct);
 }

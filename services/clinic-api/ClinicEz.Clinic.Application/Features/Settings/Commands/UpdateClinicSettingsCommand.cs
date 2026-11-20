@@ -148,6 +148,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         var prevAccreditationNumber = settings.AccreditationNumber;
         var prevIsPhilHealthConfigured = settings.IsPhilHealthConfigured;
         var prevEnableTeleconsultation = settings.EnableTeleconsultation;
+        var prevIsJoinEnabled = settings.IsJoinEnabled;
+        var prevJoinCode = settings.JoinCode;
 
         if (!string.IsNullOrWhiteSpace(request.ClinicName))
             settings.ClinicName = request.ClinicName.Trim();
@@ -455,6 +457,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             prevIsPhilHealthConfigured != settings.IsPhilHealthConfigured ||
             prevEnableTeleconsultation != settings.EnableTeleconsultation;
 
+        var joinGatingChanged =
+            prevIsJoinEnabled != settings.IsJoinEnabled ||
+            !string.Equals(prevJoinCode, settings.JoinCode, StringComparison.Ordinal);
+
         if (!request.SkipPendingVerificationSync
             && directoryFieldsChanged
             && _directorySyncService != null
@@ -466,6 +472,14 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
                 _clinicContext.StaffId?.ToString(),
                 _clinicContext.StaffName,
                 ct);
+        }
+        else if ((directoryFieldsChanged || joinGatingChanged)
+            && _directorySyncService != null
+            && settings.PlatformVerificationStatus == PlatformVerificationStatus.Verified
+            && settings.IsDirectoryPublished)
+        {
+            await _directorySyncService.EnqueueDirectoryUpdateAsync(settings, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
         }
 
         var isWorkspaceEntitled = false;
