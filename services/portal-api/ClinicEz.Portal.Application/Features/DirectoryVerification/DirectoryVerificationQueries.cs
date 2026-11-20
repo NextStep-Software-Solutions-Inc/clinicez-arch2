@@ -173,7 +173,9 @@ public sealed record VerificationRequestDetailDto(
     bool SupportsInPerson = true,
     bool SupportsTeleconsult = false,
     DateTime? UpdatedAtUtc = null,
-    ResubmissionDiffDto? ResubmissionDiff = null);
+    ResubmissionDiffDto? ResubmissionDiff = null,
+    Guid? CanonicalPractitionerId = null,
+    PractitionerVerificationLevel? CanonicalPractitionerStatus = null);
 
 public sealed record GetVerificationQueueQuery(
     string? Kind = null,
@@ -557,7 +559,7 @@ public sealed class GetVerificationRequestDetailQueryHandler(IApplicationDbConte
             var branch = facilityReq.Facility.Branch;
             var dohLtoNumber = FirstNonEmpty(facilitySnap?.DohLtoNumber, facilityReq.Facility.LicenseToOperate);
             var dohLtoExpiryDate = ResolveDohLtoExpiryDate(snapshotEl, facilitySnap, facilityReq.Facility.LtoExpiryDate);
-            var clinicContactNumber = FirstNonEmpty(
+            var clinicContactNumber = FirstValidPhoneNumber(
                 facilitySnap?.ContactNumber,
                 facilityReq.Facility.ContactNumber,
                 branch?.ContactNumber,
@@ -565,6 +567,11 @@ public sealed class GetVerificationRequestDetailQueryHandler(IApplicationDbConte
             var clinicContactEmail = FirstNonEmpty(
                 facilitySnap?.ContactEmail,
                 facilityReq.Facility.ContactEmail,
+                FirstEmailFallbackFromPhoneFields(
+                    facilitySnap?.ContactNumber,
+                    facilityReq.Facility.ContactNumber,
+                    branch?.ContactNumber,
+                    facilityReq.Tenant.PhoneNumber),
                 branch?.ContactEmail,
                 facilityReq.Tenant.Email);
             var (philHealthNumber, isPhilHealthAccredited) = ResolveFacilityPhilHealth(
@@ -759,6 +766,24 @@ public sealed class GetVerificationRequestDetailQueryHandler(IApplicationDbConte
             ? null
             : ComputePractitionerDiff(prevPracSubmission, pracReq);
 
+        Practitioner? canonicalPractitioner = null;
+        if (pracReq.PractitionerId.HasValue)
+        {
+            canonicalPractitioner = await db.Practitioners
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == pracReq.PractitionerId.Value && !p.IsDeleted, ct);
+            if (canonicalPractitioner?.MergedIntoPractitionerId is { } mergedId)
+            {
+                canonicalPractitioner = await db.Practitioners
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.Id == mergedId && !p.IsDeleted, ct)
+                    ?? canonicalPractitioner;
+            }
+        }
+        canonicalPractitioner ??= candidates.FirstOrDefault(p =>
+            string.Equals(p.ProfessionKind, pracReq.ProfessionKind, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(p.NormalizedPrcLicenseNo, pracReq.NormalizedPrcLicenseNo, StringComparison.OrdinalIgnoreCase));
+
         return new VerificationRequestDetailDto(
             Id: pracReq.Id,
             Kind: "Practitioner",
@@ -795,14 +820,20 @@ public sealed class GetVerificationRequestDetailQueryHandler(IApplicationDbConte
             DohLtoExpiryDate: pracReq.Facility.LtoExpiryDate,
             ReviewedByDisplayName: pracReviewedByName,
             ReviewedByEmail: pracReviewedByEmail,
-            ClinicContactNumber: FirstNonEmpty(pracReq.Facility.ContactNumber, pracBranch?.ContactNumber, pracReq.Tenant.PhoneNumber),
-            ClinicContactEmail: FirstNonEmpty(pracReq.Facility.ContactEmail, pracBranch?.ContactEmail, pracReq.Tenant.Email),
+            ClinicContactNumber: FirstValidPhoneNumber(pracReq.Facility.ContactNumber, pracBranch?.ContactNumber, pracReq.Tenant.PhoneNumber),
+            ClinicContactEmail: FirstNonEmpty(
+                pracReq.Facility.ContactEmail,
+                FirstEmailFallbackFromPhoneFields(pracReq.Facility.ContactNumber, pracBranch?.ContactNumber, pracReq.Tenant.PhoneNumber),
+                pracBranch?.ContactEmail,
+                pracReq.Tenant.Email),
             PhilHealthAccreditationNumber: pracPhilHealthNumber,
             IsPhilHealthAccredited: pracIsPhilHealthAccredited,
             SupportsInPerson: true,
             SupportsTeleconsult: pracTeleconsultBilling?.IsEnabled == true,
             UpdatedAtUtc: pracReq.UpdatedAt,
-            ResubmissionDiff: pracResubmissionDiff);
+            ResubmissionDiff: pracResubmissionDiff,
+            CanonicalPractitionerId: canonicalPractitioner?.Id,
+            CanonicalPractitionerStatus: canonicalPractitioner?.VerificationStatus);
     }
 
     private async Task<List<Practitioner>> LoadCandidatesAsync(IReadOnlyCollection<string> normalizedPrcs, CancellationToken ct)
@@ -1234,6 +1265,12 @@ public sealed class GetVerificationRequestDetailQueryHandler(IApplicationDbConte
 
     private static string? FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
+
+    private static string? FirstValidPhoneNumber(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v) && !DirectoryVerificationHelper.IsPureEmailAddress(v))?.Trim();
+
+    private static string? FirstEmailFallbackFromPhoneFields(params string?[] values) =>
+        values.FirstOrDefault(DirectoryVerificationHelper.IsPureEmailAddress)?.Trim();
 
     private static List<PractitionerVerificationRequest> SelectDiffChildren(
         string parentStatus,

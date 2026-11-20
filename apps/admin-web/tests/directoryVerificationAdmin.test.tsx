@@ -36,6 +36,8 @@ import {
   VerificationReviewDrawer,
   getVisibleServices,
   indexChangedFields,
+  isEmailAddressValue,
+  resolvePractitionerGovernanceTarget,
 } from "../src/components/verifications/VerificationReviewDrawer";
 import {
   buildVerificationsQueueHref,
@@ -439,12 +441,28 @@ describe("Directory Verifications — Admin Governance Workstation", () => {
         },
       });
 
+      await expect(
+        verificationService.suspendPractitioner("prac-77", { reason: "   " }),
+      ).rejects.toThrow("A compliance reason is required to suspend a practitioner.");
+
       await verificationService.suspendPractitioner("prac-77", {
         reason: "PRC license suspended",
       });
       expect(posts[2]).toEqual({
         url: "/admin/practitioners/prac-77/suspend",
         body: { reason: "PRC license suspended" },
+      });
+
+      await expect(
+        verificationService.reinstatePractitioner("prac-77", { reason: "  " }),
+      ).rejects.toThrow("A compliance reason is required to reinstate a practitioner.");
+
+      await verificationService.reinstatePractitioner("prac-77", {
+        reason: "PRC renewal verified",
+      });
+      expect(posts[3]).toEqual({
+        url: "/admin/practitioners/prac-77/reinstate",
+        body: { reason: "PRC renewal verified" },
       });
     });
   });
@@ -1723,6 +1741,476 @@ describe("Directory Verifications — Admin Governance Workstation", () => {
         />,
       );
       expect(noDiffHtml).not.toContain("Changes from Submission #");
+    });
+  });
+
+  describe("4B. Issue #227 Suspension Lifecycle, Initial Pending Hiding, Reinstate & Snapshot Phone Guard", () => {
+    const superAdminProfile: ReviewerProfile = {
+      isAdmin: true,
+      fullName: "Platform Super Admin",
+      email: "super@clinicez.ph",
+      roleName: "Super Admin",
+      permissions: [
+        VERIFICATION_PERMISSIONS.VIEW,
+        VERIFICATION_PERMISSIONS.VERIFY,
+        VERIFICATION_PERMISSIONS.REVOKE,
+      ],
+    };
+
+    function buildPractitionerDetail(
+      overrides: Partial<VerificationRequestDetailDto> = {},
+    ): VerificationRequestDetailDto {
+      return {
+        id: "req-227",
+        kind: "Practitioner",
+        status: "PendingReview",
+        requestKind: "Initial",
+        submissionNumber: 6,
+        correlationId: "corr-227",
+        submittedAtUtc: "2026-11-20T01:00:00Z",
+        submittedByClinicUserId: "user-clinic-1",
+        submittedByDisplayName: "Clinic Manager",
+        reviewedAtUtc: null,
+        reviewedByAdminUserId: null,
+        reviewerNotes: null,
+        withdrawnAtUtc: null,
+        withdrawnByActor: null,
+        withdrawalReason: null,
+        tenantId: "t-227",
+        tenantSlug: "rizal-clinic",
+        tenantName: "Rizal Medical Clinic",
+        facilityId: "f-227",
+        facilityName: "Rizal Medical Clinic - Main",
+        facilitySlug: "rizal-medical-clinic-main",
+        facilityVerificationStatus: "Verified",
+        dohLtoNumber: "DOH-LTO-2270",
+        clinicContactNumber: "wave.ambray@nextstep-software.com",
+        clinicContactEmail: null,
+        evidenceObjectKey: "verification/prc/jose.pdf",
+        ltoEvidenceObjectKey: "verification/lto/rizal.pdf",
+        prcEvidenceObjectKey: "verification/prc/jose.pdf",
+        submittedSnapshotJson: "{}",
+        snapshot: {
+          title: "Dr.",
+          firstName: "Jose",
+          lastName: "Rizal",
+          specialty: "Ophthalmology",
+          professionKind: "Doctor",
+          normalizedPrcLicenseNo: "0099887",
+        },
+        hasNameMismatch: false,
+        childPractitionerRequests: [
+          {
+            id: "child-227",
+            facilityVerificationRequestId: null,
+            practitionerId: "prac-227",
+            clinicStaffMemberId: "staff-227",
+            submissionNumber: 6,
+            requestKind: "Initial",
+            status: "PendingReview",
+            professionKind: "Doctor",
+            prcLicenseNo: "0099887",
+            normalizedPrcLicenseNo: "0099887",
+            prcExpiryDate: "2028-12-31",
+            firstName: "Jose",
+            lastName: "Rizal",
+            title: "Dr.",
+            primarySpecialty: "Ophthalmology",
+            prcEvidenceObjectKey: "verification/prc/jose.pdf",
+            hasNameMismatch: false,
+            verificationContact: "jose@clinic.example",
+            isConfirmed: true,
+            availabilityCount: 2,
+          },
+        ],
+        prcMatchCandidates: [
+          {
+            practitionerId: "prac-227",
+            professionKind: "Doctor",
+            normalizedPrcLicenseNo: "0099887",
+            displayPrcLicenseNo: "0099887",
+            firstName: "Jose",
+            lastName: "Rizal",
+            title: "Dr.",
+            primarySpecialty: "Ophthalmology",
+            verificationStatus: "Verified",
+            prcExpiryDate: "2028-12-31",
+            verifiedAtUtc: "2026-01-10T00:00:00Z",
+            isCompatibleNameMatch: true,
+            affiliatedFacilityCount: 1,
+            affiliatedClinics: ["Rizal Medical Clinic - Main"],
+          },
+        ],
+        canonicalPractitionerId: "prac-227",
+        canonicalPractitionerStatus: "Verified",
+        submissionHistory: [],
+        ...overrides,
+      };
+    }
+
+    test("hides Revoke / Suspend Verification for initial unapproved PendingReview applications with no prior Verified/Suspended practitioner", () => {
+      const initialPendingDetail = buildPractitionerDetail({
+        canonicalPractitionerId: null,
+        canonicalPractitionerStatus: "Unverified",
+        prcMatchCandidates: [
+          {
+            practitionerId: "prac-unverified",
+            professionKind: "Doctor",
+            normalizedPrcLicenseNo: "0099887",
+            displayPrcLicenseNo: "0099887",
+            firstName: "Jose",
+            lastName: "Rizal",
+            title: "Dr.",
+            primarySpecialty: "Ophthalmology",
+            verificationStatus: "Unverified",
+            prcExpiryDate: "2028-12-31",
+            verifiedAtUtc: null,
+            isCompatibleNameMatch: true,
+            affiliatedFacilityCount: 0,
+            affiliatedClinics: [],
+          },
+        ],
+        childPractitionerRequests: [
+          {
+            id: "child-unverified",
+            facilityVerificationRequestId: null,
+            practitionerId: null,
+            clinicStaffMemberId: "staff-1",
+            submissionNumber: 1,
+            requestKind: "Initial",
+            status: "PendingReview",
+            professionKind: "Doctor",
+            prcLicenseNo: "0099887",
+            normalizedPrcLicenseNo: "0099887",
+            prcExpiryDate: "2028-12-31",
+            firstName: "Jose",
+            lastName: "Rizal",
+            title: "Dr.",
+            primarySpecialty: "Ophthalmology",
+            prcEvidenceObjectKey: "verification/prc/jose.pdf",
+            hasNameMismatch: false,
+            verificationContact: "jose@clinic.example",
+            isConfirmed: true,
+            availabilityCount: 1,
+          },
+        ],
+      });
+
+      expect(resolvePractitionerGovernanceTarget(initialPendingDetail)).toBeNull();
+
+      const html = renderToString(
+        <VerificationDetailWorkspace
+          requestId="req-227"
+          profile={superAdminProfile}
+          initialDetail={initialPendingDetail}
+          onActionCompleted={() => {}}
+        />,
+      );
+
+      expect(html).toContain("Approve Request");
+      expect(html).toContain("Reject Request");
+      expect(html).not.toContain("Revoke / Suspend Verification");
+      expect(html).not.toContain("Suspend Practitioner Across Clinics");
+    });
+
+    test("interactive suspend requires reason + confirmation, syncs Suspended/Rejected state immediately, and Reinstate restores Verified state", async () => {
+      let currentDetail = buildPractitionerDetail({
+        clinicContactNumber: "+63 2 8555 0199",
+        clinicContactEmail: "frontdesk@rizalclinic.ph",
+      });
+      const postCalls: Array<{ url: string; body: unknown }> = [];
+      let actionCompletedCount = 0;
+
+      (apiClient as unknown as { get: typeof apiClient.get }).get = (async (url: string) => {
+        if (url === "/admin/verification-queue/req-227") {
+          return { data: currentDetail };
+        }
+        throw new Error(`Unexpected GET ${url}`);
+      }) as unknown as typeof apiClient.get;
+
+      (apiClient as unknown as { post: typeof apiClient.post }).post = (async (
+        url: string,
+        body?: unknown,
+      ) => {
+        postCalls.push({ url, body });
+        if (url === "/admin/practitioners/prac-227/suspend") {
+          currentDetail = buildPractitionerDetail({
+            status: "Rejected",
+            reviewedAtUtc: "2026-11-20T03:00:00Z",
+            reviewerNotes: "Practitioner suspended: PRC license temporarily suspended",
+            canonicalPractitionerId: "prac-227",
+            canonicalPractitionerStatus: "Suspended",
+            clinicContactNumber: "+63 2 8555 0199",
+            clinicContactEmail: "frontdesk@rizalclinic.ph",
+            childPractitionerRequests: [
+              {
+                ...currentDetail.childPractitionerRequests[0],
+                status: "Rejected",
+              },
+            ],
+            prcMatchCandidates: [
+              {
+                ...currentDetail.prcMatchCandidates[0],
+                verificationStatus: "Suspended",
+              },
+            ],
+          });
+          return {
+            data: {
+              practitionerId: "prac-227",
+              status: "Suspended",
+              affectedClinicCount: 1,
+              closedPendingRequestsCount: 1,
+            },
+          };
+        }
+        if (url === "/admin/practitioners/prac-227/reinstate") {
+          currentDetail = buildPractitionerDetail({
+            status: "Rejected",
+            canonicalPractitionerId: "prac-227",
+            canonicalPractitionerStatus: "Verified",
+            clinicContactNumber: "+63 2 8555 0199",
+            clinicContactEmail: "frontdesk@rizalclinic.ph",
+            childPractitionerRequests: [
+              {
+                ...currentDetail.childPractitionerRequests[0],
+                status: "Rejected",
+              },
+            ],
+            prcMatchCandidates: [
+              {
+                ...currentDetail.prcMatchCandidates[0],
+                verificationStatus: "Verified",
+              },
+            ],
+          });
+          return {
+            data: {
+              practitionerId: "prac-227",
+              status: "Verified",
+              affectedClinicCount: 1,
+            },
+          };
+        }
+        throw new Error(`Unexpected POST ${url}`);
+      }) as unknown as typeof apiClient.post;
+
+      const prevWindow = (globalThis as unknown as { window?: unknown }).window;
+      (globalThis as unknown as { window?: unknown }).window = {
+        location: { hostname: "localhost" },
+      };
+
+      const mounted = mountReactTree(
+        <VerificationReviewDrawer
+          requestId="req-227"
+          profile={superAdminProfile}
+          initialDetail={currentDetail}
+          onClose={() => {}}
+          onActionCompleted={() => {
+            actionCompletedCount += 1;
+          }}
+        />,
+      );
+
+      try {
+
+      expect(mounted.html).toContain("Suspend Practitioner Across Clinics");
+      expect(mounted.html).toContain("Approve Request");
+      expect(mounted.html).toContain("Reject Request");
+
+      // 1) Clicking Suspend without compliance reason shows inline validation and does not open dialog or POST
+      const suspendBtnBefore = findReactNode(
+        mounted.tree,
+        (el) =>
+          el?.type === "button" &&
+          extractNodeText(el).includes("Suspend Practitioner Across Clinics"),
+      );
+      expect(suspendBtnBefore).toBeTruthy();
+      suspendBtnBefore.props.onClick();
+
+      expect(mounted.html).toContain("Compliance reason is required to suspend a practitioner.");
+      expect(postCalls).toHaveLength(0);
+      expect(
+        findReactNode(mounted.tree, (el) => el?.props?.role === "dialog"),
+      ).toBeNull();
+
+      // 2) Enter compliance reason and click Suspend -> opens confirmation modal
+      const suspendTextarea = findReactNode(
+        mounted.tree,
+        (el) => el?.type === "textarea" && el?.props?.id === "suspend-reason",
+      );
+      expect(suspendTextarea).toBeTruthy();
+      suspendTextarea.props.onChange({
+        target: { value: "PRC license temporarily suspended" },
+      });
+
+      const suspendBtnAfterReason = findReactNode(
+        mounted.tree,
+        (el) =>
+          el?.type === "button" &&
+          extractNodeText(el).includes("Suspend Practitioner Across Clinics"),
+      );
+      suspendBtnAfterReason.props.onClick();
+
+      const confirmDialog = findReactNode(mounted.tree, (el) => el?.props?.role === "dialog");
+      expect(confirmDialog).toBeTruthy();
+      expect(mounted.html).toContain("Confirm Practitioner Suspension");
+
+      // 3) Confirm Suspension -> POSTs /suspend, reloads detail, swaps UI to Suspended + Reinstate without F5
+      const confirmSuspendBtn = findReactNode(
+        mounted.tree,
+        (el) => el?.type === "button" && extractNodeText(el).includes("Confirm Suspension"),
+      );
+      expect(confirmSuspendBtn).toBeTruthy();
+      confirmSuspendBtn.props.onClick();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(postCalls).toEqual([
+        {
+          url: "/admin/practitioners/prac-227/suspend",
+          body: { reason: "PRC license temporarily suspended" },
+        },
+      ]);
+      expect(actionCompletedCount).toBe(1);
+      expect(mounted.html).toContain("Suspended");
+      expect(mounted.html).toContain("Reinstate Practitioner Across Clinics");
+      expect(mounted.html).not.toContain("Suspend Practitioner Across Clinics");
+      expect(mounted.html).not.toContain("Approve Request");
+      expect(mounted.html).not.toContain("Reject Request");
+
+      // 4) Reinstate requires reason + confirmation and swaps back to Verified / Suspend state
+      const reinstateTextarea = findReactNode(
+        mounted.tree,
+        (el) => el?.type === "textarea" && el?.props?.id === "reinstate-reason",
+      );
+      expect(reinstateTextarea).toBeTruthy();
+      reinstateTextarea.props.onChange({
+        target: { value: "PRC board clearance received" },
+      });
+
+      const reinstateBtn = findReactNode(
+        mounted.tree,
+        (el) =>
+          el?.type === "button" &&
+          extractNodeText(el).includes("Reinstate Practitioner Across Clinics"),
+      );
+      expect(reinstateBtn).toBeTruthy();
+      reinstateBtn.props.onClick();
+
+      const confirmReinstateBtn = findReactNode(
+        mounted.tree,
+        (el) => el?.type === "button" && extractNodeText(el).includes("Confirm Reinstatement"),
+      );
+      expect(confirmReinstateBtn).toBeTruthy();
+      confirmReinstateBtn.props.onClick();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(postCalls[1]).toEqual({
+        url: "/admin/practitioners/prac-227/reinstate",
+        body: { reason: "PRC board clearance received" },
+      });
+      expect(actionCompletedCount).toBe(2);
+      expect(mounted.html).toContain("Suspend Practitioner Across Clinics");
+      expect(mounted.html).not.toContain("Reinstate Practitioner Across Clinics");
+      } finally {
+        mounted.unmount();
+        if (prevWindow === undefined) {
+          delete (globalThis as unknown as { window?: unknown }).window;
+        } else {
+          (globalThis as unknown as { window?: unknown }).window = prevWindow;
+        }
+      }
+    });
+
+    test("disables Approve Request when viewing an open PendingReview request for an already-Suspended practitioner", () => {
+      const suspendedPendingDetail = buildPractitionerDetail({
+        status: "PendingReview",
+        canonicalPractitionerId: "prac-227",
+        canonicalPractitionerStatus: "Suspended",
+        prcMatchCandidates: [
+          {
+            practitionerId: "prac-227",
+            professionKind: "Doctor",
+            normalizedPrcLicenseNo: "0099887",
+            displayPrcLicenseNo: "0099887",
+            firstName: "Jose",
+            lastName: "Rizal",
+            title: "Dr.",
+            primarySpecialty: "Ophthalmology",
+            verificationStatus: "Suspended",
+            prcExpiryDate: "2028-12-31",
+            verifiedAtUtc: "2026-01-10T00:00:00Z",
+            isCompatibleNameMatch: true,
+            affiliatedFacilityCount: 0,
+            affiliatedClinics: [],
+          },
+        ],
+      });
+
+      const mounted = mountReactTree(
+        <VerificationDetailWorkspace
+          requestId="req-227"
+          profile={superAdminProfile}
+          initialDetail={suspendedPendingDetail}
+          onActionCompleted={() => {}}
+        />,
+      );
+
+      expect(mounted.html).toContain(
+        "Practitioner verification is currently suspended across clinics. Reinstate the practitioner before approving, or reject this submission.",
+      );
+      const approveBtn = findReactNode(
+        mounted.tree,
+        (el) => el?.type === "button" && extractNodeText(el).includes("Approve Request"),
+      );
+      expect(approveBtn).toBeTruthy();
+      expect(approveBtn.props.disabled).toBe(true);
+      mounted.unmount();
+    });
+
+    test("Snapshot Phone guard never displays an email address and falls back email cleanly", () => {
+      expect(isEmailAddressValue("wave.ambray@nextstep-software.com")).toBe(true);
+      expect(isEmailAddressValue("+63 2 8555 0199")).toBe(false);
+
+      const pollutedDetail = buildPractitionerDetail({
+        clinicContactNumber: "wave.ambray@nextstep-software.com",
+        clinicContactEmail: null,
+        snapshot: {
+          title: "Dr.",
+          firstName: "Jose",
+          lastName: "Rizal",
+          contactNumber: "wave.ambray@nextstep-software.com",
+        },
+      });
+
+      const pollutedHtml = renderToString(
+        <VerificationDetailWorkspace
+          requestId="req-227"
+          profile={superAdminProfile}
+          initialDetail={pollutedDetail}
+          onActionCompleted={() => {}}
+        />,
+      );
+      expect(pollutedHtml).not.toContain("<span>Phone</span>");
+      expect(pollutedHtml).toContain("<span>Email</span>");
+      expect(pollutedHtml).toContain("wave.ambray@nextstep-software.com");
+
+      const cleanDetail = buildPractitionerDetail({
+        clinicContactNumber: "+63 2 8555 0199",
+        clinicContactEmail: "wave.ambray@nextstep-software.com",
+      });
+      const cleanHtml = renderToString(
+        <VerificationDetailWorkspace
+          requestId="req-227"
+          profile={superAdminProfile}
+          initialDetail={cleanDetail}
+          onActionCompleted={() => {}}
+        />,
+      );
+      expect(cleanHtml).toContain("<span>Phone</span>");
+      expect(cleanHtml).toContain("+63 2 8555 0199");
+      expect(cleanHtml).toContain("<span>Email</span>");
+      expect(cleanHtml).toContain("wave.ambray@nextstep-software.com");
     });
   });
 

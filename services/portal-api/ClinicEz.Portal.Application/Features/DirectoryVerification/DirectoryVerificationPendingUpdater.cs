@@ -172,6 +172,10 @@ public sealed class DirectoryVerificationPendingUpdater(
             ? payload.FacilitySlug.Trim()
             : (existingSnap?.FacilitySlug ?? facility.Slug);
 
+        var (normalizedContactNumber, normalizedContactEmail) = DirectoryVerificationHelper.NormalizeFacilityContacts(
+            payload.ContactNumber,
+            payload.ContactEmail);
+
         var updatedSnapshot = new FacilityVerificationRequestedPayload
         {
             RequestId = facReq.Id,
@@ -184,10 +188,8 @@ public sealed class DirectoryVerificationPendingUpdater(
             DohLtoExpiryDate = payload.DohLtoExpiryDate,
             LtoEvidenceObjectKey = ltoEvidenceKey,
             Address = payload.Address,
-            ContactNumber = payload.ContactNumber,
-            ContactEmail = !string.IsNullOrWhiteSpace(payload.ContactEmail)
-                ? payload.ContactEmail.Trim()
-                : existingSnap?.ContactEmail,
+            ContactNumber = normalizedContactNumber,
+            ContactEmail = normalizedContactEmail ?? existingSnap?.ContactEmail,
             OperatingHours = payload.OperatingHours,
             IsOnlineBookingPaused = payload.IsOnlineBookingPaused,
             PhilHealthAccreditationNumber = payload.PhilHealthAccreditationNumber,
@@ -221,11 +223,9 @@ public sealed class DirectoryVerificationPendingUpdater(
             facility.Classification = payload.Classification.Trim();
         if (!string.IsNullOrWhiteSpace(payload.OperatingHours))
             facility.OperatingHours = payload.OperatingHours.Trim();
-        facility.ContactNumber = string.IsNullOrWhiteSpace(payload.ContactNumber)
-            ? null
-            : payload.ContactNumber.Trim();
-        if (!string.IsNullOrWhiteSpace(payload.ContactEmail))
-            facility.ContactEmail = payload.ContactEmail.Trim();
+        facility.ContactNumber = normalizedContactNumber;
+        if (!string.IsNullOrWhiteSpace(normalizedContactEmail))
+            facility.ContactEmail = normalizedContactEmail;
         facility.PhilHealthAccreditationNumber = string.IsNullOrWhiteSpace(payload.PhilHealthAccreditationNumber)
             ? null
             : payload.PhilHealthAccreditationNumber.Trim();
@@ -695,6 +695,15 @@ public sealed class DirectoryVerificationPendingUpdater(
             resolvedDohLtoExpiryDate = facility.LtoExpiryDate ?? existingSnap?.DohLtoExpiryDate;
         }
 
+        var (facContactNumber, facContactEmail) = DirectoryVerificationHelper.NormalizeFacilityContacts(
+            facility.ContactNumber,
+            facility.ContactEmail);
+
+        var resolvedPortalEmail = facContactEmail
+            ?? (facility.ContactEmail is null
+                ? existingSnap?.ContactEmail ?? (DirectoryVerificationHelper.IsPureEmailAddress(existingSnap?.ContactNumber) ? existingSnap!.ContactNumber : null)
+                : facility.ContactEmail);
+
         var updatedSnap = existingSnap is not null
             ? existingSnap with
             {
@@ -705,8 +714,8 @@ public sealed class DirectoryVerificationPendingUpdater(
                 DohLtoExpiryDate = resolvedDohLtoExpiryDate,
                 LtoEvidenceObjectKey = ltoEvidenceKey,
                 Address = address,
-                ContactNumber = facility.ContactNumber ?? existingSnap.ContactNumber,
-                ContactEmail = facility.ContactEmail ?? existingSnap.ContactEmail,
+                ContactNumber = facContactNumber ?? (DirectoryVerificationHelper.IsPureEmailAddress(existingSnap.ContactNumber) ? null : existingSnap.ContactNumber),
+                ContactEmail = resolvedPortalEmail,
                 OperatingHours = facility.OperatingHours ?? existingSnap.OperatingHours,
                 PhilHealthAccreditationNumber = philHealthNumber,
                 IsPhilHealthAccredited = existingSnap.IsPhilHealthAccredited || !string.IsNullOrWhiteSpace(philHealthNumber)
@@ -723,8 +732,8 @@ public sealed class DirectoryVerificationPendingUpdater(
                 DohLtoExpiryDate = resolvedDohLtoExpiryDate,
                 LtoEvidenceObjectKey = ltoEvidenceKey,
                 Address = address,
-                ContactNumber = facility.ContactNumber,
-                ContactEmail = facility.ContactEmail,
+                ContactNumber = facContactNumber,
+                ContactEmail = facContactEmail,
                 OperatingHours = facility.OperatingHours,
                 PhilHealthAccreditationNumber = philHealthNumber,
                 IsPhilHealthAccredited = !string.IsNullOrWhiteSpace(philHealthNumber),

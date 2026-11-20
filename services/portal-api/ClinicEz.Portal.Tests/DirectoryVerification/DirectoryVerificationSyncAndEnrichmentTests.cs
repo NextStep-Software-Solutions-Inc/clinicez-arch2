@@ -2524,4 +2524,95 @@ public sealed class DirectoryVerificationSyncAndEnrichmentTests : IDisposable
         Assert.Equal(newExpiry, canonical.PrcExpiryDate);
         Assert.Equal(sub4Id, canonical.LatestVerificationRequestId);
     }
+
+    [Fact]
+    public async Task Issue227_ContactNumberEmailLeakage_IsNormalizedOnIngestionAndSkippedInDetailQueries()
+    {
+        var fac = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenant.Id,
+            BranchId = _branch.Id,
+            Name = "Email Phone Guard Clinic",
+            Slug = "email-phone-guard",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Active,
+            ContactNumber = "wave.ambray@nextstep-software.com", // legacy polluted DB value
+            ContactEmail = null
+        };
+        _context.Facilities.Add(fac);
+
+        var pracReqId = Guid.NewGuid();
+        _context.PractitionerVerificationRequests.Add(new PractitionerVerificationRequest
+        {
+            Id = pracReqId,
+            TenantId = _tenant.Id,
+            FacilityId = fac.Id,
+            ClinicStaffMemberId = Guid.NewGuid(),
+            SubmissionNumber = 1,
+            CorrelationId = pracReqId.ToString(),
+            RequestKind = "Initial",
+            ProfessionKind = "Doctor",
+            SubmittedPrcLicenseNo = "0778899",
+            NormalizedPrcLicenseNo = "0778899",
+            VerificationContact = "wave.ambray@nextstep-software.com",
+            SubmittedSnapshotJson = "{}",
+            Status = "PendingReview",
+            SubmittedAtUtc = _clock.GetUtcNow().UtcDateTime
+        });
+        await _context.SaveChangesAsync();
+
+        // 1. Detail query skips polluted Facility.ContactNumber email and falls back to Branch.ContactNumber (+63288887777)
+        var detailBefore = await new GetVerificationRequestDetailQueryHandler(_context)
+            .Handle(new GetVerificationRequestDetailQuery(pracReqId), CancellationToken.None);
+        Assert.NotNull(detailBefore);
+        Assert.Equal("+63288887777", detailBefore.ClinicContactNumber);
+        Assert.Equal("wave.ambray@nextstep-software.com", detailBefore.ClinicContactEmail);
+
+        // 2. When branch/tenant also have no phone, ClinicContactNumber is null (never an email)
+        _branch.ContactNumber = null;
+        _tenant.PhoneNumber = null;
+        await _context.SaveChangesAsync();
+
+        var detailNoPhone = await new GetVerificationRequestDetailQueryHandler(_context)
+            .Handle(new GetVerificationRequestDetailQuery(pracReqId), CancellationToken.None);
+        Assert.NotNull(detailNoPhone);
+        Assert.Null(detailNoPhone.ClinicContactNumber);
+        Assert.Equal("wave.ambray@nextstep-software.com", detailNoPhone.ClinicContactEmail);
+
+        // 3. Ingestion handler normalizes email-only ContactNumber into ContactEmail instead of Facility.ContactNumber
+        var reqHandler = new FacilityVerificationRequestedHandler(
+            _context, _clock, NullLogger<FacilityVerificationRequestedHandler>.Instance);
+        var facReqId = Guid.NewGuid();
+        var facPayload = new FacilityVerificationRequestedPayload
+        {
+            RequestId = facReqId,
+            TenantId = _tenant.Id.ToString(),
+            FacilityId = fac.Id,
+            FacilityName = fac.Name,
+            DohLtoNumber = "DOH-LTO-EMAIL-GUARD",
+            ContactNumber = "wave.ambray@nextstep-software.com",
+            ContactEmail = null,
+            RequestKind = "Initial",
+            SubmittedAtUtc = _clock.GetUtcNow().UtcDateTime
+        };
+        await reqHandler.HandleAsync(
+            facPayload,
+            new InteropMessageContext(InteropEnvelope.Create(
+                InteropTypes.FacilityVerificationRequested,
+                Party.ForFacility(_tenant.Id.ToString(), fac.Id.ToString(), FacilityType.Clinic),
+                Party.Portal,
+                facReqId,
+                facPayload)),
+            CancellationToken.None);
+
+        var reloadedFac = await _context.Facilities.FindAsync(fac.Id);
+        Assert.Null(reloadedFac!.ContactNumber);
+        Assert.Equal("wave.ambray@nextstep-software.com", reloadedFac.ContactEmail);
+
+        var facDetail = await new GetVerificationRequestDetailQueryHandler(_context)
+            .Handle(new GetVerificationRequestDetailQuery(facReqId), CancellationToken.None);
+        Assert.Null(facDetail!.ClinicContactNumber);
+        Assert.Equal("wave.ambray@nextstep-software.com", facDetail.ClinicContactEmail);
+    }
 }

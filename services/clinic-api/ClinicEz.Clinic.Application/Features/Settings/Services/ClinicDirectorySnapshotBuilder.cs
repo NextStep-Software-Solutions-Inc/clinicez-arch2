@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Mail;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Shared.Common;
@@ -14,6 +15,85 @@ namespace ClinicEz.Clinic.Application.Features.Settings.Services;
 /// </summary>
 public static class ClinicDirectorySnapshotBuilder
 {
+    private static readonly string[] ContactSegmentSeparators = ["|", "•", ";", ",", " / "];
+
+    public static bool IsPureEmailAddress(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return false;
+
+        var trimmed = candidate.Trim();
+        if (trimmed.Any(char.IsWhiteSpace))
+            return false;
+
+        var atIndex = trimmed.IndexOf('@');
+        if (atIndex <= 0 || atIndex == trimmed.Length - 1)
+            return false;
+
+        if (!trimmed[(atIndex + 1)..].Contains('.'))
+            return false;
+
+        return MailAddress.TryCreate(trimmed, out var parsed)
+            && string.Equals(parsed.Address, trimmed, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? TryExtractEmailSegment(string segment)
+    {
+        var trimmed = segment.Trim();
+        if (IsPureEmailAddress(trimmed))
+            return trimmed;
+
+        if (trimmed.StartsWith("email:", StringComparison.OrdinalIgnoreCase))
+        {
+            var rest = trimmed["email:".Length..].Trim();
+            if (IsPureEmailAddress(rest))
+                return rest;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Splits a clinic letterhead contact field into phone/contact number and email when the value
+    /// is an email address or a delimited mixture of phone and email segments.
+    /// </summary>
+    public static (string? ContactNumber, string? ContactEmail) SplitLetterheadContact(string? letterheadContact)
+    {
+        if (string.IsNullOrWhiteSpace(letterheadContact))
+            return (null, null);
+
+        var trimmed = letterheadContact.Trim();
+        if (TryExtractEmailSegment(trimmed) is { } singleEmail)
+            return (null, singleEmail);
+
+        var segments = trimmed
+            .Split(ContactSegmentSeparators, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToList();
+
+        if (segments.Count > 1)
+        {
+            var phoneParts = new List<string>();
+            var emailParts = new List<string>();
+
+            foreach (var segment in segments)
+            {
+                if (TryExtractEmailSegment(segment) is { } email)
+                    emailParts.Add(email);
+                else
+                    phoneParts.Add(segment);
+            }
+
+            if (emailParts.Count > 0)
+            {
+                var contactNumber = phoneParts.Count > 0 ? string.Join(" • ", phoneParts) : null;
+                return (contactNumber, emailParts[0]);
+            }
+        }
+
+        return (trimmed, null);
+    }
     public static string MapClassification(string? specialtyMode) =>
         specialtyMode?.Trim().ToLowerInvariant() switch
         {
@@ -209,6 +289,7 @@ public static class ClinicDirectorySnapshotBuilder
     {
         var practitioners = BuildBundledPractitioners(staffMembers, scheduleTemplates);
         var serviceDtos = BuildActiveServiceDtos(serviceItems);
+        var (contactNumber, contactEmail) = SplitLetterheadContact(settings.LetterheadContact);
 
         return new FacilityVerificationRequestedPayload
         {
@@ -222,8 +303,8 @@ public static class ClinicDirectorySnapshotBuilder
             DohLtoExpiryDate = settings.DohLtoExpiryDate,
             LtoEvidenceObjectKey = settings.LtoEvidenceObjectKey,
             Address = settings.LetterheadAddress,
-            ContactNumber = settings.LetterheadContact,
-            ContactEmail = null,
+            ContactNumber = contactNumber,
+            ContactEmail = contactEmail,
             OperatingHours = settings.OperatingHours,
             IsOnlineBookingPaused = settings.IsOnlineBookingPaused,
             PhilHealthAccreditationNumber = ResolvePhilHealthAccreditationNumber(settings),
@@ -251,6 +332,7 @@ public static class ClinicDirectorySnapshotBuilder
     {
         var practitioners = BuildBundledPractitioners(staffMembers, scheduleTemplates);
         var serviceDtos = BuildActiveServiceDtos(serviceItems);
+        var (contactNumber, contactEmail) = SplitLetterheadContact(settings.LetterheadContact);
 
         return new FacilityVerificationUpdateRequestedPayload
         {
@@ -263,8 +345,8 @@ public static class ClinicDirectorySnapshotBuilder
             DohLtoExpiryDate = settings.DohLtoExpiryDate,
             LtoEvidenceObjectKey = settings.LtoEvidenceObjectKey,
             Address = settings.LetterheadAddress,
-            ContactNumber = settings.LetterheadContact,
-            ContactEmail = null,
+            ContactNumber = contactNumber,
+            ContactEmail = contactEmail,
             OperatingHours = settings.OperatingHours,
             IsOnlineBookingPaused = settings.IsOnlineBookingPaused,
             PhilHealthAccreditationNumber = ResolvePhilHealthAccreditationNumber(settings),

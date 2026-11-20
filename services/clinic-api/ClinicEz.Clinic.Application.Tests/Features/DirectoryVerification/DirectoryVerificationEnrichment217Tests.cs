@@ -264,4 +264,44 @@ public sealed class DirectoryVerificationEnrichment217Tests
             docId,
             Arg.Is<PractitionerVerificationRequestedPayload>(p => p.SubmittedByDisplayName == "Lorna Villanueva"));
     }
+
+    [Fact]
+    public void SplitLetterheadContact_RoutesPureAndMixedEmailsToContactEmail_PreservingPhoneStrings()
+    {
+        var pureEmailSettings = new FacilitySettings
+        {
+            TenantId = TenantId,
+            ClinicId = _clinicId,
+            ClinicName = "Rizal Care Clinic",
+            LetterheadContact = "wave.ambray@nextstep-software.com"
+        };
+        var emailOnlyReq = ClinicDirectorySnapshotBuilder.BuildVerificationRequestedPayload(
+            pureEmailSettings, [], [], [], "Initial", "staff-1", "Dr. Rizal", DateTime.UtcNow);
+        emailOnlyReq.ContactNumber.Should().BeNull();
+        emailOnlyReq.ContactEmail.Should().Be("wave.ambray@nextstep-software.com");
+
+        var mixedSettings = new FacilitySettings
+        {
+            TenantId = TenantId,
+            ClinicId = _clinicId,
+            ClinicName = "Rizal Care Clinic",
+            LetterheadContact = "Tel: (02) 8876-5432 | wave.ambray@nextstep-software.com"
+        };
+        var mixedUpdate = ClinicDirectorySnapshotBuilder.BuildFacilityUpdatePayload(
+            mixedSettings, [], [], [], "staff-1", "Dr. Rizal", DateTime.UtcNow);
+        mixedUpdate.ContactNumber.Should().Be("Tel: (02) 8876-5432");
+        mixedUpdate.ContactEmail.Should().Be("wave.ambray@nextstep-software.com");
+
+        var phoneOnlySettings = new FacilitySettings
+        {
+            TenantId = TenantId,
+            ClinicId = _clinicId,
+            ClinicName = "Rizal Care Clinic",
+            LetterheadContact = "Tel: (02) 8876-5432 • Mobile: +63 917 123 4567"
+        };
+        var phoneOnlyReq = ClinicDirectorySnapshotBuilder.BuildVerificationRequestedPayload(
+            phoneOnlySettings, [], [], [], "Initial", "staff-1", "Dr. Rizal", DateTime.UtcNow);
+        phoneOnlyReq.ContactNumber.Should().Be("Tel: (02) 8876-5432 • Mobile: +63 917 123 4567");
+        phoneOnlyReq.ContactEmail.Should().BeNull();
+    }
 }
