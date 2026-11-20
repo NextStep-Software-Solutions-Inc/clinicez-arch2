@@ -20,5 +20,18 @@ public sealed record PatientYakapEnlistmentDto(
     DateTime? ConsentSignedAtUtc = null,
     Guid? CreatedByStaffId = null,
     string? CreatedByStaffName = null,
-    DateOnly? EnlistmentTransDate = null
+    DateOnly? EnlistmentTransDate = null,
+    Guid? PatientId = null,
+    string? HciAccreditationNumber = null,
+    string? YesReferenceNo = null,
+    TimeOnly? ProfilingTime = null,
+    string? FpeClassificationType = null,
+    string? ServiceDeliveryMethod = null,
+    string? FacilitatorType = null,
+    string? FacilitatorName = null,
+    bool HasCoPayment = false,
+    DateOnly? CoPaymentDate = null,
+    decimal? CoPaymentAmount = null,
+    decimal? CoPaymentBalance = null,
+    string? Remarks = null
 );

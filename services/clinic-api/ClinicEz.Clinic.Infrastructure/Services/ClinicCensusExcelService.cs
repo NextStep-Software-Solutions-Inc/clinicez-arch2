@@ -164,7 +164,7 @@ public sealed class ClinicCensusExcelService : IClinicCensusExcelService
             ws1.Cell(visitStartRow, 12).SetValue(item.CustomFieldsSummary);
 
             // 13. Primary Service Availed on Main Visit Row
-            var primaryServiceLabel = ClinicCensusBreakdownResolver.MapVisitTypeToPrimaryServiceLabel(item.VisitType);
+            var primaryServiceLabel = ClinicCensusBreakdownResolver.ResolvePrimaryServiceLabel(item);
             ws1.Cell(visitStartRow, 13).SetValue(primaryServiceLabel);
             ws1.Cell(visitStartRow, 13).Style.Font.Bold = true;
             ws1.Cell(visitStartRow, 13).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
@@ -522,6 +522,7 @@ public sealed class ClinicCensusExcelService : IClinicCensusExcelService
             {
                 "Consultation" => $"{svc.Percentage:0.0}% of census (vitals bundled)",
                 "Vitals Check" => $"{svc.Percentage:0.0}% of census (nurse vitals check)",
+                "Health Screening" => $"{svc.Percentage:0.0}% of census (clinical health screening)",
                 "Medicine Dispensing" => $"{svc.Percentage:0.0}% of visits • {report.Summary.TotalDispensedLineItems} line items ({report.Summary.TotalDispensedUnits} units)",
                 "Prescription" => $"{svc.Percentage:0.0}% of visits • {svc.TotalVolume} signed Rx items",
                 "Medical Certificate" => $"{svc.Percentage:0.0}% of visits • {svc.TotalVolume} signed certificates",

@@ -1,9 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Card, CardContent } from '../ui/Card';
+import { Card, CardContent, CardHeader } from '../ui/Card';
 import { SkeletonList } from '../ui/Skeleton';
+import ThemedText from '../ui/ThemedText';
+import Badge from '../ui/Badge';
+import Select, { type SelectOption } from '../ui/Select';
+import EmptyState from '../ui/EmptyState';
+import ErrorState from '../ui/ErrorState';
+import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
-import { clinicService, DailyEodReport, ClinicSettingsRecord, type PlatformVerificationStatus } from '../../services/clinicService';
+import { clinicService, DailyEodReport, ClinicSettingsRecord, ClinicServiceItem, type PlatformVerificationStatus } from '../../services/clinicService';
 import { type ChartLayoutMode } from '../chart/types';
 import { type GeneralSettingsSectionKey } from './types';
 import { notify } from '../../utils/feedback';
@@ -96,6 +102,9 @@ export interface GeneralSettingsTabProps {
   setCashierMode?: (v: 'ClinicDesk' | 'CashierCounter') => void;
   platformVerificationStatus?: PlatformVerificationStatus;
   onRefreshVerificationState?: () => Promise<void>;
+  services?: ClinicServiceItem[];
+  servicesLoadError?: string | null;
+  onRefreshServices?: () => Promise<void>;
 }
 
 export default function GeneralSettingsTab(props: GeneralSettingsTabProps) {
@@ -105,9 +114,111 @@ export default function GeneralSettingsTab(props: GeneralSettingsTabProps) {
   );
   const [savingCashierMode, setSavingCashierMode] = useState(false);
 
+  const [fallbackServices, setFallbackServices] = useState<ClinicServiceItem[]>([]);
+  const [loadingFallbackServices, setLoadingFallbackServices] = useState(false);
+  const [fallbackServicesError, setFallbackServicesError] = useState<string | null>(null);
+  const [savingScreeningService, setSavingScreeningService] = useState(false);
+
   useEffect(() => {
     if (settings?.cashierMode) setInternalCashierMode(settings.cashierMode);
   }, [settings?.cashierMode]);
+
+  const loadFallbackServices = useCallback(async () => {
+    setLoadingFallbackServices(true);
+    setFallbackServicesError(null);
+    try {
+      const [data, err] = await clinicService.getServices(undefined, true);
+      if (err) {
+        setFallbackServicesError(err.message || 'Unable to load clinic services.');
+      } else {
+        setFallbackServices(data ?? []);
+      }
+    } catch {
+      setFallbackServicesError('Unable to load clinic services.');
+    } finally {
+      setLoadingFallbackServices(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (props.services === undefined && !showSkeletons && (!activeSection || activeSection === 'clinical')) {
+      void loadFallbackServices();
+    }
+  }, [props.services, showSkeletons, activeSection, loadFallbackServices]);
+
+  const resolvedServices = props.services ?? fallbackServices;
+  const activeServices = useMemo(
+    () => resolvedServices.filter((s) => s.isActive),
+    [resolvedServices]
+  );
+  const effectiveServicesError =
+    props.services !== undefined ? (props.servicesLoadError ?? null) : fallbackServicesError;
+
+  const serviceOptions: SelectOption[] = useMemo(
+    () =>
+      activeServices.map((s) => ({
+        label: `${s.name} (${s.code})`,
+        value: s.id,
+        description: s.description || `${s.category} · ₱${s.standardPrice.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`,
+        badge: s.category,
+        category: s.category,
+      })),
+    [activeServices]
+  );
+
+  const orphanedServiceItem = useMemo(() => {
+    const configuredId = settings?.defaultHealthScreeningServiceItemId;
+    if (!configuredId || activeServices.length === 0) return null;
+    if (activeServices.some((s) => s.id === configuredId)) return null;
+    return resolvedServices.find((s) => s.id === configuredId) ?? { id: configuredId };
+  }, [settings?.defaultHealthScreeningServiceItemId, activeServices, resolvedServices]);
+
+  const selectedScreeningItemId = useMemo(() => {
+    if (settings?.defaultHealthScreeningServiceItemId) {
+      if (activeServices.some((s) => s.id === settings.defaultHealthScreeningServiceItemId)) {
+        return settings.defaultHealthScreeningServiceItemId;
+      }
+      return '';
+    }
+    const targetCode = (settings?.defaultHealthScreeningServiceCode || 'HEALTH-SCREEN').toUpperCase();
+    const match = activeServices.find((s) => s.code.toUpperCase() === targetCode);
+    return match?.id ?? '';
+  }, [settings?.defaultHealthScreeningServiceItemId, settings?.defaultHealthScreeningServiceCode, activeServices]);
+
+  const resolvedScreeningCode = useMemo(() => {
+    const match = activeServices.find((s) => s.id === selectedScreeningItemId);
+    return match?.code || settings?.defaultHealthScreeningServiceCode || 'HEALTH-SCREEN';
+  }, [activeServices, selectedScreeningItemId, settings?.defaultHealthScreeningServiceCode]);
+
+  const handleSelectHealthScreeningService = useCallback(
+    async (serviceItemId: string) => {
+      if (savingScreeningService) return;
+      const chosen = activeServices.find((s) => s.id === serviceItemId) ?? null;
+      const nextCode = chosen?.code ?? 'HEALTH-SCREEN';
+      setSavingScreeningService(true);
+      try {
+        const [updated, err] = await clinicService.updateSettings({
+          defaultHealthScreeningServiceItemId: chosen ? chosen.id : null,
+          defaultHealthScreeningServiceCode: nextCode,
+        });
+        if (err || !updated) {
+          notify.error(err?.message || 'Failed to update default health screening service item.');
+          return;
+        }
+        notify.success(
+          chosen
+            ? `Default health screening item set to ${chosen.name} (${chosen.code}).`
+            : 'Reset default health screening service code to HEALTH-SCREEN.'
+        );
+        onSettingsUpdated?.(updated);
+      } catch {
+        notify.error('Failed to update default health screening service item.');
+      } finally {
+        setSavingScreeningService(false);
+      }
+    },
+    [activeServices, onSettingsUpdated, savingScreeningService]
+  );
 
   const resolvedCashierMode = props.cashierMode ?? internalCashierMode;
   const stationCashierMode = resolvedCashierMode ?? 'ClinicDesk';
@@ -164,6 +275,74 @@ export default function GeneralSettingsTab(props: GeneralSettingsTabProps) {
         <View style={styles.sectionStack} testID="settings-section-clinical">
           <ClinicalSpecialtyCard {...props} />
           <ChartLayoutDefaultCard {...props} preferredChartLayout={props.preferredChartLayout} />
+          <Card style={styles.fullWidthCard} testID="health-screening-settings-card">
+            <CardHeader
+              icon="heartPulse"
+              title="Health Screening & Preventive Assessment"
+              subtitle="Default clinic service catalog item billed on Cashier SOA for Regular health screenings"
+              rightAction={
+                <Badge
+                  label={resolvedScreeningCode}
+                  variant={selectedScreeningItemId ? 'primary' : 'neutral'}
+                  size="sm"
+                />
+              }
+            />
+            <CardContent>
+              {showSkeletons || (props.services === undefined && loadingFallbackServices) ? (
+                <SkeletonList rows={2} />
+              ) : effectiveServicesError && activeServices.length === 0 ? (
+                <ErrorState
+                  compact
+                  title="Service catalog unavailable"
+                  message={effectiveServicesError}
+                  onRetry={() => {
+                    if (props.onRefreshServices) {
+                      void props.onRefreshServices();
+                    } else {
+                      void loadFallbackServices();
+                    }
+                  }}
+                />
+              ) : activeServices.length === 0 ? (
+                <EmptyState
+                  icon="tag"
+                  title="No active service catalog items"
+                  description="Add an active Health Screening item (default code: HEALTH-SCREEN) in Services & Prices to auto-attach fees on Cashier SOA."
+                />
+              ) : (
+                <View style={styles.screeningFieldGroup}>
+                  {orphanedServiceItem ? (
+                    <View style={styles.inactiveNoticeRow} testID="inactive-screening-service-notice">
+                      <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+                      <ThemedText variant="caption" color={theme.colors.warningText} style={styles.flexOne}>
+                        {'name' in orphanedServiceItem && orphanedServiceItem.name
+                          ? `Configured item "${orphanedServiceItem.name} (${orphanedServiceItem.code})" is inactive. Select an active catalog item below.`
+                          : `Previously configured screening catalog item (${settings?.defaultHealthScreeningServiceCode || 'HEALTH-SCREEN'}) is inactive or missing. Select an active catalog item below.`}
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                  <Select
+                    label="Default Health Screening Service Item"
+                    placeholder="Select default screening service item (HEALTH-SCREEN)..."
+                    options={serviceOptions}
+                    value={selectedScreeningItemId || null}
+                    onSelect={handleSelectHealthScreeningService}
+                    disabled={savingScreeningService}
+                    allowClear
+                    allowCustom={false}
+                    modalTitle="Default Health Screening Service Item"
+                    modalSubtitle="Automatically attached to Regular Health Screenings on Cashier SOA (PhilHealth YAKAP FPE remains ₱0.00 covered)."
+                    icon="heartPulse"
+                    helperText="Defaults to catalog code HEALTH-SCREEN when unset. PhilHealth YAKAP FPE screenings remain covered at ₱0.00."
+                  />
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Active code: {resolvedScreeningCode}
+                  </ThemedText>
+                </View>
+              )}
+            </CardContent>
+          </Card>
           {showSkeletons ? renderSkeletonCard('patient-search-skeleton') : <PatientSearchConfigSection settings={settings} onSettingsUpdated={onSettingsUpdated} />}
         </View>
       ) : null}
@@ -206,4 +385,16 @@ const styles = StyleSheet.create({
   constrainedContainer: { width: '100%', minWidth: 0, alignSelf: 'stretch', gap: theme.spacing.lg },
   sectionStack: { width: '100%', minWidth: 0, alignSelf: 'stretch', gap: theme.spacing.lg },
   fullWidthCard: { width: '100%', minWidth: 0, alignSelf: 'stretch' },
+  screeningFieldGroup: { gap: theme.spacing.xs },
+  inactiveNoticeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.warningBorder,
+    backgroundColor: theme.colors.warningBg,
+  },
+  flexOne: { flex: 1 },
 });

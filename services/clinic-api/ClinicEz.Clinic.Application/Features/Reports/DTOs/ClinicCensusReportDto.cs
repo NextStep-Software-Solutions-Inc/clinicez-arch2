@@ -60,7 +60,8 @@ public sealed record CensusSummaryDto(
     int ReferralsIssued = 0,
     int LabRequisitionsIssued = 0,
     int VitalsCheckVisits = 0,
-    int InClinicProceduresCount = 0
+    int InClinicProceduresCount = 0,
+    int HealthScreeningVisits = 0
 );
 
 public sealed record CensusServiceBreakdownDto(
@@ -227,14 +228,22 @@ public static class ClinicCensusBreakdownResolver
             (item.ServicesAvailed != null && item.ServicesAvailed.Any(s => s.Equals(svc, StringComparison.OrdinalIgnoreCase))) ||
             (!string.IsNullOrWhiteSpace(item.ServicesAvailedSummary) && item.ServicesAvailedSummary.Contains(svc, StringComparison.OrdinalIgnoreCase));
 
+        bool IsHealthScreeningItem(CensusItemDto item) =>
+            HasService(item, "Health Screening") || HasService(item, "YAKAP Health Screening (FPE)");
+
         int consultVisits = items.Count > 0
             ? items.Count(i => HasService(i, "Consultation") || VisitTypeExtensions.IsPhysicianConsultationString(i.VisitType))
             : report.Summary.Consultations;
 
+        int healthScreeningVisits = items.Count > 0
+            ? items.Count(IsHealthScreeningItem)
+            : report.Summary.HealthScreeningVisits;
+
         int vitalsCheckVisits = items.Count > 0
-            ? items.Count(i => HasService(i, "Vitals Check") ||
-                               HasService(i, "Preventive Health Assessment") ||
-                               i.VisitType.Equals(nameof(VisitType.PreventiveHealthAssessment), StringComparison.OrdinalIgnoreCase))
+            ? items.Count(i => !IsHealthScreeningItem(i) &&
+                               (HasService(i, "Vitals Check") ||
+                                HasService(i, "Preventive Health Assessment") ||
+                                i.VisitType.Equals(nameof(VisitType.PreventiveHealthAssessment), StringComparison.OrdinalIgnoreCase)))
             : report.Summary.VitalsCheckVisits;
 
         int dispensingVisits = report.Summary.VisitsWithMedicineDispensing > 0
@@ -275,17 +284,28 @@ public static class ClinicCensusBreakdownResolver
             : (report.Summary.InClinicProceduresCount > 0 ? report.Summary.InClinicProceduresCount : report.Summary.StandaloneProcedures);
         int procVolume = report.Summary.InClinicProceduresCount > 0 ? report.Summary.InClinicProceduresCount : procVisits;
 
-        return new List<CensusServiceBreakdownDto>
+        var breakdown = new List<CensusServiceBreakdownDto>
         {
             new("Consultation", consultVisits, consultVisits, Pct(consultVisits)),
             new("Vitals Check", vitalsCheckVisits, vitalsCheckVisits, Pct(vitalsCheckVisits)),
+        };
+
+        if (healthScreeningVisits > 0)
+        {
+            breakdown.Add(new("Health Screening", healthScreeningVisits, healthScreeningVisits, Pct(healthScreeningVisits)));
+        }
+
+        breakdown.AddRange(new List<CensusServiceBreakdownDto>
+        {
             new("Medicine Dispensing", dispensingVisits, dispensingVolume, Pct(dispensingVisits)),
             new("Prescription", rxVisits, rxVolume, Pct(rxVisits)),
             new("Medical Certificate", medCertVisits, medCertVolume, Pct(medCertVisits)),
             new("Referral", referralVisits, referralVolume, Pct(referralVisits)),
             new("Laboratory Requisition", labVisits, labVolume, Pct(labVisits)),
             new("In-Clinic Procedure", procVisits, procVolume, Pct(procVisits))
-        };
+        });
+
+        return breakdown;
     }
 
     public static IReadOnlyList<CensusRosBreakdownDto> ResolveRosBreakdown(ClinicCensusReportDto report)
@@ -359,6 +379,25 @@ public static class ClinicCensusBreakdownResolver
         var other => string.IsNullOrWhiteSpace(other) ? "Clinic Visit" : other
     };
 
+    public static string ResolvePrimaryServiceLabel(CensusItemDto item)
+    {
+        if (item.ServicesAvailed != null)
+        {
+            if (item.ServicesAvailed.Any(s => s.Equals("YAKAP Health Screening (FPE)", StringComparison.OrdinalIgnoreCase)) &&
+                !VisitTypeExtensions.IsPhysicianConsultationString(item.VisitType))
+            {
+                return "YAKAP Health Screening (FPE)";
+            }
+            if (item.ServicesAvailed.Any(s => s.Equals("Health Screening", StringComparison.OrdinalIgnoreCase)) &&
+                !VisitTypeExtensions.IsPhysicianConsultationString(item.VisitType))
+            {
+                return "Health Screening";
+            }
+        }
+
+        return MapVisitTypeToPrimaryServiceLabel(item.VisitType);
+    }
+
     public static string NormalizeCensusDisplayValue(string? val, params string[] extraEmptySentinels)
     {
         if (string.IsNullOrWhiteSpace(val)) return string.Empty;
@@ -402,7 +441,7 @@ public static class ClinicCensusBreakdownResolver
             return item.ServiceRows;
         }
 
-        var primaryLabel = MapVisitTypeToPrimaryServiceLabel(item.VisitType);
+        var primaryLabel = ResolvePrimaryServiceLabel(item);
         if (item.ServicesAvailed is not { Count: > 0 })
         {
             return Array.Empty<CensusServiceRowDto>();

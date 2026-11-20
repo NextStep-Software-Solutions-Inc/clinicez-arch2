@@ -49,7 +49,8 @@ import AttachExternalDocumentModal, {
 import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
-import PhilHealthProfileModal from '../../components/PhilHealthProfileModal';
+import PhilHealthCoverageModal from '../../components/patient/PhilHealthCoverageModal';
+import HealthScreeningModal from '../../components/screening/HealthScreeningModal';
 import PhilHealthPinInput from '../../components/ui/PhilHealthPinInput';
 import DebouncedDuplicateChecker from '../../components/patient/DebouncedDuplicateChecker';
 import DuplicatePatientWarningModal from '../../components/patient/DuplicatePatientWarningModal';
@@ -120,6 +121,8 @@ import {
   VisitType,
   PatientAddressDto,
   PatientGuardianDto,
+  PatientPhilHealthCoverageDto,
+  HealthScreeningDetailRecord,
 } from '../../services/clinicService';
 
 import { offlineSyncService } from '../../services/offlineSyncService';
@@ -560,9 +563,16 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     [rooms],
   );
 
-  // Standalone PhilHealth Profile Modal state
-  const [philHealthProfileModalVisible, setPhilHealthProfileModalVisible] = useState(false);
-  const [selectedPatientForProfile, setSelectedPatientForProfile] = useState<ClinicPatient | null>(null);
+  // Standalone PhilHealth Coverage & Enlistment Modal state (administrative, zero visit/queue writes)
+  const [philHealthCoverageModalVisible, setPhilHealthCoverageModalVisible] = useState(false);
+  const [selectedPatientForCoverage, setSelectedPatientForCoverage] = useState<ClinicPatient | null>(null);
+
+  // Guided 4-Station Health Screening Modal state (lazy direct visit on first save only)
+  const [healthScreeningModalVisible, setHealthScreeningModalVisible] = useState(false);
+  const [healthScreeningPatient, setHealthScreeningPatient] = useState<ClinicPatient | null>(null);
+  const [healthScreeningQueueItemId, setHealthScreeningQueueItemId] = useState<string | null>(null);
+  const [healthScreeningAllowDuplicateActive, setHealthScreeningAllowDuplicateActive] = useState(false);
+  const [healthScreeningInitialTrack, setHealthScreeningInitialTrack] = useState<'Regular' | 'YakapAvailment'>('Regular');
 
   // Edit Patient Demographics state
   const [editPatientModalVisible, setEditPatientModalVisible] = useState(false);
@@ -1370,13 +1380,42 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   }, [openRegister]);
 
   const handleOpenPhilHealthProfile = (patient: ClinicPatient) => {
-    setSelectedPatientForProfile(patient);
-    setPhilHealthProfileModalVisible(true);
+    setSelectedPatientForCoverage(patient);
+    setPhilHealthCoverageModalVisible(true);
   };
 
-  const handlePhilHealthProfileSaved = () => {
-    fetchPatients();
-    if (selectedPatient && chartVisible) {
+  const handlePhilHealthCoverageSaved = (coverage: PatientPhilHealthCoverageDto) => {
+    if (coverage?.patientId) {
+      setPatients((prev) =>
+        prev
+          ? prev.map((p) =>
+              p.id === coverage.patientId
+                ? {
+                    ...p,
+                    philHealthNumber:
+                      coverage.philHealthNumber !== undefined
+                        ? (coverage.philHealthNumber ?? undefined)
+                        : p.philHealthNumber,
+                  }
+                : p
+            )
+          : prev
+      );
+      if (selectedPatient?.id === coverage.patientId) {
+        setSelectedPatient((prev) =>
+          prev
+            ? {
+                ...prev,
+                philHealthNumber:
+                  coverage.philHealthNumber !== undefined
+                    ? (coverage.philHealthNumber ?? undefined)
+                    : prev.philHealthNumber,
+              }
+            : prev
+        );
+      }
+    }
+    if (selectedPatient && chartVisible && selectedPatient.id === coverage?.patientId) {
       handleOpenChart(selectedPatient, activeChartTab);
     }
   };
@@ -1673,9 +1712,21 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     });
   };
 
+  const openHealthScreeningForPatient = (
+    patient: ClinicPatient,
+    track: 'Regular' | 'YakapAvailment' = 'Regular'
+  ) => {
+    resolveActiveVisitForAction(patient, 'Health Screening', (queueItemId, forceSeparateVisit) => {
+      setHealthScreeningPatient(patient);
+      setHealthScreeningQueueItemId(queueItemId);
+      setHealthScreeningAllowDuplicateActive(Boolean(forceSeparateVisit));
+      setHealthScreeningInitialTrack(track);
+      setHealthScreeningModalVisible(true);
+    });
+  };
+
   const handleStartProfilingAction = (patient: ClinicPatient) => {
-    // Health screening (profiling / Yakap FPE) is purely longitudinal profiling and NEVER creates a visit on click.
-    handleOpenPhilHealthProfile(patient);
+    openHealthScreeningForPatient(patient, 'Regular');
   };
 
   const handleRecordVitalsAction = (patient: ClinicPatient) => {
@@ -1975,6 +2026,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   onAddToQueue={handleQueueCheckIn}
                   onSelectService={handleSelectService}
                   onStartConsultation={handleStartConsultationAction}
+                  onStartHealthScreening={handleStartProfilingAction}
                   onStartProfiling={handleStartProfilingAction}
                   onRecordVitals={handleRecordVitalsAction}
                   onPerformProcedure={handlePerformProcedureAction}
@@ -2023,6 +2075,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   onAddToQueue={handleQueueCheckIn}
                   onSelectService={handleSelectService}
                   onStartConsultation={handleStartConsultationAction}
+                  onStartHealthScreening={handleStartProfilingAction}
                   onStartProfiling={handleStartProfilingAction}
                   onRecordVitals={handleRecordVitalsAction}
                   onPerformProcedure={handlePerformProcedureAction}
@@ -3076,15 +3129,118 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         }}
       />
 
-      {/* Standalone PhilHealth Patient Profile Modal (Offline & Walk-In Capable) */}
-      <PhilHealthProfileModal
-        visible={philHealthProfileModalVisible}
+      {/* Standalone PhilHealth Coverage & Annual YAKAP Enlistment Modal (Administrative, Zero Visit Created) */}
+      <PhilHealthCoverageModal
+        visible={philHealthCoverageModalVisible}
         onClose={() => {
-          setPhilHealthProfileModalVisible(false);
-          setSelectedPatientForProfile(null);
+          setPhilHealthCoverageModalVisible(false);
+          setSelectedPatientForCoverage(null);
         }}
-        patient={selectedPatientForProfile}
-        onSaved={handlePhilHealthProfileSaved}
+        patient={selectedPatientForCoverage}
+        onSaved={handlePhilHealthCoverageSaved}
+        onStartYakapScreening={(targetPatient) => {
+          setPhilHealthCoverageModalVisible(false);
+          setSelectedPatientForCoverage(null);
+          openHealthScreeningForPatient(targetPatient, 'YakapAvailment');
+        }}
+      />
+
+      {/* Guided 4-Station Health Screening Modal (Zero Writes on Open/Cancel) */}
+      <HealthScreeningModal
+        visible={healthScreeningModalVisible}
+        onClose={() => {
+          setHealthScreeningModalVisible(false);
+          setHealthScreeningPatient(null);
+          setHealthScreeningQueueItemId(null);
+          setHealthScreeningAllowDuplicateActive(false);
+          setHealthScreeningInitialTrack('Regular');
+        }}
+        patient={healthScreeningPatient}
+        queueItemId={healthScreeningQueueItemId}
+        initialTrack={healthScreeningInitialTrack}
+        allowDuplicateActive={healthScreeningAllowDuplicateActive}
+        onSuccess={(screening: HealthScreeningDetailRecord) => {
+          // Keep modal open on Station 4 completion so user sees completion banner & MedCert CTA.
+          if (screening.queueItemId && screening.patientId) {
+            const isTerminal = screening.status === 'Completed' || screening.status === 'Cancelled';
+            setPatients((prev) =>
+              prev
+                ? prev.map((p) => {
+                    if (p.id !== screening.patientId) return p;
+                    const existingTickets = p.activeQueueTickets || [];
+                    if (isTerminal) {
+                      const remainingTickets = existingTickets.filter((t) => t.id !== screening.queueItemId);
+                      return {
+                        ...p,
+                        activeQueueTicket: remainingTickets[0]?.queueNumber ?? undefined,
+                        activeQueueItemId: remainingTickets[0]?.id ?? undefined,
+                        activeQueueTickets: remainingTickets,
+                      };
+                    }
+                    const hasTicket = existingTickets.some((t) => t.id === screening.queueItemId);
+                    const nextTicketNumber = screening.queueNumber || p.activeQueueTicket;
+                    const updatedTickets = hasTicket
+                      ? existingTickets.map((t) =>
+                          t.id === screening.queueItemId
+                            ? {
+                                ...t,
+                                status: 'Triaged',
+                                queueNumber: screening.queueNumber || t.queueNumber,
+                              }
+                            : t
+                        )
+                      : screening.queueNumber
+                      ? [
+                          ...existingTickets,
+                          {
+                            id: screening.queueItemId!,
+                            queueNumber: screening.queueNumber,
+                            status: 'Triaged',
+                            priority: 'Routine',
+                            visitType: 'PreventiveHealthAssessment',
+                            checkInTime: screening.screeningDateUtc,
+                          },
+                        ]
+                      : existingTickets;
+                    return {
+                      ...p,
+                      activeQueueTicket: nextTicketNumber ?? p.activeQueueTicket,
+                      activeQueueItemId: p.activeQueueItemId ?? screening.queueItemId ?? undefined,
+                      activeQueueTickets: updatedTickets,
+                    };
+                  })
+                : prev
+            );
+          }
+          if (selectedPatient && chartVisible && selectedPatient.id === screening.patientId) {
+            handleOpenChart(selectedPatient, activeChartTab);
+          }
+        }}
+        onIssueMedCert={({ patient: targetPatient, queueItemId }) => {
+          setHealthScreeningModalVisible(false);
+          setHealthScreeningPatient(null);
+          setHealthScreeningQueueItemId(null);
+          setHealthScreeningAllowDuplicateActive(false);
+          setHealthScreeningInitialTrack('Regular');
+          setMedCertPatient(targetPatient);
+          setMedCertQueueItemId(queueItemId);
+          setMedCertForceSeparateVisit(false);
+          setMedCertModalVisible(true);
+        }}
+        onEscalateToConsultation={({ patient: targetPatient, queueItemId, workflowMode }) => {
+          setHealthScreeningModalVisible(false);
+          setHealthScreeningPatient(null);
+          setHealthScreeningQueueItemId(null);
+          setHealthScreeningAllowDuplicateActive(false);
+          setHealthScreeningInitialTrack('Regular');
+          navigation.navigate('Consultations', {
+            queueId: queueItemId,
+            queueItemId,
+            patientId: targetPatient.id,
+            patientName: targetPatient.fullName,
+            directVisitMode: workflowMode === 'YakapAvailment' ? 'yakap' : 'regular',
+          });
+        }}
       />
 
       {/* PhilHealth Accredited Consultation Type Selection Modal */}

@@ -243,6 +243,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     const ids = items.map((i) => i.id);
     expect(ids).toEqual(['edit-demographics', 'philhealth-profile', 'view-chart', 'schedule-visit']);
     expect(items.map((i) => i.label)).toEqual(['Edit info', 'PhilHealth info', 'View chart', 'Schedule visit']);
+    expect(items.find((i) => i.id === 'philhealth-profile')?.icon).toBe('shield');
     expect(items.every((i) => i.hint === undefined)).toBe(true);
 
     items[0].onPress();
@@ -1203,15 +1204,18 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(componentCode).toContain('testID="schedule-visit-date-input"');
   });
 
-  test('30. buildPatientOverflowMenuItems supports direct clinical action handlers and Yakap FPE profiling when accredited', () => {
+  test('30. buildPatientOverflowMenuItems supports direct clinical action handlers with distinct Health screening (heartPulse) and PhilHealth info (shield) actions', () => {
+    let philHealthTriggered = false;
     let consultationTriggered = false;
     let profilingTriggered = false;
+    let healthScreeningTriggered = false;
     let vitalsTriggered = false;
     let procedureTriggered = false;
     let clearanceTriggered = false;
 
     const items = buildPatientOverflowMenuItems(basePatient, {
       hasPhilHealthAccreditation: true,
+      onOpenPhilHealth: () => { philHealthTriggered = true; },
       onStartConsultation: () => { consultationTriggered = true; },
       onStartProfiling: () => { profilingTriggered = true; },
       onRecordVitals: () => { vitalsTriggered = true; },
@@ -1220,6 +1224,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     });
 
     const labels = items.map((i) => i.label);
+    expect(labels).toContain('PhilHealth info');
     expect(labels).toContain('Consult');
     expect(labels).toContain('Health screening');
     expect(labels).toContain('Vitals');
@@ -1227,11 +1232,28 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(labels).toContain('Medical certificate');
     expect(items.every((i) => i.hint === undefined)).toBe(true);
 
+    const philHealthItem = items.find((i) => i.id === 'philhealth-profile')!;
+    const screeningItem = items.find((i) => i.id === 'start-profiling')!;
+    expect(philHealthItem.icon).toBe('shield');
+    expect(screeningItem.icon).toBe('heartPulse');
+
+    philHealthItem.onPress();
+    expect(philHealthTriggered).toBe(true);
+
     items.find((i) => i.id === 'service-consultation')!.onPress();
     expect(consultationTriggered).toBe(true);
 
-    items.find((i) => i.id === 'start-profiling')!.onPress();
+    screeningItem.onPress();
     expect(profilingTriggered).toBe(true);
+
+    // Verify new onStartHealthScreening prop alias works identically
+    const aliasItems = buildPatientOverflowMenuItems(basePatient, {
+      onStartHealthScreening: () => { healthScreeningTriggered = true; },
+    });
+    const aliasScreeningItem = aliasItems.find((i) => i.id === 'start-profiling')!;
+    expect(aliasScreeningItem.icon).toBe('heartPulse');
+    aliasScreeningItem.onPress();
+    expect(healthScreeningTriggered).toBe(true);
 
     items.find((i) => i.id === 'service-vitals')!.onPress();
     expect(vitalsTriggered).toBe(true);
@@ -1243,12 +1265,13 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(clearanceTriggered).toBe(true);
   });
 
-  test('31. buildPatientOverflowMenuItems omits Yakap FPE profiling when clinic is not accredited and patient has no PIN', () => {
+  test('31. buildPatientOverflowMenuItems keeps Health screening available for all clinics and patients without PhilHealth accreditation or PIN', () => {
     const unaccreditedPatient = { ...basePatient, philHealthNumber: null };
+    let screeningTriggered = false;
     const items = buildPatientOverflowMenuItems(unaccreditedPatient, {
       hasPhilHealthAccreditation: false,
       onStartConsultation: () => {},
-      onStartProfiling: () => {},
+      onStartHealthScreening: () => { screeningTriggered = true; },
       onRecordVitals: () => {},
       onPerformProcedure: () => {},
       onIssueClearance: () => {},
@@ -1256,7 +1279,11 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
 
     const labels = items.map((i) => i.label);
     expect(labels).toContain('Consult');
-    expect(labels).not.toContain('Health screening');
+    expect(labels).toContain('Health screening');
+    const screeningItem = items.find((i) => i.id === 'start-profiling')!;
+    expect(screeningItem.icon).toBe('heartPulse');
+    screeningItem.onPress();
+    expect(screeningTriggered).toBe(true);
   });
 
   test('32. ConsultationTypeModal renders concise patient subtitle and plain-language choice cards without demographic banner or jargon', async () => {
@@ -1291,25 +1318,28 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(markup).toContain('Cancel');
   });
 
-  test('33. Patients.screen.tsx integrates direct clinical actions, ConsultationTypeModal, and RecordVitalsModal', async () => {
+  test('33. Patients.screen.tsx integrates PhilHealthCoverageModal, HealthScreeningModal, ConsultationTypeModal, and RecordVitalsModal', async () => {
     const { readFileSync } = await import('fs');
     const { join } = await import('path');
     const code = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
 
     // Handlers and zero-write active visit resolution
     expect(code).toContain('resolveActiveVisitForAction');
+    expect(code).toContain('handleOpenPhilHealthProfile');
     expect(code).toContain('handleStartConsultationAction');
     expect(code).toContain('handleStartProfilingAction');
+    expect(code).toContain('openHealthScreeningForPatient');
+    expect(code).toContain("resolveActiveVisitForAction(patient, 'Health Screening'");
     expect(code).toContain('handleRecordVitalsAction');
     expect(code).toContain('handlePerformProcedureAction');
     expect(code).toContain('handleIssueClearanceAction');
     expect(code).toContain('handleVitalsRecorded');
 
-    // Accreditation gating
+    // Accreditation context & decoupled modals rendered
     expect(code).toContain('accreditationNumber');
     expect(code).toContain('hasPhilHealthAccreditation');
-
-    // Modals rendered
+    expect(code).toContain('<PhilHealthCoverageModal');
+    expect(code).toContain('<HealthScreeningModal');
     expect(code).toContain('<ConsultationTypeModal');
     expect(code).toContain('<RecordVitalsModal');
     expect(code).toContain('<IssueMedicalCertificateModal');

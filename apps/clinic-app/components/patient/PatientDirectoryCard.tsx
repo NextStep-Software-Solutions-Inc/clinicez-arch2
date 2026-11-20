@@ -81,6 +81,8 @@ export interface PatientDirectoryCardProps {
   onQueuePatient?: (patient: ClinicPatient, visitType?: VisitType) => void;
   onSelectService?: (patient: ClinicPatient, visitType: VisitType) => void;
   onStartConsultation?: (patient: ClinicPatient) => void;
+  onStartHealthScreening?: (patient: ClinicPatient) => void;
+  /** @deprecated Use onStartHealthScreening */
   onStartProfiling?: (patient: ClinicPatient) => void;
   onRecordVitals?: (patient: ClinicPatient) => void;
   onPerformProcedure?: (patient: ClinicPatient) => void;
@@ -171,6 +173,7 @@ export function buildPatientOverflowMenuItems(
     onQueuePatient?: (p: ClinicPatient, visitType?: VisitType) => void;
     onAddToQueue?: (p: ClinicPatient, visitType?: VisitType) => void;
     onStartConsultation?: (p: ClinicPatient) => void;
+    onStartHealthScreening?: (p: ClinicPatient) => void;
     onStartProfiling?: (p: ClinicPatient) => void;
     onRecordVitals?: (p: ClinicPatient) => void;
     onPerformProcedure?: (p: ClinicPatient) => void;
@@ -216,6 +219,7 @@ export function buildPatientOverflowMenuItems(
 
   const hasDirectClinicalActions = Boolean(
     handlers.onStartConsultation ||
+    handlers.onStartHealthScreening ||
     handlers.onStartProfiling ||
     handlers.onRecordVitals ||
     handlers.onPerformProcedure ||
@@ -232,12 +236,13 @@ export function buildPatientOverflowMenuItems(
         onPress: () => handlers.onStartConsultation!(patient),
       });
     }
-    if (handlers.onStartProfiling && (handlers.hasPhilHealthAccreditation || patient.philHealthNumber)) {
+    const healthScreeningHandler = handlers.onStartHealthScreening || handlers.onStartProfiling;
+    if (healthScreeningHandler) {
       items.push({
         id: 'start-profiling',
         label: 'Health screening',
-        icon: 'shield',
-        onPress: () => handlers.onStartProfiling!(patient),
+        icon: 'heartPulse',
+        onPress: () => healthScreeningHandler(patient),
       });
     }
     if (handlers.onRecordVitals) {
@@ -351,6 +356,7 @@ function PatientDirectoryCard({
   onQueuePatient,
   onSelectService,
   onStartConsultation,
+  onStartHealthScreening,
   onStartProfiling,
   onRecordVitals,
   onPerformProcedure,
@@ -379,6 +385,7 @@ function PatientDirectoryCard({
     onScheduleVisit: handleScheduleVisit,
     onBookAppointment: handleScheduleVisit,
     onStartConsultation,
+    onStartHealthScreening,
     onStartProfiling,
     onRecordVitals,
     onPerformProcedure,

@@ -80,6 +80,7 @@ public static class ClinicRoleSeeder
                 ClinicPermissions.TriageRead,
                 ClinicPermissions.TriageWrite,
                 ClinicPermissions.PatientsRead,
+                ClinicPermissions.PatientsWrite,
                 ClinicPermissions.DocumentsRead,
                 ClinicPermissions.RecordsRead,
                 ClinicPermissions.RecordsUpload,

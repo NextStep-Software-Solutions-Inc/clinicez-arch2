@@ -94,7 +94,10 @@ public sealed record ClinicSettingsDto(
     string? VerificationRejectionReason = null,
     DateTime? LastVerificationSubmittedAtUtc = null,
     string? LtoEvidenceObjectKey = null,
-    DateOnly? DohLtoExpiryDate = null)
+    DateOnly? DohLtoExpiryDate = null,
+    bool AllowNurseMidwifeYakapFpeFacilitator = false,
+    Guid? DefaultHealthScreeningServiceItemId = null,
+    string? DefaultHealthScreeningServiceCode = "HEALTH-SCREEN")
 {
     public static ClinicSettingsDto FromEntity(FacilitySettings settings, bool isWorkspaceTeleconsultEntitled = false) => new(
         settings.Id,
@@ -185,5 +188,8 @@ public sealed record ClinicSettingsDto(
         VerificationRejectionReason: settings.VerificationRejectionReason,
         LastVerificationSubmittedAtUtc: settings.LastVerificationSubmittedAtUtc,
         LtoEvidenceObjectKey: settings.LtoEvidenceObjectKey,
-        DohLtoExpiryDate: settings.DohLtoExpiryDate);
+        DohLtoExpiryDate: settings.DohLtoExpiryDate,
+        AllowNurseMidwifeYakapFpeFacilitator: settings.AllowNurseMidwifeYakapFpeFacilitator,
+        DefaultHealthScreeningServiceItemId: settings.DefaultHealthScreeningServiceItemId,
+        DefaultHealthScreeningServiceCode: settings.DefaultHealthScreeningServiceCode);
 }

@@ -99,3 +99,8 @@ export {
   type IssueReferralLetterModalProps,
   type ReferralUrgency,
 } from './IssueReferralLetterModal';
+
+export {
+  default as PhilHealthCoverageModal,
+  type PhilHealthCoverageModalProps,
+} from './PhilHealthCoverageModal';

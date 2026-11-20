@@ -10,6 +10,8 @@ using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
 using ClinicEz.Clinic.Application.Features.Dental.DTOs;
 using ClinicEz.Clinic.Application.Features.Dispensing.DTOs;
 using ClinicEz.Clinic.Application.Features.Documents.DTOs;
+using ClinicEz.Clinic.Application.Features.HealthScreenings.Common;
+using ClinicEz.Clinic.Application.Features.HealthScreenings.DTOs;
 using ClinicEz.Clinic.Application.Features.Immunizations.DTOs;
 using ClinicEz.Clinic.Application.Features.LabOrders.Commands;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
@@ -56,6 +58,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
     private readonly IRepository<PatientAlert>? _alertRepo;
     private readonly IRepository<ClinicDispensingLog>? _dispensingLogRepo;
     private readonly IRepository<QueueItem>? _queueRepo;
+    private readonly IRepository<HealthScreening>? _healthScreeningRepo;
 
     public GetPatientChartQueryHandler(
         IRepository<ConsultationEncounter> consultationRepo,
@@ -82,7 +85,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         IRepository<PatientAlert>? alertRepo = null,
         IRepository<PatientMedicalHistory>? problemRepo = null,
         IRepository<ClinicDispensingLog>? dispensingLogRepo = null,
-        IRepository<QueueItem>? queueRepo = null)
+        IRepository<QueueItem>? queueRepo = null,
+        IRepository<HealthScreening>? healthScreeningRepo = null)
     {
         _consultationRepo = consultationRepo;
         _triageRepo = triageRepo;
@@ -108,6 +112,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         _alertRepo = alertRepo;
         _dispensingLogRepo = dispensingLogRepo;
         _queueRepo = queueRepo;
+        _healthScreeningRepo = healthScreeningRepo;
     }
 
     public async Task<PatientChartDto> Handle(GetPatientChartQuery request, CancellationToken cancellationToken)
@@ -982,6 +987,21 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             )).ToList();
         }
 
+        List<HealthScreeningDto>? healthScreeningDtos = null;
+        if (_healthScreeningRepo != null)
+        {
+            var screenings = await _healthScreeningRepo
+                .Query(hs => hs.ClinicId == _clinicContext.ClinicId && hs.PatientId == request.PatientId && !hs.IsDeleted)
+                .AsNoTracking()
+                .OrderByDescending(hs => hs.ScreeningDateUtc)
+                .ThenByDescending(hs => hs.CreatedAt)
+                .ToListAsync(cancellationToken);
+
+            healthScreeningDtos = screenings
+                .Select(hs => HealthScreeningHelper.ToDto(hs))
+                .ToList();
+        }
+
         return new PatientChartDto(
             request.PatientId,
             patientName,
@@ -1012,7 +1032,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             PhysicalExams: physicalExamDtos,
             LatestPhysicalExam: latestPhysicalExamDto,
             Addresses: patient != null ? Commands.RegisterClinicPatientCommandHandler.MapAddresses(patient.Addresses) : null,
-            Guardians: patient != null ? Commands.RegisterClinicPatientCommandHandler.MapGuardians(patient.Guardians) : null
+            Guardians: patient != null ? Commands.RegisterClinicPatientCommandHandler.MapGuardians(patient.Guardians) : null,
+            HealthScreenings: healthScreeningDtos
         );
     }
 

@@ -2517,6 +2517,7 @@ public class ClinicDispensingAndVisitValidityTests
             typeof(EncounterObGyneExam),
             typeof(EncounterPediatricMilestone),
             typeof(EncounterReviewOfSystemsItem),
+            typeof(HealthScreening),
             typeof(PatientBpMonitoringLog),
             typeof(PatientMedicalHistory),
             typeof(PatientPhysicalExam),

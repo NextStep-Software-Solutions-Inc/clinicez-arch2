@@ -284,9 +284,13 @@ describe('Challenger 2 — Adversarial Cashier SOA & Frontend Zero-Write Verific
       expect(patientsContent).toContain("resolveActiveVisitForAction(patient, 'Doctor Consultation'");
       expect(patientsContent).toContain("navigation.navigate('Consultations', {");
 
-      // 2. Health screening (profiling)
+      // 2. Health screening (zero-write resolution -> HealthScreeningModal, separated from PhilHealth info)
       expect(patientsContent).toContain('handleStartProfilingAction = (patient: ClinicPatient) =>');
-      expect(patientsContent).toContain('handleOpenPhilHealthProfile(patient)');
+      expect(patientsContent).toContain("resolveActiveVisitForAction(patient, 'Health Screening'");
+      expect(patientsContent).toContain('setHealthScreeningModalVisible(true)');
+      expect(patientsContent).toContain('<HealthScreeningModal');
+      expect(patientsContent).toContain('<PhilHealthCoverageModal');
+      expect(patientsContent).toContain('setPhilHealthCoverageModalVisible(true)');
 
       // 3. Vitals
       expect(patientsContent).toContain("resolveActiveVisitForAction(patient, 'Vitals Check'");

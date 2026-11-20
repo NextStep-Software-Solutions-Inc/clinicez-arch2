@@ -117,4 +117,37 @@ describe('Per-Visit Cashier SOA Grouping & Add-on Unbilled Flow', () => {
       expect(matches).toEqual([]);
     });
   });
+
+  describe('Suite 5: Health Screening SOA Auto-Attach & YAKAP ₱0.00', () => {
+    test('5.1 handleSelectPatient fetches visit health screenings and lab orders for PreventiveHealthAssessment visits', () => {
+      expect(billingContent).toContain('clinicService.getPatientHealthScreenings(p.patientId, p.queueItemId)');
+      expect(billingContent).toContain("clinicService.getLabOrders(p.patientId, undefined, undefined, { includeUnsigned: true })");
+      expect(billingContent).toContain("s.status !== 'Cancelled' &&");
+      expect(billingContent).toContain("s.status !== 'EscalatedToConsultation'");
+    });
+
+    test('5.2 Regular Health Screening resolves configurable service item (serviceItemId -> defaultHealthScreeningServiceItemId -> defaultHealthScreeningServiceCode -> HEALTH-SCREEN) and ordered screening labs', () => {
+      expect(billingContent).toContain("visitScreening && visitScreening.workflowMode === 'Regular'");
+      expect(billingContent).toContain('effectiveSettings?.defaultHealthScreeningServiceItemId');
+      expect(billingContent).toContain("effectiveSettings?.defaultHealthScreeningServiceCode || 'HEALTH-SCREEN'");
+      expect(billingContent).toContain('id: `screening-${visitScreening.id}`');
+      expect(billingContent).toContain('(labItem as any).isDoneOutsideFacility');
+      expect(billingContent).toContain('id: `lab-${labItem.id');
+    });
+
+    test('5.3 YAKAP FPE mode displays PhilHealth YAKAP FPE Covered (₱0.00) notice, attaches zero-peso YAKAP-FPE line item, and supports optional co-payment', () => {
+      expect(billingContent).toContain('PhilHealth YAKAP FPE Covered (₱0.00)');
+      expect(billingContent).toContain("code: 'YAKAP-FPE'");
+      expect(billingContent).toContain("code: 'YAKAP-COPAY'");
+      expect(billingContent).toContain('upsertYakapCoPaymentLineItem');
+      expect(billingContent).toContain('testID="billing-yakap-fpe-banner"');
+      expect(billingContent).toContain('testID="yakap-copay-toggle"');
+    });
+
+    test('5.4 Vitals-only PreventiveHealthAssessment visits without HealthScreening record do not auto-attach HEALTH-SCREEN or CONSULT', () => {
+      expect(billingContent).toContain("p.visitType !== 'PreventiveHealthAssessment'");
+      // Regular screening auto-attach is strictly gated on visitScreening existing
+      expect(billingContent).toContain("else if (visitScreening && visitScreening.workflowMode === 'Regular')");
+    });
+  });
 });

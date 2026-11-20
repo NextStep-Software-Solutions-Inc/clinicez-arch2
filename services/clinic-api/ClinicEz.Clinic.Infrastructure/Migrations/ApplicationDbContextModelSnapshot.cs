@@ -2072,6 +2072,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<bool>("AllowNurseMidwifeYakapFpeFacilitator")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("AppointmentReminder24hEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -2158,6 +2163,13 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<decimal>("DefaultDoctorSharePercentage")
                         .HasColumnType("numeric");
+
+                    b.Property<string>("DefaultHealthScreeningServiceCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("DefaultHealthScreeningServiceItemId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("DefaultSlotDurationMinutes")
                         .HasColumnType("integer");
@@ -2472,6 +2484,200 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasFilter("\"IsDeleted\" = false");
 
                     b.ToTable("Settings", "public");
+                });
+
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.HealthScreening", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AdultsRoutineScreeningCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("BreastCancerScreeningCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("CervicalCancerScreeningCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClinicalImpression")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ColorectalCancerScreeningCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ConsultationEncounterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Disposition")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("ExaminedByDoctorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExaminedByDoctorName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("FpeClassificationType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsWalkedIn")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("NcdRiskAssessmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("NurseCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NurseScreeningNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PatientPhysicalExamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PatientVitalsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PediatricRoutineScreeningCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PhilHealthAtc")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("PrenatalScreeningServicesCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PreventiveCounselingNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ProfilingTransNo")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ProstateCancerScreeningCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("QueueItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("RecommendedFollowUpDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("ScreenedByNurseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ScreenedByNurseName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("ScreeningDateUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ScreeningType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ServiceDeliveryMethod")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("ServiceItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WorkflowMode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("YakapEnlistmentId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConsultationEncounterId");
+
+                    b.HasIndex("NcdRiskAssessmentId");
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("PatientPhysicalExamId");
+
+                    b.HasIndex("PatientVitalsId");
+
+                    b.HasIndex("QueueItemId");
+
+                    b.HasIndex("ServiceItemId");
+
+                    b.HasIndex("YakapEnlistmentId");
+
+                    b.HasIndex("ClinicId", "QueueItemId");
+
+                    b.HasIndex("ClinicId", "Status");
+
+                    b.HasIndex("ClinicId", "PatientId", "ScreeningDateUtc");
+
+                    b.HasIndex("TenantId", "ClinicId", "PatientId");
+
+                    b.ToTable("HealthScreenings", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.IdempotencyRecord", b =>
@@ -9718,6 +9924,67 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("ConsultationEncounter");
+                });
+
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.HealthScreening", b =>
+                {
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.ConsultationEncounter", "ConsultationEncounter")
+                        .WithMany()
+                        .HasForeignKey("ConsultationEncounterId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.NcdRiskAssessment", "NcdRiskAssessment")
+                        .WithMany()
+                        .HasForeignKey("NcdRiskAssessmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.Patient", "Patient")
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.PatientPhysicalExam", "PatientPhysicalExam")
+                        .WithMany()
+                        .HasForeignKey("PatientPhysicalExamId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.PatientVitals", "PatientVitals")
+                        .WithMany()
+                        .HasForeignKey("PatientVitalsId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.QueueItem", "QueueItem")
+                        .WithMany()
+                        .HasForeignKey("QueueItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.ServiceItem", "ServiceItem")
+                        .WithMany()
+                        .HasForeignKey("ServiceItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.PatientYakapEnlistment", "YakapEnlistment")
+                        .WithMany()
+                        .HasForeignKey("YakapEnlistmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ConsultationEncounter");
+
+                    b.Navigation("NcdRiskAssessment");
+
+                    b.Navigation("Patient");
+
+                    b.Navigation("PatientPhysicalExam");
+
+                    b.Navigation("PatientVitals");
+
+                    b.Navigation("QueueItem");
+
+                    b.Navigation("ServiceItem");
+
+                    b.Navigation("YakapEnlistment");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.Invoice", b =>

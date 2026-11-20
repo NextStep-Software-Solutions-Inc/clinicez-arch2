@@ -87,6 +87,10 @@ public sealed class FacilitySettingsConfiguration : IEntityTypeConfiguration<Fac
             entity.Property(e => e.DateFormat).HasMaxLength(50);
             entity.Property(e => e.TimeFormat).HasMaxLength(20);
 
+            entity.Property(e => e.AllowNurseMidwifeYakapFpeFacilitator).HasDefaultValue(false);
+            entity.Property(e => e.DefaultHealthScreeningServiceItemId);
+            entity.Property(e => e.DefaultHealthScreeningServiceCode).HasMaxLength(50);
+
             entity.HasIndex(e => new { e.TenantId, e.ClinicId })
                 .IsUnique()
                 .HasFilter("\"IsDeleted\" = false");

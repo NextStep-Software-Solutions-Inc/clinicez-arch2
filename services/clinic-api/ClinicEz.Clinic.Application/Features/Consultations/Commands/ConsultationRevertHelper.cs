@@ -51,6 +51,7 @@ public static class ConsultationRevertHelper
         IRepository<NcdRiskAssessment>? ncdRiskRepo = null,
         IRepository<PatientImmunization>? immunizationRepo = null,
         IRepository<RecordAttachment>? attachmentRepo = null,
+        IRepository<HealthScreening>? healthScreeningRepo = null,
         CancellationToken ct = default)
     {
         if (!consultationId.HasValue && !queueItemId.HasValue)
@@ -95,6 +96,7 @@ public static class ConsultationRevertHelper
         ncdRiskRepo = Resolve(ncdRiskRepo);
         immunizationRepo = Resolve(immunizationRepo);
         attachmentRepo = Resolve(attachmentRepo);
+        healthScreeningRepo = Resolve(healthScreeningRepo);
 
         int removedCount = 0;
         var removedIds = new HashSet<Guid>();
@@ -248,6 +250,23 @@ public static class ConsultationRevertHelper
                 foreach (var ra in linkedAttachments)
                 {
                     ra.ConsultationId = null;
+                }
+            }
+
+            if (healthScreeningRepo != null)
+            {
+                var linkedScreenings = await healthScreeningRepo
+                    .Query(hs => hs.ClinicId == clinicId &&
+                                 hs.ConsultationEncounterId.HasValue &&
+                                 unsignedEncounterIds.Contains(hs.ConsultationEncounterId.Value))
+                    .IgnoreQueryFilters()
+                    .ToListAsync(ct);
+
+                foreach (var hs in linkedScreenings)
+                {
+                    hs.ConsultationEncounterId = null;
+                    hs.ConsultationEncounter = null;
+                    healthScreeningRepo.Update(hs);
                 }
             }
         }

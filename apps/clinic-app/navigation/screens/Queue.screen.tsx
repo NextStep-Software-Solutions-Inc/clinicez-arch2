@@ -32,11 +32,14 @@ import {
   isPatientVisibleToStaff,
   resolveCallToRoom,
   PatientQueueItem,
+  ClinicPatient,
   QueueStatus,
   QueueView,
   QueueMetrics,
   ClinicalProcedureRecord,
   ClinicRoom,
+  HealthScreeningRecord,
+  VisitWorkflowMode,
   mapCensusVisitTypeLabel,
   isNurseAssessmentVisitType,
   isPhysicianConsultationVisitType,
@@ -44,6 +47,8 @@ import {
 import { ProcedureExecutionModal } from '../../components/chart/NursingProceduresTab';
 import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
 import DivertEmergencyModal from '../../components/queue/DivertEmergencyModal';
+import HealthScreeningModal from '../../components/screening/HealthScreeningModal';
+import IssueMedicalCertificateModal from '../../components/patient/IssueMedicalCertificateModal';
 
 export default function QueueScreen() {
   const navigation = useNavigation<any>();
@@ -140,8 +145,59 @@ export default function QueueScreen() {
   const [escalateReason, setEscalateReason] = useState<string>('');
   const [isEscalating, setIsEscalating] = useState<boolean>(false);
 
+  // Health Screening active hydration & modal state
+  const [healthScreeningsByQueueId, setHealthScreeningsByQueueId] = useState<Record<string, HealthScreeningRecord | null>>({});
+  const screeningHydrationSeqRef = useRef(0);
+  const lastScreeningKeyRef = useRef<string>('');
+  const [openingScreeningQueueId, setOpeningScreeningQueueId] = useState<string | null>(null);
+  const [screeningModalVisible, setScreeningModalVisible] = useState(false);
+  const [screeningPatient, setScreeningPatient] = useState<ClinicPatient | null>(null);
+  const [screeningQueueItemId, setScreeningQueueItemId] = useState<string | null>(null);
+  const [screeningInitialId, setScreeningInitialId] = useState<string | null>(null);
+  const [screeningInitialTrack, setScreeningInitialTrack] = useState<'Regular' | 'YakapAvailment'>('Regular');
+  const [medCertModalVisible, setMedCertModalVisible] = useState(false);
+  const [medCertPatient, setMedCertPatient] = useState<ClinicPatient | null>(null);
+  const [medCertQueueItemId, setMedCertQueueItemId] = useState<string | null>(null);
+
+  const hydrateActiveHealthScreenings = useCallback(async (items: PatientQueueItem[], force = false) => {
+    const activeScreeningItems = items.filter((item) => {
+      const terminal =
+        item.status === 'Completed' ||
+        item.status === 'DischargedNonDoctor' ||
+        item.status === 'Cancelled' ||
+        item.status === 'NoShow' ||
+        item.status === 'Diverted';
+      return !terminal && item.visitType === 'PreventiveHealthAssessment';
+    });
+    const key = activeScreeningItems.map((i) => `${i.id}:${i.status}`).sort().join('|');
+    if (!force && key === lastScreeningKeyRef.current) return;
+    lastScreeningKeyRef.current = key;
+    const seq = ++screeningHydrationSeqRef.current;
+    if (activeScreeningItems.length === 0) {
+      setHealthScreeningsByQueueId({});
+      return;
+    }
+    const results = await Promise.allSettled(
+      activeScreeningItems.map(async (item) => {
+        const [rows] = await clinicService.getPatientHealthScreenings(item.patientId, item.id);
+        const active = (rows ?? []).find((s) => s.status !== 'Cancelled') ?? null;
+        return [item.id, active] as const;
+      })
+    );
+    if (seq !== screeningHydrationSeqRef.current) return;
+    const nextMap: Record<string, HealthScreeningRecord | null> = {};
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        const [qId, record] = r.value;
+        nextMap[qId] = record;
+      }
+    }
+    setHealthScreeningsByQueueId(nextMap);
+  }, []);
+
   const loadData = useCallback(async () => {
     setError(null);
+    lastScreeningKeyRef.current = '';
     const todayStr = getManilaTodayStr();
     const doctorId = currentStaff?.id;
     const selectedRoomObj =
@@ -165,6 +221,7 @@ export default function QueueScreen() {
         isPatientVisibleToStaff(item, currentStaff, activeRooms),
       );
       setQueue(filtered);
+      void hydrateActiveHealthScreenings(filtered, true);
     }
 
     if (metricsData) {
@@ -172,7 +229,31 @@ export default function QueueScreen() {
     }
     setLoading(false);
     setRefreshing(false);
-  }, [selectedView, selectedStation, currentStaff, activeRooms]);
+  }, [selectedView, selectedStation, currentStaff, activeRooms, hydrateActiveHealthScreenings]);
+
+  const handleOpenHealthScreening = useCallback(async (ticket: PatientQueueItem) => {
+    setOpeningScreeningQueueId(ticket.id);
+    try {
+      const [patientRecord, patErr] = await clinicService.getPatientById(ticket.patientId);
+      if (patErr || !patientRecord) {
+        notify.error(patErr?.message || 'Unable to load patient details for health screening.');
+        return;
+      }
+      const existing = healthScreeningsByQueueId[ticket.id] ?? null;
+      const track: 'Regular' | 'YakapAvailment' =
+        existing?.workflowMode ??
+        ((ticket.visitWorkflowMode as VisitWorkflowMode | undefined) === 'YakapAvailment'
+          ? 'YakapAvailment'
+          : 'Regular');
+      setScreeningPatient(patientRecord);
+      setScreeningQueueItemId(ticket.id);
+      setScreeningInitialId(existing?.id ?? null);
+      setScreeningInitialTrack(track);
+      setScreeningModalVisible(true);
+    } finally {
+      setOpeningScreeningQueueId(null);
+    }
+  }, [healthScreeningsByQueueId]);
 
   useEffect(() => {
     setLoading(true);
@@ -417,6 +498,17 @@ export default function QueueScreen() {
           <View style={styles.queueList}>
             {queue.map((ticket) => {
               const statusBadge = getStatusBadge(ticket.status);
+              const isTerminal =
+                ticket.status === 'Completed' ||
+                ticket.status === 'DischargedNonDoctor' ||
+                ticket.status === 'Cancelled' ||
+                ticket.status === 'NoShow' ||
+                ticket.status === 'Diverted';
+              const isHealthScreeningVisit = ticket.visitType === 'PreventiveHealthAssessment';
+              const activeScreening = isHealthScreeningVisit
+                ? healthScreeningsByQueueId[ticket.id] ?? null
+                : null;
+              const isAwaitingDoctorPe = !isTerminal && activeScreening?.status === 'AwaitingDoctor';
               return (
                 <Card key={ticket.id} style={styles.ticketCard}>
                   <CardHeader
@@ -434,6 +526,14 @@ export default function QueueScreen() {
                             label={mapCensusVisitTypeLabel(ticket.visitType)}
                             variant="neutral"
                             size="sm"
+                          />
+                        ) : null}
+                        {isAwaitingDoctorPe ? (
+                          <Badge
+                            label="Awaiting Doctor PE"
+                            variant="warning"
+                            size="sm"
+                            icon="stethoscope"
                           />
                         ) : null}
                         <Badge
@@ -586,7 +686,19 @@ export default function QueueScreen() {
                         />
                       )}
 
-                      {ticket.status === 'Waiting' && (
+                      {!isTerminal && isHealthScreeningVisit && (
+                        <Button
+                          title="Health screening"
+                          variant={isAwaitingDoctorPe ? 'primary' : 'outline'}
+                          icon="heartPulse"
+                          size="sm"
+                          loading={openingScreeningQueueId === ticket.id}
+                          disabled={Boolean(openingScreeningQueueId)}
+                          onPress={() => handleOpenHealthScreening(ticket)}
+                        />
+                      )}
+
+                      {ticket.status === 'Waiting' && !isHealthScreeningVisit && (
                         <Button
                           title="Triage Patient"
                           variant="outline"
@@ -814,6 +926,66 @@ export default function QueueScreen() {
           </View>
         </Modal>
       </ScrollView>
+
+      {/* GUIDED 4-STATION HEALTH SCREENING MODAL (Outside ScrollView to preserve scroll & filter state) */}
+      <HealthScreeningModal
+        visible={screeningModalVisible}
+        onClose={() => {
+          setScreeningModalVisible(false);
+          setScreeningPatient(null);
+          setScreeningQueueItemId(null);
+          setScreeningInitialId(null);
+          setScreeningInitialTrack('Regular');
+        }}
+        patient={screeningPatient}
+        queueItemId={screeningQueueItemId}
+        initialScreeningId={screeningInitialId}
+        initialTrack={screeningInitialTrack}
+        onSuccess={() => {
+          void loadData();
+        }}
+        onIssueMedCert={({ patient: targetPatient, queueItemId: qId }) => {
+          setScreeningModalVisible(false);
+          setScreeningPatient(null);
+          setScreeningQueueItemId(null);
+          setScreeningInitialId(null);
+          setMedCertPatient(targetPatient);
+          setMedCertQueueItemId(qId);
+          setMedCertModalVisible(true);
+        }}
+        onEscalateToConsultation={({ patient: targetPatient, queueItemId: qId, workflowMode }) => {
+          setScreeningModalVisible(false);
+          setScreeningPatient(null);
+          setScreeningQueueItemId(null);
+          setScreeningInitialId(null);
+          navigation.navigate('Consultations', {
+            queueId: qId,
+            queueItemId: qId,
+            patientId: targetPatient.id,
+            patientName: targetPatient.fullName,
+            directVisitMode: workflowMode === 'YakapAvailment' ? 'yakap' : 'regular',
+          });
+        }}
+      />
+
+      {/* POST-SCREENING MEDICAL CERTIFICATE MODAL */}
+      <IssueMedicalCertificateModal
+        visible={medCertModalVisible}
+        patient={medCertPatient}
+        queueItemId={medCertQueueItemId}
+        allowDuplicateActive
+        onClose={() => {
+          setMedCertModalVisible(false);
+          setMedCertPatient(null);
+          setMedCertQueueItemId(null);
+        }}
+        onSuccess={() => {
+          setMedCertModalVisible(false);
+          setMedCertPatient(null);
+          setMedCertQueueItemId(null);
+          void loadData();
+        }}
+      />
     </ResponsiveLayout>
   );
 }
@@ -904,6 +1076,7 @@ const styles = StyleSheet.create({
   },
   ticketActionsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: theme.spacing.sm,

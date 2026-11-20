@@ -63,6 +63,8 @@ import {
   CensusItem,
   CensusFilterOptions,
   VisitType,
+  VisitWorkflowMode,
+  HealthScreeningRecord,
   ClinicDispensingLogRecord,
   resolveCensusLedgerEntryMeta,
   resolveCensusVisitServiceRows,
@@ -79,6 +81,8 @@ import {
 } from '../../services/clinicService';
 import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
 import DivertEmergencyModal from '../../components/queue/DivertEmergencyModal';
+import HealthScreeningModal from '../../components/screening/HealthScreeningModal';
+import IssueMedicalCertificateModal from '../../components/patient/IssueMedicalCertificateModal';
 import {
   EditVitalsModal,
   NurseCareAndOtcDispensingSection,
@@ -406,6 +410,18 @@ export default function DashboardScreen({
   const [dischargeRemarks, setDischargeRemarks] = useState<string>('');
   const [savingDischarge, setSavingDischarge] = useState<boolean>(false);
   const [divertModalItem, setDivertModalItem] = useState<PatientQueueItem | null>(null);
+  const [healthScreeningsByQueueId, setHealthScreeningsByQueueId] = useState<Record<string, HealthScreeningRecord | null>>({});
+  const screeningHydrationSeqRef = useRef(0);
+  const lastScreeningKeyRef = useRef<string>('');
+  const [openingScreeningQueueId, setOpeningScreeningQueueId] = useState<string | null>(null);
+  const [screeningModalVisible, setScreeningModalVisible] = useState(false);
+  const [screeningPatient, setScreeningPatient] = useState<ClinicPatient | null>(null);
+  const [screeningQueueItemId, setScreeningQueueItemId] = useState<string | null>(null);
+  const [screeningInitialId, setScreeningInitialId] = useState<string | null>(null);
+  const [screeningInitialTrack, setScreeningInitialTrack] = useState<'Regular' | 'YakapAvailment'>('Regular');
+  const [medCertModalVisible, setMedCertModalVisible] = useState(false);
+  const [medCertPatient, setMedCertPatient] = useState<ClinicPatient | null>(null);
+  const [medCertQueueItemId, setMedCertQueueItemId] = useState<string | null>(null);
 
   const activeTabRef = useRef<DashboardTab>('QUEUE');
   const reportTypeRef = useRef<ReportType>('DAILY_EOD');
@@ -671,8 +687,45 @@ export default function DashboardScreen({
     setUnreviewedOtcLogs(logsData ?? []);
   }, []);
 
+  const hydrateActiveHealthScreenings = useCallback(async (items: PatientQueueItem[] | null, force = false) => {
+    const activeScreeningItems = (items ?? []).filter((item) => {
+      const terminal =
+        item.status === 'Completed' ||
+        item.status === 'DischargedNonDoctor' ||
+        item.status === 'Cancelled' ||
+        item.status === 'NoShow' ||
+        item.status === 'Diverted';
+      return !terminal && item.visitType === 'PreventiveHealthAssessment';
+    });
+    const key = activeScreeningItems.map((i) => `${i.id}:${i.status}`).sort().join('|');
+    if (!force && key === lastScreeningKeyRef.current) return;
+    lastScreeningKeyRef.current = key;
+    const seq = ++screeningHydrationSeqRef.current;
+    if (activeScreeningItems.length === 0) {
+      setHealthScreeningsByQueueId({});
+      return;
+    }
+    const results = await Promise.allSettled(
+      activeScreeningItems.map(async (item) => {
+        const [rows] = await clinicService.getPatientHealthScreenings(item.patientId, item.id);
+        const active = (rows ?? []).find((s) => s.status !== 'Cancelled') ?? null;
+        return [item.id, active] as const;
+      })
+    );
+    if (seq !== screeningHydrationSeqRef.current) return;
+    const nextMap: Record<string, HealthScreeningRecord | null> = {};
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        const [qId, record] = r.value;
+        nextMap[qId] = record;
+      }
+    }
+    setHealthScreeningsByQueueId(nextMap);
+  }, []);
+
   const loadData = useCallback(async () => {
     const todayStr = getManilaTodayStr();
+    lastScreeningKeyRef.current = '';
     const [
       [metricsData, metricsErr],
       [queueData, queueErr],
@@ -698,6 +751,7 @@ export default function DashboardScreen({
     setMetrics(metricsData ?? null);
     setQueue(queueData ?? null);
     setQueueError(queueErr || metricsErr ? (queueErr ?? metricsErr)?.message ?? 'Request failed' : null);
+    void hydrateActiveHealthScreenings(queueData ?? null, true);
 
     setAnalytics(analyticsData ?? null);
     setAnalyticsError(analyticsErr ? analyticsErr.message : null);
@@ -710,7 +764,35 @@ export default function DashboardScreen({
     setUnreviewedOtcLogs(otcLogsData ?? []);
     const reportErr = eodErr ?? censusErr ?? morbidityErr ?? taxErr ?? sharesErr;
     setReportsError(reportErr ? reportErr.message : null);
-  }, []);
+  }, [hydrateActiveHealthScreenings]);
+
+  useEffect(() => {
+    void hydrateActiveHealthScreenings(queue);
+  }, [queue, hydrateActiveHealthScreenings]);
+
+  const handleOpenHealthScreening = useCallback(async (item: PatientQueueItem) => {
+    setOpeningScreeningQueueId(item.id);
+    try {
+      const [patientRecord, patErr] = await clinicService.getPatientById(item.patientId);
+      if (patErr || !patientRecord) {
+        notify.error(patErr?.message || 'Unable to load patient details for health screening.');
+        return;
+      }
+      const existing = healthScreeningsByQueueId[item.id] ?? null;
+      const track: 'Regular' | 'YakapAvailment' =
+        existing?.workflowMode ??
+        ((item.visitWorkflowMode as VisitWorkflowMode | undefined) === 'YakapAvailment'
+          ? 'YakapAvailment'
+          : 'Regular');
+      setScreeningPatient(patientRecord);
+      setScreeningQueueItemId(item.id);
+      setScreeningInitialId(existing?.id ?? null);
+      setScreeningInitialTrack(track);
+      setScreeningModalVisible(true);
+    } finally {
+      setOpeningScreeningQueueId(null);
+    }
+  }, [healthScreeningsByQueueId]);
 
   const loadAnalytics = useCallback(async (start?: string, end?: string) => {
     setAnalyticsLoading(true);
@@ -1669,6 +1751,12 @@ export default function DashboardScreen({
             const hasExceptionActions = canNoShow || canCancel;
             const hasEmergencyActions = canDivert;
             const serviceBadge = getServiceBadge(item.visitType);
+            const activeScreening =
+              item.visitType === 'PreventiveHealthAssessment'
+                ? healthScreeningsByQueueId[item.id] ?? null
+                : null;
+            const isAwaitingDoctorPe = !isTerminal && activeScreening?.status === 'AwaitingDoctor';
+            const canLaunchScreening = !isTerminal && item.visitType === 'PreventiveHealthAssessment';
 
             return (
               <Card key={item.id}>
@@ -1702,6 +1790,9 @@ export default function DashboardScreen({
                       ) : null}
                       {isOverdueWait ? (
                         <Badge label="Waiting > 60m" variant="emergency" icon="alert" />
+                      ) : null}
+                      {isAwaitingDoctorPe ? (
+                        <Badge label="Awaiting Doctor PE" variant="warning" size="sm" icon="stethoscope" />
                       ) : null}
                       <Badge label={badge.label} variant={badge.variant} icon={badge.icon} />
                     </View>
@@ -1796,6 +1887,17 @@ export default function DashboardScreen({
                                       handleOpenTriage(item);
                                     }
                                   }}
+                                />
+                              ) : null}
+                              {canLaunchScreening ? (
+                                <Button
+                                  title="Health screening"
+                                  variant={isAwaitingDoctorPe ? 'primary' : 'outline'}
+                                  size="sm"
+                                  icon="heartPulse"
+                                  loading={openingScreeningQueueId === item.id}
+                                  disabled={Boolean(openingScreeningQueueId)}
+                                  onPress={() => handleOpenHealthScreening(item)}
                                 />
                               ) : null}
                               {isNurseAssessmentVisitType(item.visitType) &&
@@ -4970,6 +5072,66 @@ export default function DashboardScreen({
         onSuccess={() => {
           setDivertModalItem(null);
           loadData();
+        }}
+      />
+
+      {/* Guided 4-Station Health Screening Modal (Outside ScrollView to preserve scroll & filter state) */}
+      <HealthScreeningModal
+        visible={screeningModalVisible}
+        onClose={() => {
+          setScreeningModalVisible(false);
+          setScreeningPatient(null);
+          setScreeningQueueItemId(null);
+          setScreeningInitialId(null);
+          setScreeningInitialTrack('Regular');
+        }}
+        patient={screeningPatient}
+        queueItemId={screeningQueueItemId}
+        initialScreeningId={screeningInitialId}
+        initialTrack={screeningInitialTrack}
+        onSuccess={() => {
+          void loadData();
+        }}
+        onIssueMedCert={({ patient: targetPatient, queueItemId: qId }) => {
+          setScreeningModalVisible(false);
+          setScreeningPatient(null);
+          setScreeningQueueItemId(null);
+          setScreeningInitialId(null);
+          setMedCertPatient(targetPatient);
+          setMedCertQueueItemId(qId);
+          setMedCertModalVisible(true);
+        }}
+        onEscalateToConsultation={({ patient: targetPatient, queueItemId: qId, workflowMode }) => {
+          setScreeningModalVisible(false);
+          setScreeningPatient(null);
+          setScreeningQueueItemId(null);
+          setScreeningInitialId(null);
+          navigation.navigate('Consultations', {
+            queueId: qId,
+            queueItemId: qId,
+            patientId: targetPatient.id,
+            patientName: targetPatient.fullName,
+            directVisitMode: workflowMode === 'YakapAvailment' ? 'yakap' : 'regular',
+          });
+        }}
+      />
+
+      {/* Post-Screening Medical Certificate / Fit-to-Work Modal */}
+      <IssueMedicalCertificateModal
+        visible={medCertModalVisible}
+        patient={medCertPatient}
+        queueItemId={medCertQueueItemId}
+        allowDuplicateActive
+        onClose={() => {
+          setMedCertModalVisible(false);
+          setMedCertPatient(null);
+          setMedCertQueueItemId(null);
+        }}
+        onSuccess={() => {
+          setMedCertModalVisible(false);
+          setMedCertPatient(null);
+          setMedCertQueueItemId(null);
+          void loadData();
         }}
       />
     </ResponsiveLayout>

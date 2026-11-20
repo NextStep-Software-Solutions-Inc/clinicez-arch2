@@ -82,7 +82,11 @@ public sealed record UpdateClinicSettingsCommand(
     bool? EnableTeleconsultation = null,
     DateOnly? DohLtoExpiryDate = null,
     bool ClearDohLtoExpiryDate = false,
-    bool SkipPendingVerificationSync = false) : IRequest<ClinicSettingsDto>;
+    bool SkipPendingVerificationSync = false,
+    bool? AllowNurseMidwifeYakapFpeFacilitator = null,
+    Guid? DefaultHealthScreeningServiceItemId = null,
+    string? DefaultHealthScreeningServiceCode = null,
+    bool ClearDefaultHealthScreeningServiceItemId = false) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -408,6 +412,19 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
                 settings.EnableTeleconsultation = false;
             }
         }
+
+        if (request.AllowNurseMidwifeYakapFpeFacilitator.HasValue)
+            settings.AllowNurseMidwifeYakapFpeFacilitator = request.AllowNurseMidwifeYakapFpeFacilitator.Value;
+
+        if (request.ClearDefaultHealthScreeningServiceItemId || request.DefaultHealthScreeningServiceItemId == Guid.Empty)
+            settings.DefaultHealthScreeningServiceItemId = null;
+        else if (request.DefaultHealthScreeningServiceItemId.HasValue)
+            settings.DefaultHealthScreeningServiceItemId = request.DefaultHealthScreeningServiceItemId.Value;
+
+        if (request.DefaultHealthScreeningServiceCode != null)
+            settings.DefaultHealthScreeningServiceCode = string.IsNullOrWhiteSpace(request.DefaultHealthScreeningServiceCode)
+                ? null
+                : request.DefaultHealthScreeningServiceCode.Trim();
 
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";

@@ -18,5 +18,11 @@ public sealed record PatientPhilHealthMembershipDto(
     string? MembershipCategoryDesc = null,
     string? EmployerPin = null,
     string? EmployerName = null,
-    string? DefaultWalkInAtc = null
+    string? DefaultWalkInAtc = null,
+    Guid? PatientId = null,
+    string? MemberPin = null,
+    string? PrincipalMemberLandlineNumber = null,
+    string? PrincipalMemberMobileNumber = null,
+    string? PrincipalMemberEmail = null,
+    DateTime? UpdatedAtUtc = null
 );
