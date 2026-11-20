@@ -1810,28 +1810,34 @@ export default function StaffManagementTab({
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
+                    style={isCompact ? styles.filterChipScrollMobile : styles.filterChipScroll}
                     contentContainerStyle={styles.filterChipGroup}
+                    testID="staff-status-filter-scroll"
                   >
                     <Chip
                       label={`All (${statusCounts.all})`}
                       active={statusFilter === 'all'}
                       onPress={() => setStatusFilter('all')}
+                      size="sm"
                     />
                     <Chip
                       label={`Active (${statusCounts.active})`}
                       active={statusFilter === 'active'}
                       onPress={() => setStatusFilter('active')}
+                      size="sm"
                     />
                     <Chip
                       label={`Invited (${statusCounts.invited})`}
                       active={statusFilter === 'invited'}
                       onPress={() => setStatusFilter('invited')}
+                      size="sm"
                     />
                     {statusCounts.inactive > 0 ? (
                       <Chip
                         label={`Inactive (${statusCounts.inactive})`}
                         active={statusFilter === 'inactive'}
                         onPress={() => setStatusFilter('inactive')}
+                        size="sm"
                       />
                     ) : null}
                   </ScrollView>
@@ -1841,12 +1847,15 @@ export default function StaffManagementTab({
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
+                    style={styles.roleFilterScroll}
                     contentContainerStyle={styles.filterChipGroup}
+                    testID="staff-role-filter-scroll"
                   >
                     <Chip
                       label="All Roles"
                       active={roleFilter === 'all'}
                       onPress={() => setRoleFilter('all')}
+                      size="sm"
                     />
                     {roleFilterOptions.map(({ role: r, count }) => (
                       <Chip
@@ -1854,6 +1863,7 @@ export default function StaffManagementTab({
                         label={`${r} (${count})`}
                         active={roleFilter === r}
                         onPress={() => setRoleFilter(r)}
+                        size="sm"
                       />
                     ))}
                   </ScrollView>
@@ -3406,12 +3416,14 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   filterToolbar: {
+    width: '100%',
     gap: theme.spacing.sm,
     paddingBottom: theme.spacing.sm,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
   },
   filterTopRow: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
@@ -3420,15 +3432,35 @@ const styles = StyleSheet.create({
   filterSearchInput: {
     flexGrow: 1,
     flexShrink: 1,
-    minWidth: 240,
+    flexBasis: 0,
+    minWidth: 220,
   },
   filterSearchInputMobile: {
     width: '100%',
+  },
+  filterChipScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
+  },
+  filterChipScrollMobile: {
+    flexGrow: 0,
+    flexShrink: 1,
+    width: '100%',
+    maxWidth: '100%',
+  },
+  roleFilterScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    width: '100%',
+    maxWidth: '100%',
   },
   filterChipGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
+    flexGrow: 0,
   },
   filterSummaryRow: {
     flexDirection: 'row',

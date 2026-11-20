@@ -13,22 +13,38 @@ export function Chip({
   active,
   onPress,
   disabled = false,
+  size = 'md',
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
   disabled?: boolean;
+  size?: 'sm' | 'md';
 }) {
+  const isSmall = size === 'sm';
   return (
     <Pressable
       onPress={disabled ? undefined : onPress}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ selected: active, disabled }}
-      style={[styles.chip, active && styles.chipActive, disabled && styles.chipDisabled]}
+      style={[
+        styles.chip,
+        isSmall && styles.chipSm,
+        active && styles.chipActive,
+        disabled && styles.chipDisabled,
+      ]}
     >
       <ThemedText
-        variant={active ? 'smallBold' : 'small'}
+        variant={
+          isSmall
+            ? active
+              ? 'captionBold'
+              : 'caption'
+            : active
+            ? 'smallBold'
+            : 'small'
+        }
         color={active ? theme.colors.primary : theme.colors.textSecondary}
         numberOfLines={1}
       >
@@ -104,6 +120,10 @@ const styles = StyleSheet.create({
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderDark,
     flexShrink: 0,
+  },
+  chipSm: {
+    paddingHorizontal: theme.spacing.sm + 2,
+    paddingVertical: theme.spacing.xs,
   },
   chipActive: {
     backgroundColor: theme.colors.primaryLight,

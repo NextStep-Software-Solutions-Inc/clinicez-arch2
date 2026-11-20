@@ -148,6 +148,7 @@ const {
   default: StaffManagementTab,
   buildStaffOverflowMenuItems,
 } = await import('../components/settings/StaffManagementTab');
+const { Chip } = await import('../components/settings/common');
 
 describe('Staff Management UX & Helper Enhancements', () => {
   beforeEach(() => {
@@ -385,6 +386,8 @@ describe('Staff Management UX & Helper Enhancements', () => {
 
     expect(markup).toContain('data-testid="staff-filter-toolbar"');
     expect(markup).toContain('data-testid="staff-search-input"');
+    expect(markup).toContain('data-testid="staff-status-filter-scroll"');
+    expect(markup).toContain('data-testid="staff-role-filter-scroll"');
     expect(markup).toContain('All (4)');
     expect(markup).toContain('Active (2)');
     expect(markup).toContain('Invited (1)');
@@ -403,5 +406,23 @@ describe('Staff Management UX & Helper Enhancements', () => {
     expect(markup).not.toContain('Submit for Verification');
     expect(markup).not.toContain('Resubmit PRC');
     expect(markup).not.toContain('Not Listed');
+  });
+
+  test('6. Chip size="sm" uses compact padding and caption typography for inline filter bars', () => {
+    const smEl = Chip({ label: 'Active (9)', active: true, onPress: () => {}, size: 'sm' }) as any;
+    const mdEl = Chip({ label: 'Doctor', active: false, onPress: () => {} }) as any;
+
+    const smStyles = (smEl.props.style as any[]).filter(Boolean);
+    const mdStyles = (mdEl.props.style as any[]).filter(Boolean);
+
+    expect(smStyles.some((s) => s.paddingVertical === 4 && s.paddingHorizontal === 10)).toBe(true);
+    expect(mdStyles.some((s) => s.paddingVertical === 4)).toBe(false);
+    expect(smEl.props.children.props.variant).toBe('captionBold');
+    expect(mdEl.props.children.props.variant).toBe('small');
+
+    const smMarkup = renderToStaticMarkup(
+      React.createElement(Chip, { label: 'All (15)', active: false, onPress: () => {}, size: 'sm' })
+    );
+    expect(smMarkup).toContain('All (15)');
   });
 });
