@@ -169,7 +169,6 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
         };
 
         const string initialCaseNo = "C00921202600001";
-        const string initialEnlistNo = "E00921202600001";
         const string initialProfTransNo = "P00921202600001";
 
         patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
@@ -178,9 +177,8 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             EnlistmentDate = new DateOnly(2026, 1, 1),
             ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
+            Source = YakapEnlistmentSource.AssistedIntake,
             CaseNo = initialCaseNo,
-            EnlistmentTransNo = initialEnlistNo,
             ProfilingTransNo = initialProfTransNo
         });
 
@@ -216,9 +214,8 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
         entry.EnlistmentDate.Should().Be(new DateOnly(2026, 2, 15));
         entry.Source.Should().Be(YakapEnlistmentSource.PhilHealthMasterlist);
 
-        // All 3 control numbers MUST be strictly retained!
+        // Control numbers MUST be strictly retained!
         entry.CaseNo.Should().Be(initialCaseNo);
-        entry.EnlistmentTransNo.Should().Be(initialEnlistNo);
         entry.ProfilingTransNo.Should().Be(initialProfTransNo);
     }
 
@@ -252,7 +249,6 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
         };
 
         const string initialCaseNo = "C00921202600002";
-        const string initialEnlistNo = "E00921202600002";
         const string initialProfTransNo = "P00921202600002";
 
         patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
@@ -261,9 +257,8 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             EnlistmentDate = new DateOnly(2026, 1, 5),
             ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
+            Source = YakapEnlistmentSource.AssistedIntake,
             CaseNo = initialCaseNo,
-            EnlistmentTransNo = initialEnlistNo,
             ProfilingTransNo = initialProfTransNo
         });
 
@@ -297,7 +292,6 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
 
         // Control numbers strictly retained
         entry.CaseNo.Should().Be(initialCaseNo);
-        entry.EnlistmentTransNo.Should().Be(initialEnlistNo);
         entry.ProfilingTransNo.Should().Be(initialProfTransNo);
 
         // Verification that strict guard rejects future encounters on this transferred enlistment
@@ -343,9 +337,8 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             EnlistmentDate = new DateOnly(2024, 2, 1),
             ValidUntil = new DateOnly(2024, 12, 31),
             Status = YakapEnlistmentStatus.Expired,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
+            Source = YakapEnlistmentSource.AssistedIntake,
             CaseNo = "C00921202400010",
-            EnlistmentTransNo = "E00921202400010",
             ProfilingTransNo = "P00921202400010"
         });
 
@@ -356,9 +349,8 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             EnlistmentDate = new DateOnly(2025, 1, 15),
             ValidUntil = new DateOnly(2025, 12, 31),
             Status = YakapEnlistmentStatus.Expired,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
+            Source = YakapEnlistmentSource.AssistedIntake,
             CaseNo = "C00921202500055",
-            EnlistmentTransNo = "E00921202500055",
             ProfilingTransNo = "P00921202500055"
         });
 
@@ -430,7 +422,6 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
         };
 
         const string caseNo = "C00921202600777";
-        const string enlistNo = "E00921202600777";
         const string profNo = "P00921202600777";
 
         patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
@@ -439,9 +430,8 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             EnlistmentDate = new DateOnly(2026, 1, 1),
             ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
+            Source = YakapEnlistmentSource.AssistedIntake,
             CaseNo = caseNo,
-            EnlistmentTransNo = enlistNo,
             ProfilingTransNo = profNo
         });
 
@@ -478,7 +468,6 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
         enlistments[0].Status.Should().Be(YakapEnlistmentStatus.Active);
         enlistments[0].Source.Should().Be(YakapEnlistmentSource.PhilHealthMasterlist);
         enlistments[0].CaseNo.Should().Be(caseNo);
-        enlistments[0].EnlistmentTransNo.Should().Be(enlistNo);
         enlistments[0].ProfilingTransNo.Should().Be(profNo);
     }
 
@@ -585,21 +574,23 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
 
         var syncService = new PhilHealthMasterlistSyncService(dbContext, null, clinicContext);
 
-        // XML payload containing varied PIN formats and a dummy all-zero placeholder
-        const string xmlPayload = """
-            <?xml version="1.0" encoding="utf-8"?>
-            <KONSULTA_MASTERLIST pAccreNo="000921" pYear="2026">
-                <!-- Patient 1: Active, raw PIN format -->
-                <ASSIGNMENT pAssignedPin="123456789012" pAssignedDate="2026-01-10" pAssignedStatus="1" pEffYear="2026" pAssignedLastName="Magbanua" pAssignedFirstName="Teresa" />
-                <!-- Patient 2: Transferred, hyphenated PIN format -->
-                <ASSIGNMENT pAssignedPin="03-026307850-7" pAssignedDate="2026-02-15" pAssignedStatus="2" pEffYear="2026" pAssignedLastName="del Pilar" pAssignedFirstName="Marcelo" />
-                <!-- Adversarial Entry: All-zero placeholder PIN -->
-                <ASSIGNMENT pAssignedPin="00-000000000-0" pAssignedDate="2026-01-01" pAssignedStatus="1" pEffYear="2026" pAssignedLastName="Dummy" pAssignedFirstName="Zero" />
-            </KONSULTA_MASTERLIST>
-            """;
+        // PCAPI v2.0 Service 05 Masterlist download containing varied PIN formats and an all-zero placeholder
+        var downloadResponse = new ClinicEz.Clinic.Application.Features.Yakap.DTOs.MasterlistDownloadResponse(
+            AccreNo: "H00000921",
+            TransmittalNo: "RH000009212026011000001",
+            EffYear: "2026",
+            StartDate: "01/01/2026",
+            EndDate: "02/28/2026",
+            TotalRecords: 3,
+            Assignments: new List<ClinicEz.Clinic.Application.Features.Yakap.DTOs.MasterlistAssignmentItem>
+            {
+                new("123456789012", "Magbanua", "Teresa", "", "", "1868-10-13", "F", "2026-01-10", "1"),
+                new("03-026307850-7", "del Pilar", "Marcelo", "", "", "1850-08-30", "M", "2026-02-15", "2"),
+                new("00-000000000-0", "Dummy", "Zero", "", "", "2000-01-01", "M", "2026-01-01", "1")
+            });
 
         // Act
-        var result = await syncService.SyncXmlAsync(tenantId, clinicId, xmlPayload);
+        var result = await syncService.SyncMasterlistDownloadAsync(tenantId, clinicId, downloadResponse);
 
         // Assert
         result.TotalProcessed.Should().Be(3);

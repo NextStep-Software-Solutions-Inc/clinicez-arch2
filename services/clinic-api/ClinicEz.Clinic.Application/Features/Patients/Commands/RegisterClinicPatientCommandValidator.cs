@@ -31,16 +31,8 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
 
         RuleFor(x => x.Sex)
             .NotEmpty().WithMessage("Sex is required.")
-            .Must(s =>
-                s.Equals("Male", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("Female", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("Intersex", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("Unknown", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("M", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("F", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("I", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("U", StringComparison.OrdinalIgnoreCase))
-            .WithMessage("Sex must be 'Male', 'Female', 'Intersex', or 'Unknown'.");
+            .Must(BeValidPhilHealthSex)
+            .WithMessage("Sex must be 'Male' or 'Female'.");
 
         When(x => !string.IsNullOrWhiteSpace(x.PatientCode), () =>
         {
@@ -89,6 +81,16 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
                 .Must(s => BloodTypeParser.TryParse(s, out _))
                 .WithMessage("Blood type must be a valid ABO/Rh blood group (e.g., A+, A-, B+, B-, AB+, AB-, O+, O-, Unknown).");
         });
+    }
+
+    public static bool BeValidPhilHealthSex(string? sex)
+    {
+        if (string.IsNullOrWhiteSpace(sex)) return false;
+        var trimmed = sex.Trim();
+        return trimmed.Equals("Male", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("Female", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("M", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("F", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool BeValidPhilHealthMod11(string pin)

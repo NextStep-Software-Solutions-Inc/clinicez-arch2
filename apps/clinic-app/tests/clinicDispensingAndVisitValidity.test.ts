@@ -209,9 +209,9 @@ describe('Clinic Stock & OTC Dispensing, ROS Association & Visit Validity Suite'
         expect(hay).not.toContain('pharmacy');
       }
 
-      // Confirm only valid clinical entry points exist (Consult & Vitals)
-      expect(directItems.some((i) => i.id === 'service-consultation' && i.label === 'Consult')).toBe(true);
-      expect(directItems.some((i) => i.id === 'service-vitals' && i.label === 'Vitals')).toBe(true);
+      // Confirm only valid clinical entry points exist (Start consult & Record vitals)
+      expect(directItems.some((i) => i.id === 'service-consultation' && i.label === 'Start consult')).toBe(true);
+      expect(directItems.some((i) => i.id === 'service-vitals' && i.label === 'Record vitals')).toBe(true);
     });
   });
 

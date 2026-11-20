@@ -977,7 +977,7 @@ export default function JoinClient({
                     </h3>
                   </div>
                   <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">
-                    Required for Konsulta
+                    Required for PhilHealth coverage
                   </span>
                 </div>
 

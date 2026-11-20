@@ -87,6 +87,8 @@ public sealed class SaveHealthScreeningProgressCommandHandler
     private readonly IRepository<PatientYakapEnlistment>? _enlistmentRepo;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
     private readonly IRepository<StaffMember>? _staffRepo;
+    private readonly IRepository<PatientIdentityVerification>? _verificationRepo;
+    private readonly IRepository<YakapSubmission>? _submissionRepo;
 
     public SaveHealthScreeningProgressCommandHandler(
         IRepository<HealthScreening> screeningRepo,
@@ -104,7 +106,9 @@ public sealed class SaveHealthScreeningProgressCommandHandler
         IRepository<PatientPhilHealthMembership>? membershipRepo = null,
         IRepository<PatientYakapEnlistment>? enlistmentRepo = null,
         IWorkspaceProfileProvider? workspaceProfiles = null,
-        IRepository<StaffMember>? staffRepo = null)
+        IRepository<StaffMember>? staffRepo = null,
+        IRepository<PatientIdentityVerification>? verificationRepo = null,
+        IRepository<YakapSubmission>? submissionRepo = null)
     {
         _screeningRepo = screeningRepo;
         _patientRepo = patientRepo;
@@ -122,6 +126,8 @@ public sealed class SaveHealthScreeningProgressCommandHandler
         _enlistmentRepo = enlistmentRepo;
         _workspaceProfiles = workspaceProfiles;
         _staffRepo = staffRepo;
+        _verificationRepo = verificationRepo;
+        _submissionRepo = submissionRepo;
     }
 
     public async Task<HealthScreeningDetailDto> Handle(
@@ -470,7 +476,9 @@ public sealed class SaveHealthScreeningProgressCommandHandler
             _membershipRepo,
             _enlistmentRepo,
             _settingsRepo,
-            _workspaceProfiles);
+            _workspaceProfiles,
+            _verificationRepo,
+            _submissionRepo);
 
         return await detailQuery.BuildDetailAsync(screening, cancellationToken);
     }

@@ -105,6 +105,14 @@ export interface PhilHealthPinInputProps {
   disabled?: boolean;
   editable?: boolean;
   error?: string;
+  /** When true, local Mod-11 completion prompts server/PhilHealth verification instead of showing a green verified state prematurely. */
+  requireVerification?: boolean;
+  /** Remote verification state paired with requireVerification (sequence + PhilHealth DB confirmation). */
+  verificationStatus?: 'idle' | 'checking' | 'verified' | 'invalid' | 'server_error';
+  /** Custom verified message shown inside the input description once confirmed. */
+  verificationMessage?: string;
+  /** Optional action button or accessory aligned inline beside the PIN input box. */
+  rightAccessory?: React.ReactNode;
   containerStyle?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -121,6 +129,10 @@ export default function PhilHealthPinInput({
   disabled = false,
   editable = true,
   error: externalError,
+  requireVerification = false,
+  verificationStatus = 'idle',
+  verificationMessage,
+  rightAccessory,
   containerStyle,
   testID = 'philhealth-pin-input',
 }: PhilHealthPinInputProps) {
@@ -158,81 +170,119 @@ export default function PhilHealthPinInput({
 
   // Border & background state calculation
   const hasError = !!externalError || (validation.isComplete && !validation.isValid);
+  const isServerErrorWarning = !hasError && verificationStatus === 'server_error';
   const isIncompleteOnBlur = touched && validation.digitsCount > 0 && !validation.isComplete;
   const isValidComplete = validation.isComplete && validation.isValid;
+  const isVerifiedSuccess = isValidComplete && verificationStatus === 'verified' && !externalError;
+  const isSequenceOnlyValid = isValidComplete && !requireVerification && !externalError;
 
   const wrapperBorderColor = hasError
-    ? theme.colors.emergencyBorder
-    : isIncompleteOnBlur
-    ? theme.colors.warningBorder
-    : isValidComplete
-    ? theme.colors.successBorder
+    ? theme.colors.emergency
+    : isIncompleteOnBlur || isServerErrorWarning
+    ? theme.colors.warning
+    : isVerifiedSuccess || isSequenceOnlyValid
+    ? theme.colors.success
     : isFocused
     ? theme.colors.primary
     : theme.colors.borderDark;
 
   const wrapperBgColor = hasError
     ? theme.colors.emergencySubtle
-    : isIncompleteOnBlur
+    : isIncompleteOnBlur || isServerErrorWarning
     ? theme.colors.warningBg
     : theme.colors.surface;
+
+  const pinFieldBox = (
+    <View
+      style={[
+        styles.inputWrapper,
+        rightAccessory ? styles.inputWrapperFlex : null,
+        { borderColor: wrapperBorderColor, backgroundColor: wrapperBgColor },
+        !isInteractive && styles.disabledWrapper,
+      ]}
+    >
+      <View style={styles.leftIcon}>
+        <IconSlot
+          value="shield"
+          size={theme.sizes.iconSm}
+          color={
+            hasError
+              ? theme.colors.emergency
+              : isServerErrorWarning
+                ? theme.colors.warning
+              : isVerifiedSuccess || isSequenceOnlyValid
+                ? theme.colors.success
+                : theme.colors.textMuted
+          }
+        />
+      </View>
+
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={handleChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={theme.colors.textLight}
+        keyboardType="numeric"
+        maxLength={14} // 12 digits + 2 hyphens
+        editable={isInteractive}
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleBlur}
+        autoCorrect={false}
+        autoCapitalize="none"
+      />
+
+      {value.length > 0 && isInteractive ? (
+        <Pressable
+          onPress={() => handleChangeText('')}
+          style={styles.clearBtn}
+          hitSlop={theme.spacing.sm}
+        >
+          <IconSlot value="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
 
   return (
     <View style={[styles.container, containerStyle]} testID={testID}>
       {label ? (
         <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
           {label}
-          {required ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
+          {required ? <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText> : null}
         </ThemedText>
       ) : null}
 
-      <View
-        style={[
-          styles.inputWrapper,
-          { borderColor: wrapperBorderColor, backgroundColor: wrapperBgColor },
-          !isInteractive && styles.disabledWrapper,
-        ]}
-      >
-        <View style={styles.leftIcon}>
-          <IconSlot
-            value="shield"
-            size={theme.sizes.iconSm}
-            color={isValidComplete ? theme.colors.success : theme.colors.textMuted}
-          />
+      {rightAccessory ? (
+        <View style={styles.inputAccessoryRow}>
+          {pinFieldBox}
+          {rightAccessory}
         </View>
-
-        <TextInput
-          style={styles.input}
-          value={value}
-          onChangeText={handleChangeText}
-          placeholder={placeholder}
-          placeholderTextColor={theme.colors.textLight}
-          keyboardType="numeric"
-          maxLength={14} // 12 digits + 2 hyphens
-          editable={isInteractive}
-          onFocus={() => setIsFocused(true)}
-          onBlur={handleBlur}
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
-
-        {value.length > 0 && isInteractive ? (
-          <Pressable
-            onPress={() => handleChangeText('')}
-            style={styles.clearBtn}
-            hitSlop={theme.spacing.sm}
-          >
-            <IconSlot value="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-          </Pressable>
-        ) : null}
-      </View>
+      ) : (
+        pinFieldBox
+      )}
 
       {/* Visual Feedback Row */}
       {hasError ? (
         <View style={styles.feedbackRow}>
           <IconSlot value="alertCircle" size={theme.fontSizes.xs} color={theme.colors.emergency} />
-          <ThemedText variant="caption" color={theme.colors.emergencyText}>
+          <ThemedText variant="caption" color={theme.colors.emergency}>
             {externalError || validation.errorMessage}
+          </ThemedText>
+        </View>
+      ) : verificationStatus === 'checking' ? (
+        <View style={styles.feedbackRow}>
+          <IconSlot value="clock" size={theme.fontSizes.xs} color={theme.colors.info} />
+          <ThemedText variant="caption" color={theme.colors.textSecondary}>
+            Checking format and PhilHealth records...
+          </ThemedText>
+        </View>
+      ) : isServerErrorWarning ? (
+        <View style={styles.feedbackRow}>
+          <IconSlot value="alert" size={theme.fontSizes.xs} color={theme.colors.warning} />
+          <ThemedText variant="caption" color={theme.colors.warningText}>
+            {verificationMessage ||
+              'Unable to reach PhilHealth verification server. Retry Verify PIN or defer verification to continue.'}
           </ThemedText>
         </View>
       ) : isIncompleteOnBlur ? (
@@ -242,11 +292,25 @@ export default function PhilHealthPinInput({
             PhilHealth PIN must be 12 digits ({validation.digitsCount}/12 entered)
           </ThemedText>
         </View>
+      ) : isVerifiedSuccess ? (
+        <View style={styles.feedbackRow}>
+          <IconSlot value="checkCircle" size={theme.fontSizes.xs} color={theme.colors.success} />
+          <ThemedText variant="captionBold" color={theme.colors.successText}>
+            {verificationMessage || 'Verified with PhilHealth records'}
+          </ThemedText>
+        </View>
+      ) : isValidComplete && requireVerification ? (
+        <View style={styles.feedbackRow}>
+          <IconSlot value="info" size={theme.fontSizes.xs} color={theme.colors.primary} />
+          <ThemedText variant="caption" color={theme.colors.textSecondary}>
+            Valid 12-digit format. Click Verify PIN to confirm in PhilHealth records.
+          </ThemedText>
+        </View>
       ) : isValidComplete ? (
         <View style={styles.feedbackRow}>
           <IconSlot value="checkCircle" size={theme.fontSizes.xs} color={theme.colors.success} />
           <ThemedText variant="captionBold" color={theme.colors.successText}>
-            Valid PhilHealth PIN
+            Valid 12-digit PhilHealth PIN format
           </ThemedText>
         </View>
       ) : helperText ? (
@@ -268,6 +332,16 @@ const styles = StyleSheet.create({
   },
   label: {
     marginBottom: 2,
+  },
+  inputAccessoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+  },
+  inputWrapperFlex: {
+    flex: 1,
+    minWidth: 200,
   },
   inputWrapper: {
     flexDirection: 'row',

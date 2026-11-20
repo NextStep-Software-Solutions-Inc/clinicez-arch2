@@ -74,6 +74,31 @@ public sealed class UpsertPatientPhilHealthMembershipCommandHandler
         var formattedPatientPin = FormatPinIfPresent(request.PhilHealthPin);
         var formattedPrincipalPin = FormatPinIfPresent(request.PrincipalMemberPin);
 
+        if (isDependent
+            && !string.IsNullOrWhiteSpace(formattedPatientPin)
+            && !string.IsNullOrWhiteSpace(formattedPrincipalPin)
+            && PhilHealthPinNormalizer.Normalize(formattedPatientPin) == PhilHealthPinNormalizer.Normalize(formattedPrincipalPin))
+        {
+            throw new BadRequestException("Principal Member PIN cannot be the same as the patient's own PhilHealth PIN.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(formattedPatientPin))
+        {
+            var conflict = await ClinicEz.Clinic.Application.Features.Yakap.Common.YakapWorkflowHelpers.FindExistingPinOwnerAsync(
+                _patientRepo,
+                _membershipRepo,
+                _clinicContext.ClinicId,
+                formattedPatientPin,
+                request.PatientId,
+                cancellationToken);
+
+            if (conflict != null)
+            {
+                var codeSuffix = string.IsNullOrWhiteSpace(conflict.PatientCode) ? string.Empty : $" ({conflict.PatientCode})";
+                throw new ConflictException($"PhilHealth PIN '{formattedPatientPin}' is already assigned to another patient: {conflict.FullName}{codeSuffix}.");
+            }
+        }
+
         // Sync Patient.PhilHealthNumber (clear to null when DD without personal PIN)
         patient.PhilHealthNumber = formattedPatientPin;
         patient.UpdatedAt = now;

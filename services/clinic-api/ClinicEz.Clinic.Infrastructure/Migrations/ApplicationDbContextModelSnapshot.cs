@@ -2110,10 +2110,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<Guid?>("BranchId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("BranchKonsultaEndpoint")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
                     b.Property<string>("BranchName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -2321,10 +2317,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<int>("KioskTokenVersion")
                         .HasColumnType("integer");
-
-                    b.Property<string>("KonsultaEndpoint")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
 
                     b.Property<DateTime?>("LastVerificationSubmittedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -2608,6 +2600,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("PatientIdentityVerificationId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("PatientPhysicalExamId")
                         .HasColumnType("uuid");
 
@@ -2691,6 +2686,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<Guid?>("YakapEnlistmentId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("YakapSubmissionId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ConsultationEncounterId");
@@ -2698,6 +2696,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("NcdRiskAssessmentId");
 
                     b.HasIndex("PatientId");
+
+                    b.HasIndex("PatientIdentityVerificationId");
 
                     b.HasIndex("PatientPhysicalExamId");
 
@@ -2708,6 +2708,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("ServiceItemId");
 
                     b.HasIndex("YakapEnlistmentId");
+
+                    b.HasIndex("YakapSubmissionId");
 
                     b.HasIndex("ClinicId", "QueueItemId");
 
@@ -6951,13 +6953,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<DateOnly>("EnlistmentDate")
                         .HasColumnType("date");
 
-                    b.Property<DateOnly?>("EnlistmentTransDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("EnlistmentTransNo")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
                     b.Property<string>("FacilitatorName")
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
@@ -7389,61 +7384,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasFilter("\"IsDeleted\" = false");
 
                     b.ToTable("PhilHealthDailySequences", "public");
-                });
-
-            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PhilHealthSequenceTracker", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ClinicId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("CurrentSequence")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DeletedBy")
-                        .HasColumnType("text");
-
-                    b.Property<string>("EffectiveYear")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("LastAssignedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("SequenceType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("TenantId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("PhilHealthSequenceTrackers", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PrescriptionItem", b =>
@@ -10001,6 +9941,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.PatientIdentityVerification", "IdentityVerification")
+                        .WithMany()
+                        .HasForeignKey("PatientIdentityVerificationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("ClinicEz.Clinic.Domain.Entities.PatientPhysicalExam", "PatientPhysicalExam")
                         .WithMany()
                         .HasForeignKey("PatientPhysicalExamId")
@@ -10027,7 +9972,14 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasForeignKey("YakapEnlistmentId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.YakapSubmission", "YakapSubmission")
+                        .WithMany()
+                        .HasForeignKey("YakapSubmissionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("ConsultationEncounter");
+
+                    b.Navigation("IdentityVerification");
 
                     b.Navigation("NcdRiskAssessment");
 
@@ -10042,6 +9994,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Navigation("ServiceItem");
 
                     b.Navigation("YakapEnlistment");
+
+                    b.Navigation("YakapSubmission");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.Invoice", b =>

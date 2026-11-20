@@ -222,7 +222,6 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 e.EnlistmentDate,
                 e.ValidUntil,
                 e.CaseNo,
-                e.EnlistmentTransNo,
                 e.ProfilingTransNo,
                 e.ProfilingDate,
                 e.ProfilingAtc,
@@ -231,7 +230,14 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 e.ConsentSignedAtUtc,
                 e.CreatedByStaffId,
                 e.CreatedByStaffName,
-                e.EnlistmentTransDate
+                e.PatientId,
+                string.IsNullOrWhiteSpace(e.HciAccreditationNumber) ? null : e.HciAccreditationNumber,
+                e.SelectionControlNumber,
+                e.YesReferenceNo,
+                e.RegistrationStatusCode,
+                e.EmpanelmentMethod,
+                e.IdentityVerificationId,
+                e.McaFlag
             )).ToList();
         }
 
@@ -1106,7 +1112,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
     {
         if (patient.YakapEnlistments != null && patient.YakapEnlistments.Count > 0)
         {
-            var active = patient.YakapEnlistments.LastOrDefault(e => e.Status == YakapEnlistmentStatus.Active && !string.IsNullOrWhiteSpace(e.CaseNo));
+            var active = patient.YakapEnlistments.LastOrDefault(e => e.Status.IsUsableActiveStatus() && !string.IsNullOrWhiteSpace(e.CaseNo));
             if (active != null) return active.CaseNo;
         }
 

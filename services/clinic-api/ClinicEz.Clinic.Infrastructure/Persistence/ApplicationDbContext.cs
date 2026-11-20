@@ -99,7 +99,6 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<PatientBpMonitoringDay> PatientBpMonitoringDays { get; set; } = null!;
     public DbSet<YakapSubmission> YakapSubmissions { get; set; } = null!;
     public DbSet<YakapSubmissionError> YakapSubmissionErrors { get; set; } = null!;
-    public DbSet<PhilHealthSequenceTracker> PhilHealthSequenceTrackers { get; set; } = null!;
     public DbSet<PatientCodeSequenceTracker> PatientCodeSequenceTrackers { get; set; } = null!;
     public DbSet<PhilHealthCatalogItem> PhilHealthCatalogItems { get; set; } = null!;
     public DbSet<PhilHealthCatalogImportLog> PhilHealthCatalogImportLogs { get; set; } = null!;

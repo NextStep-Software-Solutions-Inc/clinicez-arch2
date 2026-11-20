@@ -138,7 +138,7 @@ export default function RecordExternalDispenseModal({
         placeholder="e.g. OR-2026-081923"
         value={receiptNumber}
         onChangeText={setReceiptNumber}
-        helperText="Required for BIR and PhilHealth Konsulta audit compliance."
+        helperText="Required for BIR and PhilHealth audit compliance."
       />
 
       <View style={styles.twoColRow}>

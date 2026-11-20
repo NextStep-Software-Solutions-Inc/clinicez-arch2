@@ -202,7 +202,9 @@ internal static class HealthScreeningHelper
         PatientVitals? vitals,
         PatientPhysicalExam? physicalExam,
         NcdRiskAssessment? ncdAssessment,
-        DateOnly referenceDate)
+        DateOnly referenceDate,
+        PatientIdentityVerification? latestVerification = null,
+        YakapSubmission? latestSubmission = null)
     {
         var missing = new List<string>();
         var warnings = new List<string>();
@@ -211,37 +213,43 @@ internal static class HealthScreeningHelper
         bool hasValidPin = !string.IsNullOrWhiteSpace(resolvedPin) && PhilHealthPinNormalizer.IsValidPin(resolvedPin);
         if (!hasValidPin)
         {
-            missing.Add("Valid 12-digit PhilHealth PIN (patient or principal sponsor) is required.");
+            missing.Add("Enter a valid 12-digit PhilHealth number for the patient (or their sponsor).");
         }
 
         var nonDeletedEnlistments = enlistments.Where(e => !e.IsDeleted).ToList();
         var activeEnlistment = nonDeletedEnlistments.FirstOrDefault(e => e.IsActiveOn(referenceDate))
             ?? nonDeletedEnlistments.FirstOrDefault(e =>
                 e.EffectiveYear == referenceDate.Year &&
-                e.Status is YakapEnlistmentStatus.Active or YakapEnlistmentStatus.Registered or YakapEnlistmentStatus.Verified);
+                e.Status.IsUsableActiveStatus());
 
         bool hasActiveEnlistment = activeEnlistment != null;
         if (!hasActiveEnlistment)
         {
-            missing.Add($"Active PhilHealth YAKAP enlistment covering {referenceDate:yyyy-MM-dd} is required.");
+            missing.Add($"Assign this patient to your clinic for PhilHealth annual checkups covering {referenceDate:yyyy-MM-dd}.");
+        }
+
+        bool hasIdentityVerification = latestVerification != null && latestVerification.VerifiedAtUtc.HasValue;
+        if (!hasIdentityVerification)
+        {
+            warnings.Add("Confirm patient identity (Face Scan, Text Code, or Photo ID) to enable immediate PhilHealth submission.");
         }
 
         bool hasAtcOrWalkIn = screening.IsWalkedIn || !string.IsNullOrWhiteSpace(screening.PhilHealthAtc);
         if (!hasAtcOrWalkIn)
         {
-            missing.Add("PhilHealth Authorization Transaction Code (ATC) or Walk-In confirmation is required.");
+            missing.Add("Enter a PhilHealth Visit Code or mark the visit as Walk-In.");
         }
 
         bool hasVitals = vitals != null;
         if (!hasVitals)
         {
-            missing.Add("Station 1 Vitals & Anthropometrics must be recorded.");
+            missing.Add("Complete Step 1: Vitals & Measurements first.");
         }
 
         bool hasPhysicalExam = physicalExam != null;
         if (!hasPhysicalExam)
         {
-            warnings.Add("Station 3 9-System Physical Exam should be recorded before final physician sign-off.");
+            warnings.Add("Complete Step 3: Physical Exam before doctor sign-off.");
         }
 
         int ageYears = referenceDate.Year - patient.DateOfBirth.Year;
@@ -250,7 +258,7 @@ internal static class HealthScreeningHelper
         bool hasNcdAssessment = !isAdult || ncdAssessment != null;
         if (isAdult && ncdAssessment == null)
         {
-            warnings.Add("PhilPEN NCD Risk Assessment is recommended for adults aged 20+.");
+            warnings.Add("Heart & diabetes risk questions are recommended for adults aged 20 and older.");
         }
 
         var currentYearEntry = nonDeletedEnlistments.FirstOrDefault(e => e.EffectiveYear == referenceDate.Year);
@@ -261,7 +269,7 @@ internal static class HealthScreeningHelper
 
         if (alreadyCompletedThisYear)
         {
-            warnings.Add($"Annual YAKAP FPE already stamped for {referenceDate.Year} (TransNo: {currentYearEntry?.ProfilingTransNo ?? "Recorded"}).");
+            warnings.Add($"PhilHealth annual checkup already completed for {referenceDate.Year}.");
         }
 
         return new YakapFpeReadinessDto(
@@ -276,7 +284,13 @@ internal static class HealthScreeningHelper
             ExistingProfilingTransNo: currentYearEntry?.ProfilingTransNo,
             ExistingProfilingDate: currentYearEntry?.ProfilingDate,
             MissingRequirements: missing,
-            Warnings: warnings);
+            Warnings: warnings,
+            HasIdentityVerification: hasIdentityVerification,
+            VerificationMode: latestVerification?.Mode.ToString(),
+            SelectionStatus: currentYearEntry?.RegistrationStatusCode,
+            YesReferenceNo: latestSubmission?.YesReferenceNo ?? currentYearEntry?.YesReferenceNo,
+            SubmissionStatus: latestSubmission?.ProcessingStatus.ToString(),
+            UploadTransactionNo: latestSubmission?.UploadTransactionNo);
     }
 
     public static string MapDeliveryMethodCode(YakapServiceDeliveryMethod method) => method switch
@@ -332,7 +346,9 @@ internal static class HealthScreeningHelper
             BreastCancerScreeningCode: hs.BreastCancerScreeningCode,
             CervicalCancerScreeningCode: hs.CervicalCancerScreeningCode,
             ColorectalCancerScreeningCode: hs.ColorectalCancerScreeningCode,
-            ProstateCancerScreeningCode: hs.ProstateCancerScreeningCode);
+            ProstateCancerScreeningCode: hs.ProstateCancerScreeningCode,
+            PatientIdentityVerificationId: hs.PatientIdentityVerificationId,
+            YakapSubmissionId: hs.YakapSubmissionId);
 
     public static HealthScreeningDetailDto ToDetailDto(
         HealthScreening hs,
@@ -343,7 +359,8 @@ internal static class HealthScreeningHelper
         NcdRiskAssessment? ncdAssessment,
         IReadOnlyList<LabOrder> labOrders,
         YakapFpeReadinessDto? yakapReadiness,
-        FacilitySettings? settings) =>
+        FacilitySettings? settings,
+        YakapSubmission? submission = null) =>
         new(
             Id: hs.Id,
             PatientId: hs.PatientId,
@@ -392,7 +409,12 @@ internal static class HealthScreeningHelper
             LabOrders: labOrders.Select(MapLabOrder).ToList(),
             YakapReadiness: yakapReadiness,
             RequiresPhysicianSignOff: RequiresPhysicianSignOff(hs.ScreeningType, hs.WorkflowMode, settings),
-            AllowNurseMidwifeYakapFpeFacilitator: settings?.AllowNurseMidwifeYakapFpeFacilitator ?? false);
+            AllowNurseMidwifeYakapFpeFacilitator: settings?.AllowNurseMidwifeYakapFpeFacilitator ?? false,
+            PatientIdentityVerificationId: hs.PatientIdentityVerificationId,
+            YakapSubmissionId: hs.YakapSubmissionId ?? submission?.Id,
+            YakapSubmissionStatus: submission?.ProcessingStatus.ToString() ?? yakapReadiness?.SubmissionStatus,
+            YakapUploadTransactionNo: submission?.UploadTransactionNo ?? yakapReadiness?.UploadTransactionNo,
+            YesReferenceNo: submission?.YesReferenceNo ?? yakapReadiness?.YesReferenceNo);
 
     public static TriageVitalsDto? MapVitals(PatientVitals? v, QueueItem? queueItem = null)
     {

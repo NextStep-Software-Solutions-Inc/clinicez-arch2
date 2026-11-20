@@ -188,15 +188,20 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
 
         var syncService = new PhilHealthMasterlistSyncService(dbContext, null, clinicContext);
 
-        const string xmlPayload = """
-            <?xml version="1.0" encoding="utf-8"?>
-            <KONSULTA_MASTERLIST pAccreNo="000921" pYear="2026">
-                <ASSIGNMENT pAssignedPin="12-345678901-2" pAssignedDate="2026-07-20T14:30:00Z" pAssignedStatus="1" pEffYear="2026" pAssignedLastName="Silang" pAssignedFirstName="Gabriela" />
-            </KONSULTA_MASTERLIST>
-            """;
+        var downloadResponse = new ClinicEz.Clinic.Application.Features.Yakap.DTOs.MasterlistDownloadResponse(
+            AccreNo: "H00000921",
+            TransmittalNo: "RH000009212026072000001",
+            EffYear: "2026",
+            StartDate: "07/20/2026",
+            EndDate: "07/20/2026",
+            TotalRecords: 1,
+            Assignments: new List<ClinicEz.Clinic.Application.Features.Yakap.DTOs.MasterlistAssignmentItem>
+            {
+                new("12-345678901-2", "Silang", "Gabriela", "", "", "1980-03-19", "F", "2026-07-20T14:30:00Z", "1")
+            });
 
         // Act
-        var result = await syncService.SyncXmlAsync(tenantId, clinicId, xmlPayload);
+        var result = await syncService.SyncMasterlistDownloadAsync(tenantId, clinicId, downloadResponse);
 
         // Assert
         result.MatchedPatientsCount.Should().Be(1);
@@ -238,7 +243,6 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
         };
 
         const string expectedCaseNo = "C00921202600888";
-        const string expectedEnlistNo = "E00921202600888";
         const string expectedProfTransNo = "P00921202600888";
 
         patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
@@ -247,9 +251,8 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
             EnlistmentDate = new DateOnly(2026, 1, 1),
             ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
+            Source = YakapEnlistmentSource.AssistedIntake,
             CaseNo = expectedCaseNo,
-            EnlistmentTransNo = expectedEnlistNo,
             ProfilingTransNo = expectedProfTransNo
         });
 
@@ -282,7 +285,6 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
 
         // Control numbers strictly retained
         entry.CaseNo.Should().Be(expectedCaseNo);
-        entry.EnlistmentTransNo.Should().Be(expectedEnlistNo);
         entry.ProfilingTransNo.Should().Be(expectedProfTransNo);
     }
 }

@@ -545,7 +545,7 @@ export default function DocumentTemplatesSettingsTab({
                 value={accreditationNumber}
                 onChangeText={setAccreditationNumber}
                 placeholder="e.g. PHIC-ACC-2026-9912"
-                helperText="PhilHealth accreditation number for Konsulta / Yakap compliance."
+                helperText="PhilHealth accreditation number for YAKAP compliance."
                 testID="input-phic-acc"
               />
             </View>

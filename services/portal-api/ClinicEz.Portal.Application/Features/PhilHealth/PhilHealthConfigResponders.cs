@@ -13,11 +13,8 @@ namespace ClinicEz.Portal.Application.Features.PhilHealth;
 /// <summary>PhilHealth settings shared by the hub responders and the branch configuration endpoint.</summary>
 public static class PhilHealthDefaults
 {
-    /// <summary>Canonical PhilHealth PCAPI base URL.</summary>
+    /// <summary>Canonical PhilHealth PCAPI v2.0 base URL.</summary>
     public const string PcapiBaseUrl = "https://pcapi.philhealth.gov.ph";
-
-    /// <summary>Konsulta SOAP endpoint fallback of a branch that did not set one.</summary>
-    public const string KonsultaEndpoint = "https://staging.philhealth.gov.ph/KONSULTA/SOAP";
 }
 
 /// <summary>
@@ -136,7 +133,7 @@ public sealed class PhilHealthConfigUpsertRequestedResponder(
         branch.PhilHealthSoftwareCertificateId = request.SoftwareCertificateId.Trim();
         branch.PhilHealthBaseUrl = !string.IsNullOrWhiteSpace(request.BaseUrl)
             ? request.BaseUrl.Trim()
-            : (!string.IsNullOrWhiteSpace(request.KonsultaEndpoint) ? request.KonsultaEndpoint.Trim() : PhilHealthDefaults.PcapiBaseUrl);
+            : PhilHealthDefaults.PcapiBaseUrl;
         branch.IsPhilHealthAccredited = request.IsActive;
 
         if (!string.IsNullOrWhiteSpace(request.SecretKey))

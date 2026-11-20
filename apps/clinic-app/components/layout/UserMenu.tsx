@@ -10,6 +10,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import { useThemeMode } from '../../context/ThemeModeContext';
 import {
+  isBiometricEnabled,
+  offlineUnlockSupported,
+  subscribeUnlockConfigChange,
+} from '../../services/offlineUnlock';
+import {
   getActiveAudioPreferences,
   setActiveAudioPreferences,
 } from '../../utils/alertSounds';
@@ -50,6 +55,30 @@ export default function UserMenu({
   const { current: staffCurrent, loading: staffLoading } = useStaff();
   const { isDark, toggleDarkMode } = useThemeMode();
   const navigation = useNavigation<any>();
+  const [hasBiometric, setHasBiometric] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!offlineUnlockSupported || !user) {
+      setHasBiometric(false);
+      return undefined;
+    }
+    let active = true;
+    const refreshBiometric = () => {
+      void isBiometricEnabled()
+        .then((enabled) => {
+          if (active) setHasBiometric(Boolean(enabled));
+        })
+        .catch(() => {
+          if (active) setHasBiometric(false);
+        });
+    };
+    refreshBiometric();
+    const unsubscribe = subscribeUnlockConfigChange?.(refreshBiometric);
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [user?.id, authState]);
 
   const resolvedName = (staffCurrent ? formatStaffName(staffCurrent) : (user?.name ?? '')).trim();
   const resolvedEmail = (staffCurrent?.email || user?.email || '').trim();
@@ -114,7 +143,10 @@ export default function UserMenu({
 
   const quickToggleLabel = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
   const quickToggleIcon: IconName = isDark ? 'sun' : 'moon';
-  const canQuickLock = !offline && typeof lockWorkstation === 'function';
+  const hasPersonalPin =
+    Boolean(user?.hasQuickUnlockPin) && (user?.sessionPolicy?.allowStaffPinUnlock ?? true);
+  const canQuickLock =
+    !offline && typeof lockWorkstation === 'function' && (hasPersonalPin || hasBiometric);
 
   const lockButton = canQuickLock ? (
     compact ? (

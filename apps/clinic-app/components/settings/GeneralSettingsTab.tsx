@@ -332,9 +332,9 @@ export default function GeneralSettingsTab(props: GeneralSettingsTabProps) {
                     allowClear
                     allowCustom={false}
                     modalTitle="Default Health Screening Service Item"
-                    modalSubtitle="Automatically attached to Regular Health Screenings on Cashier SOA (PhilHealth YAKAP FPE remains ₱0.00 covered)."
+                    modalSubtitle="Automatically attached to Standard Checkups on Cashier SOA (PhilHealth Annual Checkup remains ₱0.00 covered)."
                     icon="heartPulse"
-                    helperText="Defaults to catalog code HEALTH-SCREEN when unset. PhilHealth YAKAP FPE screenings remain covered at ₱0.00."
+                    helperText="Defaults to catalog code HEALTH-SCREEN when unset. PhilHealth Annual Checkup screenings remain covered at ₱0.00."
                   />
                   <ThemedText variant="caption" color={theme.colors.textMuted}>
                     Active code: {resolvedScreeningCode}

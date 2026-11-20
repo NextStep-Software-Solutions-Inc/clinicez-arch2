@@ -316,7 +316,7 @@ public sealed class Tier5BackendAdversarialCoverageTests
         var patient = CreateTestPatient("PAT-REL-01");
         patient.YakapEnlistments = new List<PatientYakapEnlistment>
         {
-            new() { EffectiveYear = 2026, EnlistmentDate = new DateOnly(2026, 2, 1), ValidUntil = new DateOnly(2026, 12, 31), Status = YakapEnlistmentStatus.Active, CaseNo = "C000921202600001", EnlistmentTransNo = "E000921202600001", ProfilingTransNo = "P000921202600001" },
+            new() { EffectiveYear = 2026, EnlistmentDate = new DateOnly(2026, 2, 1), ValidUntil = new DateOnly(2026, 12, 31), Status = YakapEnlistmentStatus.Active, CaseNo = "C000921202600001", ProfilingTransNo = "P000921202600001" },
             new() { EffectiveYear = 2025, EnlistmentDate = new DateOnly(2025, 1, 1), ValidUntil = new DateOnly(2025, 12, 31), Status = YakapEnlistmentStatus.Expired, IsDeleted = true }
         };
 
@@ -370,7 +370,6 @@ public sealed class Tier5BackendAdversarialCoverageTests
             ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
             CaseNo = "C000921202600001",
-            EnlistmentTransNo = "E000921202600001",
             ProfilingTransNo = "P000921202600001"
         };
         patient.AddOrRenewYakapEnlistment(initial);
@@ -384,7 +383,6 @@ public sealed class Tier5BackendAdversarialCoverageTests
             Status = YakapEnlistmentStatus.Active,
             Source = YakapEnlistmentSource.PhilHealthMasterlist,
             CaseNo = null,
-            EnlistmentTransNo = "",
             ProfilingTransNo = "   "
         };
         patient.AddOrRenewYakapEnlistment(updated);
@@ -393,7 +391,6 @@ public sealed class Tier5BackendAdversarialCoverageTests
         enlistments.Should().HaveCount(1);
         enlistments[0].Source.Should().Be(YakapEnlistmentSource.PhilHealthMasterlist);
         enlistments[0].CaseNo.Should().Be("C000921202600001");
-        enlistments[0].EnlistmentTransNo.Should().Be("E000921202600001");
         enlistments[0].ProfilingTransNo.Should().Be("P000921202600001");
     }
 
@@ -574,29 +571,31 @@ public sealed class Tier5BackendAdversarialCoverageTests
     }
 
     [Fact]
-    public async Task MasterlistSync_XmlSync_WithMalformedXml_ThrowsAndLogsCleanly()
+    public async Task MasterlistSync_Download_WithNullPayload_ThrowsArgumentNullException()
     {
         var clinicContext = Substitute.For<IClinicContext>();
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
         var service = new PhilHealthMasterlistSyncService(dbContext, null, clinicContext);
-        var act = () => service.SyncXmlAsync("tenant1", Guid.NewGuid(), "<INVALID_XML><UNCLOSED>");
+        Func<Task> act = () => service.SyncMasterlistDownloadAsync("tenant1", Guid.NewGuid(), null!);
 
-        await act.Should().ThrowAsync<Exception>();
+        await act.Should().ThrowAsync<ArgumentNullException>();
     }
 
     [Fact]
-    public async Task MasterlistSync_XmlSync_EmptyContent_ReturnsZero()
+    public async Task MasterlistSync_Download_EmptyAssignments_ReturnsZero()
     {
         var clinicContext = Substitute.For<IClinicContext>();
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
         var service = new PhilHealthMasterlistSyncService(dbContext, null, clinicContext);
-        var res1 = await service.SyncXmlAsync("tenant1", Guid.NewGuid(), "");
+        var res1 = await service.SyncMasterlistDownloadAsync(
+            "tenant1",
+            Guid.NewGuid(),
+            new ClinicEz.Clinic.Application.Features.Yakap.DTOs.MasterlistDownloadResponse(
+                "H00000921", "RH000009212026010100001", "2026", null, null, 0,
+                Array.Empty<ClinicEz.Clinic.Application.Features.Yakap.DTOs.MasterlistAssignmentItem>()));
         res1.TotalProcessed.Should().Be(0);
-
-        var res2 = await service.SyncXmlAsync("tenant1", Guid.NewGuid(), "   \n");
-        res2.TotalProcessed.Should().Be(0);
     }
 
     [Fact]
@@ -665,7 +664,6 @@ public sealed class Tier5BackendAdversarialCoverageTests
             ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
             CaseNo = "C000921202600888",
-            EnlistmentTransNo = "E000921202600888",
             ProfilingTransNo = "P000921202600888"
         });
 
@@ -694,7 +692,6 @@ public sealed class Tier5BackendAdversarialCoverageTests
         enlistments[1].EffectiveYear.Should().Be(2026);
         enlistments[1].Status.Should().Be(YakapEnlistmentStatus.Transferred);
         enlistments[1].CaseNo.Should().Be("C000921202600888"); // Preserved!
-        enlistments[1].EnlistmentTransNo.Should().Be("E000921202600888"); // Preserved!
         enlistments[1].ProfilingTransNo.Should().Be("P000921202600888"); // Preserved!
     }
 
@@ -759,17 +756,15 @@ public sealed class Tier5BackendAdversarialCoverageTests
             accreditationNumber: "000921",
             effectiveYear: "2026");
 
-        // Assert: C, E, P allocated; SOAP is null
-        result.CaseNumber.Should().StartWith("C0009212026");
-        result.EnlistmentTransactionNumber.Should().StartWith("E0009212026");
-        result.ProfilingTransactionNumber.Should().StartWith("P0009212026");
+        // Assert: C, P allocated; SOAP is null (23B daily format)
+        result.CaseNumber.Should().HaveLength(23).And.StartWith("C0000009212026");
+        result.ProfilingTransactionNumber.Should().HaveLength(23).And.StartWith("P0000009212026");
         result.SoapTransactionNumber.Should().BeNull();
 
         // Check persisted patient record
         var reloaded = await dbContext.Patients.IgnoreQueryFilters().FirstAsync(p => p.Id == patientId);
         var active = reloaded.ResolveActiveEnlistmentForYearOrThrow(2026);
         active.CaseNo.Should().Be(result.CaseNumber);
-        active.EnlistmentTransNo.Should().Be(result.EnlistmentTransactionNumber);
         active.ProfilingTransNo.Should().Be(result.ProfilingTransactionNumber);
     }
 
@@ -814,11 +809,10 @@ public sealed class Tier5BackendAdversarialCoverageTests
             accreditationNumber: "000921",
             effectiveYear: "2026");
 
-        // Assert: All 4 keys allocated
-        result.CaseNumber.Should().StartWith("C0009212026");
-        result.EnlistmentTransactionNumber.Should().StartWith("E0009212026");
-        result.ProfilingTransactionNumber.Should().StartWith("P0009212026");
-        result.SoapTransactionNumber.Should().StartWith("S0009212026");
+        // Assert: All 23B keys allocated
+        result.CaseNumber.Should().HaveLength(23).And.StartWith("C0000009212026");
+        result.ProfilingTransactionNumber.Should().HaveLength(23).And.StartWith("P0000009212026");
+        result.SoapTransactionNumber.Should().HaveLength(23).And.StartWith("S0000009212026");
 
         // Check persisted encounter record
         var reloadedEnc = await dbContext.Consultations.IgnoreQueryFilters().FirstAsync(e => e.Id == encounterId);
@@ -835,7 +829,6 @@ public sealed class Tier5BackendAdversarialCoverageTests
             effectiveYear: "2026");
 
         repeatedResult.CaseNumber.Should().Be(result.CaseNumber);
-        repeatedResult.EnlistmentTransactionNumber.Should().Be(result.EnlistmentTransactionNumber);
         repeatedResult.ProfilingTransactionNumber.Should().Be(result.ProfilingTransactionNumber);
         repeatedResult.SoapTransactionNumber.Should().Be(result.SoapTransactionNumber);
     }
@@ -891,12 +884,10 @@ public sealed class Tier5BackendAdversarialCoverageTests
 
         allocatedResults.Should().HaveCount(concurrentPatients);
         var caseNumbers = allocatedResults.Select(r => r.CaseNumber).ToList();
-        var enlistNumbers = allocatedResults.Select(r => r.EnlistmentTransactionNumber).ToList();
         var profNumbers = allocatedResults.Select(r => r.ProfilingTransactionNumber).ToList();
 
         // All allocated keys are strictly distinct (no collisions)
         caseNumbers.Distinct().Should().HaveCount(concurrentPatients);
-        enlistNumbers.Distinct().Should().HaveCount(concurrentPatients);
         profNumbers.Distinct().Should().HaveCount(concurrentPatients);
     }
 
@@ -967,7 +958,7 @@ public sealed class Tier5BackendAdversarialCoverageTests
         entries1[0].EffectiveYear.Should().Be(2027);
         entries1[0].ValidUntil.Should().Be(new DateOnly(2027, 12, 31));
         entries1[0].Status.Should().Be(YakapEnlistmentStatus.Active);
-        entries1[0].Source.Should().Be(YakapEnlistmentSource.ClinicEnlistment);
+        entries1[0].Source.Should().Be(YakapEnlistmentSource.AssistedIntake);
         entries1[0].CaseNo.Should().BeNull();
 
         // 2. Missing effective_year and default EnlistmentDate -> falls back to UtcNow.Year
@@ -1054,33 +1045,29 @@ public sealed class Tier5BackendAdversarialCoverageTests
 
         var service = new PhilHealthMasterlistSyncService(dbContext, null, clinicContext);
 
-        // 1. SyncProxyResponseAsync using Beneficiaries collection (RawXml is null)
-        var proxyResponse = new YakapMasterlistProxyResponse(
-            IsSuccess: true,
-            AccreditationNumber: "000921",
-            EffectiveYear: "2026",
-            TotalCount: 1,
-            Beneficiaries: new[]
+        // 1. SyncMasterlistDownloadAsync using PCAPI v2.0 MasterlistDownloadResponse
+        var downloadResponse = new ClinicEz.Clinic.Application.Features.Yakap.DTOs.MasterlistDownloadResponse(
+            AccreNo: "H00000921",
+            TransmittalNo: "RH000009212026030100001",
+            EffYear: "2026",
+            StartDate: "03/01/2026",
+            EndDate: "03/01/2026",
+            TotalRecords: 1,
+            Assignments: new[]
             {
-                new YakapBeneficiaryDto(
-                    PhilHealthIdentificationNumber: "12-345678901-2",
-                    MemberPhilHealthIdentificationNumber: "12-345678901-2",
+                new ClinicEz.Clinic.Application.Features.Yakap.DTOs.MasterlistAssignmentItem(
+                    PatientPin: "12-345678901-2",
                     LastName: "Test",
                     FirstName: "Proxy",
                     MiddleName: null,
-                    ExtensionName: null,
-                    DateOfBirth: "1990-01-01",
+                    ExtName: null,
+                    BirthDate: "1990-01-01",
                     Sex: "M",
-                    MemberType: "MM",
-                    EffectivityYear: "2026",
-                    RegistrationDate: "2026-03-01",
-                    PackageType: "K",
-                    AssignedStatus: "1")
-            },
-            RawXml: null,
-            ErrorMessage: null);
+                    AssignedDate: "2026-03-01",
+                    Status: "1")
+            });
 
-        var res1 = await service.SyncProxyResponseAsync(tenantId, clinicId, proxyResponse);
+        var res1 = await service.SyncMasterlistDownloadAsync(tenantId, clinicId, downloadResponse);
         res1.MatchedPatientsCount.Should().Be(1);
 
         // 2. SyncMasterlistBeneficiariesAsync
@@ -1116,20 +1103,20 @@ public sealed class Tier5BackendAdversarialCoverageTests
 
         var generator = new PhilHealthSequenceGenerator(dbContext, NullLogger<PhilHealthSequenceGenerator>.Instance);
 
-        // 1. Accreditation with dashes and letters: "HCI-NCR-921" -> digits "921" -> padded "000921"
+        // 1. Accreditation sanitized to 9 uppercase alphanumeric chars: "HCI-NCR-921" -> "HCINCR921"
         var caseNo = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "HCI-NCR-921", "2026");
-        caseNo.Should().Be("C000921202600001");
+        caseNo.Should().HaveLength(23).And.StartWith("CHCINCR9212026").And.EndWith("00001");
 
-        // 2. Accreditation empty -> defaults to "000921"
-        var transNo = await generator.GenerateTransmittalNumberAsync(tenantId, clinicId, "", "2026");
-        transNo.Should().Be("R000921202600001");
+        // 2. Accreditation empty -> defaults to "H00000001"
+        var referralNo = await generator.GenerateTransactionNumberAsync(tenantId, clinicId, PhilHealthSequenceType.Referral, "", "2026");
+        referralNo.Should().HaveLength(23).And.StartWith("RH000000012026").And.EndWith("00001");
 
-        // 3. Various sequence types
+        // 3. Various sequence types (921 -> 000000921)
         var soapNo = await generator.GenerateTransactionNumberAsync(tenantId, clinicId, PhilHealthSequenceType.Soap, "921", "2026");
-        soapNo.Should().Be("S000921202600001");
+        soapNo.Should().HaveLength(23).And.StartWith("S0000009212026").And.EndWith("00001");
 
         var medNo = await generator.GenerateTransactionNumberAsync(tenantId, clinicId, PhilHealthSequenceType.Medicine, "921", "2026");
-        medNo.Should().Be("M000921202600001");
+        medNo.Should().HaveLength(23).And.StartWith("M0000009212026").And.EndWith("00001");
     }
 }
 

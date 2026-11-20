@@ -260,4 +260,27 @@ describe('PhilHealthSettingsTab — Milestone 2 Branch Inheritance & Credentials
     expect(markup).toContain('Bypassed (Facility uses explicit override credentials)');
     expect(markup).not.toContain('Inherited from Branch');
   });
+
+  test('6. Displays Connection URL Required when neither clinic nor branch PhilHealthBaseUrl is set', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(PhilHealthSettingsTab, {
+        accreditationNumber: 'P10038831',
+        clinicName: 'Nextstep OPD',
+        settings: {
+          id: 's-6',
+          tenantId: 't-6',
+          clinicId: 'c-6',
+          clinicName: 'Nextstep OPD',
+          accreditationNumber: 'P10038831',
+          philHealthBaseUrl: null,
+          branchPhilHealthBaseUrl: null,
+          isPhilHealthConfigured: true,
+        } as any,
+      })
+    );
+
+    expect(markup).toContain('PhilHealth Connection URL');
+    expect(markup).toContain('Not configured');
+    expect(markup).toContain('Connection URL Required');
+  });
 });

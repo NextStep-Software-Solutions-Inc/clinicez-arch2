@@ -59,14 +59,6 @@ public sealed class AuditablePhilHealthSequenceGenerator : ClinicEz.Clinic.Domai
         CancellationToken ct = default) =>
         _inner.GenerateTransactionNumberAsync(tenantId, clinicId, type, accreditationNumber, effectiveYear, ct);
 
-    public Task<string> GenerateTransmittalNumberAsync(
-        string tenantId,
-        Guid clinicId,
-        string accreditationNumber,
-        string effectiveYear,
-        CancellationToken ct = default) =>
-        _inner.GenerateTransmittalNumberAsync(tenantId, clinicId, accreditationNumber, effectiveYear, ct);
-
     public Task<PhilHealthPatientJourneyNumbers> AssignPatientJourneyNumbersAsync(
         string tenantId,
         Guid clinicId,
@@ -139,7 +131,6 @@ public sealed class AuditablePhilHealthSequenceGenerator : ClinicEz.Clinic.Domai
                 AccreditationNumber = accreditationNumber,
                 EffectiveYear = effectiveYear,
                 CaseNumber = journeyNumbers.CaseNumber,
-                EnlistmentTransactionNumber = journeyNumbers.EnlistmentTransactionNumber,
                 ProfilingTransactionNumber = journeyNumbers.ProfilingTransactionNumber,
                 SoapTransactionNumber = journeyNumbers.SoapTransactionNumber,
                 AssignedAtUtc = DateTime.UtcNow
@@ -163,7 +154,7 @@ public sealed class AuditablePhilHealthSequenceGenerator : ClinicEz.Clinic.Domai
                 TargetEntityId = encounterId?.ToString() ?? patientId.ToString(),
                 PatientId = patientId,
                 Outcome = ClinicAuditOutcomes.Success,
-                Description = $"PhilHealth eKAS numbers generated for patient '{patientId}' (Case: {journeyNumbers.CaseNumber}, Enlistment: {journeyNumbers.EnlistmentTransactionNumber}).",
+                Description = $"PhilHealth YAKAP 2.0 23B numbers generated for patient '{patientId}' (Case: {journeyNumbers.CaseNumber}, Profiling: {journeyNumbers.ProfilingTransactionNumber}).",
                 MetadataJson = JsonSerializer.Serialize(metadata, JsonOptions)
             };
 

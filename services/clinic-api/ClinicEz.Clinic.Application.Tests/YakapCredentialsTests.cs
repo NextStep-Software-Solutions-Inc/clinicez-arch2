@@ -10,6 +10,7 @@ using ClinicEz.Shared.Interop.Requests;
 using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using Xunit;
 
 namespace ClinicEz.Clinic.Application.Tests;
@@ -29,14 +30,16 @@ public sealed class YakapCredentialsTests
     private static PhilHealthResponsePayload Ok<T>(T data) =>
         new() { StatusCode = 200, Body = JsonSerializer.Serialize(ApiResponse<T>.Success(data)) };
 
-    private static PhilHealthConfigStatusResponse Status(Guid tenantId) => new(
+    private static TenantConfigurationStatusResponse ProxyStatus(Guid tenantId) => new(
         TenantId: tenantId,
+        BranchId: null,
         FacilityName: "St. Jude Clinic",
-        AccreditationNumber: "PHIC-99999",
-        PmccNumber: "PMCC-12345",
+        AccreditationNumber: "H10000001",
+        PmccNumber: "Z15445",
         SoftwareCertificateId: "CERT-ABCDE",
-        KonsultaEndpoint: "/soap/konsulta",
-        IsConfigured: true,
+        HasSecretKey: true,
+        HasCipherKey: true,
+        BaseUrl: "https://pcapi.philhealth.gov.ph",
         IsActive: true,
         UpdatedAt: DateTimeOffset.UtcNow);
 
@@ -44,23 +47,22 @@ public sealed class YakapCredentialsTests
     public async Task ConfigureTenantCredentialsAsync_SendsTheCredentialsToThePhilHealthService_FromThisClinic()
     {
         var tenantId = Guid.NewGuid();
-        var (client, hub) = CreateClient(_ => Ok(Status(tenantId)));
+        var (client, hub) = CreateClient(_ => Ok(ProxyStatus(tenantId)));
         var request = new ConfigurePhilHealthCredentialsProxyRequest(
             TenantId: tenantId,
             FacilityName: "St. Jude Clinic",
-            AccreditationNumber: "PHIC-99999",
-            PmccNumber: "PMCC-12345",
+            AccreditationNumber: "H10000001",
+            PmccNumber: "Z15445",
             SoftwareCertificateId: "CERT-ABCDE",
-            Username: "phic_user",
-            Password: "secret_password",
+            SecretKey: "pcapi_secret_key",
             CipherKey: "secret_cipher_key",
-            KonsultaEndpoint: "/soap/konsulta");
+            BaseUrl: "https://pcapi.philhealth.gov.ph");
 
         var response = await client.ConfigureTenantCredentialsAsync(request);
 
         response.Succeeded.Should().BeTrue();
         response.Data!.IsConfigured.Should().BeTrue();
-        response.Data.AccreditationNumber.Should().Be("PHIC-99999");
+        response.Data.AccreditationNumber.Should().Be("H10000001");
         var call = hub.Calls.Should().ContainSingle().Subject;
         call.RequestType.Should().Be(InteropTypes.PhilHealthRequest);
         call.ReplyType.Should().Be(InteropTypes.PhilHealthResponse);
@@ -69,13 +71,13 @@ public sealed class YakapCredentialsTests
         var payload = (PhilHealthRequestPayload)call.Payload;
         payload.Operation.Should().Be(PhilHealthOperations.TenantConfigure);
         payload.Argument.Should().BeNull();
-        payload.Body.Should().Contain("phic_user").And.Contain("PHIC-99999");
+        payload.Body.Should().Contain("pcapi_secret_key").And.Contain("H10000001");
     }
 
     [Fact]
     public async Task GetTenantConfigurationStatusAsync_ReturnsStatusFromTheService()
     {
-        var (client, hub) = CreateClient(_ => Ok(Status(Guid.NewGuid())));
+        var (client, hub) = CreateClient(_ => Ok(ProxyStatus(Guid.NewGuid())));
 
         var response = await client.GetTenantConfigurationStatusAsync();
 
@@ -90,7 +92,11 @@ public sealed class YakapCredentialsTests
     [Fact]
     public async Task TestTenantConnectionAsync_WhenGatewayAccepts_ReturnsSuccessMessage()
     {
-        var (client, hub) = CreateClient(_ => Ok("Authentication successful! PhilHealth gateway accepted facility credentials."));
+        var (client, hub) = CreateClient(_ => Ok(new TestTenantConnectionResponse(
+            Success: true,
+            Message: "Authentication successful! PhilHealth gateway accepted facility credentials.",
+            StatusCode: 200,
+            LatencyMs: 45)));
 
         var response = await client.TestTenantConnectionAsync();
 
@@ -105,7 +111,7 @@ public sealed class YakapCredentialsTests
         var (client, _) = CreateClient(_ => new PhilHealthResponsePayload
         {
             StatusCode = 400,
-            Body = JsonSerializer.Serialize(ApiResponse<string>.Fail("Invalid facility accreditation code or expired certificate."))
+            Body = JsonSerializer.Serialize(ApiResponse<TestTenantConnectionResponse>.Fail("Invalid facility accreditation code or expired certificate."))
         });
 
         var response = await client.TestTenantConnectionAsync();
@@ -139,7 +145,7 @@ public sealed class YakapCredentialsTests
     [Fact]
     public async Task ASilentService_IsAClearTimeoutFailure()
     {
-        var (client, hub) = CreateClient(_ => Ok(Status(Guid.NewGuid())));
+        var (client, hub) = CreateClient(_ => Ok(ProxyStatus(Guid.NewGuid())));
         hub.Failure = new InteropRequestTimeoutException(InteropTypes.PhilHealthRequest, Guid.NewGuid(), TimeSpan.FromSeconds(60));
 
         var response = await client.TestTenantConnectionAsync();
@@ -151,14 +157,50 @@ public sealed class YakapCredentialsTests
     [Fact]
     public async Task AnUnprovisionedClinic_CannotReachPhilHealthAndSendsNothing()
     {
-        var hub = new StubInteropRequestClient(_ => Ok(Status(Guid.NewGuid())));
+        var hub = new StubInteropRequestClient(_ => Ok(ProxyStatus(Guid.NewGuid())));
         IPhilHealthProxyClient client = new PhilHealthProxyClient(
             hub, NSubstitute.Substitute.For<ClinicEz.Clinic.Application.Common.Interfaces.IClinicIdentityProvider>(), NullLogger<PhilHealthProxyClient>.Instance);
 
         var response = await client.GetTenantConfigurationStatusAsync();
 
         response.Succeeded.Should().BeFalse();
-        response.Message.Should().Contain("not been provisioned");
+        response.Message.Should().Contain("not been connected");
+        hub.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MissingConnectionUrl_InFacilitySettings_EmitsClearErrorBeforeCallingHub()
+    {
+        var hub = new StubInteropRequestClient(_ => Ok(ProxyStatus(Guid.NewGuid())));
+        var clinicCtx = Substitute.For<ClinicEz.Clinic.Domain.Interfaces.IClinicContext>();
+        clinicCtx.ClinicId.Returns(_clinicId);
+        clinicCtx.TenantId.Returns(Tenant);
+        var (db, _, sieve) = TestDbHelper.CreateTestContext(clinicCtx);
+        db.Settings.Add(new ClinicEz.Clinic.Domain.Entities.FacilitySettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Tenant,
+            ClinicId = _clinicId,
+            ClinicName = "No URL Clinic",
+            AccreditationNumber = "P10038831",
+            PhilHealthBaseUrl = null,
+            BranchPhilHealthBaseUrl = null,
+            IsPhilHealthConfigured = true
+        });
+        await db.SaveChangesAsync();
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicEz.Clinic.Domain.Entities.FacilitySettings>(db, sieve);
+
+        var pcapi = new PhilHealthProxyClient(
+            hub,
+            Phase3TestKit.Identity(_clinicId, Tenant),
+            NullLogger<PhilHealthProxyClient>.Instance,
+            settingsRepo);
+
+        var response = await pcapi.ValidateStandingAsync(new ClinicEz.Clinic.Application.Features.Yakap.DTOs.YakapValidateStandingRequest("123456789012", "2026"));
+
+        response.Succeeded.Should().BeFalse();
+        response.ErrorCode.Should().Be("PHILHEALTH_CONNECTION_URL_MISSING");
+        response.Message.Should().Contain("PhilHealth Connection URL is not configured");
         hub.Calls.Should().BeEmpty();
     }
 }

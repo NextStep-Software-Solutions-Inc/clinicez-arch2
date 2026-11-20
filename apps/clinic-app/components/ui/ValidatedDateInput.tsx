@@ -343,7 +343,7 @@ export default function ValidatedDateInput({
         <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
           {label}
           {required && !label.trim().endsWith('*') ? (
-            <ThemedText color={theme.colors.emergency}> *</ThemedText>
+            <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText>
           ) : null}
         </ThemedText>
       ) : null}

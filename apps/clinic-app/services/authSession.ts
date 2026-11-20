@@ -130,6 +130,7 @@ function handleBroadcastMessage(data: AuthBroadcastMessage | null | undefined) {
   } else if (data.type === 'session-locked') {
     accessToken = null;
     accessExpiresAt = 0;
+    user = null;
     lockedSession = data.lockedSession;
     offline = false;
     setWorkstationLockedFlag(true);
@@ -201,6 +202,7 @@ let lockedSession: LockedSessionInfo | null = null;
 let lastRefreshLockedSession: LockedSessionInfo | null = null;
 let offline = false;
 let refreshInFlight: Promise<boolean> | null = null;
+let lockInFlight: Promise<LockedSessionInfo | null> | null = null;
 let lastNetworkFailureAt = 0;
 const NETWORK_RETRY_BACKOFF_MS = 15_000;
 
@@ -520,6 +522,7 @@ async function postRefreshRequest(body: unknown): Promise<{
 }
 
 async function executeRefresh(): Promise<boolean> {
+  if (lockedSession || lockInFlight) return false;
   lastRefreshLockedSession = null;
 
   if (isWeb()) {
@@ -579,8 +582,10 @@ async function executeRefresh(): Promise<boolean> {
  * a network failure leaves the session intact so the caller can retry.
  */
 export function refreshSession(): Promise<boolean> {
+  if (lockedSession || lockInFlight) return Promise.resolve(false);
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
+    if (lockedSession || lockInFlight) return false;
     const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
     if (isWeb() && locks?.request) {
       return locks.request(REFRESH_LOCK_NAME, () => executeRefresh());
@@ -594,7 +599,7 @@ export function refreshSession(): Promise<boolean> {
 
 /** Makes sure a valid access token exists (refreshing when it is about to expire). */
 export async function ensureFreshToken(): Promise<boolean> {
-  if (lockedSession) return false;
+  if (lockedSession || lockInFlight) return false;
   if (accessToken && Date.now() < accessExpiresAt - EXPIRY_SKEW_MS) return true;
   // Don't make every request wait on a dead network while the server is unreachable.
   if (Date.now() - lastNetworkFailureAt < NETWORK_RETRY_BACKOFF_MS) return false;
@@ -676,13 +681,37 @@ export async function resumeOnline(): Promise<boolean> {
  * Locks the workstation cleanly: flushes registered drafts while the access token is still valid,
  * clears the in-memory access token, notifies peer tabs, and marks the refresh session locked on the server.
  */
-export async function lockSession(): Promise<LockedSessionInfo | null> {
+export function lockSession(): Promise<LockedSessionInfo | null> {
+  if (lockInFlight) return lockInFlight;
+  lockInFlight = executeLockSession().finally(() => {
+    lockInFlight = null;
+  });
+  return lockInFlight;
+}
+
+async function executeLockSession(): Promise<LockedSessionInfo | null> {
   runBeforeLockHooks();
+
+  // Wait for any active refresh rotation before locking so /auth/lock does not race /auth/refresh
+  // with an already-rotated cookie/token and trigger refresh-family revocation.
+  if (refreshInFlight) {
+    try {
+      await refreshInFlight;
+    } catch {
+      // Ignore refresh failure and continue with locking.
+    }
+  }
 
   const previousUser = user;
   const fallbackLocked = lockedSession ?? buildFallbackLockedSession(previousUser);
   const token = refreshToken;
 
+  // Set lockedSession & clear user/accessToken synchronously before awaiting /auth/lock so concurrent
+  // API calls or 401 interceptors cannot trigger /auth/refresh while the workstation is locking.
+  if (fallbackLocked) {
+    lockedSession = fallbackLocked;
+  }
+  user = null;
   accessToken = null;
   accessExpiresAt = 0;
   offline = false;

@@ -116,7 +116,7 @@ export function Icd10AutocompleteInput({
       {hasSelectedCode ? (
         <View style={styles.selectedWrapper}>
           <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
-            Selected ICD-10 Diagnosis {required ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
+            Selected ICD-10 Diagnosis {required ? <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText> : null}
           </ThemedText>
 
           {/* Active Diagnosis Card / Chip */}

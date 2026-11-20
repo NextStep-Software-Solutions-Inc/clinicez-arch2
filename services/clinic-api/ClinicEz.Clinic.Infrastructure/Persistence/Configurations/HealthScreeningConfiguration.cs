@@ -57,6 +57,16 @@ public sealed class HealthScreeningConfiguration : IEntityTypeConfiguration<Heal
             .HasForeignKey(e => e.YakapEnlistmentId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        entity.HasOne(e => e.IdentityVerification)
+            .WithMany()
+            .HasForeignKey(e => e.PatientIdentityVerificationId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        entity.HasOne(e => e.YakapSubmission)
+            .WithMany()
+            .HasForeignKey(e => e.YakapSubmissionId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         entity.HasOne(e => e.PatientVitals)
             .WithMany()
             .HasForeignKey(e => e.PatientVitalsId)

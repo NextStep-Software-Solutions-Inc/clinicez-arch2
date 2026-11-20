@@ -273,9 +273,7 @@ public enum YakapEnlistmentStatus
 
 public enum YakapEnlistmentSource
 {
-    ClinicEnlistment,
     PhilHealthMasterlist,
-    SelfReported,
     WalkIn,
     OnlinePortal,
     MasterlistSync,
@@ -284,7 +282,7 @@ public enum YakapEnlistmentSource
 
 public enum YakapPackageType
 {
-    Konsulta,
+    YakapPrimaryCare,
     YakapPlus,
     FirstPatientEncounter,
     FollowUpEncounter,

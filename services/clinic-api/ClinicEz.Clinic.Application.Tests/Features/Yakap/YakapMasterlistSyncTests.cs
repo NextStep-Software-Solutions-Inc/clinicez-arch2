@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Api.Controllers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.Yakap.Commands;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Entities;
@@ -12,6 +14,7 @@ using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Clinic.Infrastructure.Services;
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -59,7 +62,7 @@ public class YakapMasterlistSyncTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
+        var (dbContext, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
 
         var patient = new Patient
         {
@@ -124,7 +127,7 @@ public class YakapMasterlistSyncTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
+        var (dbContext, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
 
         var patient = new Patient
         {
@@ -183,7 +186,7 @@ public class YakapMasterlistSyncTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
+        var (dbContext, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
 
         var patient = new Patient
         {
@@ -241,7 +244,7 @@ public class YakapMasterlistSyncTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
+        var (dbContext, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
 
         var patient = new Patient
         {
@@ -304,7 +307,7 @@ public class YakapMasterlistSyncTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
+        var (dbContext, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
 
         var patient = new Patient
         {
@@ -330,10 +333,9 @@ public class YakapMasterlistSyncTests
             EnlistmentDate = new DateOnly(2026, 1, 1),
             ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
-            CaseNo = "C000921202600099",
-            EnlistmentTransNo = "E000921202600099",
-            ProfilingTransNo = "P000921202600099"
+            Source = YakapEnlistmentSource.AssistedIntake,
+            CaseNo = "CINCR009212026010100099",
+            ProfilingTransNo = "PINCR009212026010100099"
         });
 
         dbContext.Patients.Add(patient);
@@ -371,9 +373,8 @@ public class YakapMasterlistSyncTests
         enlistment.Source.Should().Be(YakapEnlistmentSource.PhilHealthMasterlist);
 
         // Control numbers MUST be preserved!
-        enlistment.CaseNo.Should().Be("C000921202600099");
-        enlistment.EnlistmentTransNo.Should().Be("E000921202600099");
-        enlistment.ProfilingTransNo.Should().Be("P000921202600099");
+        enlistment.CaseNo.Should().Be("CINCR009212026010100099");
+        enlistment.ProfilingTransNo.Should().Be("PINCR009212026010100099");
     }
 
     [Fact]
@@ -386,7 +387,7 @@ public class YakapMasterlistSyncTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
+        var (dbContext, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
 
         var patient = new Patient
         {
@@ -412,9 +413,8 @@ public class YakapMasterlistSyncTests
             EnlistmentDate = new DateOnly(2025, 1, 10),
             ValidUntil = new DateOnly(2025, 12, 31),
             Status = YakapEnlistmentStatus.Expired,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
+            Source = YakapEnlistmentSource.AssistedIntake,
             CaseNo = "C000921202500001",
-            EnlistmentTransNo = "E000921202500001",
             ProfilingTransNo = "P000921202500001"
         });
 
@@ -468,7 +468,7 @@ public class YakapMasterlistSyncTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
+        var (dbContext, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
 
         var beneficiaries = new List<YakapBeneficiaryDto>
         {
@@ -574,7 +574,7 @@ public class YakapMasterlistSyncTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
+        var (dbContext, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
 
         var patient = new Patient
         {
@@ -594,55 +594,55 @@ public class YakapMasterlistSyncTests
 
         var syncService = new PhilHealthMasterlistSyncService(dbContext, null, clinicContext);
 
-        var proxyResponse = new YakapMasterlistProxyResponse(
-            IsSuccess: true,
-            AccreditationNumber: "000921",
-            EffectiveYear: "2026",
-            TotalCount: 1,
-            Beneficiaries: new List<YakapBeneficiaryDto>
+        var downloadResponse = new MasterlistDownloadResponse(
+            AccreNo: "H00000921",
+            TransmittalNo: "RH000009212026012000001",
+            EffYear: "2026",
+            StartDate: "01/01/2026",
+            EndDate: "01/20/2026",
+            TotalRecords: 1,
+            Assignments: new List<MasterlistAssignmentItem>
             {
                 new(
-                    PhilHealthIdentificationNumber: "030263078507",
-                    MemberPhilHealthIdentificationNumber: "030263078507",
+                    PatientPin: "030263078507",
                     LastName: "BONIFACIO",
                     FirstName: "ANDRES",
                     MiddleName: "",
-                    ExtensionName: "",
-                    DateOfBirth: "1863-11-30",
+                    ExtName: "",
+                    BirthDate: "1863-11-30",
                     Sex: "M",
-                    MemberType: "MM",
-                    EffectivityYear: "2026",
-                    RegistrationDate: "2026-01-20",
-                    PackageType: "K",
-                    AssignedStatus: "1")
-            },
-            RawXml: null,
-            ErrorMessage: null);
+                    AssignedDate: "2026-01-20",
+                    Status: "1")
+            });
 
         var proxyClient = Substitute.For<IPhilHealthProxyClient>();
-        proxyClient.ExtractMasterlistAsync(Arg.Any<ExtractMasterlistProxyRequest>(), Arg.Any<CancellationToken>())
-            .Returns(ApiResponse<YakapMasterlistProxyResponse>.Success(proxyResponse));
+        var pcapiClient = Substitute.For<IYakapPcapiClient>();
+        pcapiClient.DownloadBatchMasterlistAsync(Arg.Any<MasterlistBatchRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ApiResponse<MasterlistDownloadResponse>.Success(downloadResponse));
 
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(dbContext, sieve);
+        dbContext.Settings.Add(new FacilitySettings { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, ClinicName = "Test Clinic" });
+        await dbContext.SaveChangesAsync();
+
+        var cmdHandler = new SyncYakapMasterlistCommandHandler(pcapiClient, syncService, settingsRepo, clinicContext);
         var sender = Substitute.For<ISender>();
+        sender.Send(Arg.Any<SyncYakapMasterlistCommand>(), Arg.Any<CancellationToken>())
+            .Returns(ci => cmdHandler.Handle(ci.Arg<SyncYakapMasterlistCommand>(), ci.Arg<CancellationToken>()));
 
-        var controller = new YakapTransmittalsController(sender, proxyClient, syncService, clinicContext);
-
-        var request = new ExtractMasterlistProxyRequest
-        {
-            AccreditationNumber = "000921",
-            Password = "TEST_PASSWORD",
-            SoftwareCertificationId = "CERT-001",
-            CipherKey = "KEY-001",
-            EffectiveYear = "2026"
-        };
+        var controller = new YakapTransmittalsController(sender, proxyClient, pcapiClient);
 
         // Act
-        var actionResult = await controller.ExtractMasterlist(request, CancellationToken.None);
+        var actionResult = await controller.SyncMasterlist(
+            new SyncMasterlistApiRequest(
+                StartDate: new DateOnly(2026, 1, 1),
+                EndDate: new DateOnly(2026, 1, 20)),
+            CancellationToken.None);
 
         // Assert
         var okResult = actionResult.Result.Should().BeOfType<OkObjectResult>().Subject;
-        var apiResponse = okResult.Value.Should().BeOfType<ApiResponse<YakapMasterlistProxyResponse>>().Subject;
+        var apiResponse = okResult.Value.Should().BeOfType<ApiResponse<PortalYakapMasterlistSyncResultDto>>().Subject;
         apiResponse.Succeeded.Should().BeTrue();
+        apiResponse.Data!.RecordsUpdated.Should().Be(1);
 
         var updatedPatient = await dbContext.Patients.FirstAsync(p => p.Id == patient.Id);
         var enlistments = updatedPatient.GetYakapEnlistments();

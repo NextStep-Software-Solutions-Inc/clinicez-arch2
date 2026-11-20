@@ -119,7 +119,7 @@ public sealed class FacilityDirectoryUpdatedHandler : IInteropHandler<FacilityCr
             settings.BranchPhilHealthAccreditationNumber = message.BranchPhilHealthAccreditationNumber;
             settings.BranchPmccNumber = message.BranchPmccNumber;
             settings.BranchSoftwareCertificateId = message.BranchSoftwareCertificateId;
-            settings.BranchKonsultaEndpoint = message.BranchKonsultaEndpoint;
+            settings.BranchPhilHealthBaseUrl = message.BranchPhilHealthBaseUrl;
             settings.IsBranchPhilHealthAccredited = message.IsBranchPhilHealthAccredited;
 
             // If not overridden by clinic administrator, inherit branch PhilHealth parameters
@@ -130,7 +130,7 @@ public sealed class FacilityDirectoryUpdatedHandler : IInteropHandler<FacilityCr
                     settings.AccreditationNumber = message.BranchPhilHealthAccreditationNumber;
                     settings.PmccNumber = message.BranchPmccNumber;
                     settings.SoftwareCertificateId = message.BranchSoftwareCertificateId;
-                    settings.KonsultaEndpoint = !string.IsNullOrWhiteSpace(message.BranchKonsultaEndpoint) ? message.BranchKonsultaEndpoint : "/soap/konsulta";
+                    settings.PhilHealthBaseUrl = !string.IsNullOrWhiteSpace(message.BranchPhilHealthBaseUrl) ? message.BranchPhilHealthBaseUrl : "https://pcapi.philhealth.gov.ph";
                     settings.IsPhilHealthConfigured = true;
                 }
                 else
@@ -138,7 +138,7 @@ public sealed class FacilityDirectoryUpdatedHandler : IInteropHandler<FacilityCr
                     settings.AccreditationNumber = null;
                     settings.PmccNumber = null;
                     settings.SoftwareCertificateId = null;
-                    settings.KonsultaEndpoint = "/soap/konsulta";
+                    settings.PhilHealthBaseUrl = "https://pcapi.philhealth.gov.ph";
                     settings.IsPhilHealthConfigured = false;
                 }
             }
@@ -151,7 +151,7 @@ public sealed class FacilityDirectoryUpdatedHandler : IInteropHandler<FacilityCr
             settings.BranchPhilHealthAccreditationNumber = null;
             settings.BranchPmccNumber = null;
             settings.BranchSoftwareCertificateId = null;
-            settings.BranchKonsultaEndpoint = null;
+            settings.BranchPhilHealthBaseUrl = null;
             settings.IsBranchPhilHealthAccredited = false;
 
             if (!settings.IsPhilHealthOverridden)
@@ -159,7 +159,7 @@ public sealed class FacilityDirectoryUpdatedHandler : IInteropHandler<FacilityCr
                 settings.AccreditationNumber = null;
                 settings.PmccNumber = null;
                 settings.SoftwareCertificateId = null;
-                settings.KonsultaEndpoint = "/soap/konsulta";
+                settings.PhilHealthBaseUrl = "https://pcapi.philhealth.gov.ph";
                 settings.IsPhilHealthConfigured = false;
             }
         }

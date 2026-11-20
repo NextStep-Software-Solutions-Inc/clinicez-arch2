@@ -3873,7 +3873,7 @@ export default function ConsultationsScreen() {
 
     const finalPan = isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined;
     if (isYakapEligible && (!finalPan || !finalPrc)) {
-      const msg = 'Doctor PhilHealth Accreditation Number (PAN) and PRC license are required for Konsulta encounters.';
+      const msg = 'Doctor PhilHealth Accreditation Number and PRC license are required for PhilHealth YAKAP visits.';
       setBanner({
         text: msg,
         isError: true,
@@ -4498,7 +4498,7 @@ export default function ConsultationsScreen() {
     if (!panValid) missing.push('Doctor PhilHealth Accreditation Number (PAN) is missing.');
     if (!prcValid) missing.push('Doctor PRC License number is required to sign encounters.');
     if (!pinValid) missing.push('Patient PhilHealth PIN is invalid (must contain exactly 12 numeric digits).');
-    if (!atcValid) missing.push('Encounter ATC code is required.');
+    if (!atcValid) missing.push('PhilHealth visit code is required.');
     if (!hasSymptom) missing.push('At least one complaint or symptom is required.');
     if (hasPainCode && !painSiteValid) missing.push('Pain site description is required when pain is reported.');
     if (hasOtherCode && !otherValid) missing.push('Description is required when other complaint is reported.');
@@ -8648,7 +8648,7 @@ export default function ConsultationsScreen() {
                 </ThemedText>
               </View>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Review clinical charges and procedures rendered during this encounter. This read-only charge slip will be posted to the Cashier for compilation into the Statement of Account (SOA), statutory discount application (Senior Citizen / PWD / PhilHealth Konsulta), and payment collection.
+                Review clinical charges and procedures rendered during this encounter. This read-only charge slip will be posted to the Cashier for compilation into the Statement of Account (SOA), statutory discount application (Senior Citizen / PWD / PhilHealth YAKAP), and payment collection.
               </ThemedText>
             </View>
 

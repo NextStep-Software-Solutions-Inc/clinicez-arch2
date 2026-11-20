@@ -150,8 +150,8 @@ export const SETTINGS_NAV_ITEMS: SearchItem[] = [
   {
     id: 'setting-philhealth',
     category: 'Settings',
-    title: 'PhilHealth Konsulta & Yakap Config',
-    subtitle: 'Accreditation numbers, PMAC keys, and claims transmittal settings',
+    title: 'PhilHealth & Yakap Config',
+    subtitle: 'Accreditation numbers, access keys, and annual checkup submission settings',
     badgeText: 'PhilHealth',
     badgeVariant: 'urgent',
     targetRoute: 'Settings',

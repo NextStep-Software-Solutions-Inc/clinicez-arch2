@@ -47,7 +47,7 @@ public class BranchInheritanceAndOverrideTests
         BranchPhilHealthAccreditationNumber = branchAccreditation,
         BranchPmccNumber = branchPmcc,
         BranchSoftwareCertificateId = branchCert,
-        BranchKonsultaEndpoint = branchEndpoint,
+        BranchPhilHealthBaseUrl = branchEndpoint,
         IsBranchPhilHealthAccredited = isAccredited
     };
 
@@ -95,7 +95,7 @@ public class BranchInheritanceAndOverrideTests
         settings.BranchPhilHealthAccreditationNumber.Should().Be("PH-BRANCH-9999");
         settings.BranchPmccNumber.Should().Be("PMCC-8888");
         settings.BranchSoftwareCertificateId.Should().Be("CERT-7777");
-        settings.BranchKonsultaEndpoint.Should().Be("/soap/branch-endpoint");
+        settings.BranchPhilHealthBaseUrl.Should().Be("/soap/branch-endpoint");
         settings.IsBranchPhilHealthAccredited.Should().BeTrue();
 
         // Inherited active settings
@@ -104,7 +104,7 @@ public class BranchInheritanceAndOverrideTests
         settings.AccreditationNumber.Should().Be("PH-BRANCH-9999");
         settings.PmccNumber.Should().Be("PMCC-8888");
         settings.SoftwareCertificateId.Should().Be("CERT-7777");
-        settings.KonsultaEndpoint.Should().Be("/soap/branch-endpoint");
+        settings.PhilHealthBaseUrl.Should().Be("/soap/branch-endpoint");
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public class BranchInheritanceAndOverrideTests
         settings.AccreditationNumber.Should().Be("PH-BRANCH-UPDATED");
         settings.PmccNumber.Should().Be("PMCC-UPDATED");
         settings.SoftwareCertificateId.Should().Be("CERT-UPDATED");
-        settings.KonsultaEndpoint.Should().Be("/soap/branch-updated");
+        settings.PhilHealthBaseUrl.Should().Be("/soap/branch-updated");
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public class BranchInheritanceAndOverrideTests
         initial.AccreditationNumber = "CLINIC-SPECIFIC-ACC";
         initial.PmccNumber = "CLINIC-SPECIFIC-PMCC";
         initial.SoftwareCertificateId = "CLINIC-SPECIFIC-CERT";
-        initial.KonsultaEndpoint = "/soap/clinic-specific";
+        initial.PhilHealthBaseUrl = "/soap/clinic-specific";
         initial.IsPhilHealthConfigured = true;
         await db.SaveChangesAsync();
 
@@ -230,7 +230,7 @@ public class BranchInheritanceAndOverrideTests
         settings.AccreditationNumber.Should().Be("CLINIC-SPECIFIC-ACC");
         settings.PmccNumber.Should().Be("CLINIC-SPECIFIC-PMCC");
         settings.SoftwareCertificateId.Should().Be("CLINIC-SPECIFIC-CERT");
-        settings.KonsultaEndpoint.Should().Be("/soap/clinic-specific");
+        settings.PhilHealthBaseUrl.Should().Be("/soap/clinic-specific");
         settings.IsPhilHealthConfigured.Should().BeTrue();
     }
 
@@ -256,7 +256,7 @@ public class BranchInheritanceAndOverrideTests
             AccreditationNumber: "OVERRIDE-ACC-123",
             PmccNumber: "OVERRIDE-PMCC-456",
             SoftwareCertificateId: "OVERRIDE-CERT-789",
-            KonsultaEndpoint: "/soap/custom-konsulta",
+            BaseUrl: "https://pcapi-sandbox.philhealth.gov.ph",
             IsConfigured: true,
             IsActive: true,
             UpdatedAt: DateTimeOffset.UtcNow);
@@ -271,10 +271,9 @@ public class BranchInheritanceAndOverrideTests
             AccreditationNumber: "OVERRIDE-ACC-123",
             PmccNumber: "OVERRIDE-PMCC-456",
             SoftwareCertificateId: "OVERRIDE-CERT-789",
-            Username: "custom_user",
-            Password: "custom_password",
+            SecretKey: "custom_secret_key",
             CipherKey: "custom-cipher-key-32-chars-long!",
-            KonsultaEndpoint: "/soap/custom-konsulta");
+            BaseUrl: "https://pcapi-sandbox.philhealth.gov.ph");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -283,7 +282,7 @@ public class BranchInheritanceAndOverrideTests
         result.AccreditationNumber.Should().Be("OVERRIDE-ACC-123");
         result.PmccNumber.Should().Be("OVERRIDE-PMCC-456");
         result.SoftwareCertificateId.Should().Be("OVERRIDE-CERT-789");
-        result.KonsultaEndpoint.Should().Be("/soap/custom-konsulta");
+        result.PhilHealthBaseUrl.Should().Be("https://pcapi-sandbox.philhealth.gov.ph");
 
         // Verify Proxy client was invoked
         await proxyClient.Received(1).ConfigureTenantCredentialsAsync(
@@ -291,7 +290,8 @@ public class BranchInheritanceAndOverrideTests
                 r.AccreditationNumber == "OVERRIDE-ACC-123" &&
                 r.PmccNumber == "OVERRIDE-PMCC-456" &&
                 r.SoftwareCertificateId == "OVERRIDE-CERT-789" &&
-                r.Username == "custom_user"),
+                r.SecretKey == "custom_secret_key" &&
+                r.BaseUrl == "https://pcapi-sandbox.philhealth.gov.ph"),
             Arg.Any<CancellationToken>());
 
         // Verify in DB
@@ -317,7 +317,7 @@ public class BranchInheritanceAndOverrideTests
         existing.BranchPhilHealthAccreditationNumber = "BRANCH-ACCREDITATION-REVERT";
         existing.BranchPmccNumber = "BRANCH-PMCC-REVERT";
         existing.BranchSoftwareCertificateId = "BRANCH-CERT-REVERT";
-        existing.BranchKonsultaEndpoint = "/soap/branch-revert";
+        existing.BranchPhilHealthBaseUrl = "/soap/branch-revert";
         existing.IsBranchPhilHealthAccredited = true;
 
         // Currently overridden
@@ -336,7 +336,7 @@ public class BranchInheritanceAndOverrideTests
         result.AccreditationNumber.Should().Be("BRANCH-ACCREDITATION-REVERT");
         result.PmccNumber.Should().Be("BRANCH-PMCC-REVERT");
         result.SoftwareCertificateId.Should().Be("BRANCH-CERT-REVERT");
-        result.KonsultaEndpoint.Should().Be("/soap/branch-revert");
+        result.PhilHealthBaseUrl.Should().Be("/soap/branch-revert");
 
         // Verify in DB
         var persisted = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);

@@ -27,13 +27,11 @@ public static class EhrStaticOptions
             dict[optionSet] = items.ToList().AsReadOnly();
         }
 
-        // LIB-001: Sex (Biological Sex)
+        // LIB-001: Sex (Biological Sex — PhilHealth lib_sex: Male / Female only; broader options live in Gender Identity)
         Add("sex", new[]
         {
             new EhrOptionDescriptor { Code = "MALE", Label = "Male", PhilHealthCode = "M", PhilHealthLibrary = "lib_sex" },
-            new EhrOptionDescriptor { Code = "FEMALE", Label = "Female", PhilHealthCode = "F", PhilHealthLibrary = "lib_sex" },
-            new EhrOptionDescriptor { Code = "INTERSEX", Label = "Intersex", PhilHealthCode = null, PhilHealthLibrary = "lib_sex" },
-            new EhrOptionDescriptor { Code = "UNKNOWN", Label = "Unknown", PhilHealthCode = null, PhilHealthLibrary = "lib_sex" }
+            new EhrOptionDescriptor { Code = "FEMALE", Label = "Female", PhilHealthCode = "F", PhilHealthLibrary = "lib_sex" }
         });
 
         // LIB-002: Gender Identity (SOGIE)

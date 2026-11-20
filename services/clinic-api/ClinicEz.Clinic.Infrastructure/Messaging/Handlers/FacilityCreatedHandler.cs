@@ -106,7 +106,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                 existingSettings.BranchPhilHealthAccreditationNumber = message.BranchPhilHealthAccreditationNumber;
                 existingSettings.BranchPmccNumber = message.BranchPmccNumber;
                 existingSettings.BranchSoftwareCertificateId = message.BranchSoftwareCertificateId;
-                existingSettings.BranchKonsultaEndpoint = message.BranchKonsultaEndpoint;
+                existingSettings.BranchPhilHealthBaseUrl = message.BranchPhilHealthBaseUrl;
                 existingSettings.IsBranchPhilHealthAccredited = message.IsBranchPhilHealthAccredited;
 
                 if (!existingSettings.IsPhilHealthOverridden)
@@ -116,7 +116,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                         existingSettings.AccreditationNumber = message.BranchPhilHealthAccreditationNumber;
                         existingSettings.PmccNumber = message.BranchPmccNumber;
                         existingSettings.SoftwareCertificateId = message.BranchSoftwareCertificateId;
-                        existingSettings.KonsultaEndpoint = !string.IsNullOrWhiteSpace(message.BranchKonsultaEndpoint) ? message.BranchKonsultaEndpoint : "/soap/konsulta";
+                        existingSettings.PhilHealthBaseUrl = !string.IsNullOrWhiteSpace(message.BranchPhilHealthBaseUrl) ? message.BranchPhilHealthBaseUrl : "https://pcapi.philhealth.gov.ph";
                         existingSettings.IsPhilHealthConfigured = true;
                     }
                     else
@@ -132,7 +132,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                 existingSettings.BranchPhilHealthAccreditationNumber = null;
                 existingSettings.BranchPmccNumber = null;
                 existingSettings.BranchSoftwareCertificateId = null;
-                existingSettings.BranchKonsultaEndpoint = null;
+                existingSettings.BranchPhilHealthBaseUrl = null;
                 existingSettings.IsBranchPhilHealthAccredited = false;
 
                 if (!existingSettings.IsPhilHealthOverridden)
@@ -176,7 +176,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                 BranchPhilHealthAccreditationNumber = message.BranchPhilHealthAccreditationNumber,
                 BranchPmccNumber = message.BranchPmccNumber,
                 BranchSoftwareCertificateId = message.BranchSoftwareCertificateId,
-                BranchKonsultaEndpoint = message.BranchKonsultaEndpoint,
+                BranchPhilHealthBaseUrl = message.BranchPhilHealthBaseUrl,
                 IsBranchPhilHealthAccredited = message.IsBranchPhilHealthAccredited,
                 IsPhilHealthOverridden = false,
                 LetterheadAddress = message.Address,
@@ -191,7 +191,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                 newSettings.AccreditationNumber = message.BranchPhilHealthAccreditationNumber;
                 newSettings.PmccNumber = message.BranchPmccNumber;
                 newSettings.SoftwareCertificateId = message.BranchSoftwareCertificateId;
-                newSettings.KonsultaEndpoint = !string.IsNullOrWhiteSpace(message.BranchKonsultaEndpoint) ? message.BranchKonsultaEndpoint : "/soap/konsulta";
+                newSettings.PhilHealthBaseUrl = !string.IsNullOrWhiteSpace(message.BranchPhilHealthBaseUrl) ? message.BranchPhilHealthBaseUrl : "https://pcapi.philhealth.gov.ph";
                 newSettings.IsPhilHealthConfigured = true;
             }
             else

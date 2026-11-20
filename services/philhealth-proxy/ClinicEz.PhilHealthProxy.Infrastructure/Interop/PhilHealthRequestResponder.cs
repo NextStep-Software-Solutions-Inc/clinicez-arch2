@@ -15,6 +15,7 @@ using ClinicEz.PhilHealthProxy.Application.Features.Tenants.Commands;
 using ClinicEz.PhilHealthProxy.Application.Features.Tenants.Queries;
 using ClinicEz.PhilHealthProxy.Application.Features.Validator.Queries;
 using ClinicEz.PhilHealthProxy.Application.Features.VerificationCode.Commands;
+using ClinicEz.PhilHealthProxy.Domain.Exceptions;
 using ClinicEz.PhilHealthProxy.Domain.Models;
 using ClinicEz.PhilHealthProxy.Infrastructure.Services;
 using ClinicEz.Shared.Common;
@@ -99,24 +100,24 @@ public sealed class PhilHealthRequestResponder(
                 PhilHealthOperations.MasterlistDownloadBatch =>
                     await HandleAsync(Deserialize<MasterlistBatchRequest>(request.Body), req => mediator.Send(new DownloadBatchMasterlistQuery(req), ct)),
 
-                // Service 06: Data Upload
+                // Service 06: Data Upload (accepts either Annex C encrypted envelope OR raw wire JSON encrypted at proxy boundary)
                 PhilHealthOperations.DataUploadFpe =>
-                    await HandleAsync(Deserialize<PhilHealthEncryptedPayload>(request.Body), env => mediator.Send(new UploadDataCommand("fpe", env), ct)),
+                    await HandleDataUploadAsync("fpe", request.Body, ct),
 
                 PhilHealthOperations.DataUploadConsultation =>
-                    await HandleAsync(Deserialize<PhilHealthEncryptedPayload>(request.Body), env => mediator.Send(new UploadDataCommand("consultation", env), ct)),
+                    await HandleDataUploadAsync("consultation", request.Body, ct),
 
                 PhilHealthOperations.DataUploadDiagnosticRequest =>
-                    await HandleAsync(Deserialize<PhilHealthEncryptedPayload>(request.Body), env => mediator.Send(new UploadDataCommand("diagnostic-request", env), ct)),
+                    await HandleDataUploadAsync("diagnostic-request", request.Body, ct),
 
                 PhilHealthOperations.DataUploadDiagnosticResults =>
-                    await HandleAsync(Deserialize<PhilHealthEncryptedPayload>(request.Body), env => mediator.Send(new UploadDataCommand("diagnostic-results", env), ct)),
+                    await HandleDataUploadAsync("diagnostic-results", request.Body, ct),
 
                 PhilHealthOperations.DataUploadMedicine =>
-                    await HandleAsync(Deserialize<PhilHealthEncryptedPayload>(request.Body), env => mediator.Send(new UploadDataCommand("medicine", env), ct)),
+                    await HandleDataUploadAsync("medicine", request.Body, ct),
 
                 PhilHealthOperations.DataUploadReferral =>
-                    await HandleAsync(Deserialize<PhilHealthEncryptedPayload>(request.Body), env => mediator.Send(new UploadDataCommand("referral", env), ct)),
+                    await HandleDataUploadAsync("referral", request.Body, ct),
 
                 PhilHealthOperations.DataUploadGetStatus =>
                     await HandleAsync(
@@ -127,9 +128,9 @@ public sealed class PhilHealthRequestResponder(
                 PhilHealthOperations.GeneratePatientOtp =>
                     await HandleAsync(Deserialize<VerificationCodeRequest>(request.Body), req => mediator.Send(new ValidateVerificationCodeCommand(req), ct)),
 
-                // Service 08: Electronic Konsulta Availment Slip
+                // Service 08: Electronic Konsulta Availment Slip (decrypted at proxy boundary -> AvailmentSlipResponse)
                 PhilHealthOperations.GenerateAvailmentSlip =>
-                    await HandleAsync(Deserialize<AvailmentSlipRequest>(request.Body), req => mediator.Send(new GenerateAvailmentSlipQuery(req), ct)),
+                    await HandleAsync(Deserialize<AvailmentSlipRequest>(request.Body), req => mediator.Send(new GenerateDecryptedAvailmentSlipQuery(req), ct)),
 
                 // Tenant Configuration & Status
                 PhilHealthOperations.TenantConfigure =>
@@ -159,11 +160,73 @@ public sealed class PhilHealthRequestResponder(
             logger.LogWarning(vex, "[PhilHealthResponder] Validation failure on Operation '{Op}'", request.Operation);
             return Error(422, string.Join("; ", vex.Errors.Select(e => e.ErrorMessage)));
         }
+        catch (KeyNotFoundException knf)
+        {
+            logger.LogWarning(knf, "[PhilHealthResponder] Not found on Operation '{Op}'", request.Operation);
+            return Error(404, knf.Message);
+        }
+        catch (UnauthorizedAccessException uex)
+        {
+            logger.LogWarning(uex, "[PhilHealthResponder] Unauthorized on Operation '{Op}'", request.Operation);
+            return Error(401, uex.Message);
+        }
+        catch (TimeoutException tex)
+        {
+            logger.LogWarning(tex, "[PhilHealthResponder] Timeout on Operation '{Op}'", request.Operation);
+            return Error(504, tex.Message);
+        }
+        catch (PhilHealthGatewayException gex)
+        {
+            logger.LogWarning(gex, "[PhilHealthResponder] Gateway failure ({Code}/{ErrorCode}) on Operation '{Op}'", gex.StatusCode, gex.ErrorCode, request.Operation);
+            return Error(gex.StatusCode, gex.Message, gex.ErrorCode);
+        }
+        catch (System.Net.Http.HttpRequestException hex)
+        {
+            var code = hex.StatusCode.HasValue ? (int)hex.StatusCode.Value : 502;
+            logger.LogWarning(hex, "[PhilHealthResponder] Upstream HTTP {Code} on Operation '{Op}'", code, request.Operation);
+            return Error(code, hex.Message);
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "[PhilHealthResponder] Exception handling Operation '{Op}'", request.Operation);
             return Error(500, ex.Message);
         }
+    }
+
+    private async Task<PhilHealthResponsePayload> HandleDataUploadAsync(
+        string form,
+        string? body,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            throw new ArgumentException("Request body cannot be empty for data upload.");
+        }
+
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+        if (root.ValueKind == JsonValueKind.Object
+            && TryHasPropertyCaseInsensitive(root, "docMimeType")
+            && TryHasPropertyCaseInsensitive(root, "doc"))
+        {
+            var envelope = Deserialize<PhilHealthEncryptedPayload>(body);
+            return await HandleAsync(envelope, env => mediator.Send(new UploadDataCommand(form, env), ct));
+        }
+
+        return await HandleAsync(body, plainJson => mediator.Send(new UploadPlainJsonDataCommand(form, plainJson), ct));
+    }
+
+    private static bool TryHasPropertyCaseInsensitive(JsonElement element, string name)
+    {
+        foreach (var prop in element.EnumerateObject())
+        {
+            if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static T Deserialize<T>(string? json)
@@ -182,13 +245,28 @@ public sealed class PhilHealthRequestResponder(
         return new PhilHealthResponsePayload
         {
             StatusCode = 200,
-            Body = JsonSerializer.Serialize(result, JsonOpts)
+            Body = JsonSerializer.Serialize(ApiResponse<TRes>.Success(result), JsonOpts)
         };
     }
 
-    private static PhilHealthResponsePayload Error(int statusCode, string message) => new()
+    private static PhilHealthResponsePayload Error(int statusCode, string message, string? explicitErrorCode = null)
     {
-        StatusCode = statusCode,
-        Body = JsonSerializer.Serialize(ApiResponse<string>.Fail(message), JsonOpts)
-    };
+        var errorCode = !string.IsNullOrWhiteSpace(explicitErrorCode)
+            ? explicitErrorCode
+            : statusCode switch
+            {
+                >= 500 => "UPSTREAM_SERVER_ERROR",
+                429 => "RATE_LIMITED",
+                404 => "PIN_NOT_FOUND",
+                400 or 422 => "PIN_INVALID",
+                401 => "UNAUTHORIZED",
+                _ => $"HTTP_{statusCode}"
+            };
+
+        return new()
+        {
+            StatusCode = statusCode,
+            Body = JsonSerializer.Serialize(ApiResponse<object>.Fail(message, errorCode), JsonOpts)
+        };
+    }
 }

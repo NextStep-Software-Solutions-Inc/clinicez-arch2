@@ -1,63 +1,35 @@
-using System.Collections.Generic;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
-using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Application.Common.Interfaces;
 
 public sealed record ConfigurePhilHealthCredentialsProxyRequest(
-    System.Guid TenantId,
+    Guid TenantId,
     string FacilityName,
     string AccreditationNumber,
     string PmccNumber,
     string SoftwareCertificateId,
-    string Username,
-    string Password,
+    string SecretKey,
     string CipherKey,
-    string? KonsultaEndpoint = null);
+    string? BaseUrl = "https://pcapi.philhealth.gov.ph");
 
 public sealed record PhilHealthConfigStatusResponse(
-    System.Guid TenantId,
+    Guid TenantId,
     string FacilityName,
     string AccreditationNumber,
     string PmccNumber,
     string SoftwareCertificateId,
-    string KonsultaEndpoint,
+    string BaseUrl,
     bool IsConfigured,
     bool IsActive,
-    System.DateTimeOffset? UpdatedAt);
+    DateTimeOffset? UpdatedAt);
 
 public interface IPhilHealthProxyClient
 {
-    Task<ApiResponse<YakapValidationProxyResponse>> ValidateReportAsync(
-        GenerateAndValidateReportProxyRequest request,
-        CancellationToken ct = default);
-
-    Task<ApiResponse<YakapSubmissionProxyResponse>> SubmitReportAsync(
-        GenerateAndSubmitReportProxyRequest request,
-        CancellationToken ct = default);
-
-    Task<ApiResponse<YakapMasterlistProxyResponse>> ExtractMasterlistAsync(
-        ExtractMasterlistProxyRequest request,
-        CancellationToken ct = default);
-
     Task<ApiResponse<bool>> ValidatePinAsync(
         string pin,
-        CancellationToken ct = default);
-
-    Task<ApiResponse<SoapSimulationReportDto>> RunSoapSimulationAsync(
-        RunSoapSimulationProxyRequest request,
-        CancellationToken ct = default);
-
-    Task<ApiResponse<SoapSandboxStatusDto>> GetSoapSandboxStatusAsync(
-        CancellationToken ct = default);
-
-    Task<ApiResponse<SoapSandboxStatusDto>> SetSoapSandboxScenarioAsync(
-        SetSimulationScenarioRequest request,
-        CancellationToken ct = default);
-
-    Task<ApiResponse<SoapSandboxStatusDto>> ResetSoapSandboxAsync(
         CancellationToken ct = default);
 
     Task<ApiResponse<PhilHealthConfigStatusResponse>> ConfigureTenantCredentialsAsync(
@@ -70,4 +42,3 @@ public interface IPhilHealthProxyClient
     Task<ApiResponse<string>> TestTenantConnectionAsync(
         CancellationToken ct = default);
 }
-

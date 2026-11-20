@@ -185,7 +185,7 @@ export function buildPatientOverflowMenuItems(
   if (handlers.onEditDemographics) {
     items.push({
       id: 'edit-demographics',
-      label: 'Edit info',
+      label: 'Edit patient',
       icon: 'edit',
       onPress: () => handlers.onEditDemographics!(patient),
     });
@@ -193,8 +193,8 @@ export function buildPatientOverflowMenuItems(
   if (handlers.onOpenPhilHealth) {
     items.push({
       id: 'philhealth-profile',
-      label: 'PhilHealth info',
-      icon: 'shield',
+      label: 'Manage PhilHealth',
+      icon: 'shieldCheck',
       onPress: () => handlers.onOpenPhilHealth!(patient),
     });
   }
@@ -230,7 +230,7 @@ export function buildPatientOverflowMenuItems(
     if (handlers.onStartConsultation) {
       items.push({
         id: 'service-consultation',
-        label: 'Consult',
+        label: 'Start consult',
         icon: 'stethoscope',
         dividerBefore: true,
         onPress: () => handlers.onStartConsultation!(patient),
@@ -240,7 +240,7 @@ export function buildPatientOverflowMenuItems(
     if (healthScreeningHandler) {
       items.push({
         id: 'start-profiling',
-        label: 'Health screening',
+        label: 'Start screening',
         icon: 'heartPulse',
         onPress: () => healthScreeningHandler(patient),
       });
@@ -248,7 +248,7 @@ export function buildPatientOverflowMenuItems(
     if (handlers.onRecordVitals) {
       items.push({
         id: 'service-vitals',
-        label: 'Vitals',
+        label: 'Record vitals',
         icon: 'activity',
         onPress: () => handlers.onRecordVitals!(patient),
       });
@@ -264,7 +264,7 @@ export function buildPatientOverflowMenuItems(
     if (handlers.onIssueClearance) {
       items.push({
         id: 'service-administrative',
-        label: 'Medical certificate',
+        label: 'Issue certificate',
         icon: 'file',
         onPress: () => handlers.onIssueClearance!(patient),
       });

@@ -100,5 +100,9 @@ public class EhrOptionVersionHelperTests
         var sexVersion = EhrStaticOptions.GetOptionSetVersion("sex");
         sexVersion.Should().NotBeNullOrWhiteSpace();
         sexVersion.Length.Should().Be(64);
+
+        var sexOptions = EhrStaticOptions.GetOptions("sex");
+        sexOptions.Select(o => o.Code).Should().BeEquivalentTo(new[] { "MALE", "FEMALE" });
+        sexOptions.Select(o => o.PhilHealthCode).Should().BeEquivalentTo(new[] { "M", "F" });
     }
 }

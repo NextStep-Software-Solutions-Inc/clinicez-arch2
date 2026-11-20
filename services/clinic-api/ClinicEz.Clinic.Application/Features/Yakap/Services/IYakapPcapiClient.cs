@@ -17,7 +17,6 @@ public interface IYakapPcapiClient
 
     // ── Service 02: Standing Validator ──────────────────────────────────────
     Task<ApiResponse<YakapValidatorResponse>> ValidateStandingAsync(YakapValidateStandingRequest request, CancellationToken ct = default);
-    Task<ApiResponse<bool>> ValidatePinAsync(string pin, CancellationToken ct = default);
 
     // ── Service 03: YAKAP Empanelment ───────────────────────────────────────
     Task<ApiResponse<YakapEmpanelmentResponse>> SubmitEmpanelmentAsync(YakapEmpanelmentRequest request, CancellationToken ct = default);
@@ -31,13 +30,14 @@ public interface IYakapPcapiClient
 
     // ── Service 06: Data Upload (Annex A - F) ───────────────────────────────
     Task<ApiResponse<DataUploadResponse>> UploadDataAsync(string form, PhilHealthEncryptedPayload payload, CancellationToken ct = default);
+    Task<ApiResponse<DataUploadResponse>> UploadPlainJsonAsync(string form, string plainJson, CancellationToken ct = default);
     Task<ApiResponse<DataUploadStatusResponse>> GetUploadStatusAsync(string uploadTransactionNo, CancellationToken ct = default);
 
     // ── Service 07: Verification Code (OTP) ─────────────────────────────────
     Task<ApiResponse<VerificationCodeResponse>> ValidateVerificationCodeAsync(VerificationCodeRequest request, CancellationToken ct = default);
 
     // ── Service 08: Electronic Konsulta Availment Slip ──────────────────────
-    Task<ApiResponse<PhilHealthEncryptedPayload>> GenerateAvailmentSlipAsync(AvailmentSlipRequest request, CancellationToken ct = default);
+    Task<ApiResponse<AvailmentSlipResponse>> GenerateAvailmentSlipAsync(AvailmentSlipRequest request, CancellationToken ct = default);
 
     // ── Tenant Credentials & Connectivity ───────────────────────────────────
     Task<ApiResponse<TenantConfigurationStatusResponse>> ConfigureTenantCredentialsAsync(ConfigureTenantCredentialsRequest request, CancellationToken ct = default);

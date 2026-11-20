@@ -643,29 +643,6 @@ public sealed class PatientsController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<PatientPhilHealthMembershipDto>.Success(result, "PhilHealth membership details updated successfully."));
     }
-
-    [HttpPost("{patientId:guid}/yakap/enlistments")]
-    [HasPermission(ClinicPermissions.PatientsWrite)]
-    public async Task<ActionResult<ApiResponse<PatientYakapEnlistmentDto>>> CreateYakapEnlistment(
-        Guid patientId,
-        [FromBody] CreateYakapEnlistmentRequest request,
-        CancellationToken ct = default)
-    {
-        var command = new CreatePatientYakapEnlistmentCommand(
-            patientId,
-            request.EffectiveYear,
-            request.EnlistmentDate,
-            request.ValidUntil,
-            request.Source,
-            request.PackageType,
-            request.CaseNo,
-            request.EnlistmentTransNo,
-            request.YesReferenceNo,
-            request.Notes);
-
-        var result = await _sender.Send(command, ct);
-        return Ok(ApiResponse<PatientYakapEnlistmentDto>.Success(result, "PhilHealth YAKAP enlistment recorded successfully."));
-    }
 }
 
 public sealed record UpsertPhilHealthMembershipRequest(
@@ -687,17 +664,6 @@ public sealed record UpsertPhilHealthMembershipRequest(
     string? PrincipalMemberLandlineNumber = null,
     string? PrincipalMemberMobileNumber = null,
     string? PrincipalMemberEmail = null);
-
-public sealed record CreateYakapEnlistmentRequest(
-    int EffectiveYear,
-    DateOnly EnlistmentDate,
-    DateOnly? ValidUntil = null,
-    string? Source = null,
-    string? PackageType = null,
-    string? CaseNo = null,
-    string? EnlistmentTransNo = null,
-    string? YesReferenceNo = null,
-    string? Notes = null);
 
 public sealed record UpdatePatientRequest(
     string FirstName,

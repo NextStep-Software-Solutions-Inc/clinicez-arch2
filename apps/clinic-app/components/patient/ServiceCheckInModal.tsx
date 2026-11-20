@@ -308,7 +308,7 @@ export const VISIT_TYPE_OPTIONS: Array<{
     visitType: 'PreventiveHealthAssessment',
     label: 'Preventive Health Assessment',
     icon: 'heartPulse',
-    hint: 'Health screening, APE, pre-employment, PhilHealth YAKAP FPE, or vitals monitoring',
+    hint: 'Standard checkup, APE, pre-employment, PhilHealth Annual Checkup, or vitals monitoring',
     defaultPrefixRegular: 'V',
     defaultPrefixPriority: 'SV',
   },

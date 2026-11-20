@@ -5,18 +5,17 @@ import {
   ScrollView,
   Pressable,
 } from 'react-native';
-import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl, PsgcAddressSelector, Select, type SelectOption } from '../ui';
+import { ThemedText, TextInput, Input, Icon, Button, Badge, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, PsgcAddressSelector, Select, type SelectOption } from '../ui';
 import { theme } from '../../constants/theme';
 import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition, type PatientAddressDto, type PatientGuardianDto } from '../../services/clinicService';
 import { DynamicCustomFieldsRenderer, validateCustomFields } from '../custom-fields';
 import { notify, Alert } from '../../utils/feedback';
 import { isSeniorFromDob } from '../../utils/age';
 import {
-  type MemberType,
-  type PrincipalRelationship,
-  buildPrincipalSponsorFromGuardian,
-  extractPhilHealthProfileData,
-} from './memberType';
+  PHILHEALTH_SEX_LABELS,
+  filterPhilHealthSexLabels,
+  parsePhilHealthSexInput,
+} from '../../utils/philhealthSex';
 import {
   mergePatientCustomFields,
   hasPreviousValue,
@@ -304,19 +303,16 @@ export function EditPatientModal({
   const [verificationStatus, setVerificationStatus] = useState<string>(
     patient?.verificationStatus || 'Verified'
   );
-  const [sexOptions, setSexOptions] = useState<string[]>([]);
+  const [sexOptions, setSexOptions] = useState<string[]>([...PHILHEALTH_SEX_LABELS]);
   const [genderIdentityOptions, setGenderIdentityOptions] = useState<SelectOption[]>([]);
   const [civilStatusOptions, setCivilStatusOptions] = useState<string[]>([]);
-  const [relationshipOptions, setRelationshipOptions] = useState<
-    Array<{ code: string; label: string; description?: string }>
-  >([]);
   const [emergencyRelationshipOptions, setEmergencyRelationshipOptions] = useState<string[]>([]);
 
   useEffect(() => {
     let isMounted = true;
     clinicService.getOptionSet('sex').then((opts) => {
       if (isMounted && opts && opts.length > 0) {
-        setSexOptions(opts.map((o) => o.label));
+        setSexOptions(filterPhilHealthSexLabels(opts));
       }
     });
     clinicService.getOptionSet('gender_identity').then((opts) => {
@@ -340,32 +336,12 @@ export function EditPatientModal({
         setEmergencyRelationshipOptions(opts.map((o) => o.label));
       }
     });
-    clinicService.getOptionSet('dependent_relationship').then((opts) => {
-      if (isMounted && opts && opts.length > 0) {
-        setRelationshipOptions(
-          opts.map((o) => ({
-            code: o.philHealthCode || o.code,
-            label: o.label,
-            description: o.label,
-          }))
-        );
-      }
-    });
     return () => {
       isMounted = false;
     };
   }, []);
   const [contactNumber, setContactNumber] = useState('');
   const [email, setEmail] = useState('');
-  const [philHealthNumber, setPhilHealthNumber] = useState(patient?.philHealthNumber || '');
-  const [memberType, setMemberType] = useState<MemberType>(() =>
-    patient ? extractPhilHealthProfileData(patient.customFields, patient).memberType : 'MM'
-  );
-  const [principalMemberPin, setPrincipalMemberPin] = useState('');
-  const [principalFullName, setPrincipalFullName] = useState('');
-  const [principalRelationship, setPrincipalRelationship] = useState<PrincipalRelationship>('C');
-  const [principalDob, setPrincipalDob] = useState('');
-  const [isPrincipalPinValid, setIsPrincipalPinValid] = useState<boolean | null>(null);
   const [seniorCitizenId, setSeniorCitizenId] = useState(patient?.seniorCitizenId || '');
   const [pwdId, setPwdId] = useState(patient?.pwdId || '');
   const [bloodType, setBloodType] = useState('');
@@ -418,38 +394,10 @@ export function EditPatientModal({
     });
   };
 
-  const guardianSponsor = useMemo(
-    () => buildPrincipalSponsorFromGuardian(guardian, { patientDob: dateOfBirth, pwdId }),
-    [guardian, dateOfBirth, pwdId]
-  );
-
   const isSenior = useMemo(
     () => isSeniorFromDob(dateOfBirth) || Boolean(seniorCitizenId?.trim()),
     [dateOfBirth, seniorCitizenId]
   );
-
-  const handleApplyGuardianAsSponsor = () => {
-    if (!guardianSponsor) {
-      if (!guardian) {
-        setGuardian(createEmptyGuardianDraft());
-      }
-      notify.info('Enter Legal Guardian details above, then tap Use Legal Guardian to auto-fill.');
-      return;
-    }
-    if (guardianSponsor.fullName) {
-      setPrincipalFullName(guardianSponsor.fullName);
-      clearFieldError('principalFullName');
-    }
-    setPrincipalRelationship(guardianSponsor.relationship);
-    if (guardianSponsor.formattedPin) {
-      setPrincipalMemberPin(guardianSponsor.formattedPin);
-      clearFieldError('principalMemberPin');
-    }
-    if (guardianSponsor.birthDate) {
-      setPrincipalDob(guardianSponsor.birthDate);
-    }
-    notify.success('Principal member details filled from Legal Guardian.');
-  };
 
   const effectiveCustomFields = useMemo(() => {
     const activeTenantFields = tenantCustomFields.filter(
@@ -517,7 +465,6 @@ export function EditPatientModal({
   const [hydratingPatient, setHydratingPatient] = useState(false);
   const [hydratedPatient, setHydratedPatient] = useState<ClinicPatient | null>(null);
   const [hasFullClinicalContext, setHasFullClinicalContext] = useState(false);
-  const [isPinValid, setIsPinValid] = useState<boolean | null>(null);
 
   const applyPatientToForm = (source: ClinicPatient) => {
     const isFullRecord =
@@ -538,14 +485,6 @@ export function EditPatientModal({
     setVerificationStatus(source.verificationStatus || 'Verified');
     setContactNumber(source.contactNumber || '');
     setEmail(source.email || '');
-    setPhilHealthNumber(source.philHealthNumber || '');
-    const pProfile = extractPhilHealthProfileData(source.customFields, source);
-    setMemberType(pProfile.memberType);
-    setPrincipalMemberPin(pProfile.principalPin);
-    setPrincipalFullName(pProfile.principalFullName);
-    setPrincipalRelationship(pProfile.principalRelationship);
-    setPrincipalDob(pProfile.principalDob);
-    setIsPrincipalPinValid(null);
     setSeniorCitizenId(source.seniorCitizenId || '');
     setPwdId(source.pwdId || '');
     setBloodType(source.bloodType || '');
@@ -693,19 +632,19 @@ export function EditPatientModal({
       return;
     }
 
+    if (!parsePhilHealthSexInput(sex)) {
+      Alert.alert(
+        'Select Biological Sex',
+        'Please select Male or Female (as specified by PhilHealth).'
+      );
+      return;
+    }
+
     const dobCheck = validateDateString(dateOfBirth, { boundaryMode: 'pastOrToday' });
     if (!dobCheck.isValid) {
       Alert.alert(
         'Invalid Date of Birth',
         dobCheck.errorMessage || 'Please enter a valid date of birth not in the future.'
-      );
-      return;
-    }
-
-    if (philHealthNumber.trim() && isPinValid === false) {
-      Alert.alert(
-        'Invalid PhilHealth PIN',
-        'Please provide a valid 12-digit PhilHealth Identification Number (Mod-11 check passed) or leave it blank.'
       );
       return;
     }
@@ -746,28 +685,6 @@ export function EditPatientModal({
       }
     }
 
-    if (memberType === 'DD') {
-      if (!principalFullName.trim()) {
-        Alert.alert('Missing Details', 'Principal member full name is required for dependents.');
-        return;
-      }
-      if (!principalRelationship) {
-        Alert.alert('Missing Details', 'Relationship to principal member is required.');
-        return;
-      }
-      if (principalMemberPin.trim() && isPrincipalPinValid === false) {
-        Alert.alert('Invalid PIN', 'Principal Member PIN failed Mod-11 verification.');
-        return;
-      }
-      if (principalDob.trim()) {
-        const pDobCheck = validateDateString(principalDob, { boundaryMode: 'pastOrToday' });
-        if (!pDobCheck.isValid) {
-          Alert.alert('Invalid Date of Birth', pDobCheck.errorMessage || 'Principal Date of Birth cannot be in the future.');
-          return;
-        }
-      }
-    }
-
     const effectivePatient = hydratedPatient || patient;
 
     const mergedCustomFields = mergePatientCustomFields({
@@ -783,12 +700,6 @@ export function EditPatientModal({
       yearLevel,
       employeeId,
       department,
-      memberType,
-      principalMemberPin,
-      principalFullName,
-      principalRelationship,
-      principalDob,
-      philHealthNumber,
       firstName,
       lastName,
       middleName,
@@ -813,7 +724,8 @@ export function EditPatientModal({
       civilStatus,
       contactNumber: contactNumber.trim(),
       email: email.trim() || undefined,
-      philHealthNumber: philHealthNumber.trim() || undefined,
+      // Preserve PhilHealth PIN managed in Manage PhilHealth so editing demographics never clears it
+      philHealthNumber: effectivePatient.philHealthNumber || undefined,
       seniorCitizenId: seniorCitizenId.trim() || undefined,
       pwdId: pwdId.trim() || undefined,
       bloodType: bloodType.trim() || undefined,
@@ -880,13 +792,6 @@ export function EditPatientModal({
 
         const phoneErr = err.getFieldError?.('contactNumber') || err.getFieldError?.('phone');
         if (phoneErr) fieldErrorsMap.contactNumber = phoneErr;
-
-        const philErr = err.getFieldError?.('philHealthId') || err.getFieldError?.('philHealthPin') || err.getFieldError?.('philHealthNumber');
-        if (philErr) {
-          fieldErrorsMap.philHealthId = philErr;
-          fieldErrorsMap.philHealthPin = philErr;
-          fieldErrorsMap.philHealthNumber = philErr;
-        }
 
         const emailErr = err.getFieldError?.('email');
         if (emailErr) fieldErrorsMap.email = emailErr;
@@ -1055,7 +960,7 @@ export function EditPatientModal({
             <View style={styles.formRow}>
               <View style={[styles.formCol, { minWidth: 0 }]}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Sex<ThemedText color={theme.colors.emergency}> *</ThemedText>
+                  Sex<ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText>
                 </ThemedText>
                 <ScrollView
                   horizontal
@@ -1274,121 +1179,10 @@ export function EditPatientModal({
               </>
             )}
 
-            {/* Government IDs & Coverage */}
+            {/* Government IDs (PhilHealth membership is managed via Manage PhilHealth) */}
             <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-              Government IDs & Coverage
+              Government IDs
             </ThemedText>
-
-            <PhilHealthPinInput
-              label="PhilHealth PIN"
-              value={philHealthNumber}
-              onChangeText={(val) => {
-                setPhilHealthNumber(val);
-                clearFieldError('philHealthId');
-                clearFieldError('philHealthPin');
-                clearFieldError('philHealthNumber');
-              }}
-              onValidityChange={setIsPinValid}
-              error={fieldErrors.philHealthId || fieldErrors.philHealthPin || fieldErrors.philHealthNumber}
-            />
-
-            {/* PhilHealth Member Type Selector (MM vs DD) */}
-            <View style={{ gap: 4 }}>
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                PhilHealth Member Type *
-              </ThemedText>
-              <SegmentedControl
-                options={[
-                  { value: 'MM', label: 'Member' },
-                  { value: 'DD', label: 'Dependent' },
-                ]}
-                value={memberType}
-                onChange={(val) => setMemberType(val as MemberType)}
-              />
-            </View>
-
-            {/* Conditional Principal Sponsor Details Card when DD */}
-            {memberType === 'DD' && (
-              <View style={styles.sponsorCard}>
-                <View style={styles.sponsorHeaderRow}>
-                  <View style={styles.sponsorHeader}>
-                    <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
-                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                      Principal Member Details
-                    </ThemedText>
-                  </View>
-                  <Button
-                    title={guardianSponsor ? guardianSponsor.buttonLabel : 'Use Legal Guardian'}
-                    icon="copy"
-                    variant="outline"
-                    size="sm"
-                    onPress={handleApplyGuardianAsSponsor}
-                  />
-                </View>
-
-                <Input
-                  label="Principal Member Full Name *"
-                  placeholder="e.g. Maria Santos"
-                  value={principalFullName}
-                  onChangeText={(val) => {
-                    setPrincipalFullName(val);
-                    clearFieldError('principalFullName');
-                  }}
-                  error={fieldErrors.principalFullName}
-                />
-
-                <View style={{ gap: 4 }}>
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                    Relationship to Principal Member *
-                  </ThemedText>
-                  <View style={styles.relationshipGrid}>
-                    {relationshipOptions.map((rel) => {
-                      const isSelected = principalRelationship === rel.code;
-                      return (
-                        <Pressable
-                          key={rel.code}
-                          onPress={() => setPrincipalRelationship(rel.code as PrincipalRelationship)}
-                          style={[
-                            styles.relationshipChip,
-                            isSelected && styles.relationshipChip_selected,
-                          ]}
-                          accessibilityRole="radio"
-                          accessibilityState={{ selected: isSelected }}
-                        >
-                          <ThemedText
-                            variant="captionBold"
-                            color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
-                          >
-                            {rel.label}
-                          </ThemedText>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                <View style={styles.formRow}>
-                  <View style={styles.formCol}>
-                    <PhilHealthPinInput
-                      label="Principal Member PIN"
-                      value={principalMemberPin}
-                      onChangeText={setPrincipalMemberPin}
-                      onValidityChange={setIsPrincipalPinValid}
-                      error={fieldErrors.principalMemberPin}
-                    />
-                  </View>
-                  <View style={styles.formCol}>
-                    <ValidatedDateInput
-                      label="Principal Date of Birth"
-                      value={principalDob}
-                      onChangeText={setPrincipalDob}
-                      boundaryMode="pastOrToday"
-                      placeholder="YYYY-MM-DD"
-                    />
-                  </View>
-                </View>
-              </View>
-            )}
 
             <View style={styles.formRow}>
               {isSenior && (
@@ -1493,10 +1287,12 @@ const styles = StyleSheet.create({
   },
   formRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: theme.spacing.md,
   },
   formCol: {
     flex: 1,
+    minWidth: 0,
     gap: theme.spacing.xs,
   },
   inputLabel: {
@@ -1569,47 +1365,5 @@ const styles = StyleSheet.create({
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
     paddingTop: theme.spacing.md,
-  },
-  sponsorCard: {
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderColor: theme.colors.borderLight,
-    borderWidth: 1,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.sm,
-    gap: theme.spacing.xs,
-  },
-  sponsorHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  sponsorHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
-  },
-  relationshipGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  relationshipChip: {
-    minHeight: 34,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.borderDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  relationshipChip_selected: {
-    backgroundColor: theme.colors.primaryLight,
-    borderColor: theme.colors.primary,
-    borderWidth: 1.5,
   },
 });

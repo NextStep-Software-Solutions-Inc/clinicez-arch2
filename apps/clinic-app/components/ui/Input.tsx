@@ -83,7 +83,7 @@ export default function Input({
           <View style={styles.labelRow}>
             <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.labelInline}>
               {label}
-              {required ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
+              {required ? <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText> : null}
             </ThemedText>
             <View style={styles.tooltipAnchor}>
               <Pressable
@@ -127,7 +127,7 @@ export default function Input({
         ) : (
           <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
             {label}
-            {required ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
+            {required ? <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText> : null}
           </ThemedText>
         )
       ) : null}

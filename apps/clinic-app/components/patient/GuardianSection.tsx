@@ -14,6 +14,10 @@ import {
 } from '../ui';
 import { theme } from '../../constants/theme';
 import { clinicService, type PatientGuardianDto } from '../../services/clinicService';
+import {
+  PHILHEALTH_SEX_SELECT_OPTIONS,
+  filterPhilHealthSexSelectOptions,
+} from '../../utils/philhealthSex';
 
 export function createEmptyGuardianDraft(): PatientGuardianDto {
   return {
@@ -152,7 +156,7 @@ export function GuardianSection({
   onPinValidityChange,
 }: GuardianSectionProps) {
   const [relationshipOptions, setRelationshipOptions] = useState<SelectOption[]>([]);
-  const [sexOptions, setSexOptions] = useState<SelectOption[]>([]);
+  const [sexOptions, setSexOptions] = useState<SelectOption[]>(PHILHEALTH_SEX_SELECT_OPTIONS);
 
   const isMinor = isMinorFromDob(patientDateOfBirth);
   const expanded = isMinor || guardian !== null;
@@ -172,12 +176,7 @@ export function GuardianSection({
     });
     clinicService.getOptionSet('sex').then((opts) => {
       if (isMounted && opts && opts.length > 0) {
-        setSexOptions(
-          opts.map((o) => ({
-            value: o.label,
-            label: o.label,
-          }))
-        );
+        setSexOptions(filterPhilHealthSexSelectOptions(opts));
       }
     });
     return () => {

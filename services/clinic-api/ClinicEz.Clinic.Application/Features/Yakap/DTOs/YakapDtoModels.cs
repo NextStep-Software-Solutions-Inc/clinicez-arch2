@@ -402,56 +402,6 @@ public sealed record YakapMedicineDto(
     string ReportStatus = "U",
     string DeficiencyRemarks = "");
 
-public sealed record YakapReportDocumentDto(
-    string Username,
-    string Password,
-    string HciAccreNo,
-    string PmccNo,
-    string CertificationId,
-    string HciTransmittalNumber,
-    IReadOnlyList<YakapEnlistmentDto> Enlistments,
-    IReadOnlyList<YakapProfileDto> Profiles,
-    IReadOnlyList<YakapSoapDto> Soaps,
-    IReadOnlyList<YakapDiagnosticResultDto> DiagnosticResults,
-    IReadOnlyList<YakapMedicineDto> Medicines);
-
-public sealed record GenerateAndValidateReportProxyRequest
-{
-    public required YakapReportDocumentDto Document { get; init; }
-    public required string ReportTagging { get; init; }
-}
-
-public sealed record YakapValidationProxyResponse(
-    bool IsValid,
-    string? TransmittalNumber,
-    string? RawXml,
-    string? EncryptedPayload,
-    string? PhilHealthSoapResponse,
-    IReadOnlyList<string>? ValidationErrors);
-
-public sealed record GenerateAndSubmitReportProxyRequest
-{
-    public required YakapReportDocumentDto Document { get; init; }
-    public required string ReportTagging { get; init; }
-}
-
-public sealed record YakapSubmissionProxyResponse(
-    bool IsSuccess,
-    string TransmittalNumber,
-    string? TransactionNumber,
-    string? RawXml,
-    string? PhilHealthSoapResponse,
-    IReadOnlyList<string>? ValidationErrors);
-
-public sealed record ExtractMasterlistProxyRequest
-{
-    public required string AccreditationNumber { get; init; }
-    public required string Password { get; init; }
-    public required string SoftwareCertificationId { get; init; }
-    public required string CipherKey { get; init; }
-    public required string EffectiveYear { get; init; }
-}
-
 public sealed record YakapBeneficiaryDto(
     string PhilHealthIdentificationNumber,
     string MemberPhilHealthIdentificationNumber,
@@ -467,27 +417,14 @@ public sealed record YakapBeneficiaryDto(
     string PackageType,
     string AssignedStatus = "1");
 
-public sealed record YakapMasterlistProxyResponse(
-    bool IsSuccess,
-    string? AccreditationNumber,
-    string? EffectiveYear,
-    int TotalCount,
-    IReadOnlyList<YakapBeneficiaryDto> Beneficiaries,
-    string? RawXml,
-    string? ErrorMessage);
-
-// Note: ConfigurePhilHealthCredentialsProxyRequest and PhilHealthConfigStatusResponse
-// are canonically defined in ClinicEz.Clinic.Application.Common.Interfaces.
-
 public sealed record ConfigureClinicPhilHealthCredentialsRequest(
     string FacilityName,
     string AccreditationNumber,
     string PmccNumber,
     string SoftwareCertificateId,
-    string Username,
-    string Password,
+    string SecretKey,
     string CipherKey,
-    string? KonsultaEndpoint = null);
+    string? BaseUrl = "https://pcapi.philhealth.gov.ph");
 
 public sealed record PhilHealthConditionEntryDto(
     string Code,

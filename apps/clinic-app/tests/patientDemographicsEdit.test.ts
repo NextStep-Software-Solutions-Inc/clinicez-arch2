@@ -170,12 +170,12 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     createdAt: '2026-01-01T00:00:00Z',
   };
 
-  test('F1: Sex options include Male, Female, Intersex, and Unknown, and persist to update payload', async () => {
+  test('F1: Sex options are Male and Female per PhilHealth, and persist to update payload', async () => {
     const payload: RegisterPatientPayload = {
       firstName: 'Alex',
       lastName: 'Dela Cruz',
       dateOfBirth: '1995-05-15',
-      sex: 'Intersex',
+      sex: 'Female',
       civilStatus: 'Single',
       contactNumber: '0919-555-1234',
       verificationStatus: 'Verified',
@@ -184,7 +184,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     const [updated, err] = await clinicService.updatePatient('pat-test-id', payload);
     expect(err).toBeNull();
     expect(lastPutUrl).toBe('/patients/pat-test-id');
-    expect(lastPutPayload.sex).toBe('Intersex');
+    expect(lastPutPayload.sex).toBe('Female');
     expect(lastPutPayload.civilStatus).toBe('Single');
   });
 

@@ -750,12 +750,11 @@ public sealed class ChallengerM1AggregateLifecycleStressTests
             PatientId = patient.Id,
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
-            PackageType = YakapPackageType.Konsulta,
+            Source = YakapEnlistmentSource.AssistedIntake,
+            PackageType = YakapPackageType.YakapPrimaryCare,
             EnlistmentDate = new DateOnly(2026, 1, 10),
             ValidUntil = new DateOnly(2026, 12, 31),
             CaseNo = "KONS-2026-0001",
-            EnlistmentTransNo = "TRANS-ENL-001",
             ProfilingTransNo = "TRANS-PROF-001",
             ProfilingDate = new DateOnly(2026, 1, 12),
             ProfilingAtc = "ATC_PREMIUM",
@@ -800,8 +799,8 @@ public sealed class ChallengerM1AggregateLifecycleStressTests
             PatientId = patient.Id,
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
-            PackageType = YakapPackageType.Konsulta,
+            Source = YakapEnlistmentSource.AssistedIntake,
+            PackageType = YakapPackageType.YakapPrimaryCare,
             EnlistmentDate = new DateOnly(2026, 2, 1),
             ValidUntil = new DateOnly(2026, 12, 31),
             CaseNo = "KONS-2026-0002"
@@ -1024,7 +1023,7 @@ public sealed class ChallengerM1AggregateLifecycleStressTests
         using var context = CreateTestDbContext(clinicId, dbName: dbName);
 
         var patient = CreateBaselinePatient(clinicId);
-        // Inject legacy dictionary format into CustomFields
+        // Inject legacy v1 dictionary format into CustomFields (must be ignored now that YAKAP v1.* is abolished)
         patient.CustomFields["yakap_enlistments"] = new List<Dictionary<string, object?>>
         {
             new()
@@ -1040,34 +1039,31 @@ public sealed class ChallengerM1AggregateLifecycleStressTests
         context.Patients.Add(patient);
         await context.SaveChangesAsync();
 
-        // Parse via domain extension: items have Id = Guid.Empty
-        var parsed = patient.GetYakapEnlistments();
-        parsed.Should().ContainSingle();
-        parsed[0].Id.Should().Be(Guid.Empty);
-        parsed[0].CaseNo.Should().Be("LEGACY-CASE-2025");
+        // Abolished v1.*: CustomFields fallback MUST NOT produce enlistments
+        patient.GetYakapEnlistments().Should().BeEmpty();
 
-        // Now persist the parsed enlistment into the relational table
+        // Now persist a 1NF relational enlistment with Guid.Empty without concurrency exception
         var relational = new PatientYakapEnlistment
         {
-            Id = parsed[0].Id, // Guid.Empty
+            Id = Guid.Empty,
             TenantId = patient.TenantId,
             ClinicId = clinicId,
             PatientId = patient.Id,
-            EffectiveYear = parsed[0].EffectiveYear,
-            Status = parsed[0].Status,
-            Source = parsed[0].Source,
-            CaseNo = parsed[0].CaseNo,
-            EnlistmentDate = parsed[0].EnlistmentDate,
-            ValidUntil = parsed[0].ValidUntil
+            EffectiveYear = 2026,
+            Status = YakapEnlistmentStatus.Active,
+            Source = YakapEnlistmentSource.AssistedIntake,
+            CaseNo = "CH100000012026112000001",
+            EnlistmentDate = new DateOnly(2026, 1, 15),
+            ValidUntil = new DateOnly(2026, 12, 31)
         };
 
         context.PatientYakapEnlistments.Add(relational);
         await context.SaveChangesAsync();
 
-        relational.Id.Should().NotBeEmpty("EF Core must generate a valid key when persisting an unkeyed parsed enlistment");
+        relational.Id.Should().NotBeEmpty("EF Core must generate a valid key when persisting an unkeyed relational enlistment");
         var saved = await context.PatientYakapEnlistments.FirstOrDefaultAsync(e => e.Id == relational.Id);
         saved.Should().NotBeNull();
-        saved!.CaseNo.Should().Be("LEGACY-CASE-2025");
+        saved!.CaseNo.Should().Be("CH100000012026112000001");
     }
 
     #endregion

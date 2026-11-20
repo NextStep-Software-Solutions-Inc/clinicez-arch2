@@ -691,7 +691,7 @@ export default function DynamicCustomFieldsRenderer({
               <View key={field.id || field.fieldKey} style={styles.fieldWrapper}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
                   {field.label}
-                  {field.isRequired ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
+                  {field.isRequired ? <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText> : null}
                 </ThemedText>
                 <View style={styles.booleanRow}>
                   <Pressable
@@ -750,7 +750,7 @@ export default function DynamicCustomFieldsRenderer({
               <View key={field.id || field.fieldKey} style={styles.fieldWrapper}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
                   {field.label}
-                  {field.isRequired ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
+                  {field.isRequired ? <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText> : null}
                 </ThemedText>
 
                 {availableOptions.length > 0 ? (

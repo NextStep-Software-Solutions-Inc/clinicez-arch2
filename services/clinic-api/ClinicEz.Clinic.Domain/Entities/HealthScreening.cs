@@ -19,6 +19,12 @@ public sealed class HealthScreening : ClinicScopedEntity
     public Guid? YakapEnlistmentId { get; set; }
     public PatientYakapEnlistment? YakapEnlistment { get; set; }
 
+    public Guid? PatientIdentityVerificationId { get; set; }
+    public PatientIdentityVerification? IdentityVerification { get; set; }
+
+    public Guid? YakapSubmissionId { get; set; }
+    public YakapSubmission? YakapSubmission { get; set; }
+
     public Guid? PatientVitalsId { get; set; }
     public PatientVitals? PatientVitals { get; set; }
 

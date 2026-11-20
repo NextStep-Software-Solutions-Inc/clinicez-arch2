@@ -152,8 +152,8 @@ public class PhilHealthMasterlistSyncService : IPhilHealthMasterlistSyncService
                     EffectiveYear = effYear,
                     Status = status,
                     Source = YakapEnlistmentSource.PhilHealthMasterlist,
+                    PackageType = YakapPackageType.YakapPrimaryCare,
                     CaseNo = null,
-                    EnlistmentTransNo = null,
                     ProfilingTransNo = null
                 };
 
@@ -179,74 +179,22 @@ public class PhilHealthMasterlistSyncService : IPhilHealthMasterlistSyncService
             MatchedPatientCodes: matchedCodes);
     }
 
-    public async Task<YakapMasterlistSyncResult> SyncXmlAsync(
+    public async Task<YakapMasterlistSyncResult> SyncMasterlistDownloadAsync(
         string tenantId,
         Guid? clinicId,
-        string xmlContent,
-        string? fallbackEffectiveYear = null,
+        MasterlistDownloadResponse downloadResponse,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(xmlContent))
-        {
-            return new YakapMasterlistSyncResult(0, 0, 0, 0, 0, Array.Empty<string>());
-        }
+        ArgumentNullException.ThrowIfNull(downloadResponse);
 
-        var items = new List<YakapMasterlistSyncItem>();
-        try
-        {
-            var doc = XDocument.Parse(xmlContent);
-            var root = doc.Root;
-            if (root != null)
-            {
-                var elements = root.Elements()
-                    .Where(e => e.Name.LocalName.Equals("ASSIGNMENT", StringComparison.OrdinalIgnoreCase));
-
-                foreach (var el in elements)
-                {
-                    var pin = el.Attribute("pAssignedPin")?.Value ?? el.Attribute("AssignedPin")?.Value;
-                    if (string.IsNullOrWhiteSpace(pin)) continue;
-
-                    var assignedDate = el.Attribute("pAssignedDate")?.Value ?? el.Attribute("AssignedDate")?.Value;
-                    var assignedStatus = el.Attribute("pAssignedStatus")?.Value ?? el.Attribute("AssignedStatus")?.Value ?? "1";
-                    var effYear = el.Attribute("pEffYear")?.Value ?? el.Attribute("EffectiveYear")?.Value ?? fallbackEffectiveYear;
-                    var lName = el.Attribute("pAssignedLastName")?.Value;
-                    var fName = el.Attribute("pAssignedFirstName")?.Value;
-
-                    items.Add(new YakapMasterlistSyncItem(pin, assignedDate, assignedStatus, effYear, lName, fName));
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "[PhilHealthMasterlistSync] Failed to parse masterlist XML content.");
-            throw;
-        }
-
-        return await SyncAssignmentsAsync(tenantId, clinicId, items, ct);
-    }
-
-    public async Task<YakapMasterlistSyncResult> SyncProxyResponseAsync(
-        string tenantId,
-        Guid? clinicId,
-        YakapMasterlistProxyResponse proxyResponse,
-        CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(proxyResponse);
-
-        // Prefer RawXml if available
-        if (!string.IsNullOrWhiteSpace(proxyResponse.RawXml))
-        {
-            return await SyncXmlAsync(tenantId, clinicId, proxyResponse.RawXml, proxyResponse.EffectiveYear, ct);
-        }
-
-        // Fallback to Beneficiaries collection
-        var items = (proxyResponse.Beneficiaries ?? Array.Empty<YakapBeneficiaryDto>()).Select(b => new YakapMasterlistSyncItem(
-            Pin: b.PhilHealthIdentificationNumber,
-            AssignedDate: b.RegistrationDate,
-            AssignedStatus: b.AssignedStatus,
-            EffectiveYear: !string.IsNullOrWhiteSpace(b.EffectivityYear) ? b.EffectivityYear : proxyResponse.EffectiveYear,
-            LastName: b.LastName,
-            FirstName: b.FirstName));
+        var items = (downloadResponse.Assignments ?? Array.Empty<MasterlistAssignmentItem>())
+            .Select(a => new YakapMasterlistSyncItem(
+                Pin: a.PatientPin,
+                AssignedDate: a.AssignedDate,
+                AssignedStatus: a.Status,
+                EffectiveYear: downloadResponse.EffYear,
+                LastName: a.LastName,
+                FirstName: a.FirstName));
 
         return await SyncAssignmentsAsync(tenantId, clinicId, items, ct);
     }

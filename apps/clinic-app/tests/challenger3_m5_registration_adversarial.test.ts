@@ -111,11 +111,6 @@ mock.module('@expo-google-fonts/geist-mono', () => ({
 }));
 
 const { sanitizeCustomFieldsPayload } = await import('../components/custom-fields');
-const {
-  getYakapEnlistments,
-  getActiveYakapEnlistment,
-  recordAnnualRenewal,
-} = await import('../utils/yakapEnlistment');
 
 /**
  * Pure helper reproducing the exact customFields construction logic inside
@@ -313,121 +308,10 @@ describe('Challenger 3 Adversarial Registration & Locality Suite: Patients.scree
   });
 
   // =========================================================================
-  // SUITE 2: Dirty Data, Stringified JSON, & Multiple Enlistment Periods
+  // SUITE 2: Dirty Data Sanitization in dynamicFieldValues
   // =========================================================================
   describe('Suite 2: Adversarial Data Variations in dynamicFieldValues', () => {
-    it('2.1 Multi-Year Enlistment Array: Preserves chronological order, expired statuses, and journey numbers', () => {
-      const multiYearEnlistments = [
-        {
-          effective_year: '2024',
-          enlisted_at: '2024-01-10',
-          valid_until: '2024-12-31',
-          status: 'Expired',
-          source: 'ClinicEnlistment',
-          case_no: 'C00921202400001',
-          enlistment_no: 'E00921202400001',
-          profiling_trans_no: 'P00921202400001',
-        },
-        {
-          effective_year: '2025',
-          enlisted_at: '2025-01-05',
-          valid_until: '2025-12-31',
-          status: 'Expired',
-          source: 'PhilHealthMasterlist',
-          case_no: 'C00921202500002',
-          enlistment_no: 'E00921202500002',
-          profiling_trans_no: 'P00921202500002',
-        },
-        {
-          effective_year: '2026',
-          enlisted_at: '2026-01-02',
-          valid_until: '2026-12-31',
-          status: 'Active',
-          source: 'ClinicEnlistment',
-          case_no: null,
-          enlistment_no: null,
-          profiling_trans_no: null,
-        },
-      ];
-
-      const result = buildRegistrationCustomFields({
-        tenantCustomFields: [],
-        dynamicFieldValues: { yakap_enlistments: multiYearEnlistments },
-      });
-
-      expect(result.yakap_enlistments).toHaveLength(3);
-      expect(result.yakap_enlistments[0].effective_year).toBe('2024');
-      expect(result.yakap_enlistments[0].status).toBe('Expired');
-      expect(result.yakap_enlistments[1].effective_year).toBe('2025');
-      expect(result.yakap_enlistments[2].effective_year).toBe('2026');
-      expect(result.yakap_enlistments[2].status).toBe('Active');
-
-      // Verify that consumer helper getYakapEnlistments & getActiveYakapEnlistment parses correctly
-      const parsed = getYakapEnlistments(result);
-      expect(parsed).toHaveLength(3);
-      const active = getActiveYakapEnlistment(result, '2026-06-15');
-      expect(active).not.toBeNull();
-      expect(active?.effective_year).toBe('2026');
-    });
-
-    it('2.2 Stringified JSON Array: Transfers faithfully and parses cleanly with getYakapEnlistments', () => {
-      const rawStringifiedJson = JSON.stringify([
-        {
-          effective_year: '2026',
-          enlisted_at: '2026-02-01',
-          valid_until: '2026-12-31',
-          status: 'Active',
-          source: 'SelfReported',
-        },
-      ]);
-
-      const result = buildRegistrationCustomFields({
-        tenantCustomFields: [],
-        dynamicFieldValues: { yakap_enlistments: rawStringifiedJson },
-      });
-
-      // The string is transferred without mutation or crash
-      expect(typeof result.yakap_enlistments).toBe('string');
-      expect(result.yakap_enlistments).toBe(rawStringifiedJson);
-
-      // Downstream consumers parse stringified JSON seamlessly
-      const parsed = getYakapEnlistments(result);
-      expect(parsed).toHaveLength(1);
-      expect(parsed[0].effective_year).toBe('2026');
-      expect(parsed[0].source).toBe('SelfReported');
-    });
-
-    it('2.3 Falsy or Empty Enlistments: Does not corrupt customFields with undefined or empty string', () => {
-      // Case A: undefined
-      const resUndefined = buildRegistrationCustomFields({
-        tenantCustomFields: [],
-        dynamicFieldValues: { yakap_enlistments: undefined },
-      });
-      expect(resUndefined.yakap_enlistments).toBeUndefined();
-
-      // Case B: null
-      const resNull = buildRegistrationCustomFields({
-        tenantCustomFields: [],
-        dynamicFieldValues: { yakap_enlistments: null },
-      });
-      expect(resNull.yakap_enlistments).toBeUndefined();
-
-      // Case C: empty string
-      const resEmptyStr = buildRegistrationCustomFields({
-        tenantCustomFields: [],
-        dynamicFieldValues: { yakap_enlistments: '' },
-      });
-      expect(resEmptyStr.yakap_enlistments).toBeUndefined();
-
-      // Case D: empty array []
-      const resEmptyArr = buildRegistrationCustomFields({
-        tenantCustomFields: [],
-        dynamicFieldValues: { yakap_enlistments: [] },
-      });
-      expect(resEmptyArr.yakap_enlistments).toEqual([]);
-    });
-
-    it('2.4 Dirty Keys Sanitization: Prevents malicious or unapproved keys from leaking into customFields', () => {
+    it('2.1 Dirty Keys Sanitization: Prevents malicious or unapproved keys from leaking into customFields', () => {
       const tenantCustomFields = [
         {
           id: 'f-1',
@@ -448,15 +332,6 @@ describe('Challenger 3 Adversarial Registration & Locality Suite: Patients.scree
         primary_city: 'Quezon City',
         unapproved_hack: 'DROP TABLE patients;',
         __proto_injection: '<script>alert(1)</script>',
-        yakap_enlistments: [
-          {
-            effective_year: '2026',
-            enlisted_at: '2026-01-01',
-            valid_until: '2026-12-31',
-            status: 'Active',
-            source: 'ClinicEnlistment',
-          },
-        ],
       };
 
       const result = buildRegistrationCustomFields({
@@ -464,115 +339,9 @@ describe('Challenger 3 Adversarial Registration & Locality Suite: Patients.scree
         dynamicFieldValues: dirtyDynamicFieldValues,
       });
 
-      // Sanitization strips unapproved keys while preserving allowed field and yakap_enlistments
       expect(result.primary_city).toBe('Quezon City');
       expect(result.unapproved_hack).toBeUndefined();
       expect(result.__proto_injection).toBeUndefined();
-      expect(result.yakap_enlistments).toHaveLength(1);
-      expect(result.yakap_enlistments[0].effective_year).toBe('2026');
-    });
-  });
-
-  // =========================================================================
-  // SUITE 3: Interactive Lifecycle: recordAnnualRenewal -> handleRegister Payload
-  // =========================================================================
-  describe('Suite 3: YakapEnlistmentSection Renewal Simulation to Registration Payload', () => {
-    it('3.1 Simulates adding renewal in YakapEnlistmentSection then registering patient', () => {
-      // Initial state: dynamicFieldValues has no enlistments
-      const dynamicFieldValues: Record<string, any> = {};
-
-      // User triggers annual renewal for 2026 via YakapEnlistmentSection
-      recordAnnualRenewal(dynamicFieldValues, {
-        effectiveYear: '2026',
-        enlistedAt: '2026-01-01',
-        validUntil: '2026-12-31',
-        source: 'ClinicEnlistment',
-      });
-
-      expect(dynamicFieldValues['yakap_enlistments']).toBeDefined();
-      expect(dynamicFieldValues['yakap_enlistments']).toHaveLength(1);
-
-      // Now user triggers registration
-      const payloadCustomFields = buildRegistrationCustomFields({
-        tenantCustomFields: [],
-        dynamicFieldValues,
-        formClassification: 'General',
-      });
-
-      expect(payloadCustomFields.yakap_enlistments).toBeDefined();
-      expect(payloadCustomFields.yakap_enlistments).toHaveLength(1);
-      expect(payloadCustomFields.yakap_enlistments[0].effective_year).toBe('2026');
-      expect(payloadCustomFields.yakap_enlistments[0].status).toBe('Active');
-      expect(payloadCustomFields.yakap_enlistments[0].case_no).toBeNull();
-      expect(payloadCustomFields.yakap_enlistments[0].enlistment_no).toBeNull();
-      expect(payloadCustomFields.yakap_enlistments[0].profiling_trans_no).toBeNull();
-    });
-
-    it('3.2 Successive renewals transition prior active entry for same year to Expired before registration', () => {
-      const dynamicFieldValues: Record<string, any> = {};
-
-      // Record first 2026 entry
-      recordAnnualRenewal(dynamicFieldValues, {
-        effectiveYear: '2026',
-        enlistedAt: '2026-01-01',
-        validUntil: '2026-12-31',
-        source: 'ClinicEnlistment',
-      });
-
-      // Renew again for 2026 (superseding the first entry)
-      recordAnnualRenewal(dynamicFieldValues, {
-        effectiveYear: '2026',
-        enlistedAt: '2026-06-01',
-        validUntil: '2026-12-31',
-        source: 'ClinicEnlistment',
-      });
-
-      const payloadCustomFields = buildRegistrationCustomFields({
-        tenantCustomFields: [],
-        dynamicFieldValues,
-      });
-
-      expect(payloadCustomFields.yakap_enlistments).toHaveLength(2);
-      const [entry1, entry2] = payloadCustomFields.yakap_enlistments;
-      expect(entry1.effective_year).toBe('2026');
-      expect(entry1.status).toBe('Expired'); // Prior active entry for same year marked Expired
-      expect(entry2.effective_year).toBe('2026');
-      expect(entry2.status).toBe('Active'); // Newest active entry for benefit year
-    });
-
-    it('3.3 Multi-year renewals preserve independent annual periods with date-based active resolution', () => {
-      const dynamicFieldValues: Record<string, any> = {};
-
-      // Record 2025
-      recordAnnualRenewal(dynamicFieldValues, {
-        effectiveYear: '2025',
-        enlistedAt: '2025-01-01',
-        validUntil: '2025-12-31',
-        source: 'ClinicEnlistment',
-      });
-
-      // Record 2026
-      recordAnnualRenewal(dynamicFieldValues, {
-        effectiveYear: '2026',
-        enlistedAt: '2026-01-01',
-        validUntil: '2026-12-31',
-        source: 'ClinicEnlistment',
-      });
-
-      const payloadCustomFields = buildRegistrationCustomFields({
-        tenantCustomFields: [],
-        dynamicFieldValues,
-      });
-
-      expect(payloadCustomFields.yakap_enlistments).toHaveLength(2);
-
-      // In 2025, active enlistment was 2025
-      const active2025 = getActiveYakapEnlistment(payloadCustomFields, '2025-06-01');
-      expect(active2025?.effective_year).toBe('2025');
-
-      // In 2026, active enlistment is 2026
-      const active2026 = getActiveYakapEnlistment(payloadCustomFields, '2026-06-01');
-      expect(active2026?.effective_year).toBe('2026');
     });
   });
 
@@ -580,15 +349,16 @@ describe('Challenger 3 Adversarial Registration & Locality Suite: Patients.scree
   // SUITE 4: Source Code White-Box Verification of Patients.screen.tsx
   // =========================================================================
   describe('Suite 4: White-Box Source Code Verification of Patients.screen.tsx', () => {
-    it('4.1 Asserts Patients.screen.tsx has purged legacy yakap_enlistments transfer', () => {
+    it('4.1 Asserts Patients.screen.tsx has purged legacy yakap_enlistments transfer and YakapEnlistmentSection', () => {
       const screenPath = path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx');
       expect(fs.existsSync(screenPath)).toBe(true);
 
       const code = fs.readFileSync(screenPath, 'utf8');
 
-      // 1. Verify that legacy yakap_enlistments transfer into customFields is completely purged
+      // 1. Verify that legacy yakap_enlistments transfer into customFields and YakapEnlistmentSection are completely purged
       expect(code.includes("customFields['yakap_enlistments']")).toBe(false);
       expect(code.includes("dynamicFieldValues['yakap_enlistments']")).toBe(false);
+      expect(code.includes('<YakapEnlistmentSection')).toBe(false);
 
       // 2. Verify that sanitizeCustomFieldsPayload is used
       const sanitizeIndex = code.indexOf('const cleanCustom = sanitizeCustomFieldsPayload');
@@ -597,16 +367,6 @@ describe('Challenger 3 Adversarial Registration & Locality Suite: Patients.scree
       // 3. Verify that payload maps customFields
       const payloadCustomFieldsIndex = code.indexOf('customFields: Object.keys(customFields).length > 0 ? customFields : undefined');
       expect(payloadCustomFieldsIndex).toBeGreaterThan(sanitizeIndex);
-    });
-
-    it('4.2 Verifies YakapEnlistmentSection is mounted with dynamicFieldValues binding', () => {
-      const screenPath = path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx');
-      const code = fs.readFileSync(screenPath, 'utf8');
-
-      // Check YakapEnlistmentSection binding
-      expect(code.includes('<YakapEnlistmentSection')).toBe(true);
-      expect(code.includes('customFields={dynamicFieldValues}')).toBe(true);
-      expect(code.includes('onCustomFieldsChange={(next) => setDynamicFieldValues(next)}')).toBe(true);
     });
   });
 });

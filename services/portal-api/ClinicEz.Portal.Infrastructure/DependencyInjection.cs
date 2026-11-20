@@ -195,7 +195,6 @@ public static class DependencyInjection
                 InteropTypes.FacilityVerificationUpdateRequested, InteropTypes.FacilityVerificationUpdateResponded)
             .Respond<PractitionerVerificationUpdateRequestedPayload, VerificationUpdateRespondedPayload, PractitionerVerificationUpdateRequestedResponder>(
                 InteropTypes.PractitionerVerificationUpdateRequested, InteropTypes.PractitionerVerificationUpdateResponded)
-            .HandleReply(InteropTypes.YakapTransmittalResponded)
             .HandleReply(InteropTypes.YakapSubmissionResponded)
             .HandleReply(InteropTypes.VerificationEvidenceResponded));
 

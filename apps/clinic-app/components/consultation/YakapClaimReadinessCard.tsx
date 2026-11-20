@@ -40,7 +40,7 @@ const XML_IDENTIFIERS: [RegExp, string][] = [
   [new RegExp('\\b' + 'p' + 'DoctorPan' + '\\b', 'gi'), 'Doctor PAN'],
   [new RegExp('\\b' + 'p' + 'DoctorPrc' + '\\b', 'gi'), 'Doctor PRC license'],
   [new RegExp('\\b' + 'p' + 'Pin' + '\\b', 'gi'), 'Patient PIN'],
-  [new RegExp('\\b' + 'p' + 'PhilHealthAtc' + '\\b', 'gi'), 'Authorization Transaction Code (ATC)'],
+  [new RegExp('\\b' + 'p' + 'PhilHealthAtc' + '\\b', 'gi'), 'PhilHealth Visit Code'],
   [new RegExp('\\b' + 'p' + 'SignSympCode' + '\\b', 'gi'), 'Chief complaint'],
   [new RegExp('\\b' + 'p' + 'PeSpecific' + '\\b', 'gi'), 'Physical examination findings'],
   [new RegExp('\\b' + 'PE' + 'SPECIFIC' + '\\b', 'gi'), 'Physical examination findings'],
@@ -48,11 +48,11 @@ const XML_IDENTIFIERS: [RegExp, string][] = [
   [new RegExp('\\b' + 'p' + 'Vitals' + '\\b', 'gi'), 'Triage vitals'],
   [new RegExp('\\b' + 'VITALS' + '\\b', 'gi'), 'Triage vitals'],
   [new RegExp('\\b' + 'p' + 'DrugCode' + '\\b', 'gi'), 'PhilHealth formulary medication'],
-  [new RegExp('\\b' + 'p' + 'HciCaseNo' + '\\b', 'gi'), 'Encounter case number'],
-  [new RegExp('\\b' + 'p' + 'HciTransNo' + '\\b', 'gi'), 'Facility transaction number'],
-  [new RegExp('\\b' + 'p' + 'SoapTransNo' + '\\b', 'gi'), 'Consultation transaction number'],
-  [new RegExp('\\b' + 'KONSULTA' + 'DATA' + '\\b', 'gi'), 'PhilHealth Konsulta consultation data'],
-  [new RegExp('KonsultaData_' + 'v1(?:\\.[0-9]+)?(?:\\.dtd|\\.xsd)?', 'gi'), 'PhilHealth Konsulta standard'],
+  [new RegExp('\\b' + 'p' + 'HciCaseNo' + '\\b', 'gi'), 'Visit case number'],
+  [new RegExp('\\b' + 'p' + 'HciTransNo' + '\\b', 'gi'), 'Clinic reference number'],
+  [new RegExp('\\b' + 'p' + 'SoapTransNo' + '\\b', 'gi'), 'Consultation reference number'],
+  [new RegExp('\\b' + 'KONSULTA' + 'DATA' + '\\b', 'gi'), 'PhilHealth YAKAP visit data'],
+  [new RegExp('KonsultaData_' + 'v1(?:\\.[0-9]+)?(?:\\.dtd|\\.xsd)?', 'gi'), 'PhilHealth YAKAP standard'],
   [new RegExp('\\bDTD' + '(?:\\s+v[0-9.]+)?', 'gi'), 'PhilHealth standard'],
   [new RegExp('Auto-' + 'Snap' + 'shot(?:ted|ting)?', 'gi'), 'Verified'],
   [new RegExp('Snap' + 'shot(?:ted|ting)?', 'gi'), 'Recorded'],
@@ -189,9 +189,9 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
     {
       key: 'atc',
       sectionKey: 'atc',
-      label: 'Encounter ATC Code',
+      label: 'PhilHealth Visit Code',
       isValid: atcValid,
-      missingReason: 'Authorization Transaction Code is required',
+      missingReason: 'PhilHealth visit code is required',
     },
     {
       key: 'symptoms',
@@ -435,7 +435,7 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
           />
           <ThemedText variant="smallBold" color={isReady ? theme.colors.successText : theme.colors.emergencyText}>
             {isReady
-              ? 'Encounter meets 100% of PhilHealth Konsulta requirements. Claim transmittal ready for signing.'
+              ? 'Encounter meets all PhilHealth YAKAP requirements and is ready for signing.'
               : 'Signing is locked. Resolve the missing requirements above to enable encounter signing.'}
           </ThemedText>
         </View>

@@ -461,7 +461,7 @@ const sampleAdultFemale: any = {
   dateOfBirth: '1995-05-15',
   age: 31,
   sex: 'Female',
-  philHealthNumber: '12-345678901-9',
+  philHealthNumber: '12-345678901-8',
   guardians: [
     {
       id: 'g-1',
@@ -586,7 +586,8 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
       saveHealthScreeningProgress: [],
       completeHealthScreening: [],
       escalateHealthScreening: [],
-      createPatientYakapEnlistment: [],
+      validatePatientYakapStanding: [],
+      submitPatientYakapSelection: [],
       upsertPatientPhilHealthMembership: [],
       updatePatientPhysicalExam: [],
       getPatientHealthScreenings: [],
@@ -614,11 +615,11 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
       getPatientPhilHealthCoverage: async (patientId: string) => [
         {
           patientId,
-          philHealthNumber: '12-345678901-9',
+          philHealthNumber: '12-345678901-8',
           membership: {
             patientId,
             memberType: 'MM',
-            philHealthPin: '12-345678901-9',
+            philHealthPin: '12-345678901-8',
           },
           enlistments: [
             {
@@ -650,9 +651,41 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
         callLog.upsertPatientPhilHealthMembership.push({ patientId, payload });
         return [{ patientId, ...payload }, null];
       },
-      createPatientYakapEnlistment: async (patientId: string, payload: any) => {
-        callLog.createPatientYakapEnlistment.push({ patientId, payload });
-        return [{ id: 'enl-new', patientId, status: 'Enlisted', ...payload }, null];
+      validatePatientYakapStanding: async (patientId: string, payload?: any) => {
+        callLog.validatePatientYakapStanding.push({ patientId, payload });
+        return [
+          {
+            pin: '12-345678901-8',
+            effectiveYear: 2026,
+            pcuStatus: 'VERIFIED',
+            selectionStatus: 'PENDING',
+            empanelmentStatus: 'PENDING',
+            fpeStatus: 'PENDING',
+            consultationStatus: 'PENDING',
+            needsClinicSelection: true,
+            needsIdentityCheck: false,
+            canStartCheckup: true,
+            summaryMessage: 'Patient eligibility checked cleanly.',
+          },
+          null,
+        ];
+      },
+      submitPatientYakapSelection: async (patientId: string, payload?: any) => {
+        callLog.submitPatientYakapSelection.push({ patientId, payload });
+        return [
+          {
+            enlistmentId: 'enl-new',
+            patientId,
+            effectiveYear: 2026,
+            selectionStatus: 'SELECTED',
+            selectionTransactionNo: 'K009212026112000001',
+            selectionDate: '2026-11-20',
+            caseNo: 'Y009212026112000001',
+            queuedForSync: false,
+            message: 'Patient assigned to this clinic.',
+          },
+          null,
+        ];
       },
       getPatientChart: async (patientId: string) => [
         {
@@ -832,7 +865,7 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
           },
         }),
         async ({ container }) => {
-          expect(container.textContent).toContain('PhilHealth Info & YAKAP Enlistment');
+          expect(container.textContent).toContain('PhilHealth Coverage & Clinic Assignment');
           expect(container.textContent).toContain('Member (MM)');
           expect(container.textContent).toContain('Dependent (DD)');
           expect(findByTestId(container, 'yakap-fpe-status-banner')).not.toBeNull();
@@ -866,20 +899,31 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
           const principalPinInput = principalPinWrapper?.querySelector('input') ?? principalPinWrapper;
           expect(principalPinInput?.value || principalPinInput?.getAttribute('value')).toBe('11-223344556-7');
 
-          // Open Add / Renew Enlistment sub-modal and confirm
+          // Check PhilHealth eligibility & open Patient Identity Check sub-modal (Zero visit writes)
           await React.act(async () => {
-            clickNode(findByTestId(container, 'add-renew-enlistment-btn'));
+            clickNode(findByTestId(container, 'check-yakap-standing-btn'));
             await flushMicrotasks();
           });
-          expect(findByTestId(container, 'yakap-enlistment-renewal-modal')).not.toBeNull();
+          expect(callLog.validatePatientYakapStanding.length).toBe(1);
 
           await React.act(async () => {
-            clickNode(findByTestId(container, 'confirm-enlistment-btn'));
+            clickNode(findByTestId(container, 'open-identity-check-btn'));
             await flushMicrotasks();
           });
-          expect(callLog.createPatientYakapEnlistment.length).toBe(1);
+          expect(findByTestId(container, 'patient-identity-check-modal')).not.toBeNull();
+          await React.act(async () => {
+            clickNode(findByTestId(container, 'identity-check-cancel-btn'));
+            await flushMicrotasks();
+          });
 
-          // Click "Start YAKAP Health Screening" -> closes dialog and calls onStartYakapScreening
+          // Complete Step 4 (Assign to This Clinic) before Step 5 unlocks (no skipping)
+          await React.act(async () => {
+            clickNode(findByTestId(container, 'assign-clinic-yakap-btn'));
+            await flushMicrotasks();
+          });
+          expect(callLog.submitPatientYakapSelection.length).toBe(1);
+
+          // Click "Start PhilHealth Checkup" -> closes dialog and calls onStartYakapScreening
           await React.act(async () => {
             clickNode(findByTestId(container, 'start-yakap-screening-btn'));
             await flushMicrotasks();
@@ -1259,7 +1303,8 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
           // Resuming an InProgress screening with saved vitals opens directly at Station 2
           expect(findByTestId(container, 'screening-station-2')).not.toBeNull();
           expect(findByTestId(container, 'screening-step-1')?.textContent).toContain('Completed');
-          expect(findByTestId(container, 'screening-step-2')?.textContent).toContain('Current · Intake & PhilPEN');
+          expect(findByTestId(container, 'screening-step-2')?.textContent).toContain('Intake & PhilPEN');
+          expect(findByTestId(container, 'screening-step-2')?.textContent).not.toContain('Current');
           // Historical PE from prior visits must NOT falsely mark Step 3 as Completed
           expect(findByTestId(container, 'screening-step-3')?.textContent).toContain('Physician');
           expect(findByTestId(container, 'screening-step-3')?.textContent).not.toContain('Completed');
@@ -1468,8 +1513,8 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
       expect(billingSource).toContain('id: `lab-${labItem.id');
     });
 
-    test('3.2 YAKAP FPE displays ₱0.00 covered notice, attaches zero-peso YAKAP-FPE item, and supports optional co-payment', () => {
-      expect(billingSource).toContain('PhilHealth YAKAP FPE Covered (₱0.00)');
+    test('3.2 YAKAP Annual Checkup displays ₱0.00 covered notice, attaches zero-peso YAKAP-FPE item, and supports optional co-payment', () => {
+      expect(billingSource).toContain('PhilHealth Annual Checkup Covered (₱0.00)');
       expect(billingSource).toContain("code: 'YAKAP-FPE'");
       expect(billingSource).toContain("code: 'YAKAP-COPAY'");
       expect(billingSource).toContain('upsertYakapCoPaymentLineItem');
@@ -1588,7 +1633,7 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
       expect(markup).toContain('Cleared');
       expect(markup).toContain('BP 118/76');
       expect(markup).toContain('WHO/ISH Risk: BandA (4%)');
-      expect(markup).toContain('YAKAP FPE');
+      expect(markup).toContain('PhilHealth Checkup');
       expect(markup).toContain('Cleared w/ Advice');
       expect(markup).toContain('PACC98765420260007');
       expect(markup).toContain('ATC-2026-88');
@@ -1672,7 +1717,7 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
   // Suite 6: Directory Card, Patients Screen & ServiceCheckInModal Decoupling
   // =========================================================================
   describe('Suite 6: Directory Card, Patients Screen & ServiceCheckInModal Decoupling', () => {
-    test('6.1 PatientDirectoryCard separates PhilHealth info (shield) and Health screening (heartPulse) without accreditation/PIN gate', () => {
+    test('6.1 PatientDirectoryCard separates Manage PhilHealth (shieldCheck) and Start screening (heartPulse) without accreditation/PIN gate', () => {
       const items = buildPatientOverflowMenuItems(sampleAdultMaleNoPin, {
         hasPhilHealthAccreditation: false,
         onOpenPhilHealth: () => {},
@@ -1682,9 +1727,9 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
       const phItem = items.find((i) => i.id === 'philhealth-profile');
       const hsItem = items.find((i) => i.id === 'start-profiling');
 
-      expect(phItem?.label).toBe('PhilHealth info');
-      expect(phItem?.icon).toBe('shield');
-      expect(hsItem?.label).toBe('Health screening');
+      expect(phItem?.label).toBe('Manage PhilHealth');
+      expect(phItem?.icon).toBe('shieldCheck');
+      expect(hsItem?.label).toBe('Start screening');
       expect(hsItem?.icon).toBe('heartPulse');
     });
 
@@ -1705,7 +1750,7 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
       expect(patientsSource).not.toContain(legacyModalName);
 
       expect(checkInSource).toContain(
-        'Health screening, APE, pre-employment, PhilHealth YAKAP FPE, or vitals monitoring'
+        'Standard checkup, APE, pre-employment, PhilHealth Annual Checkup, or vitals monitoring'
       );
     });
 
@@ -1780,7 +1825,7 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
             await flushMicrotasks();
           });
 
-          const hsMenuBtn = container.querySelector('[aria-label="Health screening"]');
+          const hsMenuBtn = container.querySelector('[aria-label="Start screening"]');
           expect(hsMenuBtn).not.toBeNull();
           await React.act(async () => {
             clickNode(hsMenuBtn!);
@@ -1818,7 +1863,7 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
             clickNode(container.querySelector('[aria-label="More actions for Juan Dela Cruz"]'));
             await flushMicrotasks();
           });
-          const hsMenuBtn2 = container.querySelector('[aria-label="Health screening"]');
+          const hsMenuBtn2 = container.querySelector('[aria-label="Start screening"]');
           expect(hsMenuBtn2).not.toBeNull();
           await React.act(async () => {
             clickNode(hsMenuBtn2!);
@@ -1864,7 +1909,7 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
             clickNode(container.querySelector('[aria-label="More actions for Juan Dela Cruz"]'));
             await flushMicrotasks();
           });
-          const hsMenuBtn3 = container.querySelector('[aria-label="Health screening"]');
+          const hsMenuBtn3 = container.querySelector('[aria-label="Start screening"]');
           expect(hsMenuBtn3).not.toBeNull();
           await React.act(async () => {
             clickNode(hsMenuBtn3!);
@@ -1940,7 +1985,8 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
 
           expect(findByTestId(container, 'philhealth-coverage-modal')).not.toBeNull();
 
-          // Clear PIN input and click Save Coverage
+          // Footer Save Coverage is removed; Step 1 save button handles clearing the saved PIN
+          expect(findByTestId(container, 'philhealth-save-coverage-btn')).toBeNull();
           const pinWrapper = findByTestId(container, 'coverage-patient-pin-input');
           const pinInput = pinWrapper?.querySelector('input') ?? pinWrapper;
           await React.act(async () => {
@@ -1948,7 +1994,7 @@ describe('Health Screening & PhilHealth Info Decoupled Workflow', () => {
             await flushMicrotasks();
           });
           await React.act(async () => {
-            clickNode(findByTestId(container, 'philhealth-save-coverage-btn'));
+            clickNode(findByTestId(container, 'save-step1-membership-btn'));
             await flushMicrotasks();
           });
 

@@ -24,7 +24,10 @@ import {
   GamotBeneficiaryLedger,
   GamotFormularyItem,
   UpscVerifyResult,
-  YakapMasterlistAssignment,
+  type PortalYakapBranchSummaryDto,
+  type PortalYakapMasterlistSyncResultDto,
+  type PortalYakapSubmissionDto,
+  type YakapSandboxStatus,
 } from '../../services/clinicService';
 import type { YakapSubTool } from './toolsCatalog';
 import { FilterChip } from './ToolsUiHelpers';
@@ -76,14 +79,23 @@ export default function PhilHealthYakapToolsSection({
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [isVerifyingUpsc, setIsVerifyingUpsc] = useState(false);
 
-  // Masterlist Sync State
-  const [hciOverride, setHciOverride] = useState<string | null>(null);
-  const hciNumber = hciOverride ?? accreditationNumber;
-  const [cipherKey, setCipherKey] = useState('');
-  const [masterlistItems, setMasterlistItems] = useState<YakapMasterlistAssignment[]>([]);
-  const [masterlistSynced, setMasterlistSynced] = useState(false);
+  // Masterlist Sync & YAKAP 2.0 Submissions State
+  const [masterlistPin, setMasterlistPin] = useState('');
+  const [masterlistStartDate, setMasterlistStartDate] = useState('');
+  const [masterlistEndDate, setMasterlistEndDate] = useState('');
+  const [masterlistResult, setMasterlistResult] = useState<PortalYakapMasterlistSyncResultDto | null>(null);
   const [masterlistError, setMasterlistError] = useState<string | null>(null);
   const [isSyncingMasterlist, setIsSyncingMasterlist] = useState(false);
+
+  const [submissionSummary, setSubmissionSummary] = useState<PortalYakapBranchSummaryDto | null>(null);
+  const [submissions, setSubmissions] = useState<PortalYakapSubmissionDto[]>([]);
+  const [submissionsError, setSubmissionsError] = useState<string | null>(null);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [activeSubmissionActionId, setActiveSubmissionActionId] = useState<string | null>(null);
+
+  // Demo testing mode (visible when enabled on local/demo environments)
+  const [sandboxStatus, setSandboxStatus] = useState<YakapSandboxStatus | null>(null);
+  const [updatingSandbox, setUpdatingSandbox] = useState(false);
 
   // Real-time PIN Checker State
   const [pinToCheck, setPinToCheck] = useState('');
@@ -198,26 +210,115 @@ export default function PhilHealthYakapToolsSection({
     setIsValidatingPin(false);
   }, [pinToCheck]);
 
+  const loadSubmissionsAndSandbox = useCallback(async () => {
+    if (!canAccess) return;
+    setLoadingSubmissions(true);
+    try {
+      const [[sumRes, sumErr], [listRes, listErr], [sbRes]] = await Promise.all([
+        clinicService.getYakapSubmissionsSummary(),
+        clinicService.getYakapSubmissions({ page: 1, pageSize: 25 }),
+        clinicService.getYakapSandboxStatus(),
+      ]);
+      if (sumRes && !sumErr) setSubmissionSummary(sumRes);
+      if (listErr) {
+        setSubmissionsError(listErr.message || 'Unable to load PhilHealth submission records.');
+      } else {
+        setSubmissions(listRes ?? []);
+        setSubmissionsError(null);
+      }
+      if (sbRes) setSandboxStatus(sbRes);
+    } finally {
+      setLoadingSubmissions(false);
+    }
+  }, [canAccess]);
+
+  useEffect(() => {
+    if (canAccess && activeTool === 'masterlist') {
+      void loadSubmissionsAndSandbox();
+    }
+  }, [canAccess, activeTool, loadSubmissionsAndSandbox]);
+
   // Sync Masterlist
   const handleSyncMasterlist = async () => {
-    if (!hciNumber.trim() || !cipherKey.trim()) {
-      Alert.alert('Required', 'Enter the HCI accreditation number and cipher key to sync the masterlist.');
-      return;
-    }
     setIsSyncingMasterlist(true);
-    const [res, err] = await clinicService.extractYakapMasterlist({
-      hciAccreditationNumber: hciNumber.trim(),
-      cipherKey,
-    });
-    if (err || !res || !Array.isArray(res)) {
-      setMasterlistError(err?.message || 'The masterlist could not be synced. Please try again.');
-    } else {
-      setMasterlistItems(res);
-      setMasterlistSynced(true);
+    try {
+      const [res, err] = await clinicService.syncYakapMasterlist({
+        patientPin: masterlistPin.trim() || undefined,
+        effectiveYear: new Date().getFullYear(),
+        startDate: masterlistStartDate.trim() || undefined,
+        endDate: masterlistEndDate.trim() || undefined,
+      });
+      if (err || !res) {
+        setMasterlistError(err?.message || 'Could not sync patient list right now. Please try again.');
+        return;
+      }
+      setMasterlistResult(res);
       setMasterlistError(null);
-      notify.success('Masterlist synced.');
+      notify.success(res.message || 'Patient list synced.');
+      await loadSubmissionsAndSandbox();
+    } finally {
+      setIsSyncingMasterlist(false);
     }
-    setIsSyncingMasterlist(false);
+  };
+
+  const handlePollSubmission = async (id: string) => {
+    setActiveSubmissionActionId(id);
+    try {
+      const [res, err] = await clinicService.pollYakapSubmissionStatus(id);
+      if (err || !res) {
+        notify.error(err?.message || 'Could not check status.');
+        return;
+      }
+      notify.info(`Status updated: ${res.processingStatus}`);
+      await loadSubmissionsAndSandbox();
+    } finally {
+      setActiveSubmissionActionId(null);
+    }
+  };
+
+  const handleRetrySubmission = async (id: string) => {
+    setActiveSubmissionActionId(id);
+    try {
+      const [res, err] = await clinicService.retryYakapSubmission(id);
+      if (err || !res) {
+        notify.error(err?.message || 'Could not retry submission.');
+        return;
+      }
+      notify.success(`Resubmitted (${res.processingStatus}).`);
+      await loadSubmissionsAndSandbox();
+    } finally {
+      setActiveSubmissionActionId(null);
+    }
+  };
+
+  const handleSelectSandboxScenario = async (scenario: string) => {
+    setUpdatingSandbox(true);
+    try {
+      const [res, err] = await clinicService.setYakapSandboxScenario(scenario);
+      if (err || !res) {
+        notify.error(err?.message || 'Could not switch demo testing mode.');
+        return;
+      }
+      setSandboxStatus(res);
+      notify.success(`Demo testing mode set to ${res.currentScenario}.`);
+    } finally {
+      setUpdatingSandbox(false);
+    }
+  };
+
+  const handleResetSandbox = async () => {
+    setUpdatingSandbox(true);
+    try {
+      const [res, err] = await clinicService.resetYakapSandbox();
+      if (err || !res) {
+        notify.error(err?.message || 'Could not reset demo data.');
+        return;
+      }
+      setSandboxStatus(res);
+      notify.success('Demo testing state reset.');
+    } finally {
+      setUpdatingSandbox(false);
+    }
   };
 
   useEffect(() => {
@@ -229,8 +330,20 @@ export default function PhilHealthYakapToolsSection({
       }
     } else if (activeTool === 'pin-checker' && pinToCheck.trim()) {
       void handleValidatePin();
+    } else if (activeTool === 'masterlist') {
+      void loadSubmissionsAndSandbox();
     }
-  }, [refreshSignal, canAccess, activeTool, loadFormulary, handleSearchLedger, handleValidatePin, searchPin, pinToCheck]);
+  }, [
+    refreshSignal,
+    canAccess,
+    activeTool,
+    loadFormulary,
+    handleSearchLedger,
+    handleValidatePin,
+    loadSubmissionsAndSandbox,
+    searchPin,
+    pinToCheck,
+  ]);
 
   const categories = useMemo(
     () => ['all', ...Array.from(new Set(formulary.map((item) => item.therapeuticCategory))).sort()],
@@ -580,67 +693,203 @@ export default function PhilHealthYakapToolsSection({
   );
 
   const renderMasterlist = () => (
-    <Card>
-      <CardHeader
-        title="Assigned Patient Masterlist"
-        subtitle="Patients assigned to this clinic under PhilHealth Yakap."
-        icon="patients"
-      />
-
-      <View style={rowStyle}>
-        <View style={styles.flexFill}>
-          <Input label="Clinic accreditation number (HCI)" value={hciNumber} onChangeText={setHciOverride} />
-        </View>
-        <View style={styles.flexFill}>
-          <Input label="PhilHealth decryption key (Cipher key)" value={cipherKey} onChangeText={setCipherKey} secureTextEntry />
-        </View>
-      </View>
-
-      <Button
-        title="Sync masterlist"
-        icon="refresh"
-        variant="primary"
-        loading={isSyncingMasterlist}
-        onPress={handleSyncMasterlist}
-      />
-
-      {masterlistError ? (
-        <ErrorState
-          compact
-          title="Unable to sync masterlist"
-          message={masterlistError}
-          onRetry={handleSyncMasterlist}
-        />
-      ) : masterlistSynced && masterlistItems.length === 0 ? (
-        <EmptyState
+    <View style={styles.tabBody}>
+      <Card>
+        <CardHeader
+          title="Assigned Patient List"
+          subtitle={`Download and refresh patients assigned to ${accreditationNumber || 'this clinic'} under PhilHealth YAKAP.`}
           icon="patients"
-          title="No assigned patients"
-          description="No assigned patients were returned for this accreditation number."
         />
-      ) : masterlistItems.length > 0 ? (
-        <View>
-          <ThemedText variant="bodyBold">Assigned patients ({masterlistItems.length})</ThemedText>
-          {masterlistItems.map((item) => (
-            <View key={item.philHealthIdentificationNumber} style={styles.listRow}>
-              <View style={styles.flexFill}>
-                <ThemedText variant="bodyBold">
-                  {item.firstName} {item.lastName}
-                </ThemedText>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  PIN {item.philHealthIdentificationNumber} · DOB {item.birthDate} ({item.gender})
-                </ThemedText>
-              </View>
-              <View style={styles.rowEnd}>
-                <Badge variant="success" label={item.packageType} />
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Registered {item.registrationDate}
-                </ThemedText>
-              </View>
-            </View>
-          ))}
+
+        <View style={rowStyle}>
+          <View style={styles.flexFill}>
+            <Input
+              label="Patient PhilHealth PIN (Optional)"
+              value={masterlistPin}
+              onChangeText={setMasterlistPin}
+              placeholder="XX-XXXXXXXXX-X"
+            />
+          </View>
+          <View style={styles.flexFill}>
+            <Input
+              label="Start Date (Optional)"
+              value={masterlistStartDate}
+              onChangeText={setMasterlistStartDate}
+              placeholder="YYYY-MM-DD"
+            />
+          </View>
+          <View style={styles.flexFill}>
+            <Input
+              label="End Date (Optional)"
+              value={masterlistEndDate}
+              onChangeText={setMasterlistEndDate}
+              placeholder="YYYY-MM-DD"
+            />
+          </View>
         </View>
+
+        <Button
+          title={isSyncingMasterlist ? 'Syncing...' : 'Sync Patient List'}
+          icon="refresh"
+          variant="primary"
+          loading={isSyncingMasterlist}
+          onPress={handleSyncMasterlist}
+          testID="yakap-sync-masterlist-btn"
+        />
+
+        {masterlistError ? (
+          <ErrorState
+            compact
+            title="Unable to sync patient list"
+            message={masterlistError}
+            onRetry={handleSyncMasterlist}
+          />
+        ) : masterlistResult ? (
+          <View style={[styles.resultBox, styles.resultBoxValid]} testID="yakap-masterlist-sync-result">
+            <View style={styles.resultHeader}>
+              <Badge variant="success" label="Synced" />
+              <ThemedText variant="bodyBold" color={theme.colors.text}>
+                {masterlistResult.totalActiveCount} Active Assigned Patients
+              </ThemedText>
+            </View>
+            <ThemedText variant="small" color={theme.colors.textSecondary}>
+              {masterlistResult.recordsAdded} added · {masterlistResult.recordsUpdated} updated
+              {masterlistResult.message ? ` · ${masterlistResult.message}` : ''}
+            </ThemedText>
+          </View>
+        ) : null}
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Checkup Records & Clinic Submissions"
+          subtitle="Track PhilHealth checkup and clinic assignment status without leaving the app."
+          icon="clipboard"
+          rightAction={
+            <Button
+              title="Refresh"
+              variant="outline"
+              size="xs"
+              icon="refresh"
+              onPress={() => void loadSubmissionsAndSandbox()}
+              disabled={loadingSubmissions}
+            />
+          }
+        />
+
+        {submissionSummary ? (
+          <View style={styles.statsRow}>
+            <StatCard label="Assigned Patients" value={submissionSummary.empaneledCount} icon="patients" style={styles.statCard} />
+            <StatCard label="Pending Confirmation" value={submissionSummary.pendingPollingCount} icon="clock" style={styles.statCard} />
+            <StatCard label="Needs Attention" value={submissionSummary.rejectedOrFailedCount} icon="alert" style={styles.statCard} />
+          </View>
+        ) : null}
+
+        {loadingSubmissions && submissions.length === 0 ? (
+          <SkeletonList rows={3} />
+        ) : submissionsError ? (
+          <ErrorState
+            compact
+            title="Unable to load submissions"
+            message={submissionsError}
+            onRetry={() => void loadSubmissionsAndSandbox()}
+          />
+        ) : submissions.length === 0 ? (
+          <EmptyState
+            icon="clipboard"
+            title="No checkup submissions yet"
+            description="Completed PhilHealth annual checkups and walk-in clinic assignments appear here."
+          />
+        ) : (
+          <View>
+            {submissions.map((sub) => {
+              const busy = activeSubmissionActionId === sub.id;
+              const isBad = sub.processingStatus === 'Rejected' || sub.processingStatus === 'Failed';
+              const isDone = sub.processingStatus === 'Accepted' || sub.processingStatus === 'Completed';
+              return (
+                <View key={sub.id} style={styles.listRow}>
+                  <View style={styles.flexFill}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      {sub.patientCode} · {sub.submissionType}
+                    </ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      Ref: {sub.uploadTransactionNo || sub.localTransactionNo}
+                      {sub.yesReferenceNo ? ` · Assignment No: ${sub.yesReferenceNo}` : ''}
+                    </ThemedText>
+                    {sub.lastErrorMessage ? (
+                      <ThemedText variant="caption" color={theme.colors.emergencyText}>
+                        {sub.lastErrorMessage}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  <View style={styles.rowEnd}>
+                    <Badge
+                      variant={isDone ? 'success' : isBad ? 'emergency' : 'warning'}
+                      label={sub.processingStatus}
+                    />
+                    <View style={styles.chipRow}>
+                      <Button
+                        title="Check Status"
+                        variant="outline"
+                        size="xs"
+                        disabled={busy}
+                        onPress={() => void handlePollSubmission(sub.id)}
+                      />
+                      {(isBad || sub.processingStatus === 'Queued') && (
+                        <Button
+                          title="Retry"
+                          variant="outline"
+                          size="xs"
+                          disabled={busy}
+                          onPress={() => void handleRetrySubmission(sub.id)}
+                        />
+                      )}
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </Card>
+
+      {sandboxStatus ? (
+        <Card>
+          <CardHeader
+            title="PhilHealth Demo Testing Mode"
+            subtitle={`Current mode: ${sandboxStatus.currentScenario}`}
+            icon="settings"
+            rightAction={
+              <Button
+                title="Reset Demo Data"
+                variant="outline"
+                size="xs"
+                disabled={updatingSandbox}
+                onPress={() => void handleResetSandbox()}
+              />
+            }
+          />
+          <View style={styles.chipRow}>
+            {(
+              [
+                { value: 'HappyPath', label: 'Normal (Success)' },
+                { value: 'ServerError', label: 'Offline Outage' },
+                { value: 'UploadRejected', label: 'Checkup Rejected' },
+                { value: 'ValidationError', label: 'Validation Error' },
+                { value: 'BeneficiaryNotFound', label: 'Member Not Found' },
+              ] as const
+            ).map((sc) => (
+              <FilterChip
+                key={sc.value}
+                label={sc.label}
+                active={sandboxStatus.currentScenario === sc.value}
+                onPress={() => void handleSelectSandboxScenario(sc.value)}
+              />
+            ))}
+          </View>
+        </Card>
       ) : null}
-    </Card>
+    </View>
   );
 
   return (

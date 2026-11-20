@@ -326,7 +326,7 @@ describe("Workspace Settings Cleanup & Branches Master-Detail Redesign", () => {
     test("PhilHealth payload helpers preserve encrypted stored secrets when inputs are blank", () => {
       const placeholders = resolvePhilHealthPlaceholders(sampleBranch);
       expect(placeholders.secretKey).toBe("•••••••••••••••• (Leave blank to keep existing)");
-      expect(placeholders.cipherKey).toBe("Enter AES-256-CBC Cipher Key");
+      expect(placeholders.cipherKey).toBe("Enter Record Encryption Key");
 
       const testPayload = buildPhilHealthTestPayload({
         accreditationNumber: "P10038831",
@@ -425,7 +425,7 @@ describe("Workspace Settings Cleanup & Branches Master-Detail Redesign", () => {
           </SWRConfig>,
         );
         expect(philHealthHtml).toContain("PhilHealth YAKAP Accreditation");
-        expect(philHealthHtml).toContain("Gateway Connectivity Test");
+        expect(philHealthHtml).toContain("Connection Test");
       } finally {
         mockSearchParams = new URLSearchParams();
       }

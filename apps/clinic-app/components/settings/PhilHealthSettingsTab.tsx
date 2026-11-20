@@ -14,6 +14,7 @@ import { theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 import { InfoRow } from './common';
 import { clinicService, ClinicSettingsRecord, ClinicServiceItem } from '../../services/clinicService';
+import { resolveEffectivePhilHealthConnectionUrl } from '../../utils/philhealthError';
 
 export interface PhilHealthSettingsTabProps {
   accreditationNumber: string;
@@ -45,6 +46,10 @@ export default function PhilHealthSettingsTab({
     settings?.branchName ||
     settings?.branchPhilHealthAccreditationNumber
   );
+  const effectiveConnectionUrl = resolveEffectivePhilHealthConnectionUrl(settings);
+  const isSandboxConnectionUrl =
+    effectiveConnectionUrl.toLowerCase().includes('sandbox') ||
+    effectiveConnectionUrl.toLowerCase().includes('simulator');
 
   const [overrideModalVisible, setOverrideModalVisible] = useState(false);
   const [savingOverride, setSavingOverride] = useState(false);
@@ -71,18 +76,18 @@ export default function PhilHealthSettingsTab({
         });
         if (err || !updated) {
           setAllowNurseMidwifeFpe(!nextVal);
-          notify.error(err?.message || 'Could not update PhilHealth YAKAP FPE facilitator setting.');
+          notify.error(err?.message || 'Could not update PhilHealth Annual Checkup sign-off setting.');
           return;
         }
         notify.success(
           nextVal
-            ? 'Authorized Nurse/Midwife facilitator enabled for PhilHealth YAKAP FPE sign-off.'
-            : 'PhilHealth YAKAP FPE sign-off restricted to Physicians.'
+            ? 'Authorized Nurse/Midwife sign-off enabled for PhilHealth Annual Checkups.'
+            : 'PhilHealth Annual Checkup sign-off restricted to Physicians.'
         );
         onSettingsUpdated?.(updated);
       } catch {
         setAllowNurseMidwifeFpe(!nextVal);
-        notify.error('Failed to update PhilHealth YAKAP FPE facilitator setting.');
+        notify.error('Failed to update PhilHealth Annual Checkup sign-off setting.');
       } finally {
         setSavingFacilitator(false);
       }
@@ -94,21 +99,19 @@ export default function PhilHealthSettingsTab({
   const [formAccreditation, setFormAccreditation] = useState('');
   const [formPmcc, setFormPmcc] = useState('');
   const [formCertId, setFormCertId] = useState('');
-  const [formUsername, setFormUsername] = useState('');
-  const [formPassword, setFormPassword] = useState('');
+  const [formSecretKey, setFormSecretKey] = useState('');
   const [formCipherKey, setFormCipherKey] = useState('');
-  const [formEndpoint, setFormEndpoint] = useState('/soap/konsulta');
+  const [formEndpoint, setFormEndpoint] = useState('');
 
   const baselineAccreditation = settings?.accreditationNumber || accreditationNumber || '';
   const baselinePmcc = settings?.pmccNumber || '';
   const baselineCertId = settings?.softwareCertificateId || '';
-  const baselineEndpoint = settings?.konsultaEndpoint || '/soap/konsulta';
+  const baselineEndpoint = settings?.philHealthBaseUrl || '';
   const isOverrideDirty =
     formAccreditation !== baselineAccreditation ||
     formPmcc !== baselinePmcc ||
     formCertId !== baselineCertId ||
-    formUsername.trim().length > 0 ||
-    formPassword.length > 0 ||
+    formSecretKey.trim().length > 0 ||
     formCipherKey.trim().length > 0 ||
     formEndpoint !== baselineEndpoint;
 
@@ -116,10 +119,9 @@ export default function PhilHealthSettingsTab({
     setFormAccreditation(settings?.accreditationNumber || accreditationNumber || '');
     setFormPmcc(settings?.pmccNumber || '');
     setFormCertId(settings?.softwareCertificateId || '');
-    setFormUsername('');
-    setFormPassword('');
+    setFormSecretKey('');
     setFormCipherKey('');
-    setFormEndpoint(settings?.konsultaEndpoint || '/soap/konsulta');
+    setFormEndpoint(settings?.philHealthBaseUrl || '');
     setOverrideModalVisible(true);
   };
 
@@ -129,12 +131,34 @@ export default function PhilHealthSettingsTab({
       return;
     }
     if (!formPmcc.trim()) {
-      notify.error('PhilHealth PMCC Number is required.');
+      notify.error('PhilHealth Facility Code is required.');
       return;
     }
     if (!formCertId.trim()) {
       notify.error('PhilHealth Software Certificate ID is required.');
       return;
+    }
+    const trimmedEndpoint = formEndpoint.trim();
+    const effectiveOverrideUrl =
+      trimmedEndpoint ||
+      settings?.branchPhilHealthBaseUrl?.trim() ||
+      settings?.philHealthBaseUrl?.trim() ||
+      '';
+    if (!effectiveOverrideUrl) {
+      notify.error('PhilHealth Connection URL is required when no branch baseline URL is configured.');
+      return;
+    }
+    if (trimmedEndpoint) {
+      try {
+        const parsed = new URL(trimmedEndpoint);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          notify.error('PhilHealth Connection URL must start with HTTP or HTTPS.');
+          return;
+        }
+      } catch {
+        notify.error('Enter a valid PhilHealth Connection URL.');
+        return;
+      }
     }
 
     setSavingOverride(true);
@@ -142,10 +166,9 @@ export default function PhilHealthSettingsTab({
       accreditationNumber: formAccreditation.trim(),
       pmccNumber: formPmcc.trim(),
       softwareCertificateId: formCertId.trim(),
-      username: formUsername.trim(),
-      password: formPassword,
-      cipherKey: formCipherKey.trim(),
-      konsultaEndpoint: formEndpoint.trim() || '/soap/konsulta',
+      secretKey: formSecretKey.trim() || undefined,
+      cipherKey: formCipherKey.trim() || undefined,
+      baseUrl: formEndpoint.trim() || undefined,
     });
     setSavingOverride(false);
 
@@ -178,7 +201,7 @@ export default function PhilHealthSettingsTab({
       {/* PhilHealth Facility Accreditation Overview */}
       <Card>
         <CardHeader
-          title="PhilHealth Konsulta & eClaims Accreditation"
+          title="PhilHealth YAKAP Accreditation"
           subtitle="Accreditation credentials and eClaims electronic submission status"
         />
         <CardContent>
@@ -207,9 +230,9 @@ export default function PhilHealthSettingsTab({
               </View>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
                 {isConfigured
-                  ? 'This facility is accredited and cryptographic PhilHealth credentials are configured for Konsulta reimbursement.'
+                  ? 'This facility is accredited and its PhilHealth credentials are configured for Annual Checkup coverage.'
                   : hasAccreditation
-                  ? 'Accreditation number entered, but PhilHealth cryptographic credentials are still pending configuration.'
+                  ? 'Accreditation number entered, but PhilHealth access credentials are still pending setup.'
                   : 'Enter your DOH/PhilHealth accreditation number in General Settings or inherit branch baseline credentials.'}
               </ThemedText>
             </View>
@@ -226,7 +249,7 @@ export default function PhilHealthSettingsTab({
               valueColor={isConfigured ? theme.colors.primary : theme.colors.textMuted}
             />
             <InfoRow
-              label="Konsulta Benefit Package"
+              label="PhilHealth Annual Checkup Package"
               value={
                 isConfigured
                   ? 'Active'
@@ -237,14 +260,32 @@ export default function PhilHealthSettingsTab({
               valueColor={isConfigured ? theme.colors.successText : theme.colors.warningText}
             />
             {settings?.pmccNumber ? (
-              <InfoRow label="PMCC Number" value={settings.pmccNumber} />
+              <InfoRow label="PhilHealth Facility Code" value={settings.pmccNumber} />
             ) : null}
             {settings?.softwareCertificateId ? (
               <InfoRow label="Software Certificate ID" value={settings.softwareCertificateId} />
             ) : null}
             <InfoRow
-              label="Electronic Claims Engine"
-              value="Clinic EZ Yakap eClaims v2.4 (Compliant)"
+              label="PhilHealth Connection URL"
+              value={effectiveConnectionUrl || 'Not configured'}
+              valueColor={effectiveConnectionUrl ? theme.colors.primary : theme.colors.emergencyText}
+            />
+            <InfoRow
+              label="PhilHealth Connection"
+              value={
+                !effectiveConnectionUrl
+                  ? 'Connection URL Required'
+                  : isSandboxConnectionUrl
+                    ? 'Sandbox / Test Mode'
+                    : 'PhilHealth YAKAP Ready'
+              }
+              valueColor={
+                !effectiveConnectionUrl
+                  ? theme.colors.emergencyText
+                  : isSandboxConnectionUrl
+                    ? theme.colors.warningText
+                    : theme.colors.successText
+              }
             />
           </View>
 
@@ -291,12 +332,16 @@ export default function PhilHealthSettingsTab({
                 }
               />
               <InfoRow
-                label="Branch PMCC Number"
+                label="Branch Facility Code"
                 value={settings?.branchPmccNumber || 'Not configured'}
               />
               <InfoRow
                 label="Branch Software Certificate"
                 value={settings?.branchSoftwareCertificateId || 'Not configured'}
+              />
+              <InfoRow
+                label="Branch Connection URL"
+                value={settings?.branchPhilHealthBaseUrl || 'Not configured'}
               />
               <InfoRow
                 label="Branch Accreditation Status"
@@ -327,12 +372,12 @@ export default function PhilHealthSettingsTab({
         </Card>
       )}
 
-      {/* PhilHealth YAKAP FPE Facilitator Authority */}
+      {/* PhilHealth Annual Checkup Sign-Off Authority */}
       <Card testID="philhealth-yakap-fpe-facilitator-card">
         <CardHeader
           icon="heartPulse"
-          title="PhilHealth YAKAP FPE Facilitator Authority"
-          subtitle="Control whether authorized nurses or midwives can finalize and sign off PhilHealth YAKAP First Patient Encounters"
+          title="PhilHealth Annual Checkup Sign-Off"
+          subtitle="Control whether authorized nurses or midwives can finalize and sign off PhilHealth Annual Checkups"
           rightAction={
             <Badge
               label={allowNurseMidwifeFpe ? 'Nurse/Midwife Enabled' : 'Physician Sign-Off Only'}
@@ -355,16 +400,16 @@ export default function PhilHealthSettingsTab({
             <View style={styles.toggleRow}>
               <View style={styles.toggleTextContainer}>
                 <ThemedText variant="bodyBold" color={theme.colors.text}>
-                  Allow authorized Nurse/Midwife facilitator for PhilHealth YAKAP FPE
+                  Allow authorized Nurse/Midwife sign-off for PhilHealth Annual Checkups
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                  When disabled (default), YAKAP FPE screenings route from Nursing to a Physician for Station 3 Physical Exam and Station 4 Sign-Off. When enabled, authorized nurses and midwives can complete YAKAP FPE encounters as Facilitator Type H per PCAPI v2.0.
+                  When disabled (default), PhilHealth annual checkups route from Nursing to a Physician for Step 3 Physical Exam and Step 4 Sign-Off. When enabled, authorized nurses and midwives can complete the checkup sign-off directly.
                 </ThemedText>
               </View>
               <ToggleSwitch
                 value={allowNurseMidwifeFpe}
                 onValueChange={handleToggleNurseMidwifeFacilitator}
-                accessibilityLabel="Allow authorized Nurse/Midwife facilitator for PhilHealth YAKAP FPE"
+                accessibilityLabel="Allow authorized Nurse/Midwife sign-off for PhilHealth Annual Checkups"
               />
             </View>
           )}
@@ -408,7 +453,7 @@ export default function PhilHealthSettingsTab({
             required
           />
           <Input
-            label="PMCC Number"
+            label="PhilHealth Facility Code"
             placeholder="e.g. 123456"
             value={formPmcc}
             onChangeText={setFormPmcc}
@@ -422,30 +467,29 @@ export default function PhilHealthSettingsTab({
             required
           />
           <Input
-            label="PhilHealth Portal Username (Optional)"
-            placeholder="Username for SOAP auth"
-            value={formUsername}
-            onChangeText={setFormUsername}
-          />
-          <Input
-            label="PhilHealth Portal Password (Optional)"
-            placeholder="Password for SOAP auth"
-            value={formPassword}
-            onChangeText={setFormPassword}
+            label="Access Secret (Optional)"
+            placeholder="Secret provided by PhilHealth"
+            value={formSecretKey}
+            onChangeText={setFormSecretKey}
             secureTextEntry
           />
           <Input
-            label="Custom Cipher Key (Optional)"
-            placeholder="Leave empty for standard encryption key"
+            label="Record Encryption Key (Optional)"
+            placeholder="Leave empty to keep existing encryption key"
             value={formCipherKey}
             onChangeText={setFormCipherKey}
             secureTextEntry
           />
           <Input
-            label="Konsulta SOAP Endpoint (Optional)"
-            placeholder="/soap/konsulta"
+            label="PhilHealth Connection URL"
+            placeholder={
+              settings?.branchPhilHealthBaseUrl?.trim()
+                ? `Leave empty for branch default (${settings.branchPhilHealthBaseUrl.trim()})`
+                : 'Enter your PhilHealth YAKAP gateway address'
+            }
             value={formEndpoint}
             onChangeText={setFormEndpoint}
+            required={!settings?.branchPhilHealthBaseUrl?.trim() && !settings?.philHealthBaseUrl?.trim()}
           />
         </View>
       </Modal>

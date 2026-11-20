@@ -29,7 +29,7 @@ export const CATEGORY_PILLS: CategoryPillItem[] = [
   { key: 'Operations', label: 'Operations', icon: 'settings', description: 'Schedules, rooms, custom fields, settings' },
   { key: 'Billing', label: 'Billing', icon: 'billing', description: 'Invoices, payments, receipts, voids, refunds' },
   { key: 'Clinical Access', label: 'Clinical Access', icon: 'consultations', description: 'Consultations, vitals, problems, chart views' },
-  { key: 'PhilHealth Yakap', label: 'PhilHealth Yakap', icon: 'yakap', description: 'PIN queries, eKAS, ATC, transmittals' },
+  { key: 'PhilHealth Yakap', label: 'PhilHealth Yakap', icon: 'yakap', description: 'PIN checks, eligibility, annual checkups, clinic submissions' },
 ];
 
 export const DATE_PRESETS: Array<{ key: AuditDatePreset; label: string }> = [

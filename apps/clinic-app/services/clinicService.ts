@@ -3554,7 +3554,7 @@ export interface ClinicSettingsRecord {
   // Branch Baseline & Explicit PhilHealth Override (Milestone 2 Issue #70)
   pmccNumber?: string | null;
   softwareCertificateId?: string | null;
-  konsultaEndpoint?: string | null;
+  philHealthBaseUrl?: string | null;
   isPhilHealthConfigured?: boolean;
   isPhilHealthOverridden?: boolean;
   branchId?: string | null;
@@ -3562,7 +3562,7 @@ export interface ClinicSettingsRecord {
   branchPhilHealthAccreditationNumber?: string | null;
   branchPmccNumber?: string | null;
   branchSoftwareCertificateId?: string | null;
-  branchKonsultaEndpoint?: string | null;
+  branchPhilHealthBaseUrl?: string | null;
   isBranchPhilHealthAccredited?: boolean;
 
   // Teleconsultation Settings (Milestone 1 & Milestone 5)
@@ -5436,10 +5436,10 @@ export const clinicService = {
     accreditationNumber: string;
     pmccNumber: string;
     softwareCertificateId: string;
-    username?: string;
-    password?: string;
+    secretKey?: string;
     cipherKey?: string;
-    konsultaEndpoint?: string;
+    baseUrl?: string;
+    skipPendingVerificationSync?: boolean;
   }) {
     return clinicApiClient.post<ClinicSettingsRecord>('/settings/philhealth/override', payload);
   },
@@ -5537,15 +5537,7 @@ export const clinicService = {
     return clinicApiClient.get<any>(`/public/queue/display${query ? `?${query}` : ''}`, { headers });
   },
 
-  // PhilHealth Yakap (formerly Konsulta)
-  async getYakapTransmittals(status?: string, year?: string) {
-    const params = new URLSearchParams();
-    if (status) params.append('status', status);
-    if (year) params.append('year', year);
-    const qs = params.toString();
-    return clinicApiClient.get<YakapTransmittal[]>(`/yakap/transmittals${qs ? `?${qs}` : ''}`);
-  },
-
+  // PhilHealth YAKAP 2.0 Services 01–08
   async getEligibleYakapEncounters(params?: {
     reportTagging?: string;
     startDate?: string;
@@ -5561,66 +5553,131 @@ export const clinicService = {
     return clinicApiClient.get<EligibleYakapEncounter[]>(`/yakap/encounters/eligible${qs ? `?${qs}` : ''}`);
   },
 
-  async getYakapTransmittalById(id: string) {
-    return clinicApiClient.get<YakapTransmittal>(`/yakap/transmittals/${id}`);
+  async validatePhilHealthPin(
+    pin: string,
+    excludePatientId?: string,
+    options?: { checkUniqueness?: boolean }
+  ) {
+    const queryParts: string[] = [];
+    if (excludePatientId) {
+      queryParts.push(`excludePatientId=${encodeURIComponent(excludePatientId)}`);
+    }
+    if (options?.checkUniqueness === false) {
+      queryParts.push('checkUniqueness=false');
+    }
+    const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+    return clinicApiClient.get<PinValidationResult>(`/yakap/pin/${encodeURIComponent(pin)}/validate${qs}`);
   },
 
-  async getYakapTransmittalRawXml(id: string) {
-    return clinicApiClient.get<string>(`/yakap/transmittals/${id}/raw-xml`);
+  async validatePatientYakapStanding(
+    patientId: string,
+    payload?: { effectiveYear?: number; consent?: boolean }
+  ) {
+    return clinicApiClient.post<YakapStandingCheckDto>(
+      `/yakap/patients/${patientId}/validate-standing`,
+      payload ?? { consent: true }
+    );
   },
 
-  async createYakapTransmittal(payload: CreateYakapTransmittalPayload) {
-    const body = {
-      ...payload,
-      consultationEncounterIds: payload.consultationEncounterIds || payload.encounterIds,
-    };
-    return clinicApiClient.post<YakapTransmittal>('/yakap/transmittals', body);
+  async startPatientPcuSession(patientId: string) {
+    return clinicApiClient.post<YakapPcuStartResultDto>(`/yakap/patients/${patientId}/pcu/start`, {});
   },
 
-  async validateYakapTransmittal(id: string) {
-    return clinicApiClient.post<YakapTransmittal>(`/yakap/transmittals/${id}/validate`, {});
+  async verifyPatientPcuSession(
+    patientId: string,
+    payload?: { verificationId?: string; livenessAuthorizationId?: string }
+  ) {
+    return clinicApiClient.post<YakapIdentityVerificationDto>(
+      `/yakap/patients/${patientId}/pcu/verify`,
+      payload ?? {}
+    );
   },
 
-  async submitYakapTransmittal(id: string) {
-    return clinicApiClient.post<YakapTransmittal>(`/yakap/transmittals/${id}/submit`, {});
+  async validatePatientOtp(
+    patientId: string,
+    payload: { oneTimePin: string; consent?: boolean }
+  ) {
+    return clinicApiClient.post<YakapIdentityVerificationDto>(
+      `/yakap/patients/${patientId}/otp/validate`,
+      { consent: true, ...payload }
+    );
   },
 
-  async validatePhilHealthPin(pin: string) {
-    return clinicApiClient.get<PinValidationResult>(`/yakap/pin/${encodeURIComponent(pin)}/validate`);
+  async recordPatientValidId(
+    patientId: string,
+    payload: { validIdTypeCode: string; validIdNumber?: string; attachmentId?: string; consent?: boolean }
+  ) {
+    return clinicApiClient.post<YakapIdentityVerificationDto>(
+      `/yakap/patients/${patientId}/valid-id`,
+      { consent: true, ...payload }
+    );
   },
 
-  async extractYakapMasterlist(payload: { hciAccreditationNumber: string; cipherKey: string }) {
-    return clinicApiClient.post<YakapMasterlistAssignment[]>('/yakap/masterlist/extract', payload);
+  async submitPatientYakapSelection(
+    patientId: string,
+    payload?: { selectionDate?: string; consent?: boolean }
+  ) {
+    return clinicApiClient.post<YakapSelectionResultDto>(
+      `/yakap/patients/${patientId}/select`,
+      { consent: true, ...(payload ?? {}) }
+    );
   },
 
-  // PhilHealth SOAP Sandbox & Simulation
-  async runSoapSimulation(payload?: { accreditationNumber?: string; cipherKey?: string }) {
-    return clinicApiClient.post<SoapSimulationReport>('/yakap/simulation/run-e2e', payload || {});
+  async getPatientAvailmentSlip(patientId: string, year?: number) {
+    const qs = year ? `?year=${year}` : '';
+    return clinicApiClient.get<AvailmentSlipResponse>(`/yakap/patients/${patientId}/availment-slip${qs}`);
   },
 
-  async getSoapSandboxStatus() {
-    return clinicApiClient.get<SoapSandboxStatus>('/yakap/simulation/status');
+  async getYakapSubmissionsSummary(branchId?: string) {
+    const qs = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+    return clinicApiClient.get<PortalYakapBranchSummaryDto>(`/yakap/submissions/summary${qs}`);
   },
 
-  async setSoapSandboxScenario(scenario: SoapSimulationScenario | number) {
-    return clinicApiClient.post<SoapSandboxStatus>('/yakap/simulation/scenario', { scenario });
+  async getYakapSubmissions(params?: {
+    status?: string;
+    submissionType?: string;
+    page?: number;
+    pageSize?: number;
+    branchId?: string;
+  }) {
+    const qp = new URLSearchParams();
+    if (params?.status) qp.append('status', params.status);
+    if (params?.submissionType) qp.append('submissionType', params.submissionType);
+    if (params?.page) qp.append('page', String(params.page));
+    if (params?.pageSize) qp.append('pageSize', String(params.pageSize));
+    if (params?.branchId) qp.append('branchId', params.branchId);
+    const qs = qp.toString();
+    return clinicApiClient.get<PortalYakapSubmissionDto[]>(`/yakap/submissions${qs ? `?${qs}` : ''}`);
   },
 
-  async resetSoapSandbox() {
-    return clinicApiClient.post<SoapSandboxStatus>('/yakap/simulation/reset', {});
+  async pollYakapSubmissionStatus(submissionId: string) {
+    return clinicApiClient.post<PortalYakapSubmissionDto>(`/yakap/submissions/${submissionId}/poll`, {});
   },
 
-  // PhilHealth Credential Configuration & Connectivity
-  async configurePhilHealthCredentials(payload: PhilHealthCredentialPayload) {
-    return clinicApiClient.post<PhilHealthConfigStatus>('/yakap/credentials/configure', payload);
+  async retryYakapSubmission(submissionId: string) {
+    return clinicApiClient.post<PortalYakapSubmissionDto>(`/yakap/submissions/${submissionId}/retry`, {});
   },
 
-  async getPhilHealthConfigStatus() {
-    return clinicApiClient.get<PhilHealthConfigStatus>('/yakap/credentials/status');
+  async syncYakapMasterlist(payload?: {
+    patientPin?: string;
+    effectiveYear?: number;
+    startDate?: string;
+    endDate?: string;
+    branchId?: string;
+  }) {
+    return clinicApiClient.post<PortalYakapMasterlistSyncResultDto>('/yakap/masterlist/sync', payload ?? {});
   },
 
-  async testPhilHealthConnection() {
-    return clinicApiClient.post<string>('/yakap/credentials/test-connection', {});
+  async getYakapSandboxStatus() {
+    return clinicApiClient.get<YakapSandboxStatus>('/yakap/sandbox/status');
+  },
+
+  async setYakapSandboxScenario(scenario: string) {
+    return clinicApiClient.post<YakapSandboxStatus>('/yakap/sandbox/scenario', { scenario });
+  },
+
+  async resetYakapSandbox() {
+    return clinicApiClient.post<YakapSandboxStatus>('/yakap/sandbox/reset', {});
   },
 
   // Standalone PhilHealth Patient Profile (Online, Offline & On-Premise)
@@ -5632,17 +5689,13 @@ export const clinicService = {
     return clinicApiClient.put<PhilHealthPatientProfile>(`/yakap/patients/${patientId}/profile`, profile);
   },
 
-  // 1NF PhilHealth Coverage & Annual YAKAP Enlistment
+  // 1NF PhilHealth Coverage & Annual YAKAP Lifecycle
   async getPatientPhilHealthCoverage(patientId: string) {
     return clinicApiClient.get<PatientPhilHealthCoverageDto>(`/patients/${patientId}/philhealth`);
   },
 
   async upsertPatientPhilHealthMembership(patientId: string, payload: UpsertPhilHealthMembershipPayload) {
     return clinicApiClient.put<PatientPhilHealthMembershipDto>(`/patients/${patientId}/philhealth/membership`, payload);
-  },
-
-  async createPatientYakapEnlistment(patientId: string, payload: CreateYakapEnlistmentPayload) {
-    return clinicApiClient.post<PatientYakapEnlistmentDto>(`/patients/${patientId}/yakap/enlistments`, payload);
   },
 
   // 4-Station Clinical Health Screening
@@ -6275,43 +6328,6 @@ export interface RecordExternalDispensePayload {
   notes?: string;
 }
 
-export type YakapTransmittalStatus = 'Draft' | 'Validated' | 'Submitted' | 'Approved' | 'Failed';
-
-export interface YakapTransmittalItem {
-  id: string;
-  transmittalId: string;
-  patientId: string;
-  patientName: string;
-  philHealthIdentificationNumber: string;
-  consultationEncounterId?: string;
-  itemType: 'Enlistment' | 'Profile' | 'Soap';
-  reportStatus: 'U' | 'A' | 'D' | 'V' | 'F';
-  deficiencyRemarks?: string;
-  processedAt?: string;
-}
-
-export interface YakapTransmittal {
-  id: string;
-  transmittalNumber: string;
-  reportTagging: '1' | '2';
-  effectiveYear: string;
-  packageType: string;
-  status: YakapTransmittalStatus;
-  totalEnlistments: number;
-  totalProfiles: number;
-  totalSoaps: number;
-  totalMedicines: number;
-  philHealthTransactionNumber?: string;
-  validationErrors?: string[];
-  rawXmlPayload?: string;
-  encryptedPayloadHash?: string;
-  transmittedAt?: string;
-  validatedAt?: string;
-  notes?: string;
-  createdAt: string;
-  items: YakapTransmittalItem[];
-}
-
 export interface EligibleYakapEncounter {
   encounterId: string;
   patientId: string;
@@ -6328,19 +6344,136 @@ export interface EligibleYakapEncounter {
   totalMedicationAmount: number;
 }
 
-export interface CreateYakapTransmittalPayload {
-  reportTagging: '1' | '2';
-  effectiveYear?: string;
-  packageType?: string;
-  consultationEncounterIds?: string[];
-  encounterIds?: string[];
-  notes?: string;
+export interface YakapStandingCheckDto {
+  pin: string;
+  effectiveYear: number;
+  patientLastName?: string | null;
+  patientFirstName?: string | null;
+  pcuStatus: string;
+  pcuTransactionCode?: string | null;
+  selectionStatus: string;
+  selectionTransactionNo?: string | null;
+  selectionDate?: string | null;
+  empanelmentStatus: string;
+  yesReferenceNo?: string | null;
+  fpeStatus: string;
+  fpeTransactionNo?: string | null;
+  fpeUploadTransactionNo?: string | null;
+  consultationStatus: string;
+  localEnlistmentId?: string | null;
+  needsClinicSelection: boolean;
+  needsIdentityCheck: boolean;
+  canStartCheckup: boolean;
+  summaryMessage: string;
+}
+
+export interface YakapPcuStartResultDto {
+  verificationId: string;
+  sdkUrl: string;
+  livenessAuthorizationId: string;
+  status: string;
+  expiresInSeconds: number;
+}
+
+export interface YakapIdentityVerificationDto {
+  verificationId: string;
+  patientId: string;
+  mode: string;
+  verificationDate: string;
+  isVerified: boolean;
+  transactionCode?: string | null;
+  status?: string | null;
+  validIdTypeCode?: string | null;
+  verifiedAtUtc?: string | null;
+}
+
+export interface YakapSelectionResultDto {
+  enlistmentId: string;
+  patientId: string;
+  effectiveYear: number;
+  selectionStatus: string;
+  selectionTransactionNo?: string | null;
+  selectionDate: string;
+  caseNo?: string | null;
+  queuedForSync: boolean;
+  message: string;
+}
+
+export interface AvailmentSlipResponse {
+  patient_pin: string;
+  eff_year: string;
+  mime_type: string;
+  pdf_base64: string;
+}
+
+export interface PortalYakapBranchSummaryDto {
+  branchId: string;
+  accreditationNo?: string | null;
+  empaneledCount: number;
+  selectedCount: number;
+  acceptedUploadsCount: number;
+  pendingPollingCount: number;
+  rejectedOrFailedCount: number;
+  submissionsByType: Record<string, number>;
+  lastMasterlistSyncAtUtc?: string | null;
+  masterlistTotalCount: number;
+}
+
+export interface PortalYakapSubmissionErrorDto {
+  fieldPath: string;
+  issue: string;
+  errorCode?: string | null;
+}
+
+export interface PortalYakapSubmissionDto {
+  id: string;
+  patientCode: string;
+  accreditationNo: string;
+  caseNo: string;
+  submissionType: string;
+  reportStatus: string;
+  localTransactionNo: string;
+  uploadTransactionNo?: string | null;
+  yesReferenceNo?: string | null;
+  processingStatus: string;
+  payloadSha256Hash?: string | null;
+  submittedAtUtc?: string | null;
+  lastPolledAtUtc?: string | null;
+  completedAtUtc?: string | null;
+  attemptCount: number;
+  lastErrorMessage?: string | null;
+  errors: PortalYakapSubmissionErrorDto[];
+}
+
+export interface PortalYakapMasterlistSyncResultDto {
+  success: boolean;
+  recordsAdded: number;
+  recordsUpdated: number;
+  totalActiveCount: number;
+  syncedAtUtc: string;
+  message?: string | null;
+}
+
+export interface YakapSandboxStatus {
+  currentScenario: string;
+  beneficiariesCount: number;
+  selectionsCount: number;
+  empanelmentsCount: number;
+  uploadsCount: number;
+  otpsCount: number;
 }
 
 export interface PinValidationResult {
   isValid: boolean;
   formattedPin: string;
+  isSequenceValid?: boolean;
+  isPhilHealthVerified?: boolean;
+  memberName?: string | null;
   failureReason?: string;
+  isServerError?: boolean;
+  isUniqueInClinic?: boolean;
+  conflictingPatientName?: string | null;
+  conflictingPatientCode?: string | null;
 }
 
 export type PhilHealthMemberType = 'MM' | 'DD';
@@ -6414,14 +6547,17 @@ export interface PatientYakapEnlistmentDto {
   enlistmentDate: string;
   validUntil?: string | null;
   caseNo?: string | null;
-  enlistmentTransNo?: string | null;
-  enlistmentTransDate?: string | null;
   profilingTransNo?: string | null;
   profilingDate?: string | null;
   profilingAtc?: string | null;
   isWalkedIn?: boolean;
   hciAccreditationNumber?: string | null;
+  selectionControlNumber?: string | null;
   yesReferenceNo?: string | null;
+  registrationStatusCode?: string | null;
+  empanelmentMethod?: string | null;
+  identityVerificationId?: string | null;
+  mcaFlag?: boolean;
   profilingTime?: string | null;
   fpeClassificationType?: string | null;
   serviceDeliveryMethod?: YakapServiceDeliveryMethod | string | null;
@@ -6442,6 +6578,33 @@ export interface CurrentYearFpeStatusDto {
   profilingDate?: string | null;
   profilingTransNo?: string | null;
   profilingAtc?: string | null;
+  selectionControlNumber?: string | null;
+  yesReferenceNo?: string | null;
+  registrationStatusCode?: string | null;
+}
+
+export interface PatientIdentityVerificationSummaryDto {
+  id: string;
+  mode: string;
+  verificationDate: string;
+  isVerifiedForToday: boolean;
+  pcuTransactionId?: string | null;
+  pcuStatus?: string | null;
+  otpStatus?: string | null;
+  validIdTypeCode?: string | null;
+  verifiedAtUtc?: string | null;
+}
+
+export interface PatientYakapSubmissionSummaryDto {
+  id: string;
+  submissionType: string;
+  localTransactionNo: string;
+  uploadTransactionNo?: string | null;
+  yesReferenceNo?: string | null;
+  processingStatus: string;
+  submittedAtUtc?: string | null;
+  completedAtUtc?: string | null;
+  lastErrorMessage?: string | null;
 }
 
 export interface PatientPhilHealthCoverageDto {
@@ -6450,6 +6613,8 @@ export interface PatientPhilHealthCoverageDto {
   membership?: PatientPhilHealthMembershipDto | null;
   enlistments: PatientYakapEnlistmentDto[];
   currentYearFpeStatus: CurrentYearFpeStatusDto;
+  latestIdentityVerification?: PatientIdentityVerificationSummaryDto | null;
+  latestFpeSubmission?: PatientYakapSubmissionSummaryDto | null;
 }
 
 export interface UpsertPhilHealthMembershipPayload {
@@ -6468,18 +6633,6 @@ export interface UpsertPhilHealthMembershipPayload {
   employerPin?: string | null;
   employerName?: string | null;
   defaultWalkInAtc?: string | null;
-}
-
-export interface CreateYakapEnlistmentPayload {
-  effectiveYear: number;
-  enlistmentDate: string;
-  validUntil?: string | null;
-  source?: YakapEnlistmentSource | string | null;
-  packageType?: YakapPackageType | string | null;
-  caseNo?: string | null;
-  enlistmentTransNo?: string | null;
-  yesReferenceNo?: string | null;
-  notes?: string | null;
 }
 
 export type HealthScreeningType =
@@ -6552,7 +6705,17 @@ export interface YakapFpeReadinessDto {
   hasVitals: boolean;
   hasPhysicalExam: boolean;
   hasNcdRiskAssessment: boolean;
+  hasIdentityVerification?: boolean;
+  verificationMode?: string | null;
+  selectionStatus?: string | null;
+  yesReferenceNo?: string | null;
+  submissionStatus?: string | null;
+  uploadTransactionNo?: string | null;
+  alreadyCompletedThisYear?: boolean;
+  existingProfilingTransNo?: string | null;
+  existingProfilingDate?: string | null;
   missingRequirements?: string[];
+  warnings?: string[];
 }
 
 export interface HealthScreeningDetailRecord extends HealthScreeningRecord {
@@ -6623,65 +6786,6 @@ export interface EscalateHealthScreeningPayload {
   doctorName?: string | null;
   roomId?: string | null;
   roomOrStation?: string | null;
-}
-
-export type SoapSimulationScenario =
-  | 'HappyPath'
-  | 'DtdValidationError'
-  | 'ExpiredToken'
-  | 'InvalidPin'
-  | 'NetworkTimeout'
-  | 'SoapFault500';
-
-export type SoapSimulationStepStatus =
-  | 'Pending'
-  | 'Running'
-  | 'Passed'
-  | 'Failed'
-  | 'Skipped';
-
-export interface SoapSimulationStepResult {
-  stepNumber: number;
-  actionName: string;
-  status: SoapSimulationStepStatus | number;
-  durationMs: number;
-  summary: string;
-  requestXml?: string;
-  responseXml?: string;
-  errorMessage?: string;
-}
-
-export interface SoapSimulationReport {
-  scenario: SoapSimulationScenario | number;
-  passed: boolean;
-  totalSteps: number;
-  passedSteps: number;
-  failedSteps: number;
-  totalDurationMs: number;
-  steps: SoapSimulationStepResult[];
-  timestamp: string;
-}
-
-export interface SoapSandboxStatus {
-  isActive: boolean;
-  activeScenario: SoapSimulationScenario | number;
-  endpointUrl: string;
-  totalSimulatedCalls: number;
-  availableScenarios: string[];
-}
-
-export interface YakapMasterlistAssignment {
-  philHealthIdentificationNumber: string;
-  memberPhilHealthIdentificationNumber?: string;
-  lastName: string;
-  firstName: string;
-  middleName?: string;
-  extensionName?: string;
-  birthDate: string;
-  gender: string;
-  packageType: string;
-  registrationDate: string;
-  effectivityYear: string;
 }
 
 export interface PhilHealthConditionEntry {
@@ -6897,29 +7001,6 @@ export interface DispenseGamotPayload {
 export interface ReverseGamotPayload {
   reason: string;
   reversedBy: string;
-}
-
-export interface PhilHealthCredentialPayload {
-  facilityName: string;
-  accreditationNumber: string;
-  pmccNumber?: string;
-  softwareCertificateId?: string;
-  username: string;
-  password?: string;
-  cipherKey?: string;
-  konsultaEndpoint?: string;
-}
-
-export interface PhilHealthConfigStatus {
-  tenantId: string;
-  facilityName: string;
-  accreditationNumber: string;
-  pmccNumber?: string;
-  softwareCertificateId?: string;
-  konsultaEndpoint: string;
-  isConfigured: boolean;
-  isActive: boolean;
-  updatedAt?: string;
 }
 
 // ============================================================================

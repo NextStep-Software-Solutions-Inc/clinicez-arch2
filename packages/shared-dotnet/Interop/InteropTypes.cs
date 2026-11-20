@@ -127,15 +127,11 @@ public static class InteropTypes
     // Notifications (any facility -> portal mail)
     public const string NotificationEmailRequested = "notification.email.requested";
 
-    // PhilHealth YAKAP Transmittals & Submissions (Portal <-> Clinic request/reply through the hub)
+    // PhilHealth YAKAP 2.0 Submissions (Portal <-> Clinic request/reply through the hub)
     /// <summary>Portal -> clinic. Payload: <c>YakapSubmissionRequestedPayload</c>. Reply type: <see cref="YakapSubmissionResponded"/>.</summary>
     public const string YakapSubmissionRequested = "yakap.submission.requested";
     /// <summary>Clinic -> portal. Payload: <c>YakapSubmissionRespondedPayload</c>.</summary>
     public const string YakapSubmissionResponded = "yakap.submission.responded";
-    /// <summary>Portal -> clinic. Payload: <c>YakapTransmittalRequestedPayload</c>. Reply type: <see cref="YakapTransmittalResponded"/>.</summary>
-    public const string YakapTransmittalRequested = "yakap.transmittal.requested";
-    /// <summary>Clinic -> portal. Payload: <c>YakapTransmittalRespondedPayload</c>.</summary>
-    public const string YakapTransmittalResponded = "yakap.transmittal.responded";
 
     // Communications (comms-api <-> facilities / patient-api / portal-api)
     /// <summary>Facility service -> comms. Payload: <c>CommsEligibilityGrantedPayload</c>.</summary>

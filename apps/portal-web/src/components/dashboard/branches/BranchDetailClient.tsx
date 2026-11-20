@@ -344,7 +344,7 @@ function BranchPhilHealthCard({
   const [phSecretKey, setPhSecretKey] = useState("");
   const [phCipherKey, setPhCipherKey] = useState("");
   const [phBaseUrl, setPhBaseUrl] = useState(
-    branch.philHealthBaseUrl || branch.philHealthKonsultaEndpoint || "https://pcapi.philhealth.gov.ph",
+    branch.philHealthBaseUrl || "https://pcapi.philhealth.gov.ph",
   );
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -408,7 +408,7 @@ function BranchPhilHealthCard({
       await branchService.configurePhilHealth(branch.id, payload);
       setPhSecretKey("");
       setPhCipherKey("");
-      toast.success(`PhilHealth PCAPI credentials saved for "${branch.name}".`);
+      toast.success(`PhilHealth credentials saved for "${branch.name}".`);
       await onSaved();
     } catch (err: unknown) {
       toast.error(apiErrorMessage(err, "Failed to configure PhilHealth credentials."));
@@ -428,7 +428,7 @@ function BranchPhilHealthCard({
                 <span>PhilHealth YAKAP Accreditation</span>
               </CardTitle>
               <CardDescription className="text-xs mt-1">
-                Configure encrypted PCAPI credentials for {branch.name}. Statutory secrets are encrypted with AES-GCM at rest and never echoed back over the wire.
+                Configure encrypted PhilHealth credentials for {branch.name}. Credentials are encrypted at rest and never sent back in responses.
               </CardDescription>
             </div>
             {branch.isPhilHealthAccredited ? (
@@ -461,7 +461,7 @@ function BranchPhilHealthCard({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">PMCC Number</Label>
+              <Label className="text-xs font-semibold">PhilHealth Facility Code</Label>
               <Input
                 placeholder="e.g. Z15445"
                 value={phPmcc}
@@ -482,7 +482,7 @@ function BranchPhilHealthCard({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">PCAPI Base URL</Label>
+              <Label className="text-xs font-semibold">PhilHealth Connection URL</Label>
               <Input
                 placeholder="https://pcapi.philhealth.gov.ph"
                 value={phBaseUrl}
@@ -495,7 +495,7 @@ function BranchPhilHealthCard({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
-                <Label className="text-xs font-semibold">PCAPI Secret Key</Label>
+                <Label className="text-xs font-semibold">PhilHealth Access Secret</Label>
                 {branch.hasSecretKey ? (
                   <Badge
                     variant="outline"
@@ -520,7 +520,7 @@ function BranchPhilHealthCard({
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
-                <Label className="text-xs font-semibold">AES Cipher Key</Label>
+                <Label className="text-xs font-semibold">Record Encryption Key</Label>
                 {branch.hasCipherKey ? (
                   <Badge
                     variant="outline"
@@ -550,10 +550,10 @@ function BranchPhilHealthCard({
               <div className="space-y-0.5">
                 <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <IconBolt className="h-3.5 w-3.5 text-warning shrink-0" />
-                  <span>Gateway Connectivity Test</span>
+                  <span>Connection Test</span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Verifies credentials and tests <code className="font-mono text-[10px]">/auth/token</code> against the PCAPI gateway before saving.
+                  Verifies credentials against PhilHealth before saving.
                 </p>
               </div>
               <Button

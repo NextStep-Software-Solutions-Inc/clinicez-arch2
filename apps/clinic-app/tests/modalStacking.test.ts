@@ -914,7 +914,7 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
           onClose: () => {},
         })
       );
-      expect(openCoverageMarkup).toContain('PhilHealth Info &amp; YAKAP Enlistment');
+      expect(openCoverageMarkup).toContain('PhilHealth Coverage &amp; Clinic Assignment');
       expect(openCoverageMarkup).toContain('Elena Gomez');
 
       // 3. Visible HealthScreeningModal renders workstation title and all 4 stations
@@ -1264,7 +1264,7 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
             onClose: () => {},
           })
         );
-        expect(coverageMarkup).toContain('PhilHealth Info &amp; YAKAP Enlistment');
+        expect(coverageMarkup).toContain('PhilHealth Coverage &amp; Clinic Assignment');
 
         const screeningMarkup = renderToStaticMarkup(
           React.createElement(HealthScreeningModal, {
@@ -1610,7 +1610,7 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
               onClose: () => {},
             })
           );
-          expect(coverageMarkup).toContain('PhilHealth Info &amp; YAKAP Enlistment');
+          expect(coverageMarkup).toContain('PhilHealth Coverage &amp; Clinic Assignment');
         }
         expect(appendCount).toBe(0);
         expect(mockBody.children.length).toBe(0);

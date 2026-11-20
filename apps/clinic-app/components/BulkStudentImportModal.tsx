@@ -4,6 +4,7 @@ import { theme } from '@constants/theme';
 import { Modal, Input, Button, Icon, ThemedText } from '@ui';
 import { Alert } from '@utils/feedback';
 import { clinicService, RegisterPatientPayload } from '../services/clinicService';
+import { parsePhilHealthSexInput } from '../utils/philhealthSex';
 
 interface BulkStudentImportModalProps {
   visible: boolean;
@@ -77,14 +78,7 @@ export function BulkStudentImportModal({
       const lastName = record['last_name'] || record['lastname'] || record['lname'] || '';
       const middleName = record['middle_name'] || record['middlename'] || record['mname'] || '';
       const studentId = record['student_id'] || record['id_number'] || record['studentid'] || record['id'] || '';
-      const sexRaw = (record['sex'] || '').toLowerCase();
-      const sex = sexRaw.startsWith('f')
-        ? 'Female'
-        : sexRaw.startsWith('i')
-        ? 'Intersex'
-        : sexRaw.startsWith('u')
-        ? 'Unknown'
-        : 'Male';
+      const sex = parsePhilHealthSexInput(record['sex']);
       const dob = record['dob'] || record['date_of_birth'] || record['birthdate'] || '';
       const contactNumber = record['contact_number'] || record['contact'] || record['phone'] || '';
       const email = record['email'] || undefined;
@@ -96,8 +90,8 @@ export function BulkStudentImportModal({
         errors.push(`Row ${rowNum}: Missing required first name or last name.`);
         return;
       }
-      if (!sexRaw) {
-        errors.push(`Row ${rowNum}: Missing sex.`);
+      if (!sex) {
+        errors.push(`Row ${rowNum}: Sex must be Male or Female (M/F).`);
         return;
       }
       if (!dob || !contactNumber) {

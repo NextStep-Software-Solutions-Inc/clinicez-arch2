@@ -7,7 +7,7 @@ using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 namespace ClinicEz.Clinic.Application.Features.Yakap.Services;
 
 /// <summary>
-/// Represents a normalized masterlist assignment item from PhilHealth.
+/// Represents a normalized masterlist assignment item from PhilHealth PCAPI v2.0.
 /// </summary>
 public sealed record YakapMasterlistSyncItem(
     string Pin,
@@ -29,49 +29,25 @@ public sealed record YakapMasterlistSyncResult(
     IReadOnlyList<string> MatchedPatientCodes);
 
 /// <summary>
-/// Service interface for synchronizing PhilHealth Konsulta (YAKAP) masterlist beneficiaries
-/// into clinic patient records (CustomFields["yakap_enlistments"]).
+/// Service interface for synchronizing PhilHealth YAKAP 2.0 (Service 05) clinic roster assignments
+/// into normalized relational <see cref="ClinicEz.Clinic.Domain.Entities.PatientYakapEnlistment"/> records.
 /// </summary>
 public interface IPhilHealthMasterlistSyncService
 {
-    /// <summary>
-    /// Normalizes a PhilHealth PIN to a 12-digit string suitable for deterministic matching.
-    /// Returns null if the PIN is invalid, empty, or all zeros.
-    /// </summary>
     string? NormalizePin(string? rawPin);
 
-    /// <summary>
-    /// Synchronizes a collection of masterlist assignment records into the clinic's patient database.
-    /// </summary>
     Task<YakapMasterlistSyncResult> SyncAssignmentsAsync(
         string tenantId,
         Guid? clinicId,
         IEnumerable<YakapMasterlistSyncItem> assignments,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Parses an XML payload adhering to KonsultaMasterlist_v1.4.dtd and synchronizes matched patients.
-    /// </summary>
-    Task<YakapMasterlistSyncResult> SyncXmlAsync(
+    Task<YakapMasterlistSyncResult> SyncMasterlistDownloadAsync(
         string tenantId,
         Guid? clinicId,
-        string xmlContent,
-        string? fallbackEffectiveYear = null,
+        MasterlistDownloadResponse downloadResponse,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Synchronizes beneficiaries from a YakapMasterlistProxyResponse (using RawXml or Beneficiaries DTO).
-    /// </summary>
-    Task<YakapMasterlistSyncResult> SyncProxyResponseAsync(
-        string tenantId,
-        Guid? clinicId,
-        YakapMasterlistProxyResponse proxyResponse,
-        CancellationToken ct = default);
-
-    /// <summary>
-    /// Synchronizes beneficiaries directly, scoping to ambient context if set or all scoped patients.
-    /// Returns the total number of matched and updated patients.
-    /// </summary>
     Task<int> SyncMasterlistBeneficiariesAsync(
         IEnumerable<YakapBeneficiaryDto> beneficiaries,
         CancellationToken ct = default);

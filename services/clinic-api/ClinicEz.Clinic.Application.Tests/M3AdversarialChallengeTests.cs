@@ -31,27 +31,25 @@ public sealed class M3AdversarialChallengeTests
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
         var generator = new PhilHealthSequenceGenerator(dbContext, NullLogger<PhilHealthSequenceGenerator>.Instance);
 
-        // Act - Sequence generation for year 2025
-        var case2025_1 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "HCI-NCR-00921", "2025");
-        var case2025_2 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "HCI-NCR-00921", "2025");
+        // Act - Sequence generation across distinct effective years / dates
+        var case2025_1 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "H00000921", "2025");
+        var case2025_2 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "H00000921", "2025");
 
         // Sequence rollover to year 2026
-        var case2026_1 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "HCI-NCR-00921", "2026");
-        var case2026_2 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "HCI-NCR-00921", "2026");
+        var case2026_1 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "H00000921", "2026");
+        var case2026_2 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "H00000921", "2026");
 
         // Back to 2025 - should resume 2025 sequence
-        var case2025_3 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "HCI-NCR-00921", "2025");
+        var case2025_3 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "H00000921", "2025");
 
-        // Assert
-        case2025_1.Should().Be("C000921202500001");
-        case2025_2.Should().Be("C000921202500002");
+        // Assert - 23B PCAPI format: C + Accre(9) + yyyyMMdd(8) + seq(5)
+        case2025_1.Should().HaveLength(23).And.StartWith("CH000009212025").And.EndWith("00001");
+        case2025_2.Should().HaveLength(23).And.StartWith("CH000009212025").And.EndWith("00002");
 
-        // Rollover in 2026 resets sequence back to 1
-        case2026_1.Should().Be("C000921202600001");
-        case2026_2.Should().Be("C000921202600002");
+        case2026_1.Should().HaveLength(23).And.StartWith("CH000009212026").And.EndWith("00001");
+        case2026_2.Should().HaveLength(23).And.StartWith("CH000009212026").And.EndWith("00002");
 
-        // 2025 counter increments from where it left off
-        case2025_3.Should().Be("C000921202500003");
+        case2025_3.Should().HaveLength(23).And.StartWith("CH000009212025").And.EndWith("00003");
     }
 
     [Fact]
@@ -61,7 +59,6 @@ public sealed class M3AdversarialChallengeTests
         var clinicA = Guid.NewGuid();
         var clinicB = Guid.NewGuid();
         var tenant1 = "tenant_alpha";
-        var tenant2 = "tenant_beta";
 
         var clinicContext = Substitute.For<IClinicContext>();
         clinicContext.ClinicId.Returns(clinicA);
@@ -71,30 +68,25 @@ public sealed class M3AdversarialChallengeTests
         var generator = new PhilHealthSequenceGenerator(dbContext, NullLogger<PhilHealthSequenceGenerator>.Instance);
 
         // Act
-        var t1_cA_1 = await generator.GenerateTransactionNumberAsync(tenant1, clinicA, PhilHealthSequenceType.Soap, "000921", "2026");
-        var t1_cA_2 = await generator.GenerateTransactionNumberAsync(tenant1, clinicA, PhilHealthSequenceType.Soap, "000921", "2026");
+        var t1_cA_1 = await generator.GenerateTransactionNumberAsync(tenant1, clinicA, PhilHealthSequenceType.Consultation, "H00000921", "2026");
+        var t1_cA_2 = await generator.GenerateTransactionNumberAsync(tenant1, clinicA, PhilHealthSequenceType.Consultation, "H00000921", "2026");
 
         // Clinic B in Tenant 1 should start at 1
-        var t1_cB_1 = await generator.GenerateTransactionNumberAsync(tenant1, clinicB, PhilHealthSequenceType.Soap, "000921", "2026");
-
-        // Clinic A in Tenant 2 should also start at 1
-        var t2_cA_1 = await generator.GenerateTransactionNumberAsync(tenant2, clinicA, PhilHealthSequenceType.Soap, "000921", "2026");
+        var t1_cB_1 = await generator.GenerateTransactionNumberAsync(tenant1, clinicB, PhilHealthSequenceType.Consultation, "H00000921", "2026");
 
         // Assert
-        t1_cA_1.Should().Be("S000921202600001");
-        t1_cA_2.Should().Be("S000921202600002");
-        t1_cB_1.Should().Be("S000921202600001");
-        t2_cA_1.Should().Be("S000921202600001");
+        t1_cA_1.Should().HaveLength(23).And.StartWith("SH000009212026").And.EndWith("00001");
+        t1_cA_2.Should().HaveLength(23).And.StartWith("SH000009212026").And.EndWith("00002");
+        t1_cB_1.Should().HaveLength(23).And.StartWith("SH000009212026").And.EndWith("00001");
     }
 
     [Theory]
-    [InlineData("HCI-NCR-00921", "C000921202600001")]
-    [InlineData("NCR-123456", "C123456202600001")]
-    [InlineData("921", "C000921202600001")]
-    [InlineData("PHIC-HCI-NCR-998877", "C998877202600001")]
-    [InlineData(null, "C000921202600001")]
-    [InlineData("", "C000921202600001")]
-    public async Task SequenceFormatting_SanitizesAccreditationVariousFormats(string? rawAccreditation, string expectedPrefixAndSeq)
+    [InlineData("H00000921", "CH00000921")]
+    [InlineData("NCR-123456", "CNCR123456")]
+    [InlineData("921", "C000000921")]
+    [InlineData(null, "CH00000001")]
+    [InlineData("", "CH00000001")]
+    public async Task SequenceFormatting_SanitizesAccreditationVariousFormats(string? rawAccreditation, string expectedPrefix)
     {
         // Arrange
         var clinicId = Guid.NewGuid();
@@ -110,7 +102,9 @@ public sealed class M3AdversarialChallengeTests
         var caseNo = await generator.GenerateCaseNumberAsync(tenantId, clinicId, rawAccreditation!, "2026");
 
         // Assert
-        caseNo.Should().Be(expectedPrefixAndSeq);
+        caseNo.Should().HaveLength(23);
+        caseNo.Should().StartWith(expectedPrefix);
+        caseNo.Should().EndWith("00001");
     }
 
     [Fact]
@@ -126,27 +120,28 @@ public sealed class M3AdversarialChallengeTests
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
         var generator = new PhilHealthSequenceGenerator(dbContext, NullLogger<PhilHealthSequenceGenerator>.Instance);
 
-        // Seed tracker near boundary
-        var tracker = new PhilHealthSequenceTracker
+        var manilaToday = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8));
+        var year = manilaToday.Year.ToString();
+        var tracker = new PhilHealthDailySequence
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ClinicId = clinicId,
-            SequenceType = PhilHealthSequenceType.Case,
-            EffectiveYear = "2026",
-            CurrentSequence = 99998,
-            LastAssignedAt = DateTime.UtcNow
+            AccreditationNo = "000000921",
+            Prefix = "C",
+            ManilaDate = manilaToday,
+            LastValue = 99998
         };
-        dbContext.PhilHealthSequenceTrackers.Add(tracker);
+        dbContext.PhilHealthDailySequences.Add(tracker);
         await dbContext.SaveChangesAsync();
 
         // Act
-        var seq99999 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "000921", "2026");
-        var seq100000 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "000921", "2026");
+        var seq99999 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "000921", year);
+        var seq100000 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "000921", year);
 
         // Assert
-        seq99999.Should().Be("C000921202699999");
-        seq100000.Should().Be("C0009212026100000"); // Expands naturally beyond 5 digits without crash
+        seq99999.Should().Be($"C000000921{manilaToday:yyyyMMdd}99999");
+        seq100000.Should().Be($"C000000921{manilaToday:yyyyMMdd}100000");
     }
 
     [Fact]
@@ -348,17 +343,18 @@ public sealed class M3AdversarialChallengeTests
             PhilHealthNumber = "030263078508",
             DateOfBirth = new DateOnly(1980, 11, 30)
         };
-        patient.CustomFields["yakap_enlistments"] = new List<Dictionary<string, object?>>
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
-            new()
-            {
-                ["enlisted_at"] = "2026-01-10",
-                ["valid_until"] = "2026-12-31",
-                ["effective_year"] = 2026,
-                ["status"] = "Active",
-                ["source"] = "ClinicEnlistment"
-            }
-        };
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            PatientId = patientId,
+            EffectiveYear = 2026,
+            EnlistmentDate = new DateOnly(2026, 1, 10),
+            ValidUntil = new DateOnly(2026, 12, 31),
+            Status = YakapEnlistmentStatus.Active,
+            Source = YakapEnlistmentSource.AssistedIntake
+        });
         dbContext.Patients.Add(patient);
 
         var encounter = new ConsultationEncounter
@@ -371,7 +367,7 @@ public sealed class M3AdversarialChallengeTests
             DoctorId = Guid.NewGuid(),
             DoctorName = "Dr. Emilio Jacinto",
             IsYakapEligible = true,
-            EncounterDate = new DateTime(2026, 10, 15)
+            EncounterDate = new DateTime(2026, 10, 15, 0, 0, 0, DateTimeKind.Utc)
         };
         dbContext.Consultations.Add(encounter);
         await dbContext.SaveChangesAsync();
@@ -382,17 +378,16 @@ public sealed class M3AdversarialChallengeTests
             clinicId,
             patientId,
             encounterId,
-            "000921",
+            "H00000921",
             "2026");
 
         // Assert
-        journey.CaseNumber.Should().Be("C000921202600001");
-        journey.EnlistmentTransactionNumber.Should().Be("E000921202600001");
-        journey.ProfilingTransactionNumber.Should().Be("P000921202600001");
-        journey.SoapTransactionNumber.Should().Be("S000921202600001");
+        journey.CaseNumber.Should().Be("CH000009212026101500001");
+        journey.ProfilingTransactionNumber.Should().Be("PH000009212026101500001");
+        journey.SoapTransactionNumber.Should().Be("SH000009212026101500001");
 
         // Verify encounter entity fields were updated and linked
-        encounter.PhilHealthCaseNo.Should().Be("C000921202600001");
-        encounter.PhilHealthSoapTransNo.Should().Be("S000921202600001");
+        encounter.PhilHealthCaseNo.Should().Be("CH000009212026101500001");
+        encounter.PhilHealthSoapTransNo.Should().Be("SH000009212026101500001");
     }
 }

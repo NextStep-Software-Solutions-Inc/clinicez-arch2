@@ -549,11 +549,75 @@ describe('authSession web multi-tab & native dual-mode', () => {
 
     expect(tokenDuringHook).toBe('lock-access-1');
     expect(getAccessToken()).toBeNull();
+    expect(getSessionSnapshot().user).toBeNull();
     expect(result?.staffId).toBe('staff-1');
     expect(lockedInfoSeen?.staffId).toBe('staff-1');
     expect(sessionStoreMap.get('clinicez.auth.workstationLocked')).toBe('1');
     expect(postCalls.some((c) => c.url.includes('/auth/lock'))).toBe(true);
     expect(received.some((m) => m?.type === 'session-locked' && m?.lockedSession?.staffId === 'staff-1')).toBe(true);
+  });
+
+  test('lockSession waits for active refreshSession and blocks concurrent refresh calls while locking', async () => {
+    nextPostResponse = async () => ({ data: { data: makeTokens('pre-lock-access', null, -1000) } });
+    await login('reyes@clinic.test', 'Pass123!');
+    postCalls.length = 0;
+
+    let signalRefreshStarted!: () => void;
+    const refreshStarted = new Promise<void>((resolve) => {
+      signalRefreshStarted = resolve;
+    });
+    let releaseRefresh!: () => void;
+    const refreshGate = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    const order: string[] = [];
+
+    nextPostResponse = async (url: string) => {
+      if (url.includes('/auth/refresh')) {
+        order.push('refresh-start');
+        signalRefreshStarted();
+        await refreshGate;
+        order.push('refresh-end');
+        return { data: { data: makeTokens('refreshed-before-lock', null) } };
+      }
+      if (url.includes('/auth/lock')) {
+        order.push('lock');
+        return {
+          data: {
+            data: {
+              staffId: 'staff-1',
+              name: 'Dr. Reyes',
+              email: 'reyes@clinic.test',
+              role: 'Doctor',
+              roleName: null,
+              clinicName: 'Metro Clinic',
+              hasQuickUnlockPin: true,
+              allowStaffPinUnlock: true,
+              lockedAtUtc: new Date().toISOString(),
+              lockExpiresAtUtc: new Date(Date.now() + 8 * 3_600_000).toISOString(),
+            },
+          },
+        };
+      }
+      return { data: { data: null } };
+    };
+
+    const refreshPromise = refreshSession();
+    await refreshStarted;
+    const lockPromise = lockSession();
+    // Subsequent refresh call while locking must short-circuit cleanly
+    const blockedRefresh = await refreshSession();
+    expect(blockedRefresh).toBe(false);
+
+    releaseRefresh();
+    await refreshPromise;
+    const locked = await lockPromise;
+
+    expect(locked?.staffId).toBe('staff-1');
+    expect(order).toEqual(['refresh-start', 'refresh-end', 'lock']);
+    expect(postCalls.filter((c) => c.url.includes('/auth/refresh')).length).toBe(1);
+    expect(getLockedSession()?.staffId).toBe('staff-1');
+    expect(getAccessToken()).toBeNull();
   });
 
   test('restoreSession returns workstationLocked on HTTP 423 SESSION_LOCKED without issuing accessToken (prevents F5 bypass)', async () => {

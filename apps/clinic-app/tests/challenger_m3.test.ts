@@ -529,12 +529,12 @@ describe('Adversarial Verification Suite for Milestone 3', () => {
       expect(tableMarkup).not.toContain('Republic Act');
     });
 
-    test('5.3 buildPatientOverflowMenuItems Edit info item omits long hint descriptions and jargon', () => {
+    test('5.3 buildPatientOverflowMenuItems Edit patient item omits long hint descriptions and jargon', () => {
       const items = buildPatientOverflowMenuItems(youngPatient, {
         onEditDemographics: () => {},
       });
       const editItem = items.find((i) => i.id === 'edit-demographics')!;
-      expect(editItem.label).toBe('Edit info');
+      expect(editItem.label).toBe('Edit patient');
       expect(editItem.hint).toBeUndefined();
     });
   });

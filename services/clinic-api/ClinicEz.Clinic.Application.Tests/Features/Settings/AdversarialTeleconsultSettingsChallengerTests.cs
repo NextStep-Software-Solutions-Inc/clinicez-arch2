@@ -516,7 +516,7 @@ public class AdversarialTeleconsultSettingsChallengerTests
             AccreditationNumber: "OVERRIDE-123",
             PmccNumber: "PMCC-123",
             SoftwareCertificateId: "CERT-123",
-            KonsultaEndpoint: "/soap/custom",
+            BaseUrl: "https://pcapi-sandbox.philhealth.gov.ph",
             IsConfigured: true,
             IsActive: true,
             UpdatedAt: DateTimeOffset.UtcNow);
@@ -531,8 +531,7 @@ public class AdversarialTeleconsultSettingsChallengerTests
             AccreditationNumber: "OVERRIDE-123",
             PmccNumber: "PMCC-123",
             SoftwareCertificateId: "CERT-123",
-            Username: "user",
-            Password: "pwd",
+            SecretKey: "secret-key-test",
             CipherKey: "cipher-key-test-32-chars-long!!");
 
         // Act

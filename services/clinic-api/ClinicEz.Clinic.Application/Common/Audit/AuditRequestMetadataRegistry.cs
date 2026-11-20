@@ -300,8 +300,24 @@ public static class AuditRequestMetadataRegistry
                 return (ClinicAuditCategories.PhilHealth, "philhealth.submission.cancelled", ClinicAuditSeverities.Emergency, "YakapSubmission", "Cancelled PhilHealth Yakap 2.0 submission");
             case "UpsertPatientPhilHealthMembershipCommand":
                 return (ClinicAuditCategories.PhilHealth, "philhealth.membership.upserted", ClinicAuditSeverities.Routine, "PatientPhilHealthMembership", "Updated patient PhilHealth membership and sponsor details");
-            case "CreatePatientYakapEnlistmentCommand":
-                return (ClinicAuditCategories.PhilHealth, "philhealth.yakap_enlistment.created", ClinicAuditSeverities.Routine, "PatientYakapEnlistment", "Recorded annual PhilHealth YAKAP patient enlistment");
+            case "ValidatePatientYakapStandingCommand":
+                return (ClinicAuditCategories.PhilHealth, "yakap.standing.validated", ClinicAuditSeverities.Routine, "PhilHealthMember", "Checked patient PhilHealth YAKAP standing");
+            case "StartPatientPcuSessionCommand":
+            case "VerifyPatientPcuSessionCommand":
+            case "ValidatePatientOtpCommand":
+            case "RecordValidIdVerificationCommand":
+                return (ClinicAuditCategories.PhilHealth, "yakap.identity.verified", ClinicAuditSeverities.Routine, "PatientIdentityVerification", "Confirmed patient identity for PhilHealth YAKAP");
+            case "SubmitPatientYakapSelectionCommand":
+                return (ClinicAuditCategories.PhilHealth, "yakap.selection.submitted", ClinicAuditSeverities.Routine, "PatientYakapEnlistment", "Assigned patient to clinic in PhilHealth YAKAP");
+            case "SubmitHealthScreeningYakapFpeCommand":
+                return (ClinicAuditCategories.PhilHealth, "yakap.fpe.uploaded", ClinicAuditSeverities.Routine, "YakapSubmission", "Submitted health screening to PhilHealth YAKAP");
+            case "PollYakapSubmissionStatusCommand":
+            case "RetryYakapSubmissionCommand":
+                return (ClinicAuditCategories.PhilHealth, "yakap.submission.polled", ClinicAuditSeverities.Routine, "YakapSubmission", "Checked or retried PhilHealth YAKAP submission");
+            case "SyncYakapMasterlistCommand":
+                return (ClinicAuditCategories.PhilHealth, "yakap.masterlist.synced", ClinicAuditSeverities.Routine, "PhilHealthMasterlist", "Synchronized clinic PhilHealth YAKAP roster");
+            case "GetYakapAvailmentSlipQuery":
+                return (ClinicAuditCategories.PhilHealth, "yakap.availment_slip.generated", ClinicAuditSeverities.Routine, "PhilHealthAvailmentSlip", "Generated PhilHealth YAKAP confirmation slip");
 
             // Auditing the Auditor
             case "GetAuditLogsQuery":

@@ -247,9 +247,9 @@ public sealed class AuditE2ETests
         };
         await context.AuditEntries.AddAsync(ekasEntry);
 
-        // ── Step 4: PhilHealth Yakap XML Transmittal Generation (DTD v1.14) ───
-        var transmittalBatchNo = "PMCC-202610-0018";
-        var transmittalGenEntry = new AuditEntry
+        // ── Step 4: PhilHealth YAKAP 2.0 FPE & Selection Audit Events ───────────
+        var uploadTxNo = "UH00009212026101500001";
+        var fpeUploadedEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -257,32 +257,32 @@ public sealed class AuditE2ETests
             Timestamp = baseTime.AddMinutes(50),
             Category = ClinicAuditCategories.PhilHealth,
             Severity = ClinicAuditSeverities.Routine,
-            Action = PhilHealthAuditEvents.TransmittalGenerated,
+            Action = PhilHealthAuditEvents.FpeUploaded,
             ActorStaffId = doctorStaffId,
             ActorName = "Dr. Roberto Santos, MD",
             ActorRole = "Physician",
             ClientIpAddress = "192.168.10.22",
             UserAgent = "ClinicWorkstation/1.0 (Doctor-Station-03)",
-            TargetEntityType = "TransmittalBatch",
-            TargetEntityId = transmittalBatchNo,
+            TargetEntityType = "YakapSubmission",
+            TargetEntityId = uploadTxNo,
             PatientId = patientId,
             PatientNameMasked = maskedPatientName,
             PatientPinMasked = maskedPhilHealthPin,
             Outcome = ClinicAuditOutcomes.Success,
-            Description = $"PhilHealth Konsulta XML transmittal {transmittalBatchNo} generated against KonsultaData_v1.14.dtd",
+            Description = $"Uploaded YAKAP 2.0 'fpe' record (UploadTx: {uploadTxNo}, Status: on_queue).",
             MetadataJson = JsonSerializer.Serialize(new
             {
-                TransmittalBatchNo = transmittalBatchNo,
-                SchemaVersion = "KonsultaData_v1.14.dtd",
+                UploadTransactionNo = uploadTxNo,
+                Form = "fpe",
                 SoftwareCertId = "CERT-PHILHEALTH-2026",
-                EncounterCount = 1,
                 IcdCode = "J18.9"
             })
         };
-        await context.AuditEntries.AddAsync(transmittalGenEntry);
+        await context.AuditEntries.AddAsync(fpeUploadedEntry);
 
-        // ── Step 5: Payload AES-256-CBC Encryption & PhilHealth SOAP Transmittal
-        var transmittalEncEntry = new AuditEntry
+        // ── Step 5: YAKAP 2.0 Formal Empanelment & Status Poll ─────────────────
+        var yesRefNo = "MCA2026001";
+        var empanelmentEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -290,29 +290,28 @@ public sealed class AuditE2ETests
             Timestamp = baseTime.AddMinutes(52),
             Category = ClinicAuditCategories.PhilHealth,
             Severity = ClinicAuditSeverities.Routine,
-            Action = PhilHealthAuditEvents.TransmittalEncrypted,
+            Action = PhilHealthAuditEvents.EmpanelmentSubmitted,
             ActorStaffId = doctorStaffId,
             ActorName = "Dr. Roberto Santos, MD",
             ActorRole = "Physician",
             ClientIpAddress = "192.168.10.22",
             UserAgent = "ClinicWorkstation/1.0 (Doctor-Station-03)",
-            TargetEntityType = "TransmittalBatch",
-            TargetEntityId = transmittalBatchNo,
+            TargetEntityType = "PhilHealthEmpanelment",
+            TargetEntityId = yesRefNo,
             PatientId = patientId,
             PatientNameMasked = maskedPatientName,
             PatientPinMasked = maskedPhilHealthPin,
             Outcome = ClinicAuditOutcomes.Success,
-            Description = $"Payload for transmittal {transmittalBatchNo} encrypted with PhilHealth AES-256-CBC envelope",
+            Description = $"Submitted PhilHealth YAKAP 2.0 empanelment for '{maskedPhilHealthPin}' (YesRef: {yesRefNo}).",
             MetadataJson = JsonSerializer.Serialize(new
             {
-                TransmittalBatchNo = transmittalBatchNo,
-                Algorithm = "AES-256-CBC",
-                KeyDigest = "sha256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069"
+                YesReferenceNo = yesRefNo,
+                Method = "PCU"
             })
         };
-        await context.AuditEntries.AddAsync(transmittalEncEntry);
+        await context.AuditEntries.AddAsync(empanelmentEntry);
 
-        var soapSubmittedEntry = new AuditEntry
+        var statusPolledEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -320,28 +319,27 @@ public sealed class AuditE2ETests
             Timestamp = baseTime.AddMinutes(55),
             Category = ClinicAuditCategories.PhilHealth,
             Severity = ClinicAuditSeverities.Routine,
-            Action = PhilHealthAuditEvents.SoapSubmitted,
+            Action = PhilHealthAuditEvents.SubmissionStatusPolled,
             ActorStaffId = doctorStaffId,
             ActorName = "Dr. Roberto Santos, MD",
             ActorRole = "Physician",
             ClientIpAddress = "192.168.10.22",
             UserAgent = "ClinicWorkstation/1.0 (Doctor-Station-03)",
-            TargetEntityType = "TransmittalBatch",
-            TargetEntityId = transmittalBatchNo,
+            TargetEntityType = "YakapSubmission",
+            TargetEntityId = uploadTxNo,
             PatientId = patientId,
             PatientNameMasked = maskedPatientName,
             PatientPinMasked = maskedPhilHealthPin,
             Outcome = ClinicAuditOutcomes.Success,
-            Description = $"SOAP request transmittal {transmittalBatchNo} transmitted to PhilHealth web service endpoint successfully",
+            Description = $"Checked PhilHealth processing status for '{uploadTxNo}': accepted.",
             MetadataJson = JsonSerializer.Serialize(new
             {
-                TransmittalBatchNo = transmittalBatchNo,
-                ResponseStatus = "200 OK",
-                PhilHealthReceiptCode = "PHIC-ACK-99214-202610-0089",
+                UploadTransactionNo = uploadTxNo,
+                ProcessingStatus = "accepted",
                 TransmissionLatencyMs = 642
             })
         };
-        await context.AuditEntries.AddAsync(soapSubmittedEntry);
+        await context.AuditEntries.AddAsync(statusPolledEntry);
 
         // Commit all records to DB
         var savedCount = await context.SaveChangesAsync();
@@ -353,7 +351,7 @@ public sealed class AuditE2ETests
 
         logsResult.Items.Should().HaveCount(6);
         // Latest first
-        logsResult.Items[0].Action.Should().Be(PhilHealthAuditEvents.SoapSubmitted);
+        logsResult.Items[0].Action.Should().Be(PhilHealthAuditEvents.SubmissionStatusPolled);
         logsResult.Items[^1].Action.Should().Be("queue.ticket.created");
 
         // Verify Detail Retrieval for the signed consultation

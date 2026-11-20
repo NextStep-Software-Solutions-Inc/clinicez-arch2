@@ -228,14 +228,14 @@ public class UpdateClinicPatientCommandValidatorTests
     }
 
     // =========================================================================
-    // 4. Biological Sex (Male, Female, Intersex, Unknown vs Non-standard)
+    // 4. Biological Sex (PhilHealth lib_sex: Male, Female / M, F only)
     // =========================================================================
 
     [Theory]
     [InlineData("Male")]
     [InlineData("Female")]
-    [InlineData("Intersex")]
-    [InlineData("Unknown")]
+    [InlineData("M")]
+    [InlineData("F")]
     public void Validate_StandardBiologicalSex_PassesValidation(string validSex)
     {
         var command = CreateValidCommand(sex: validSex);
@@ -245,6 +245,8 @@ public class UpdateClinicPatientCommandValidatorTests
     }
 
     [Theory]
+    [InlineData("Intersex")]    // belongs in GenderIdentity per PhilHealth lib_sex
+    [InlineData("Unknown")]     // not valid in PhilHealth lib_sex (M/F only)
     [InlineData("Non-Binary")]  // gender identity belongs in GenderIdentity, not Sex
     [InlineData("Transgender")] // gender identity belongs in GenderIdentity, not Sex
     [InlineData("Other")]       // legacy value removed
@@ -256,7 +258,7 @@ public class UpdateClinicPatientCommandValidatorTests
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(UpdateClinicPatientCommand.Sex)
-            && e.ErrorMessage.Contains("Sex must be 'Male', 'Female', 'Intersex', or 'Unknown'"));
+            && e.ErrorMessage.Contains("Sex must be 'Male' or 'Female'"));
     }
 
     [Theory]
@@ -357,8 +359,9 @@ public class UpdateClinicPatientCommandValidatorTests
     [Theory]
     [InlineData("Male", "MAN")]
     [InlineData("Female", "WOMAN")]
-    [InlineData("Intersex", "NON_BINARY")]
-    [InlineData("Unknown", "PREFER_NOT_TO_ANSWER")]
+    [InlineData("Male", "NON_BINARY")]
+    [InlineData("Female", "INTERSEX_IDENTITY")]
+    [InlineData("Female", "PREFER_NOT_TO_ANSWER")]
     public void Validate_ValidBiologicalSexAndGenderIdentity_Passes(string sex, string genderIdentity)
     {
         var command = CreateValidCommand(sex: sex) with

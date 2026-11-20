@@ -119,16 +119,6 @@ public static class PhilHealthOperations
     /// <summary>Reset PCAPI sandbox state to clean initial baseline.</summary>
     public const string PcapiSandboxReset = "pcapi-sandbox.reset";
 
-    // Legacy Konsulta v1.14 XML/SOAP Operations (Preserved for backward compatibility)
-    public const string YakapReportValidate = "yakap.report.validate";
-    public const string YakapReportSubmit = "yakap.report.submit";
-    public const string YakapMasterlistExtract = "yakap.masterlist.extract";
-    public const string YakapPinValidate = "yakap.pin.validate";
-    public const string SoapSandboxRun = "soap-sandbox.run";
-    public const string SoapSandboxStatus = "soap-sandbox.status";
-    public const string SoapSandboxScenario = "soap-sandbox.scenario";
-    public const string SoapSandboxReset = "soap-sandbox.reset";
-
     /// <summary>All active PCAPI v2.0 operation constant strings.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -138,10 +128,7 @@ public static class PhilHealthOperations
         DataUploadMedicine, DataUploadReferral, DataUploadGetStatus,
         GeneratePatientOtp, GenerateAvailmentSlip,
         TenantConfigure, TenantStatus, TenantTestConnection,
-        PcapiSandboxStatus, PcapiSandboxScenario, PcapiSandboxReset,
-        // Include legacy constants for dictionary / validator backwards compatibility
-        YakapReportValidate, YakapReportSubmit, YakapMasterlistExtract, YakapPinValidate,
-        SoapSandboxRun, SoapSandboxStatus, SoapSandboxScenario, SoapSandboxReset
+        PcapiSandboxStatus, PcapiSandboxScenario, PcapiSandboxReset
     ];
 }
 
@@ -204,11 +191,6 @@ public sealed record PhilHealthConfigPayload
 
     /// <summary>Whether this facility is active and accredited for PhilHealth YAKAP services.</summary>
     public bool IsActive { get; init; }
-
-    // Legacy SOAP Credential Fallbacks (Preserved for backward compatibility)
-    public string Username { get; init; } = string.Empty;
-    public string Password { get; init; } = string.Empty;
-    public string KonsultaEndpoint { get; init; } = string.Empty;
 }
 
 /// <summary>PhilHealth proxy -> portal (<c>InteropTypes.PhilHealthConfigRequested</c>, From = <c>Party.PhilHealth</c>). Asks for a facility's credentials.</summary>
@@ -345,29 +327,4 @@ public sealed record PortalYakapMasterlistSyncResultDto
     public int TotalActiveCount { get; init; }
     public DateTime SyncedAtUtc { get; init; }
     public string? Message { get; init; }
-}
-
-// =============================================================================
-// Legacy Tranche 1/2 XML Contracts (Preserved for backwards compatibility during migration)
-// =============================================================================
-
-/// <summary>
-/// Legacy Portal -> clinic (<c>InteropTypes.YakapTransmittalRequested</c>). Request payload for XML transmittal operations.
-/// </summary>
-public sealed record YakapTransmittalRequestedPayload
-{
-    public string Method { get; init; } = "GET";
-    public string Path { get; init; } = string.Empty;
-    public string? Query { get; init; }
-    public string? Body { get; init; }
-}
-
-/// <summary>
-/// Legacy Clinic -> portal (<c>InteropTypes.YakapTransmittalResponded</c>). Result of the XML transmittal operation.
-/// </summary>
-public sealed record YakapTransmittalRespondedPayload
-{
-    public int StatusCode { get; init; } = 200;
-    public string? ContentType { get; init; } = "application/json";
-    public string? Body { get; init; }
 }

@@ -242,8 +242,8 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
 
     const ids = items.map((i) => i.id);
     expect(ids).toEqual(['edit-demographics', 'philhealth-profile', 'view-chart', 'schedule-visit']);
-    expect(items.map((i) => i.label)).toEqual(['Edit info', 'PhilHealth info', 'View chart', 'Schedule visit']);
-    expect(items.find((i) => i.id === 'philhealth-profile')?.icon).toBe('shield');
+    expect(items.map((i) => i.label)).toEqual(['Edit patient', 'Manage PhilHealth', 'View chart', 'Schedule visit']);
+    expect(items.find((i) => i.id === 'philhealth-profile')?.icon).toBe('shieldCheck');
     expect(items.every((i) => i.hint === undefined)).toBe(true);
 
     items[0].onPress();
@@ -1224,17 +1224,17 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     });
 
     const labels = items.map((i) => i.label);
-    expect(labels).toContain('PhilHealth info');
-    expect(labels).toContain('Consult');
-    expect(labels).toContain('Health screening');
-    expect(labels).toContain('Vitals');
+    expect(labels).toContain('Manage PhilHealth');
+    expect(labels).toContain('Start consult');
+    expect(labels).toContain('Start screening');
+    expect(labels).toContain('Record vitals');
     expect(labels).toContain('Start procedure');
-    expect(labels).toContain('Medical certificate');
+    expect(labels).toContain('Issue certificate');
     expect(items.every((i) => i.hint === undefined)).toBe(true);
 
     const philHealthItem = items.find((i) => i.id === 'philhealth-profile')!;
     const screeningItem = items.find((i) => i.id === 'start-profiling')!;
-    expect(philHealthItem.icon).toBe('shield');
+    expect(philHealthItem.icon).toBe('shieldCheck');
     expect(screeningItem.icon).toBe('heartPulse');
 
     philHealthItem.onPress();
@@ -1278,8 +1278,8 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     });
 
     const labels = items.map((i) => i.label);
-    expect(labels).toContain('Consult');
-    expect(labels).toContain('Health screening');
+    expect(labels).toContain('Start consult');
+    expect(labels).toContain('Start screening');
     const screeningItem = items.find((i) => i.id === 'start-profiling')!;
     expect(screeningItem.icon).toBe('heartPulse');
     screeningItem.onPress();

@@ -7,15 +7,14 @@ namespace ClinicEz.Clinic.Domain.Interfaces;
 
 public record PhilHealthPatientJourneyNumbers(
     string CaseNumber,
-    string EnlistmentTransactionNumber,
     string ProfilingTransactionNumber,
     string? SoapTransactionNumber = null);
 
 public interface IPhilHealthSequenceGenerator
 {
     /// <summary>
-    /// Generates an official, 20-character compliant PhilHealth Case Number (pHciCaseNo).
-    /// Format: C + {AccreditationNo} + {Year} + {Sequence:D5} (e.g. C00921202600001)
+    /// Generates an official 23-character PhilHealth PCAPI v2.0 Case Number (case_no).
+    /// Format: C + {AccreditationNo9} + {yyyyMMdd} + {Sequence:D5}
     /// </summary>
     Task<string> GenerateCaseNumberAsync(
         string tenantId,
@@ -25,8 +24,8 @@ public interface IPhilHealthSequenceGenerator
         CancellationToken ct = default);
 
     /// <summary>
-    /// Generates an official, 20-character compliant PhilHealth Transaction Number (pHciTransNo).
-    /// Format: Prefix (E/P/S/M) + {AccreditationNo} + {Year} + {Sequence:D5}
+    /// Generates an official 23-character PhilHealth PCAPI v2.0 Daily Transaction Number.
+    /// Format: Prefix (C/P/S/D/L/M/R) + {AccreditationNo9} + {yyyyMMdd} + {Sequence:D5}
     /// </summary>
     Task<string> GenerateTransactionNumberAsync(
         string tenantId,
@@ -37,20 +36,9 @@ public interface IPhilHealthSequenceGenerator
         CancellationToken ct = default);
 
     /// <summary>
-    /// Generates an official PhilHealth Transmittal Number (pHciTransmittalNumber).
-    /// Format: R + {AccreditationNo} + {Year} + {Sequence:D5} (e.g. R00921202600001)
-    /// </summary>
-    Task<string> GenerateTransmittalNumberAsync(
-        string tenantId,
-        Guid clinicId,
-        string accreditationNumber,
-        string effectiveYear,
-        CancellationToken ct = default);
-
-    /// <summary>
-    /// Automatically generates or resolves the patient's annual CaseNo, EnlistmentNo,
-    /// ProfilingNo, and (if encounter specified) SOAP TransNo, persisting them atomically
-    /// onto the Patient and ConsultationEncounter records.
+    /// Automatically generates or resolves the patient's annual CaseNo (C...),
+    /// ProfilingNo (P...), and (if encounter specified) Consultation TransNo (S...),
+    /// persisting them atomically onto PatientYakapEnlistment and ConsultationEncounter.
     /// </summary>
     Task<PhilHealthPatientJourneyNumbers> AssignPatientJourneyNumbersAsync(
         string tenantId,

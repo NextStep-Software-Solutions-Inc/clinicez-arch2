@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.PhilHealthProxy.Domain.Interfaces;
@@ -71,15 +72,27 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
         public required string LivenessAuthorizationId { get; init; }
         public required string Pin { get; init; }
         public required string TransNo { get; init; }
-        public bool PinMatched { get; init; } = true;
-        public string Status { get; init; } = "VERIFIED";
+        public bool PinMatched { get; set; } = true;
+        public string Status { get; set; } = "PENDING";
     }
+
+    private sealed record SandboxUploadMarker(string TransactionNo, string UploadTransactionNo);
 
     private readonly ConcurrentDictionary<string, SandboxBeneficiary> _beneficiaries = new();
     private readonly ConcurrentDictionary<string, SandboxSelection> _selections = new();
     private readonly ConcurrentDictionary<string, SandboxEmpanelment> _empanelments = new();
     private readonly ConcurrentDictionary<string, SandboxUpload> _uploads = new();
     private readonly ConcurrentDictionary<string, SandboxPcuSession> _pcuSessions = new();
+    private readonly ConcurrentDictionary<string, SandboxPcuSession> _verifiedPcuByPin = new();
+    private readonly ConcurrentDictionary<string, SandboxUploadMarker> _fpeUploads = new();
+    private readonly ConcurrentDictionary<string, SandboxUploadMarker> _consultations = new();
+
+    private static string NormalizePin(string? pin)
+    {
+        if (string.IsNullOrWhiteSpace(pin)) return string.Empty;
+        var digits = new string(pin.Where(char.IsDigit).ToArray());
+        return digits.Length > 0 ? digits : pin.Trim();
+    }
 
     public PcapiSandboxService(
         IPhilHealthPayloadEncryptor encryptor,
@@ -98,6 +111,33 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
             "987654321098", "SANTOS", "MARIA", "CLARA", "", "05/20/1985", "F"));
         _beneficiaries.TryAdd("112233445566", new SandboxBeneficiary(
             "112233445566", "REYES", "PEDRO", "PENDUKO", "JR", "11/30/1992", "M"));
+
+        // Pre-seed 987654321098 (Maria Clara Santos) as an already-assigned & empaneled YAKAP member,
+        // while 123456789012 (Juan Dela Cruz), 112233445566 (Pedro Reyes), and unseen PINs start as NOT_ASSIGNED walk-ins.
+        _selections.TryAdd("987654321098", new SandboxSelection
+        {
+            PatientPin = "987654321098",
+            AccreNo = "H10000001",
+            TransactionNo = $"KH10000001{DateTime.UtcNow:yyyyMMdd}00001",
+            Date = DateTime.UtcNow.ToString("MM/dd/yyyy"),
+            Status = "ASSIGNED"
+        });
+        _verifiedPcuByPin.TryAdd("987654321098", new SandboxPcuSession
+        {
+            LivenessAuthorizationId = "SEED-PCU-987654321098",
+            Pin = "987654321098",
+            TransNo = "PCU0000001",
+            PinMatched = true,
+            Status = "VERIFIED"
+        });
+        _empanelments.TryAdd("987654321098", new SandboxEmpanelment
+        {
+            YesReferenceNo = "MCAH100001",
+            PatientPin = "987654321098",
+            AccreNo = "H10000001",
+            EffYear = DateTime.UtcNow.Year.ToString(),
+            PcuTransactionCode = "PCU0000001"
+        });
     }
 
     private void CheckFaultScenario()
@@ -123,16 +163,17 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
     {
         CheckFaultScenario();
 
+        var normalizedPin = NormalizePin(req.Pin);
         var authId = Guid.NewGuid().ToString("N");
         var transNo = $"PCU{Interlocked.Increment(ref _pcuSeries):D7}";
 
         _pcuSessions[authId] = new SandboxPcuSession
         {
             LivenessAuthorizationId = authId,
-            Pin = req.Pin,
+            Pin = normalizedPin,
             TransNo = transNo,
             PinMatched = true,
-            Status = "VERIFIED"
+            Status = "PENDING"
         };
 
         var sdkUrl = $"https://pcapi-pcu.philhealth.gov.ph/sdk?auth={authId}";
@@ -145,16 +186,30 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
 
         if (_pcuSessions.TryGetValue(req.LivenessAuthorizationId, out var session))
         {
+            session.Status = "VERIFIED";
+            session.PinMatched = true;
+            _verifiedPcuByPin[NormalizePin(session.Pin)] = session;
             return Task.FromResult(new PcuVerifyResponse(session.TransNo, session.PinMatched, session.Status, session.Pin));
         }
 
         var fallbackTransNo = $"PCU{Interlocked.Increment(ref _pcuSeries):D7}";
+        var fallback = new SandboxPcuSession
+        {
+            LivenessAuthorizationId = req.LivenessAuthorizationId,
+            Pin = "123456789012",
+            TransNo = fallbackTransNo,
+            PinMatched = true,
+            Status = "VERIFIED"
+        };
+        _verifiedPcuByPin["123456789012"] = fallback;
         return Task.FromResult(new PcuVerifyResponse(fallbackTransNo, true, "VERIFIED", "123456789012"));
     }
 
     public Task<YakapValidatorResponse> ValidateStandingAsync(YakapValidateStandingRequest req, string accreNo, CancellationToken ct = default)
     {
         CheckFaultScenario();
+
+        var normalizedPin = NormalizePin(req.PatientPin);
 
         if (_scenario == PcapiFaultScenario.BeneficiaryNotFound)
         {
@@ -166,22 +221,17 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
             throw new InvalidOperationException("403 consent_required: Patient consent is required to query PhilHealth standing.");
         }
 
-        _beneficiaries.TryGetValue(req.PatientPin, out var beneficiary);
+        _beneficiaries.TryGetValue(normalizedPin, out var beneficiary);
         var lastName = beneficiary?.LastName ?? "DELA CRUZ";
         var firstName = beneficiary?.FirstName ?? "JUAN";
         var middleName = beneficiary?.MiddleName ?? "SANTOS";
         var extName = beneficiary?.ExtName ?? "";
 
-        var selection = _selections.GetOrAdd(req.PatientPin, pin => new SandboxSelection
-        {
-            PatientPin = pin,
-            AccreNo = accreNo,
-            TransactionNo = $"K{accreNo}{DateTime.UtcNow:yyyyMMdd}{Interlocked.Increment(ref _selectionSeries):D5}",
-            Date = DateTime.UtcNow.ToString("MM/dd/yyyy"),
-            Status = "ASSIGNED"
-        });
-
-        _empanelments.TryGetValue(req.PatientPin, out var empanelment);
+        _verifiedPcuByPin.TryGetValue(normalizedPin, out var pcu);
+        _selections.TryGetValue(normalizedPin, out var selection);
+        _empanelments.TryGetValue(normalizedPin, out var empanelment);
+        _fpeUploads.TryGetValue(normalizedPin, out var fpe);
+        _consultations.TryGetValue(normalizedPin, out var consultation);
 
         var response = new YakapValidatorResponse(
             req.PatientPin,
@@ -189,11 +239,17 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
             firstName,
             middleName,
             extName,
-            new PcuStatusInfo("VERIFIED", $"PCU{Interlocked.Increment(ref _pcuSeries):D7}"),
-            new SelectionStatusInfo(selection.Status, selection.TransactionNo, selection.Date),
+            new PcuStatusInfo(pcu?.Status ?? "UNVERIFIED", pcu?.TransNo),
+            selection != null
+                ? new SelectionStatusInfo(selection.Status, selection.TransactionNo, selection.Date)
+                : new SelectionStatusInfo("NOT_ASSIGNED"),
             new EmpanelmentStatusInfo(empanelment != null ? "Y" : "N", empanelment?.YesReferenceNo),
-            new FpeStatusInfo("Y", $"P{accreNo}{DateTime.UtcNow:yyyyMMdd}0001", $"U{accreNo}{DateTime.UtcNow:yyyyMMdd}0001"),
-            new ConsultationStatusInfo("Y", $"S{accreNo}{DateTime.UtcNow:yyyyMMdd}0001", $"U{accreNo}{DateTime.UtcNow:yyyyMMdd}0002")
+            fpe != null
+                ? new FpeStatusInfo("Y", fpe.TransactionNo, fpe.UploadTransactionNo)
+                : new FpeStatusInfo("N"),
+            consultation != null
+                ? new ConsultationStatusInfo("Y", consultation.TransactionNo, consultation.UploadTransactionNo)
+                : new ConsultationStatusInfo("N")
         );
 
         return Task.FromResult(response);
@@ -208,21 +264,23 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
             throw new InvalidOperationException("403 consent_required: Patient consent required for empanelment.");
         }
 
+        var normalizedPin = NormalizePin(req.PatientPin);
         var prefix = accreNo.Length >= 4 ? accreNo[..4] : "9999";
         var yesRefNo = $"MCA{prefix}{Interlocked.Increment(ref _empanelSeries):D3}";
         var effYear = DateTime.UtcNow.Year.ToString();
+        _fpeUploads.TryGetValue(normalizedPin, out var fpe);
 
         var empanelment = new SandboxEmpanelment
         {
             YesReferenceNo = yesRefNo,
-            PatientPin = req.PatientPin,
+            PatientPin = normalizedPin,
             AccreNo = accreNo,
             EffYear = effYear,
-            FpeTransactionNo = $"P{accreNo}{DateTime.UtcNow:yyyyMMdd}0001",
+            FpeTransactionNo = fpe?.TransactionNo,
             PcuTransactionCode = req.PcuTransactionCode
         };
 
-        _empanelments[req.PatientPin] = empanelment;
+        _empanelments[normalizedPin] = empanelment;
 
         return Task.FromResult(new YakapEmpanelmentResponse(
             yesRefNo,
@@ -230,7 +288,7 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
             accreNo,
             effYear,
             WithYes: true,
-            WithFpe: true,
+            WithFpe: fpe != null,
             empanelment.FpeTransactionNo,
             req.PcuTransactionCode));
     }
@@ -244,17 +302,18 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
             throw new InvalidOperationException("403 consent_required: Patient consent required for selection.");
         }
 
+        var normalizedPin = NormalizePin(req.PatientPin);
         var txNo = $"K{accreNo}{DateTime.UtcNow:yyyyMMdd}{Interlocked.Increment(ref _selectionSeries):D5}";
         var selection = new SandboxSelection
         {
-            PatientPin = req.PatientPin,
+            PatientPin = normalizedPin,
             AccreNo = accreNo,
             TransactionNo = txNo,
             Date = req.SelectionDate,
             Status = "ASSIGNED"
         };
 
-        _selections[req.PatientPin] = selection;
+        _selections[normalizedPin] = selection;
 
         return Task.FromResult(new YakapSelectionResponse(
             req.PatientPin,
@@ -266,7 +325,7 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
     {
         CheckFaultScenario();
 
-        _beneficiaries.TryGetValue(req.PatientPin, out var b);
+        _beneficiaries.TryGetValue(NormalizePin(req.PatientPin), out var b);
         var item = new MasterlistAssignmentItem(
             req.PatientPin,
             b?.LastName ?? "DELA CRUZ",
@@ -327,6 +386,12 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
         CheckFaultScenario();
 
         var uploadTxNo = $"U{accreNo}{DateTime.UtcNow:yyyyMMdd}{Interlocked.Increment(ref _uploadSeries):D5}";
+        var effectiveCipherKey = string.IsNullOrWhiteSpace(cipherKey)
+            ? Application.Common.TenantResolutionHelper.SandboxDefaultCipherKey
+            : cipherKey;
+        var caseNo = $"CASE-{uploadTxNo[..Math.Min(10, uploadTxNo.Length)]}";
+
+        TryRecordUploadedMarker(form, envelope, effectiveCipherKey, uploadTxNo, ref caseNo);
 
         var upload = new SandboxUpload
         {
@@ -344,8 +409,83 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
             uploadTxNo,
             form,
             "queued",
-            $"CASE-{uploadTxNo[..Math.Min(10, uploadTxNo.Length)]}",
+            caseNo,
             upload.ReceivedAt));
+    }
+
+    private void TryRecordUploadedMarker(
+        string form,
+        PhilHealthEncryptedPayload envelope,
+        string cipherKey,
+        string uploadTxNo,
+        ref string caseNo)
+    {
+        try
+        {
+            var plainJson = _encryptor.DecryptJson(envelope, cipherKey);
+            using var doc = JsonDocument.Parse(plainJson);
+            var root = doc.RootElement;
+            string? pin = null;
+            string? txNo = null;
+
+            if (root.TryGetProperty("enlistment", out var enlistment) && enlistment.TryGetProperty("patient_pin", out var ep))
+            {
+                pin = ep.GetString();
+            }
+            else if (root.TryGetProperty("patient_pin", out var p))
+            {
+                pin = p.GetString();
+            }
+            else if (root.TryGetProperty("pPatientPin", out var pPin))
+            {
+                pin = pPin.GetString();
+            }
+
+            if (root.TryGetProperty("case", out var caseEl) && caseEl.TryGetProperty("case_no", out var cNo))
+            {
+                caseNo = cNo.GetString() ?? caseNo;
+            }
+            else if (root.TryGetProperty("pHciCaseNo", out var cWireNo) && !string.IsNullOrWhiteSpace(cWireNo.GetString()))
+            {
+                caseNo = cWireNo.GetString()!;
+            }
+
+            if (form.Equals("fpe", StringComparison.OrdinalIgnoreCase))
+            {
+                if (root.TryGetProperty("profiling", out var prof) && prof.TryGetProperty("fpe_transaction_no", out var fpeTx))
+                {
+                    txNo = fpeTx.GetString();
+                }
+                else if (root.TryGetProperty("pProfilingTransNo", out var wireFpeTx))
+                {
+                    txNo = wireFpeTx.GetString();
+                }
+            }
+            else if (form.Equals("consultation", StringComparison.OrdinalIgnoreCase)
+                && root.TryGetProperty("consultation", out var cons)
+                && cons.TryGetProperty("consult_transaction_no", out var consTx))
+            {
+                txNo = consTx.GetString();
+            }
+
+            if (!string.IsNullOrWhiteSpace(pin))
+            {
+                var normalizedPin = NormalizePin(pin);
+                var marker = new SandboxUploadMarker(txNo ?? uploadTxNo, uploadTxNo);
+                if (form.Equals("fpe", StringComparison.OrdinalIgnoreCase))
+                {
+                    _fpeUploads[normalizedPin] = marker;
+                }
+                else if (form.Equals("consultation", StringComparison.OrdinalIgnoreCase))
+                {
+                    _consultations[normalizedPin] = marker;
+                }
+            }
+        }
+        catch
+        {
+            // Ignore synthetic unit test payloads with dummy ciphertexts (e.g. "doc123").
+        }
     }
 
     public Task<DataUploadStatusResponse> GetUploadStatusAsync(string uploadTxNo, string accreNo, CancellationToken ct = default)
@@ -424,10 +564,13 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
     {
         CheckFaultScenario();
 
-        var pdfContent = $"%PDF-1.4\n1 0 obj\n<< /Title (ClinicEZ Electronic Konsulta Availment Slip) /Author (PhilHealth) /Pin ({req.PatientPin}) /Year ({req.EffYear}) /Accre ({accreNo}) >>\nendobj\nxref\n0 1\n0000000000 65535 f\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n";
+        var effectiveCipherKey = string.IsNullOrWhiteSpace(cipherKey)
+            ? Application.Common.TenantResolutionHelper.SandboxDefaultCipherKey
+            : cipherKey;
+        var pdfContent = $"%PDF-1.4\n1 0 obj\n<< /Title (ClinicEZ PhilHealth YAKAP Confirmation Slip) /Author (PhilHealth) /Pin ({req.PatientPin}) /Year ({req.EffYear}) /Accre ({accreNo}) >>\nendobj\nxref\n0 1\n0000000000 65535 f\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n";
         byte[] pdfBytes = Encoding.ASCII.GetBytes(pdfContent);
 
-        var encryptedEnvelope = _encryptor.EncryptBytes(pdfBytes, "application/pdf", cipherKey);
+        var encryptedEnvelope = _encryptor.EncryptBytes(pdfBytes, "application/pdf", effectiveCipherKey);
         return Task.FromResult(encryptedEnvelope);
     }
 
@@ -455,6 +598,9 @@ public sealed class PcapiSandboxService : IPcapiSandboxService
         _empanelments.Clear();
         _uploads.Clear();
         _pcuSessions.Clear();
+        _verifiedPcuByPin.Clear();
+        _fpeUploads.Clear();
+        _consultations.Clear();
         _beneficiaries.Clear();
         SeedDefaults();
         _logger.LogInformation("[PcapiSandbox] State reset to initial defaults");

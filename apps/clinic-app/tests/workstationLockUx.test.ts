@@ -246,7 +246,7 @@ describe('Workstation Lock, Idle Warning & PIN UX', () => {
     expect(markup).toContain('Set a 6-digit Quick-Unlock PIN in My Profile');
   });
 
-  test('UserMenu shows 1-click Lock screen action online and hides it offline', () => {
+  test('UserMenu hides Lock screen when no personal PIN/biometrics is configured, and shows 1-click Lock screen when PIN is enabled online', () => {
     let lockCalled = 0;
     (globalThis as any).__mockAuthContext = {
       state: 'signedIn',
@@ -257,13 +257,31 @@ describe('Workstation Lock, Idle Warning & PIN UX', () => {
         email: 'maria@nextstep.example',
         role: 'Doctor',
         permissions: ['*'],
+        hasQuickUnlockPin: false,
       },
       lockWorkstation: async () => { lockCalled += 1; },
       can: () => true,
     };
 
+    const noPinMarkup = renderToStaticMarkup(React.createElement(UserMenu, { variant: 'card' }));
+    expect(noPinMarkup).not.toContain('Lock screen');
+    expect(noPinMarkup).not.toContain('user-menu-lock-button');
+    expect(pressHandlersByTestId.has('user-menu-lock-button')).toBe(false);
+
+    (globalThis as any).__mockAuthContext.user.hasQuickUnlockPin = true;
+    (globalThis as any).__mockAuthContext.user.sessionPolicy = {
+      idleLockMinutes: 15,
+      maxLockedSessionHours: 8,
+      allowStaffPinUnlock: false,
+    };
+    const adminDisabledMarkup = renderToStaticMarkup(React.createElement(UserMenu, { variant: 'card' }));
+    expect(adminDisabledMarkup).not.toContain('Lock screen');
+    expect(adminDisabledMarkup).not.toContain('user-menu-lock-button');
+
+    (globalThis as any).__mockAuthContext.user.sessionPolicy.allowStaffPinUnlock = true;
     const onlineMarkup = renderToStaticMarkup(React.createElement(UserMenu, { variant: 'card' }));
     expect(onlineMarkup).toContain('Lock screen');
+    expect(onlineMarkup).toContain('user-menu-lock-button');
     pressHandlersByTestId.get('user-menu-lock-button')?.();
     expect(lockCalled).toBe(1);
 

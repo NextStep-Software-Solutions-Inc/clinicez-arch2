@@ -49,9 +49,8 @@ public sealed class YakapEnlistmentExtensionsTests
             EnlistmentDate = new DateOnly(2026, 1, 15),
             ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
+            Source = YakapEnlistmentSource.AssistedIntake,
             CaseNo = "C000921202600001",
-            EnlistmentTransNo = "E000921202600001",
             ProfilingTransNo = "P000921202600001"
         };
         var e2025 = new PatientYakapEnlistment
@@ -93,7 +92,7 @@ public sealed class YakapEnlistmentExtensionsTests
             ValidUntil = new DateOnly(2026, 12, 31),
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment
+            Source = YakapEnlistmentSource.AssistedIntake
         });
 
         var entries = patient.GetYakapEnlistments();
@@ -113,9 +112,8 @@ public sealed class YakapEnlistmentExtensionsTests
             ValidUntil = new DateOnly(2026, 12, 31),
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
+            Source = YakapEnlistmentSource.AssistedIntake,
             CaseNo = "C000921202600001",
-            EnlistmentTransNo = "E000921202600001",
             ProfilingTransNo = "P000921202600001"
         });
 
@@ -126,14 +124,13 @@ public sealed class YakapEnlistmentExtensionsTests
             ValidUntil = new DateOnly(2027, 1, 10),
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment
+            Source = YakapEnlistmentSource.AssistedIntake
         });
 
         var entries = patient.GetYakapEnlistments();
         entries.Should().HaveCount(1);
         entries[0].ValidUntil.Should().Be(new DateOnly(2027, 1, 10));
         entries[0].CaseNo.Should().Be("C000921202600001");
-        entries[0].EnlistmentTransNo.Should().Be("E000921202600001");
         entries[0].ProfilingTransNo.Should().Be("P000921202600001");
     }
 

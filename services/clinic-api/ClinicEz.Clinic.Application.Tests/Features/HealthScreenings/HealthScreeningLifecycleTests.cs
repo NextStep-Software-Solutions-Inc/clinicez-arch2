@@ -20,6 +20,7 @@ using ClinicEz.Clinic.Application.Features.Queue.Commands;
 using ClinicEz.Clinic.Application.Features.Reports.DTOs;
 using ClinicEz.Clinic.Application.Features.Reports.Queries;
 using ClinicEz.Clinic.Application.Features.ServicesCatalog.Common;
+using ClinicEz.Clinic.Application.Features.Yakap.Commands;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Application.Features.Yakap.WireBuilders;
@@ -696,8 +697,7 @@ public sealed class HealthScreeningLifecycleTests
         result.YakapEnlistmentId.Should().Be(currentEnlistment.Id);
 
         var stamped = await context.PatientYakapEnlistments.SingleAsync(e => e.Id == currentEnlistment.Id);
-        stamped.CaseNo.Should().StartWith("C");
-        stamped.EnlistmentTransNo.Should().StartWith("E");
+        stamped.CaseNo.Should().HaveLength(23).And.StartWith("C");
         stamped.ProfilingTransNo.Should().Be(result.ProfilingTransNo);
         stamped.ProfilingDate.Should().NotBeNull();
         stamped.ProfilingTime.Should().NotBeNull();
@@ -970,13 +970,38 @@ public sealed class HealthScreeningLifecycleTests
         (await context.Patients.SingleAsync(p => p.Id == adultDependent.Id)).PhilHealthNumber.Should().BeNull();
 
         // Historical enlistment preservation (2025 preserved when 2026 added + renewed in place)
-        var enlistHandler = new CreatePatientYakapEnlistmentCommandHandler(patientRepo, enlistmentRepo, uow, ctx, settingsRepo);
-        await enlistHandler.Handle(new CreatePatientYakapEnlistmentCommand(
-            adultDependent.Id, 2025, new DateOnly(2025, 2, 1), CaseNo: "CASE-2025"), CancellationToken.None);
-        await enlistHandler.Handle(new CreatePatientYakapEnlistmentCommand(
-            adultDependent.Id, 2026, new DateOnly(2026, 1, 15), YesReferenceNo: "MCA2026001"), CancellationToken.None);
-        await enlistHandler.Handle(new CreatePatientYakapEnlistmentCommand(
-            adultDependent.Id, 2026, new DateOnly(2026, 2, 1), Notes: "Renewed"), CancellationToken.None);
+        var trackedPatient = await context.Patients
+            .Include(p => p.YakapEnlistments)
+            .SingleAsync(p => p.Id == adultDependent.Id);
+
+        trackedPatient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
+        {
+            TenantId = trackedPatient.TenantId,
+            ClinicId = trackedPatient.ClinicId,
+            EffectiveYear = 2025,
+            EnlistmentDate = new DateOnly(2025, 2, 1),
+            ValidUntil = new DateOnly(2025, 12, 31),
+            CaseNo = "CASE-2025"
+        });
+        trackedPatient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
+        {
+            TenantId = trackedPatient.TenantId,
+            ClinicId = trackedPatient.ClinicId,
+            EffectiveYear = 2026,
+            EnlistmentDate = new DateOnly(2026, 1, 15),
+            ValidUntil = new DateOnly(2026, 12, 31),
+            YesReferenceNo = "MCA2026001"
+        });
+        trackedPatient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
+        {
+            TenantId = trackedPatient.TenantId,
+            ClinicId = trackedPatient.ClinicId,
+            EffectiveYear = 2026,
+            EnlistmentDate = new DateOnly(2026, 2, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
+            Remarks = "Renewed"
+        });
+        await context.SaveChangesAsync();
 
         var allEnlistments = await context.PatientYakapEnlistments
             .Where(e => e.PatientId == adultDependent.Id)
@@ -1249,10 +1274,15 @@ public sealed class HealthScreeningLifecycleTests
         memDesc.PatientIdGetter(memCmd).Should().Be(patientId);
         memDesc.PatientPinGetter(memCmd).Should().Be(ValidPatientPin);
 
-        var enlistDesc = AuditRequestMetadataRegistry.GetDescriptor<CreatePatientYakapEnlistmentCommand>();
-        enlistDesc.IsAuditable.Should().BeTrue();
-        enlistDesc.Category.Should().Be(ClinicAuditCategories.PhilHealth);
-        enlistDesc.Action.Should().Be("philhealth.yakap_enlistment.created");
+        var selectDesc = AuditRequestMetadataRegistry.GetDescriptor<SubmitPatientYakapSelectionCommand>();
+        selectDesc.IsAuditable.Should().BeTrue();
+        selectDesc.Category.Should().Be(ClinicAuditCategories.PhilHealth);
+        selectDesc.Action.Should().Be("yakap.selection.submitted");
+
+        var standingDesc = AuditRequestMetadataRegistry.GetDescriptor<ValidatePatientYakapStandingCommand>();
+        standingDesc.IsAuditable.Should().BeTrue();
+        standingDesc.Category.Should().Be(ClinicAuditCategories.PhilHealth);
+        standingDesc.Action.Should().Be("yakap.standing.validated");
     }
 
     [Fact]
@@ -1313,8 +1343,13 @@ public sealed class HealthScreeningLifecycleTests
         var upsertMem = typeof(PatientsController).GetMethod(nameof(PatientsController.UpsertPhilHealthMembership))!;
         upsertMem.GetCustomAttributes<HasPermissionAttribute>(true).Select(a => a.Permission).Should().Equal(ClinicPermissions.PatientsWrite);
 
-        var createEnlist = typeof(PatientsController).GetMethod(nameof(PatientsController.CreateYakapEnlistment))!;
-        createEnlist.GetCustomAttributes<HasPermissionAttribute>(true).Select(a => a.Permission).Should().Equal(ClinicPermissions.PatientsWrite);
+        var submitSel = typeof(YakapTransmittalsController).GetMethod(nameof(YakapTransmittalsController.SubmitSelection))!;
+        submitSel.GetCustomAttributes<HasAnyPermissionAttribute>(true).SelectMany(a => a.Permissions).Should().BeEquivalentTo(new[]
+        {
+            ClinicPermissions.PatientsWrite,
+            ClinicPermissions.TriageWrite,
+            ClinicPermissions.YakapRead
+        });
     }
 
     // =========================================================================
@@ -1714,19 +1749,6 @@ public sealed class HealthScreeningLifecycleTests
             PrincipalLastName: "Clara",
             PrincipalFirstName: "Juan",
             PrincipalDateOfBirth: new DateOnly(1960, 1, 1))).IsValid.Should().BeFalse();
-
-        var enlistValidator = new CreatePatientYakapEnlistmentCommandValidator();
-        enlistValidator.Validate(new CreatePatientYakapEnlistmentCommand(
-            Guid.NewGuid(),
-            2026,
-            new DateOnly(2026, 1, 15),
-            Source: "999")).IsValid.Should().BeFalse();
-
-        enlistValidator.Validate(new CreatePatientYakapEnlistmentCommand(
-            Guid.NewGuid(),
-            2026,
-            new DateOnly(2026, 1, 15),
-            PackageType: "999")).IsValid.Should().BeFalse();
     }
 
     [Fact]

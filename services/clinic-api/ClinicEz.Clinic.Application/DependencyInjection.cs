@@ -41,6 +41,7 @@ public static class DependencyInjection
         services.AddScoped<ClinicEz.Clinic.Application.Features.Schedules.Services.ISlotAvailabilityService, ClinicEz.Clinic.Application.Features.Schedules.Services.SlotAvailabilityService>();
         services.AddScoped<ClinicEz.Clinic.Application.Features.Queue.Services.IQueueNotificationDispatcher, ClinicEz.Clinic.Application.Features.Queue.Services.QueueNotificationDispatcher>();
         services.AddScoped<IAppointmentNotificationDispatcher, AppointmentNotificationDispatcher>();
+        services.AddScoped<IYakapScreeningDispatcher, ClinicEz.Clinic.Application.Features.Yakap.Services.YakapScreeningDispatcher>();
         services.AddScoped<IClinicDirectorySyncService, ClinicDirectorySyncService>();
 
         return services;

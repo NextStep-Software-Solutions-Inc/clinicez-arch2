@@ -123,7 +123,7 @@ public static class DependencyInjection
         services.AddScoped<PharmacyGamotGateway>();
         services.AddScoped<PhilHealthSequenceGenerator>();
 
-        services.AddScoped<IPhilHealthProxyClient, ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthProxyClient>(sp =>
+        services.AddScoped<ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthProxyClient>(sp =>
             new ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthProxyClient(
                 sp.GetRequiredService<PhilHealthProxyClient>(),
                 sp.GetRequiredService<IAuditLogQueue>(),
@@ -131,6 +131,12 @@ public static class DependencyInjection
                 sp.GetRequiredService<IPhiRedactionService>(),
                 sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(),
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthProxyClient>>()));
+
+        services.AddScoped<IPhilHealthProxyClient>(sp =>
+            sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthProxyClient>());
+
+        services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IYakapPcapiClient>(sp =>
+            sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthProxyClient>());
 
         services.AddScoped<IPharmacyGamotGateway, ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePharmacyGamotGateway>(sp =>
             new ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePharmacyGamotGateway(
@@ -304,8 +310,6 @@ public static class DependencyInjection
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
             .Handle<CommsTranscriptArchivedPayload, CommsTranscriptArchivedHandler>(InteropTypes.CommsTranscriptArchived)
             .Handle<CommsAttachmentFiledPayload, CommsAttachmentFiledHandler>(InteropTypes.CommsAttachmentFiled)
-            .Respond<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload, ClinicEz.Clinic.Infrastructure.Messaging.Responders.YakapTransmittalResponder>(
-                InteropTypes.YakapTransmittalRequested, InteropTypes.YakapTransmittalResponded)
             .Respond<YakapSubmissionRequestedPayload, YakapSubmissionRespondedPayload, ClinicEz.Clinic.Infrastructure.Messaging.Responders.YakapSubmissionResponder>(
                 InteropTypes.YakapSubmissionRequested, InteropTypes.YakapSubmissionResponded)
             .Respond<VerificationEvidenceRequestedPayload, VerificationEvidenceRespondedPayload, ClinicEz.Clinic.Infrastructure.Messaging.Responders.VerificationEvidenceResponder>(

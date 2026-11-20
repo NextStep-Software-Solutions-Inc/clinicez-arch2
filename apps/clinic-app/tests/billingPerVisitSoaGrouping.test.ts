@@ -135,8 +135,8 @@ describe('Per-Visit Cashier SOA Grouping & Add-on Unbilled Flow', () => {
       expect(billingContent).toContain('id: `lab-${labItem.id');
     });
 
-    test('5.3 YAKAP FPE mode displays PhilHealth YAKAP FPE Covered (₱0.00) notice, attaches zero-peso YAKAP-FPE line item, and supports optional co-payment', () => {
-      expect(billingContent).toContain('PhilHealth YAKAP FPE Covered (₱0.00)');
+    test('5.3 YAKAP Checkup mode displays PhilHealth Annual Checkup Covered (₱0.00) notice, attaches zero-peso YAKAP-FPE line item, and supports optional co-payment', () => {
+      expect(billingContent).toContain('PhilHealth Annual Checkup Covered (₱0.00)');
       expect(billingContent).toContain("code: 'YAKAP-FPE'");
       expect(billingContent).toContain("code: 'YAKAP-COPAY'");
       expect(billingContent).toContain('upsertYakapCoPaymentLineItem');

@@ -17,10 +17,9 @@ public sealed record OverridePhilHealthSettingsCommand(
     [Required] string AccreditationNumber,
     [Required] string PmccNumber,
     [Required] string SoftwareCertificateId,
-    string? Username,
-    string? Password,
+    string? SecretKey,
     string? CipherKey,
-    string? KonsultaEndpoint = null,
+    string? BaseUrl = null,
     bool SkipPendingVerificationSync = false) : IRequest<ClinicSettingsDto>;
 
 public sealed class OverridePhilHealthSettingsCommandHandler : IRequestHandler<OverridePhilHealthSettingsCommand, ClinicSettingsDto>
@@ -71,9 +70,9 @@ public sealed class OverridePhilHealthSettingsCommandHandler : IRequestHandler<O
             await _settingsRepo.AddAsync(settings, ct);
         }
 
-        var endpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
-            ? request.KonsultaEndpoint.Trim()
-            : (!string.IsNullOrWhiteSpace(settings.KonsultaEndpoint) ? settings.KonsultaEndpoint : "/soap/konsulta");
+        var baseUrl = !string.IsNullOrWhiteSpace(request.BaseUrl)
+            ? request.BaseUrl.Trim()
+            : (!string.IsNullOrWhiteSpace(settings.PhilHealthBaseUrl) ? settings.PhilHealthBaseUrl : "https://pcapi.philhealth.gov.ph");
 
         var proxyRequest = new ConfigurePhilHealthCredentialsProxyRequest(
             TenantId: Guid.TryParse(_clinicContext.TenantId, out var tid) ? tid : _clinicContext.ClinicId,
@@ -81,22 +80,21 @@ public sealed class OverridePhilHealthSettingsCommandHandler : IRequestHandler<O
             AccreditationNumber: request.AccreditationNumber.Trim(),
             PmccNumber: request.PmccNumber.Trim(),
             SoftwareCertificateId: request.SoftwareCertificateId.Trim(),
-            Username: request.Username ?? "",
-            Password: request.Password ?? "",
-            CipherKey: !string.IsNullOrWhiteSpace(request.CipherKey) ? request.CipherKey : "dev-cipher-key-for-local-development-only-0000",
-            KonsultaEndpoint: endpoint);
+            SecretKey: request.SecretKey ?? string.Empty,
+            CipherKey: !string.IsNullOrWhiteSpace(request.CipherKey) ? request.CipherKey : "CLINICEZ-SANDBOX-CIPHER-KEY-32CH!",
+            BaseUrl: baseUrl);
 
         var proxyResult = await _proxyClient.ConfigureTenantCredentialsAsync(proxyRequest, ct);
         if (!proxyResult.Succeeded)
         {
-            throw new InvalidOperationException(proxyResult.Message ?? "Failed to configure PhilHealth credentials via proxy.");
+            throw new InvalidOperationException(proxyResult.Message ?? "Failed to update PhilHealth connection settings.");
         }
 
         settings.IsPhilHealthOverridden = true;
         settings.AccreditationNumber = request.AccreditationNumber.Trim();
         settings.PmccNumber = request.PmccNumber.Trim();
         settings.SoftwareCertificateId = request.SoftwareCertificateId.Trim();
-        settings.KonsultaEndpoint = endpoint;
+        settings.PhilHealthBaseUrl = baseUrl;
         settings.IsPhilHealthConfigured = true;
         settings.UpdatedAt = DateTime.UtcNow;
 

@@ -26,7 +26,6 @@ export interface BranchDto {
   philHealthPmccNumber?: string;
   philHealthSoftwareCertificateId?: string;
   philHealthBaseUrl?: string;
-  philHealthKonsultaEndpoint?: string;
   isPhilHealthAccredited: boolean;
   hasSecretKey?: boolean;
   hasCipherKey?: boolean;
@@ -82,9 +81,6 @@ export interface ConfigureBranchPhilHealthPayload {
   cipherKey?: string;
   baseUrl?: string;
   isPhilHealthAccredited?: boolean;
-  username?: string;
-  password?: string;
-  konsultaEndpoint?: string;
 }
 
 export interface TestBranchPhilHealthPayload {
@@ -94,9 +90,6 @@ export interface TestBranchPhilHealthPayload {
   secretKey?: string;
   cipherKey?: string;
   baseUrl?: string;
-  username?: string;
-  password?: string;
-  konsultaEndpoint?: string;
 }
 
 export interface TestPhilHealthConnectionResult {

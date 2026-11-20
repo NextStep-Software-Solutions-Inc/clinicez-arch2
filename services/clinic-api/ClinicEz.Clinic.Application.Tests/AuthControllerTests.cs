@@ -159,10 +159,29 @@ public class AuthControllerTests
         var setCookie = _controller.HttpContext.Response.Headers.SetCookie.ToString();
         setCookie.Should().Contain($"{AuthController.RefreshCookieName}=web-refresh-123");
         setCookie.Should().Contain("httponly");
-        setCookie.Should().Contain("samesite=lax");
+        setCookie.Should().Contain("samesite=none");
         setCookie.Should().Contain("secure");
         setCookie.Should().Contain("path=/api/v1/auth");
         setCookie.Should().NotContain("expires=");
+    }
+
+    [Fact]
+    public async Task Login_WebClient_ForwardedHttpsProto_SetsSameSiteNoneAndSecureCookie()
+    {
+        _controller.HttpContext.Request.Headers["X-Client-Platform"] = "web";
+        _controller.HttpContext.Request.IsHttps = false;
+        _controller.HttpContext.Request.Headers["X-Forwarded-Proto"] = "https";
+        _auth.LoginAsync(Arg.Any<LoginRequest>(), Arg.Any<CancellationToken>())
+            .Returns(AuthOutcome.Success(SampleTokens("proxy-https-refresh")));
+
+        var result = await _controller.Login(new LoginRequest(null, "staff@clinic.test", "Pass123!", "Clinic EZ web"), CancellationToken.None) as ObjectResult;
+
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be(StatusCodes.Status200OK);
+        var setCookie = _controller.HttpContext.Response.Headers.SetCookie.ToString();
+        setCookie.Should().Contain($"{AuthController.RefreshCookieName}=proxy-https-refresh");
+        setCookie.Should().Contain("samesite=none");
+        setCookie.Should().Contain("secure");
     }
 
     [Fact]

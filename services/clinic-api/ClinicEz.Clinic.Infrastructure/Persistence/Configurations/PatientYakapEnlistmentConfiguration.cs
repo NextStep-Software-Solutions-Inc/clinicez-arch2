@@ -38,7 +38,6 @@ public sealed class PatientYakapEnlistmentConfiguration : IEntityTypeConfigurati
             entity.Property(e => e.FacilitatorName).HasMaxLength(150);
             entity.Property(e => e.CoPaymentAmount).HasPrecision(18, 2);
             entity.Property(e => e.CoPaymentBalance).HasPrecision(18, 2);
-            entity.Property(e => e.EnlistmentTransNo).HasMaxLength(50);
             entity.Property(e => e.ProfilingTransNo).HasMaxLength(50);
             entity.Property(e => e.ProfilingAtc).HasMaxLength(50);
             entity.Property(e => e.CreatedByStaffName).HasMaxLength(150);

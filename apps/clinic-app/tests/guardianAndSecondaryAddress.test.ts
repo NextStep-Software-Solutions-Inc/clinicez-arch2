@@ -404,8 +404,8 @@ describe('Legal Guardian Section & Secondary Address Cutover', () => {
     });
   });
 
-  test('EditPatientModal renders quick-fill sponsor button when PhilHealth Member Type is Dependent (DD)', () => {
-    const dependentWithGuardianMarkup = renderToStaticMarkup(
+  test('EditPatientModal omits PhilHealth fields (moved to Manage PhilHealth) while retaining Government IDs and Guardian', () => {
+    const markup = renderToStaticMarkup(
       React.createElement(EditPatientModal, {
         visible: true,
         onClose: () => {},
@@ -423,6 +423,8 @@ describe('Legal Guardian Section & Secondary Address Cutover', () => {
           sex: 'Male',
           civilStatus: 'Single',
           contactNumber: '09171234567',
+          philHealthNumber: '12-345678901-8',
+          pwdId: 'PWD-BIN-2022-001',
           createdAt: '2026-10-29T00:00:00Z',
           customFields: {
             member_type: 'DD',
@@ -446,38 +448,14 @@ describe('Legal Guardian Section & Secondary Address Cutover', () => {
       })
     );
 
-    expect(dependentWithGuardianMarkup).toContain('Principal Member Details');
-    expect(dependentWithGuardianMarkup).toContain('Use Guardian (Maria Santos)');
-
-    const dependentWithoutGuardianMarkup = renderToStaticMarkup(
-      React.createElement(EditPatientModal, {
-        visible: true,
-        onClose: () => {},
-        onSaved: () => {},
-        patient: {
-          id: 'pat-dep-2',
-          tenantId: 'tenant-1',
-          clinicId: 'clinic-1',
-          patientCode: 'PAT-002',
-          firstName: 'Andrea',
-          lastName: 'Reyes',
-          fullName: 'Andrea Reyes',
-          dateOfBirth: '2002-04-10',
-          age: 24,
-          sex: 'Female',
-          civilStatus: 'Single',
-          contactNumber: '09181112222',
-          createdAt: '2026-10-29T00:00:00Z',
-          customFields: {
-            member_type: 'DD',
-          },
-          guardians: [],
-        } as any,
-      })
-    );
-
-    expect(dependentWithoutGuardianMarkup).toContain('Principal Member Details');
-    expect(dependentWithoutGuardianMarkup).toContain('Use Legal Guardian');
+    expect(markup).toContain('Government IDs');
+    expect(markup).toContain('PWD ID');
+    expect(markup).toContain('Guardian PhilHealth PIN');
+    expect(markup).not.toContain('Government IDs &amp; Coverage');
+    expect(markup).not.toContain('>PhilHealth PIN<');
+    expect(markup).not.toContain('PhilHealth Member Type');
+    expect(markup).not.toContain('Principal Member Details');
+    expect(markup).not.toContain('Use Guardian (Maria Santos)');
   });
 
   test('isSeniorFromDob identifies seniors (>=60) and omits for 30-year-olds and minors', () => {

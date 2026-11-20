@@ -369,7 +369,7 @@ describe("PhilHealth YAKAP 2.0 Zero-PHI Telemetry Console (Milestone M4-B)", () 
         path.resolve(__dirname, "../src/components/dashboard/yakap/YakapTransmittalClient.tsx"),
         "utf8",
       );
-      expect(src).toContain("Configure PCAPI Credentials");
+      expect(src).toContain("Configure PhilHealth Credentials");
       expect(src).toContain("Poll All Pending");
       expect(src).toContain("?tab=philhealth");
       expect(src).not.toMatch(/#[0-9a-fA-F]{6}\b/);

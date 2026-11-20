@@ -259,9 +259,9 @@ describe('Milestone 4-A Empirical Adversarial Challenger: Workstation EHR Workfl
       expect(regularHtml).not.toContain('Regular Clinical');
       expect(regularHtml).toContain('Regular Consultation');
       expect(regularHtml).toContain('Standard EHR clinical consultation');
-      expect(regularHtml).not.toContain('Authorization Transaction Code (ATC)');
+      expect(regularHtml).not.toContain('PhilHealth Visit Code');
 
-      // 2. YakapAvailment mode rendering (ATC input embedded inside Clinical Workflow Mode card)
+      // 2. YakapAvailment mode rendering (visit code input embedded inside Clinical Workflow Mode card)
       const yakapHtml = renderToStaticMarkup(
         React.createElement(WorkflowModeSelector, {
           mode: 'YakapAvailment',
@@ -273,7 +273,7 @@ describe('Milestone 4-A Empirical Adversarial Challenger: Workstation EHR Workfl
       expect(yakapHtml).not.toContain('YAKAP 2.0 Availment');
       expect(yakapHtml).toContain('Yakap Availment');
       expect(yakapHtml).toContain('PhilHealth YAKAP 2.0 statutory consultation encounter');
-      expect(yakapHtml).toContain('Authorization Transaction Code (ATC)');
+      expect(yakapHtml).toContain('PhilHealth Visit Code');
       expect(yakapHtml).toContain('WALKEDIN');
 
       // 3. Consultation Workspace Expand & Split View icon-only toggle button

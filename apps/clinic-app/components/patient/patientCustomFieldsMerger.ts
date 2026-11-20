@@ -93,7 +93,7 @@ export function mergePatientCustomFields(input: MergePatientCustomFieldsInput): 
     yearLevel = '',
     employeeId = '',
     department = '',
-    memberType = 'MM',
+    memberType = undefined,
     principalMemberPin = '',
     principalFullName = '',
     principalRelationship = 'C',
@@ -212,19 +212,21 @@ export function mergePatientCustomFields(input: MergePatientCustomFieldsInput): 
     }
   }
 
-  // 6. PhilHealth Dependent / Principal Member details
-  merged['member_type'] = memberType;
-  if (memberType === 'DD') {
-    merged['principal_member_pin'] = principalMemberPin.trim();
-    merged['principal_full_name'] = principalFullName.trim();
-    merged['principal_relationship'] = principalRelationship;
-    if (principalDob.trim()) merged['principal_dob'] = principalDob.trim();
-    else if (hasPreviousValue(patient, 'principal_dob')) merged['principal_dob'] = null;
-  } else {
-    // If transitioning from DD to MM, clear sponsor fields if previously populated
-    for (const k of ['principal_member_pin', 'principal_full_name', 'principal_relationship', 'principal_dob']) {
-      if (hasPreviousValue(patient, k)) merged[k] = null;
-      else delete merged[k];
+  // 6. PhilHealth Dependent / Principal Member details (only modified if caller owns PhilHealth fields; otherwise preserve existing customFields)
+  if (memberType !== undefined) {
+    merged['member_type'] = memberType;
+    if (memberType === 'DD') {
+      merged['principal_member_pin'] = principalMemberPin.trim();
+      merged['principal_full_name'] = principalFullName.trim();
+      merged['principal_relationship'] = principalRelationship;
+      if (principalDob.trim()) merged['principal_dob'] = principalDob.trim();
+      else if (hasPreviousValue(patient, 'principal_dob')) merged['principal_dob'] = null;
+    } else {
+      // If transitioning from DD to MM, clear sponsor fields if previously populated
+      for (const k of ['principal_member_pin', 'principal_full_name', 'principal_relationship', 'principal_dob']) {
+        if (hasPreviousValue(patient, k)) merged[k] = null;
+        else delete merged[k];
+      }
     }
   }
 

@@ -17,6 +17,25 @@ const HASH_KEY = 'clinicez.unlock.hash';
 const ATTEMPTS_KEY = 'clinicez.unlock.attempts';
 const BIOMETRIC_KEY = 'clinicez.unlock.biometric';
 
+const unlockConfigListeners = new Set<() => void>();
+
+function notifyUnlockConfigChange(): void {
+  unlockConfigListeners.forEach((listener) => {
+    try {
+      listener();
+    } catch {
+      // ignore listener errors
+    }
+  });
+}
+
+export function subscribeUnlockConfigChange(listener: () => void): () => void {
+  unlockConfigListeners.add(listener);
+  return () => {
+    unlockConfigListeners.delete(listener);
+  };
+}
+
 export interface PinCheckResult {
   ok: boolean;
   attemptsLeft: number;
@@ -59,6 +78,7 @@ export async function setPin(pin: string, enableBiometric: boolean): Promise<voi
   await setSecureItem(HASH_KEY, hash);
   await setSecureItem(ATTEMPTS_KEY, '0');
   await setSecureItem(BIOMETRIC_KEY, hasBio ? '1' : '0');
+  notifyUnlockConfigChange();
 }
 
 export async function verifyPin(pin: string): Promise<PinCheckResult> {
@@ -107,6 +127,7 @@ export async function clearUnlock(): Promise<void> {
   await deleteSecureItem(HASH_KEY);
   await deleteSecureItem(ATTEMPTS_KEY);
   await deleteSecureItem(BIOMETRIC_KEY);
+  notifyUnlockConfigChange();
 }
 
 async function wipeOfflineAccess(): Promise<void> {

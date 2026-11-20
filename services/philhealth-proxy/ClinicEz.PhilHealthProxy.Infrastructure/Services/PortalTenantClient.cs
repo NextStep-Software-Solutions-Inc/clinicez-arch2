@@ -316,11 +316,9 @@ public sealed class PortalTenantClient : ITenantRepository
             AccreditationNumber = dto.AccreditationNumber,
             PmccNumber = dto.PmccNumber,
             SoftwareCertificateId = dto.SoftwareCertificateId,
-            EncryptedSecretKey = !string.IsNullOrEmpty(dto.SecretKey) ? _protector.Protect(dto.SecretKey)
-                                : (!string.IsNullOrEmpty(dto.Password) ? _protector.Protect(dto.Password) : string.Empty),
+            EncryptedSecretKey = !string.IsNullOrEmpty(dto.SecretKey) ? _protector.Protect(dto.SecretKey) : string.Empty,
             EncryptedCipherKey = !string.IsNullOrEmpty(dto.CipherKey) ? _protector.Protect(dto.CipherKey) : string.Empty,
-            BaseUrl = !string.IsNullOrWhiteSpace(dto.BaseUrl) ? dto.BaseUrl
-                     : (!string.IsNullOrWhiteSpace(dto.KonsultaEndpoint) ? dto.KonsultaEndpoint : "https://pcapi.philhealth.gov.ph"),
+            BaseUrl = !string.IsNullOrWhiteSpace(dto.BaseUrl) ? dto.BaseUrl : "https://pcapi.philhealth.gov.ph",
             IsActive = dto.IsActive,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -336,11 +334,9 @@ public sealed class PortalTenantClient : ITenantRepository
             AccreditationNumber = dto.AccreditationNumber,
             PmccNumber = dto.PmccNumber,
             SoftwareCertificateId = dto.SoftwareCertificateId,
-            EncryptedSecretKey = !string.IsNullOrEmpty(dto.SecretKey) ? _protector.Protect(dto.SecretKey)
-                                : (!string.IsNullOrEmpty(dto.Password) ? _protector.Protect(dto.Password) : string.Empty),
+            EncryptedSecretKey = !string.IsNullOrEmpty(dto.SecretKey) ? _protector.Protect(dto.SecretKey) : string.Empty,
             EncryptedCipherKey = !string.IsNullOrEmpty(dto.CipherKey) ? _protector.Protect(dto.CipherKey) : string.Empty,
-            BaseUrl = !string.IsNullOrWhiteSpace(dto.BaseUrl) ? dto.BaseUrl
-                     : (!string.IsNullOrWhiteSpace(dto.KonsultaEndpoint) ? dto.KonsultaEndpoint : "https://pcapi.philhealth.gov.ph"),
+            BaseUrl = !string.IsNullOrWhiteSpace(dto.BaseUrl) ? dto.BaseUrl : "https://pcapi.philhealth.gov.ph",
             IsActive = dto.IsActive,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -354,9 +350,7 @@ public sealed class PortalTenantClient : ITenantRepository
         [property: JsonPropertyName("pmccNumber")] string PmccNumber,
         [property: JsonPropertyName("softwareCertificateId")] string SoftwareCertificateId,
         [property: JsonPropertyName("secretKey")] string? SecretKey,
-        [property: JsonPropertyName("password")] string? Password,
         [property: JsonPropertyName("cipherKey")] string? CipherKey,
         [property: JsonPropertyName("baseUrl")] string? BaseUrl,
-        [property: JsonPropertyName("konsultaEndpoint")] string? KonsultaEndpoint,
         [property: JsonPropertyName("isActive")] bool IsActive);
 }

@@ -348,7 +348,7 @@ export const printInvoice = (
                 <td>
                   <strong>Clinic EZ Workspace License &ndash; ${escapeHtml(planName)}</strong><br/>
                   <span style="font-size: 11px; color: ${lightColors.textMuted};">
-                    Full access to clinical EMR, doctor rostering, queuing, PhilHealth Konsulta integration, and licensed facilities.
+                    Full access to clinical EMR, doctor rostering, queuing, PhilHealth YAKAP integration, and licensed facilities.
                   </span>
                 </td>
                 <td>${cycleLabel}</td>

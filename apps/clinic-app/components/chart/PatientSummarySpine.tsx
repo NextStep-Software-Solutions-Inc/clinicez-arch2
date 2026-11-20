@@ -887,7 +887,7 @@ export default function PatientSummarySpine({
           <Badge label={`Case: ${caseNo}`} variant="purple" size="sm" />
         ) : null}
         {atc ? (
-          <Badge label={`ATC: ${atc}`} variant="purple" size="sm" />
+          <Badge label={`Visit Code: ${atc}`} variant="purple" size="sm" />
         ) : null}
 
         {/* Senior / PWD */}

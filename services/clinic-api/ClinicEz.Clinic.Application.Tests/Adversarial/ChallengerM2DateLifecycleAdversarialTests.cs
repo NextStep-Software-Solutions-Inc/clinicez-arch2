@@ -73,9 +73,8 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
                     PatientId = patient.Id,
                     EffectiveYear = dict.TryGetValue("effective_year", out var ey) && ey != null && int.TryParse(ey.ToString(), out var parsedEy) ? parsedEy : 2026,
                     Status = dict.TryGetValue("status", out var st) && st != null && Enum.TryParse<YakapEnlistmentStatus>(st.ToString(), true, out var parsedSt) ? parsedSt : YakapEnlistmentStatus.Active,
-                    Source = dict.TryGetValue("source", out var src) && src != null && Enum.TryParse<YakapEnlistmentSource>(src.ToString(), true, out var parsedSrc) ? parsedSrc : YakapEnlistmentSource.ClinicEnlistment,
+                    Source = dict.TryGetValue("source", out var src) && src != null && Enum.TryParse<YakapEnlistmentSource>(src.ToString(), true, out var parsedSrc) ? parsedSrc : YakapEnlistmentSource.AssistedIntake,
                     CaseNo = dict.TryGetValue("case_no", out var cn) ? cn?.ToString() : null,
-                    EnlistmentTransNo = dict.TryGetValue("enlistment_no", out var en) ? en?.ToString() : (dict.TryGetValue("enlistment_trans_no", out var etn) ? etn?.ToString() : null),
                     ProfilingTransNo = dict.TryGetValue("profiling_trans_no", out var pn) ? pn?.ToString() : null
                 };
 
@@ -118,7 +117,7 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
                 ["valid_until"] = "2024-12-31",
                 ["effective_year"] = 2024,
                 ["status"] = YakapEnlistmentStatus.Active,
-                ["source"] = YakapEnlistmentSource.ClinicEnlistment
+                ["source"] = YakapEnlistmentSource.AssistedIntake
             }
         });
         _dbContext.Patients.Add(patient);
@@ -144,9 +143,9 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
 
         // Assert
         result.Should().NotBeNull();
-        result.CaseNumber.Should().StartWith("C0009212024");
-        result.EnlistmentTransactionNumber.Should().StartWith("E0009212024");
-        result.SoapTransactionNumber.Should().StartWith("S0009212024");
+        result.CaseNumber.Should().HaveLength(23).And.StartWith("CINCR009212024");
+        result.ProfilingTransactionNumber.Should().HaveLength(23).And.StartWith("PINCR009212024");
+        result.SoapTransactionNumber.Should().HaveLength(23).And.StartWith("SINCR009212024");
         encounter.PhilHealthCaseNo.Should().Be(result.CaseNumber);
     }
 
@@ -185,7 +184,7 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
         var result = await _generator.AssignPatientJourneyNumbersAsync(
             _tenantId, _clinicId, patient.Id, encounter.Id, "HCI-NCR-00921", "2028");
 
-        result.CaseNumber.Should().StartWith("C0009212028");
+        result.CaseNumber.Should().HaveLength(23).And.StartWith("CINCR009212028");
     }
 
     [Fact]
@@ -223,7 +222,7 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
                 ["valid_until"] = "2025-12-31",
                 ["effective_year"] = 2025,
                 ["status"] = YakapEnlistmentStatus.Active,
-                ["source"] = YakapEnlistmentSource.ClinicEnlistment
+                ["source"] = YakapEnlistmentSource.AssistedIntake
             }
         });
         _dbContext.Patients.Add(patient);
@@ -237,7 +236,7 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
             PatientName = "Empirical Challenger",
             DoctorId = Guid.NewGuid(),
             DoctorName = "Dr. Rizal",
-            EncounterDate = new DateTime(2025, 12, 31, 23, 59, 59, DateTimeKind.Utc),
+            EncounterDate = new DateTime(2025, 12, 31, 15, 59, 59, DateTimeKind.Utc), // 23:59:59 Asia/Manila
             IsYakapEligible = true
         };
         _dbContext.Consultations.Add(encounter);
@@ -246,7 +245,7 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
         var result = await _generator.AssignPatientJourneyNumbersAsync(
             _tenantId, _clinicId, patient.Id, encounter.Id, "HCI-NCR-00921", "2025");
 
-        result.CaseNumber.Should().StartWith("C0009212025");
+        result.CaseNumber.Should().HaveLength(23).And.StartWith("CINCR0092120251231");
         encounter.PhilHealthCaseNo.Should().Be(result.CaseNumber);
     }
 
@@ -264,7 +263,7 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
                 ["valid_until"] = "2025-12-31",
                 ["effective_year"] = 2025,
                 ["status"] = YakapEnlistmentStatus.Active, // marked active during 2025, but expired chronologically
-                ["source"] = YakapEnlistmentSource.ClinicEnlistment,
+                ["source"] = YakapEnlistmentSource.AssistedIntake,
                 ["case_no"] = "C000921202500001",
                 ["enlistment_no"] = "E000921202500001",
                 ["profiling_trans_no"] = "P000921202500001"
@@ -432,35 +431,31 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
             _tenantId, _clinicId, patient.Id, encounter.Id, "HCI-NCR-00921", "2026");
 
         // Assert: 2026 gets newly assigned numbers
-        result.CaseNumber.Should().StartWith("C0009212026");
+        result.CaseNumber.Should().HaveLength(23).And.StartWith("CINCR009212026");
 
-        // Re-read from patient CustomFields
+        // Re-read from relational table
         var entries = patient.GetYakapEnlistments();
         entries.Should().HaveCount(4);
 
         // Verify 2023, 2024, 2025 entries are 100% UNTOUCHED
         entries[0].EffectiveYear.Should().Be(2023);
         entries[0].CaseNo.Should().Be("C000921202300001");
-        entries[0].EnlistmentTransNo.Should().Be("E000921202300001");
         entries[0].ProfilingTransNo.Should().Be("P000921202300001");
         entries[0].Status.Should().Be(YakapEnlistmentStatus.Expired);
 
         entries[1].EffectiveYear.Should().Be(2024);
         entries[1].CaseNo.Should().Be("C000921202400002");
-        entries[1].EnlistmentTransNo.Should().Be("E000921202400002");
         entries[1].ProfilingTransNo.Should().Be("P000921202400002");
         entries[1].Status.Should().Be(YakapEnlistmentStatus.Expired);
 
         entries[2].EffectiveYear.Should().Be(2025);
         entries[2].CaseNo.Should().Be("C000921202500003");
-        entries[2].EnlistmentTransNo.Should().Be("E000921202500003");
         entries[2].ProfilingTransNo.Should().Be("P000921202500003");
         entries[2].Status.Should().Be(YakapEnlistmentStatus.Expired);
 
         // 2026 has newly generated numbers
         entries[3].EffectiveYear.Should().Be(2026);
         entries[3].CaseNo.Should().Be(result.CaseNumber);
-        entries[3].EnlistmentTransNo.Should().Be(result.EnlistmentTransactionNumber);
         entries[3].ProfilingTransNo.Should().Be(result.ProfilingTransactionNumber);
         entries[3].Status.Should().Be(YakapEnlistmentStatus.Active);
     }
@@ -482,9 +477,8 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
                 ["valid_until"] = "2026-12-31",
                 ["effective_year"] = 2026,
                 ["status"] = YakapEnlistmentStatus.Active,
-                ["source"] = YakapEnlistmentSource.SelfReported,
+                ["source"] = YakapEnlistmentSource.WalkIn,
                 ["case_no"] = null,
-                ["enlistment_no"] = null,
                 ["profiling_trans_no"] = null
             }
         });
@@ -511,7 +505,7 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
         var entries = patient.GetYakapEnlistments();
         entries.Should().HaveCount(1);
         entries[0].EnlistmentDate.Should().Be(new DateOnly(2026, 1, 2));
-        entries[0].Source.Should().Be(YakapEnlistmentSource.SelfReported);
+        entries[0].Source.Should().Be(YakapEnlistmentSource.WalkIn);
         entries[0].CaseNo.Should().Be(result.CaseNumber);
     }
 
@@ -673,7 +667,7 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
                 ["valid_until"] = "2025-12-31",
                 ["effective_year"] = 2025,
                 ["status"] = YakapEnlistmentStatus.Active, // Still marked Active in database
-                ["source"] = YakapEnlistmentSource.ClinicEnlistment,
+                ["source"] = YakapEnlistmentSource.AssistedIntake,
                 ["case_no"] = "C000921202500001",
                 ["enlistment_no"] = "E000921202500001",
                 ["profiling_trans_no"] = "P000921202500001"

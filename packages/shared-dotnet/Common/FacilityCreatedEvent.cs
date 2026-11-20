@@ -79,7 +79,7 @@ public record FacilityCreatedEvent
     public string? BranchPhilHealthAccreditationNumber { get; init; }
     public string? BranchPmccNumber { get; init; }
     public string? BranchSoftwareCertificateId { get; init; }
-    public string? BranchKonsultaEndpoint { get; init; }
+    public string? BranchPhilHealthBaseUrl { get; init; }
     public bool IsBranchPhilHealthAccredited { get; init; } = false;
 }
 

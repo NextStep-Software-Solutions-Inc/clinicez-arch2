@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Web;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.Yakap.Commands;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetEligibleYakapEncounters;
-using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Messaging;
 using ClinicEz.Shared.Common;
@@ -21,8 +23,8 @@ namespace ClinicEz.Clinic.Infrastructure.Messaging.Responders;
 
 /// <summary>
 /// Handles <c>yakap.submission.requested</c> messages arriving over the Interop Hub from <c>Party.Portal</c>.
-/// Runs in-process against the clinic's MediatR queries and services within the addressed clinic scope,
-/// returning <c>yakap.submission.responded</c> with the Zero-PHI ApiResponse payload.
+/// Runs in-process against the clinic's YAKAP 2.0 MediatR queries and commands within the addressed clinic scope,
+/// returning <c>yakap.submission.responded</c> with a strictly Zero-PHI <see cref="ApiResponse{T}"/> payload.
 /// </summary>
 public sealed class YakapSubmissionResponder : IInteropResponder<YakapSubmissionRequestedPayload, YakapSubmissionRespondedPayload>
 {
@@ -30,26 +32,20 @@ public sealed class YakapSubmissionResponder : IInteropResponder<YakapSubmission
         .UseStrictStringEnums();
 
     private readonly ISender _sender;
-    private readonly IPhilHealthProxyClient _proxyClient;
     private readonly ClinicRecipientResolver _recipient;
     private readonly IClinicScopeSetter _scope;
-    private readonly IPhilHealthMasterlistSyncService? _syncService;
     private readonly ILogger<YakapSubmissionResponder> _logger;
 
     public YakapSubmissionResponder(
         ISender sender,
-        IPhilHealthProxyClient proxyClient,
         ClinicRecipientResolver recipient,
         IClinicScopeSetter scope,
-        ILogger<YakapSubmissionResponder> logger,
-        IPhilHealthMasterlistSyncService? syncService = null)
+        ILogger<YakapSubmissionResponder> logger)
     {
         _sender = sender;
-        _proxyClient = proxyClient;
         _recipient = recipient;
         _scope = scope;
         _logger = logger;
-        _syncService = syncService;
     }
 
     public async Task<YakapSubmissionRespondedPayload> RespondAsync(
@@ -58,13 +54,12 @@ public sealed class YakapSubmissionResponder : IInteropResponder<YakapSubmission
         CancellationToken ct)
     {
         var from = context.From;
-        // Verify sender: Only the control plane (Party.Portal) or trusted platform services are authorized
         if (from.Kind != PartyKind.ControlPlane)
         {
             _logger.LogWarning(
                 "[YakapSubmissionResponder] Refusing request {MessageId}: sender {From} is not a control plane party.",
                 context.MessageId, from.Address);
-            return Fail(403, "FORBIDDEN", "Forbidden: only the portal control plane may query YAKAP submissions.");
+            return Fail(403, "FORBIDDEN", "Forbidden: only the portal control plane may query YAKAP telemetry.");
         }
 
         var clinic = await _recipient.ResolveAsync(context, ct);
@@ -79,35 +74,43 @@ public sealed class YakapSubmissionResponder : IInteropResponder<YakapSubmission
         var queryParams = HttpUtility.ParseQueryString(request.Query ?? string.Empty);
         Guid? branchId = Guid.TryParse(queryParams["branchId"], out var bId) ? bId : null;
 
-        // Enter ambient clinic scope for the duration of this request
         _scope.Enter(clinic.TenantId, clinic.ClinicId, branchId);
 
         var method = (request.Method ?? "GET").Trim().ToUpperInvariant();
         var rawPath = (request.Path ?? string.Empty).Trim('/');
 
-        // Strip optional prefix "api/v1/yakap/" or "yakap/" if passed by caller
         if (rawPath.StartsWith("api/v1/yakap/", StringComparison.OrdinalIgnoreCase))
             rawPath = rawPath[13..];
         else if (rawPath.StartsWith("yakap/", StringComparison.OrdinalIgnoreCase))
             rawPath = rawPath[6..];
 
+        var segments = rawPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
         try
         {
-            return (method, rawPath) switch
+            return (method, rawPath, segments.Length) switch
             {
-                ("GET", "encounters/eligible") => await HandleGetEligibleEncountersAsync(queryParams, branchId, ct),
-                ("GET", "submissions") => HandleGetSubmissions(),
-                ("GET", "submissions/summary") => HandleGetSubmissionsSummary(),
-                ("GET", _) when rawPath.StartsWith("pin/", StringComparison.OrdinalIgnoreCase) && rawPath.EndsWith("/validate", StringComparison.OrdinalIgnoreCase)
-                    => await HandleValidatePinAsync(rawPath, ct),
-                ("POST", "masterlist/extract") => await HandleExtractMasterlistAsync(request.Body, clinic.TenantId, clinic.ClinicId, ct),
-                _ => Fail(404, "NOT_FOUND", $"Unknown YAKAP submission operation: {method} {request.Path}")
+                ("GET", "encounters/eligible", _) => await HandleGetEligibleEncountersAsync(queryParams, branchId, ct),
+                ("GET", "submissions/summary", _) => await HandleGetSubmissionsSummaryAsync(branchId, ct),
+                ("GET", "submissions", _) => await HandleGetSubmissionsAsync(queryParams, branchId, ct),
+                ("GET", _, 2) when segments[0].Equals("submissions", StringComparison.OrdinalIgnoreCase) && Guid.TryParse(segments[1], out var getSubId)
+                    => await HandleGetSubmissionByIdAsync(getSubId, branchId, ct),
+                ("POST", _, 3) when segments[0].Equals("submissions", StringComparison.OrdinalIgnoreCase)
+                                    && segments[2].Equals("poll", StringComparison.OrdinalIgnoreCase)
+                                    && Guid.TryParse(segments[1], out var pollSubId)
+                    => await HandlePollSubmissionAsync(pollSubId, branchId, ct),
+                ("POST", _, 3) when segments[0].Equals("submissions", StringComparison.OrdinalIgnoreCase)
+                                    && segments[2].Equals("retry", StringComparison.OrdinalIgnoreCase)
+                                    && Guid.TryParse(segments[1], out var retrySubId)
+                    => await HandleRetrySubmissionAsync(retrySubId, branchId, ct),
+                ("POST", "masterlist/sync", _) => await HandleSyncMasterlistAsync(request.Body, branchId, ct),
+                _ => Fail(404, "NOT_FOUND", $"Unknown YAKAP 2.0 telemetry operation: {method} {request.Path}")
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[YakapSubmissionResponder] Error handling YAKAP submission operation {Method} {Path}", method, rawPath);
-            return Fail(500, "INTERNAL_ERROR", $"Internal error processing YAKAP submission operation: {ex.Message}");
+            _logger.LogError(ex, "[YakapSubmissionResponder] Error handling YAKAP operation {Method} {Path}", method, rawPath);
+            return Fail(500, "INTERNAL_ERROR", $"Unable to process PhilHealth telemetry request: {ex.Message}");
         }
     }
 
@@ -125,59 +128,58 @@ public sealed class YakapSubmissionResponder : IInteropResponder<YakapSubmission
         return Success(result);
     }
 
-    private static YakapSubmissionRespondedPayload HandleGetSubmissions()
+    private async Task<YakapSubmissionRespondedPayload> HandleGetSubmissionsSummaryAsync(Guid? branchId, CancellationToken ct)
     {
-        var emptyList = ApiResponse<IReadOnlyList<object>>.Success(Array.Empty<object>());
-        return Success(emptyList);
+        var summary = await _sender.Send(new GetYakapSubmissionsSummaryQuery(branchId), ct);
+        return Success(ApiResponse<PortalYakapBranchSummaryDto>.Success(summary));
     }
 
-    private static YakapSubmissionRespondedPayload HandleGetSubmissionsSummary()
-    {
-        var summary = ApiResponse<PortalYakapBranchSummaryDto>.Success(new PortalYakapBranchSummaryDto());
-        return Success(summary);
-    }
-
-    private async Task<YakapSubmissionRespondedPayload> HandleValidatePinAsync(string path, CancellationToken ct)
-    {
-        var parts = path.Split('/');
-        if (parts.Length < 3 || string.IsNullOrWhiteSpace(parts[1]))
-        {
-            return Fail(400, "INVALID_PIN", "PIN is required");
-        }
-
-        var result = await _proxyClient.ValidatePinAsync(parts[1], ct);
-        return Success(result);
-    }
-
-    private async Task<YakapSubmissionRespondedPayload> HandleExtractMasterlistAsync(
-        string? body,
-        string tenantId,
-        Guid? clinicId,
+    private async Task<YakapSubmissionRespondedPayload> HandleGetSubmissionsAsync(
+        NameValueCollection query,
+        Guid? branchId,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(body))
+        var status = query["status"];
+        var submissionType = query["submissionType"];
+        var page = int.TryParse(query["page"], out var p) ? p : 1;
+        var pageSize = int.TryParse(query["pageSize"], out var ps) ? ps : 50;
+
+        var list = await _sender.Send(new GetYakapSubmissionsQuery(status, submissionType, page, pageSize, branchId), ct);
+        return Success(ApiResponse<IReadOnlyList<PortalYakapSubmissionDto>>.Success(list));
+    }
+
+    private async Task<YakapSubmissionRespondedPayload> HandleGetSubmissionByIdAsync(Guid id, Guid? branchId, CancellationToken ct)
+    {
+        var item = await _sender.Send(new GetYakapSubmissionByIdQuery(id, branchId), ct);
+        return Success(ApiResponse<PortalYakapSubmissionDto>.Success(item));
+    }
+
+    private async Task<YakapSubmissionRespondedPayload> HandlePollSubmissionAsync(Guid id, Guid? branchId, CancellationToken ct)
+    {
+        var item = await _sender.Send(new PollYakapSubmissionStatusCommand(id, branchId), ct);
+        return Success(ApiResponse<PortalYakapSubmissionDto>.Success(item));
+    }
+
+    private async Task<YakapSubmissionRespondedPayload> HandleRetrySubmissionAsync(Guid id, Guid? branchId, CancellationToken ct)
+    {
+        var item = await _sender.Send(new RetryYakapSubmissionCommand(id, branchId), ct);
+        return Success(ApiResponse<PortalYakapSubmissionDto>.Success(item));
+    }
+
+    private async Task<YakapSubmissionRespondedPayload> HandleSyncMasterlistAsync(string? body, Guid? branchId, CancellationToken ct)
+    {
+        SyncYakapMasterlistCommand cmd = new(BranchId: branchId);
+        if (!string.IsNullOrWhiteSpace(body))
         {
-            return Fail(400, "INVALID_BODY", "Request body is required.");
+            var parsed = JsonSerializer.Deserialize<SyncYakapMasterlistCommand>(body, JsonOptions);
+            if (parsed != null)
+            {
+                cmd = parsed with { BranchId = parsed.BranchId ?? branchId };
+            }
         }
 
-        var req = JsonSerializer.Deserialize<ExtractMasterlistProxyRequest>(body, JsonOptions);
-        if (req == null)
-        {
-            return Fail(400, "INVALID_BODY", "Malformed masterlist extract payload.");
-        }
-
-        var result = await _proxyClient.ExtractMasterlistAsync(req, ct);
-        if (!result.Succeeded || result.Data == null)
-        {
-            return Fail(400, "EXTRACT_FAILED", result.Message ?? "Failed to extract masterlist");
-        }
-
-        if (_syncService != null)
-        {
-            await _syncService.SyncProxyResponseAsync(tenantId, clinicId, result.Data, ct);
-        }
-
-        return Success(result);
+        var res = await _sender.Send(cmd, ct);
+        return Success(ApiResponse<PortalYakapMasterlistSyncResultDto>.Success(res));
     }
 
     private static YakapSubmissionRespondedPayload Success<T>(ApiResponse<T> result, int statusCode = 200)

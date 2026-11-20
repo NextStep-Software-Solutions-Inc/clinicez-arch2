@@ -70,7 +70,7 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
             BranchPhilHealthAccreditationNumber = branch?.PhilHealthAccreditationNumber ?? facilityCreated.BranchPhilHealthAccreditationNumber,
             BranchPmccNumber = branch?.PhilHealthPmccNumber ?? facilityCreated.BranchPmccNumber,
             BranchSoftwareCertificateId = branch?.PhilHealthSoftwareCertificateId ?? facilityCreated.BranchSoftwareCertificateId,
-            BranchKonsultaEndpoint = branch?.PhilHealthBaseUrl ?? facilityCreated.BranchKonsultaEndpoint,
+            BranchPhilHealthBaseUrl = branch?.PhilHealthBaseUrl ?? facilityCreated.BranchPhilHealthBaseUrl,
             IsBranchPhilHealthAccredited = isBranchAccredited || facilityCreated.IsBranchPhilHealthAccredited,
             IsPhilHealthAccredited = facilityCreated.IsPhilHealthAccredited ?? isBranchAccredited
         };
@@ -227,7 +227,7 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
             BranchPhilHealthAccreditationNumber = branch?.PhilHealthAccreditationNumber ?? source.BranchPhilHealthAccreditationNumber,
             BranchPmccNumber = branch?.PhilHealthPmccNumber ?? source.BranchPmccNumber,
             BranchSoftwareCertificateId = branch?.PhilHealthSoftwareCertificateId ?? source.BranchSoftwareCertificateId,
-            BranchKonsultaEndpoint = branch?.PhilHealthBaseUrl ?? source.BranchKonsultaEndpoint,
+            BranchPhilHealthBaseUrl = branch?.PhilHealthBaseUrl ?? source.BranchPhilHealthBaseUrl,
             IsBranchPhilHealthAccredited = isBranchAccredited || source.IsBranchPhilHealthAccredited
         };
     }

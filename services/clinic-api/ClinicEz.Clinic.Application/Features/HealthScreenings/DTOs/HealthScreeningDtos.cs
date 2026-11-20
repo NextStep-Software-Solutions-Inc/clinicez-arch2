@@ -19,7 +19,13 @@ public sealed record YakapFpeReadinessDto(
     string? ExistingProfilingTransNo,
     DateOnly? ExistingProfilingDate,
     List<string> MissingRequirements,
-    List<string> Warnings
+    List<string> Warnings,
+    bool HasIdentityVerification = false,
+    string? VerificationMode = null,
+    string? SelectionStatus = null,
+    string? YesReferenceNo = null,
+    string? SubmissionStatus = null,
+    string? UploadTransactionNo = null
 )
 {
     public bool HasNcdRiskAssessment => HasNcdAssessment;
@@ -67,7 +73,12 @@ public sealed record HealthScreeningDto(
     string? BreastCancerScreeningCode = null,
     string? CervicalCancerScreeningCode = null,
     string? ColorectalCancerScreeningCode = null,
-    string? ProstateCancerScreeningCode = null
+    string? ProstateCancerScreeningCode = null,
+    Guid? PatientIdentityVerificationId = null,
+    Guid? YakapSubmissionId = null,
+    string? YakapSubmissionStatus = null,
+    string? YakapUploadTransactionNo = null,
+    string? YesReferenceNo = null
 )
 {
     public string? AdultRoutineScreeningCode => AdultsRoutineScreeningCode;
@@ -121,7 +132,12 @@ public sealed record HealthScreeningDetailDto(
     List<ClinicLabOrderDto> LabOrders,
     YakapFpeReadinessDto? YakapReadiness,
     bool RequiresPhysicianSignOff,
-    bool AllowNurseMidwifeYakapFpeFacilitator
+    bool AllowNurseMidwifeYakapFpeFacilitator,
+    Guid? PatientIdentityVerificationId = null,
+    Guid? YakapSubmissionId = null,
+    string? YakapSubmissionStatus = null,
+    string? YakapUploadTransactionNo = null,
+    string? YesReferenceNo = null
 )
 {
     public string? AdultRoutineScreeningCode => AdultsRoutineScreeningCode;

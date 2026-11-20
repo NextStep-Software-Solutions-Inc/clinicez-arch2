@@ -623,19 +623,21 @@ public sealed class ChallengerM1DeltaDomainAndLifecycleStressTests
     [Fact]
     public void TierA_EhrStaticOptions_PhilHealthCodePresence_DistinguishesStatutoryFromEhrOnly()
     {
-        // Statutory sex options map to M and F
+        // Statutory sex options are strictly Male (M) and Female (F) per PhilHealth lib_sex
         EhrStaticOptions.TryGetOption("sex", "MALE", out var male).Should().BeTrue();
         male!.PhilHealthCode.Should().Be("M");
 
         EhrStaticOptions.TryGetOption("sex", "FEMALE", out var female).Should().BeTrue();
         female!.PhilHealthCode.Should().Be("F");
 
-        // Payer-agnostic EHR extensions (Intersex, Unknown) have null PhilHealthCode
-        EhrStaticOptions.TryGetOption("sex", "INTERSEX", out var intersex).Should().BeTrue();
-        intersex!.PhilHealthCode.Should().BeNull("INTERSEX is a canonical EHR option without PhilHealth statutory equivalent");
+        EhrStaticOptions.GetOptions("sex").Should().HaveCount(2);
 
-        EhrStaticOptions.TryGetOption("sex", "UNKNOWN", out var unknown).Should().BeTrue();
-        unknown!.PhilHealthCode.Should().BeNull("UNKNOWN is an EHR option without PhilHealth statutory equivalent");
+        // Payer-agnostic EHR extensions have null PhilHealthCode (while Intersex lives in gender_identity)
+        EhrStaticOptions.TryGetOption("gender_identity", "INTERSEX_IDENTITY", out var intersexIdentity).Should().BeTrue();
+        intersexIdentity!.PhilHealthCode.Should().Be("I");
+
+        EhrStaticOptions.TryGetOption("blood_type", "UNKNOWN", out var unknownBloodType).Should().BeTrue();
+        unknownBloodType!.PhilHealthCode.Should().BeNull("blood_type UNKNOWN is an EHR option without PhilHealth statutory equivalent");
 
         // Valid ID statutory codes
         EhrStaticOptions.TryGetOption("valid_id_type", "PHILSYS_ID", out var philsys).Should().BeTrue();

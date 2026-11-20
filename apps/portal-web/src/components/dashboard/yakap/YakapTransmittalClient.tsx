@@ -352,11 +352,11 @@ export default function YakapTransmittalClient() {
               <IconFileCertificate className="h-5 w-5" />
             </span>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-              PhilHealth YAKAP 2.0 Telemetry Console
+              PhilHealth YAKAP Submissions Overview
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Zero-PHI real-time submission tracking, asynchronous batch polling, and PCAPI Service 05 Masterlist oversight.
+            De-identified submission tracking, status updates, and PhilHealth patient list sync.
           </p>
         </div>
 
@@ -397,7 +397,7 @@ export default function YakapTransmittalClient() {
             {activeBranch.philHealthAccreditationNumber ? (
               <span className="font-mono text-muted-foreground">
                 Accreditation: <strong className="text-foreground">{activeBranch.philHealthAccreditationNumber}</strong>
-                {activeBranch.philHealthPmccNumber && ` • PMCC: ${activeBranch.philHealthPmccNumber}`}
+                {activeBranch.philHealthPmccNumber && ` • Facility Code: ${activeBranch.philHealthPmccNumber}`}
               </span>
             ) : (
               <span className="text-destructive font-medium">No PhilHealth Accreditation Configured</span>
@@ -419,7 +419,7 @@ export default function YakapTransmittalClient() {
             {activeBranch.hasSecretKey ? (
               <Badge variant="outline" className="text-primary bg-primary/10 border-primary/20 text-[11px] font-medium gap-1 h-8 px-2.5 rounded-xl">
                 <IconShieldCheck className="h-3.5 w-3.5 text-primary" />
-                PCAPI Secured
+                PhilHealth Connected
               </Badge>
             ) : (
               <Button
@@ -429,7 +429,7 @@ export default function YakapTransmittalClient() {
                 className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5 border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300 hover:bg-amber-500/20"
               >
                 <Link href={philHealthSetupHref}>
-                  <span>Configure PCAPI Credentials</span>
+                  <span>Configure PhilHealth Credentials</span>
                   <IconArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </Button>
@@ -652,7 +652,7 @@ export default function YakapTransmittalClient() {
                 className="w-full sm:w-36 shrink-0"
                 options={[
                   { value: "all", label: "All Types" },
-                  { value: "fpe", label: "FPE" },
+                  { value: "fpe", label: "Annual Checkup" },
                   { value: "consultation", label: "Consultation" },
                   { value: "diagnostic", label: "Diagnostic" },
                   { value: "medicine", label: "Medicine" },
@@ -734,10 +734,10 @@ export default function YakapTransmittalClient() {
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-bold text-foreground">
-                    Finish PhilHealth PCAPI Setup to Start Tracking Submissions
+                    Finish PhilHealth Setup to Start Tracking Submissions
                   </h3>
                   <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                    Complete these three steps for <strong>{activeBranch.name}</strong> before clinical transmittals can be verified:
+                    Complete these three steps for <strong>{activeBranch.name}</strong> before checkup submissions can be verified:
                   </p>
                 </div>
 
@@ -746,26 +746,26 @@ export default function YakapTransmittalClient() {
                     <span className="size-5 rounded-full bg-primary/15 text-primary font-bold text-[11px] flex items-center justify-center shrink-0">
                       1
                     </span>
-                    <span>Add PCAPI credentials in Branch Settings</span>
+                    <span>Add PhilHealth credentials in Branch Settings</span>
                   </li>
                   <li className="flex items-center gap-2.5 text-muted-foreground">
                     <span className="size-5 rounded-full bg-muted text-muted-foreground font-bold text-[11px] flex items-center justify-center shrink-0">
                       2
                     </span>
-                    <span>Sync Service 05 Masterlist</span>
+                    <span>Sync Assigned Patient List</span>
                   </li>
                   <li className="flex items-center gap-2.5 text-muted-foreground">
                     <span className="size-5 rounded-full bg-muted text-muted-foreground font-bold text-[11px] flex items-center justify-center shrink-0">
                       3
                     </span>
-                    <span>Transmit encounters from the Clinic App</span>
+                    <span>Submit checkups and visits from the Clinic App</span>
                   </li>
                 </ol>
 
                 <div>
                   <Button asChild size="sm" className="rounded-xl text-xs font-semibold gap-1.5">
                     <Link href={philHealthSetupHref}>
-                      <span>Configure PCAPI Credentials</span>
+                      <span>Configure PhilHealth Credentials</span>
                       <IconArrowRight className="h-3.5 w-3.5" />
                     </Link>
                   </Button>
@@ -778,7 +778,7 @@ export default function YakapTransmittalClient() {
                 </div>
                 <h3 className="text-sm font-bold text-foreground">No Submissions Found</h3>
                 <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                  No submissions recorded for this branch yet. Clinical transmittals from clinic facilities will appear here.
+                  No submissions recorded for this branch yet. Checkup and visit records from clinic facilities will appear here.
                 </p>
               </div>
             )
@@ -789,8 +789,8 @@ export default function YakapTransmittalClient() {
                   <tr>
                     <th className="py-2.5 px-3.5">Patient Code</th>
                     <th className="py-2.5 px-3.5">Type</th>
-                    <th className="py-2.5 px-3.5">23B Local Tx No</th>
-                    <th className="py-2.5 px-3.5">23B Upload Tx No</th>
+                    <th className="py-2.5 px-3.5">Local Ref No</th>
+                    <th className="py-2.5 px-3.5">Upload Ref No</th>
                     <th className="py-2.5 px-3.5">PhilHealth Ref No</th>
                     <th className="py-2.5 px-3.5">Status</th>
                     <th className="py-2.5 px-3.5">Submitted</th>
@@ -878,7 +878,7 @@ export default function YakapTransmittalClient() {
                                 onClick={() => void handlePollStatus(sub.id)}
                                 disabled={pollingId === sub.id || isPollingAll}
                                 className="h-7 px-2 rounded-lg text-[11px] font-semibold gap-1"
-                                title="Poll latest PCAPI validation status"
+                                title="Check latest PhilHealth status"
                               >
                                 {pollingId === sub.id ? (
                                   <IconLoader className="h-3 w-3 animate-spin text-primary" />
@@ -896,7 +896,7 @@ export default function YakapTransmittalClient() {
                                 onClick={() => void handleRetrySubmission(sub.id)}
                                 disabled={retryingId === sub.id}
                                 className="h-7 px-2 rounded-lg text-[11px] font-semibold gap-1 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                                title="Retry PCAPI submission"
+                                title="Retry submission"
                               >
                                 {retryingId === sub.id ? (
                                   <IconLoader className="h-3 w-3 animate-spin" />
@@ -940,7 +940,7 @@ export default function YakapTransmittalClient() {
               Non-PHI Submission Diagnostics
             </DialogTitle>
             <DialogDescription className="text-xs">
-              PhilHealth PCAPI validation issues for transaction{" "}
+              PhilHealth validation issues for reference{" "}
               <code className="font-mono font-bold text-foreground">{inspectedSubmission?.localTransactionNo}</code>.
             </DialogDescription>
           </DialogHeader>

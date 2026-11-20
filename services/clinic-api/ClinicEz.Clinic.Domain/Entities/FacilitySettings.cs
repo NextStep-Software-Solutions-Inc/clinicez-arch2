@@ -15,10 +15,9 @@ public sealed class FacilitySettings : ClinicScopedEntity
 
     public required string ClinicName { get; set; }
     public string? TaxIdentificationNumber { get; set; } // TIN
-    public string? AccreditationNumber { get; set; }     // e.g. PHIC-KONSULTA-09214
+    public string? AccreditationNumber { get; set; }     // e.g. H10000001
     public string? PmccNumber { get; set; }
     public string? SoftwareCertificateId { get; set; }
-    public string? KonsultaEndpoint { get; set; } = "/soap/konsulta";
     public string? PhilHealthSecretKey { get; set; }
     public string? PhilHealthBaseUrl { get; set; }
     public bool IsPhilHealthConfigured { get; set; }
@@ -32,7 +31,6 @@ public sealed class FacilitySettings : ClinicScopedEntity
     public string? BranchPhilHealthAccreditationNumber { get; set; }
     public string? BranchPmccNumber { get; set; }
     public string? BranchSoftwareCertificateId { get; set; }
-    public string? BranchKonsultaEndpoint { get; set; }
     public string? BranchPhilHealthSecretKey { get; set; }
     public string? BranchPhilHealthBaseUrl { get; set; }
     public bool IsBranchPhilHealthAccredited { get; set; } = false;

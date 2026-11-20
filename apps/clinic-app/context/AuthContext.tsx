@@ -303,7 +303,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
         }
         setUser(snapshot.user);
-        if (stateRef.current === 'signedOut' || stateRef.current === 'workstationLocked') {
+        if ((stateRef.current === 'signedOut' || stateRef.current === 'workstationLocked') && !getLockedSession()) {
           setNotice(null);
           setLockedSession(null);
           setIdleWarningSecondsLeft(null);

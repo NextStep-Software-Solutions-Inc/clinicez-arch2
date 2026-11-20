@@ -36,15 +36,25 @@ public sealed class AuthController : ControllerBase
         Request.Headers.TryGetValue(ClientPlatformHeader, out var platform) &&
         string.Equals(platform.ToString().Trim(), "web", StringComparison.OrdinalIgnoreCase);
 
-    private CookieOptions BuildRefreshCookieOptions() => new()
+    private bool IsSecureConnection =>
+        Request.IsHttps ||
+        string.Equals(Request.Headers["X-Forwarded-Proto"].ToString().Trim(), "https", StringComparison.OrdinalIgnoreCase);
+
+    private CookieOptions BuildRefreshCookieOptions()
     {
-        HttpOnly = true,
-        SameSite = SameSiteMode.Lax,
-        Secure = Request.IsHttps,
-        Path = RefreshCookiePath,
-        IsEssential = true
-        // Intentionally omit Expires/MaxAge so the browser clears it when the browser session ends.
-    };
+        var isHttps = IsSecureConnection;
+        return new()
+        {
+            HttpOnly = true,
+            // Cross-origin HTTPS clinic consoles (e.g. dev/cloud web or localhost -> API domain) need SameSite=None
+            // so HttpOnly refresh cookies are stored and sent on credentialed XHR auth requests (/refresh, /lock, /unlock-*).
+            SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
+            Secure = isHttps,
+            Path = RefreshCookiePath,
+            IsEssential = true
+            // Intentionally omit Expires/MaxAge so the browser clears it when the browser session ends.
+        };
+    }
 
     private void AppendRefreshCookie(string refreshToken) =>
         Response.Cookies.Append(RefreshCookieName, refreshToken, BuildRefreshCookieOptions());

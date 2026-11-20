@@ -206,8 +206,8 @@ export default function WorkflowModeSelector({
       {isYakap && onChangeAtc ? (
         <View style={styles.atcSection}>
           <Input
-            label="Authorization Transaction Code (ATC)"
-            placeholder="e.g. WALKEDIN or ATC-2026-99214"
+            label="PhilHealth Visit Code"
+            placeholder="e.g. WALKEDIN or visit code from PhilHealth"
             value={atcValue ?? ''}
             onChangeText={onChangeAtc}
             editable={!disabled}

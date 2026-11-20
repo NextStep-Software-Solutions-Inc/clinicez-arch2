@@ -235,8 +235,24 @@ describe('Adversarial Demographic Stress Suite', () => {
     expect(lastPutPayload.alerts).toBe('Fall Risk, Hard of Hearing');
   });
 
-  test('ADV-2: Sex selection correctly handles all 4 values (Male, Female, Intersex, Unknown)', async () => {
-    for (const g of ['Male', 'Female', 'Intersex', 'Unknown'] as const) {
+  test('ADV-2: Sex selection handles PhilHealth-specified values (Male, Female) and strips legacy Intersex/Unknown options', async () => {
+    const { filterPhilHealthSexLabels, parsePhilHealthSexInput } = await import('../utils/philhealthSex');
+
+    expect(
+      filterPhilHealthSexLabels([
+        { code: 'MALE', label: 'Male', philHealthCode: 'M', philHealthLibrary: 'lib_sex' },
+        { code: 'FEMALE', label: 'Female', philHealthCode: 'F', philHealthLibrary: 'lib_sex' },
+        { code: 'INTERSEX', label: 'Intersex', philHealthCode: null, philHealthLibrary: 'lib_sex' },
+        { code: 'UNKNOWN', label: 'Unknown', philHealthCode: null, philHealthLibrary: 'lib_sex' },
+      ]),
+    ).toEqual(['Male', 'Female']);
+
+    expect(parsePhilHealthSexInput('Intersex')).toBeNull();
+    expect(parsePhilHealthSexInput('Unknown')).toBeNull();
+    expect(parsePhilHealthSexInput('M')).toBe('Male');
+    expect(parsePhilHealthSexInput('F')).toBe('Female');
+
+    for (const g of ['Male', 'Female'] as const) {
       const payload: RegisterPatientPayload = {
         firstName: 'Alex',
         lastName: 'Santos',
@@ -361,7 +377,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       fullName: 'Sam Smith',
       dateOfBirth: '1992-05-19',
       age: 33,
-      sex: 'Intersex',
+      sex: 'Female',
       civilStatus: 'Separated',
       contactNumber: '0917-000-0000',
       createdAt: '2026-01-01T00:00:00Z',
@@ -374,7 +390,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       onSaved: () => {},
     });
 
-    expect(element.props.patient.sex).toBe('Intersex');
+    expect(element.props.patient.sex).toBe('Female');
     expect(element.props.patient.civilStatus).toBe('Separated');
   });
 

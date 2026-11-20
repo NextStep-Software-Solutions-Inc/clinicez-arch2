@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.PhilHealthProxy.Domain.Entities;
+using ClinicEz.PhilHealthProxy.Domain.Exceptions;
 using ClinicEz.PhilHealthProxy.Domain.Interfaces;
 using ClinicEz.PhilHealthProxy.Domain.Models;
 using Microsoft.AspNetCore.DataProtection;
@@ -20,6 +21,7 @@ public sealed class PhilHealthPcapiClient : IPhilHealthPcapiClient
     private readonly IPhilHealthTokenCache _tokenCache;
     private readonly IPhilHealthRateLimiter _rateLimiter;
     private readonly IPcapiSandboxService _sandboxService;
+    private readonly IDataProtectionProvider _dataProtectionProvider;
     private readonly IDataProtector _protector;
     private readonly ILogger<PhilHealthPcapiClient> _logger;
 
@@ -41,18 +43,194 @@ public sealed class PhilHealthPcapiClient : IPhilHealthPcapiClient
         _tokenCache = tokenCache;
         _rateLimiter = rateLimiter;
         _sandboxService = sandboxService;
+        _dataProtectionProvider = dataProtectionProvider;
         _protector = dataProtectionProvider.CreateProtector("PhilHealthTenantProtection");
         _logger = logger;
     }
 
     private static bool IsSandbox(string? baseUrl)
     {
-        if (string.IsNullOrWhiteSpace(baseUrl)) return true;
+        if (string.IsNullOrWhiteSpace(baseUrl)) return false;
         var lower = baseUrl.ToLowerInvariant();
         return lower.Contains("sandbox") ||
                lower.Contains("simulator") ||
                lower.Contains("localhost") ||
                lower.Contains("127.0.0.1");
+    }
+
+    private static Uri EnsureValidBaseUrl(PhilHealthTenant tenant)
+    {
+        if (string.IsNullOrWhiteSpace(tenant.BaseUrl))
+        {
+            throw new PhilHealthGatewayException(
+                424,
+                "PHILHEALTH_CONNECTION_URL_MISSING",
+                "PhilHealth Connection URL is not configured for this clinic. Configure a valid PhilHealth YAKAP URL in Settings -> PhilHealth & YAKAP or Portal Branch Settings.");
+        }
+
+        if (!Uri.TryCreate(tenant.BaseUrl.Trim(), UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new PhilHealthGatewayException(
+                400,
+                "PHILHEALTH_CONNECTION_URL_INVALID",
+                $"PhilHealth Connection URL '{tenant.BaseUrl}' is invalid. Configure a full http:// or https:// URL in Settings -> PhilHealth & YAKAP.");
+        }
+
+        return uri;
+    }
+
+    private async Task<HttpResponseMessage> SendWithDiagnosticsAsync(
+        Func<Task<HttpResponseMessage>> sendAsync,
+        Uri baseUri,
+        string targetUrl,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await sendAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new PhilHealthGatewayException(
+                502,
+                "PHILHEALTH_SERVER_UNREACHABLE",
+                $"Could not connect to PhilHealth server at '{baseUri.Host}': {ex.Message} Verify the PhilHealth Connection URL in Settings -> PhilHealth & YAKAP.",
+                ex);
+        }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new PhilHealthGatewayException(
+                504,
+                "TIMEOUT",
+                $"PhilHealth server at '{baseUri.Host}' did not respond in time ({targetUrl}). Verify the PhilHealth Connection URL and try again.",
+                ex);
+        }
+    }
+
+    private static async Task EnsurePcapiSuccessAsync(
+        HttpResponseMessage response,
+        Uri baseUri,
+        string targetUrl,
+        bool isAuthEndpoint,
+        CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var statusCode = (int)response.StatusCode;
+        var rawBody = await response.Content.ReadAsStringAsync(ct);
+        var (isJson, extractedMessage) = TryExtractUpstreamMessage(rawBody);
+        var suffix = string.IsNullOrWhiteSpace(extractedMessage) ? string.Empty : $" Details: {extractedMessage}";
+
+        if (isAuthEndpoint)
+        {
+            if (statusCode == 404)
+            {
+                throw new PhilHealthGatewayException(
+                    502,
+                    "PHILHEALTH_ENDPOINT_NOT_FOUND",
+                    $"PhilHealth authentication endpoint was not found at '{targetUrl}' (HTTP 404). Verify the PhilHealth Connection URL in Settings -> PhilHealth & YAKAP.");
+            }
+
+            if (statusCode is 401 or 403)
+            {
+                throw new PhilHealthGatewayException(
+                    statusCode,
+                    "PHILHEALTH_AUTH_FAILED",
+                    $"PhilHealth server rejected facility credentials at '{baseUri.Host}' (HTTP {statusCode}).{suffix} Verify Accreditation No., Software Certificate ID, and Access Secret in Settings -> PhilHealth & YAKAP.");
+            }
+
+            throw new PhilHealthGatewayException(
+                statusCode >= 500 ? statusCode : 502,
+                "PHILHEALTH_AUTH_ERROR",
+                $"PhilHealth authentication failed with HTTP {statusCode} at '{targetUrl}'.{suffix}");
+        }
+
+        if (statusCode == 404)
+        {
+            if (!isJson || string.IsNullOrWhiteSpace(extractedMessage))
+            {
+                throw new PhilHealthGatewayException(
+                    502,
+                    "PHILHEALTH_ENDPOINT_NOT_FOUND",
+                    $"PhilHealth server endpoint was not found at '{targetUrl}' (HTTP 404). Verify the PhilHealth Connection URL in Settings -> PhilHealth & YAKAP.");
+            }
+
+            throw new PhilHealthGatewayException(404, "PIN_NOT_FOUND", extractedMessage);
+        }
+
+        if (statusCode is 401 or 403)
+        {
+            throw new PhilHealthGatewayException(
+                statusCode,
+                "PHILHEALTH_AUTH_FAILED",
+                $"PhilHealth server rejected authorization at '{baseUri.Host}' (HTTP {statusCode}).{suffix}");
+        }
+
+        if (statusCode == 429)
+        {
+            throw new PhilHealthGatewayException(
+                429,
+                "RATE_LIMITED",
+                extractedMessage ?? "PhilHealth server rate limit exceeded. Please try again in a moment.");
+        }
+
+        if (statusCode >= 500)
+        {
+            throw new PhilHealthGatewayException(
+                statusCode,
+                "UPSTREAM_SERVER_ERROR",
+                $"PhilHealth server error (HTTP {statusCode}) from '{baseUri.Host}'.{suffix}");
+        }
+
+        throw new PhilHealthGatewayException(
+            statusCode,
+            "PIN_INVALID",
+            extractedMessage ?? $"PhilHealth server rejected the request (HTTP {statusCode}).");
+    }
+
+    private static (bool IsJson, string? Message) TryExtractUpstreamMessage(string? rawBody)
+    {
+        if (string.IsNullOrWhiteSpace(rawBody))
+        {
+            return (false, null);
+        }
+
+        var trimmed = rawBody.Trim();
+        if (!trimmed.StartsWith('{') && !trimmed.StartsWith('['))
+        {
+            return (false, null);
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(trimmed);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return (true, null);
+            }
+
+            foreach (var key in new[] { "message", "Message", "error_description", "error", "detail", "title", "Title" })
+            {
+                if (doc.RootElement.TryGetProperty(key, out var prop) && prop.ValueKind == JsonValueKind.String)
+                {
+                    var val = prop.GetString();
+                    if (!string.IsNullOrWhiteSpace(val))
+                    {
+                        return (true, val.Trim());
+                    }
+                }
+            }
+
+            return (true, null);
+        }
+        catch
+        {
+            return (false, null);
+        }
     }
 
     private string UnprotectSafe(string? encrypted)
@@ -64,7 +242,14 @@ public sealed class PhilHealthPcapiClient : IPhilHealthPcapiClient
         }
         catch
         {
-            return encrypted;
+            try
+            {
+                return _dataProtectionProvider.CreateProtector("ClinicEz.PhilHealthProxy.TenantCredentials").Unprotect(encrypted);
+            }
+            catch
+            {
+                return encrypted;
+            }
         }
     }
 
@@ -75,20 +260,28 @@ public sealed class PhilHealthPcapiClient : IPhilHealthPcapiClient
             return new PcapiTokenData("pcapi-sandbox-token-" + Guid.NewGuid().ToString("N")[..8], "Bearer", 3600);
         }
 
+        var baseUri = EnsureValidBaseUrl(tenant);
         var secretKey = UnprotectSafe(tenant.EncryptedSecretKey);
         var request = new PcapiTokenRequest(
             tenant.SoftwareCertificateId,
             tenant.AccreditationNumber,
             secretKey);
 
-        var url = $"{tenant.BaseUrl.TrimEnd('/')}/api/v1/auth/token";
-        var response = await _httpClient.PostAsJsonAsync(url, request, JsonOpts, ct);
-        response.EnsureSuccessStatusCode();
+        var url = $"{baseUri.AbsoluteUri.TrimEnd('/')}/api/v1/auth/token";
+        using var response = await SendWithDiagnosticsAsync(
+            () => _httpClient.PostAsJsonAsync(url, request, JsonOpts, ct),
+            baseUri,
+            url,
+            ct);
+        await EnsurePcapiSuccessAsync(response, baseUri, url, isAuthEndpoint: true, ct);
 
         var result = await response.Content.ReadFromJsonAsync<PcapiTokenResponse>(JsonOpts, ct);
         if (result?.Data is null)
         {
-            throw new InvalidOperationException("Failed to obtain PCAPI token from upstream response.");
+            throw new PhilHealthGatewayException(
+                502,
+                "UPSTREAM_UNREADABLE",
+                "PhilHealth authentication returned an unreadable or empty token response.");
         }
 
         return result.Data;
@@ -114,51 +307,73 @@ public sealed class PhilHealthPcapiClient : IPhilHealthPcapiClient
         PhilHealthTenant tenant,
         CancellationToken ct)
     {
+        var baseUri = EnsureValidBaseUrl(tenant);
+
         using var lease = await _rateLimiter.AcquireAsync(tenant.TenantId, tenant.AccreditationNumber, ct);
         if (!lease.IsAcquired)
         {
-            throw new HttpRequestException("429 Rate limit exceeded for facility.", null, HttpStatusCode.TooManyRequests);
+            throw new HttpRequestException("429 Rate limit exceeded for PhilHealth facility.", null, HttpStatusCode.TooManyRequests);
         }
 
         var token = await GetTokenAsync(tenant, ct);
-        var url = $"{tenant.BaseUrl.TrimEnd('/')}/{relativePath.TrimStart('/')}";
+        var url = $"{baseUri.AbsoluteUri.TrimEnd('/')}/{relativePath.TrimStart('/')}";
 
-        using var request = new HttpRequestMessage(method, url);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        HttpResponseMessage response = await SendWithDiagnosticsAsync(
+            async () =>
+            {
+                using var reqMsg = new HttpRequestMessage(method, url);
+                reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                if (requestBody is not null)
+                {
+                    reqMsg.Content = JsonContent.Create(requestBody, options: JsonOpts);
+                }
 
-        if (requestBody is not null)
-        {
-            request.Content = JsonContent.Create(requestBody, options: JsonOpts);
-        }
-
-        var response = await _httpClient.SendAsync(request, ct);
+                return await _httpClient.SendAsync(reqMsg, ct);
+            },
+            baseUri,
+            url,
+            ct);
 
         // Single 401 retry with token eviction
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
+            response.Dispose();
             _logger.LogWarning("[PcapiClient] Received 401 Unauthorized from PCAPI. Evicting token and retrying once.");
             _tokenCache.Invalidate(tenant.TenantId, tenant.AccreditationNumber);
 
             token = await GetTokenAsync(tenant, ct);
-            using var retryRequest = new HttpRequestMessage(method, url);
-            retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            if (requestBody is not null)
+            response = await SendWithDiagnosticsAsync(
+                async () =>
+                {
+                    using var retryRequest = new HttpRequestMessage(method, url);
+                    retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    if (requestBody is not null)
+                    {
+                        retryRequest.Content = JsonContent.Create(requestBody, options: JsonOpts);
+                    }
+
+                    return await _httpClient.SendAsync(retryRequest, ct);
+                },
+                baseUri,
+                url,
+                ct);
+        }
+
+        using (response)
+        {
+            await EnsurePcapiSuccessAsync(response, baseUri, url, isAuthEndpoint: false, ct);
+
+            var result = await response.Content.ReadFromJsonAsync<TRes>(JsonOpts, ct);
+            if (result is null)
             {
-                retryRequest.Content = JsonContent.Create(requestBody, options: JsonOpts);
+                throw new PhilHealthGatewayException(
+                    502,
+                    "UPSTREAM_UNREADABLE",
+                    $"PhilHealth server returned an empty response from '{url}'.");
             }
 
-            response = await _httpClient.SendAsync(retryRequest, ct);
+            return result;
         }
-
-        response.EnsureSuccessStatusCode();
-
-        var result = await response.Content.ReadFromJsonAsync<TRes>(JsonOpts, ct);
-        if (result is null)
-        {
-            throw new InvalidOperationException($"Empty response from PCAPI endpoint '{relativePath}'.");
-        }
-
-        return result;
     }
 
     public Task<PcuStartResponse> StartPcuAsync(PcuStartRequest req, PhilHealthTenant tenant, CancellationToken ct = default)
@@ -243,6 +458,10 @@ public sealed class PhilHealthPcapiClient : IPhilHealthPcapiClient
         if (IsSandbox(tenant.BaseUrl))
         {
             var cipherKey = UnprotectSafe(tenant.EncryptedCipherKey);
+            if (string.IsNullOrWhiteSpace(cipherKey))
+            {
+                cipherKey = Application.Common.TenantResolutionHelper.SandboxDefaultCipherKey;
+            }
             return _sandboxService.UploadDataAsync(form, envelope, tenant.AccreditationNumber, cipherKey, ct);
         }
 
@@ -277,6 +496,10 @@ public sealed class PhilHealthPcapiClient : IPhilHealthPcapiClient
         if (IsSandbox(tenant.BaseUrl))
         {
             var cipherKey = UnprotectSafe(tenant.EncryptedCipherKey);
+            if (string.IsNullOrWhiteSpace(cipherKey))
+            {
+                cipherKey = Application.Common.TenantResolutionHelper.SandboxDefaultCipherKey;
+            }
             return _sandboxService.GenerateAvailmentSlipAsync(req, tenant.AccreditationNumber, cipherKey, ct);
         }
 

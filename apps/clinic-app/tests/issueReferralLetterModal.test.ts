@@ -97,6 +97,7 @@ mock.module('../services/documentOpener', () => ({
     openedDocumentUrl = url;
     return true;
   },
+  openDocumentBlob: async () => true,
 }));
 
 mock.module('../services/clinicService', () => {

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Helpers;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.HealthScreenings.Common;
 using ClinicEz.Clinic.Application.Features.HealthScreenings.DTOs;
 using ClinicEz.Clinic.Application.Features.HealthScreenings.Queries;
@@ -86,6 +87,9 @@ public sealed class CompleteHealthScreeningCommandHandler
     private readonly IRepository<StaffMember>? _staffRepo;
     private readonly IPhilHealthSequenceGenerator? _sequenceGenerator;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<PatientIdentityVerification>? _verificationRepo;
+    private readonly IRepository<YakapSubmission>? _submissionRepo;
+    private readonly IYakapScreeningDispatcher? _yakapDispatcher;
 
     public CompleteHealthScreeningCommandHandler(
         IRepository<HealthScreening> screeningRepo,
@@ -103,7 +107,10 @@ public sealed class CompleteHealthScreeningCommandHandler
         IRepository<PatientYakapEnlistment>? enlistmentRepo = null,
         IRepository<StaffMember>? staffRepo = null,
         IPhilHealthSequenceGenerator? sequenceGenerator = null,
-        IWorkspaceProfileProvider? workspaceProfiles = null)
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<PatientIdentityVerification>? verificationRepo = null,
+        IRepository<YakapSubmission>? submissionRepo = null,
+        IYakapScreeningDispatcher? yakapDispatcher = null)
     {
         _screeningRepo = screeningRepo;
         _patientRepo = patientRepo;
@@ -121,6 +128,9 @@ public sealed class CompleteHealthScreeningCommandHandler
         _staffRepo = staffRepo;
         _sequenceGenerator = sequenceGenerator;
         _workspaceProfiles = workspaceProfiles;
+        _verificationRepo = verificationRepo;
+        _submissionRepo = submissionRepo;
+        _yakapDispatcher = yakapDispatcher;
     }
 
     public async Task<HealthScreeningDetailDto> Handle(
@@ -396,7 +406,7 @@ public sealed class CompleteHealthScreeningCommandHandler
 
             if (string.IsNullOrWhiteSpace(effectiveAtc) && !effectiveWalkIn)
             {
-                throw new BadRequestException("Either a PhilHealth Authorization Transaction Code (ATC) or Walk-In confirmation is required for YAKAP FPE.");
+                throw new BadRequestException("Enter a PhilHealth Visit Code or mark the visit as Walk-In.");
             }
 
             if (_enlistmentRepo == null)
@@ -418,7 +428,7 @@ public sealed class CompleteHealthScreeningCommandHandler
             }
             catch (InvalidOperationException ex)
             {
-                throw new BadRequestException(ex.Message);
+                throw new BadRequestException($"Check PhilHealth eligibility and assign this patient to the clinic first. ({ex.Message})");
             }
 
             if (string.IsNullOrWhiteSpace(activeEnlistment.ProfilingTransNo))
@@ -440,8 +450,6 @@ public sealed class CompleteHealthScreeningCommandHandler
 
                 if (string.IsNullOrWhiteSpace(activeEnlistment.CaseNo))
                     activeEnlistment.CaseNo = journeyNumbers.CaseNumber;
-                if (string.IsNullOrWhiteSpace(activeEnlistment.EnlistmentTransNo))
-                    activeEnlistment.EnlistmentTransNo = journeyNumbers.EnlistmentTransactionNumber;
                 activeEnlistment.ProfilingTransNo = journeyNumbers.ProfilingTransactionNumber;
             }
 
@@ -545,6 +553,21 @@ public sealed class CompleteHealthScreeningCommandHandler
         _queueRepo.Update(queueItem);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        // Auto-submit YAKAP 2.0 Annex A FPE & Service 03 Empanelment (never fails local clinical sign-off)
+        if (isYakap && _yakapDispatcher != null)
+        {
+            try
+            {
+                await _yakapDispatcher.DispatchFpeSubmissionAsync(screening.Id, cancellationToken);
+                var refreshed = await _screeningRepo.Query(hs => hs.Id == screening.Id).AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+                if (refreshed != null) screening = refreshed;
+            }
+            catch
+            {
+                // Graceful non-blocking: clinical sign-off stays committed even if submission fails.
+            }
+        }
+
         var detailQuery = new GetHealthScreeningByIdQueryHandler(
             _screeningRepo,
             _patientRepo,
@@ -558,7 +581,9 @@ public sealed class CompleteHealthScreeningCommandHandler
             _membershipRepo,
             _enlistmentRepo,
             _settingsRepo,
-            _workspaceProfiles);
+            _workspaceProfiles,
+            _verificationRepo,
+            _submissionRepo);
 
         return await detailQuery.BuildDetailAsync(screening, cancellationToken);
     }

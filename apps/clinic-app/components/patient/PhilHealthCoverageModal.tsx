@@ -8,7 +8,6 @@ import {
   Badge,
   Icon,
   ErrorState,
-  EmptyState,
   SkeletonList,
   ThemedText,
   ValidatedDateInput,
@@ -19,23 +18,26 @@ import {
   formatPhilHealthPin,
 } from '../ui';
 import { notify } from '../../utils/feedback';
+import { useClinic } from '../../context/ClinicContext';
+import {
+  formatPhilHealthServerError,
+  isMissingPhilHealthConnectionUrlKnown,
+  MISSING_CONNECTION_URL_MESSAGE,
+  type PhilHealthSettingsUrlSlice,
+} from '../../utils/philhealthError';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { useEhrOptions } from '../../hooks/useEhrOptions';
-import {
-  formatYakapStatusBadge,
-  formatYakapSourceLabel,
-  toIsoDateString,
-  type YakapEnlistmentStatus as UtilsYakapStatus,
-  type YakapEnlistmentSource as UtilsYakapSource,
-} from '../../utils/yakapEnlistment';
+import { toIsoDateString } from '../../utils/formatDateTime';
+import { openAvailmentSlipPdf } from '../../utils/philhealthSlip';
+import PatientIdentityCheckModal from './PatientIdentityCheckModal';
 import {
   clinicService,
   type ClinicPatient,
   type PatientPhilHealthCoverageDto,
   type PatientYakapEnlistmentDto,
   type PhilHealthMemberType,
-  type YakapEnlistmentSource,
   type PinValidationResult,
+  type YakapStandingCheckDto,
 } from '../../services/clinicService';
 import type { BadgeVariant } from '../ui/Badge';
 import type { IconName } from '../ui/Icon';
@@ -44,34 +46,47 @@ import {
   type PrincipalRelationship,
 } from './memberType';
 
+function formatIdentityMethodLabel(mode?: string | null): string {
+  switch ((mode || '').toLowerCase()) {
+    case 'pcu':
+      return 'Face Scan';
+    case 'otp':
+      return 'Text Code (OTP)';
+    case 'validid':
+    case 'valid_id':
+      return 'Photo ID';
+    default:
+      return mode || 'Identity Check';
+  }
+}
+
 function resolveCoverageEnlistmentBadge(status?: string | null): {
   label: string;
   variant: BadgeVariant;
   icon: IconName;
 } {
   if (!status) {
-    return formatYakapStatusBadge(null) as { label: string; variant: BadgeVariant; icon: IconName };
-  }
-  if (status === 'Active' || status === 'Expired' || status === 'Transferred') {
-    return formatYakapStatusBadge(status as UtilsYakapStatus) as {
-      label: string;
-      variant: BadgeVariant;
-      icon: IconName;
-    };
+    return { label: 'Not Yet Assigned', variant: 'neutral', icon: 'shield' };
   }
   switch (status) {
+    case 'Active':
+      return { label: 'Assigned & Active', variant: 'success', icon: 'shieldCheck' };
     case 'Draft':
-      return { label: 'Draft Enlistment', variant: 'neutral', icon: 'edit' };
+      return { label: 'Walk-In Draft (Sync Pending)', variant: 'warning', icon: 'clock' };
     case 'Registered':
-      return { label: 'Registered', variant: 'info', icon: 'check' };
+      return { label: 'Clinic Assigned', variant: 'info', icon: 'check' };
     case 'Verified':
-      return { label: 'Verified', variant: 'success', icon: 'shieldCheck' };
+      return { label: 'Identity Confirmed', variant: 'success', icon: 'shieldCheck' };
     case 'ProfilingCompleted':
-      return { label: 'Profiling Completed', variant: 'success', icon: 'checkCircle' };
+      return { label: 'Checkup Completed', variant: 'success', icon: 'checkCircle' };
     case 'Transmitted':
-      return { label: 'Transmitted to PhilHealth', variant: 'success', icon: 'send' };
+      return { label: 'Sent to PhilHealth', variant: 'success', icon: 'send' };
     case 'Suspended':
-      return { label: 'Suspended', variant: 'warning', icon: 'alert' };
+      return { label: 'On Hold', variant: 'warning', icon: 'alert' };
+    case 'Expired':
+      return { label: 'Previous Year', variant: 'neutral', icon: 'clock' };
+    case 'Transferred':
+      return { label: 'Transferred Out', variant: 'neutral', icon: 'arrowRight' };
     case 'Cancelled':
       return { label: 'Cancelled', variant: 'emergency', icon: 'close' };
     default:
@@ -80,27 +95,22 @@ function resolveCoverageEnlistmentBadge(status?: string | null): {
 }
 
 function resolveCoverageEnlistmentSourceLabel(source?: string | null): string {
-  if (!source) {
-    return formatYakapSourceLabel(null);
-  }
-  if (
-    source === 'PhilHealthMasterlist' ||
-    source === 'ClinicEnlistment' ||
-    source === 'SelfReported'
-  ) {
-    return formatYakapSourceLabel(source as UtilsYakapSource);
-  }
   switch (source) {
+    case 'PhilHealthMasterlist':
+    case 'MasterlistSync':
+      return 'PhilHealth Patient List';
+    case 'ClinicEnlistment':
+      return 'Clinic Assignment';
+    case 'SelfReported':
+      return 'Patient Self-Reported';
     case 'WalkIn':
-      return 'Walk-In Intake';
+      return 'Walk-In Visit';
     case 'OnlinePortal':
       return 'Online Portal';
-    case 'MasterlistSync':
-      return 'Masterlist Sync';
     case 'AssistedIntake':
-      return 'Assisted Intake';
+      return 'Front-Desk Assisted';
     default:
-      return source;
+      return source || 'Clinic Assignment';
   }
 }
 
@@ -113,8 +123,284 @@ export interface PhilHealthCoverageModalProps {
 }
 
 interface PinCheckFeedback {
-  status: 'idle' | 'checking' | 'valid' | 'invalid';
+  status: 'idle' | 'checking' | 'valid' | 'invalid' | 'server_error';
   message: string;
+}
+
+interface ParsedPinValidationOutcome {
+  isVerified: boolean;
+  status: PinCheckFeedback['status'];
+  message: string;
+  conflict?: { patientId: string; fullName: string; patientCode: string };
+}
+
+function interpretPinValidationResult(
+  res: PinValidationResult | boolean | null,
+  err: { message?: string; status?: number; errorCode?: string } | null,
+  mod11IsValid: boolean,
+  options?: { checkUniqueness?: boolean; settings?: PhilHealthSettingsUrlSlice }
+): ParsedPinValidationOutcome {
+  if (err || res == null) {
+    const code = (err?.errorCode || '').trim().toUpperCase();
+    const isUrlOrAuthConfigError =
+      code === 'PHILHEALTH_CONNECTION_URL_MISSING' ||
+      code === 'PHILHEALTH_CONNECTION_URL_INVALID' ||
+      code === 'PHILHEALTH_ENDPOINT_NOT_FOUND' ||
+      code === 'PHILHEALTH_AUTH_FAILED';
+    const httpStatus = err?.status;
+    const isClientPinReject =
+      isUrlOrAuthConfigError || httpStatus === 400 || httpStatus === 404 || httpStatus === 422;
+    return {
+      isVerified: false,
+      status: isClientPinReject ? 'invalid' : 'server_error',
+      message: formatPhilHealthServerError(
+        err,
+        options?.settings,
+        isClientPinReject
+          ? 'PIN not found in PhilHealth records.'
+          : 'PhilHealth verification server could not be reached. Retry Verify PIN or defer verification to continue.'
+      ),
+    };
+  }
+
+  const raw = res as unknown as boolean | (PinValidationResult & { valid?: boolean }) | null;
+  const serverValid =
+    typeof raw === 'boolean'
+      ? raw
+      : typeof raw?.isValid === 'boolean'
+        ? raw.isValid
+        : typeof raw?.valid === 'boolean'
+          ? raw.valid
+          : true;
+  const sequenceOk =
+    typeof raw === 'object' && raw !== null && typeof raw.isSequenceValid === 'boolean'
+      ? raw.isSequenceValid
+      : mod11IsValid;
+  const philHealthDbOk =
+    typeof raw === 'object' && raw !== null && typeof raw.isPhilHealthVerified === 'boolean'
+      ? raw.isPhilHealthVerified
+      : serverValid;
+  const enforceUniqueness = options?.checkUniqueness !== false;
+  const uniqueInClinic =
+    !enforceUniqueness ||
+    (typeof raw === 'object' && raw !== null && typeof raw.isUniqueInClinic === 'boolean'
+      ? raw.isUniqueInClinic
+      : true);
+
+  if (sequenceOk && uniqueInClinic && philHealthDbOk && serverValid) {
+    const memberSuffix =
+      typeof raw === 'object' && raw !== null && raw.memberName
+        ? ` (${raw.memberName})`
+        : '';
+    return {
+      isVerified: true,
+      status: 'valid',
+      message: `Verified with PhilHealth${memberSuffix}`,
+    };
+  }
+
+  const reason =
+    (typeof raw === 'object' && raw?.failureReason) ||
+    (!uniqueInClinic
+      ? `PhilHealth PIN is already assigned to another patient${
+          typeof raw === 'object' && raw?.conflictingPatientName
+            ? `: ${raw.conflictingPatientName}${raw.conflictingPatientCode ? ` (${raw.conflictingPatientCode})` : ''}`
+            : ''
+        }.`
+      : sequenceOk && !philHealthDbOk
+        ? 'PIN not found in PhilHealth records.'
+        : 'PhilHealth could not verify this PIN.');
+  const isConfigOrAuthFailure =
+    uniqueInClinic &&
+    /connection url is not configured|connection url .* is invalid|authentication endpoint was not found|endpoint returned 404|endpoint was not found|rejected facility credentials/i.test(
+      reason
+    );
+  const isExplicitServerError =
+    uniqueInClinic &&
+    !isConfigOrAuthFailure &&
+    typeof raw === 'object' &&
+    raw !== null &&
+    (raw.isServerError === true ||
+      (raw.isServerError !== false &&
+        sequenceOk &&
+        /unable to reach|timed out|did not answer|service unavailable|server error|could not be reached|network|rate limit|500|502|503|504/i.test(
+          reason
+        )));
+
+  return {
+    isVerified: false,
+    status: !sequenceOk || !uniqueInClinic ? 'invalid' : isExplicitServerError ? 'server_error' : 'invalid',
+    message: reason,
+    conflict: !uniqueInClinic
+      ? {
+          patientId: 'conflict',
+          fullName: (typeof raw === 'object' && raw?.conflictingPatientName) || 'Another patient',
+          patientCode: (typeof raw === 'object' && raw?.conflictingPatientCode) || '',
+        }
+      : undefined,
+  };
+}
+
+function areDependentSponsorFieldsValid(fields: {
+  memberType?: string | null;
+  patientPin?: string | null;
+  dependentRelationship?: string | null;
+  principalMemberPin?: string | null;
+  principalLastName?: string | null;
+  principalFirstName?: string | null;
+  principalDateOfBirth?: string | null;
+}): boolean {
+  if (fields.memberType !== 'DD') {
+    return true;
+  }
+  if (!fields.dependentRelationship) {
+    return false;
+  }
+  const patientDigits = (fields.patientPin || '').replace(/\D/g, '');
+  const principalDigits = (fields.principalMemberPin || '').replace(/\D/g, '');
+  if (!validatePhilHealthPinMod11((fields.principalMemberPin || '').trim()).isValid) {
+    return false;
+  }
+  if (patientDigits && principalDigits && patientDigits === principalDigits) {
+    return false;
+  }
+  if (!(fields.principalLastName || '').trim() || !(fields.principalFirstName || '').trim()) {
+    return false;
+  }
+  const dob = (fields.principalDateOfBirth || '').trim();
+  if (!dob) {
+    return false;
+  }
+  return validateDateString(dob, { boundaryMode: 'pastOrToday' }).isValid;
+}
+
+function buildStep1Snapshot(fields: {
+  pin: string;
+  memberType: PhilHealthMemberType;
+  dependentRelationship: PrincipalRelationship;
+  principalMemberPin: string;
+  principalLastName: string;
+  principalFirstName: string;
+  principalMiddleName: string;
+  principalSuffix: string;
+  principalDateOfBirth: string;
+  membershipCategoryCode: string;
+  membershipCategoryDesc: string;
+  employerPin: string;
+  employerName: string;
+  defaultWalkInAtc: string;
+}): string {
+  return JSON.stringify({
+    pinDigits: (fields.pin || '').replace(/\D/g, ''),
+    memberType: fields.memberType,
+    dependentRelationship: fields.memberType === 'DD' ? fields.dependentRelationship : 'MM',
+    principalMemberPin: fields.memberType === 'DD' ? (fields.principalMemberPin || '').replace(/\D/g, '') : '',
+    principalLastName: fields.memberType === 'DD' ? fields.principalLastName.trim() : '',
+    principalFirstName: fields.memberType === 'DD' ? fields.principalFirstName.trim() : '',
+    principalMiddleName: fields.memberType === 'DD' ? fields.principalMiddleName.trim() : '',
+    principalSuffix: fields.memberType === 'DD' ? fields.principalSuffix.trim() : '',
+    principalDateOfBirth: fields.memberType === 'DD' ? fields.principalDateOfBirth.trim() : '',
+    membershipCategoryCode: fields.membershipCategoryCode.trim(),
+    membershipCategoryDesc: fields.membershipCategoryDesc.trim(),
+    employerPin: fields.employerPin.trim(),
+    employerName: fields.employerName.trim(),
+    defaultWalkInAtc: fields.defaultWalkInAtc.trim(),
+  });
+}
+
+type VerticalStepState = 'completed' | 'active' | 'locked';
+
+function VerticalStepRow({
+  stepNumber,
+  title,
+  subtitle,
+  statusLabel,
+  statusVariant,
+  state,
+  isLast = false,
+  testID,
+  children,
+}: {
+  stepNumber: number;
+  title: string;
+  subtitle: string;
+  statusLabel: string;
+  statusVariant: BadgeVariant;
+  state: VerticalStepState;
+  isLast?: boolean;
+  testID?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.stepRowContainer} testID={testID}>
+      <View style={styles.stepRailCol}>
+        <View
+          style={[
+            styles.stepCircle,
+            state === 'completed'
+              ? styles.stepCircleCompleted
+              : state === 'active'
+                ? styles.stepCircleActive
+                : styles.stepCircleLocked,
+          ]}
+        >
+          {state === 'completed' ? (
+            <Icon name="check" size={theme.sizes.iconSm} color={theme.colors.successText} />
+          ) : state === 'locked' ? (
+            <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+          ) : (
+            <ThemedText variant="smallBold" color={theme.colors.onPrimary}>
+              {String(stepNumber)}
+            </ThemedText>
+          )}
+        </View>
+        {!isLast ? (
+          <View
+            style={[
+              styles.stepConnector,
+              state === 'completed' ? styles.stepConnectorDone : styles.stepConnectorPending,
+            ]}
+          />
+        ) : null}
+      </View>
+
+      <View
+        style={[
+          styles.stepCard,
+          state === 'active'
+            ? styles.stepCardActive
+            : state === 'completed'
+              ? styles.stepCardCompleted
+              : styles.stepCardLocked,
+        ]}
+      >
+        <View style={styles.sectionHeaderRow}>
+          <View style={styles.stepHeaderTextGroup}>
+            <ThemedText
+              variant="bodyBold"
+              color={state === 'locked' ? theme.colors.textSecondary : theme.colors.text}
+            >
+              {`Step ${stepNumber} · ${title}`}
+            </ThemedText>
+            {state !== 'locked' ? (
+              <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                {subtitle}
+              </ThemedText>
+            ) : null}
+          </View>
+          {state !== 'locked' ? (
+            <Badge
+              label={statusLabel}
+              variant={statusVariant}
+              size="sm"
+              icon={state === 'completed' ? 'checkCircle' : 'clock'}
+            />
+          ) : null}
+        </View>
+        {state !== 'locked' ? children : null}
+      </View>
+    </View>
+  );
 }
 
 export default function PhilHealthCoverageModal({
@@ -125,6 +411,7 @@ export default function PhilHealthCoverageModal({
   onStartYakapScreening,
 }: PhilHealthCoverageModalProps) {
   const { isCompact } = useBreakpoint();
+  const { settings: clinicSettings } = useClinic();
   const { options: relationshipOptions, loading: loadingRelationships } = useEhrOptions(
     'dependent_relationship',
     {
@@ -156,21 +443,30 @@ export default function PhilHealthCoverageModal({
     status: 'idle',
     message: '',
   });
+  const [principalPinFeedback, setPrincipalPinFeedback] = useState<PinCheckFeedback>({
+    status: 'idle',
+    message: '',
+  });
+  const [savedStep1Snapshot, setSavedStep1Snapshot] = useState<string>('');
   const [savingMembership, setSavingMembership] = useState(false);
   const [showEmployerFields, setShowEmployerFields] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  // Enlistment renewal sub-modal state
-  const [enlistmentModalVisible, setEnlistmentModalVisible] = useState(false);
-  const [renewalYear, setRenewalYear] = useState(() => String(new Date().getFullYear()));
-  const [renewalEnlistDate, setRenewalEnlistDate] = useState(() => toIsoDateString());
-  const [renewalValidUntil, setRenewalValidUntil] = useState(() => `${new Date().getFullYear()}-12-31`);
-  const [renewalSource, setRenewalSource] = useState<YakapEnlistmentSource>('ClinicEnlistment');
-  const [renewalCaseNo, setRenewalCaseNo] = useState('');
-  const [renewalTransNo, setRenewalTransNo] = useState('');
-  const [renewalYesRefNo, setRenewalYesRefNo] = useState('');
-  const [renewalNotes, setRenewalNotes] = useState('');
-  const [savingEnlistment, setSavingEnlistment] = useState(false);
+  // YAKAP 2.0 Standing, Identity Check, Selection & Slip state
+  const [identityModalOpen, setIdentityModalOpen] = useState(false);
+  const [standingCheck, setStandingCheck] = useState<YakapStandingCheckDto | null>(null);
+  const [assignedResult, setAssignedResult] = useState(false);
+  const [dbVerifiedPinDigits, setDbVerifiedPinDigits] = useState<string | null>(null);
+  const [dbVerifiedPrincipalPinDigits, setDbVerifiedPrincipalPinDigits] = useState<string | null>(null);
+  const [duplicatePinConflict, setDuplicatePinConflict] = useState<{
+    patientId: string;
+    fullName: string;
+    patientCode: string;
+  } | null>(null);
+  const [checkingStanding, setCheckingStanding] = useState(false);
+  const [submittingSelection, setSubmittingSelection] = useState(false);
+  const [printingSlip, setPrintingSlip] = useState(false);
+  const [refreshingSubmission, setRefreshingSubmission] = useState(false);
 
   const guardianSponsor = useMemo(() => {
     const primaryGuardian =
@@ -183,31 +479,67 @@ export default function PhilHealthCoverageModal({
     });
   }, [patient]);
 
+  const hasValidPin = validatePhilHealthPinMod11(pin.trim()).isValid;
+
   const hydrateFromCoverage = useCallback(
-    (data: PatientPhilHealthCoverageDto, currentPatient: ClinicPatient) => {
+    (data: PatientPhilHealthCoverageDto, currentPatient: ClinicPatient, preservePinFeedback = false) => {
       const m = data.membership;
       const effectivePin = m?.philHealthPin || data.philHealthNumber || currentPatient.philHealthNumber || '';
-      setPin(effectivePin ? formatPhilHealthPin(effectivePin) : '');
+      const formattedEffectivePin = effectivePin ? formatPhilHealthPin(effectivePin) : '';
       const nextMemberType: PhilHealthMemberType = m?.memberType === 'DD' ? 'DD' : 'MM';
+      const nextDepRel: PrincipalRelationship =
+        (m?.dependentRelationship as PrincipalRelationship) || ((currentPatient.age ?? 0) < 18 ? 'C' : 'S');
+      const nextPrincipalPin = m?.principalMemberPin ? formatPhilHealthPin(m.principalMemberPin) : '';
+      const nextPrincipalLast = m?.principalLastName || '';
+      const nextPrincipalFirst = m?.principalFirstName || '';
+      const nextPrincipalMiddle = m?.principalMiddleName || '';
+      const nextPrincipalSuffix = m?.principalSuffix || '';
+      const nextPrincipalDob = m?.principalDateOfBirth ? toIsoDateString(m.principalDateOfBirth) : '';
+      const nextCatCode = m?.membershipCategoryCode || '';
+      const nextCatDesc = m?.membershipCategoryDesc || '';
+      const nextEmpPin = m?.employerPin || '';
+      const nextEmpName = m?.employerName || '';
+      const nextWalkInAtc = m?.defaultWalkInAtc || '';
+
+      setPin(formattedEffectivePin);
       setMemberType(nextMemberType);
-      setDependentRelationship((m?.dependentRelationship as PrincipalRelationship) || ((currentPatient.age ?? 0) < 18 ? 'C' : 'S'));
-      setPrincipalMemberPin(m?.principalMemberPin ? formatPhilHealthPin(m.principalMemberPin) : '');
-      setPrincipalLastName(m?.principalLastName || '');
-      setPrincipalFirstName(m?.principalFirstName || '');
-      setPrincipalMiddleName(m?.principalMiddleName || '');
-      setPrincipalSuffix(m?.principalSuffix || '');
-      setPrincipalDateOfBirth(
-        m?.principalDateOfBirth ? toIsoDateString(m.principalDateOfBirth) : ''
-      );
-      setMembershipCategoryCode(m?.membershipCategoryCode || '');
-      setMembershipCategoryDesc(m?.membershipCategoryDesc || '');
-      setEmployerPin(m?.employerPin || '');
-      setEmployerName(m?.employerName || '');
-      setDefaultWalkInAtc(m?.defaultWalkInAtc || '');
+      setDependentRelationship(nextDepRel);
+      setPrincipalMemberPin(nextPrincipalPin);
+      setPrincipalLastName(nextPrincipalLast);
+      setPrincipalFirstName(nextPrincipalFirst);
+      setPrincipalMiddleName(nextPrincipalMiddle);
+      setPrincipalSuffix(nextPrincipalSuffix);
+      setPrincipalDateOfBirth(nextPrincipalDob);
+      setMembershipCategoryCode(nextCatCode);
+      setMembershipCategoryDesc(nextCatDesc);
+      setEmployerPin(nextEmpPin);
+      setEmployerName(nextEmpName);
+      setDefaultWalkInAtc(nextWalkInAtc);
       setShowEmployerFields(
-        Boolean(m?.membershipCategoryCode || m?.membershipCategoryDesc || m?.employerPin || m?.employerName)
+        Boolean(nextCatCode || nextCatDesc || nextEmpPin || nextEmpName)
       );
-      setPinFeedback({ status: 'idle', message: '' });
+      setSavedStep1Snapshot(
+        buildStep1Snapshot({
+          pin: formattedEffectivePin,
+          memberType: nextMemberType,
+          dependentRelationship: nextDepRel,
+          principalMemberPin: nextPrincipalPin,
+          principalLastName: nextPrincipalLast,
+          principalFirstName: nextPrincipalFirst,
+          principalMiddleName: nextPrincipalMiddle,
+          principalSuffix: nextPrincipalSuffix,
+          principalDateOfBirth: nextPrincipalDob,
+          membershipCategoryCode: nextCatCode,
+          membershipCategoryDesc: nextCatDesc,
+          employerPin: nextEmpPin,
+          employerName: nextEmpName,
+          defaultWalkInAtc: nextWalkInAtc,
+        })
+      );
+      if (!preservePinFeedback) {
+        setPinFeedback({ status: 'idle', message: '' });
+        setPrincipalPinFeedback({ status: 'idle', message: '' });
+      }
     },
     []
   );
@@ -237,76 +569,207 @@ export default function PhilHealthCoverageModal({
 
   useEffect(() => {
     if (visible && patient) {
-      setEnlistmentModalVisible(false);
+      setIdentityModalOpen(false);
+      setStandingCheck(null);
+      setAssignedResult(false);
+      setDbVerifiedPinDigits(null);
+      setDbVerifiedPrincipalPinDigits(null);
+      setPrincipalPinFeedback({ status: 'idle', message: '' });
+      setDuplicatePinConflict(null);
       setHistoryOpen(false);
       void loadCoverage(patient);
     }
   }, [visible, patient, loadCoverage]);
+
+  const checkClinicPinUniqueness = useCallback(
+    async (formattedPin: string, excludePatientId?: string) => {
+      if (typeof clinicService.checkPatientDuplicates !== 'function') {
+        return null;
+      }
+      try {
+        const [dupRes] = await clinicService.checkPatientDuplicates({
+          philHealthNumber: formattedPin,
+        });
+        if (!dupRes || !Array.isArray(dupRes.matches)) {
+          return null;
+        }
+        const match = dupRes.matches.find((m) => !excludePatientId || m.patientId !== excludePatientId);
+        if (!match) {
+          return null;
+        }
+        return {
+          patientId: match.patientId,
+          fullName: match.fullName,
+          patientCode: match.patientCode,
+        };
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
+  // Detect clinic-wide PIN collisions automatically as soon as a complete valid 12-digit PIN is entered
+  const currentPinDigitsForCheck = (pin || '').replace(/\D/g, '');
+  useEffect(() => {
+    if (!visible || !patient || !hasValidPin || currentPinDigitsForCheck.length !== 12) {
+      return;
+    }
+    let cancelled = false;
+    const formatted = formatPhilHealthPin(currentPinDigitsForCheck);
+    const timer = setTimeout(async () => {
+      const conflict = await checkClinicPinUniqueness(formatted, patient.id);
+      if (cancelled) return;
+      if (conflict) {
+        const codeSuffix = conflict.patientCode ? ` (${conflict.patientCode})` : '';
+        setDuplicatePinConflict(conflict);
+        setDbVerifiedPinDigits(null);
+        setPinFeedback({
+          status: 'invalid',
+          message: `PhilHealth PIN is already assigned to another patient: ${conflict.fullName}${codeSuffix}.`,
+        });
+      } else {
+        setDuplicatePinConflict(null);
+      }
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [visible, patient, hasValidPin, currentPinDigitsForCheck, checkClinicPinUniqueness]);
 
   const handleVerifyPin = useCallback(async () => {
     const mod11 = validatePhilHealthPinMod11(pin);
     if (!mod11.isComplete) {
       setPinFeedback({
         status: 'invalid',
-        message: mod11.errorMessage || 'Enter a complete 12-digit PhilHealth PIN.',
+        message: 'Enter a complete 12-digit PhilHealth PIN.',
       });
       return;
     }
     if (!mod11.isValid) {
       setPinFeedback({
         status: 'invalid',
-        message: mod11.errorMessage || 'PhilHealth PIN failed Mod-11 check digit validation.',
+        message: mod11.errorMessage || 'PhilHealth PIN check digit is invalid.',
       });
       return;
     }
 
-    setPinFeedback({ status: 'checking', message: 'Verifying PIN...' });
+    setPinFeedback({ status: 'checking', message: 'Checking clinic records and PhilHealth registry...' });
     try {
-      const [res, err] = await clinicService.validatePhilHealthPin(mod11.formattedPin);
-      if (err) {
-        // Offline / non-YAKAP role fallback: Mod-11 passed locally
+      // 1. Check in-system uniqueness before calling PhilHealth gateway
+      const localConflict = await checkClinicPinUniqueness(mod11.formattedPin, patient?.id);
+      if (localConflict) {
+        const codeSuffix = localConflict.patientCode ? ` (${localConflict.patientCode})` : '';
+        setDuplicatePinConflict(localConflict);
+        setDbVerifiedPinDigits(null);
         setPinFeedback({
-          status: 'valid',
-          message: 'Valid 12-digit Mod-11 PIN (local verification)',
+          status: 'invalid',
+          message: `PhilHealth PIN is already assigned to another patient: ${localConflict.fullName}${codeSuffix}.`,
         });
         return;
       }
 
-      // Defensive parsing: backend /yakap/pin/{pin}/validate returns ApiResponse<bool>,
-      // while clinicService types PinValidationResult.
-      const raw = res as unknown as boolean | PinValidationResult | null;
-      const serverValid =
-        typeof raw === 'boolean'
-          ? raw
-          : typeof raw?.isValid === 'boolean'
-            ? raw.isValid
-            : mod11.isValid;
-
-      if (serverValid) {
-        setPinFeedback({
-          status: 'valid',
-          message: 'Verified 12-digit PhilHealth PIN (Mod-11 & standing checked)',
-        });
-      } else {
-        setPinFeedback({
-          status: 'invalid',
-          message:
-            (typeof raw === 'object' && raw?.failureReason) ||
-            'PhilHealth registry could not verify this PIN.',
-        });
+      if (isMissingPhilHealthConnectionUrlKnown(clinicSettings)) {
+        setDbVerifiedPinDigits(null);
+        setPinFeedback({ status: 'invalid', message: MISSING_CONNECTION_URL_MESSAGE });
+        return;
       }
+
+      const [res, err] = await clinicService.validatePhilHealthPin(mod11.formattedPin, patient?.id);
+      const outcome = interpretPinValidationResult(res, err as any, mod11.isValid, {
+        checkUniqueness: true,
+        settings: clinicSettings,
+      });
+      if (outcome.isVerified) {
+        setDuplicatePinConflict(null);
+        setDbVerifiedPinDigits(mod11.formattedPin.replace(/\D/g, ''));
+      } else {
+        setDbVerifiedPinDigits(null);
+        if (outcome.conflict) {
+          setDuplicatePinConflict(outcome.conflict);
+        }
+      }
+      setPinFeedback({ status: outcome.status, message: outcome.message });
     } catch {
+      setDbVerifiedPinDigits(null);
       setPinFeedback({
-        status: 'valid',
-        message: 'Valid 12-digit Mod-11 PIN (offline check)',
+        status: 'server_error',
+        message: 'Unable to reach PhilHealth verification server. Retry Verify PIN or defer verification to continue.',
       });
     }
-  }, [pin]);
+  }, [pin, patient?.id, checkClinicPinUniqueness, clinicSettings]);
+
+  const handleVerifyPrincipalPin = useCallback(async () => {
+    const mod11 = validatePhilHealthPinMod11(principalMemberPin);
+    if (!mod11.isComplete) {
+      setDbVerifiedPrincipalPinDigits(null);
+      setPrincipalPinFeedback({
+        status: 'invalid',
+        message: 'Enter a complete 12-digit Principal Member PIN.',
+      });
+      return;
+    }
+    if (!mod11.isValid) {
+      setDbVerifiedPrincipalPinDigits(null);
+      setPrincipalPinFeedback({
+        status: 'invalid',
+        message: mod11.errorMessage || 'Principal Member PIN check digit is invalid.',
+      });
+      return;
+    }
+
+    const patientDigits = (pin || '').replace(/\D/g, '');
+    const principalDigits = mod11.formattedPin.replace(/\D/g, '');
+    if (patientDigits && principalDigits === patientDigits) {
+      setDbVerifiedPrincipalPinDigits(null);
+      setPrincipalPinFeedback({
+        status: 'invalid',
+        message: 'Principal Member PIN cannot be the same as the Patient PhilHealth PIN.',
+      });
+      return;
+    }
+
+    if (isMissingPhilHealthConnectionUrlKnown(clinicSettings)) {
+      setDbVerifiedPrincipalPinDigits(null);
+      setPrincipalPinFeedback({ status: 'invalid', message: MISSING_CONNECTION_URL_MESSAGE });
+      return;
+    }
+
+    setPrincipalPinFeedback({
+      status: 'checking',
+      message: 'Checking Principal Member PIN format and PhilHealth records...',
+    });
+    try {
+      // Principal Member PIN may match an existing parent/spouse patient in the clinic; skip patient-uniqueness check
+      const [res, err] = await clinicService.validatePhilHealthPin(mod11.formattedPin, undefined, {
+        checkUniqueness: false,
+      });
+      const outcome = interpretPinValidationResult(res, err as any, mod11.isValid, {
+        checkUniqueness: false,
+        settings: clinicSettings,
+      });
+      if (outcome.isVerified) {
+        setDbVerifiedPrincipalPinDigits(principalDigits);
+      } else {
+        setDbVerifiedPrincipalPinDigits(null);
+      }
+      setPrincipalPinFeedback({ status: outcome.status, message: outcome.message });
+    } catch {
+      setDbVerifiedPrincipalPinDigits(null);
+      setPrincipalPinFeedback({
+        status: 'server_error',
+        message: 'Unable to reach PhilHealth verification server. Retry Verify PIN or defer verification to continue.',
+      });
+    }
+  }, [principalMemberPin, pin, clinicSettings]);
 
   const handleApplyGuardianSponsor = useCallback(() => {
     if (!guardianSponsor) return;
     if (guardianSponsor.formattedPin || guardianSponsor.rawPin) {
       setPrincipalMemberPin(guardianSponsor.formattedPin || formatPhilHealthPin(guardianSponsor.rawPin));
+      setPrincipalPinFeedback({ status: 'idle', message: '' });
+      setDbVerifiedPrincipalPinDigits(null);
     }
     setDependentRelationship(guardianSponsor.relationship);
     setPrincipalFirstName(guardianSponsor.firstName);
@@ -319,22 +782,70 @@ export default function PhilHealthCoverageModal({
     notify.success(`Copied ${guardianSponsor.fullName || 'legal guardian'} into Principal Sponsor.`);
   }, [guardianSponsor]);
 
-  const handleSaveMembership = useCallback(async () => {
-    if (!patient) return;
-
-    const trimmedPin = pin.trim();
-    if (trimmedPin) {
-      const mod11 = validatePhilHealthPinMod11(trimmedPin);
-      if (!mod11.isValid) {
-        notify.error(mod11.errorMessage || 'PhilHealth PIN is invalid.');
+  const handleSaveMembership = useCallback(
+    async (requirePinEntry = false) => {
+      if (
+        !patient ||
+        pinFeedback.status === 'checking' ||
+        (memberType === 'DD' && principalPinFeedback.status === 'checking')
+      ) {
         return;
       }
-    }
+
+      const trimmedPin = pin.trim();
+      const currentDigits = trimmedPin.replace(/\D/g, '');
+
+      if (requirePinEntry && !trimmedPin) {
+        setPinFeedback({
+          status: 'invalid',
+          message: 'Enter a complete 12-digit PhilHealth PIN.',
+        });
+        return;
+      }
+
+      if (trimmedPin) {
+        const mod11 = validatePhilHealthPinMod11(trimmedPin);
+        if (!mod11.isComplete) {
+          setPinFeedback({
+            status: 'invalid',
+            message: 'Enter a complete 12-digit PhilHealth PIN.',
+          });
+          return;
+        }
+        if (!mod11.isValid) {
+          setPinFeedback({
+            status: 'invalid',
+            message: mod11.errorMessage || 'PhilHealth PIN is invalid.',
+          });
+          return;
+        }
+        const conflict =
+          duplicatePinConflict ?? (await checkClinicPinUniqueness(mod11.formattedPin, patient.id));
+        if (conflict) {
+          const codeSuffix = conflict.patientCode ? ` (${conflict.patientCode})` : '';
+          setDuplicatePinConflict(conflict);
+          setPinFeedback({
+            status: 'invalid',
+            message: `PhilHealth PIN is already assigned to another patient: ${conflict.fullName}${codeSuffix}.`,
+          });
+          notify.error(`PhilHealth PIN is already assigned to ${conflict.fullName}${codeSuffix}.`);
+          return;
+        }
+      }
 
     if (memberType === 'DD') {
       const sponsorPinMod11 = validatePhilHealthPinMod11(principalMemberPin);
       if (!principalMemberPin.trim() || !sponsorPinMod11.isValid) {
         notify.error(sponsorPinMod11.errorMessage || 'Valid 12-digit Principal Member PIN is required for dependents.');
+        return;
+      }
+      const principalDigits = principalMemberPin.replace(/\D/g, '');
+      if (currentDigits && principalDigits && currentDigits === principalDigits) {
+        notify.error('Principal Member PIN cannot be the same as the Patient PhilHealth PIN.');
+        return;
+      }
+      if (principalPinFeedback.status === 'invalid') {
+        notify.error(principalPinFeedback.message || 'Principal Member PIN failed PhilHealth verification.');
         return;
       }
       if (!principalLastName.trim() || !principalFirstName.trim()) {
@@ -376,11 +887,18 @@ export default function PhilHealthCoverageModal({
         return;
       }
 
-      notify.success('PhilHealth coverage & membership saved.');
+      const principalUnverified =
+        memberType === 'DD' &&
+        dbVerifiedPrincipalPinDigits !== (principalMemberPin || '').replace(/\D/g, '');
+      if ((trimmedPin && dbVerifiedPinDigits !== currentDigits) || principalUnverified) {
+        notify.info('PhilHealth number saved locally (verification with PhilHealth pending).');
+      } else {
+        notify.success('PhilHealth coverage & membership saved.');
+      }
       const [fresh] = await clinicService.getPatientPhilHealthCoverage(patient.id);
       if (fresh) {
         setCoverage(fresh);
-        hydrateFromCoverage(fresh, patient);
+        hydrateFromCoverage(fresh, patient, true);
         onSaved?.(fresh);
       }
     } catch (e: any) {
@@ -388,25 +906,34 @@ export default function PhilHealthCoverageModal({
     } finally {
       setSavingMembership(false);
     }
-  }, [
-    patient,
-    pin,
-    memberType,
-    principalMemberPin,
-    principalLastName,
-    principalFirstName,
-    principalMiddleName,
-    principalSuffix,
-    principalDateOfBirth,
-    dependentRelationship,
-    membershipCategoryCode,
-    membershipCategoryDesc,
-    employerPin,
-    employerName,
-    defaultWalkInAtc,
-    hydrateFromCoverage,
-    onSaved,
-  ]);
+    },
+    [
+      patient,
+      pin,
+      pinFeedback.status,
+      principalPinFeedback.status,
+      principalPinFeedback.message,
+      duplicatePinConflict,
+      checkClinicPinUniqueness,
+      dbVerifiedPinDigits,
+      dbVerifiedPrincipalPinDigits,
+      memberType,
+      principalMemberPin,
+      principalLastName,
+      principalFirstName,
+      principalMiddleName,
+      principalSuffix,
+      principalDateOfBirth,
+      dependentRelationship,
+      membershipCategoryCode,
+      membershipCategoryDesc,
+      employerPin,
+      employerName,
+      defaultWalkInAtc,
+      hydrateFromCoverage,
+      onSaved,
+    ]
+  );
 
   const sortedEnlistments = useMemo(() => {
     const list = coverage?.enlistments ?? [];
@@ -424,84 +951,154 @@ export default function PhilHealthCoverageModal({
     );
   }, [sortedEnlistments]);
 
-  const handleOpenEnlistmentModal = useCallback(() => {
-    const currentYear = new Date().getFullYear();
-    const suggestedYear = activeEnlistment && activeEnlistment.effectiveYear >= currentYear
-      ? String(activeEnlistment.effectiveYear + 1)
-      : String(currentYear);
-    setRenewalYear(suggestedYear);
-    setRenewalEnlistDate(toIsoDateString());
-    setRenewalValidUntil(`${suggestedYear}-12-31`);
-    setRenewalSource('ClinicEnlistment');
-    setRenewalCaseNo('');
-    setRenewalTransNo('');
-    setRenewalYesRefNo('');
-    setRenewalNotes('');
-    setEnlistmentModalVisible(true);
-  }, [activeEnlistment]);
+  const normalizedCurrentPinDigits = (pin || '').replace(/\D/g, '');
+  const savedPinRaw = coverage?.membership?.philHealthPin || coverage?.philHealthNumber || '';
+  const normalizedSavedPinDigits = savedPinRaw.replace(/\D/g, '');
+  const hasSavedValidPin = validatePhilHealthPinMod11(normalizedSavedPinDigits).isValid;
+  const hasUnsavedPinEdit = normalizedCurrentPinDigits !== normalizedSavedPinDigits;
+  const isSavedDependentSponsorComplete = areDependentSponsorFieldsValid({
+    memberType: coverage?.membership?.memberType,
+    patientPin: savedPinRaw,
+    dependentRelationship: coverage?.membership?.dependentRelationship,
+    principalMemberPin: coverage?.membership?.principalMemberPin,
+    principalLastName: coverage?.membership?.principalLastName,
+    principalFirstName: coverage?.membership?.principalFirstName,
+    principalDateOfBirth: coverage?.membership?.principalDateOfBirth,
+  });
+  const step1Done = hasSavedValidPin && !hasUnsavedPinEdit && isSavedDependentSponsorComplete && !duplicatePinConflict;
 
-  const handleConfirmEnlistment = useCallback(async () => {
+  const refreshCoverage = useCallback(async () => {
     if (!patient) return;
-    const yearNum = parseInt(renewalYear.trim(), 10);
-    if (!/^\d{4}$/.test(renewalYear.trim()) || isNaN(yearNum)) {
-      notify.error('Enter a valid 4-digit benefit year.');
-      return;
+    const [fresh] = await clinicService.getPatientPhilHealthCoverage(patient.id);
+    if (fresh) {
+      setCoverage(fresh);
+      onSaved?.(fresh);
     }
-    const enlistDateCheck = validateDateString(renewalEnlistDate, { boundaryMode: 'pastOrToday' });
-    if (!enlistDateCheck.isValid) {
-      notify.error(enlistDateCheck.errorMessage || 'Enter a valid enlistment date.');
-      return;
-    }
-    if (renewalValidUntil.trim()) {
-      const validUntilCheck = validateDateString(renewalValidUntil, { boundaryMode: 'any' });
-      if (!validUntilCheck.isValid) {
-        notify.error(validUntilCheck.errorMessage || 'Enter a valid expiration date.');
-        return;
-      }
-    }
+  }, [patient, onSaved]);
 
-    setSavingEnlistment(true);
+  const handleCheckStanding = useCallback(async () => {
+    if (!patient) return;
+    if (!step1Done) {
+      notify.error('Save a valid 12-digit PhilHealth number in Step 1 first.');
+      return;
+    }
+    if (isMissingPhilHealthConnectionUrlKnown(clinicSettings)) {
+      notify.error(MISSING_CONNECTION_URL_MESSAGE);
+      return;
+    }
+    setCheckingStanding(true);
     try {
-      const [, err] = await clinicService.createPatientYakapEnlistment(patient.id, {
-        effectiveYear: yearNum,
-        enlistmentDate: renewalEnlistDate.trim(),
-        validUntil: renewalValidUntil.trim() || `${yearNum}-12-31`,
-        source: renewalSource,
-        caseNo: renewalCaseNo.trim() || null,
-        enlistmentTransNo: renewalTransNo.trim() || null,
-        yesReferenceNo: renewalYesRefNo.trim() || null,
-        notes: renewalNotes.trim() || null,
+      const [res, err] = await clinicService.validatePatientYakapStanding(patient.id, {
+        effectiveYear: new Date().getFullYear(),
+        consent: true,
       });
-
-      if (err) {
-        notify.error(err.message || 'Could not record PhilHealth YAKAP enlistment.');
+      if (err || !res) {
+        notify.error(
+          formatPhilHealthServerError(err, clinicSettings, 'Could not check PhilHealth eligibility right now.')
+        );
         return;
       }
-
-      setEnlistmentModalVisible(false);
-      notify.success(`Recorded PhilHealth YAKAP enlistment for ${yearNum}.`);
-      const [fresh] = await clinicService.getPatientPhilHealthCoverage(patient.id);
-      if (fresh) {
-        setCoverage(fresh);
-        onSaved?.(fresh);
-      }
-    } catch (e: any) {
-      notify.error(e?.message || 'Failed to save PhilHealth YAKAP enlistment.');
+      setStandingCheck(res);
+      setDbVerifiedPinDigits(normalizedSavedPinDigits);
+      notify.success(res.summaryMessage || 'PhilHealth standing checked.');
+      await refreshCoverage();
     } finally {
-      setSavingEnlistment(false);
+      setCheckingStanding(false);
     }
-  }, [
-    patient,
-    renewalYear,
-    renewalEnlistDate,
-    renewalValidUntil,
-    renewalSource,
-    renewalCaseNo,
-    renewalTransNo,
-    renewalYesRefNo,
-    renewalNotes,
-    onSaved,
-  ]);
+  }, [patient, step1Done, clinicSettings, normalizedSavedPinDigits, refreshCoverage]);
+
+  const handleAssignToClinic = useCallback(async () => {
+    if (!patient) return;
+    if (isMissingPhilHealthConnectionUrlKnown(clinicSettings)) {
+      notify.error(MISSING_CONNECTION_URL_MESSAGE);
+      return;
+    }
+    setSubmittingSelection(true);
+    try {
+      const [res, err] = await clinicService.submitPatientYakapSelection(patient.id, { consent: true });
+      if (err || !res) {
+        notify.error(
+          formatPhilHealthServerError(err, clinicSettings, 'Could not assign patient to this clinic.')
+        );
+        return;
+      }
+      setAssignedResult(true);
+      setStandingCheck((prev) =>
+        prev
+          ? {
+              ...prev,
+              needsClinicSelection: false,
+              selectionStatus: res.queuedForSync ? 'DRAFT' : 'ASSIGNED',
+              selectionTransactionNo: res.selectionTransactionNo ?? prev.selectionTransactionNo,
+              canStartCheckup: !prev.needsIdentityCheck,
+            }
+          : prev
+      );
+      if (res.queuedForSync) {
+        notify.info(res.message || 'Saved locally as a walk-in draft and queued for PhilHealth sync.');
+      } else {
+        notify.success(res.message || 'Patient assigned to this clinic under PhilHealth YAKAP.');
+      }
+      await refreshCoverage();
+    } finally {
+      setSubmittingSelection(false);
+    }
+  }, [patient, clinicSettings, refreshCoverage]);
+
+  const handlePrintSlip = useCallback(async () => {
+    if (!patient) return;
+    if (isMissingPhilHealthConnectionUrlKnown(clinicSettings)) {
+      notify.error(MISSING_CONNECTION_URL_MESSAGE);
+      return;
+    }
+    setPrintingSlip(true);
+    try {
+      const year = coverage?.currentYearFpeStatus?.effectiveYear ?? new Date().getFullYear();
+      const [slip, err] = await clinicService.getPatientAvailmentSlip(patient.id, year);
+      if (err || !slip) {
+        notify.error(
+          formatPhilHealthServerError(err, clinicSettings, 'Confirmation slip is not available yet.')
+        );
+        return;
+      }
+      const opened = await openAvailmentSlipPdf(slip);
+      if (!opened) {
+        notify.error('Could not open the PDF confirmation slip.');
+      }
+    } finally {
+      setPrintingSlip(false);
+    }
+  }, [patient, coverage?.currentYearFpeStatus?.effectiveYear]);
+
+  const handlePollSubmission = useCallback(async (submissionId: string) => {
+    setRefreshingSubmission(true);
+    try {
+      const [res, err] = await clinicService.pollYakapSubmissionStatus(submissionId);
+      if (err || !res) {
+        notify.error(err?.message || 'Could not check submission status.');
+        return;
+      }
+      notify.info(`PhilHealth status: ${res.processingStatus}`);
+      await refreshCoverage();
+    } finally {
+      setRefreshingSubmission(false);
+    }
+  }, [refreshCoverage]);
+
+  const handleRetrySubmission = useCallback(async (submissionId: string) => {
+    setRefreshingSubmission(true);
+    try {
+      const [res, err] = await clinicService.retryYakapSubmission(submissionId);
+      if (err || !res) {
+        notify.error(err?.message || 'Could not retry submission.');
+        return;
+      }
+      notify.success(`Resubmitted to PhilHealth (${res.processingStatus}).`);
+      await refreshCoverage();
+    } finally {
+      setRefreshingSubmission(false);
+    }
+  }, [refreshCoverage]);
 
   if (!visible || !patient) {
     return null;
@@ -509,12 +1106,171 @@ export default function PhilHealthCoverageModal({
 
   const fpeStatus = coverage?.currentYearFpeStatus;
   const enlistmentBadge = resolveCoverageEnlistmentBadge(activeEnlistment?.status);
+  const latestIdentity = coverage?.latestIdentityVerification;
+  const latestSubmission = coverage?.latestFpeSubmission;
+
+  const isFpeCompleted = Boolean(fpeStatus?.isCompleted);
+  const step2Unlocked = step1Done;
+  const step2Done = isFpeCompleted || (step2Unlocked && standingCheck !== null);
+  const step3Unlocked = step2Done;
+  const isIdentityVerifiedToday = Boolean(
+    latestIdentity?.isVerifiedForToday ||
+      (standingCheck && standingCheck.pcuStatus === 'VERIFIED' && !standingCheck.needsIdentityCheck)
+  );
+  const step3Done = isFpeCompleted || (step3Unlocked && isIdentityVerifiedToday);
+  const step4Unlocked = step3Done;
+  const hasClinicAssignment = Boolean(
+    assignedResult || (activeEnlistment && standingCheck?.needsClinicSelection !== true)
+  );
+  const step4Done = isFpeCompleted || (step4Unlocked && hasClinicAssignment);
+  const step5Unlocked = step4Done;
+  const step5Done = isFpeCompleted;
+  const savedIsDependent = coverage?.membership?.memberType === 'DD';
+  const normalizedPrincipalPinDigits = (principalMemberPin || '').replace(/\D/g, '');
+  const savedPrincipalPinDigits = savedIsDependent
+    ? (coverage?.membership?.principalMemberPin || '').replace(/\D/g, '')
+    : '';
+  const hasSavedValidPrincipalPin =
+    Boolean(savedPrincipalPinDigits) && validatePhilHealthPinMod11(savedPrincipalPinDigits).isValid;
+  const hasUnsavedPrincipalPinEdit = savedIsDependent
+    ? normalizedPrincipalPinDigits !== savedPrincipalPinDigits
+    : Boolean(normalizedPrincipalPinDigits);
+
+  const isPrincipalPinSameAsPatient =
+    memberType === 'DD' &&
+    Boolean(normalizedCurrentPinDigits) &&
+    Boolean(normalizedPrincipalPinDigits) &&
+    normalizedCurrentPinDigits === normalizedPrincipalPinDigits;
+  const principalPinSameAsPatientError = isPrincipalPinSameAsPatient
+    ? 'Principal Member PIN cannot be the same as the Patient PhilHealth PIN.'
+    : undefined;
+  const hasValidPrincipalPin =
+    validatePhilHealthPinMod11(principalMemberPin.trim()).isValid && !isPrincipalPinSameAsPatient;
+
+  const isPatientPinDbVerified = Boolean(
+    step1Done &&
+      (dbVerifiedPinDigits === normalizedSavedPinDigits ||
+        standingCheck !== null ||
+        isFpeCompleted ||
+        Boolean(activeEnlistment?.selectionControlNumber) ||
+        activeEnlistment?.source === 'PhilHealthMasterlist')
+  );
+  const isSavedPrincipalPinDbVerified = Boolean(
+    savedIsDependent &&
+      hasSavedValidPrincipalPin &&
+      (dbVerifiedPrincipalPinDigits === savedPrincipalPinDigits ||
+        standingCheck !== null ||
+        isFpeCompleted ||
+        Boolean(activeEnlistment?.selectionControlNumber) ||
+        activeEnlistment?.source === 'PhilHealthMasterlist')
+  );
+  const isPinDbVerified = isPatientPinDbVerified && (!savedIsDependent || isSavedPrincipalPinDbVerified);
+
+  const isDependentSponsorComplete = areDependentSponsorFieldsValid({
+    memberType,
+    patientPin: pin,
+    dependentRelationship,
+    principalMemberPin,
+    principalLastName,
+    principalFirstName,
+    principalDateOfBirth,
+  });
+  const principalDobTrimmed = principalDateOfBirth.trim();
+  const principalDobCheck = principalDobTrimmed
+    ? validateDateString(principalDobTrimmed, { boundaryMode: 'pastOrToday' })
+    : null;
+  const principalDobError =
+    principalDobCheck && !principalDobCheck.isValid
+      ? principalDobCheck.errorMessage || 'Enter a valid date not in the future.'
+      : undefined;
+
+  const isCurrentPinDbVerified =
+    pinFeedback.status === 'valid' ||
+    (Boolean(normalizedCurrentPinDigits) &&
+      (dbVerifiedPinDigits === normalizedCurrentPinDigits || (!hasUnsavedPinEdit && isPatientPinDbVerified)));
+
+  const isCurrentPrincipalPinDbVerified =
+    principalPinFeedback.status === 'valid' ||
+    (Boolean(normalizedPrincipalPinDigits) &&
+      !isPrincipalPinSameAsPatient &&
+      (dbVerifiedPrincipalPinDigits === normalizedPrincipalPinDigits ||
+        (savedIsDependent && !hasUnsavedPrincipalPinEdit && isSavedPrincipalPinDbVerified)));
+
+  const currentStep1Snapshot = buildStep1Snapshot({
+    pin,
+    memberType,
+    dependentRelationship,
+    principalMemberPin,
+    principalLastName,
+    principalFirstName,
+    principalMiddleName,
+    principalSuffix,
+    principalDateOfBirth,
+    membershipCategoryCode,
+    membershipCategoryDesc,
+    employerPin,
+    employerName,
+    defaultWalkInAtc,
+  });
+  const hasStep1Changes = Boolean(savedStep1Snapshot) && currentStep1Snapshot !== savedStep1Snapshot;
+  const isClearingSavedPin = Boolean(normalizedSavedPinDigits) && !pin.trim() && hasStep1Changes;
+  const principalPinReady =
+    memberType !== 'DD' || (hasValidPrincipalPin && isCurrentPrincipalPinDbVerified);
+  const principalPinDeferred =
+    memberType === 'DD' && hasValidPrincipalPin && principalPinFeedback.status === 'server_error';
+  const principalBlocking =
+    memberType === 'DD' &&
+    (principalPinFeedback.status === 'invalid' ||
+      principalPinFeedback.status === 'checking' ||
+      isPrincipalPinSameAsPatient);
+
+  const patientPinSatisfiedForOtherChanges =
+    !hasUnsavedPinEdit &&
+    hasSavedValidPin &&
+    pinFeedback.status !== 'invalid' &&
+    pinFeedback.status !== 'checking';
+
+  const step1CanDeferOnServerError =
+    hasValidPin &&
+    !principalBlocking &&
+    (pinFeedback.status === 'server_error' || principalPinDeferred) &&
+    (isCurrentPinDbVerified || pinFeedback.status === 'server_error' || patientPinSatisfiedForOtherChanges) &&
+    (principalPinReady || principalPinDeferred) &&
+    (!step1Done || hasStep1Changes);
+  const step1ReadyToSaveVerified =
+    hasValidPin &&
+    (isCurrentPinDbVerified || patientPinSatisfiedForOtherChanges) &&
+    principalPinReady &&
+    (!step1Done || hasStep1Changes);
+  const step1MetadataEditOnly =
+    step1Done &&
+    !hasUnsavedPinEdit &&
+    (!savedIsDependent || !hasUnsavedPrincipalPinEdit) &&
+    memberType === (savedIsDependent ? 'DD' : 'MM') &&
+    hasStep1Changes &&
+    !isPinDbVerified &&
+    pinFeedback.status !== 'invalid' &&
+    pinFeedback.status !== 'checking' &&
+    !principalBlocking;
+  const showStep1ActionRow =
+    !duplicatePinConflict &&
+    pinFeedback.status !== 'invalid' &&
+    !principalBlocking &&
+    (isClearingSavedPin || step1CanDeferOnServerError || step1ReadyToSaveVerified || step1MetadataEditOnly);
+
+  const completedStepsCount = [step1Done, step2Done, step3Done, step4Done, step5Done].filter(Boolean).length;
+  const currentStepNumber = !step1Done ? 1 : !step2Done ? 2 : !step3Done ? 3 : !step4Done ? 4 : 5;
+  const step1State: VerticalStepState = step1Done ? 'completed' : 'active';
+  const step2State: VerticalStepState = step2Done ? 'completed' : step2Unlocked ? 'active' : 'locked';
+  const step3State: VerticalStepState = step3Done ? 'completed' : step3Unlocked ? 'active' : 'locked';
+  const step4State: VerticalStepState = step4Done ? 'completed' : step4Unlocked ? 'active' : 'locked';
+  const step5State: VerticalStepState = step5Done ? 'completed' : step5Unlocked ? 'active' : 'locked';
 
   return (
     <Modal
       visible={visible}
       onClose={onClose}
-      title="PhilHealth Info & YAKAP Enlistment"
+      title="PhilHealth Coverage & Clinic Assignment"
       subtitle={`${patient.fullName} · ${patient.sex} · ${patient.age} yrs · Administrative Coverage (No Visit Created)`}
       maxWidth={680}
       maxHeight="95%"
@@ -525,15 +1281,8 @@ export default function PhilHealthCoverageModal({
             title="Close"
             variant="ghost"
             onPress={onClose}
-            disabled={savingMembership || savingEnlistment}
-          />
-          <Button
-            title="Save Coverage"
-            icon="save"
-            onPress={handleSaveMembership}
-            loading={savingMembership}
-            disabled={loading || !!loadError || savingMembership}
-            testID="philhealth-save-coverage-btn"
+            disabled={savingMembership || submittingSelection || checkingStanding}
+            testID="philhealth-close-coverage-btn"
           />
         </View>
       }
@@ -548,110 +1297,104 @@ export default function PhilHealthCoverageModal({
         />
       ) : (
         <View style={styles.sectionsContainer}>
-          {/* Annual FPE Status Banner */}
-          <View
-            style={[
-              styles.fpeBanner,
-              fpeStatus?.isCompleted ? styles.fpeBannerCompleted : styles.fpeBannerPending,
-            ]}
-            testID="yakap-fpe-status-banner"
-          >
-            <View style={styles.fpeBannerHeader}>
-              <View style={styles.fpeBannerTitleRow}>
-                <Icon
-                  name={fpeStatus?.isCompleted ? 'checkCircle' : 'yakap'}
-                  size={theme.sizes.iconMd}
-                  color={fpeStatus?.isCompleted ? theme.colors.successText : theme.colors.infoText}
-                />
-                <View style={styles.fpeBannerText}>
-                  <ThemedText variant="bodyBold" color={theme.colors.text}>
-                    {fpeStatus?.effectiveYear ?? new Date().getFullYear()} Annual Health Screening (YAKAP FPE)
-                  </ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    {fpeStatus?.isCompleted
-                      ? `Completed on ${fpeStatus.profilingDate || 'Recorded'} · Trans No: ${fpeStatus.profilingTransNo || 'Assigned'}`
-                      : 'Pending for current benefit year. Launch Health Screening in YAKAP FPE mode when patient is ready.'}
-                  </ThemedText>
-                </View>
-              </View>
-              <Badge
-                label={fpeStatus?.isCompleted ? 'FPE Completed' : 'FPE Pending'}
-                variant={fpeStatus?.isCompleted ? 'success' : 'info'}
-                size="sm"
-                icon={fpeStatus?.isCompleted ? 'checkCircle' : 'clock'}
-              />
+          {/* Step Progress Header */}
+          <View style={styles.stepProgressBar} testID="yakap-step-progress-bar">
+            <View style={styles.stepProgressInfo}>
+              <ThemedText variant="smallBold" color={theme.colors.text}>
+                {isFpeCompleted
+                  ? `${fpeStatus?.effectiveYear ?? new Date().getFullYear()} PhilHealth Onboarding Complete`
+                  : `PhilHealth Onboarding · Step ${currentStepNumber} of 5`}
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                {isFpeCompleted
+                  ? 'All annual checkup requirements are complete.'
+                  : 'Complete each step in order below to unlock the PhilHealth Annual Checkup.'}
+              </ThemedText>
             </View>
-
-            {!fpeStatus?.isCompleted && onStartYakapScreening ? (
-              <View style={styles.fpeActionRow}>
-                <Button
-                  title="Start YAKAP Health Screening"
-                  icon="heartPulse"
-                  variant="primary"
-                  size="sm"
-                  onPress={() => {
-                    onClose();
-                    onStartYakapScreening(patient);
-                  }}
-                  testID="start-yakap-screening-btn"
-                />
-              </View>
-            ) : null}
+            <Badge
+              label={`${completedStepsCount} / 5 Done`}
+              variant={completedStepsCount === 5 ? 'success' : 'primary'}
+              size="sm"
+            />
           </View>
 
-          {/* Section 1: Membership & Identity */}
-          <View style={styles.cardSection}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={styles.sectionTitleGroup}>
-                <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
-                <ThemedText variant="bodyBold" color={theme.colors.text}>
-                  PhilHealth Membership & Identity
-                </ThemedText>
-              </View>
-              <Badge
-                label={memberType === 'MM' ? 'Member (MM)' : 'Dependent (DD)'}
-                variant={memberType === 'MM' ? 'primary' : 'info'}
-                size="sm"
+          <View style={styles.verticalStepsList} testID="yakap-vertical-stepper">
+            {/* Step 1: PhilHealth Number & Membership */}
+            <VerticalStepRow
+              stepNumber={1}
+              title="PhilHealth Number & Membership"
+              subtitle="Enter a valid 12-digit PhilHealth PIN, verify with PhilHealth, pick Member or Dependent, and save."
+              statusLabel={
+                step1Done
+                  ? isPinDbVerified
+                    ? 'Verified with PhilHealth'
+                    : 'Saved · Verification Pending'
+                  : 'Required'
+              }
+              statusVariant={
+                step1Done ? (isPinDbVerified ? 'success' : 'warning') : 'primary'
+              }
+              state={step1State}
+              testID="yakap-step-1-card"
+            >
+              {/* PIN Input + Inline Verify */}
+              <PhilHealthPinInput
+                value={pin}
+                onChangeText={(formatted) => {
+                  setPin(formatted);
+                  setPinFeedback({ status: 'idle', message: '' });
+                  setDuplicatePinConflict(null);
+                  setDbVerifiedPinDigits(null);
+                  setStandingCheck(null);
+                  setAssignedResult(false);
+                }}
+                label="Patient PhilHealth PIN"
+                helperText="12-digit PhilHealth Identification Number (XX-XXXXXXXXX-X)"
+                error={pinFeedback.status === 'invalid' ? pinFeedback.message : undefined}
+                requireVerification
+                verificationStatus={
+                  pinFeedback.status === 'checking'
+                    ? 'checking'
+                    : pinFeedback.status === 'valid'
+                      ? 'verified'
+                      : pinFeedback.status === 'invalid'
+                        ? 'invalid'
+                        : pinFeedback.status === 'server_error'
+                          ? 'server_error'
+                          : !hasUnsavedPinEdit && isPinDbVerified
+                            ? 'verified'
+                            : 'idle'
+                }
+                verificationMessage={
+                  pinFeedback.status === 'valid' || pinFeedback.status === 'server_error'
+                    ? pinFeedback.message
+                    : !hasUnsavedPinEdit && isPinDbVerified && pinFeedback.status === 'idle'
+                      ? 'Verified with PhilHealth records.'
+                      : undefined
+                }
+                rightAccessory={
+                  <Button
+                    title={pinFeedback.status === 'checking' ? 'Verifying...' : 'Verify PIN'}
+                    variant="outline"
+                    size="md"
+                    icon="shieldCheck"
+                    loading={pinFeedback.status === 'checking'}
+                    disabled={pinFeedback.status === 'checking' || savingMembership}
+                    onPress={handleVerifyPin}
+                    testID="verify-pin-btn"
+                  />
+                }
+                testID="coverage-patient-pin-input"
               />
-            </View>
 
-            {/* PIN Input + Inline Verify */}
-            <View style={[styles.pinRow, isCompact && styles.stackCol]}>
-              <View style={styles.pinInputCol}>
-                <PhilHealthPinInput
-                  value={pin}
-                  onChangeText={(formatted) => {
-                    setPin(formatted);
-                    setPinFeedback({ status: 'idle', message: '' });
-                  }}
-                  label="Patient PhilHealth PIN"
-                  helperText="12-digit PhilHealth Identification Number (XX-XXXXXXXXX-X)"
-                  testID="coverage-patient-pin-input"
-                />
-              </View>
-              <View style={styles.verifyBtnWrap}>
-                <Button
-                  title={pinFeedback.status === 'checking' ? 'Verifying...' : 'Verify PIN'}
-                  variant="outline"
-                  size="sm"
-                  icon="shieldCheck"
-                  loading={pinFeedback.status === 'checking'}
-                  onPress={handleVerifyPin}
-                  testID="verify-pin-btn"
-                />
-              </View>
-            </View>
-
-            {pinFeedback.status !== 'idle' && pinFeedback.status !== 'checking' ? (
-              <View style={styles.pinFeedbackRow}>
-                <Badge
-                  label={pinFeedback.message}
-                  variant={pinFeedback.status === 'valid' ? 'success' : 'emergency'}
-                  size="sm"
-                  icon={pinFeedback.status === 'valid' ? 'checkCircle' : 'alertCircle'}
-                />
-              </View>
-            ) : null}
+              {step1Done && !isPinDbVerified ? (
+                <View style={styles.unverifiedFlagBox} testID="pin-db-unverified-flag">
+                  <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+                  <ThemedText variant="caption" color={theme.colors.warningText} style={styles.flexOne}>
+                    PhilHealth number saved locally, but not yet verified with PhilHealth. Click Verify PIN or check eligibility in Step 2.
+                  </ThemedText>
+                </View>
+              ) : null}
 
             {/* MM / DD Segmented Control */}
             <View style={styles.fieldGroup}>
@@ -734,8 +1477,56 @@ export default function PhilHealthCoverageModal({
 
                 <PhilHealthPinInput
                   value={principalMemberPin}
-                  onChangeText={setPrincipalMemberPin}
+                  onChangeText={(formatted) => {
+                    setPrincipalMemberPin(formatted);
+                    setPrincipalPinFeedback({ status: 'idle', message: '' });
+                    setDbVerifiedPrincipalPinDigits(null);
+                  }}
                   label="Principal Member PIN"
+                  helperText="12-digit PhilHealth PIN of the Principal Member / Sponsor (XX-XXXXXXXXX-X)"
+                  error={
+                    principalPinSameAsPatientError ||
+                    (principalPinFeedback.status === 'invalid' ? principalPinFeedback.message : undefined)
+                  }
+                  requireVerification
+                  verificationStatus={
+                    isPrincipalPinSameAsPatient || principalPinFeedback.status === 'invalid'
+                      ? 'invalid'
+                      : principalPinFeedback.status === 'checking'
+                        ? 'checking'
+                        : principalPinFeedback.status === 'valid'
+                          ? 'verified'
+                          : principalPinFeedback.status === 'server_error'
+                            ? 'server_error'
+                            : !hasUnsavedPrincipalPinEdit && isSavedPrincipalPinDbVerified
+                              ? 'verified'
+                              : 'idle'
+                  }
+                  verificationMessage={
+                    principalPinFeedback.status === 'valid' || principalPinFeedback.status === 'server_error'
+                      ? principalPinFeedback.message
+                      : !hasUnsavedPrincipalPinEdit &&
+                          isSavedPrincipalPinDbVerified &&
+                          principalPinFeedback.status === 'idle'
+                        ? 'Verified with PhilHealth records.'
+                        : undefined
+                  }
+                  rightAccessory={
+                    <Button
+                      title={principalPinFeedback.status === 'checking' ? 'Verifying...' : 'Verify PIN'}
+                      variant="outline"
+                      size="md"
+                      icon="shieldCheck"
+                      loading={principalPinFeedback.status === 'checking'}
+                      disabled={
+                        principalPinFeedback.status === 'checking' ||
+                        savingMembership ||
+                        isPrincipalPinSameAsPatient
+                      }
+                      onPress={handleVerifyPrincipalPin}
+                      testID="verify-principal-pin-btn"
+                    />
+                  }
                   required
                   testID="coverage-principal-pin-input"
                 />
@@ -748,6 +1539,7 @@ export default function PhilHealthCoverageModal({
                     onChangeText={setPrincipalLastName}
                     placeholder="Last name"
                     required
+                    testID="coverage-principal-last-name-input"
                   />
                   <Input
                     containerStyle={styles.fieldCol}
@@ -756,6 +1548,7 @@ export default function PhilHealthCoverageModal({
                     onChangeText={setPrincipalFirstName}
                     placeholder="First name"
                     required
+                    testID="coverage-principal-first-name-input"
                   />
                 </View>
 
@@ -782,7 +1575,9 @@ export default function PhilHealthCoverageModal({
                   onChangeText={setPrincipalDateOfBirth}
                   boundaryMode="pastOrToday"
                   placeholder="YYYY-MM-DD"
+                  error={principalDobError}
                   required
+                  testID="coverage-principal-dob-input"
                 />
               </View>
             ) : null}
@@ -833,261 +1628,415 @@ export default function PhilHealthCoverageModal({
                   />
                 </View>
                 <Input
-                  label="Default Walk-In ATC"
+                  label="Default PhilHealth Visit Code"
                   value={defaultWalkInAtc}
                   onChangeText={setDefaultWalkInAtc}
-                  placeholder="Optional standing Authorization Transaction Code"
+                  placeholder="Optional visit code issued by PhilHealth"
                 />
               </View>
             ) : null}
-          </View>
 
-          {/* Section 2: PhilHealth YAKAP Annual Enlistment */}
-          <View style={styles.cardSection} testID="yakap-enlistment-card">
-            <View style={styles.sectionHeaderRow}>
-              <View style={styles.sectionTitleGroup}>
-                <Icon name="calendar" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
-                <ThemedText variant="bodyBold" color={theme.colors.text}>
-                  PhilHealth YAKAP Annual Enlistment
-                </ThemedText>
+              {showStep1ActionRow ? (
+                <View style={styles.enlistmentActionsRow}>
+                  <Button
+                    title={
+                      isClearingSavedPin
+                        ? 'Clear Saved PIN'
+                        : step1CanDeferOnServerError
+                          ? 'Defer PIN Verification & Continue'
+                          : step1Done
+                            ? 'Save Membership Changes'
+                            : 'Save Membership & Continue'
+                    }
+                    icon="save"
+                    variant={step1Done && !hasUnsavedPinEdit ? 'outline' : 'primary'}
+                    size="sm"
+                    onPress={() => {
+                      void handleSaveMembership(!isClearingSavedPin);
+                    }}
+                    loading={savingMembership}
+                    disabled={
+                      savingMembership ||
+                      pinFeedback.status === 'checking' ||
+                      (memberType === 'DD' && principalPinFeedback.status === 'checking') ||
+                      (!isClearingSavedPin && !isDependentSponsorComplete)
+                    }
+                    testID="save-step1-membership-btn"
+                  />
+                  {!isClearingSavedPin && memberType === 'DD' && !isDependentSponsorComplete ? (
+                    <ThemedText variant="caption" color={theme.colors.warningText} testID="dependent-required-hint">
+                      Complete all required Principal Member fields above to continue.
+                    </ThemedText>
+                  ) : null}
+                </View>
+              ) : null}
+            </VerticalStepRow>
+
+            {/* Step 2: Check PhilHealth Eligibility */}
+            <VerticalStepRow
+              stepNumber={2}
+              title="Check PhilHealth Eligibility"
+              subtitle="Confirm this year's PhilHealth YAKAP standing before checking identity or assigning."
+              statusLabel={
+                step2Done ? 'Eligibility Checked' : step2Unlocked ? 'Current Step' : 'Finish Step 1 First'
+              }
+              statusVariant={step2Done ? 'success' : step2Unlocked ? 'primary' : 'neutral'}
+              state={step2State}
+              testID="yakap-step-2-card"
+            >
+              <View style={styles.enlistmentActionsRow}>
+                <Button
+                  title={checkingStanding ? 'Checking...' : 'Check PhilHealth Eligibility'}
+                  variant={step2Done ? 'outline' : step2Unlocked ? 'primary' : 'outline'}
+                  size="sm"
+                  icon="refresh"
+                  onPress={handleCheckStanding}
+                  disabled={!step2Unlocked || checkingStanding}
+                  testID="check-yakap-standing-btn"
+                />
+                {!step2Unlocked ? (
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Complete Step 1 (save a valid 12-digit PIN) to unlock.
+                  </ThemedText>
+                ) : null}
               </View>
-              <Badge
-                label={enlistmentBadge.label}
-                variant={enlistmentBadge.variant}
-                size="sm"
-                icon={enlistmentBadge.icon}
-              />
-            </View>
 
-            {activeEnlistment ? (
-              <View style={styles.enlistmentActiveBox}>
-                <View style={styles.enlistmentHeaderRow}>
-                  <ThemedText variant="bodyBold" color={theme.colors.text}>
-                    {activeEnlistment.effectiveYear} Benefit Year
+              {standingCheck ? (
+                <View style={styles.enlistmentActiveBox} testID="yakap-standing-summary-box">
+                  <ThemedText variant="smallBold" color={theme.colors.text}>
+                    Live PhilHealth Check ({standingCheck.effectiveYear})
                   </ThemedText>
                   <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    Source: {resolveCoverageEnlistmentSourceLabel(activeEnlistment.source)}
+                    {standingCheck.summaryMessage}
                   </ThemedText>
                 </View>
-
-                <View style={[styles.formRow, isCompact && styles.stackCol]}>
-                  <View style={styles.metaCell}>
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      Enlistment Date
-                    </ThemedText>
-                    <ThemedText variant="smallBold" color={theme.colors.text}>
-                      {activeEnlistment.enlistmentDate}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.metaCell}>
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      Valid Until
-                    </ThemedText>
-                    <ThemedText variant="smallBold" color={theme.colors.text}>
-                      {activeEnlistment.validUntil || `${activeEnlistment.effectiveYear}-12-31`}
-                    </ThemedText>
-                  </View>
-                </View>
-
-                <View style={styles.refGrid}>
-                  <View style={styles.refBox}>
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      Case No.
-                    </ThemedText>
-                    <ThemedText
-                      variant="captionBold"
-                      color={activeEnlistment.caseNo ? theme.colors.primaryDark : theme.colors.textMuted}
-                    >
-                      {activeEnlistment.caseNo || 'Pending'}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.refBox}>
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      Enlistment Trans No.
-                    </ThemedText>
-                    <ThemedText
-                      variant="captionBold"
-                      color={activeEnlistment.enlistmentTransNo ? theme.colors.primaryDark : theme.colors.textMuted}
-                    >
-                      {activeEnlistment.enlistmentTransNo || 'Pending'}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.refBox}>
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      YES Reference No.
-                    </ThemedText>
-                    <ThemedText
-                      variant="captionBold"
-                      color={activeEnlistment.yesReferenceNo ? theme.colors.primaryDark : theme.colors.textMuted}
-                    >
-                      {activeEnlistment.yesReferenceNo || 'None'}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.refBox}>
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      FPE Profiling Trans No.
-                    </ThemedText>
-                    <ThemedText
-                      variant="captionBold"
-                      color={activeEnlistment.profilingTransNo ? theme.colors.successText : theme.colors.textMuted}
-                    >
-                      {activeEnlistment.profilingTransNo || 'Pending Screening'}
-                    </ThemedText>
-                  </View>
-                </View>
-              </View>
-            ) : (
-              <EmptyState
-                icon="shield"
-                title="No YAKAP enlistment on file"
-                description="Add an annual PhilHealth YAKAP enlistment record before transmitting FPE claims."
-                actionTitle="Add Enlistment"
-                onAction={handleOpenEnlistmentModal}
-                actionTestID="empty-add-enlistment-btn"
-              />
-            )}
-
-            <View style={styles.enlistmentActionsRow}>
-              <Button
-                title={activeEnlistment ? 'Add / Renew Enlistment' : 'Add Enlistment'}
-                variant="outline"
-                size="sm"
-                icon="refresh"
-                onPress={handleOpenEnlistmentModal}
-                testID="add-renew-enlistment-btn"
-              />
-              {sortedEnlistments.length > 1 ? (
-                <Button
-                  title={historyOpen ? 'Hide History' : `View All Years (${sortedEnlistments.length})`}
-                  variant="ghost"
-                  size="sm"
-                  onPress={() => setHistoryOpen((prev) => !prev)}
-                />
               ) : null}
-            </View>
+            </VerticalStepRow>
 
-            {historyOpen && sortedEnlistments.length > 1 ? (
-              <View style={styles.historyList}>
-                {sortedEnlistments.map((item) => (
-                  <View key={item.id} style={styles.historyRow}>
-                    <ThemedText variant="captionBold" color={theme.colors.text}>
-                      {item.effectiveYear}
+            {/* Step 3: Confirm Patient Identity */}
+            <VerticalStepRow
+              stepNumber={3}
+              title="Confirm Patient Identity"
+              subtitle="Complete Face Scan, Text Code (OTP), or Photo ID verification for today."
+              statusLabel={
+                step3Done ? 'Identity Confirmed' : step3Unlocked ? 'Current Step' : 'Finish Step 2 First'
+              }
+              statusVariant={step3Done ? 'success' : step3Unlocked ? 'primary' : 'neutral'}
+              state={step3State}
+              testID="yakap-step-3-card"
+            >
+              <View style={styles.enlistmentActionsRow}>
+                <Button
+                  title={step3Done ? 'Identity Confirmed Today' : 'Confirm Patient Identity'}
+                  variant={step3Done ? 'secondary' : step3Unlocked ? 'primary' : 'outline'}
+                  size="sm"
+                  icon="patientVerified"
+                  disabled={!step3Unlocked}
+                  onPress={() => {
+                    if (step3Unlocked) setIdentityModalOpen(true);
+                  }}
+                  testID="open-identity-check-btn"
+                />
+                {!step3Unlocked ? (
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Complete Step 2 (Check PhilHealth Eligibility) to unlock.
+                  </ThemedText>
+                ) : null}
+              </View>
+
+              {latestIdentity ? (
+                <View style={styles.enlistmentActiveBox}>
+                  <View style={styles.enlistmentHeaderRow}>
+                    <ThemedText variant="smallBold" color={theme.colors.text}>
+                      Identity Check ({formatIdentityMethodLabel(latestIdentity.mode)})
                     </ThemedText>
-                    <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flexOne}>
-                      {item.enlistmentDate} to {item.validUntil || `${item.effectiveYear}-12-31`} · {item.status} · Case: {item.caseNo || 'None'}
+                    <Badge
+                      label={latestIdentity.isVerifiedForToday ? 'Confirmed Today' : `Checked ${latestIdentity.verificationDate}`}
+                      variant={latestIdentity.isVerifiedForToday ? 'success' : 'warning'}
+                      size="sm"
+                    />
+                  </View>
+                  {latestIdentity.pcuTransactionId ? (
+                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                      Reference: {latestIdentity.pcuTransactionId}
+                    </ThemedText>
+                  ) : null}
+                </View>
+              ) : null}
+            </VerticalStepRow>
+
+            {/* Step 4: Assign Patient to This Clinic */}
+            <VerticalStepRow
+              stepNumber={4}
+              title="Assign Patient to This Clinic"
+              subtitle="Link this verified patient to your clinic under PhilHealth YAKAP."
+              statusLabel={
+                step4Unlocked ? enlistmentBadge.label : 'Finish Step 3 First'
+              }
+              statusVariant={
+                step4Done ? 'success' : step4Unlocked ? enlistmentBadge.variant : 'neutral'
+              }
+              state={step4State}
+              testID="yakap-enlistment-card"
+            >
+              <View style={styles.enlistmentActionsRow}>
+                {(!activeEnlistment || activeEnlistment.status === 'Draft' || standingCheck?.needsClinicSelection) ? (
+                  <Button
+                    title={submittingSelection ? 'Assigning...' : 'Assign to This Clinic'}
+                    variant={step4Unlocked ? 'primary' : 'outline'}
+                    size="sm"
+                    icon="shieldCheck"
+                    onPress={handleAssignToClinic}
+                    disabled={!step4Unlocked || submittingSelection}
+                    testID="assign-clinic-yakap-btn"
+                  />
+                ) : null}
+                {(fpeStatus?.isCompleted || activeEnlistment?.yesReferenceNo) ? (
+                  <Button
+                    title={printingSlip ? 'Preparing PDF...' : 'Print Confirmation Slip'}
+                    variant="outline"
+                    size="sm"
+                    icon="printer"
+                    onPress={handlePrintSlip}
+                    disabled={printingSlip}
+                    testID="print-confirmation-slip-btn"
+                  />
+                ) : null}
+                {!step4Unlocked ? (
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Complete Step 3 (Confirm Patient Identity) to unlock.
+                  </ThemedText>
+                ) : null}
+              </View>
+
+              {activeEnlistment ? (
+                <View style={styles.enlistmentActiveBox}>
+                  <View style={styles.enlistmentHeaderRow}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      {activeEnlistment.effectiveYear} Benefit Year
+                    </ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                      Source: {resolveCoverageEnlistmentSourceLabel(activeEnlistment.source)}
                     </ThemedText>
                   </View>
-                ))}
+
+                  <View style={[styles.formRow, isCompact && styles.stackCol]}>
+                    <View style={styles.metaCell}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Date Assigned
+                      </ThemedText>
+                      <ThemedText variant="smallBold" color={theme.colors.text}>
+                        {activeEnlistment.enlistmentDate}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.metaCell}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Valid Until
+                      </ThemedText>
+                      <ThemedText variant="smallBold" color={theme.colors.text}>
+                        {activeEnlistment.validUntil || `${activeEnlistment.effectiveYear}-12-31`}
+                      </ThemedText>
+                    </View>
+                  </View>
+
+                  <View style={styles.refGrid}>
+                    <View style={styles.refBox}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Visit Reference
+                      </ThemedText>
+                      <ThemedText
+                        variant="captionBold"
+                        color={activeEnlistment.caseNo ? theme.colors.primaryDark : theme.colors.textMuted}
+                      >
+                        {activeEnlistment.caseNo || 'Pending'}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.refBox}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Clinic Selection Ref
+                      </ThemedText>
+                      <ThemedText
+                        variant="captionBold"
+                        color={activeEnlistment.selectionControlNumber ? theme.colors.primaryDark : theme.colors.textMuted}
+                      >
+                        {activeEnlistment.selectionControlNumber || 'Pending'}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.refBox}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        PhilHealth Assignment No.
+                      </ThemedText>
+                      <ThemedText
+                        variant="captionBold"
+                        color={activeEnlistment.yesReferenceNo ? theme.colors.primaryDark : theme.colors.textMuted}
+                      >
+                        {activeEnlistment.yesReferenceNo || 'Pending Checkup'}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.refBox}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Checkup Reference
+                      </ThemedText>
+                      <ThemedText
+                        variant="captionBold"
+                        color={activeEnlistment.profilingTransNo ? theme.colors.successText : theme.colors.textMuted}
+                      >
+                        {activeEnlistment.profilingTransNo || 'Pending Checkup'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Not yet assigned to this clinic for {new Date().getFullYear()}.
+                </ThemedText>
+              )}
+
+              {latestSubmission ? (
+                <View style={styles.enlistmentActiveBox} testID="latest-yakap-submission-box">
+                  <View style={styles.enlistmentHeaderRow}>
+                    <ThemedText variant="smallBold" color={theme.colors.text}>
+                      Latest Checkup Submission
+                    </ThemedText>
+                    <Badge
+                      label={latestSubmission.processingStatus}
+                      variant={
+                        latestSubmission.processingStatus === 'Accepted' || latestSubmission.processingStatus === 'Completed'
+                          ? 'success'
+                          : latestSubmission.processingStatus === 'Rejected' || latestSubmission.processingStatus === 'Failed'
+                            ? 'emergency'
+                            : 'warning'
+                      }
+                      size="sm"
+                    />
+                  </View>
+                  {latestSubmission.lastErrorMessage ? (
+                    <ThemedText variant="caption" color={theme.colors.emergencyText}>
+                      {latestSubmission.lastErrorMessage}
+                    </ThemedText>
+                  ) : null}
+                  <View style={styles.enlistmentActionsRow}>
+                    <Button
+                      title="Check Status"
+                      variant="outline"
+                      size="xs"
+                      onPress={() => handlePollSubmission(latestSubmission.id)}
+                      disabled={refreshingSubmission}
+                    />
+                    {latestSubmission.processingStatus === 'Rejected' ||
+                    latestSubmission.processingStatus === 'Failed' ||
+                    latestSubmission.processingStatus === 'Queued' ? (
+                      <Button
+                        title="Retry Submission"
+                        variant="outline"
+                        size="xs"
+                        onPress={() => handleRetrySubmission(latestSubmission.id)}
+                        disabled={refreshingSubmission}
+                      />
+                    ) : null}
+                  </View>
+                </View>
+              ) : null}
+
+              {sortedEnlistments.length > 1 ? (
+                <View style={styles.enlistmentActionsRow}>
+                  <Button
+                    title={historyOpen ? 'Hide Previous Years' : `View Previous Years (${sortedEnlistments.length})`}
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => setHistoryOpen((prev) => !prev)}
+                  />
+                </View>
+              ) : null}
+
+              {historyOpen && sortedEnlistments.length > 1 ? (
+                <View style={styles.historyList}>
+                  {sortedEnlistments.map((item) => (
+                    <View key={item.id} style={styles.historyRow}>
+                      <ThemedText variant="captionBold" color={theme.colors.text}>
+                        {item.effectiveYear}
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flexOne}>
+                        {item.enlistmentDate} to {item.validUntil || `${item.effectiveYear}-12-31`} · {item.status} · Case: {item.caseNo || 'None'}
+                      </ThemedText>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </VerticalStepRow>
+
+            {/* Step 5: Annual PhilHealth Checkup */}
+            <VerticalStepRow
+              stepNumber={5}
+              title={`${fpeStatus?.effectiveYear ?? new Date().getFullYear()} Annual PhilHealth Checkup`}
+              subtitle={
+                isFpeCompleted
+                  ? `Completed on ${fpeStatus?.profilingDate || 'Recorded'} · Ref: ${fpeStatus?.profilingTransNo || 'Assigned'}`
+                  : step5Unlocked
+                    ? 'Ready! All PhilHealth requirements are verified. Launch the checkup when the patient is ready.'
+                    : hasValidPin
+                      ? 'Finish Steps 1–4 above in order before starting the annual PhilHealth checkup.'
+                      : 'Enter and verify a 12-digit PhilHealth number first.'
+              }
+              statusLabel={
+                isFpeCompleted ? 'Checkup Completed' : step5Unlocked ? 'Ready to Start' : 'Finish Step 4 First'
+              }
+              statusVariant={isFpeCompleted ? 'success' : step5Unlocked ? 'info' : 'neutral'}
+              state={step5State}
+              isLast
+              testID="yakap-fpe-status-banner"
+            >
+              <View style={styles.fpeActionRow}>
+                {!isFpeCompleted && onStartYakapScreening ? (
+                  <Button
+                    title="Start PhilHealth Checkup"
+                    icon="heartPulse"
+                    variant="primary"
+                    size="sm"
+                    disabled={!step5Unlocked}
+                    onPress={() => {
+                      if (!step5Unlocked) return;
+                      onClose();
+                      onStartYakapScreening(patient);
+                    }}
+                    testID="start-yakap-screening-btn"
+                  />
+                ) : null}
+                {(isFpeCompleted || activeEnlistment?.yesReferenceNo) ? (
+                  <Button
+                    title={printingSlip ? 'Preparing PDF...' : 'Print Confirmation Slip'}
+                    icon="printer"
+                    variant="outline"
+                    size="sm"
+                    onPress={handlePrintSlip}
+                    disabled={printingSlip}
+                    testID="banner-print-confirmation-slip-btn"
+                  />
+                ) : null}
               </View>
-            ) : null}
+            </VerticalStepRow>
           </View>
         </View>
       )}
 
-      {/* Inline Add / Renew Enlistment Sub-Modal (mounted only when open) */}
-      {enlistmentModalVisible ? (
-        <Modal
-          visible={enlistmentModalVisible}
-          onClose={() => setEnlistmentModalVisible(false)}
-          title="Add / Renew YAKAP Enlistment"
-          subtitle="Record an annual PhilHealth YAKAP enlistment. Previous benefit years remain preserved."
-          maxWidth={480}
-          testID="yakap-enlistment-renewal-modal"
-          footer={
-            <View style={styles.footerRow}>
-              <Button
-                title="Cancel"
-                variant="outline"
-                onPress={() => setEnlistmentModalVisible(false)}
-                disabled={savingEnlistment}
-              />
-              <Button
-                title="Confirm Enlistment"
-                onPress={handleConfirmEnlistment}
-                loading={savingEnlistment}
-                disabled={savingEnlistment}
-                testID="confirm-enlistment-btn"
-              />
-            </View>
-          }
-        >
-          <View style={styles.modalFormGap}>
-            <Input
-              label="Benefit Year"
-              value={renewalYear}
-              onChangeText={(val) => {
-                setRenewalYear(val);
-                if (/^\d{4}$/.test(val.trim())) {
-                  setRenewalValidUntil(`${val.trim()}-12-31`);
-                }
-              }}
-              placeholder="YYYY (e.g. 2026)"
-              keyboardType="numeric"
-              required
-            />
-            <ValidatedDateInput
-              label="Enlistment Date"
-              value={renewalEnlistDate}
-              onChangeText={setRenewalEnlistDate}
-              boundaryMode="pastOrToday"
-              placeholder="YYYY-MM-DD"
-              required
-            />
-            <ValidatedDateInput
-              label="Valid Until"
-              value={renewalValidUntil}
-              onChangeText={setRenewalValidUntil}
-              placeholder="YYYY-MM-DD"
-              required
-            />
-            <View style={styles.fieldGroup}>
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                Registration Source
-              </ThemedText>
-              <SegmentedControl
-                options={[
-                  { value: 'ClinicEnlistment', label: 'In-Clinic' },
-                  { value: 'SelfReported', label: 'Self-Reported' },
-                  { value: 'PhilHealthMasterlist', label: 'Masterlist' },
-                ]}
-                value={renewalSource}
-                onChange={(val) => setRenewalSource(val as YakapEnlistmentSource)}
-              />
-            </View>
-            <Input
-              label="Case Number (Optional)"
-              value={renewalCaseNo}
-              onChangeText={setRenewalCaseNo}
-              placeholder="PhilHealth Case No."
-            />
-            <Input
-              label="Enlistment Transmittal No. (Optional)"
-              value={renewalTransNo}
-              onChangeText={setRenewalTransNo}
-              placeholder="Enlistment Trans No."
-            />
-            <Input
-              label="YES Reference No. (Optional)"
-              value={renewalYesRefNo}
-              onChangeText={setRenewalYesRefNo}
-              placeholder="YES Ref No."
-            />
-            <Input
-              label="Notes (Optional)"
-              value={renewalNotes}
-              onChangeText={setRenewalNotes}
-              placeholder="Additional enlistment notes"
-            />
-          </View>
-        </Modal>
-      ) : null}
+      {/* Identity Verification Sub-Modal */}
+      <PatientIdentityCheckModal
+        visible={identityModalOpen}
+        onClose={() => setIdentityModalOpen(false)}
+        patientId={patient.id}
+        patientName={patient.fullName}
+        philHealthPin={pin || coverage?.philHealthNumber}
+        onVerified={() => {
+          void refreshCoverage();
+        }}
+      />
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   sectionsContainer: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   footerRow: {
     flexDirection: 'row',
@@ -1095,54 +2044,113 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  fpeBanner: {
+  stepProgressBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
     borderRadius: theme.radii.lg,
     borderWidth: theme.sizes.borderWidth,
-    padding: theme.spacing.md,
-    gap: theme.spacing.sm,
-    ...theme.shadows.brandSubtle,
+    borderColor: theme.colors.infoBorder,
+    backgroundColor: theme.colors.infoBg,
   },
-  fpeBannerCompleted: {
+  stepProgressInfo: {
+    flex: 1,
+    minWidth: 200,
+    gap: theme.spacing.xs,
+  },
+  verticalStepsList: {
+    gap: theme.spacing.xs,
+  },
+  stepRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: theme.spacing.md,
+  },
+  stepRailCol: {
+    alignItems: 'center',
+    width: theme.spacing['3xl'],
+  },
+  stepCircle: {
+    width: theme.spacing['3xl'],
+    height: theme.spacing['3xl'],
+    borderRadius: theme.radii.full,
+    borderWidth: theme.sizes.borderWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepCircleCompleted: {
     backgroundColor: theme.colors.successBg,
     borderColor: theme.colors.successBorder,
   },
-  fpeBannerPending: {
-    backgroundColor: theme.colors.infoBg,
-    borderColor: theme.colors.infoBorder,
+  stepCircleActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primaryDark,
   },
-  fpeBannerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
+  stepCircleLocked: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.borderDark,
   },
-  fpeBannerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: theme.spacing.sm,
+  stepConnector: {
     flex: 1,
-    minWidth: 200,
+    width: 2,
+    marginVertical: theme.spacing.xs,
   },
-  fpeBannerText: {
+  stepConnectorDone: {
+    backgroundColor: theme.colors.successBorder,
+  },
+  stepConnectorPending: {
+    backgroundColor: theme.colors.border,
+  },
+  stepCard: {
     flex: 1,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.lg,
+    borderWidth: theme.sizes.borderWidth,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  stepCardActive: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.primaryBorder,
+    ...theme.shadows.brandSubtle,
+  },
+  stepCardCompleted: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.successBorder,
+  },
+  stepCardLocked: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.borderLight,
+    paddingVertical: theme.spacing.sm,
+    opacity: 0.78,
+  },
+  unverifiedFlagBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.warningBorder,
+    backgroundColor: theme.colors.warningBg,
+  },
+  stepHeaderTextGroup: {
+    flex: 1,
+    minWidth: 180,
     gap: theme.spacing.xs,
   },
   fpeActionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'flex-start',
-  },
-  cardSection: {
-    padding: theme.spacing.md,
-    borderRadius: theme.radii.lg,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
@@ -1151,21 +2159,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-  },
-  pinRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: theme.spacing.sm,
-  },
-  pinInputCol: {
-    flex: 1,
-  },
-  verifyBtnWrap: {
-    paddingBottom: theme.spacing.xs,
-  },
-  pinFeedbackRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   fieldGroup: {
     gap: theme.spacing.xs,

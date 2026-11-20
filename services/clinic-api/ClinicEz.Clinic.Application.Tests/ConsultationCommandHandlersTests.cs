@@ -313,10 +313,9 @@ public class ConsultationCommandHandlersTests
 
         var sequenceGenerator = Substitute.For<IPhilHealthSequenceGenerator>();
         var journeyNumbers = new PhilHealthPatientJourneyNumbers(
-            CaseNumber: "C00921202600001",
-            EnlistmentTransactionNumber: "E00921202600001",
-            ProfilingTransactionNumber: "P00921202600001",
-            SoapTransactionNumber: "S00921202600001");
+            CaseNumber: "CH100000012026112000001",
+            ProfilingTransactionNumber: "PH100000012026112000001",
+            SoapTransactionNumber: "SH100000012026112000001");
 
         sequenceGenerator.AssignPatientJourneyNumbersAsync(
             tenantId,
@@ -357,16 +356,16 @@ public class ConsultationCommandHandlersTests
         result.IsYakapEligible.Should().BeTrue();
         result.DoctorPhilHealthPan.Should().Be("PAN-DOC-987654");
         result.PhilHealthAtc.Should().Be("ATC-KON-2026-001");
-        result.HciCaseNo.Should().Be("C00921202600001");
-        result.HciTransNo.Should().Be("E00921202600001");
-        result.SoapTransNo.Should().Be("S00921202600001");
+        result.HciCaseNo.Should().Be("CH100000012026112000001");
+        result.HciTransNo.Should().Be("PH100000012026112000001");
+        result.SoapTransNo.Should().Be("SH100000012026112000001");
 
         var savedEncounter = await context.Consultations.FirstAsync(c => c.Id == encounterId);
         savedEncounter.IsYakapEligible.Should().BeTrue();
         savedEncounter.DoctorPhilHealthPan.Should().Be("PAN-DOC-987654");
         savedEncounter.PhilHealthAtc.Should().Be("ATC-KON-2026-001");
-        savedEncounter.PhilHealthCaseNo.Should().Be("C00921202600001");
-        savedEncounter.PhilHealthSoapTransNo.Should().Be("S00921202600001");
+        savedEncounter.PhilHealthCaseNo.Should().Be("CH100000012026112000001");
+        savedEncounter.PhilHealthSoapTransNo.Should().Be("SH100000012026112000001");
     }
 
     [Fact]

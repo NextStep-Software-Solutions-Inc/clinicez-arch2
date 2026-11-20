@@ -584,7 +584,7 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
       })
     );
 
-    expect(markupConfigured).toContain('Accreditation number PHIC-1234 configured for Konsulta primary care benefits.');
+    expect(markupConfigured).toContain('Accreditation number PHIC-1234 configured for YAKAP primary care benefits.');
   });
 
   test('9. Ready hero card reacts dynamically to Clinic Brand Color and Personal Accent Color overrides with brandSubtle shadow', () => {

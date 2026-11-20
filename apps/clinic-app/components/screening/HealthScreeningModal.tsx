@@ -17,6 +17,11 @@ import {
   type IconName,
 } from '../ui';
 import { notify } from '../../utils/feedback';
+import {
+  formatPhilHealthServerError,
+  isMissingPhilHealthConnectionUrlKnown,
+  MISSING_CONNECTION_URL_MESSAGE,
+} from '../../utils/philhealthError';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { useAuth } from '../../context/AuthContext';
 import { useClinic } from '../../context/ClinicContext';
@@ -92,7 +97,10 @@ import {
   normalizeDeliveryType,
   normalizeContraceptiveMethod,
 } from '../../constants/reproductiveHealth';
-import { toIsoDateString } from '../../utils/yakapEnlistment';
+import { toIsoDateString } from '../../utils/formatDateTime';
+import { openAvailmentSlipPdf } from '../../utils/philhealthSlip';
+import PatientIdentityCheckModal from '../patient/PatientIdentityCheckModal';
+import type { YakapStandingCheckDto } from '../../services/clinicService';
 
 export interface HealthScreeningModalProps {
   visible: boolean;
@@ -430,7 +438,7 @@ function getScreeningTypeLabel(type: HealthScreeningType): string {
     case 'CommunityScreening':
       return 'Community Health Screening';
     case 'YakapFpe':
-      return 'PhilHealth YAKAP First Patient Encounter (FPE)';
+      return 'PhilHealth Annual Checkup';
     default:
       return 'Health Screening';
   }
@@ -507,12 +515,17 @@ export default function HealthScreeningModal({
   const [profilingTransNo, setProfilingTransNo] = useState<string | null>(null);
   const [completedScreening, setCompletedScreening] = useState<HealthScreeningDetailRecord | null>(null);
 
-  // YAKAP intake fields
+  // YAKAP intake & YAKAP 2.0 inline onboarding states
   const [coverage, setCoverage] = useState<PatientPhilHealthCoverageDto | null>(null);
   const [philHealthAtc, setPhilHealthAtc] = useState('');
   const [isWalkedIn, setIsWalkedIn] = useState(true);
   const [serviceDeliveryMethod, setServiceDeliveryMethod] =
     useState<YakapServiceDeliveryMethod>('FacilityBased');
+  const [identityModalOpen, setIdentityModalOpen] = useState(false);
+  const [standingCheck, setStandingCheck] = useState<YakapStandingCheckDto | null>(null);
+  const [checkingStanding, setCheckingStanding] = useState(false);
+  const [submittingSelection, setSubmittingSelection] = useState(false);
+  const [printingSlip, setPrintingSlip] = useState(false);
 
   // Pre-hydrated chart & linked record IDs
   const [chart, setChart] = useState<PatientChart | null>(null);
@@ -615,6 +628,11 @@ export default function HealthScreeningModal({
     setCompletedScreening(null);
 
     setCoverage(null);
+    setStandingCheck(null);
+    setIdentityModalOpen(false);
+    setCheckingStanding(false);
+    setSubmittingSelection(false);
+    setPrintingSlip(false);
     setPhilHealthAtc('');
     setIsWalkedIn(true);
     setServiceDeliveryMethod('FacilityBased');
@@ -2303,7 +2321,7 @@ export default function HealthScreeningModal({
       : (screeningType === 'RoutineWellness' || screeningType === 'CommunityScreening') &&
         canNurseScreen;
 
-  // YAKAP FPE Readiness Checklist
+  // PhilHealth Annual Checkup Readiness Checklist
   const yakapReadiness = useMemo(() => {
     const effectivePin =
       coverage?.membership?.philHealthPin ||
@@ -2315,8 +2333,16 @@ export default function HealthScreeningModal({
     const hasActiveEnlistment = Boolean(
       coverage?.currentYearFpeStatus?.hasActiveEnlistment ||
         coverage?.enlistments?.some(
-          (e) => e.effectiveYear === currentYear && e.status !== 'Expired' && e.status !== 'Cancelled'
+          (e) =>
+            e.effectiveYear === currentYear &&
+            e.status !== 'Expired' &&
+            e.status !== 'Cancelled' &&
+            e.status !== 'Suspended' &&
+            e.status !== 'Transferred'
         )
+    );
+    const hasIdentityVerification = Boolean(
+      coverage?.latestIdentityVerification?.isVerifiedForToday
     );
     const hasAtcOrWalkIn = Boolean(philHealthAtc.trim() || isWalkedIn);
     const hasVitals = Boolean(
@@ -2331,6 +2357,7 @@ export default function HealthScreeningModal({
     return {
       hasValidPin,
       hasActiveEnlistment,
+      hasIdentityVerification,
       hasAtcOrWalkIn,
       hasVitals,
       hasPhysicalExam,
@@ -2338,6 +2365,7 @@ export default function HealthScreeningModal({
       isReady:
         hasValidPin &&
         hasActiveEnlistment &&
+        hasIdentityVerification &&
         hasAtcOrWalkIn &&
         hasVitals &&
         hasPhysicalExam &&
@@ -2358,6 +2386,91 @@ export default function HealthScreeningModal({
     ncdRiskAssessmentId,
     ncdEdited,
   ]);
+
+  const refreshPatientCoverage = useCallback(async () => {
+    if (!patient) return;
+    const [fresh] = await clinicService.getPatientPhilHealthCoverage(patient.id);
+    if (fresh) {
+      setCoverage(fresh);
+    }
+  }, [patient]);
+
+  const handleCheckYakapStanding = useCallback(async () => {
+    if (!patient) return;
+    if (isMissingPhilHealthConnectionUrlKnown(clinicSettings)) {
+      notify.error(MISSING_CONNECTION_URL_MESSAGE);
+      return;
+    }
+    setCheckingStanding(true);
+    try {
+      const [res, err] = await clinicService.validatePatientYakapStanding(patient.id, {
+        effectiveYear: new Date().getFullYear(),
+        consent: true,
+      });
+      if (err || !res) {
+        notify.error(
+          formatPhilHealthServerError(err, clinicSettings, 'Could not check PhilHealth eligibility right now.')
+        );
+        return;
+      }
+      setStandingCheck(res);
+      notify.success(res.summaryMessage || 'PhilHealth standing checked.');
+      await refreshPatientCoverage();
+    } finally {
+      setCheckingStanding(false);
+    }
+  }, [patient, clinicSettings, refreshPatientCoverage]);
+
+  const handleAssignClinicYakap = useCallback(async () => {
+    if (!patient) return;
+    if (isMissingPhilHealthConnectionUrlKnown(clinicSettings)) {
+      notify.error(MISSING_CONNECTION_URL_MESSAGE);
+      return;
+    }
+    setSubmittingSelection(true);
+    try {
+      const [res, err] = await clinicService.submitPatientYakapSelection(patient.id, { consent: true });
+      if (err || !res) {
+        notify.error(
+          formatPhilHealthServerError(err, clinicSettings, 'Could not assign patient to this clinic.')
+        );
+        return;
+      }
+      if (res.queuedForSync) {
+        notify.info(res.message || 'Saved locally as a walk-in draft and queued for PhilHealth sync.');
+      } else {
+        notify.success(res.message || 'Patient assigned to this clinic.');
+      }
+      await refreshPatientCoverage();
+    } finally {
+      setSubmittingSelection(false);
+    }
+  }, [patient, clinicSettings, refreshPatientCoverage]);
+
+  const handlePrintConfirmationSlip = useCallback(async () => {
+    if (!patient) return;
+    if (isMissingPhilHealthConnectionUrlKnown(clinicSettings)) {
+      notify.error(MISSING_CONNECTION_URL_MESSAGE);
+      return;
+    }
+    setPrintingSlip(true);
+    try {
+      const year = coverage?.currentYearFpeStatus?.effectiveYear ?? new Date().getFullYear();
+      const [slip, err] = await clinicService.getPatientAvailmentSlip(patient.id, year);
+      if (err || !slip) {
+        notify.error(
+          formatPhilHealthServerError(err, clinicSettings, 'Confirmation slip is not available yet.')
+        );
+        return;
+      }
+      const opened = await openAvailmentSlipPdf(slip);
+      if (!opened) {
+        notify.error('Could not open the PDF confirmation slip.');
+      }
+    } finally {
+      setPrintingSlip(false);
+    }
+  }, [patient, clinicSettings, coverage?.currentYearFpeStatus?.effectiveYear]);
 
   // Complete Station 4 Sign-Off
   const handleCompleteSignOff = useCallback(async () => {
@@ -2460,7 +2573,7 @@ export default function HealthScreeningModal({
       setCompletedScreening(completed);
       notify.success(
         completed.profilingTransNo
-          ? `YAKAP Health Screening completed (FPE Trans No: ${completed.profilingTransNo}).`
+          ? `PhilHealth Annual Checkup completed (Ref: ${completed.profilingTransNo}).`
           : 'Health screening completed and signed off.'
       );
       onSuccess?.(completed);
@@ -2960,8 +3073,8 @@ export default function HealthScreeningModal({
                 </ThemedText>
                 <SegmentedControl
                   options={[
-                    { value: 'Regular', label: 'Clinic Health Screening', icon: 'heartPulse' },
-                    { value: 'YakapAvailment', label: 'PhilHealth YAKAP FPE', icon: 'yakap' },
+                    { value: 'Regular', label: 'Standard Checkup', icon: 'heartPulse' },
+                    { value: 'YakapAvailment', label: 'PhilHealth Annual Checkup', icon: 'yakap' },
                   ]}
                   value={workflowMode}
                   onChange={(val) => {
@@ -3013,7 +3126,7 @@ export default function HealthScreeningModal({
                         coverage?.membership?.philHealthPin || patient.philHealthNumber || ''
                       ).isValid
                         ? `PIN: ${patient.philHealthNumber || coverage?.membership?.philHealthPin}`
-                        : 'Valid PhilHealth PIN Required'
+                        : 'PhilHealth PIN Needed'
                     }
                     variant={
                       validatePhilHealthPinMod11(
@@ -3027,9 +3140,21 @@ export default function HealthScreeningModal({
                   />
                   <Badge
                     label={
+                      coverage?.latestIdentityVerification?.isVerifiedForToday
+                        ? 'Identity Confirmed Today'
+                        : 'Identity Check Needed'
+                    }
+                    variant={
+                      coverage?.latestIdentityVerification?.isVerifiedForToday ? 'success' : 'warning'
+                    }
+                    size="sm"
+                    icon="patientVerified"
+                  />
+                  <Badge
+                    label={
                       coverage?.currentYearFpeStatus?.hasActiveEnlistment
-                        ? `${coverage.currentYearFpeStatus.effectiveYear} Enlisted`
-                        : 'Enlistment Required'
+                        ? `${coverage.currentYearFpeStatus.effectiveYear} Clinic Assigned`
+                        : 'Clinic Assignment Needed'
                     }
                     variant={
                       coverage?.currentYearFpeStatus?.hasActiveEnlistment ? 'success' : 'warning'
@@ -3039,12 +3164,67 @@ export default function HealthScreeningModal({
                   />
                 </View>
 
+                {(!yakapReadiness.hasValidPin ||
+                  !yakapReadiness.hasIdentityVerification ||
+                  !yakapReadiness.hasActiveEnlistment) && (
+                  <View style={styles.warningCallout} testID="yakap-onboarding-banner">
+                    <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.infoText} />
+                    <View style={styles.flexOne}>
+                      <ThemedText variant="smallBold" color={theme.colors.text}>
+                        Before submitting a free PhilHealth Annual Checkup
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        {standingCheck?.summaryMessage ||
+                          'Step 1: Verify the patient’s PhilHealth number -> Step 2: Check PhilHealth Eligibility -> Step 3: Confirm Patient Identity -> Step 4: Assign to This Clinic.'}
+                      </ThemedText>
+                      <View style={styles.chipRow}>
+                        <Button
+                          title={checkingStanding ? 'Checking...' : 'Check PhilHealth Eligibility'}
+                          variant="outline"
+                          size="xs"
+                          onPress={handleCheckYakapStanding}
+                          disabled={checkingStanding || !yakapReadiness.hasValidPin}
+                          testID="screening-check-standing-btn"
+                        />
+                        <Button
+                          title="Confirm Patient Identity"
+                          variant="outline"
+                          size="xs"
+                          onPress={() => setIdentityModalOpen(true)}
+                          disabled={!yakapReadiness.hasValidPin}
+                          testID="screening-confirm-identity-btn"
+                        />
+                        <Button
+                          title={submittingSelection ? 'Assigning...' : 'Assign to This Clinic'}
+                          variant="outline"
+                          size="xs"
+                          onPress={handleAssignClinicYakap}
+                          disabled={submittingSelection || !yakapReadiness.hasValidPin}
+                          testID="screening-assign-clinic-btn"
+                        />
+                        <Button
+                          title="Continue Without PhilHealth"
+                          variant="ghost"
+                          size="xs"
+                          onPress={() => {
+                            setWorkflowMode('Regular');
+                            if (screeningType === 'YakapFpe') {
+                              setScreeningType('AnnualPhysicalExam');
+                            }
+                          }}
+                          testID="continue-without-philhealth-btn"
+                        />
+                      </View>
+                    </View>
+                  </View>
+                )}
+
                 {currentYearFpeCompleted ? (
                   <View style={styles.warningCallout}>
                     <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
-                    <ThemedText variant="caption" color={theme.colors.warningText} style={styles.flexOne}>
-                      FPE already completed for {coverage?.currentYearFpeStatus.effectiveYear} on{' '}
-                      {coverage?.currentYearFpeStatus.profilingDate || 'record'} (Trans No:{' '}
+                    <ThemedText variant="small" color={theme.colors.warningText} style={styles.flexOne}>
+                      PhilHealth annual checkup already completed for {coverage?.currentYearFpeStatus.effectiveYear} on{' '}
+                      {coverage?.currentYearFpeStatus.profilingDate || 'record'} (Ref:{' '}
                       {coverage?.currentYearFpeStatus.profilingTransNo || 'Assigned'}).
                     </ThemedText>
                   </View>
@@ -3053,10 +3233,10 @@ export default function HealthScreeningModal({
                 <View style={[styles.yakapControlsRow, isCompact && styles.stackCol]}>
                   <Input
                     containerStyle={styles.flexOne}
-                    label="PhilHealth ATC (Authorization Transaction Code)"
+                    label="PhilHealth Visit Code"
                     value={philHealthAtc}
                     onChangeText={setPhilHealthAtc}
-                    placeholder={isWalkedIn ? 'Optional when Walk-In' : 'Enter PhilHealth ATC'}
+                    placeholder={isWalkedIn ? 'Optional for walk-in visits' : 'Enter PhilHealth visit code'}
                   />
                   <View style={styles.walkInGroup}>
                     <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
@@ -3082,7 +3262,7 @@ export default function HealthScreeningModal({
                           variant={!isWalkedIn ? 'smallBold' : 'small'}
                           color={!isWalkedIn ? theme.colors.primary : theme.colors.textSecondary}
                         >
-                          With ATC
+                          With Visit Code
                         </ThemedText>
                       </Pressable>
                     </View>
@@ -3115,9 +3295,7 @@ export default function HealthScreeningModal({
                   ? isActive
                     ? 'Completed · Active'
                     : 'Completed'
-                  : isActive
-                    ? `Current · ${st.roleHint}`
-                    : st.roleHint;
+                  : st.roleHint;
 
                 return (
                   <React.Fragment key={st.step}>
@@ -4712,9 +4890,20 @@ export default function HealthScreeningModal({
                     </ThemedText>
                     <ThemedText variant="small" color={theme.colors.textSecondary}>
                       Disposition: {completedScreening.disposition || disposition}
-                      {profilingTransNo ? ` · YAKAP FPE Trans No: ${profilingTransNo}` : ''}
+                      {profilingTransNo ? ` · PhilHealth Ref No: ${profilingTransNo}` : ''}
                     </ThemedText>
                   </View>
+                  {workflowMode === 'YakapAvailment' || profilingTransNo ? (
+                    <Button
+                      title={printingSlip ? 'Preparing PDF...' : 'Print Confirmation Slip'}
+                      icon="printer"
+                      variant="outline"
+                      size="sm"
+                      onPress={handlePrintConfirmationSlip}
+                      disabled={printingSlip}
+                      testID="screening-print-slip-btn"
+                    />
+                  ) : null}
                 </View>
               ) : null}
 
@@ -4722,10 +4911,10 @@ export default function HealthScreeningModal({
                 <View style={styles.sectionCard} testID="yakap-readiness-checklist">
                   <View style={styles.cardTitleRow}>
                     <ThemedText variant="bodyBold" color={theme.colors.text}>
-                      PhilHealth YAKAP FPE Readiness Checklist
+                      PhilHealth Annual Checkup Checklist
                     </ThemedText>
                     <Badge
-                      label={yakapReadiness.isReady ? 'Ready for FPE Stamping' : 'Incomplete Requirements'}
+                      label={yakapReadiness.isReady ? 'Ready to Submit' : 'Incomplete Requirements'}
                       variant={yakapReadiness.isReady ? 'success' : 'warning'}
                       size="sm"
                     />
@@ -4734,8 +4923,9 @@ export default function HealthScreeningModal({
                   <View style={styles.checklistGrid}>
                     {[
                       { label: 'Valid 12-digit PhilHealth PIN', ok: yakapReadiness.hasValidPin },
-                      { label: 'Active Current-Year YAKAP Enlistment', ok: yakapReadiness.hasActiveEnlistment },
-                      { label: 'ATC or Walk-In Recorded', ok: yakapReadiness.hasAtcOrWalkIn },
+                      { label: 'Assigned to This Clinic', ok: yakapReadiness.hasActiveEnlistment },
+                      { label: 'Visit Code or Walk-In Recorded', ok: yakapReadiness.hasAtcOrWalkIn },
+                      { label: 'Patient Identity Confirmed Today', ok: yakapReadiness.hasIdentityVerification },
                       { label: 'Vitals & Anthropometrics Recorded', ok: yakapReadiness.hasVitals },
                       { label: '9-System Physical Exam Saved', ok: yakapReadiness.hasPhysicalExam },
                       { label: 'PhilPEN NCD Risk Assessed (Adults 20+)', ok: yakapReadiness.hasNcdRisk },
@@ -4763,7 +4953,7 @@ export default function HealthScreeningModal({
                   <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.warningText} />
                   <ThemedText variant="small" color={theme.colors.warningText} style={styles.flexOne}>
                     {workflowMode === 'YakapAvailment'
-                      ? 'Physician sign-off is required for PhilHealth YAKAP FPE unless Nurse/Midwife facilitator is enabled in Clinic Settings.'
+                      ? 'Physician sign-off is required for PhilHealth Annual Checkups unless Nurse/Midwife sign-off is enabled in Clinic Settings.'
                       : 'Physician sign-off is required for APE, Pre-Employment, and School Physical screenings. Save & route this chart to the Physician.'}
                   </ThemedText>
                 </View>
@@ -4920,6 +5110,17 @@ export default function HealthScreeningModal({
           allowDuplicateActive
         />
       ) : null}
+
+      <PatientIdentityCheckModal
+        visible={identityModalOpen}
+        onClose={() => setIdentityModalOpen(false)}
+        patientId={patient.id}
+        patientName={patient.fullName}
+        philHealthPin={coverage?.membership?.philHealthPin || patient.philHealthNumber}
+        onVerified={() => {
+          void refreshPatientCoverage();
+        }}
+      />
     </Modal>
   );
 }
@@ -5220,6 +5421,7 @@ const styles = StyleSheet.create({
   completedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.md,
     padding: theme.spacing.md,
     borderRadius: theme.radii.lg,

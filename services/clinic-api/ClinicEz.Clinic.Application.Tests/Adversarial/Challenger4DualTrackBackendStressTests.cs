@@ -79,7 +79,7 @@ public sealed class Challenger4DualTrackBackendStressTests
             ValidUntil = new DateOnly(2026, 12, 31),
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment
+            Source = YakapEnlistmentSource.AssistedIntake
         });
 
         // Test precisely at the last second of the benefit year: Dec 31, 2026 at 23:59:59 UTC
@@ -106,7 +106,7 @@ public sealed class Challenger4DualTrackBackendStressTests
             ValidUntil = new DateOnly(2025, 2, 28),
             EffectiveYear = 2024,
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment
+            Source = YakapEnlistmentSource.AssistedIntake
         });
 
         // Must be active on 2024-02-29 itself
@@ -140,9 +140,8 @@ public sealed class Challenger4DualTrackBackendStressTests
             ValidUntil = new DateOnly(2024, 12, 31),
             EffectiveYear = 2024,
             Status = YakapEnlistmentStatus.Expired,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
+            Source = YakapEnlistmentSource.AssistedIntake,
             CaseNo = "C000921202400001",
-            EnlistmentTransNo = "E000921202400001",
             ProfilingTransNo = "P000921202400001"
         });
 
@@ -155,7 +154,7 @@ public sealed class Challenger4DualTrackBackendStressTests
             ValidUntil = new DateOnly(2026, 12, 31),
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.SelfReported
+            Source = YakapEnlistmentSource.WalkIn
         });
 
         var enlistments = patient.GetYakapEnlistments();
@@ -163,7 +162,7 @@ public sealed class Challenger4DualTrackBackendStressTests
         enlistments[0].EffectiveYear.Should().Be(2024);
         enlistments[0].CaseNo.Should().Be("C000921202400001");
         enlistments[1].EffectiveYear.Should().Be(2026);
-        enlistments[1].Source.Should().Be(YakapEnlistmentSource.SelfReported);
+        enlistments[1].Source.Should().Be(YakapEnlistmentSource.WalkIn);
 
         // Encounter in the 2025 gap year MUST throw strict guard exception
         var gapEncounterDate = new DateOnly(2025, 6, 20);
@@ -214,7 +213,7 @@ public sealed class Challenger4DualTrackBackendStressTests
             ValidUntil = new DateOnly(2026, 12, 31),
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment
+            Source = YakapEnlistmentSource.AssistedIntake
         });
 
         dbContext.Patients.Add(patient);
@@ -255,11 +254,9 @@ public sealed class Challenger4DualTrackBackendStressTests
 
         results.Should().HaveCount(20);
         var firstResult = results.First();
-        firstResult.CaseNumber.Should().StartWith("C0009212026");
-        firstResult.EnlistmentTransactionNumber.Should().StartWith("E0009212026");
-        firstResult.ProfilingTransactionNumber.Should().StartWith("P0009212026");
+        firstResult.CaseNumber.Should().HaveLength(23).And.StartWith("C00000092120260510");
+        firstResult.ProfilingTransactionNumber.Should().HaveLength(23).And.StartWith("P00000092120260510");
         results.All(r => r.CaseNumber == firstResult.CaseNumber).Should().BeTrue();
-        results.All(r => r.EnlistmentTransactionNumber == firstResult.EnlistmentTransactionNumber).Should().BeTrue();
         results.All(r => r.ProfilingTransactionNumber == firstResult.ProfilingTransactionNumber).Should().BeTrue();
     }
 
@@ -279,7 +276,6 @@ public sealed class Challenger4DualTrackBackendStressTests
             Status = YakapEnlistmentStatus.Expired,
             Source = YakapEnlistmentSource.PhilHealthMasterlist,
             CaseNo = "C000921202500001",
-            EnlistmentTransNo = "E000921202500001",
             ProfilingTransNo = "P000921202500001"
         });
         patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
@@ -288,7 +284,7 @@ public sealed class Challenger4DualTrackBackendStressTests
             EnlistmentDate = new DateOnly(2026, 1, 1),
             ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment
+            Source = YakapEnlistmentSource.AssistedIntake
         });
 
         var parsed = patient.GetYakapEnlistments();
@@ -313,7 +309,7 @@ public sealed class Challenger4DualTrackBackendStressTests
             EnlistmentDate = new DateOnly(2026, 5, 1),
             ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment
+            Source = YakapEnlistmentSource.AssistedIntake
         });
 
         var parsed = patient.GetYakapEnlistments();

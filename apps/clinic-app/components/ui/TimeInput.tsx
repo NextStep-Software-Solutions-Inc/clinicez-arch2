@@ -162,7 +162,7 @@ export default function TimeInput({
       {label ? (
         <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
           {label}
-          {required ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
+          {required ? <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText> : null}
         </ThemedText>
       ) : null}
 

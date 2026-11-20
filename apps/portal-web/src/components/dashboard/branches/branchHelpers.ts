@@ -242,10 +242,10 @@ export function resolvePhilHealthPlaceholders(branch: Partial<BranchDto> | null)
   return {
     secretKey: branch?.hasSecretKey
       ? "•••••••••••••••• (Leave blank to keep existing)"
-      : "Enter PCAPI Secret Key",
+      : "Enter PhilHealth Access Secret",
     cipherKey: branch?.hasCipherKey
       ? "•••••••••••••••• (Leave blank to keep existing)"
-      : "Enter AES-256-CBC Cipher Key",
+      : "Enter Record Encryption Key",
   };
 }
 

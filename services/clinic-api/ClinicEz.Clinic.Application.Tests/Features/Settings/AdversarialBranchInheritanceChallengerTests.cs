@@ -52,7 +52,7 @@ public class AdversarialBranchInheritanceChallengerTests
         BranchPhilHealthAccreditationNumber = branchAccreditation,
         BranchPmccNumber = branchPmcc,
         BranchSoftwareCertificateId = branchCert,
-        BranchKonsultaEndpoint = branchEndpoint,
+        BranchPhilHealthBaseUrl = branchEndpoint,
         IsBranchPhilHealthAccredited = isAccredited
     };
 
@@ -77,7 +77,7 @@ public class AdversarialBranchInheritanceChallengerTests
         initial.BranchPhilHealthAccreditationNumber = null;
         initial.BranchPmccNumber = null;
         initial.BranchSoftwareCertificateId = null;
-        initial.BranchKonsultaEndpoint = null;
+        initial.BranchPhilHealthBaseUrl = null;
         initial.IsBranchPhilHealthAccredited = false;
         initial.IsPhilHealthOverridden = false;
 
@@ -85,7 +85,7 @@ public class AdversarialBranchInheritanceChallengerTests
         initial.AccreditationNumber = "STANDALONE-PHIC-1234";
         initial.PmccNumber = "STANDALONE-PMCC-5678";
         initial.SoftwareCertificateId = "STANDALONE-CERT-9012";
-        initial.KonsultaEndpoint = "/soap/standalone-endpoint";
+        initial.PhilHealthBaseUrl = "/soap/standalone-endpoint";
         initial.IsPhilHealthConfigured = true;
         await db.SaveChangesAsync();
 
@@ -122,7 +122,7 @@ public class AdversarialBranchInheritanceChallengerTests
         settings.AccreditationNumber.Should().Be("STANDALONE-PHIC-1234");
         settings.PmccNumber.Should().Be("STANDALONE-PMCC-5678");
         settings.SoftwareCertificateId.Should().Be("STANDALONE-CERT-9012");
-        settings.KonsultaEndpoint.Should().Be("/soap/standalone-endpoint");
+        settings.PhilHealthBaseUrl.Should().Be("/soap/standalone-endpoint");
         settings.IsPhilHealthConfigured.Should().BeTrue();
     }
 
@@ -139,7 +139,7 @@ public class AdversarialBranchInheritanceChallengerTests
         initial.BranchPhilHealthAccreditationNumber = "BRANCH-OLD-ACC";
         initial.BranchPmccNumber = "BRANCH-OLD-PMCC";
         initial.BranchSoftwareCertificateId = "BRANCH-OLD-CERT";
-        initial.BranchKonsultaEndpoint = "/soap/old-branch";
+        initial.BranchPhilHealthBaseUrl = "/soap/old-branch";
         initial.IsBranchPhilHealthAccredited = true;
 
         // Clinic has an explicit override active
@@ -147,7 +147,7 @@ public class AdversarialBranchInheritanceChallengerTests
         initial.AccreditationNumber = "OVERRIDE-CUSTOM-ACC";
         initial.PmccNumber = "OVERRIDE-CUSTOM-PMCC";
         initial.SoftwareCertificateId = "OVERRIDE-CUSTOM-CERT";
-        initial.KonsultaEndpoint = "/soap/override-custom";
+        initial.PhilHealthBaseUrl = "/soap/override-custom";
         initial.IsPhilHealthConfigured = true;
         await db.SaveChangesAsync();
 
@@ -177,7 +177,7 @@ public class AdversarialBranchInheritanceChallengerTests
         settings.BranchPhilHealthAccreditationNumber.Should().Be("BRANCH-NEW-ACC-V2");
         settings.BranchPmccNumber.Should().Be("BRANCH-NEW-PMCC-V2");
         settings.BranchSoftwareCertificateId.Should().Be("BRANCH-NEW-CERT-V2");
-        settings.BranchKonsultaEndpoint.Should().Be("/soap/new-branch-v2");
+        settings.BranchPhilHealthBaseUrl.Should().Be("/soap/new-branch-v2");
         settings.IsBranchPhilHealthAccredited.Should().BeTrue();
 
         // Clinic active credentials MUST be completely preserved!
@@ -185,7 +185,7 @@ public class AdversarialBranchInheritanceChallengerTests
         settings.AccreditationNumber.Should().Be("OVERRIDE-CUSTOM-ACC");
         settings.PmccNumber.Should().Be("OVERRIDE-CUSTOM-PMCC");
         settings.SoftwareCertificateId.Should().Be("OVERRIDE-CUSTOM-CERT");
-        settings.KonsultaEndpoint.Should().Be("/soap/override-custom");
+        settings.PhilHealthBaseUrl.Should().Be("/soap/override-custom");
         settings.IsPhilHealthConfigured.Should().BeTrue();
     }
 
@@ -207,7 +207,7 @@ public class AdversarialBranchInheritanceChallengerTests
         initial.AccreditationNumber = "CLINIC-SPECIFIC-ACC-99";
         initial.PmccNumber = "CLINIC-SPECIFIC-PMCC-99";
         initial.SoftwareCertificateId = "CLINIC-SPECIFIC-CERT-99";
-        initial.KonsultaEndpoint = "/soap/override-specific";
+        initial.PhilHealthBaseUrl = "/soap/override-specific";
         initial.IsPhilHealthConfigured = true;
         await db.SaveChangesAsync();
 
@@ -245,7 +245,7 @@ public class AdversarialBranchInheritanceChallengerTests
         settings.AccreditationNumber.Should().Be("CLINIC-SPECIFIC-ACC-99");
         settings.PmccNumber.Should().Be("CLINIC-SPECIFIC-PMCC-99");
         settings.SoftwareCertificateId.Should().Be("CLINIC-SPECIFIC-CERT-99");
-        settings.KonsultaEndpoint.Should().Be("/soap/override-specific");
+        settings.PhilHealthBaseUrl.Should().Be("/soap/override-specific");
         settings.IsPhilHealthConfigured.Should().BeTrue();
     }
 
@@ -266,7 +266,7 @@ public class AdversarialBranchInheritanceChallengerTests
         existing.BranchPhilHealthAccreditationNumber = "BRANCH-BASELINE-ACCREDITED";
         existing.BranchPmccNumber = "BRANCH-BASELINE-PMCC";
         existing.BranchSoftwareCertificateId = "BRANCH-BASELINE-CERT";
-        existing.BranchKonsultaEndpoint = "/soap/super-branch-endpoint";
+        existing.BranchPhilHealthBaseUrl = "/soap/super-branch-endpoint";
         existing.IsBranchPhilHealthAccredited = true;
 
         // Currently overridden with custom settings
@@ -274,7 +274,7 @@ public class AdversarialBranchInheritanceChallengerTests
         existing.AccreditationNumber = "TEMP-OVERRIDE-ACC";
         existing.PmccNumber = "TEMP-OVERRIDE-PMCC";
         existing.SoftwareCertificateId = "TEMP-OVERRIDE-CERT";
-        existing.KonsultaEndpoint = "/soap/temp-override";
+        existing.PhilHealthBaseUrl = "/soap/temp-override";
         existing.IsPhilHealthConfigured = true;
         await db.SaveChangesAsync();
 
@@ -287,7 +287,7 @@ public class AdversarialBranchInheritanceChallengerTests
         result.AccreditationNumber.Should().Be("BRANCH-BASELINE-ACCREDITED");
         result.PmccNumber.Should().Be("BRANCH-BASELINE-PMCC");
         result.SoftwareCertificateId.Should().Be("BRANCH-BASELINE-CERT");
-        result.KonsultaEndpoint.Should().Be("/soap/super-branch-endpoint");
+        result.PhilHealthBaseUrl.Should().Be("/soap/super-branch-endpoint");
 
         // Verify in DB
         var persisted = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
@@ -313,7 +313,7 @@ public class AdversarialBranchInheritanceChallengerTests
         existing.BranchPhilHealthAccreditationNumber = null;
         existing.BranchPmccNumber = null;
         existing.BranchSoftwareCertificateId = null;
-        existing.BranchKonsultaEndpoint = null;
+        existing.BranchPhilHealthBaseUrl = null;
         existing.IsBranchPhilHealthAccredited = false;
 
         // Overridden
@@ -450,7 +450,7 @@ public class AdversarialBranchInheritanceChallengerTests
         initial.AccreditationNumber = "MY-OWN-ACC-123";
         initial.PmccNumber = "MY-OWN-PMCC-456";
         initial.SoftwareCertificateId = "MY-OWN-CERT-789";
-        initial.KonsultaEndpoint = "/soap/my-own";
+        initial.PhilHealthBaseUrl = "/soap/my-own";
         initial.IsPhilHealthConfigured = true;
         await db.SaveChangesAsync();
 
@@ -482,7 +482,7 @@ public class AdversarialBranchInheritanceChallengerTests
         settings.AccreditationNumber.Should().Be("MY-OWN-ACC-123");
         settings.PmccNumber.Should().Be("MY-OWN-PMCC-456");
         settings.SoftwareCertificateId.Should().Be("MY-OWN-CERT-789");
-        settings.KonsultaEndpoint.Should().Be("/soap/my-own");
+        settings.PhilHealthBaseUrl.Should().Be("/soap/my-own");
         settings.IsPhilHealthConfigured.Should().BeTrue();
     }
 

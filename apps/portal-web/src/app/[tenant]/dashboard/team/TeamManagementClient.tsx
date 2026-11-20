@@ -244,7 +244,7 @@ const ROLE_DETAILS: Record<string, { label: string; badgeClass: string; descript
     "Cashier/Billing Staff": {
         label: "Cashier / Billing Staff",
         badgeClass: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800",
-        description: "Handles patient payment reconciliation, PhilHealth Konsulta co-pays, and official BIR receipts."
+        description: "Handles patient payment reconciliation, PhilHealth YAKAP co-pays, and official BIR receipts."
     },
     Biller: {
         label: "Biller / Finance",

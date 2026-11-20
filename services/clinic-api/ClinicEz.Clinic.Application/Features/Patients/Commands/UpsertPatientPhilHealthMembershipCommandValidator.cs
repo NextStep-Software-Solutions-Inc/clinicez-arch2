@@ -53,7 +53,16 @@ public sealed class UpsertPatientPhilHealthMembershipCommandValidator : Abstract
                 .WithMessage("Dependent relationship must be S (Spouse), C (Child), P (Parent), or D (Disabled).");
 
             RuleFor(x => x.PrincipalMemberPin)
-                .NotEmpty().WithMessage("Principal member PIN is required for dependents ('DD').");
+                .NotEmpty().WithMessage("Principal member PIN is required for dependents ('DD').")
+                .Must((cmd, principalPin) =>
+                {
+                    if (string.IsNullOrWhiteSpace(cmd.PhilHealthPin) || string.IsNullOrWhiteSpace(principalPin))
+                        return true;
+                    var pDigits = ClinicEz.Clinic.Domain.Entities.PhilHealthPinNormalizer.Normalize(cmd.PhilHealthPin);
+                    var sDigits = ClinicEz.Clinic.Domain.Entities.PhilHealthPinNormalizer.Normalize(principalPin);
+                    return pDigits == null || sDigits == null || pDigits != sDigits;
+                })
+                .WithMessage("Principal member PIN cannot be the same as the patient's own PhilHealth PIN.");
 
             RuleFor(x => x.PrincipalLastName)
                 .NotEmpty().WithMessage("Principal member last name is required for dependents ('DD').")
@@ -74,16 +83,8 @@ public sealed class UpsertPatientPhilHealthMembershipCommandValidator : Abstract
         When(x => !string.IsNullOrWhiteSpace(x.PrincipalSuffix), () =>
             RuleFor(x => x.PrincipalSuffix!).MaximumLength(20));
         When(x => !string.IsNullOrWhiteSpace(x.PrincipalSex), () =>
-            RuleFor(x => x.PrincipalSex!).Must(s =>
-                s.Equals("Male", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("Female", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("Intersex", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("Unknown", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("M", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("F", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("I", StringComparison.OrdinalIgnoreCase) ||
-                s.Equals("U", StringComparison.OrdinalIgnoreCase))
-            .WithMessage("Principal sex must be Male, Female, Intersex, or Unknown."));
+            RuleFor(x => x.PrincipalSex!).Must(RegisterClinicPatientCommandValidator.BeValidPhilHealthSex)
+            .WithMessage("Principal sex must be 'Male' or 'Female'."));
         When(x => !string.IsNullOrWhiteSpace(x.MembershipCategoryCode), () =>
             RuleFor(x => x.MembershipCategoryCode!).MaximumLength(50));
         When(x => !string.IsNullOrWhiteSpace(x.MembershipCategoryDesc), () =>

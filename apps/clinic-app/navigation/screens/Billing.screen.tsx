@@ -533,7 +533,7 @@ export default function BillingScreen() {
             updatedItems.push({
               id: `yakap-fpe-${visitScreening?.id || p.queueItemId || Date.now()}`,
               code: 'YAKAP-FPE',
-              name: 'PhilHealth YAKAP Health Screening (FPE)',
+              name: 'PhilHealth Annual Health Checkup',
               category: 'Preventive',
               price: 0,
               qty: 1,
@@ -1820,7 +1820,7 @@ export default function BillingScreen() {
         {
           id: 'yakap-copay',
           code: 'YAKAP-COPAY',
-          name: 'YAKAP FPE Optional Co-Payment',
+          name: 'PhilHealth Annual Checkup Optional Co-Payment',
           category: 'Co-Payment',
           price: parsed,
           qty: 1,
@@ -1852,25 +1852,25 @@ export default function BillingScreen() {
         <View style={styles.yakapCoveredBanner} testID="billing-yakap-fpe-banner">
           <View style={styles.yakapCoveredHeader}>
             <Badge
-              label="PhilHealth YAKAP FPE Covered (₱0.00)"
+              label="PhilHealth Annual Checkup Covered (₱0.00)"
               variant="success"
               size="sm"
               icon="shieldCheck"
             />
             {selectedHealthScreening?.profilingTransNo || yakapCoverage?.currentYearFpeStatus?.profilingTransNo ? (
               <Badge
-                label={`Trans: ${selectedHealthScreening?.profilingTransNo || yakapCoverage?.currentYearFpeStatus?.profilingTransNo}`}
+                label={`Ref: ${selectedHealthScreening?.profilingTransNo || yakapCoverage?.currentYearFpeStatus?.profilingTransNo}`}
                 variant="primary"
                 size="sm"
               />
             ) : null}
           </View>
           <ThemedText variant="caption" color={theme.colors.successText}>
-            Annual PhilHealth YAKAP Health Screening (FPE) is covered at ₱0.00 capitation.
+            PhilHealth Annual Checkup is fully covered (₱0.00).
             {selectedHealthScreening?.philHealthAtc
-              ? ` ATC: ${selectedHealthScreening.philHealthAtc}.`
+              ? ` Visit Code: ${selectedHealthScreening.philHealthAtc}.`
               : selectedHealthScreening?.isWalkedIn
-              ? ' Walk-In FPE.'
+              ? ' Walk-In.'
               : ''}
           </ThemedText>
           {activeYakapEnlistment?.hasCoPayment ? (

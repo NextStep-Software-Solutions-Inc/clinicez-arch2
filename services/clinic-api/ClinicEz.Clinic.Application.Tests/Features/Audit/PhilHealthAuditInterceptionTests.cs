@@ -97,7 +97,7 @@ public class PhilHealthAuditInterceptionTests
             msg.Category == ClinicAuditCategories.PhilHealth &&
             msg.Severity == ClinicAuditSeverities.Routine &&
             msg.Outcome == "Success" &&
-            msg.Description.Contains("successfully verified")));
+            msg.Description.Contains("passed format check")));
     }
 
     [Fact]
@@ -125,221 +125,154 @@ public class PhilHealthAuditInterceptionTests
             msg.Category == ClinicAuditCategories.PhilHealth &&
             msg.Severity == ClinicAuditSeverities.Urgent &&
             msg.Outcome == "Warning" &&
-            msg.Description.Contains("verification failed")));
+            msg.Description.Contains("failed format check")));
     }
 
     [Fact]
-    public async Task ExtractMasterlist_EnqueuesYakapMasterlistSynced_WithSanitizedSecrets()
+    public async Task DownloadBatchMasterlist_EnqueuesYakapMasterlistSynced_WithTotalRecords()
     {
         // Arrange
         var inner = Substitute.For<IPhilHealthProxyClient>();
-        inner.ExtractMasterlistAsync(Arg.Any<ExtractMasterlistProxyRequest>(), Arg.Any<CancellationToken>())
-            .Returns(ApiResponse<YakapMasterlistProxyResponse>.Success(new YakapMasterlistProxyResponse(
-                IsSuccess: true,
-                AccreditationNumber: "H99214",
-                EffectiveYear: "2026",
-                TotalCount: 150,
-                Beneficiaries: new List<YakapBeneficiaryDto>(),
-                RawXml: "<xml></xml>",
-                ErrorMessage: null)));
+        var pcapiInner = Substitute.For<IYakapPcapiClient>();
+        pcapiInner.DownloadBatchMasterlistAsync(Arg.Any<MasterlistBatchRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ApiResponse<MasterlistDownloadResponse>.Success(new MasterlistDownloadResponse(
+                AccreNo: "H00099214",
+                TransmittalNo: "RH000992142026011500001",
+                EffYear: "2026",
+                StartDate: "01/01/2026",
+                EndDate: "01/07/2026",
+                TotalRecords: 150,
+                Assignments: new List<MasterlistAssignmentItem>())));
 
         var logger = Substitute.For<ILogger<AuditablePhilHealthProxyClient>>();
         var client = new AuditablePhilHealthProxyClient(
-            inner, _auditQueue, _clinicContext, _redactionService, _httpContextAccessor, logger);
+            inner, _auditQueue, _clinicContext, _redactionService, _httpContextAccessor, logger, pcapiInner);
 
         _auditQueue.TryEnqueue(Arg.Any<AuditLogMessage>()).Returns(true);
 
-        var request = new ExtractMasterlistProxyRequest
-        {
-            AccreditationNumber = "H99214",
-            EffectiveYear = "2026",
-            Password = "SuperSecretPassword123!",
-            CipherKey = "AESKeySecret456!",
-            SoftwareCertificationId = "CERT-999"
-        };
+        var request = new MasterlistBatchRequest("01/01/2026", "01/07/2026", Consent: true);
 
         // Act
-        var result = await client.ExtractMasterlistAsync(request, CancellationToken.None);
+        var result = await client.DownloadBatchMasterlistAsync(request, CancellationToken.None);
 
         // Assert
         result.Succeeded.Should().BeTrue();
-        result.Data!.TotalCount.Should().Be(150);
+        result.Data!.TotalRecords.Should().Be(150);
 
         _auditQueue.Received(1).TryEnqueue(Arg.Is<AuditLogMessage>(msg =>
             msg.Action == PhilHealthAuditEvents.MasterlistSynced &&
             msg.Category == ClinicAuditCategories.PhilHealth &&
             msg.Severity == ClinicAuditSeverities.Routine &&
             msg.Outcome == "Success" &&
-            msg.Description.Contains("150 beneficiaries loaded") &&
-            !msg.MetadataJson.Contains("SuperSecretPassword123!") &&
-            !msg.MetadataJson.Contains("AESKeySecret456!") &&
-            msg.MetadataJson.Contains("H99214")));
+            msg.Description.Contains("150 members") &&
+            msg.MetadataJson.Contains("RH000992142026011500001")));
     }
 
     [Fact]
-    public async Task ValidateReport_ValidXml_EnqueuesTransmittalGeneratedAndEncrypted()
+    public async Task ValidateStanding_MasksPin_AndEnqueuesStandingValidated()
     {
         // Arrange
         var inner = Substitute.For<IPhilHealthProxyClient>();
-        var sampleXml = "<KONSULTADATA pSoftwareCertId=\"CERT-1\"></KONSULTADATA>";
-        var sampleEncrypted = "YWVzLTI1Ni1lbmNyeXB0ZWQtYnl0ZXMtZHVtbXktcGF5bG9hZA==";
+        var pcapiInner = Substitute.For<IYakapPcapiClient>();
+        const string rawPin = "12-345678901-2";
 
-        inner.ValidateReportAsync(Arg.Any<GenerateAndValidateReportProxyRequest>(), Arg.Any<CancellationToken>())
-            .Returns(ApiResponse<YakapValidationProxyResponse>.Success(new YakapValidationProxyResponse(
-                IsValid: true,
-                TransmittalNumber: "RHCI09214202600001",
-                RawXml: sampleXml,
-                EncryptedPayload: sampleEncrypted,
-                PhilHealthSoapResponse: null,
-                ValidationErrors: null)));
+        pcapiInner.ValidateStandingAsync(Arg.Any<YakapValidateStandingRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ApiResponse<YakapValidatorResponse>.Success(new YakapValidatorResponse(
+                PatientPin: "123456789012",
+                PatientLname: "DELA CRUZ",
+                PatientFname: "JUAN",
+                PatientMname: null,
+                PatientExtname: null,
+                Pcu: new PcuStatusInfo("VERIFIED", "PCU-001"),
+                Selection: new SelectionStatusInfo("ASSIGNED", "KH000992142026011500001", "2026-01-15"),
+                Empanelment: new EmpanelmentStatusInfo("N"),
+                Fpe: new FpeStatusInfo("N"),
+                Consultation: null)));
 
         var logger = Substitute.For<ILogger<AuditablePhilHealthProxyClient>>();
         var client = new AuditablePhilHealthProxyClient(
-            inner, _auditQueue, _clinicContext, _redactionService, _httpContextAccessor, logger);
+            inner, _auditQueue, _clinicContext, _redactionService, _httpContextAccessor, logger, pcapiInner);
 
         _auditQueue.TryEnqueue(Arg.Any<AuditLogMessage>()).Returns(true);
 
-        var request = new GenerateAndValidateReportProxyRequest
-        {
-            ReportTagging = "1",
-            Document = new YakapReportDocumentDto(
-                Username: "HCI001",
-                Password: "Password",
-                HciAccreNo: "H99214",
-                PmccNo: "PMCC01",
-                CertificationId: "CERT-1",
-                HciTransmittalNumber: "RHCI09214202600001",
-                Enlistments: new List<YakapEnlistmentDto>(),
-                Profiles: new List<YakapProfileDto>(),
-                Soaps: new List<YakapSoapDto>(),
-                DiagnosticResults: new List<YakapDiagnosticResultDto>(),
-                Medicines: new List<YakapMedicineDto>())
-        };
-
         // Act
-        var result = await client.ValidateReportAsync(request, CancellationToken.None);
+        var result = await client.ValidateStandingAsync(
+            new YakapValidateStandingRequest(rawPin, "2026", Consent: true),
+            CancellationToken.None);
 
         // Assert
         result.Succeeded.Should().BeTrue();
-
-        // 1. yakap.transmittal.generated
         _auditQueue.Received(1).TryEnqueue(Arg.Is<AuditLogMessage>(msg =>
-            msg.Action == PhilHealthAuditEvents.TransmittalGenerated &&
+            msg.Action == PhilHealthAuditEvents.StandingValidated &&
             msg.Category == ClinicAuditCategories.PhilHealth &&
             msg.Outcome == "Success" &&
-            msg.MetadataJson.Contains("KonsultaData_v1.14.dtd")));
-
-        // 2. yakap.transmittal.encrypted
-        _auditQueue.Received(1).TryEnqueue(Arg.Is<AuditLogMessage>(msg =>
-            msg.Action == PhilHealthAuditEvents.TransmittalEncrypted &&
-            msg.Category == ClinicAuditCategories.PhilHealth &&
-            msg.Outcome == "Success" &&
-            msg.MetadataJson.Contains("AES-256-CBC")));
+            !msg.Description.Contains("12345678901") &&
+            !msg.MetadataJson.Contains("12345678901")));
     }
 
     [Fact]
-    public async Task ValidateReport_InvalidXml_EnqueuesClaimRejectedWithDeficiencies()
+    public async Task UploadPlainJsonAsync_FpeFailure_EnqueuesUrgentFailureAudit()
     {
         // Arrange
         var inner = Substitute.For<IPhilHealthProxyClient>();
-        var errors = new List<string> { "Element 'SOAP' missing mandatory attribute 'pSoapTransNo'." };
+        var pcapiInner = Substitute.For<IYakapPcapiClient>();
 
-        inner.ValidateReportAsync(Arg.Any<GenerateAndValidateReportProxyRequest>(), Arg.Any<CancellationToken>())
-            .Returns(ApiResponse<YakapValidationProxyResponse>.Success(new YakapValidationProxyResponse(
-                IsValid: false,
-                TransmittalNumber: "RHCI09214202600001",
-                RawXml: "<xml></xml>",
-                EncryptedPayload: null,
-                PhilHealthSoapResponse: null,
-                ValidationErrors: errors)));
+        pcapiInner.UploadPlainJsonAsync("fpe", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ApiResponse<DataUploadResponse>.Fail("Mandatory field missing in health screening record."));
 
         var logger = Substitute.For<ILogger<AuditablePhilHealthProxyClient>>();
         var client = new AuditablePhilHealthProxyClient(
-            inner, _auditQueue, _clinicContext, _redactionService, _httpContextAccessor, logger);
+            inner, _auditQueue, _clinicContext, _redactionService, _httpContextAccessor, logger, pcapiInner);
 
         _auditQueue.TryEnqueue(Arg.Any<AuditLogMessage>()).Returns(true);
 
-        var request = new GenerateAndValidateReportProxyRequest
-        {
-            ReportTagging = "1",
-            Document = new YakapReportDocumentDto(
-                Username: "HCI001",
-                Password: "Password",
-                HciAccreNo: "H99214",
-                PmccNo: "PMCC01",
-                CertificationId: "CERT-1",
-                HciTransmittalNumber: "RHCI09214202600001",
-                Enlistments: new List<YakapEnlistmentDto>(),
-                Profiles: new List<YakapProfileDto>(),
-                Soaps: new List<YakapSoapDto>(),
-                DiagnosticResults: new List<YakapDiagnosticResultDto>(),
-                Medicines: new List<YakapMedicineDto>())
-        };
-
         // Act
-        var result = await client.ValidateReportAsync(request, CancellationToken.None);
+        var result = await client.UploadPlainJsonAsync("fpe", "{\"pPatientPin\":\"123456789012\"}", CancellationToken.None);
 
         // Assert
-        result.Data!.IsValid.Should().BeFalse();
+        result.Succeeded.Should().BeFalse();
 
         _auditQueue.Received(1).TryEnqueue(Arg.Is<AuditLogMessage>(msg =>
-            msg.Action == PhilHealthAuditEvents.ClaimRejected &&
+            msg.Action == PhilHealthAuditEvents.FpeUploaded &&
             msg.Category == ClinicAuditCategories.PhilHealth &&
             msg.Severity == ClinicAuditSeverities.Urgent &&
             msg.Outcome == "Failure" &&
-            msg.Description.Contains("missing mandatory attribute")));
+            msg.Description.Contains("Mandatory field missing")));
     }
 
     [Fact]
-    public async Task SubmitReport_SoapSuccess_EnqueuesSoapSubmittedWithTransactionNumber()
+    public async Task UploadPlainJsonAsync_FpeSuccess_EnqueuesFpeUploadedWithUploadTransactionNo()
     {
         // Arrange
         var inner = Substitute.For<IPhilHealthProxyClient>();
-        inner.SubmitReportAsync(Arg.Any<GenerateAndSubmitReportProxyRequest>(), Arg.Any<CancellationToken>())
-            .Returns(ApiResponse<YakapSubmissionProxyResponse>.Success(new YakapSubmissionProxyResponse(
-                IsSuccess: true,
-                TransmittalNumber: "RHCI09214202600001",
-                TransactionNumber: "TXN-2026-99214-001",
-                RawXml: "<xml></xml>",
-                PhilHealthSoapResponse: "<response>OK</response>",
-                ValidationErrors: null)));
+        var pcapiInner = Substitute.For<IYakapPcapiClient>();
+        pcapiInner.UploadPlainJsonAsync("fpe", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ApiResponse<DataUploadResponse>.Success(new DataUploadResponse(
+                UploadTransactionNo: "UH000992142026032000001",
+                Form: "fpe",
+                ProcessingStatus: "on_queue",
+                CaseNo: "CH000992142026032000001",
+                ReceivedAt: DateTime.UtcNow)));
 
         var logger = Substitute.For<ILogger<AuditablePhilHealthProxyClient>>();
         var client = new AuditablePhilHealthProxyClient(
-            inner, _auditQueue, _clinicContext, _redactionService, _httpContextAccessor, logger);
+            inner, _auditQueue, _clinicContext, _redactionService, _httpContextAccessor, logger, pcapiInner);
 
         _auditQueue.TryEnqueue(Arg.Any<AuditLogMessage>()).Returns(true);
 
-        var request = new GenerateAndSubmitReportProxyRequest
-        {
-            ReportTagging = "2",
-            Document = new YakapReportDocumentDto(
-                Username: "HCI001",
-                Password: "Password",
-                HciAccreNo: "H99214",
-                PmccNo: "PMCC01",
-                CertificationId: "CERT-1",
-                HciTransmittalNumber: "RHCI09214202600001",
-                Enlistments: new List<YakapEnlistmentDto>(),
-                Profiles: new List<YakapProfileDto>(),
-                Soaps: new List<YakapSoapDto>(),
-                DiagnosticResults: new List<YakapDiagnosticResultDto>(),
-                Medicines: new List<YakapMedicineDto>())
-        };
-
         // Act
-        var result = await client.SubmitReportAsync(request, CancellationToken.None);
+        var result = await client.UploadPlainJsonAsync("fpe", "{\"pPatientPin\":\"123456789012\"}", CancellationToken.None);
 
         // Assert
         result.Succeeded.Should().BeTrue();
 
         _auditQueue.Received(1).TryEnqueue(Arg.Is<AuditLogMessage>(msg =>
-            msg.Action == PhilHealthAuditEvents.SoapSubmitted &&
+            msg.Action == PhilHealthAuditEvents.FpeUploaded &&
             msg.Category == ClinicAuditCategories.PhilHealth &&
             msg.Severity == ClinicAuditSeverities.Routine &&
             msg.Outcome == "Success" &&
-            msg.TargetEntityId == "TXN-2026-99214-001" &&
-            msg.Description.Contains("TXN-2026-99214-001")));
+            msg.TargetEntityId == "UH000992142026032000001" &&
+            msg.Description.Contains("UH000992142026032000001")));
     }
 
     [Fact]
@@ -351,10 +284,9 @@ public class PhilHealthAuditInterceptionTests
         var encounterId = Guid.NewGuid();
 
         var journeyNumbers = new PhilHealthPatientJourneyNumbers(
-            CaseNumber: "C00921202600001",
-            EnlistmentTransactionNumber: "E00921202600001",
-            ProfilingTransactionNumber: "P00921202600001",
-            SoapTransactionNumber: "S00921202600001");
+            CaseNumber: "CH000992142026032000001",
+            ProfilingTransactionNumber: "PH000992142026032000001",
+            SoapTransactionNumber: "SH000992142026032000001");
 
         inner.AssignPatientJourneyNumbersAsync(
             Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -368,10 +300,10 @@ public class PhilHealthAuditInterceptionTests
 
         // Act
         var result = await generator.AssignPatientJourneyNumbersAsync(
-            _tenantId, _clinicId, patientId, encounterId, "H99214", "2026", CancellationToken.None);
+            _tenantId, _clinicId, patientId, encounterId, "H00099214", "2026", CancellationToken.None);
 
         // Assert
-        result.CaseNumber.Should().Be("C00921202600001");
+        result.CaseNumber.Should().Be("CH000992142026032000001");
 
         _auditQueue.Received(1).TryEnqueue(Arg.Is<AuditLogMessage>(msg =>
             msg.Action == PhilHealthAuditEvents.EkasCreated &&
@@ -379,8 +311,8 @@ public class PhilHealthAuditInterceptionTests
             msg.Severity == ClinicAuditSeverities.Routine &&
             msg.Outcome == "Success" &&
             msg.PatientId == patientId &&
-            msg.MetadataJson.Contains("C00921202600001") &&
-            msg.MetadataJson.Contains("E00921202600001")));
+            msg.MetadataJson.Contains("CH000992142026032000001") &&
+            msg.MetadataJson.Contains("PH000992142026032000001")));
     }
 
     [Fact]

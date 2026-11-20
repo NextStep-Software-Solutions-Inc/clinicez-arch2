@@ -43,6 +43,8 @@ public sealed class GetHealthScreeningByIdQueryHandler
     private readonly IRepository<PatientYakapEnlistment>? _enlistmentRepo;
     private readonly IRepository<FacilitySettings>? _settingsRepo;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<PatientIdentityVerification>? _verificationRepo;
+    private readonly IRepository<YakapSubmission>? _submissionRepo;
 
     public GetHealthScreeningByIdQueryHandler(
         IRepository<HealthScreening> screeningRepo,
@@ -57,7 +59,9 @@ public sealed class GetHealthScreeningByIdQueryHandler
         IRepository<PatientPhilHealthMembership>? membershipRepo = null,
         IRepository<PatientYakapEnlistment>? enlistmentRepo = null,
         IRepository<FacilitySettings>? settingsRepo = null,
-        IWorkspaceProfileProvider? workspaceProfiles = null)
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<PatientIdentityVerification>? verificationRepo = null,
+        IRepository<YakapSubmission>? submissionRepo = null)
     {
         _screeningRepo = screeningRepo;
         _patientRepo = patientRepo;
@@ -72,6 +76,8 @@ public sealed class GetHealthScreeningByIdQueryHandler
         _enlistmentRepo = enlistmentRepo;
         _settingsRepo = settingsRepo;
         _workspaceProfiles = workspaceProfiles;
+        _verificationRepo = verificationRepo;
+        _submissionRepo = submissionRepo;
     }
 
     public async Task<HealthScreeningDetailDto> Handle(
@@ -174,6 +180,23 @@ public sealed class GetHealthScreeningByIdQueryHandler
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
 
+        YakapSubmission? latestSubmission = null;
+        if (_submissionRepo != null)
+        {
+            if (screening.YakapSubmissionId.HasValue)
+            {
+                latestSubmission = await _submissionRepo
+                    .Query(s => s.Id == screening.YakapSubmissionId.Value && !s.IsDeleted)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+            latestSubmission ??= await _submissionRepo
+                .Query(s => s.SourceRecordId == screening.Id && s.ClinicId == _clinicContext.ClinicId && !s.IsDeleted)
+                .AsNoTracking()
+                .OrderByDescending(s => s.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         YakapFpeReadinessDto? yakapReadiness = null;
         if (screening.WorkflowMode == VisitWorkflowMode.YakapAvailment || screening.ScreeningType == HealthScreeningType.YakapFpe)
         {
@@ -190,6 +213,19 @@ public sealed class GetHealthScreeningByIdQueryHandler
                     .ToListAsync(cancellationToken)
                 : new List<PatientYakapEnlistment>();
 
+            PatientIdentityVerification? latestVerification = null;
+            if (_verificationRepo != null)
+            {
+                latestVerification = screening.PatientIdentityVerificationId.HasValue
+                    ? await _verificationRepo.Query(v => v.Id == screening.PatientIdentityVerificationId.Value && !v.IsDeleted)
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(cancellationToken)
+                    : await _verificationRepo.Query(v => v.PatientId == screening.PatientId && v.ClinicId == _clinicContext.ClinicId && !v.IsDeleted && v.VerifiedAtUtc != null)
+                        .AsNoTracking()
+                        .OrderByDescending(v => v.VerifiedAtUtc)
+                        .FirstOrDefaultAsync(cancellationToken);
+            }
+
             var today = await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, cancellationToken, _settingsRepo);
             yakapReadiness = HealthScreeningHelper.EvaluateYakapReadiness(
                 patient,
@@ -199,7 +235,9 @@ public sealed class GetHealthScreeningByIdQueryHandler
                 vitals,
                 physicalExam,
                 ncdAssessment,
-                today);
+                today,
+                latestVerification,
+                latestSubmission);
         }
 
         return HealthScreeningHelper.ToDetailDto(
@@ -211,6 +249,7 @@ public sealed class GetHealthScreeningByIdQueryHandler
             ncdAssessment,
             labOrders,
             yakapReadiness,
-            settings);
+            settings,
+            latestSubmission);
     }
 }

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using ClinicEz.Clinic.Domain.Enums;
 
 namespace ClinicEz.Clinic.Domain.Entities;
@@ -18,249 +17,16 @@ public static class PatientYakapExtensions
     /// </summary>
     public static IReadOnlyList<PatientYakapEnlistment> GetYakapEnlistments(this Patient? patient)
     {
-        if (patient == null)
+        if (patient?.YakapEnlistments == null || patient.YakapEnlistments.Count == 0)
         {
             return Array.Empty<PatientYakapEnlistment>();
         }
 
-        if (patient.YakapEnlistments != null && patient.YakapEnlistments.Count > 0)
-        {
-            return patient.YakapEnlistments
-                .Where(e => !e.IsDeleted)
-                .OrderBy(e => e.EffectiveYear)
-                .ThenBy(e => e.EnlistmentDate)
-                .ToList();
-        }
-
-        if (patient.CustomFields != null &&
-            (patient.CustomFields.TryGetValue("yakap_enlistments", out var raw) ||
-             patient.CustomFields.TryGetValue("YakapEnlistments", out raw)) &&
-            raw != null)
-        {
-            var parsed = ParseLegacyCustomFieldsEnlistments(patient, raw);
-            if (parsed.Count > 0)
-            {
-                return parsed;
-            }
-        }
-
-        return Array.Empty<PatientYakapEnlistment>();
-    }
-
-    private static List<PatientYakapEnlistment> ParseLegacyCustomFieldsEnlistments(Patient patient, object raw)
-    {
-        var result = new List<PatientYakapEnlistment>();
-
-        if (raw is string jsonString && !string.IsNullOrWhiteSpace(jsonString))
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(jsonString);
-                ParseJsonElementEnlistments(patient, doc.RootElement, result);
-            }
-            catch
-            {
-                // Ignore JSON parse errors for non-JSON strings
-            }
-            return result.OrderBy(e => e.EffectiveYear).ThenBy(e => e.EnlistmentDate).ToList();
-        }
-
-        if (raw is JsonElement je)
-        {
-            ParseJsonElementEnlistments(patient, je, result);
-            return result.OrderBy(e => e.EffectiveYear).ThenBy(e => e.EnlistmentDate).ToList();
-        }
-
-        if (raw is System.Collections.IEnumerable enumerable && raw is not string)
-        {
-            foreach (var item in enumerable)
-            {
-                if (item is IDictionary<string, object?> dict)
-                {
-                    var entry = ParseDictionaryEnlistment(patient, dict);
-                    if (entry != null) result.Add(entry);
-                }
-                else if (item is JsonElement elem && elem.ValueKind == JsonValueKind.Object)
-                {
-                    var entry = ParseSingleJsonElementEnlistment(patient, elem);
-                    if (entry != null) result.Add(entry);
-                }
-            }
-        }
-
-        return result.OrderBy(e => e.EffectiveYear).ThenBy(e => e.EnlistmentDate).ToList();
-    }
-
-    private static void ParseJsonElementEnlistments(Patient patient, JsonElement je, List<PatientYakapEnlistment> result)
-    {
-        if (je.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var elem in je.EnumerateArray())
-            {
-                if (elem.ValueKind == JsonValueKind.Object)
-                {
-                    var entry = ParseSingleJsonElementEnlistment(patient, elem);
-                    if (entry != null) result.Add(entry);
-                }
-            }
-        }
-        else if (je.ValueKind == JsonValueKind.Object)
-        {
-            var entry = ParseSingleJsonElementEnlistment(patient, je);
-            if (entry != null) result.Add(entry);
-        }
-    }
-
-    private static PatientYakapEnlistment? ParseSingleJsonElementEnlistment(Patient patient, JsonElement obj)
-    {
-        string? GetProp(string key)
-        {
-            foreach (var prop in obj.EnumerateObject())
-            {
-                if (string.Equals(prop.Name, key, StringComparison.OrdinalIgnoreCase))
-                {
-                    return prop.Value.ValueKind switch
-                    {
-                        JsonValueKind.String => prop.Value.GetString(),
-                        JsonValueKind.Number => prop.Value.ToString(),
-                        JsonValueKind.True => "true",
-                        JsonValueKind.False => "false",
-                        _ => prop.Value.ToString()
-                    };
-                }
-            }
-            return null;
-        }
-
-        var yearStr = GetProp("effective_year") ?? GetProp("EffectiveYear");
-        int.TryParse(yearStr, out var year);
-        var statusStr = GetProp("status") ?? GetProp("Status");
-        var sourceStr = GetProp("source") ?? GetProp("Source");
-        var caseNo = GetProp("case_no") ?? GetProp("CaseNo") ?? GetProp("philhealth_case_no");
-        var enlistNo = GetProp("enlistment_no") ?? GetProp("EnlistmentNo") ?? GetProp("enlistment_trans_no") ?? GetProp("EnlistmentTransNo");
-        var profNo = GetProp("profiling_trans_no") ?? GetProp("ProfilingTransNo") ?? GetProp("philhealth_profiling_trans_no");
-        var enlistedAt = GetProp("enlisted_at") ?? GetProp("EnlistedAt") ?? GetProp("enlist_date") ?? GetProp("EnlistDate");
-        var validUntil = GetProp("valid_until") ?? GetProp("ValidUntil");
-
-        var parsedEnlistDate = ParseDateOnlyNullable(enlistedAt);
-        if (year <= 0)
-        {
-            year = parsedEnlistDate.HasValue ? parsedEnlistDate.Value.Year : DateTime.UtcNow.Year;
-        }
-
-        var enlistDate = parsedEnlistDate ?? default;
-        var validDate = ParseDateOnlyNullable(validUntil) ?? (year > 0 ? new DateOnly(year, 12, 31) : new DateOnly(2026, 12, 31));
-
-        return new PatientYakapEnlistment
-        {
-            Id = Guid.Empty,
-            TenantId = patient.TenantId,
-            ClinicId = patient.ClinicId,
-            PatientId = patient.Id,
-            Patient = patient,
-            EffectiveYear = year,
-            Status = ParseStatus(statusStr),
-            Source = ParseSource(sourceStr),
-            CaseNo = caseNo,
-            EnlistmentTransNo = enlistNo,
-            ProfilingTransNo = profNo,
-            EnlistmentDate = enlistDate,
-            ValidUntil = validDate,
-            IsDeleted = false
-        };
-    }
-
-    private static PatientYakapEnlistment? ParseDictionaryEnlistment(Patient patient, IDictionary<string, object?> dict)
-    {
-        string? GetVal(string key)
-        {
-            foreach (var kvp in dict)
-            {
-                if (string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase) && kvp.Value != null)
-                {
-                    return kvp.Value.ToString();
-                }
-            }
-            return null;
-        }
-
-        var yearStr = GetVal("effective_year") ?? GetVal("EffectiveYear");
-        int.TryParse(yearStr, out var year);
-        var statusStr = GetVal("status") ?? GetVal("Status");
-        var sourceStr = GetVal("source") ?? GetVal("Source");
-        var caseNo = GetVal("case_no") ?? GetVal("CaseNo") ?? GetVal("philhealth_case_no");
-        var enlistNo = GetVal("enlistment_no") ?? GetVal("EnlistmentNo") ?? GetVal("enlistment_trans_no") ?? GetVal("EnlistmentTransNo");
-        var profNo = GetVal("profiling_trans_no") ?? GetVal("ProfilingTransNo") ?? GetVal("philhealth_profiling_trans_no");
-        var enlistedAt = GetVal("enlisted_at") ?? GetVal("EnlistedAt") ?? GetVal("enlist_date") ?? GetVal("EnlistDate");
-        var validUntil = GetVal("valid_until") ?? GetVal("ValidUntil");
-
-        var parsedEnlistDate = ParseDateOnlyNullable(enlistedAt);
-        if (year <= 0)
-        {
-            year = parsedEnlistDate.HasValue ? parsedEnlistDate.Value.Year : DateTime.UtcNow.Year;
-        }
-
-        var enlistDate = parsedEnlistDate ?? default;
-        var validDate = ParseDateOnlyNullable(validUntil) ?? (year > 0 ? new DateOnly(year, 12, 31) : new DateOnly(2026, 12, 31));
-
-        return new PatientYakapEnlistment
-        {
-            Id = Guid.Empty,
-            TenantId = patient.TenantId,
-            ClinicId = patient.ClinicId,
-            PatientId = patient.Id,
-            Patient = patient,
-            EffectiveYear = year,
-            Status = ParseStatus(statusStr),
-            Source = ParseSource(sourceStr),
-            CaseNo = caseNo,
-            EnlistmentTransNo = enlistNo,
-            ProfilingTransNo = profNo,
-            EnlistmentDate = enlistDate,
-            ValidUntil = validDate,
-            IsDeleted = false
-        };
-    }
-
-    private static YakapEnlistmentStatus ParseStatus(string? statusStr)
-    {
-        if (Enum.TryParse<YakapEnlistmentStatus>(statusStr, true, out var s)) return s;
-        return YakapEnlistmentStatus.Active;
-    }
-
-    private static YakapEnlistmentSource ParseSource(string? sourceStr)
-    {
-        if (Enum.TryParse<YakapEnlistmentSource>(sourceStr, true, out var s)) return s;
-        return YakapEnlistmentSource.ClinicEnlistment;
-    }
-
-    private static DateOnly? ParseDateOnlyNullable(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return null;
-        var trimmed = raw.Trim();
-        if (trimmed.Length >= 10 &&
-            char.IsDigit(trimmed[0]) && char.IsDigit(trimmed[1]) && char.IsDigit(trimmed[2]) && char.IsDigit(trimmed[3]) &&
-            (trimmed[4] == '-' || trimmed[4] == '/') &&
-            char.IsDigit(trimmed[5]) && char.IsDigit(trimmed[6]) &&
-            (trimmed[7] == '-' || trimmed[7] == '/') &&
-            char.IsDigit(trimmed[8]) && char.IsDigit(trimmed[9]))
-        {
-            if (int.TryParse(trimmed[..4], out var y) &&
-                int.TryParse(trimmed[5..7], out var m) &&
-                int.TryParse(trimmed[8..10], out var d))
-            {
-                try { return new DateOnly(y, m, d); } catch { }
-            }
-        }
-        if (DateTimeOffset.TryParse(trimmed, out var dto))
-        {
-            return DateOnly.FromDateTime(dto.Date);
-        }
-        if (DateTime.TryParse(trimmed, out var dt))
-        {
-            return DateOnly.FromDateTime(dt.Date);
-        }
-        return null;
+        return patient.YakapEnlistments
+            .Where(e => !e.IsDeleted)
+            .OrderBy(e => e.EffectiveYear)
+            .ThenBy(e => e.EnlistmentDate)
+            .ToList();
     }
 
     /// <summary>
@@ -280,7 +46,7 @@ public static class PatientYakapExtensions
     /// <summary>
     /// Adds a new annual YAKAP enlistment or updates an existing benefit-year entry,
     /// strictly preserving all historical entries from prior years in chronological order.
-    /// Retains already assigned control numbers (CaseNo, EnlistmentTransNo, ProfilingTransNo)
+    /// Retains already assigned control numbers (CaseNo, SelectionControlNumber, YesReferenceNo, ProfilingTransNo)
     /// if updating an existing year unless explicitly replaced.
     /// </summary>
     public static void AddOrRenewYakapEnlistment(this Patient patient, PatientYakapEnlistment newEnlistment)
@@ -316,7 +82,6 @@ public static class PatientYakapExtensions
             existing.EnlistmentDate = newEnlistment.EnlistmentDate;
             existing.ValidUntil = newEnlistment.ValidUntil;
             if (!string.IsNullOrWhiteSpace(newEnlistment.CaseNo)) existing.CaseNo = newEnlistment.CaseNo;
-            if (!string.IsNullOrWhiteSpace(newEnlistment.EnlistmentTransNo)) existing.EnlistmentTransNo = newEnlistment.EnlistmentTransNo;
             if (!string.IsNullOrWhiteSpace(newEnlistment.ProfilingTransNo)) existing.ProfilingTransNo = newEnlistment.ProfilingTransNo;
             if (newEnlistment.ProfilingDate.HasValue) existing.ProfilingDate = newEnlistment.ProfilingDate;
             if (!string.IsNullOrWhiteSpace(newEnlistment.ProfilingAtc)) existing.ProfilingAtc = newEnlistment.ProfilingAtc;
@@ -324,6 +89,7 @@ public static class PatientYakapExtensions
             if (!string.IsNullOrWhiteSpace(newEnlistment.SuspensionReason)) existing.SuspensionReason = newEnlistment.SuspensionReason;
             if (newEnlistment.TransferredAt.HasValue) existing.TransferredAt = newEnlistment.TransferredAt;
             if (!string.IsNullOrWhiteSpace(newEnlistment.TransferredToPmcc)) existing.TransferredToPmcc = newEnlistment.TransferredToPmcc;
+            if (!string.IsNullOrWhiteSpace(newEnlistment.Remarks)) existing.Remarks = newEnlistment.Remarks;
         }
         else
         {
@@ -344,7 +110,7 @@ public static class PatientYakapExtensions
         if (patient?.YakapEnlistments == null) return null;
         return patient.YakapEnlistments.FirstOrDefault(e =>
             !e.IsDeleted &&
-            e.Status == YakapEnlistmentStatus.Active &&
+            e.Status.IsUsableActiveStatus() &&
             e.IsCoveringDate(referenceDate));
     }
 
@@ -498,7 +264,7 @@ public static class PatientYakapExtensions
                 $"Patient PhilHealth YAKAP enlistment for benefit year {effectiveYear} is marked as Expired. Cannot assign journey numbers.");
         }
 
-        if (entry.Status != YakapEnlistmentStatus.Active)
+        if (!entry.Status.IsUsableActiveStatus())
         {
             throw new InvalidOperationException(
                 $"Patient PhilHealth YAKAP enlistment for benefit year {effectiveYear} is not Active (status: {entry.Status}). Cannot assign journey numbers.");
@@ -575,11 +341,18 @@ public static class PatientYakapExtensions
         return enlistment.IsCoveringDate(DateOnly.FromDateTime(referenceDate));
     }
 
+    public static bool IsUsableActiveStatus(this YakapEnlistmentStatus status) =>
+        status is YakapEnlistmentStatus.Active
+            or YakapEnlistmentStatus.Registered
+            or YakapEnlistmentStatus.Verified
+            or YakapEnlistmentStatus.ProfilingCompleted
+            or YakapEnlistmentStatus.Transmitted;
+
     public static bool IsActiveOn(this PatientYakapEnlistment enlistment, DateOnly referenceDate)
     {
         if (enlistment == null) return false;
         return !enlistment.IsDeleted &&
-               enlistment.Status == YakapEnlistmentStatus.Active &&
+               enlistment.Status.IsUsableActiveStatus() &&
                enlistment.IsCoveringDate(referenceDate);
     }
 

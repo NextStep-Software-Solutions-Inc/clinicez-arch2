@@ -58,10 +58,7 @@ public record ConfigureBranchPhilHealthRequest(
     string? SecretKey = null,
     string? CipherKey = null,
     string? BaseUrl = null,
-    bool IsPhilHealthAccredited = true,
-    string? Username = null,
-    string? Password = null,
-    string? KonsultaEndpoint = null);
+    bool IsPhilHealthAccredited = true);
 
 public record TestBranchPhilHealthRequest(
     string? AccreditationNumber = null,
@@ -69,10 +66,7 @@ public record TestBranchPhilHealthRequest(
     string? SoftwareCertificateId = null,
     string? SecretKey = null,
     string? CipherKey = null,
-    string? BaseUrl = null,
-    string? Username = null,
-    string? Password = null,
-    string? KonsultaEndpoint = null);
+    string? BaseUrl = null);
 
 public record BranchFacilitySummaryDto(
     Guid Id,
@@ -447,9 +441,7 @@ public class BranchEndpoints : IEndpoint
 
             var resolvedEndpoint = !string.IsNullOrWhiteSpace(request.BaseUrl)
                 ? request.BaseUrl.Trim()
-                : (!string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
-                    ? request.KonsultaEndpoint.Trim()
-                    : PhilHealthDefaults.PcapiBaseUrl);
+                : PhilHealthDefaults.PcapiBaseUrl;
 
             if (request.IsPhilHealthAccredited && env.IsProduction() && !PhilHealthPcapiTester.IsStagingOrSandbox(resolvedEndpoint))
             {
@@ -545,9 +537,7 @@ public class BranchEndpoints : IEndpoint
 
             var baseUrl = !string.IsNullOrWhiteSpace(request.BaseUrl)
                 ? request.BaseUrl.Trim()
-                : (!string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
-                    ? request.KonsultaEndpoint.Trim()
-                    : (!string.IsNullOrWhiteSpace(branch.PhilHealthBaseUrl) ? branch.PhilHealthBaseUrl.Trim() : PhilHealthDefaults.PcapiBaseUrl));
+                : (!string.IsNullOrWhiteSpace(branch.PhilHealthBaseUrl) ? branch.PhilHealthBaseUrl.Trim() : PhilHealthDefaults.PcapiBaseUrl);
 
             var isCustomUnsavedUrl = !string.IsNullOrWhiteSpace(request.BaseUrl) &&
                 !string.Equals(request.BaseUrl.Trim(), branch.PhilHealthBaseUrl?.Trim(), StringComparison.OrdinalIgnoreCase) &&

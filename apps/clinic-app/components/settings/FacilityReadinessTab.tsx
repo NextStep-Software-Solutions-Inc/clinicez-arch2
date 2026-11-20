@@ -317,9 +317,9 @@ export default function FacilityReadinessTab({
     {
       id: 'philhealth',
       category: 'philhealth',
-      title: 'PhilHealth Konsulta Accreditation',
+      title: 'PhilHealth YAKAP Accreditation',
       description: hasPhilHealth
-        ? `Accreditation number ${accreditationNumber} configured for Konsulta primary care benefits.`
+        ? `Accreditation number ${accreditationNumber} configured for YAKAP primary care benefits.`
         : Boolean(accreditationNumber?.trim())
         ? `Accreditation number ${accreditationNumber} entered, but PhilHealth credentials are still pending configuration.`
         : 'Configure your DOH/PhilHealth accreditation code to submit Yakap claims (optional for private clinics).',

@@ -414,7 +414,7 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
 
         return ConsultationPlanManagementMapper.ToDto(
             encounter,
-            hciTransNo: journey?.EnlistmentTransactionNumber,
+            hciTransNo: journey?.ProfilingTransactionNumber,
             rxStatus: RxPharmacyStatusDto.From(encounter));
     }
 }

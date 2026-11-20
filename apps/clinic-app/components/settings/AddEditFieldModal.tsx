@@ -720,7 +720,7 @@ export default function AddEditFieldModal({
           <View style={styles.rowBetween}>
             <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
               Field ID
-              <ThemedText color={theme.colors.emergency}> *</ThemedText>
+              <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText>
             </ThemedText>
             <Button
               title="Generate from label"

@@ -54,7 +54,7 @@ public sealed class RevertPhilHealthToBranchCommandHandler : IRequestHandler<Rev
         settings.AccreditationNumber = settings.BranchPhilHealthAccreditationNumber;
         settings.PmccNumber = settings.BranchPmccNumber;
         settings.SoftwareCertificateId = settings.BranchSoftwareCertificateId;
-        settings.KonsultaEndpoint = !string.IsNullOrWhiteSpace(settings.BranchKonsultaEndpoint) ? settings.BranchKonsultaEndpoint : "/soap/konsulta";
+        settings.PhilHealthBaseUrl = !string.IsNullOrWhiteSpace(settings.BranchPhilHealthBaseUrl) ? settings.BranchPhilHealthBaseUrl : "https://pcapi.philhealth.gov.ph";
         settings.IsPhilHealthConfigured = settings.IsBranchPhilHealthAccredited && !string.IsNullOrWhiteSpace(settings.BranchPhilHealthAccreditationNumber);
         settings.UpdatedAt = DateTime.UtcNow;
 

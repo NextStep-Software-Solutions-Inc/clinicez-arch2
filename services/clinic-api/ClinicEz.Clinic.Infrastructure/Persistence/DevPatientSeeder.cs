@@ -816,9 +816,9 @@ public static class DevPatientSeeder
                     var enlistedDate = DateOnly.FromDateTime(now.AddMonths(-rng.Next(1, 6)));
                     var validUntilDate = new DateOnly(currentYear, 12, 31);
                     var seqNum = rng.Next(1, 99999);
-                    var caseNo = $"C000921{currentYear}{seqNum:D5}";
-                    var enlistmentNo = $"E000921{currentYear}{seqNum:D5}";
-                    var profilingTransNo = $"P000921{currentYear}{seqNum:D5}";
+                    const string accre9 = "H00000921";
+                    var caseNo = $"C{accre9}{enlistedDate:yyyyMMdd}{seqNum:D5}";
+                    var profilingTransNo = $"P{accre9}{enlistedDate:yyyyMMdd}{seqNum:D5}";
 
                     batchPhilHealthMemberships.Add(new PatientPhilHealthMembership
                     {
@@ -841,12 +841,11 @@ public static class DevPatientSeeder
                         PatientId = patientId,
                         EffectiveYear = currentYear,
                         Status = YakapEnlistmentStatus.Active,
-                        Source = YakapEnlistmentSource.ClinicEnlistment,
-                        PackageType = YakapPackageType.Konsulta,
+                        Source = YakapEnlistmentSource.AssistedIntake,
+                        PackageType = YakapPackageType.YakapPrimaryCare,
                         EnlistmentDate = enlistedDate,
                         ValidUntil = validUntilDate,
                         CaseNo = caseNo,
-                        EnlistmentTransNo = enlistmentNo,
                         ProfilingTransNo = profilingTransNo,
                         CreatedAt = patientCreatedAt,
                         CreatedBy = "System:DevPatientSeeder"

@@ -11,15 +11,13 @@ public sealed class PatientYakapEnlistment : ClinicScopedEntity
 
     public int EffectiveYear { get; set; }
     public YakapEnlistmentStatus Status { get; set; } = YakapEnlistmentStatus.Active;
-    public YakapEnlistmentSource Source { get; set; } = YakapEnlistmentSource.ClinicEnlistment;
-    public YakapPackageType PackageType { get; set; } = YakapPackageType.Konsulta;
+    public YakapEnlistmentSource Source { get; set; } = YakapEnlistmentSource.AssistedIntake;
+    public YakapPackageType PackageType { get; set; } = YakapPackageType.YakapPrimaryCare;
 
     public DateOnly EnlistmentDate { get; set; }
     public DateOnly ValidUntil { get; set; }
 
     public string? CaseNo { get; set; }
-    public string? EnlistmentTransNo { get; set; }
-    public DateOnly? EnlistmentTransDate { get; set; }
 
     public string? ProfilingTransNo { get; set; }
     public DateOnly? ProfilingDate { get; set; }

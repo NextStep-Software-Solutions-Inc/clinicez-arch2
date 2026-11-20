@@ -221,7 +221,7 @@ public class CreateFacilityCommandHandler(
             BranchPhilHealthAccreditationNumber = targetBranch?.PhilHealthAccreditationNumber,
             BranchPmccNumber = targetBranch?.PhilHealthPmccNumber,
             BranchSoftwareCertificateId = targetBranch?.PhilHealthSoftwareCertificateId,
-            BranchKonsultaEndpoint = targetBranch?.PhilHealthBaseUrl,
+            BranchPhilHealthBaseUrl = targetBranch?.PhilHealthBaseUrl,
             IsBranchPhilHealthAccredited = targetBranch != null && targetBranch.IsPhilHealthAccredited && !string.IsNullOrWhiteSpace(targetBranch.PhilHealthAccreditationNumber)
         }, cancellationToken);
 

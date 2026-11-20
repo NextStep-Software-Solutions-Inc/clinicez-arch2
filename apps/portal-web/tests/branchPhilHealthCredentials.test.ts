@@ -46,14 +46,14 @@ describe("Branch PhilHealth PCAPI v2.0 Credentials & Secret Masking", () => {
     return {
       secretKey: branch?.hasSecretKey
         ? "•••••••••••••••• (Leave blank to keep existing)"
-        : "Enter PCAPI Secret Key",
+        : "Enter PhilHealth Access Secret",
       cipherKey: branch?.hasCipherKey
         ? "•••••••••••••••• (Leave blank to keep existing)"
-        : "Enter AES-256-CBC Cipher Key",
+        : "Enter Record Encryption Key",
     };
   }
 
-  describe("Unconfigured Branch (Initial PCAPI Setup)", () => {
+  describe("Unconfigured Branch (Initial Setup)", () => {
     const unconfiguredBranch: Partial<BranchDto> = {
       id: "branch-new-123",
       name: "New Regional Branch",
@@ -63,10 +63,10 @@ describe("Branch PhilHealth PCAPI v2.0 Credentials & Secret Masking", () => {
       hasCipherKey: false,
     };
 
-    test("renders 'Enter PCAPI Secret Key' and 'Enter AES-256-CBC Cipher Key' placeholders", () => {
+    test("renders 'Enter PhilHealth Access Secret' and 'Enter Record Encryption Key' placeholders", () => {
       const placeholders = getPlaceholders(unconfiguredBranch);
-      expect(placeholders.secretKey).toBe("Enter PCAPI Secret Key");
-      expect(placeholders.cipherKey).toBe("Enter AES-256-CBC Cipher Key");
+      expect(placeholders.secretKey).toBe("Enter PhilHealth Access Secret");
+      expect(placeholders.cipherKey).toBe("Enter Record Encryption Key");
     });
 
     test("sends trimmed secretKey and cipherKey when explicitly entered", () => {
@@ -176,7 +176,7 @@ describe("Branch PhilHealth PCAPI v2.0 Credentials & Secret Masking", () => {
 
       const placeholders = getPlaceholders(partialBranch);
       expect(placeholders.secretKey).toBe("•••••••••••••••• (Leave blank to keep existing)");
-      expect(placeholders.cipherKey).toBe("Enter AES-256-CBC Cipher Key");
+      expect(placeholders.cipherKey).toBe("Enter Record Encryption Key");
     });
   });
 });

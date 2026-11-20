@@ -38,24 +38,28 @@ public sealed class PhilHealthSequenceGeneratorTests
         var case1 = await _generator.GenerateCaseNumberAsync(_tenantId, _clinicId, "HCI-NCR-00921", "2026");
         var case2 = await _generator.GenerateCaseNumberAsync(_tenantId, _clinicId, "HCI-NCR-00921", "2026");
 
-        case1.Should().Be("C000921202600001");
-        case2.Should().Be("C000921202600002");
+        case1.Should().HaveLength(23).And.StartWith("CINCR009212026").And.EndWith("00001");
+        case2.Should().HaveLength(23).And.StartWith("CINCR009212026").And.EndWith("00002");
     }
 
     [Fact]
     public async Task GenerateTransactionNumberAsync_UsesCorrectPrefixPerType()
     {
-        var enlist = await _generator.GenerateTransactionNumberAsync(_tenantId, _clinicId, PhilHealthSequenceType.Enlistment, "HCI-NCR-00921", "2026");
+        var caseNo = await _generator.GenerateTransactionNumberAsync(_tenantId, _clinicId, PhilHealthSequenceType.Case, "HCI-NCR-00921", "2026");
         var prof = await _generator.GenerateTransactionNumberAsync(_tenantId, _clinicId, PhilHealthSequenceType.Profiling, "HCI-NCR-00921", "2026");
         var soap = await _generator.GenerateTransactionNumberAsync(_tenantId, _clinicId, PhilHealthSequenceType.Soap, "HCI-NCR-00921", "2026");
+        var diagReq = await _generator.GenerateTransactionNumberAsync(_tenantId, _clinicId, PhilHealthSequenceType.DiagnosticRequest, "HCI-NCR-00921", "2026");
+        var diagRes = await _generator.GenerateTransactionNumberAsync(_tenantId, _clinicId, PhilHealthSequenceType.DiagnosticResults, "HCI-NCR-00921", "2026");
         var med = await _generator.GenerateTransactionNumberAsync(_tenantId, _clinicId, PhilHealthSequenceType.Medicine, "HCI-NCR-00921", "2026");
-        var trans = await _generator.GenerateTransmittalNumberAsync(_tenantId, _clinicId, "HCI-NCR-00921", "2026");
+        var referral = await _generator.GenerateTransactionNumberAsync(_tenantId, _clinicId, PhilHealthSequenceType.Referral, "HCI-NCR-00921", "2026");
 
-        enlist.Should().StartWith("E0009212026");
-        prof.Should().StartWith("P0009212026");
-        soap.Should().StartWith("S0009212026");
-        med.Should().StartWith("M0009212026");
-        trans.Should().StartWith("R0009212026");
+        caseNo.Should().HaveLength(23).And.StartWith("CINCR009212026").And.EndWith("00001");
+        prof.Should().HaveLength(23).And.StartWith("PINCR009212026").And.EndWith("00001");
+        soap.Should().HaveLength(23).And.StartWith("SINCR009212026").And.EndWith("00001");
+        diagReq.Should().HaveLength(23).And.StartWith("DINCR009212026").And.EndWith("00001");
+        diagRes.Should().HaveLength(23).And.StartWith("LINCR009212026").And.EndWith("00001");
+        med.Should().HaveLength(23).And.StartWith("MINCR009212026").And.EndWith("00001");
+        referral.Should().HaveLength(23).And.StartWith("RINCR009212026").And.EndWith("00001");
     }
 
     [Fact]
@@ -82,7 +86,7 @@ public sealed class PhilHealthSequenceGeneratorTests
                     ClinicId = _clinicId,
                     EffectiveYear = 2026,
                     Status = YakapEnlistmentStatus.Active,
-                    Source = YakapEnlistmentSource.ClinicEnlistment,
+                    Source = YakapEnlistmentSource.AssistedIntake,
                     EnlistmentDate = new DateOnly(2026, 1, 15),
                     ValidUntil = new DateOnly(2026, 12, 31)
                 }
@@ -111,30 +115,28 @@ public sealed class PhilHealthSequenceGeneratorTests
 
         // Assert
         result.Should().NotBeNull();
-        result.CaseNumber.Should().Be("C000921202600001");
-        result.EnlistmentTransactionNumber.Should().Be("E000921202600001");
-        result.ProfilingTransactionNumber.Should().Be("P000921202600001");
-        result.SoapTransactionNumber.Should().Be("S000921202600001");
+        result.CaseNumber.Should().Be("CINCR009212026032000001");
+        result.ProfilingTransactionNumber.Should().Be("PINCR009212026032000001");
+        result.SoapTransactionNumber.Should().Be("SINCR009212026032000001");
 
         // Verify persisted on active entry in YakapEnlistments
         var enlistment = patient.YakapEnlistments.First();
-        enlistment.CaseNo.Should().Be("C000921202600001");
-        enlistment.EnlistmentTransNo.Should().Be("E000921202600001");
-        enlistment.ProfilingTransNo.Should().Be("P000921202600001");
+        enlistment.CaseNo.Should().Be("CINCR009212026032000001");
+        enlistment.ProfilingTransNo.Should().Be("PINCR009212026032000001");
         enlistment.EnlistmentDate.Should().Be(new DateOnly(2026, 1, 15));
         enlistment.ValidUntil.Should().Be(new DateOnly(2026, 12, 31));
         enlistment.Status.Should().Be(YakapEnlistmentStatus.Active);
 
         // Verify persisted on encounter
-        encounter.PhilHealthCaseNo.Should().Be("C000921202600001");
-        encounter.PhilHealthSoapTransNo.Should().Be("S000921202600001");
+        encounter.PhilHealthCaseNo.Should().Be("CINCR009212026032000001");
+        encounter.PhilHealthSoapTransNo.Should().Be("SINCR009212026032000001");
 
         // Calling again does not overwrite existing numbers (idempotent)
         var result2 = await _generator.AssignPatientJourneyNumbersAsync(
             _tenantId, _clinicId, patient.Id, encounter.Id, "HCI-NCR-00921", "2026");
 
-        result2.CaseNumber.Should().Be("C000921202600001");
-        result2.EnlistmentTransactionNumber.Should().Be("E000921202600001");
+        result2.CaseNumber.Should().Be("CINCR009212026032000001");
+        result2.ProfilingTransactionNumber.Should().Be("PINCR009212026032000001");
     }
 
     [Fact]
@@ -209,12 +211,11 @@ public sealed class PhilHealthSequenceGeneratorTests
                     ClinicId = _clinicId,
                     EffectiveYear = 2025,
                     Status = YakapEnlistmentStatus.Expired,
-                    Source = YakapEnlistmentSource.ClinicEnlistment,
+                    Source = YakapEnlistmentSource.AssistedIntake,
                     EnlistmentDate = new DateOnly(2025, 1, 10),
                     ValidUntil = new DateOnly(2025, 12, 31),
-                    CaseNo = "C000921202500042",
-                    EnlistmentTransNo = "E000921202500042",
-                    ProfilingTransNo = "P000921202500042"
+                    CaseNo = "CINCR009212025011000042",
+                    ProfilingTransNo = "PINCR009212025011000042"
                 }
             }
         };
@@ -272,9 +273,8 @@ public sealed class PhilHealthSequenceGeneratorTests
                     Source = YakapEnlistmentSource.PhilHealthMasterlist,
                     EnlistmentDate = new DateOnly(2026, 1, 1),
                     ValidUntil = new DateOnly(2026, 12, 31),
-                    CaseNo = "C000921202600099",
-                    EnlistmentTransNo = "E000921202600099",
-                    ProfilingTransNo = "P000921202600099"
+                    CaseNo = "CINCR009212026010100099",
+                    ProfilingTransNo = "PINCR009212026010100099"
                 }
             }
         };
@@ -329,12 +329,11 @@ public sealed class PhilHealthSequenceGeneratorTests
                     ClinicId = _clinicId,
                     EffectiveYear = 2025,
                     Status = YakapEnlistmentStatus.Expired,
-                    Source = YakapEnlistmentSource.ClinicEnlistment,
+                    Source = YakapEnlistmentSource.AssistedIntake,
                     EnlistmentDate = new DateOnly(2025, 1, 10),
                     ValidUntil = new DateOnly(2025, 12, 31),
-                    CaseNo = "C000921202500050",
-                    EnlistmentTransNo = "E000921202500050",
-                    ProfilingTransNo = "P000921202500050"
+                    CaseNo = "CINCR009212025011000050",
+                    ProfilingTransNo = "PINCR009212025011000050"
                 },
                 new()
                 {
@@ -343,7 +342,7 @@ public sealed class PhilHealthSequenceGeneratorTests
                     ClinicId = _clinicId,
                     EffectiveYear = 2026,
                     Status = YakapEnlistmentStatus.Active,
-                    Source = YakapEnlistmentSource.ClinicEnlistment,
+                    Source = YakapEnlistmentSource.AssistedIntake,
                     EnlistmentDate = new DateOnly(2026, 1, 15),
                     ValidUntil = new DateOnly(2026, 12, 31)
                 }
@@ -371,22 +370,22 @@ public sealed class PhilHealthSequenceGeneratorTests
             _tenantId, _clinicId, patient.Id, encounter.Id, "HCI-NCR-00921", "2026");
 
         // Assert
-        result.CaseNumber.Should().StartWith("C0009212026");
-        result.EnlistmentTransactionNumber.Should().StartWith("E0009212026");
+        result.CaseNumber.Should().HaveLength(23).And.StartWith("CINCR0092120260310");
+        result.ProfilingTransactionNumber.Should().HaveLength(23).And.StartWith("PINCR0092120260310");
+        result.SoapTransactionNumber.Should().HaveLength(23).And.StartWith("SINCR0092120260310");
 
         patient.YakapEnlistments.Should().HaveCount(2);
 
         // 2025 entry completely preserved
         var e2025 = patient.YakapEnlistments.First(e => e.EffectiveYear == 2025);
         e2025.Status.Should().Be(YakapEnlistmentStatus.Expired);
-        e2025.CaseNo.Should().Be("C000921202500050");
-        e2025.EnlistmentTransNo.Should().Be("E000921202500050");
+        e2025.CaseNo.Should().Be("CINCR009212025011000050");
+        e2025.ProfilingTransNo.Should().Be("PINCR009212025011000050");
 
         // 2026 entry updated with newly generated numbers
         var e2026 = patient.YakapEnlistments.First(e => e.EffectiveYear == 2026);
         e2026.Status.Should().Be(YakapEnlistmentStatus.Active);
         e2026.CaseNo.Should().Be(result.CaseNumber);
-        e2026.EnlistmentTransNo.Should().Be(result.EnlistmentTransactionNumber);
         e2026.ProfilingTransNo.Should().Be(result.ProfilingTransactionNumber);
 
         encounter.PhilHealthCaseNo.Should().Be(result.CaseNumber);
@@ -415,7 +414,7 @@ public sealed class PhilHealthSequenceGeneratorTests
                     ClinicId = _clinicId,
                     EffectiveYear = 2026,
                     Status = YakapEnlistmentStatus.Active,
-                    Source = YakapEnlistmentSource.SelfReported,
+                    Source = YakapEnlistmentSource.WalkIn,
                     EnlistmentDate = new DateOnly(2026, 1, 3), // Enlisted at start of year via eGovPH
                     ValidUntil = new DateOnly(2026, 12, 31)
                 }
@@ -443,13 +442,13 @@ public sealed class PhilHealthSequenceGeneratorTests
             _tenantId, _clinicId, patient.Id, encounter.Id, "HCI-NCR-00921", "2026");
 
         // Assert
-        result.CaseNumber.Should().StartWith("C0009212026");
+        result.CaseNumber.Should().HaveLength(23).And.StartWith("CINCR0092120260920");
 
         var entry = patient.YakapEnlistments.Single();
 
         // EnlistmentDate MUST retain its original historical value
         entry.EnlistmentDate.Should().Be(new DateOnly(2026, 1, 3));
-        entry.Source.Should().Be(YakapEnlistmentSource.SelfReported);
+        entry.Source.Should().Be(YakapEnlistmentSource.WalkIn);
         entry.ValidUntil.Should().Be(new DateOnly(2026, 12, 31));
         entry.CaseNo.Should().Be(result.CaseNumber);
     }
@@ -477,7 +476,7 @@ public sealed class PhilHealthSequenceGeneratorTests
                     ClinicId = _clinicId,
                     EffectiveYear = 2026,
                     Status = YakapEnlistmentStatus.Active,
-                    Source = YakapEnlistmentSource.ClinicEnlistment,
+                    Source = YakapEnlistmentSource.AssistedIntake,
                     EnlistmentDate = new DateOnly(2026, 1, 10),
                     ValidUntil = new DateOnly(2026, 12, 31)
                 }
@@ -492,9 +491,8 @@ public sealed class PhilHealthSequenceGeneratorTests
 
         // Assert
         result.Should().NotBeNull();
-        result.CaseNumber.Should().StartWith("C0009212026");
-        result.EnlistmentTransactionNumber.Should().StartWith("E0009212026");
-        result.ProfilingTransactionNumber.Should().StartWith("P0009212026");
+        result.CaseNumber.Should().HaveLength(23).And.StartWith("CINCR009212026");
+        result.ProfilingTransactionNumber.Should().HaveLength(23).And.StartWith("PINCR009212026");
         result.SoapTransactionNumber.Should().BeNull();
 
         patient.YakapEnlistments.Single().CaseNo.Should().Be(result.CaseNumber);

@@ -65,4 +65,82 @@ public static class PhilHealthPinNormalizer
     {
         return Normalize(pin) != null;
     }
+
+    private static readonly int[] Mod11Weights = [6, 5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+
+    /// <summary>
+    /// Formats a 12-digit PIN as XX-XXXXXXXXX-X when 12 digits are present.
+    /// </summary>
+    public static string FormatHyphenated(string? rawPin)
+    {
+        var digits = ExtractExactDigits(rawPin);
+        if (digits.Length == 12)
+        {
+            return $"{digits[..2]}-{digits[2..11]}-{digits[11]}";
+        }
+        return rawPin?.Trim() ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Strictly validates that the PIN contains exactly 12 non-zero-only digits and passes
+    /// the RA 11223 Modulus-11 check digit sequence.
+    /// </summary>
+    public static bool IsValidMod11Pin(string? rawPin)
+    {
+        var digits = ExtractExactDigits(rawPin);
+        if (digits.Length != 12)
+        {
+            return false;
+        }
+
+        bool hasNonZero = false;
+        for (int i = 0; i < 12; i++)
+        {
+            if (digits[i] != '0')
+            {
+                hasNonZero = true;
+                break;
+            }
+        }
+        if (!hasNonZero)
+        {
+            return false;
+        }
+
+        int sum = 0;
+        for (int i = 0; i < 11; i++)
+        {
+            sum += (digits[i] - '0') * Mod11Weights[i];
+        }
+
+        int remainder = sum % 11;
+        int expectedCheckDigit = (11 - remainder) % 11;
+        if (expectedCheckDigit == 10)
+        {
+            expectedCheckDigit = 0;
+        }
+
+        int actualCheckDigit = digits[11] - '0';
+        return actualCheckDigit == expectedCheckDigit;
+    }
+
+    private static string ExtractExactDigits(string? rawPin)
+    {
+        if (string.IsNullOrWhiteSpace(rawPin))
+        {
+            return string.Empty;
+        }
+
+        Span<char> buffer = stackalloc char[rawPin.Length];
+        int count = 0;
+        foreach (var ch in rawPin)
+        {
+            if (char.IsDigit(ch))
+            {
+                buffer[count++] = ch;
+            }
+        }
+
+        return count == 0 ? string.Empty : new string(buffer[..count]);
+    }
 }

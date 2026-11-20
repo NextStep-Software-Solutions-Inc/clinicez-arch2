@@ -85,9 +85,8 @@ public sealed class ChallengerM2_2PolymorphicSerializationAndConcurrencyTests
             EnlistmentDate = new DateOnly(2026, 2, 15),
             ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
+            Source = YakapEnlistmentSource.AssistedIntake,
             CaseNo = "C000921202600100",
-            EnlistmentTransNo = "E000921202600100",
             ProfilingTransNo = "P000921202600100"
         });
 
@@ -97,9 +96,8 @@ public sealed class ChallengerM2_2PolymorphicSerializationAndConcurrencyTests
         entries[0].ValidUntil.Should().Be(new DateOnly(2026, 12, 31));
         entries[0].EffectiveYear.Should().Be(2026);
         entries[0].Status.Should().Be(YakapEnlistmentStatus.Active);
-        entries[0].Source.Should().Be(YakapEnlistmentSource.ClinicEnlistment);
+        entries[0].Source.Should().Be(YakapEnlistmentSource.AssistedIntake);
         entries[0].CaseNo.Should().Be("C000921202600100");
-        entries[0].EnlistmentTransNo.Should().Be("E000921202600100");
         entries[0].ProfilingTransNo.Should().Be("P000921202600100");
     }
 
@@ -158,7 +156,6 @@ public sealed class ChallengerM2_2PolymorphicSerializationAndConcurrencyTests
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
             CaseNo = "C000921202600123",
-            EnlistmentTransNo = "E000921202600123",
             ProfilingTransNo = "P000921202600123"
         });
 
@@ -175,7 +172,6 @@ public sealed class ChallengerM2_2PolymorphicSerializationAndConcurrencyTests
         entries.Should().HaveCount(1);
         entries[0].ValidUntil.Should().Be(new DateOnly(2027, 3, 31));
         entries[0].CaseNo.Should().Be("C000921202600123");
-        entries[0].EnlistmentTransNo.Should().Be("E000921202600123");
         entries[0].ProfilingTransNo.Should().Be("P000921202600123");
     }
 
@@ -262,9 +258,9 @@ public sealed class ChallengerM2_2PolymorphicSerializationAndConcurrencyTests
         var c2 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "000921", "2026");
         var c3 = await generator.GenerateCaseNumberAsync(tenantId, clinicId, "000921", "2026");
 
-        c1.Should().Be("C000921202600001");
-        c2.Should().Be("C000921202600002");
-        c3.Should().Be("C000921202600003");
+        c1.Should().HaveLength(23).And.StartWith("C0000009212026").And.EndWith("00001");
+        c2.Should().HaveLength(23).And.StartWith("C0000009212026").And.EndWith("00002");
+        c3.Should().HaveLength(23).And.StartWith("C0000009212026").And.EndWith("00003");
     }
 
     [Fact]
@@ -334,7 +330,6 @@ public sealed class ChallengerM2_2PolymorphicSerializationAndConcurrencyTests
 
         // Numbers must be completely identical across all calls
         result2.CaseNumber.Should().Be(result1.CaseNumber);
-        result2.EnlistmentTransactionNumber.Should().Be(result1.EnlistmentTransactionNumber);
         result2.ProfilingTransactionNumber.Should().Be(result1.ProfilingTransactionNumber);
         result2.SoapTransactionNumber.Should().Be(result1.SoapTransactionNumber);
 
@@ -394,10 +389,10 @@ public sealed class ChallengerM2_2PolymorphicSerializationAndConcurrencyTests
         allocatedCaseNumbers.Should().HaveCount(patientCount);
         allocatedCaseNumbers.Distinct().Should().HaveCount(patientCount);
 
-        // Verify strictly formatted and sequential from 1 to 20
+        // Verify strictly formatted and sequential from 1 to 20 (23B: C + 9-char Accre + yyyyMMdd + D5)
         for (int i = 1; i <= patientCount; i++)
         {
-            allocatedCaseNumbers[i - 1].Should().Be($"C0009212026{i:D5}");
+            allocatedCaseNumbers[i - 1].Should().HaveLength(23).And.StartWith("C0000009212026").And.EndWith($"{i:D5}");
         }
     }
 
@@ -411,21 +406,22 @@ public sealed class ChallengerM2_2PolymorphicSerializationAndConcurrencyTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        // Pre-seed tracker with sequence 0
+        // Pre-seed daily sequence with 0
+        var manilaToday = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8));
         var (setupDb, _, _) = TestDbHelper.CreateSharedTestContext(dbName, clinicContext);
         await using (setupDb)
         {
-            var tracker = new PhilHealthSequenceTracker
+            var dailySeq = new PhilHealthDailySequence
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
                 ClinicId = clinicId,
-                SequenceType = PhilHealthSequenceType.Case,
-                EffectiveYear = "2026",
-                CurrentSequence = 0,
-                LastAssignedAt = DateTime.UtcNow
+                AccreditationNo = "000000921",
+                Prefix = "C",
+                ManilaDate = manilaToday,
+                LastValue = 0
             };
-            setupDb.PhilHealthSequenceTrackers.Add(tracker);
+            setupDb.PhilHealthDailySequences.Add(dailySeq);
             await setupDb.SaveChangesAsync();
         }
 

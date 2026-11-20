@@ -165,7 +165,7 @@ export function getNavigationItems(tenant: string): SearchItem[] {
     {
       id: "nav-yakap",
       title: "PhilHealth YAKAP",
-      subtitle: "Statutory accreditation, PMCC credentials & claims",
+      subtitle: "PhilHealth accreditation, clinic credentials & claims",
       category: "navigation",
       categoryLabel: "Pages & Navigation",
       icon: IconFileCertificate,

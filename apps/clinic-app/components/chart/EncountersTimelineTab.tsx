@@ -43,7 +43,7 @@ function getScreeningTypeBadgeLabel(type: HealthScreeningType): string {
     case 'SchoolPhysical':
       return 'School Physical';
     case 'YakapFpe':
-      return 'YAKAP FPE';
+      return 'PhilHealth Checkup';
     case 'RoutineWellness':
       return 'Wellness';
     case 'CommunityScreening':
@@ -814,14 +814,14 @@ export default function EncountersTimelineTab({
                     <View style={styles.statutoryStrip}>
                       {hs.profilingTransNo ? (
                         <ThemedText variant="caption" color={theme.colors.purpleText}>
-                          Profiling Trans No:{' '}
+                          PhilHealth Ref No:{' '}
                           <ThemedText variant="captionBold" color={theme.colors.purpleText}>
                             {hs.profilingTransNo}
                           </ThemedText>
                         </ThemedText>
                       ) : null}
                       <ThemedText variant="caption" color={theme.colors.purpleText}>
-                        ATC:{' '}
+                        Visit Code:{' '}
                         <ThemedText variant="captionBold" color={theme.colors.purpleText}>
                           {hs.philHealthAtc || (hs.isWalkedIn ? 'Walk-In' : '—')}
                         </ThemedText>
