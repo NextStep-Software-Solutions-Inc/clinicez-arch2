@@ -159,6 +159,11 @@ import {
 import {
   type PrintLetterhead,
 } from '../../utils/printHelper';
+import {
+  normalizeActiveQueueItemId,
+  matchVisitDocument,
+  belongsToActiveUnsignedVisit,
+} from '../../utils/visitDocumentDrafts';
 
 interface LocalPrescription {
   id: string;
@@ -244,6 +249,55 @@ const REFERRAL_URGENCIES = ['Routine', 'Urgent', 'Emergency'];
 
 /** "ResultsReceived" -> "Results Received" */
 const humanize = (value: string) => value.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+async function fetchVisitDocumentDrafts(params: {
+  patientId: string;
+  consultationId?: string | null;
+  queueItemId?: string | null;
+  chartData?: PatientChart | null;
+  isEncounterSigned: boolean;
+}) {
+  const { patientId, consultationId, queueItemId, chartData, isEncounterSigned } = params;
+  let matchedMedCert = matchVisitDocument(chartData?.medicalCertificates, {
+    consultationId,
+    queueItemId,
+  });
+  let matchedReferral = matchVisitDocument(chartData?.referralLetters, {
+    consultationId,
+    queueItemId,
+  });
+  let medCertFetchFailed = false;
+  let referralFetchFailed = false;
+
+  const hasVisitIdentifiers = Boolean(
+    (consultationId && !consultationId.startsWith('local-draft-')) ||
+      normalizeActiveQueueItemId(queueItemId),
+  );
+
+  if (!isEncounterSigned && hasVisitIdentifiers && (!matchedMedCert || !matchedReferral)) {
+    const [draftCertsRes, draftRefsRes] = await Promise.all([
+      !matchedMedCert
+        ? clinicService.getMedicalCertificates(patientId, undefined, { includeUnsigned: true })
+        : Promise.resolve([null, null] as const),
+      !matchedReferral
+        ? clinicService.getReferralLetters(patientId, undefined, { includeUnsigned: true })
+        : Promise.resolve([null, null] as const),
+    ]);
+    const [draftCerts, draftCertsErr] = draftCertsRes;
+    const [draftRefs, draftRefsErr] = draftRefsRes;
+    medCertFetchFailed = Boolean(!matchedMedCert && draftCertsErr);
+    referralFetchFailed = Boolean(!matchedReferral && draftRefsErr);
+
+    if (!matchedMedCert && draftCerts) {
+      matchedMedCert = matchVisitDocument(draftCerts, { consultationId, queueItemId });
+    }
+    if (!matchedReferral && draftRefs) {
+      matchedReferral = matchVisitDocument(draftRefs, { consultationId, queueItemId });
+    }
+  }
+
+  return { matchedMedCert, matchedReferral, medCertFetchFailed, referralFetchFailed };
+}
 
 const formatDate = (iso?: string) => {
   if (!iso) return '';
@@ -2239,34 +2293,14 @@ export default function ConsultationsScreen() {
             }))
           : [];
         setPrescriptions(hydratedRx);
-        let matchedMedCert = chartData?.medicalCertificates?.find(
-          (mc) => mc.consultationId === existingEncounter.id,
-        );
-        let matchedReferral = chartData?.referralLetters?.find(
-          (rf) => rf.consultationId === existingEncounter.id,
-        );
-        if (!existingEncounter.isSigned && (!matchedMedCert || !matchedReferral)) {
-          const [draftCertsRes, draftRefsRes] = await Promise.all([
-            !matchedMedCert
-              ? clinicService.getMedicalCertificates(p.patientId, undefined, { includeUnsigned: true })
-              : Promise.resolve([null, null] as const),
-            !matchedReferral
-              ? clinicService.getReferralLetters(p.patientId, undefined, { includeUnsigned: true })
-              : Promise.resolve([null, null] as const),
-          ]);
-          const [draftCerts] = draftCertsRes;
-          const [draftRefs] = draftRefsRes;
-          if (!matchedMedCert && draftCerts) {
-            matchedMedCert = draftCerts.find(
-              (mc) => mc.consultationId === existingEncounter.id || mc.queueItemId === effectiveVisitId,
-            );
-          }
-          if (!matchedReferral && draftRefs) {
-            matchedReferral = draftRefs.find(
-              (rf) => rf.consultationId === existingEncounter.id || rf.queueItemId === effectiveVisitId,
-            );
-          }
-        }
+        const { matchedMedCert, matchedReferral } = await fetchVisitDocumentDrafts({
+          patientId: p.patientId,
+          consultationId: isLocalOnlyEncounter ? null : existingEncounter.id,
+          queueItemId: effectiveVisitId,
+          chartData,
+          isEncounterSigned: Boolean(existingEncounter.isSigned),
+        });
+        if (activePatientId.current !== effectiveVisitId) return;
         setIssuedMedCert(
           matchedMedCert
             ? existingEncounter.isSigned
@@ -2661,6 +2695,57 @@ export default function ConsultationsScreen() {
       setDraftSaveStatus('idle');
       setLastDraftSavedAt(null);
       applyRosCategories([]);
+    }
+
+    if (!matchedEncounter) {
+      const activeQueueItemId = normalizeActiveQueueItemId(effectiveVisitId);
+      if (activeQueueItemId) {
+        const { matchedMedCert, matchedReferral } = await fetchVisitDocumentDrafts({
+          patientId: p.patientId,
+          consultationId: null,
+          queueItemId: activeQueueItemId,
+          chartData,
+          isEncounterSigned: false,
+        });
+        if (activePatientId.current !== effectiveVisitId) return;
+        setIssuedMedCert(
+          matchedMedCert
+            ? matchedMedCert.isSigned === true
+              ? matchedMedCert
+              : { ...matchedMedCert, isSigned: false }
+            : null,
+        );
+        setIssuedReferral(
+          matchedReferral
+            ? matchedReferral.isSigned === true
+              ? matchedReferral
+              : { ...matchedReferral, isSigned: false }
+            : null,
+        );
+        if (matchedMedCert) {
+          setMedCertFitness(matchedMedCert.fitnessStatus || 'FitToWork');
+          setMedCertRestDays(
+            matchedMedCert.recommendedRestDays != null
+              ? String(matchedMedCert.recommendedRestDays)
+              : '',
+          );
+          setMedCertPurpose(matchedMedCert.purpose || '');
+          setMedCertRemarks(matchedMedCert.remarks || '');
+        }
+        if (matchedReferral) {
+          setRefFacility(matchedReferral.referredToFacility || '');
+          setRefDepartment(matchedReferral.referredDepartment || '');
+          setRefUrgency(matchedReferral.urgency || 'Routine');
+          setRefReason(matchedReferral.reasonForReferral || '');
+          setRefSummary(matchedReferral.clinicalSummary || '');
+          if (matchedReferral.provisionalDiagnosis) {
+            setRefDiagnosis(matchedReferral.provisionalDiagnosis);
+          }
+        }
+      } else {
+        setIssuedMedCert(null);
+        setIssuedReferral(null);
+      }
     }
 
     const [labData, labErr] = labRes;
@@ -5073,12 +5158,16 @@ export default function ConsultationsScreen() {
 
   const refreshChartContextRef = useRef({
     selectedPatientId: selectedPatient?.patientId,
+    activeQueueItemId: normalizeActiveQueueItemId(selectedPatient?.id),
+    isSigned,
     patientRecord,
     dentalChart,
     signedConsultationId,
   });
   refreshChartContextRef.current = {
     selectedPatientId: selectedPatient?.patientId,
+    activeQueueItemId: normalizeActiveQueueItemId(selectedPatient?.id),
+    isSigned,
     patientRecord,
     dentalChart,
     signedConsultationId,
@@ -5129,6 +5218,26 @@ export default function ConsultationsScreen() {
         }));
         const multiMap = normalizeTeethToMultiRecord(taggedTeeth);
         setDentalChart(multiMap);
+      }
+    }
+    if (!latestCtx.isSigned && (latestCtx.activeQueueItemId || consultationIdRef.current)) {
+      const {
+        matchedMedCert,
+        matchedReferral,
+        medCertFetchFailed,
+        referralFetchFailed,
+      } = await fetchVisitDocumentDrafts({
+        patientId,
+        consultationId: consultationIdRef.current,
+        queueItemId: latestCtx.activeQueueItemId,
+        chartData: !chartErr ? chartData : null,
+        isEncounterSigned: false,
+      });
+      if (!medCertFetchFailed && matchedMedCert) {
+        setIssuedMedCert(matchedMedCert);
+      }
+      if (!referralFetchFailed && matchedReferral) {
+        setIssuedReferral(matchedReferral);
       }
     }
   }, []);
@@ -5417,10 +5526,80 @@ export default function ConsultationsScreen() {
         <AdministrativeDocumentsTab
           patient={patientRecord}
           patientId={selectedPatient?.patientId}
-          queueItemId={selectedPatient?.id}
+          queueItemId={normalizeActiveQueueItemId(selectedPatient?.id)}
           medicalCertificates={chartMedCertsForTab}
           referralLetters={chartReferralsForTab}
           onRefreshChart={refreshPatientChart}
+          onMedicalCertificateIssued={(cert) => {
+            const activeQueueItemId = normalizeActiveQueueItemId(selectedPatient?.id);
+            const visitCtx = {
+              isEncounterSigned: isSigned,
+              consultationId: consultationIdRef.current,
+              queueItemId: activeQueueItemId,
+            };
+            const isActiveVisitDoc =
+              belongsToActiveUnsignedVisit(cert, visitCtx) ||
+              Boolean(isSigned && matchVisitDocument([cert], visitCtx));
+
+            if (isActiveVisitDoc) {
+              setIssuedMedCert(
+                cert.isSigned === false ? { ...cert, isSigned: false } : isSigned ? cert : { ...cert, isSigned: false },
+              );
+              setMedCertFitness(cert.fitnessStatus || 'FitToWork');
+              setMedCertRestDays(cert.recommendedRestDays != null ? String(cert.recommendedRestDays) : '');
+              setMedCertPurpose(cert.purpose || '');
+              setMedCertRemarks(cert.remarks || '');
+              return;
+            }
+
+            setPatientChart((prev) => {
+              if (!prev) return prev;
+              const existing = prev.medicalCertificates || [];
+              return {
+                ...prev,
+                medicalCertificates: [cert, ...existing.filter((item) => item.id !== cert.id)],
+              };
+            });
+          }}
+          onReferralLetterIssued={(letter) => {
+            const activeQueueItemId = normalizeActiveQueueItemId(selectedPatient?.id);
+            const visitCtx = {
+              isEncounterSigned: isSigned,
+              consultationId: consultationIdRef.current,
+              queueItemId: activeQueueItemId,
+            };
+            const isActiveVisitDoc =
+              belongsToActiveUnsignedVisit(letter, visitCtx) ||
+              Boolean(isSigned && matchVisitDocument([letter], visitCtx));
+
+            if (isActiveVisitDoc) {
+              setIssuedReferral(
+                letter.isSigned === false
+                  ? { ...letter, isSigned: false }
+                  : isSigned
+                    ? letter
+                    : { ...letter, isSigned: false },
+              );
+              setRefFacility(letter.referredToFacility || '');
+              setRefDepartment(letter.referredDepartment || '');
+              setRefUrgency(letter.urgency || 'Routine');
+              setRefReason(letter.reasonForReferral || '');
+              setRefSummary(letter.clinicalSummary || '');
+              if (letter.provisionalDiagnosis) {
+                setRefDiagnosis(letter.provisionalDiagnosis);
+              }
+              return;
+            }
+
+            setPatientChart((prev) => {
+              if (!prev) return prev;
+              const existing = prev.referralLetters || [];
+              return {
+                ...prev,
+                referralLetters: [letter, ...existing.filter((item) => item.id !== letter.id)],
+              };
+            });
+          }}
         />
       )}
       {activeChartTab === 'dental' && (
