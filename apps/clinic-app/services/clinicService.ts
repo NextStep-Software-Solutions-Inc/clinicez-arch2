@@ -203,6 +203,10 @@ export interface PendingSyncMutationOptions {
   skipPendingVerificationSync?: boolean;
 }
 
+export interface UploadStaffPrcProofOptions extends PendingSyncMutationOptions {
+  stageOnly?: boolean;
+}
+
 export function isVerificationConflictError(err?: ApiError | null): boolean {
   return Boolean(
     err &&
@@ -4824,10 +4828,18 @@ export const clinicService = {
     id: string,
     fileInput: FormData | Blob | { uri: string; name: string; type: string },
     fileName?: string,
-    options?: PendingSyncMutationOptions,
+    options?: UploadStaffPrcProofOptions,
   ) {
     const formData = toEvidenceUploadFormData(fileInput, fileName);
-    const qs = options?.skipPendingVerificationSync === true ? '?skipPendingVerificationSync=true' : '';
+    const params = new URLSearchParams();
+    if (options?.skipPendingVerificationSync === true) {
+      params.set('skipPendingVerificationSync', 'true');
+    }
+    if (options?.stageOnly === true) {
+      params.set('stageOnly', 'true');
+    }
+    const qsStr = params.toString();
+    const qs = qsStr ? `?${qsStr}` : '';
     return clinicApiClient.post<EvidenceProofUploadResult>(`/staff/${id}/prc-proof${qs}`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',

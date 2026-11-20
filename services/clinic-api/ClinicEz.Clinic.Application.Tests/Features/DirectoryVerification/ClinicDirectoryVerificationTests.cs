@@ -536,6 +536,109 @@ public class ClinicDirectoryVerificationTests
     }
 
     [Fact]
+    public async Task UpdateVerifiedClinician_ExpiryOrProofChangeResetsToPendingAndEmitsPrcUpdate_WhileBioOnlyKeepsVerified()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
+        var storage = Substitute.For<IClinicStorageService>();
+        storage.SaveEncryptedFileAsync(Arg.Any<string>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.ArgAt<string>(0));
+        var publisher = Substitute.For<IInteropPublisher>();
+
+        var docId = Guid.NewGuid();
+        var originalExpiry = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1));
+        const string originalProofKey = "tenants/t/clinics/c/verification/prc/doc/old-proof.pdf";
+
+        await settingsRepo.AddAsync(new FacilitySettings
+        {
+            TenantId = TenantId,
+            ClinicId = _clinicId,
+            ClinicName = "Verified Clinic"
+        });
+        await staffRepo.AddAsync(new StaffMember
+        {
+            Id = docId,
+            TenantId = TenantId,
+            ClinicId = _clinicId,
+            FirstName = "Justine Mae",
+            LastName = "Tabasan",
+            Role = StaffRole.Doctor,
+            PrcLicenseNumber = "PRC-0111222",
+            PrcExpiryDate = originalExpiry,
+            PrcEvidenceObjectKey = originalProofKey,
+            VerificationContact = "dr.tabasan@clinic.ph",
+            PublicBio = "Primary care physician",
+            IsDirectoryOptIn = true,
+            CanonicalProviderId = Guid.NewGuid(),
+            PublicVerificationStatus = PractitionerVerificationLevel.Verified,
+            IsActive = true
+        });
+        await uow.SaveChangesAsync();
+
+        var updateHandler = new UpdateStaffMemberCommandHandler(
+            staffRepo, roleRepo, uow, _clinicContext,
+            interopPublisher: publisher,
+            settingsRepository: settingsRepo,
+            auditRepository: auditRepo);
+
+        // 1. Bio-only edit keeps Verified status and emits zero verification requests
+        var bioOnly = await updateHandler.Handle(new UpdateStaffMemberCommand(
+            docId, "Justine Mae", "Tabasan", null, "Dr.", StaffRole.Doctor, null, "dr.tabasan@clinic.ph", null,
+            "PRC-0111222", null, null, "Family Medicine", true,
+            IsDirectoryOptIn: true,
+            PrcExpiryDate: originalExpiry,
+            PrcEvidenceObjectKey: originalProofKey,
+            VerificationContact: "dr.tabasan@clinic.ph",
+            PublicBio: "Board certified family physician"), CancellationToken.None);
+
+        bioOnly.PublicVerificationStatus.Should().Be(PractitionerVerificationLevel.Verified);
+        bioOnly.PublicBio.Should().Be("Board certified family physician");
+        publisher.DidNotReceiveWithAnyArgs().Enqueue<PractitionerVerificationRequestedPayload>(default!, default!, default!, default, default!);
+
+        // 2. StageOnly upload does not mutate staff record or emit verification request until saved
+        var uploadHandler = new UploadStaffPrcProofCommandHandler(
+            staffRepo, storage, _clinicContext, uow, auditRepo: auditRepo, settingsRepo: settingsRepo, interopPublisher: publisher);
+        var stagedProof = await uploadHandler.Handle(
+            new UploadStaffPrcProofCommand(docId, "renewed-prc.png", "image/png", 4, [0x89, 0x50, 0x4E, 0x47], StageOnly: true),
+            CancellationToken.None);
+
+        stagedProof.ObjectKey.Should().NotBe(originalProofKey);
+        var entityAfterStage = await staffRepo.Query(s => s.Id == docId).FirstAsync();
+        entityAfterStage.PrcEvidenceObjectKey.Should().Be(originalProofKey);
+        entityAfterStage.PublicVerificationStatus.Should().Be(PractitionerVerificationLevel.Verified);
+        publisher.DidNotReceiveWithAnyArgs().Enqueue<PractitionerVerificationRequestedPayload>(default!, default!, default!, default, default!);
+
+        // 3. Saving with staged proof + renewed PRC expiry resets to PendingVerification and enqueues PrcUpdate
+        var renewedExpiry = originalExpiry.AddYears(2);
+        var resubmitted = await updateHandler.Handle(new UpdateStaffMemberCommand(
+            docId, "Justine Mae", "Tabasan", null, "Dr.", StaffRole.Doctor, null, "dr.tabasan@clinic.ph", null,
+            "PRC-0111222", null, null, "Family Medicine", true,
+            IsDirectoryOptIn: true,
+            PrcExpiryDate: renewedExpiry,
+            PrcEvidenceObjectKey: stagedProof.ObjectKey,
+            VerificationContact: "dr.tabasan@clinic.ph",
+            PublicBio: "Board certified family physician"), CancellationToken.None);
+
+        resubmitted.PublicVerificationStatus.Should().Be(PractitionerVerificationLevel.PendingVerification);
+        resubmitted.PrcExpiryDate.Should().Be(renewedExpiry);
+        resubmitted.PrcEvidenceObjectKey.Should().Be(stagedProof.ObjectKey);
+
+        publisher.Received(1).Enqueue(
+            InteropTypes.PractitionerVerificationRequested,
+            Arg.Any<Party>(),
+            Party.Portal,
+            docId,
+            Arg.Is<PractitionerVerificationRequestedPayload>(p =>
+                p.RequestKind == "PrcUpdate" &&
+                p.NormalizedPrcLicenseNo == "0111222" &&
+                p.PrcExpiryDate == renewedExpiry &&
+                p.PrcEvidenceObjectKey == stagedProof.ObjectKey));
+    }
+
+    [Fact]
     public async Task WithdrawPractitionerVerification_ResetsOptIn_AndSyncsVerifiedClinicDirectory()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
