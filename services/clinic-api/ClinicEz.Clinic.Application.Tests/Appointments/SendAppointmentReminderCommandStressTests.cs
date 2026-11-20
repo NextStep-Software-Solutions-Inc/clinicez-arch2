@@ -359,7 +359,7 @@ public sealed class SendAppointmentReminderCommandStressTests
         };
         await settingsRepo.AddAsync(settings);
 
-        var scheduledAt = new DateTime(2026, 11, 20, 10, 0, 0, DateTimeKind.Utc);
+        var scheduledAt = DateTime.UtcNow.AddDays(2);
         var appointment = new Appointment
         {
             Id = Guid.NewGuid(),

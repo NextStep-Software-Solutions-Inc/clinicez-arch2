@@ -6,7 +6,7 @@ import Icon from '../ui/Icon';
 import Button from '../ui/Button';
 import CustomModal from '../ui/Modal';
 import { notify } from '../../utils/feedback';
-import { clinicService, type TeleconsultPaymentPolicy, type TeleconsultGuestInviteDto } from '../../services/clinicService';
+import { clinicService, type AppointmentStatus, type TeleconsultPaymentPolicy, type TeleconsultGuestInviteDto } from '../../services/clinicService';
 import { getCachedAppointmentInvite, setCachedAppointmentInvite } from '../teleconsult/TeleconsultWaitingRoomModal';
 import type { ExtendedAppointmentItem } from './types';
 import {
@@ -14,6 +14,7 @@ import {
   resolveUrgencyTokens,
   resolveStatusTokens,
   getAppointmentLocalDateTime,
+  parseAppointmentTimestampMs,
 } from './calendarUtils';
 import { useClinicComms } from '../../context/ClinicCommsContext';
 import { useClinic } from '../../context/ClinicContext';
@@ -32,7 +33,8 @@ export interface AppointmentInspectionModalProps {
 function formatDateTimeDisplay(dateStr?: string | null): string {
   if (!dateStr) return '';
   try {
-    const d = new Date(dateStr);
+    const ts = parseAppointmentTimestampMs(dateStr);
+    const d = Number.isFinite(ts) ? new Date(ts) : new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
     const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const date = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
@@ -58,6 +60,44 @@ function getPatientInitials(name?: string | null): string {
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
   }
   return clean.slice(0, 2).toUpperCase() || 'PT';
+}
+
+function inferStatusFromReminderError(
+  err?: { status?: number; message?: string } | null,
+): AppointmentStatus | null {
+  if (!err || (err.status !== 400 && err.status !== 409) || typeof err.message !== 'string') {
+    return null;
+  }
+  const msg = err.message;
+  if (
+    /\b(?:not|never|must\s+not(?:\s+be)?|cannot(?:\s+be)?|could\s+not(?:\s+be)?|isn't|wasn't|aren't)\s+(?:yet\s+|be\s+|been\s+|marked(?:\s+as)?\s+)?(?:completed|cancell?ed|no[\s_-]?show)\b/i.test(
+      msg,
+    )
+  ) {
+    return null;
+  }
+  if (
+    /\bstatus\s*(?:is|:|=)?\s*['"]?Completed['"]?|\b(?:appointment|visit|booking)\s+(?:(?:is|was|has\s+been)(?:\s+(?:already|marked(?:\s+as)?))?|already|marked(?:\s+as)?)\s+(?:already\s+)?completed\b|\balready\s+completed\b/i.test(
+      msg,
+    )
+  ) {
+    return 'Completed';
+  }
+  if (
+    /\bstatus\s*(?:is|:|=)?\s*['"]?Cancell?ed['"]?|\b(?:appointment|visit|booking)\s+(?:(?:is|was|has\s+been)(?:\s+(?:already|marked(?:\s+as)?))?|already|marked(?:\s+as)?)\s+(?:already\s+)?cancell?ed\b|\balready\s+cancell?ed\b/i.test(
+      msg,
+    )
+  ) {
+    return 'Cancelled';
+  }
+  if (
+    /\bstatus\s*(?:is|:|=)?\s*['"]?No[\s_-]?Show['"]?|\b(?:appointment|visit|booking)\s+(?:(?:is|was|has\s+been)(?:\s+(?:already|marked(?:\s+as)?))?|already|marked(?:\s+as)?)\s+(?:already\s+)?no[\s_-]?show\b|\balready\s+no[\s_-]?show\b/i.test(
+      msg,
+    )
+  ) {
+    return 'NoShow';
+  }
+  return null;
 }
 
 export function AppointmentInspectionModal({
@@ -190,16 +230,17 @@ export function AppointmentInspectionModal({
     return null;
   }
 
+  const nowMs = Date.now();
   const { dateStr: scheduledLocalDateStr, formattedTime } = getAppointmentLocalDateTime(
     currentAppointment.scheduledAt,
     clinicTimeZoneId,
   );
   const { dateStr: todayLocalDateStr } = getAppointmentLocalDateTime(
-    new Date().toISOString(),
+    new Date(nowMs).toISOString(),
     clinicTimeZoneId,
   );
-  const scheduledTimeMs = new Date(currentAppointment.scheduledAt).getTime();
-  const isPastSchedule = Number.isFinite(scheduledTimeMs) && scheduledTimeMs < Date.now();
+  const scheduledTimeMs = parseAppointmentTimestampMs(currentAppointment.scheduledAt);
+  const isPastSchedule = Number.isFinite(scheduledTimeMs) && scheduledTimeMs < nowMs;
   const isPastDate =
     Boolean(scheduledLocalDateStr) &&
     Boolean(todayLocalDateStr) &&
@@ -212,20 +253,34 @@ export function AppointmentInspectionModal({
     isPastDate ||
     sendingReminder;
 
-  const syncAppointmentAfterReminderError = async () => {
-    if (typeof clinicService?.getAppointment !== 'function') return;
-    try {
-      const [fresh, freshErr] = await clinicService.getAppointment(currentAppointment.id);
-      if (!freshErr && fresh) {
-        const synced: ExtendedAppointmentItem = {
-          ...currentAppointment,
-          ...fresh,
-        };
-        setCurrentAppointment(synced);
-        onAppointmentSynced?.(synced);
+  const syncAppointmentAfterReminderError = async (
+    reminderError?: { status?: number; message?: string } | null,
+  ) => {
+    if (typeof clinicService?.getAppointment === 'function') {
+      try {
+        const [fresh, freshErr] = await clinicService.getAppointment(currentAppointment.id);
+        if (!freshErr && fresh) {
+          const synced: ExtendedAppointmentItem = {
+            ...currentAppointment,
+            ...fresh,
+          };
+          setCurrentAppointment(synced);
+          onAppointmentSynced?.(synced);
+          return;
+        }
+      } catch {
+        // Fall through to secondary 400/409 error status inference when refetch fails
       }
-    } catch {
-      // Ignore secondary refresh failure
+    }
+
+    const inferredStatus = inferStatusFromReminderError(reminderError);
+    if (inferredStatus && inferredStatus !== currentAppointment.status) {
+      const fallbackSynced: ExtendedAppointmentItem = {
+        ...currentAppointment,
+        status: inferredStatus,
+      };
+      setCurrentAppointment(fallbackSynced);
+      onAppointmentSynced?.(fallbackSynced);
     }
   };
 
@@ -236,7 +291,7 @@ export function AppointmentInspectionModal({
       const [updated, err] = await clinicService.sendAppointmentReminder(currentAppointment.id);
       if (err || !updated) {
         notify.error(err?.message || 'Failed to dispatch appointment push reminder.');
-        await syncAppointmentAfterReminderError();
+        await syncAppointmentAfterReminderError(err);
         return;
       }
       const merged: ExtendedAppointmentItem = {
@@ -247,9 +302,9 @@ export function AppointmentInspectionModal({
       onReminderSent?.(merged);
       onAppointmentSynced?.(merged);
       notify.success('Appointment push reminder sent to patient.');
-    } catch {
+    } catch (ex: any) {
       notify.error('Failed to dispatch appointment push reminder.');
-      await syncAppointmentAfterReminderError();
+      await syncAppointmentAfterReminderError(ex as { status?: number; message?: string } | null);
     } finally {
       setSendingReminder(false);
     }

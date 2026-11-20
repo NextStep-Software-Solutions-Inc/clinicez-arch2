@@ -464,6 +464,75 @@ public class DomainSearchProvidersTests
         results[0].RouteParams.Should().ContainKey("appointmentId").WhoseValue.Should().Be(appt1.Id.ToString());
     }
 
+    [Fact]
+    public async Task AppointmentSearchProvider_MapsNoShowAndTerminalStatusBadges()
+    {
+        // Arrange
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var provider = new AppointmentSearchProvider(apptRepo);
+
+        var noShowAppt = new Appointment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientName = "BadgeTest NoShowPatient",
+            DoctorName = "Dr. Santos",
+            Reason = "Annual Wellness",
+            ServiceType = "Consultation",
+            ScheduledAt = DateTime.UtcNow.AddDays(-1),
+            Status = AppointmentStatus.NoShow
+        };
+
+        var completedAppt = new Appointment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientName = "BadgeTest CompletedPatient",
+            DoctorName = "Dr. Santos",
+            Reason = "Lab Review",
+            ServiceType = "Consultation",
+            ScheduledAt = DateTime.UtcNow.AddHours(-3),
+            Status = AppointmentStatus.Completed
+        };
+
+        var cancelledAppt = new Appointment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientName = "BadgeTest CancelledPatient",
+            DoctorName = "Dr. Santos",
+            Reason = "Vaccination",
+            ServiceType = "Consultation",
+            ScheduledAt = DateTime.UtcNow.AddDays(2),
+            Status = AppointmentStatus.Cancelled
+        };
+
+        context.Appointments.AddRange(noShowAppt, completedAppt, cancelledAppt);
+        await context.SaveChangesAsync();
+
+        // Act
+        var results = await provider.SearchAsync("BadgeTest", _clinicIdA, 10, CancellationToken.None);
+
+        // Assert
+        results.Should().HaveCount(3);
+
+        var noShowResult = results.Single(r => r.Id == noShowAppt.Id.ToString());
+        noShowResult.BadgeText.Should().Be("No Show");
+        noShowResult.BadgeVariant.Should().Be(SearchBadgeVariant.Neutral);
+
+        var completedResult = results.Single(r => r.Id == completedAppt.Id.ToString());
+        completedResult.BadgeText.Should().Be("Completed");
+        completedResult.BadgeVariant.Should().Be(SearchBadgeVariant.Routine);
+
+        var cancelledResult = results.Single(r => r.Id == cancelledAppt.Id.ToString());
+        cancelledResult.BadgeText.Should().Be("Cancelled");
+        cancelledResult.BadgeVariant.Should().Be(SearchBadgeVariant.Neutral);
+    }
+
     // ==========================================
     // 4. QueueSearchProvider Tests
     // ==========================================
