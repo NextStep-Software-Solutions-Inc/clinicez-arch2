@@ -23,6 +23,22 @@ export const COLLAPSED_FILTER_WIDTH = 36;
 export const EXPANDED_FILTER_WIDTH = 220;
 export const FILTER_ANIMATION_DURATION_MS = 220;
 
+export function resolveTabStripEdgeFadeMask(
+  canScrollLeft: boolean,
+  canScrollRight: boolean
+): string | undefined {
+  if (canScrollLeft && canScrollRight) {
+    return 'linear-gradient(to right, transparent 0, black 24px, black calc(100% - 24px), transparent 100%)';
+  }
+  if (canScrollRight) {
+    return 'linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%)';
+  }
+  if (canScrollLeft) {
+    return 'linear-gradient(to right, transparent 0, black 24px, black 100%)';
+  }
+  return undefined;
+}
+
 export interface SettingsNavModeSwitcherProps {
   navMode: SettingsNavMode;
   onChangeNavMode: (mode: SettingsNavMode) => void;
@@ -174,6 +190,108 @@ export default function SettingsTabBar({
 
   const hasFilterText = Boolean(effectiveQuery.trim());
 
+  const tabRefs = useRef<Record<string, any>>({});
+  const lastRevealedKeyRef = useRef<string | null>(null);
+  const lastActiveTabRef = useRef<SettingsTabKey | null>(null);
+  const hasManuallyScrolledRef = useRef(false);
+  const isProgrammaticRevealRef = useRef(false);
+  const [scrollMetrics, setScrollMetrics] = useState({
+    scrollX: 0,
+    viewportWidth: 0,
+    contentWidth: 0,
+  });
+
+  const tabsSignature = useMemo(
+    () => filteredTabs.map((t) => `${t.key}:${t.badge ?? ''}`).join('|'),
+    [filteredTabs]
+  );
+
+  useEffect(() => {
+    if (lastActiveTabRef.current !== activeTab) {
+      lastActiveTabRef.current = activeTab;
+      hasManuallyScrolledRef.current = false;
+    }
+
+    if (Platform.OS !== 'web') return;
+    if (!filteredTabs.some((t) => t.key === activeTab)) return;
+
+    const revealKey = `${activeTab}|${tabsSignature}`;
+    if (lastRevealedKeyRef.current === revealKey) return;
+    if (hasManuallyScrolledRef.current && lastRevealedKeyRef.current?.startsWith(`${activeTab}|`)) {
+      return;
+    }
+
+    const targetNode = tabRefs.current[activeTab];
+    if (!targetNode || typeof targetNode.scrollIntoView !== 'function') return;
+
+    lastRevealedKeyRef.current = revealKey;
+
+    let resetTimer: ReturnType<typeof setTimeout> | undefined;
+    const reveal = () => {
+      isProgrammaticRevealRef.current = true;
+      try {
+        targetNode.scrollIntoView({
+          behavior: 'auto',
+          inline: 'nearest',
+          block: 'nearest',
+        });
+      } catch {
+        // Ignore in environments where scrollIntoView options are unsupported
+      }
+      resetTimer = setTimeout(() => {
+        isProgrammaticRevealRef.current = false;
+      }, 60);
+    };
+
+    if (typeof requestAnimationFrame === 'function') {
+      const rafId = requestAnimationFrame(reveal);
+      return () => {
+        cancelAnimationFrame(rafId);
+        if (resetTimer) clearTimeout(resetTimer);
+      };
+    }
+
+    reveal();
+    return () => {
+      if (resetTimer) clearTimeout(resetTimer);
+    };
+  }, [activeTab, filteredTabs, tabsSignature]);
+
+  const handleViewportLayout = useCallback((event: any) => {
+    const nextWidth = event?.nativeEvent?.layout?.width ?? 0;
+    setScrollMetrics((prev) =>
+      Math.abs(prev.viewportWidth - nextWidth) < 1 ? prev : { ...prev, viewportWidth: nextWidth }
+    );
+  }, []);
+
+  const handleContentSizeChange = useCallback((nextWidth: number) => {
+    setScrollMetrics((prev) =>
+      Math.abs(prev.contentWidth - nextWidth) < 1 ? prev : { ...prev, contentWidth: nextWidth }
+    );
+  }, []);
+
+  const handleStripScroll = useCallback((event: any) => {
+    if (!isProgrammaticRevealRef.current) {
+      hasManuallyScrolledRef.current = true;
+    }
+    const nextX = Math.max(0, event?.nativeEvent?.contentOffset?.x ?? 0);
+    setScrollMetrics((prev) =>
+      Math.abs(prev.scrollX - nextX) < 1 ? prev : { ...prev, scrollX: nextX }
+    );
+  }, []);
+
+  const canScrollLeft = scrollMetrics.scrollX > 4;
+  const canScrollRight =
+    scrollMetrics.contentWidth > scrollMetrics.viewportWidth + 4 &&
+    scrollMetrics.contentWidth - scrollMetrics.viewportWidth - scrollMetrics.scrollX > 4;
+  const edgeFadeMask =
+    Platform.OS === 'web'
+      ? resolveTabStripEdgeFadeMask(canScrollLeft, canScrollRight)
+      : undefined;
+  const overflowMaskStyle = edgeFadeMask
+    ? ({ maskImage: edgeFadeMask, WebkitMaskImage: edgeFadeMask } as any)
+    : null;
+
   return (
     <View
       style={[styles.container, { ...theme.shadows.sm }]}
@@ -248,13 +366,19 @@ export default function SettingsTabBar({
       <View style={styles.controlsDivider} />
 
       {/* Single-Row Non-Wrapping Native Horizontal Tab Strip */}
-      <View style={styles.scrollViewport}>
+      <View
+        style={[styles.scrollViewport, overflowMaskStyle]}
+        onLayout={handleViewportLayout}
+      >
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           bounces={false}
           alwaysBounceHorizontal={false}
           overScrollMode="never"
+          onContentSizeChange={handleContentSizeChange}
+          onScroll={handleStripScroll}
+          scrollEventThrottle={16}
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           testID="settings-tabs-scroll-view"
@@ -289,6 +413,13 @@ export default function SettingsTabBar({
                 <React.Fragment key={tab.key}>
                   {showGroupDivider ? <View style={styles.groupDivider} /> : null}
                   <Pressable
+                    ref={(node) => {
+                      if (node) {
+                        tabRefs.current[tab.key] = node;
+                      } else {
+                        delete tabRefs.current[tab.key];
+                      }
+                    }}
                     onPress={() => onSelectTab(tab.key)}
                     accessibilityRole="tab"
                     accessibilityState={{ selected: isActive }}

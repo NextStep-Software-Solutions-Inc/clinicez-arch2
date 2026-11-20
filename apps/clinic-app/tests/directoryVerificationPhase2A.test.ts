@@ -137,50 +137,16 @@ mock.module('@react-navigation/native', () => ({
   useRoute: () => ({ params: {} }),
 }));
 
-mock.module('../context/AuthContext', () => ({
-  useAuth: () => ({
-    state: 'signedIn',
-    user: {
-      id: 'admin-1',
-      name: 'Admin User',
-      email: 'admin@clinic.ph',
-      role: 'Admin',
-      clinicId: 'clinic-1',
-      tenantId: 'tenant-1',
-      permissions: ['*'],
-    },
-    offline: false,
-  }),
-  usePermission: () => true,
-}));
-
-mock.module('../context/StaffContext', () => ({
-  useStaff: () => ({
-    staff: [],
-    current: null,
-    currentName: 'Admin User',
-    loading: false,
-    error: null,
-    reload: async () => {},
-  }),
-  formatStaffName: (s?: any) => (s ? `${s.firstName} ${s.lastName}` : ''),
-}));
-
-mock.module('../context/ClinicContext', () => ({
-  useClinic: () => ({
-    facilityName: 'St. Jude Clinic',
-    rooms: [],
-    refreshRooms: async () => {},
-  }),
-}));
-
 const { clinicApiClient } = await import('../services/apiClient');
 const { clinicService } = await import('../services/clinicService');
 const {
   isClinicianRole,
+  isPendingInvitedStaff,
   isValidPrcFormat,
+  normalizePrcNumber,
   resolveFacilityVerificationBadge,
   resolvePractitionerVerificationBadge,
+  shouldShowPractitionerDirectoryBadge,
   getPractitionerDirectoryActions,
   validateClinicianDirectoryOptIn,
   isStaffRecordReadyForVerification,
@@ -192,10 +158,44 @@ describe('Phase 2A: Directory Verification Helpers, API Contracts & Staff Direct
   const originalPut = clinicApiClient.put.bind(clinicApiClient);
   const originalGet = clinicApiClient.get.bind(clinicApiClient);
 
+  beforeEach(() => {
+    (globalThis as any).__mockAuthContext = {
+      state: 'signedIn',
+      user: {
+        id: 'admin-1',
+        name: 'Admin User',
+        email: 'admin@clinic.ph',
+        role: 'Admin',
+        clinicId: 'clinic-1',
+        tenantId: 'tenant-1',
+        permissions: ['*'],
+      },
+      permissions: ['*'],
+      offline: false,
+      can: () => true,
+    };
+    (globalThis as any).__mockStaffContext = {
+      staff: [],
+      current: null,
+      currentName: 'Admin User',
+      loading: false,
+      error: null,
+      reload: async () => {},
+    };
+    (globalThis as any).__mockClinicContext = {
+      facilityName: 'St. Jude Clinic',
+      rooms: [],
+      refreshRooms: async () => {},
+    };
+  });
+
   afterEach(() => {
     clinicApiClient.post = originalPost;
     clinicApiClient.put = originalPut;
     clinicApiClient.get = originalGet;
+    delete (globalThis as any).__mockAuthContext;
+    delete (globalThis as any).__mockStaffContext;
+    delete (globalThis as any).__mockClinicContext;
   });
 
   test('1. clinicService wires all Phase 2A ClinicSettings & Staff verification endpoints cleanly', async () => {
@@ -272,6 +272,8 @@ describe('Phase 2A: Directory Verification Helpers, API Contracts & Staff Direct
     expect(getPractitionerDirectoryActions({ role: 'Doctor', isActive: true, publicVerificationStatus: 'Unverified' })).toEqual([
       'submit-verification',
     ]);
+    expect(getPractitionerDirectoryActions({ role: 'Doctor', status: 'Invited', isActive: true, publicVerificationStatus: 'Unverified' })).toEqual([]);
+    expect(getPractitionerDirectoryActions({ role: 'Nurse', status: 'Invited', isActive: true, publicVerificationStatus: 'Unverified' })).toEqual([]);
     expect(getPractitionerDirectoryActions({ role: 'Nurse', isActive: true, publicVerificationStatus: 'PendingVerification' })).toEqual([
       'withdraw-verification',
     ]);
@@ -285,6 +287,18 @@ describe('Phase 2A: Directory Verification Helpers, API Contracts & Staff Direct
     expect(getPractitionerDirectoryActions({ role: 'Receptionist', isActive: true, publicVerificationStatus: 'Unverified' })).toEqual([]);
     expect(getPractitionerDirectoryActions({ role: 'Cashier', isActive: true })).toEqual([]);
     expect(getPractitionerDirectoryActions({ role: 'Admin', isActive: true })).toEqual([]);
+
+    expect(isPendingInvitedStaff({ status: 'Invited', hasCredentials: false })).toBe(true);
+    expect(isPendingInvitedStaff({ status: 'Invited', hasCredentials: true })).toBe(false);
+    expect(isPendingInvitedStaff({ status: 'Active' })).toBe(false);
+
+    expect(normalizePrcNumber('PRC-12345')).toBe('0012345');
+    expect(normalizePrcNumber(' 12345 ')).toBe('0012345');
+    expect(shouldShowPractitionerDirectoryBadge({ role: 'Doctor', status: 'Active', publicVerificationStatus: 'Unverified' })).toBe(true);
+    expect(shouldShowPractitionerDirectoryBadge({ role: 'Doctor', status: 'Invited', publicVerificationStatus: 'Unverified' })).toBe(false);
+    expect(shouldShowPractitionerDirectoryBadge({ role: 'Nurse', status: 'Active', isDirectoryOptIn: false, publicVerificationStatus: 'Unverified' })).toBe(false);
+    expect(shouldShowPractitionerDirectoryBadge({ role: 'Nurse', status: 'Active', isDirectoryOptIn: true, publicVerificationStatus: 'PendingVerification' })).toBe(true);
+    expect(shouldShowPractitionerDirectoryBadge({ role: 'Receptionist', status: 'Active' })).toBe(false);
 
     expect(
       validateClinicianDirectoryOptIn({
@@ -423,9 +437,89 @@ describe('Phase 2A: Directory Verification Helpers, API Contracts & Staff Direct
     expect(markup).toContain('Action required: PRC ID photo cropped.');
     expect(markup).toContain('Exp 2029-05-01');
 
-    expect(markup).toContain('Submit for Verification');
-    expect(markup).toContain('Resubmit PRC');
-    expect(markup).toContain('Withdraw');
+    // Verification actions live exclusively inside the ⋮ ActionMenu (no duplicate inline row buttons)
+    expect(markup).not.toContain('Submit for Verification');
+    expect(markup).not.toContain('Resubmit PRC');
+    expect(markup).not.toContain('Withdraw Verification');
+
+    const staffTabSrc = fs.readFileSync(
+      path.resolve(__dirname, '../components/settings/StaffManagementTab.tsx'),
+      'utf8',
+    );
+    expect(staffTabSrc).toContain("directoryActions.includes('submit-verification')");
+    expect(staffTabSrc).toContain("directoryActions.includes('resubmit-prc')");
+    expect(staffTabSrc).toContain("directoryActions.includes('withdraw-verification')");
+
+    // Pending Invited clinician and non-opted-in Nurse hide passive "Not Listed" clutter
+    const invitedDocOnlyMarkup = renderToStaticMarkup(
+      React.createElement(StaffManagementTab, {
+        staff: [
+          {
+            id: 'doc-invited',
+            tenantId: 't1',
+            clinicId: 'c1',
+            firstName: 'Andre',
+            lastName: 'Amamio',
+            title: 'Dr.',
+            role: 'Doctor',
+            roleName: 'Attending Physician / Doctor',
+            prcLicenseNumber: '12345',
+            isActive: true,
+            status: 'Invited',
+            createdAt: '2026-10-01T00:00:00Z',
+            publicVerificationStatus: 'Unverified',
+          },
+        ],
+        setStaff: () => {},
+        roles: [],
+        staffLoadError: null,
+        showSkeletons: false,
+        activeStaffCount: 1,
+        maxStaffSeats: 10,
+        onRefreshStaff: async () => {},
+        showAddModal: false,
+        setShowAddModal: () => {},
+        onStaffAdded: async () => {},
+      }),
+    );
+    expect(invitedDocOnlyMarkup).toContain('Invited');
+    expect(invitedDocOnlyMarkup).toContain('Edit');
+    expect(invitedDocOnlyMarkup).not.toContain('Not Listed');
+    expect(invitedDocOnlyMarkup.match(/Attending Physician \/ Doctor/g)?.length).toBe(1);
+
+    const nonOptedInNurseMarkup = renderToStaticMarkup(
+      React.createElement(StaffManagementTab, {
+        staff: [
+          {
+            id: 'nurse-local',
+            tenantId: 't1',
+            clinicId: 'c1',
+            firstName: 'Joanne',
+            lastName: 'Awiten',
+            title: 'RN',
+            role: 'Nurse',
+            roleName: 'Triage Nurse',
+            isActive: true,
+            status: 'Active',
+            createdAt: '2026-10-01T00:00:00Z',
+            isDirectoryOptIn: false,
+            publicVerificationStatus: 'Unverified',
+          },
+        ],
+        setStaff: () => {},
+        roles: [],
+        staffLoadError: null,
+        showSkeletons: false,
+        activeStaffCount: 1,
+        maxStaffSeats: 10,
+        onRefreshStaff: async () => {},
+        showAddModal: false,
+        setShowAddModal: () => {},
+        onStaffAdded: async () => {},
+      }),
+    );
+    expect(nonOptedInNurseMarkup).not.toContain('Not Listed');
+    expect(nonOptedInNurseMarkup.match(/Triage Nurse/g)?.length).toBe(1);
 
     // Receptionist row-only check: rendering solely a Receptionist must show zero directory badges or actions
     const receptionistOnlyMarkup = renderToStaticMarkup(

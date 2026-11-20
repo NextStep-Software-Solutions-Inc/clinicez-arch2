@@ -237,6 +237,7 @@ const {
   COLLAPSED_FILTER_WIDTH,
   EXPANDED_FILTER_WIDTH,
   FILTER_ANIMATION_DURATION_MS,
+  resolveTabStripEdgeFadeMask,
 } = await import('../components/settings/SettingsTabBar');
 const {
   default: SettingsVerticalRail,
@@ -415,6 +416,14 @@ describe('Settings Dual-Mode Navigation Redesign & Issue #163 Regression Suite',
     expect(tabBarSource).not.toContain('chevronRight');
     expect(tabBarSource).not.toContain('scrollTo');
     expect(tabBarSource).not.toContain('scrollActiveTabIntoView');
+    expect(tabBarSource).toContain('scrollIntoView');
+    expect(tabBarSource).toContain('maskImage');
+
+    expect(resolveTabStripEdgeFadeMask(false, false)).toBeUndefined();
+    expect(resolveTabStripEdgeFadeMask(false, true)).toContain('transparent 100%');
+    expect(resolveTabStripEdgeFadeMask(true, false)).toContain('transparent 0');
+    expect(resolveTabStripEdgeFadeMask(true, true)).toContain('transparent 0');
+    expect(resolveTabStripEdgeFadeMask(true, true)).toContain('transparent 100%');
 
     const collapsedMarkup = renderToStaticMarkup(
       React.createElement(SettingsTabBar, {
