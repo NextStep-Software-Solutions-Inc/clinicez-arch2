@@ -16,7 +16,22 @@
 import { Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { api, ApiError } from '../api/apiClient';
-import type { CommsTicketResponse } from '@clinicez/comms-sdk';
+import type {
+  CommsAttachmentReference,
+  CommsTicketResponse,
+  DeliveryState,
+  MessageCategory,
+  RequestStatus,
+  TriageDisposition,
+} from '@clinicez/comms-sdk';
+
+export type {
+  CommsAttachmentReference,
+  DeliveryState,
+  MessageCategory,
+  RequestStatus,
+  TriageDisposition,
+};
 
 export interface CommsUploadFileInput {
   uri: string;
@@ -29,39 +44,6 @@ export interface CommsUploadFileInput {
 
 const MAX_ATTACHMENT_SIZE_BYTES = 15 * 1024 * 1024;
 const WEB_FETCHABLE_URI_PATTERN = /^(blob:|data:|https?:)/i;
-
-export interface CommsAttachmentReference {
-  fileKey: string;
-  fileName: string;
-  contentType: string;
-  sizeBytes: number;
-  hashSha256?: string;
-}
-
-export type MessageCategory =
-  | 'Medical'
-  | 'Billing'
-  | 'PrescriptionRefill'
-  | 'LabInquiry'
-  | 'General';
-
-export type RequestStatus =
-  | 'Submitted'
-  | 'WithTriage'
-  | 'Routed'
-  | 'Closed';
-
-export type TriageDisposition =
-  | 'Answered'
-  | 'NeedsVisit'
-  | 'Declined'
-  | 'Routed';
-
-export type DeliveryState =
-  | 'Sending'
-  | 'Waiting'
-  | 'Received'
-  | 'NotReceived';
 
 export interface PatientMessageAttachmentDto {
   id: string;

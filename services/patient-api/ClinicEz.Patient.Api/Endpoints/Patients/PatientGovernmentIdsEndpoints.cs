@@ -75,7 +75,15 @@ public sealed class PatientGovernmentIdsEndpoints : IEndpoint
                 g.IdNumber,
                 g.IssuedAt,
                 g.ExpiresAt,
-                g.UpdatedAt))
+                g.UpdatedAt,
+                g.PhilhealthCategory,
+                g.SponsorPin,
+                g.SponsorLastName,
+                g.SponsorFirstName,
+                g.SponsorMiddleName,
+                g.SponsorSuffix,
+                g.SponsorDob,
+                g.SponsorRelationship))
             .ToListAsync(ct);
 
         return Results.Ok(ApiResponse<IReadOnlyList<PatientGovernmentIdDto>>.Success(ids.AsReadOnly()));
@@ -97,7 +105,7 @@ public sealed class PatientGovernmentIdsEndpoints : IEndpoint
         var now = DateTime.UtcNow;
         var existingList = patient.GovernmentIds.Where(g => !g.IsDeleted).ToList();
 
-        foreach (var item in request.Items)
+        foreach (var item in request.Items ?? Array.Empty<UpdateGovernmentIdItemRequest>())
         {
             if (string.IsNullOrWhiteSpace(item.IdNumber)) continue;
 
@@ -165,7 +173,15 @@ public sealed class PatientGovernmentIdsEndpoints : IEndpoint
                 g.IdNumber,
                 g.IssuedAt,
                 g.ExpiresAt,
-                g.UpdatedAt))
+                g.UpdatedAt,
+                g.PhilhealthCategory,
+                g.SponsorPin,
+                g.SponsorLastName,
+                g.SponsorFirstName,
+                g.SponsorMiddleName,
+                g.SponsorSuffix,
+                g.SponsorDob,
+                g.SponsorRelationship))
             .ToListAsync(ct);
 
         return Results.Ok(ApiResponse<IReadOnlyList<PatientGovernmentIdDto>>.Success(

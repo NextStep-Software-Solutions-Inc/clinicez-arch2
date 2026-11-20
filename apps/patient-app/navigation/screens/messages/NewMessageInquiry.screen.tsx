@@ -1,9 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Linking,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
@@ -13,8 +11,7 @@ import Screen from '../../../components/layout/Screen';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
-import Badge from '../../../components/ui/Badge';
-import { AppIcon } from '../../../components/ui/Icon';
+import { AppIcon, type IconName } from '../../../components/ui/Icon';
 import IconButton from '../../../components/ui/IconButton';
 import ThemedText from '../../../components/ui/ThemedText';
 import FilterChipBar from '../../../components/ui/FilterChipBar';
@@ -28,18 +25,24 @@ import {
 } from '../../../services/comms/communicationsService';
 import { dialog } from '../../../utils/dialog';
 
-const CATEGORIES: { id: MessageCategory; label: string; icon: string }[] = [
-  { id: 'Medical', label: 'Medical', icon: 'stethoscope' },
+export const MAX_SUBJECT_LENGTH = 100;
+export const MAX_MESSAGE_LENGTH = 850;
+export const MAX_COMBINED_CONTENT_LENGTH = 1000;
+
+export const INQUIRY_CATEGORIES: { id: MessageCategory; label: string; icon: IconName }[] = [
+  { id: 'PostVisitFollowUp', label: 'Medical / Follow-Up', icon: 'stethoscope' },
   { id: 'PrescriptionRefill', label: 'Prescriptions', icon: 'pill' },
-  { id: 'LabInquiry', label: 'Lab Inquiry', icon: 'lab' },
+  { id: 'LabResultQuestion', label: 'Lab Inquiry', icon: 'lab' },
   { id: 'Billing', label: 'Billing / HMO', icon: 'document' },
-  { id: 'General', label: 'General', icon: 'chat' },
+  { id: 'Scheduling', label: 'Scheduling', icon: 'calendar' },
+  { id: 'Other', label: 'General', icon: 'chat' },
 ];
 
 export default function NewMessageInquiryScreen() {
   const { colors, spacing, radii } = useAppTheme();
   const navigation = useNavigation<any>();
   const { getToken, internalPatientId } = useAuth();
+  const mountedRef = useRef(true);
 
   // Emergency Gate State
   const [emergencyAcknowledged, setEmergencyAcknowledged] = useState<boolean | null>(null);
@@ -49,38 +52,53 @@ export default function NewMessageInquiryScreen() {
   const [grants, setGrants] = useState<PatientEligibilityGrantDto[]>([]);
   const [selectedGrantId, setSelectedGrantId] = useState<string | null>(null);
   const [selectedDependentId, setSelectedDependentId] = useState<string | null>(null);
-  const [category, setCategory] = useState<MessageCategory>('Medical');
+  const [category, setCategory] = useState<MessageCategory>('PostVisitFollowUp');
   const [subject, setSubject] = useState('');
   const [messageText, setMessageText] = useState('');
   const [attachments, setAttachments] = useState<CommsAttachmentReference[]>([]);
 
   // Loading & Submission State
   const [isLoadingGrants, setIsLoadingGrants] = useState(true);
+  const [grantsError, setGrantsError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
 
-  // Load Eligibility Grants
   useEffect(() => {
-    let mounted = true;
-    communicationsService
-      .getEligibilityGrants(getToken)
-      .then((res) => {
-        if (!mounted) return;
-        setGrants(res);
-        if (res.length > 0) {
-          setSelectedGrantId(res[0].grantId);
-        }
-      })
-      .catch((err) => {
-        console.warn('Failed to load eligibility grants:', err);
-      })
-      .finally(() => {
-        if (mounted) setIsLoadingGrants(false);
-      });
+    mountedRef.current = true;
     return () => {
-      mounted = false;
+      mountedRef.current = false;
     };
+  }, []);
+
+  // Load Eligibility Grants
+  const loadGrants = useCallback(async () => {
+    setIsLoadingGrants(true);
+    setGrantsError(null);
+    try {
+      const res = await communicationsService.getEligibilityGrants(getToken);
+      if (!mountedRef.current) return;
+      setGrants(res);
+      setSelectedGrantId((prev) =>
+        prev && res.some((g) => g.grantId === prev) ? prev : (res[0]?.grantId ?? null),
+      );
+    } catch (err: any) {
+      console.warn('Failed to load eligibility grants:', err);
+      if (!mountedRef.current) return;
+      setGrants([]);
+      setSelectedGrantId(null);
+      setGrantsError(
+        err?.message ?? 'Could not load your connected healthcare facilities. Please try again.',
+      );
+    } finally {
+      if (mountedRef.current) {
+        setIsLoadingGrants(false);
+      }
+    }
   }, [getToken]);
+
+  useEffect(() => {
+    loadGrants();
+  }, [loadGrants]);
 
   // Dependent Options derived from grants
   const dependentOptions: { id: string | null; label: string }[] = useMemo(() => {
@@ -97,10 +115,27 @@ export default function NewMessageInquiryScreen() {
     return list;
   }, [grants, internalPatientId]);
 
+  const targetPatientId = selectedDependentId ?? internalPatientId ?? null;
+
+  const eligibleGrants = useMemo(() => {
+    if (!targetPatientId) return grants;
+    return grants.filter((g) => g.patientId === targetPatientId);
+  }, [grants, targetPatientId]);
+
+  useEffect(() => {
+    if (eligibleGrants.length === 0) {
+      setSelectedGrantId(null);
+      return;
+    }
+    if (!selectedGrantId || !eligibleGrants.some((g) => g.grantId === selectedGrantId)) {
+      setSelectedGrantId(eligibleGrants[0].grantId);
+    }
+  }, [eligibleGrants, selectedGrantId]);
+
   // Selected active grant
   const activeGrant = useMemo(() => {
-    return grants.find((g) => g.grantId === selectedGrantId) ?? grants[0] ?? null;
-  }, [grants, selectedGrantId]);
+    return eligibleGrants.find((g) => g.grantId === selectedGrantId) ?? eligibleGrants[0] ?? null;
+  }, [eligibleGrants, selectedGrantId]);
 
   // Emergency Screening Handler
   const handleEmergencyAnswer = (isEmergency: boolean) => {
@@ -173,26 +208,45 @@ export default function NewMessageInquiryScreen() {
       return;
     }
 
-    if (!messageText.trim()) {
+    if (!activeGrant) {
+      dialog.alert(
+        'No Connected Facility',
+        'You must have an active connected healthcare facility before submitting an inquiry.',
+      );
+      return;
+    }
+
+    const trimmedMessage = messageText.trim();
+    if (!trimmedMessage) {
       dialog.alert('Missing Message', 'Please describe your concern or question.');
       return;
     }
 
-    const tenantId = activeGrant?.tenantId ?? 'default-tenant';
-    const facilityId = activeGrant?.facilityId ?? 'default-facility';
-    const facilityType = activeGrant?.facilityType ?? 'Clinic';
-    const facilityName = activeGrant?.facilityName ?? 'Primary Health Facility';
+    const trimmedSubject = subject.trim();
+    const formattedContent = trimmedSubject
+      ? `[${trimmedSubject}]\n\n${trimmedMessage}`
+      : trimmedMessage;
+
+    if (formattedContent.length > MAX_COMBINED_CONTENT_LENGTH) {
+      dialog.alert(
+        'Message Too Long',
+        `Your inquiry cannot exceed ${MAX_COMBINED_CONTENT_LENGTH} characters including the subject.`,
+      );
+      return;
+    }
+
+    const { tenantId, facilityId, facilityType, facilityName } = activeGrant;
 
     setIsSubmitting(true);
     try {
       const response = await communicationsService.submitInquiry(getToken, {
-        patientId: selectedDependentId ?? internalPatientId ?? undefined,
+        patientId: selectedDependentId ?? activeGrant.patientId ?? internalPatientId ?? undefined,
         tenantId,
         facilityId,
         facilityType,
         facilityName,
         category,
-        contentText: subject.trim() ? `[${subject.trim()}]\n\n${messageText.trim()}` : messageText.trim(),
+        contentText: formattedContent,
         isEmergencyConfirmed: false,
         attachments: attachments.length > 0 ? attachments : undefined,
       });
@@ -371,22 +425,68 @@ export default function NewMessageInquiryScreen() {
                 <ThemedText variant="small" color="textMuted">
                   Loading connected healthcare facilities...
                 </ThemedText>
-              ) : grants.length === 0 ? (
-                <View style={{ gap: 2 }}>
-                  <ThemedText variant="bodyBold" color="text">
-                    Connected Primary Clinic
+              ) : grantsError ? (
+                <View
+                  style={[
+                    styles.grantNoticeCard,
+                    {
+                      backgroundColor: colors.warningBg,
+                      borderColor: colors.warningBorder,
+                      borderRadius: radii.md,
+                      padding: spacing.md,
+                      gap: spacing.xs,
+                    },
+                  ]}
+                >
+                  <View style={styles.grantNoticeHeader}>
+                    <AppIcon name="warning" size={18} color="warning" />
+                    <ThemedText variant="bodyBold" color="warningText">
+                      Unable to Load Connected Facilities
+                    </ThemedText>
+                  </View>
+                  <ThemedText variant="small" color="warningText">
+                    {grantsError}
                   </ThemedText>
-                  <ThemedText variant="caption" color="textMuted">
-                    Your inquiry will be routed to your enrolled primary care provider.
+                  <View style={{ alignSelf: 'flex-start', marginTop: spacing.xs }}>
+                    <Button
+                      label="Retry"
+                      variant="outline"
+                      size="sm"
+                      icon="refresh"
+                      onPress={loadGrants}
+                    />
+                  </View>
+                </View>
+              ) : eligibleGrants.length === 0 ? (
+                <View
+                  style={[
+                    styles.grantNoticeCard,
+                    {
+                      backgroundColor: colors.surfaceSubtle,
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                      padding: spacing.md,
+                      gap: spacing.xs,
+                    },
+                  ]}
+                >
+                  <View style={styles.grantNoticeHeader}>
+                    <AppIcon name="alert" size={18} color="warning" />
+                    <ThemedText variant="bodyBold" color="text">
+                      No Connected Facility Found
+                    </ThemedText>
+                  </View>
+                  <ThemedText variant="small" color="textMuted">
+                    You do not currently have an active communication eligibility grant with any clinic, pharmacy, or laboratory. Once a connected facility enables messaging for your care, it will appear here.
                   </ThemedText>
                 </View>
               ) : (
                 <FilterChipBar
-                  items={grants.map((g) => ({
+                  items={eligibleGrants.map((g) => ({
                     key: g.grantId,
                     label: `${g.facilityName} (${g.facilityType})`,
                   }))}
-                  selectedKey={selectedGrantId ?? grants[0]?.grantId ?? ''}
+                  selectedKey={activeGrant?.grantId ?? ''}
                   onSelect={(id) => setSelectedGrantId(id)}
                   contentContainerStyle={{ paddingRight: spacing.sm }}
                 />
@@ -398,7 +498,7 @@ export default function NewMessageInquiryScreen() {
                 INQUIRY CATEGORY
               </ThemedText>
               <FilterChipBar
-                items={CATEGORIES.map((c) => ({
+                items={INQUIRY_CATEGORIES.map((c) => ({
                   key: c.id,
                   label: c.label,
                 }))}
@@ -416,7 +516,7 @@ export default function NewMessageInquiryScreen() {
               placeholder="e.g. Follow-up regarding blood test results"
               value={subject}
               onChangeText={setSubject}
-              maxLength={100}
+              maxLength={MAX_SUBJECT_LENGTH}
             />
 
             <Input
@@ -426,12 +526,12 @@ export default function NewMessageInquiryScreen() {
               onChangeText={setMessageText}
               multiline
               numberOfLines={5}
-              maxLength={2000}
+              maxLength={MAX_MESSAGE_LENGTH}
             />
 
             <View style={styles.charCountRow}>
               <ThemedText variant="caption" color="textMuted">
-                {messageText.length} / 2000 characters
+                {messageText.length} / {MAX_MESSAGE_LENGTH} characters
               </ThemedText>
             </View>
 
@@ -491,7 +591,13 @@ export default function NewMessageInquiryScreen() {
             size="lg"
             icon="check"
             fullWidth
-            disabled={isSubmitting || emergencyAcknowledged !== false || !messageText.trim()}
+            disabled={
+              isSubmitting ||
+              isLoadingGrants ||
+              emergencyAcknowledged !== false ||
+              !activeGrant ||
+              !messageText.trim()
+            }
             onPress={handleSubmit}
           />
         </View>
@@ -521,6 +627,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  grantNoticeCard: {
+    borderWidth: 1,
+  },
+  grantNoticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   charCountRow: {
     alignItems: 'flex-end',

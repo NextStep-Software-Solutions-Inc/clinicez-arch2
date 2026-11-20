@@ -17,7 +17,9 @@ using ClinicEz.Clinic.Infrastructure.Messaging;
 using ClinicEz.Clinic.Infrastructure.Messaging.Handlers;
 using ClinicEz.Clinic.Infrastructure.Messaging.Responders;
 using ClinicEz.Clinic.Infrastructure.Persistence;
+using ClinicEz.Clinic.Infrastructure.Services;
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Documents.Security;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Handling;
@@ -25,6 +27,8 @@ using ClinicEz.Shared.Interoperability;
 using ClinicEz.Shared.Licensing;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
@@ -1157,6 +1161,202 @@ public class ClinicDirectoryVerificationTests
             new InteropMessageContext(nonPortalEnvelope),
             CancellationToken.None);
         forbiddenReply.Found.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task FacilityCreatedHandler_OnReActivationOrRenewal_UpdatesVerificationAndSyncsPublishedDirectory()
+    {
+        using var db = MessagingTestKit.CreateDbContext();
+        var clinicId = Guid.NewGuid();
+        var settings = MessagingTestKit.SeedClinic(db, clinicId, TenantId, "Renewed Clinic");
+        settings.IsDirectoryPublished = true;
+        settings.IsWorkspaceEligible = false;
+        settings.PlatformVerificationStatus = PlatformVerificationStatus.PendingReview;
+        await db.SaveChangesAsync();
+
+        var publisher = Substitute.For<IInteropPublisher>();
+        ValidatingLicenseMock(clinicId, TenantId, out var validator);
+        var handler = new FacilityCreatedHandler(db, publisher, validator, NullLogger<FacilityCreatedHandler>.Instance);
+
+        var renewalEvent = new FacilityCreatedEvent
+        {
+            TenantId = TenantId,
+            ResourceId = clinicId,
+            FacilityType = FacilityType.Clinic,
+            Name = "Renewed Clinic",
+            LicenseToken = "renewed-token",
+            IsWorkspaceEligible = true,
+            IsPlatformVerified = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified
+        };
+
+        await handler.HandleAsync(
+            renewalEvent,
+            MessagingTestKit.Delivered(InteropTypes.FacilityLicenseIssued, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId), clinicId, renewalEvent),
+            CancellationToken.None);
+
+        var updated = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        updated.IsWorkspaceEligible.Should().BeTrue();
+        updated.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.Verified);
+        updated.VerificationRejectionReason.Should().BeNull();
+
+        publisher.Received(1).Enqueue(
+            InteropTypes.FacilityDirectoryUpdated,
+            Arg.Is<Party>(p => p.FacilityId == clinicId.ToString()),
+            Arg.Is<Party>(p => p.Service == InteropServices.Patient),
+            clinicId,
+            Arg.Is<FacilityCreatedEvent>(e =>
+                e.IsPublic == true &&
+                e.IsDirectoryPublished == true &&
+                e.IsWorkspaceEligible == true &&
+                e.IsPlatformVerified == true));
+    }
+
+    [Fact]
+    public async Task UpdateClinicSettings_WhenVerifiedAndPublished_SyncsLiveDirectoryOnlyOnDirectoryOrJoinChanges()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+
+        await settingsRepo.AddAsync(new FacilitySettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            ClinicId = _clinicId,
+            ClinicName = "Verified Clinic",
+            OperatingHours = "Mon-Fri 8AM-5PM",
+            IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
+            IsDirectoryPublished = true
+        });
+        await uow.SaveChangesAsync();
+
+        var publisher = Substitute.For<IInteropPublisher>();
+        var syncService = new ClinicDirectorySyncService(staffRepo, servicesRepo, publisher, settingsRepo: settingsRepo);
+        var handler = new UpdateClinicSettingsCommandHandler(settingsRepo, _clinicContext, uow, directorySyncService: syncService);
+
+        // Non-directory setting change -> must not enqueue live directory sync
+        await handler.Handle(new UpdateClinicSettingsCommand(PrimaryColorHex: "#0D6963", QueuePrefix: "B"), CancellationToken.None);
+        publisher.DidNotReceive().Enqueue(
+            InteropTypes.FacilityDirectoryUpdated,
+            Arg.Any<Party>(),
+            Arg.Any<Party>(),
+            Arg.Any<Guid>(),
+            Arg.Any<FacilityCreatedEvent>());
+
+        // Directory field change -> enqueues live directory sync to Patient API
+        await handler.Handle(new UpdateClinicSettingsCommand(OperatingHours: "Mon-Sat 9AM-6PM"), CancellationToken.None);
+        publisher.Received(1).Enqueue(
+            InteropTypes.FacilityDirectoryUpdated,
+            Arg.Any<Party>(),
+            Arg.Is<Party>(p => p.Service == InteropServices.Patient),
+            _clinicId,
+            Arg.Is<FacilityCreatedEvent>(e => e.OperatingHours == "Mon-Sat 9AM-6PM" && e.IsPublic == true));
+
+        // Join gating change -> enqueues live directory sync with gating info
+        await handler.Handle(new UpdateClinicSettingsCommand(IsJoinEnabled: true, JoinCode: "JOIN2026"), CancellationToken.None);
+        publisher.Received(1).Enqueue(
+            InteropTypes.FacilityDirectoryUpdated,
+            Arg.Any<Party>(),
+            Arg.Is<Party>(p => p.Service == InteropServices.Patient),
+            _clinicId,
+            Arg.Is<FacilityCreatedEvent>(e => e.IsJoinGated == true && e.JoinCode == "JOIN2026"));
+
+        // When unpublished, changes must not publish a live directory snapshot
+        var persisted = await context.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == _clinicId);
+        persisted.IsDirectoryPublished = false;
+        await context.SaveChangesAsync();
+
+        publisher.ClearReceivedCalls();
+        await handler.Handle(new UpdateClinicSettingsCommand(OperatingHours: "Sun Closed"), CancellationToken.None);
+        publisher.DidNotReceive().Enqueue(
+            InteropTypes.FacilityDirectoryUpdated,
+            Arg.Any<Party>(),
+            Arg.Any<Party>(),
+            Arg.Any<Guid>(),
+            Arg.Any<FacilityCreatedEvent>());
+    }
+
+    [Fact]
+    public async Task StartupBackfillHostedService_EnqueuesLiveDirectorySnapshotOnlyForVerifiedAndPublishedClinics()
+    {
+        var dbName = $"ClinicEz_BackfillTest_{Guid.NewGuid():N}";
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection([new KeyValuePair<string, string?>("DbSchema", "public")])
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddDbContext<ApplicationDbContext>(o => o.UseInMemoryDatabase(dbName));
+        services.AddSingleton(Substitute.For<IDocumentSecurityService>());
+
+        using var provider = services.BuildServiceProvider();
+
+        var publishedClinicId = Guid.NewGuid();
+        var unpublishedClinicId = Guid.NewGuid();
+        var unverifiedClinicId = Guid.NewGuid();
+
+        using (var seedScope = provider.CreateScope())
+        {
+            var db = seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.Settings.AddRange(
+                new FacilitySettings
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = TenantId,
+                    ClinicId = publishedClinicId,
+                    ClinicName = "Published Verified Clinic",
+                    IsWorkspaceEligible = true,
+                    IsDirectoryPublished = true,
+                    PlatformVerificationStatus = PlatformVerificationStatus.Verified,
+                    CreatedAt = DateTime.UtcNow
+                },
+                new FacilitySettings
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = TenantId,
+                    ClinicId = unpublishedClinicId,
+                    ClinicName = "Unpublished Verified Clinic",
+                    IsWorkspaceEligible = true,
+                    IsDirectoryPublished = false,
+                    PlatformVerificationStatus = PlatformVerificationStatus.Verified,
+                    CreatedAt = DateTime.UtcNow
+                },
+                new FacilitySettings
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = TenantId,
+                    ClinicId = unverifiedClinicId,
+                    ClinicName = "Published Pending Clinic",
+                    IsWorkspaceEligible = true,
+                    IsDirectoryPublished = true,
+                    PlatformVerificationStatus = PlatformVerificationStatus.PendingReview,
+                    CreatedAt = DateTime.UtcNow
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var hostedService = new ClinicPortalStartupBackfillHostedService(
+            provider,
+            NullLogger<ClinicPortalStartupBackfillHostedService>.Instance);
+        await hostedService.BackfillAsync(CancellationToken.None);
+
+        using var verifyScope = provider.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var directoryOutbox = await verifyDb.InteropOutbox
+            .Where(m => m.Type == InteropTypes.FacilityDirectoryUpdated)
+            .ToListAsync();
+
+        directoryOutbox.Should().ContainSingle();
+        var envelope = InteropEnvelope.FromJson(directoryOutbox[0].EnvelopeJson);
+        envelope.To.Service.Should().Be(InteropServices.Patient);
+        var payload = envelope.GetPayload<FacilityCreatedEvent>();
+        payload.ResourceId.Should().Be(publishedClinicId);
+        payload.IsPublic.Should().BeTrue();
+        payload.IsDirectoryPublished.Should().BeTrue();
+        payload.IsPlatformVerified.Should().BeTrue();
     }
 
     #endregion

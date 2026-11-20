@@ -35,6 +35,7 @@ public class FacilityHeartbeatContractChallengerTests
         entry.FacilityType.Should().Be(FacilityType.Pharmacy);
         entry.LicenseExpiresAt.Should().Be(expiry);
         entry.IsWorkspaceEligible.Should().BeNull();
+        entry.PlatformVerificationStatus.Should().BeNull();
     }
 
     [Theory]
@@ -49,18 +50,25 @@ public class FacilityHeartbeatContractChallengerTests
         var entry = new FacilityRegistryEntry(tenantId, facilityId, FacilityType.Clinic, null, eligible);
 
         entry.IsWorkspaceEligible.Should().Be(eligible);
+        entry.PlatformVerificationStatus.Should().BeNull();
     }
 
     [Fact]
-    public async Task FacilityHeartbeatService_ForwardsIsWorkspaceEligibleToPayload()
+    public async Task FacilityHeartbeatService_ForwardsIsWorkspaceEligibleAndVerificationStatusToPayload()
     {
         using var h = new FacilityHarness();
         var clinicFacilityId = Guid.NewGuid();
         var labFacilityId = Guid.NewGuid();
 
         h.Data.Facilities.Clear();
-        // 1. Clinic with IsWorkspaceEligible = true
-        h.Data.Facilities.Add(new FacilityRegistryEntry(FacilityHarness.Tenant, clinicFacilityId, FacilityType.Clinic, null, IsWorkspaceEligible: true));
+        // 1. Clinic with IsWorkspaceEligible = true and PlatformVerificationStatus = Verified
+        h.Data.Facilities.Add(new FacilityRegistryEntry(
+            FacilityHarness.Tenant,
+            clinicFacilityId,
+            FacilityType.Clinic,
+            null,
+            IsWorkspaceEligible: true,
+            PlatformVerificationStatus: PlatformVerificationStatus.Verified));
         // 2. Laboratory with default null (4 params)
         h.Data.Facilities.Add(new FacilityRegistryEntry(FacilityHarness.Tenant, labFacilityId, FacilityType.Laboratory, null));
 
@@ -74,10 +82,12 @@ public class FacilityHeartbeatContractChallengerTests
         var clinicEnvelope = envelopes.Single(e => e.From.FacilityId == clinicFacilityId.ToString());
         var clinicPayload = clinicEnvelope.GetPayload<FacilityHeartbeatPayload>();
         clinicPayload.IsWorkspaceEligible.Should().BeTrue();
+        clinicPayload.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.Verified);
 
         var labEnvelope = envelopes.Single(e => e.From.FacilityId == labFacilityId.ToString());
         var labPayload = labEnvelope.GetPayload<FacilityHeartbeatPayload>();
         labPayload.IsWorkspaceEligible.Should().BeNull();
+        labPayload.PlatformVerificationStatus.Should().BeNull();
     }
 
     [Theory]
@@ -90,5 +100,21 @@ public class FacilityHeartbeatContractChallengerTests
         var payload = JsonSerializer.Deserialize<FacilityHeartbeatPayload>(json, InteropJson.Options);
         payload.Should().NotBeNull();
         payload!.IsWorkspaceEligible.Should().Be(expected);
+        payload.PlatformVerificationStatus.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("{\"appVersion\": \"1.0.0\", \"platformVerificationStatus\": null}", null)]
+    [InlineData("{\"appVersion\": \"1.0.0\", \"platformVerificationStatus\": \"Unverified\"}", PlatformVerificationStatus.Unverified)]
+    [InlineData("{\"appVersion\": \"1.0.0\", \"platformVerificationStatus\": \"PendingReview\"}", PlatformVerificationStatus.PendingReview)]
+    [InlineData("{\"appVersion\": \"1.0.0\", \"platformVerificationStatus\": \"Verified\"}", PlatformVerificationStatus.Verified)]
+    [InlineData("{\"appVersion\": \"1.0.0\", \"platformVerificationStatus\": \"Suspended\"}", PlatformVerificationStatus.Suspended)]
+    public void FacilityHeartbeatPayload_JsonRoundtrip_HandlesPlatformVerificationStatus(
+        string json,
+        PlatformVerificationStatus? expected)
+    {
+        var payload = JsonSerializer.Deserialize<FacilityHeartbeatPayload>(json, InteropJson.Options);
+        payload.Should().NotBeNull();
+        payload!.PlatformVerificationStatus.Should().Be(expected);
     }
 }

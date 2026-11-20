@@ -35,8 +35,23 @@ public sealed class GetPatientFullRecordQueryHandler
 
         // ── Contact & identifiers ────────────────────────────────────────────
         var govIds = p.GovernmentIds
-            .Select(g => new PatientGovernmentIdDto(g.Id, g.ClientId,
-                g.IdType.ToString(), g.IdNumber, g.IssuedAt, g.ExpiresAt, g.UpdatedAt))
+            .Where(g => !g.IsDeleted)
+            .Select(g => new PatientGovernmentIdDto(
+                g.Id,
+                g.ClientId,
+                g.IdType.ToString(),
+                g.IdNumber,
+                g.IssuedAt,
+                g.ExpiresAt,
+                g.UpdatedAt,
+                g.PhilhealthCategory,
+                g.SponsorPin,
+                g.SponsorLastName,
+                g.SponsorFirstName,
+                g.SponsorMiddleName,
+                g.SponsorSuffix,
+                g.SponsorDob,
+                g.SponsorRelationship))
             .ToList().AsReadOnly();
 
         var addresses = p.Addresses

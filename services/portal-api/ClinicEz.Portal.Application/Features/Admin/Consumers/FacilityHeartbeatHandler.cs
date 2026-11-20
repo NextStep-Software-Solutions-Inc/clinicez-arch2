@@ -42,18 +42,26 @@ public sealed class FacilityHeartbeatHandler(
 
         var tenant = facility.Tenant ?? await dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, ct);
 
-        // Drift detection: detect missing or mismatched IsWorkspaceEligible on Clinic facilities compared to portal's authoritative state
-        var hasDrift = facility.FacilityType == FacilityType.Clinic && (payload.IsWorkspaceEligible.HasValue
+        // Drift detection: detect missing/mismatched IsWorkspaceEligible or mismatched PlatformVerificationStatus
+        // on Clinic facilities compared to portal's authoritative state.
+        var hasEligibilityDrift = payload.IsWorkspaceEligible.HasValue
             ? payload.IsWorkspaceEligible.Value != facility.IsPatientDiscoveryEligible
-            : facility.IsPatientDiscoveryEligible);
+            : facility.IsPatientDiscoveryEligible;
+
+        var hasVerificationDrift = payload.PlatformVerificationStatus.HasValue
+            && payload.PlatformVerificationStatus.Value != facility.PlatformVerificationStatus;
+
+        var hasDrift = facility.FacilityType == FacilityType.Clinic && (hasEligibilityDrift || hasVerificationDrift);
 
         if (hasDrift && tenant is not null)
         {
             logger.LogWarning(
-                "Facility {FacilityId} reported heartbeat eligibility drift (Heartbeat={HeartbeatEligible}, Portal={PortalEligible}). Triggering self-healing directory update.",
+                "Facility {FacilityId} reported heartbeat directory drift (HeartbeatEligible={HeartbeatEligible}, PortalEligible={PortalEligible}, HeartbeatVerification={HeartbeatVerification}, PortalVerification={PortalVerification}). Triggering self-healing directory update.",
                 facility.Id,
                 payload.IsWorkspaceEligible,
-                facility.IsPatientDiscoveryEligible);
+                facility.IsPatientDiscoveryEligible,
+                payload.PlatformVerificationStatus,
+                facility.PlatformVerificationStatus);
 
             await provisioningPublisher.StageDirectoryUpdateAsync(tenant, facility, ct);
         }

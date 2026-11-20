@@ -22,7 +22,15 @@ public sealed record PatientGovernmentIdDto(
     Guid Id, Guid ClientId,
     string IdType, string IdNumber,
     DateOnly? IssuedAt, DateOnly? ExpiresAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    string? PhilhealthCategory = null,
+    string? SponsorPin = null,
+    string? SponsorLastName = null,
+    string? SponsorFirstName = null,
+    string? SponsorMiddleName = null,
+    string? SponsorSuffix = null,
+    DateOnly? SponsorDob = null,
+    string? SponsorRelationship = null);
 
 public sealed record PatientAddressDto(
     Guid Id, Guid ClientId,

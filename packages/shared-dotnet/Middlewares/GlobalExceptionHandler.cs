@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Text.Json;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
@@ -58,20 +59,8 @@ public class GlobalExceptionHandler : IExceptionHandler
             return true;
         }
 
-        // ── 3. Known Application & Domain Exceptions ───────────────────────────
-        var (statusCode, genericCode) = exception switch
-        {
-            ValidationException          => ((int)HttpStatusCode.BadRequest,            "VALIDATION_ERROR"),
-            BadRequestException          => ((int)HttpStatusCode.BadRequest,            "BAD_REQUEST"),
-            UnauthorizedException        => ((int)HttpStatusCode.Unauthorized,          "UNAUTHORIZED"),
-            UnauthorizedAccessException  => ((int)HttpStatusCode.Unauthorized,          "UNAUTHORIZED"),
-            ForbiddenException           => ((int)HttpStatusCode.Forbidden,             "FORBIDDEN"),
-            TooManyRequestsException     => ((int)HttpStatusCode.TooManyRequests,       "TOO_MANY_REQUESTS"),
-            ServiceUnavailableException  => ((int)HttpStatusCode.ServiceUnavailable,    "SERVICE_UNAVAILABLE"),
-            ConflictException            => ((int)HttpStatusCode.Conflict,              "CONFLICT"),
-            NotFoundException            => ((int)HttpStatusCode.NotFound,              "NOT_FOUND"),
-            _                            => ((int)HttpStatusCode.InternalServerError,   "INTERNAL_ERROR"),
-        };
+        // ── 3. Known Application, Request-Binding & Domain Exceptions ──────────
+        var (statusCode, genericCode) = ResolveClientStatusAndCode(exception);
 
         httpContext.Response.StatusCode = statusCode;
 
@@ -96,6 +85,30 @@ public class GlobalExceptionHandler : IExceptionHandler
                 traceId);
 
             await httpContext.Response.WriteAsJsonAsync(response, cancellationToken);
+            return true;
+        }
+
+        // ── 4b. Request JSON deserialization errors (invalid enum, malformed JSON)
+        if (TryExtractJsonBindingError(exception, out var jsonException))
+        {
+            var field = ExtractJsonFieldName(jsonException.Path);
+            var jsonMessage = field is not null
+                ? $"Invalid value for field '{field}'."
+                : "Invalid JSON in request body.";
+
+            _logger?.LogWarning(
+                "Request JSON binding failure [{GenericCode}] ({StatusCode}) on field {Field} during {Method} {Path}. TraceId: {TraceId}",
+                genericCode,
+                statusCode,
+                field ?? "(body)",
+                httpContext.Request.Method,
+                httpContext.Request.Path,
+                traceId);
+
+            var jsonFieldError = new ApiFieldError(field, "INVALID_JSON", jsonMessage);
+            await httpContext.Response.WriteAsJsonAsync(
+                ApiResponse<object>.Fail(jsonMessage, [jsonFieldError], genericCode, traceId),
+                cancellationToken);
             return true;
         }
 
@@ -129,7 +142,9 @@ public class GlobalExceptionHandler : IExceptionHandler
             traceId);
 
         // Sanitize message in case an unexpected raw ORM string was attached to a domain exception
-        var clientMessage = exception.Message;
+        var clientMessage = exception is BadHttpRequestException && string.IsNullOrWhiteSpace(exception.Message)
+            ? "Invalid HTTP request."
+            : exception.Message;
         if (clientMessage.Contains("An error occurred while saving the entity changes", StringComparison.OrdinalIgnoreCase))
         {
             clientMessage = $"A database conflict occurred. Support Reference: {traceId}";
@@ -141,6 +156,75 @@ public class GlobalExceptionHandler : IExceptionHandler
             cancellationToken);
 
         return true;
+    }
+
+    private static (int StatusCode, string GenericCode) ResolveClientStatusAndCode(Exception exception)
+    {
+        if (exception is BadHttpRequestException badEx)
+        {
+            var code = badEx.StatusCode is >= 400 and < 500
+                ? badEx.StatusCode
+                : (int)HttpStatusCode.BadRequest;
+
+            var genericCode = code switch
+            {
+                (int)HttpStatusCode.RequestEntityTooLarge => "PAYLOAD_TOO_LARGE",
+                (int)HttpStatusCode.UnsupportedMediaType  => "UNSUPPORTED_MEDIA_TYPE",
+                _                                         => "BAD_REQUEST",
+            };
+
+            return (code, genericCode);
+        }
+
+        return exception switch
+        {
+            ValidationException         => ((int)HttpStatusCode.BadRequest,          "VALIDATION_ERROR"),
+            BadRequestException         => ((int)HttpStatusCode.BadRequest,          "BAD_REQUEST"),
+            JsonException               => ((int)HttpStatusCode.BadRequest,          "BAD_REQUEST"),
+            UnauthorizedException       => ((int)HttpStatusCode.Unauthorized,        "UNAUTHORIZED"),
+            UnauthorizedAccessException => ((int)HttpStatusCode.Unauthorized,        "UNAUTHORIZED"),
+            ForbiddenException          => ((int)HttpStatusCode.Forbidden,           "FORBIDDEN"),
+            TooManyRequestsException    => ((int)HttpStatusCode.TooManyRequests,     "TOO_MANY_REQUESTS"),
+            ServiceUnavailableException => ((int)HttpStatusCode.ServiceUnavailable,  "SERVICE_UNAVAILABLE"),
+            ConflictException           => ((int)HttpStatusCode.Conflict,            "CONFLICT"),
+            NotFoundException           => ((int)HttpStatusCode.NotFound,            "NOT_FOUND"),
+            _                           => ((int)HttpStatusCode.InternalServerError, "INTERNAL_ERROR"),
+        };
+    }
+
+    private static bool TryExtractJsonBindingError(Exception exception, out JsonException jsonException)
+    {
+        if (exception is BadHttpRequestException { InnerException: JsonException innerJson })
+        {
+            jsonException = innerJson;
+            return true;
+        }
+
+        if (exception is JsonException directJson)
+        {
+            jsonException = directJson;
+            return true;
+        }
+
+        jsonException = null!;
+        return false;
+    }
+
+    private static string? ExtractJsonFieldName(string? jsonPath)
+    {
+        if (string.IsNullOrWhiteSpace(jsonPath))
+            return null;
+
+        var trimmed = jsonPath.Trim();
+        if (trimmed == "$")
+            return null;
+
+        if (trimmed.StartsWith("$.", StringComparison.Ordinal))
+            trimmed = trimmed[2..];
+        else if (trimmed.StartsWith('$'))
+            trimmed = trimmed[1..];
+
+        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
     }
 
     /// <summary>

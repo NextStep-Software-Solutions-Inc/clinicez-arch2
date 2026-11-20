@@ -666,4 +666,357 @@ public class PatientCommunicationsTests
         result.HashSha256.Should().NotBeNullOrWhiteSpace();
         result.WasExifStripped.Should().BeTrue();
     }
+
+    [Theory]
+    [InlineData("Pharmacy", FacilityType.Pharmacy, MessageCategory.PrescriptionRefill)]
+    [InlineData("Laboratory", FacilityType.Laboratory, MessageCategory.LabResultQuestion)]
+    [InlineData("Clinic", FacilityType.Clinic, MessageCategory.PostVisitFollowUp)]
+    public async Task SubmitPatientInquiry_WithActiveGrant_CreatesConversationAndRoutesToTargetFacilityType(
+        string facilityTypeRaw,
+        FacilityType expectedFacilityType,
+        MessageCategory category)
+    {
+        using var harness = new PatientInteropHarness();
+        var patientId = Guid.NewGuid();
+        const string clerkUserId = "user_inquiry_grant_1";
+        const string tenantId = "tenant-target";
+        const string facilityId = "fac-target-1";
+        const string facilityName = "Target Health Facility";
+
+        await harness.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Domain.Entities.Patient
+            {
+                Id = patientId,
+                ClerkUserId = clerkUserId,
+                FirstName = "Clara",
+                LastName = "Santos",
+                ClinicEzId = "CE-CLARA-181"
+            });
+
+            db.PatientEligibilityGrants.Add(new PatientEligibilityGrant
+            {
+                Id = Guid.NewGuid(),
+                GrantId = Guid.NewGuid(),
+                PatientId = patientId,
+                TenantId = tenantId,
+                FacilityId = facilityId,
+                FacilityType = facilityTypeRaw,
+                FacilityName = facilityName,
+                ContextType = "Encounter",
+                ContextId = "enc-123",
+                IsActive = true,
+                WindowStartUtc = DateTime.UtcNow.AddDays(-1),
+                WindowEndUtc = DateTime.UtcNow.AddDays(7)
+            });
+
+            await db.SaveChangesAsync();
+        });
+
+        var handler = new SubmitPatientInquiryCommandHandler(
+            harness.Provider.GetRequiredService<IPatientRepository>(),
+            harness.Provider.GetRequiredService<IPatientCommunicationsRepository>(),
+            harness.Provider.GetRequiredService<IUnitOfWork>(),
+            harness.Provider.GetRequiredService<IInteropPublisher>());
+
+        var response = await handler.Handle(
+            new SubmitPatientInquiryCommand(
+                ClerkUserId: clerkUserId,
+                PatientId: null,
+                TenantId: tenantId,
+                FacilityId: facilityId,
+                FacilityType: facilityTypeRaw,
+                FacilityName: facilityName,
+                Category: category,
+                ContentText: "Checking on my prescription / test follow-up.",
+                IsEmergencyConfirmed: false),
+            CancellationToken.None);
+
+        response.IsEmergencyRedirect.Should().BeFalse();
+        response.ConversationId.Should().NotBeNull();
+
+        await harness.WithDbAsync(async db =>
+        {
+            var conversation = await db.PatientConversations.FindAsync(response.ConversationId);
+            conversation.Should().NotBeNull();
+            conversation!.Category.Should().Be(category);
+            conversation.HomeFacilityType.Should().Be(facilityTypeRaw);
+
+            var outbox = await db.InteropOutbox
+                .Where(o => o.Type == InteropTypes.CommsRequestSubmit)
+                .SingleAsync();
+
+            var envelope = System.Text.Json.JsonSerializer.Deserialize<InteropEnvelope>(
+                outbox.EnvelopeJson,
+                InteropJson.Options);
+            envelope.Should().NotBeNull();
+            envelope!.To.Kind.Should().Be(PartyKind.Facility);
+            envelope.To.TenantId.Should().Be(tenantId);
+            envelope.To.FacilityId.Should().Be(facilityId);
+            envelope.To.FacilityType.Should().Be(expectedFacilityType);
+            envelope.To.Service.Should().Be(InteropServices.Comms);
+        });
+    }
+
+    [Fact]
+    public async Task SubmitPatientInquiry_WhenNoActiveGrantExists_ThrowsValidationException()
+    {
+        using var harness = new PatientInteropHarness();
+        const string clerkUserId = "user_no_grant_181";
+
+        await harness.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Domain.Entities.Patient
+            {
+                Id = Guid.NewGuid(),
+                ClerkUserId = clerkUserId,
+                FirstName = "No",
+                LastName = "Grant",
+                ClinicEzId = "CE-NOGRANT-181"
+            });
+            await db.SaveChangesAsync();
+        });
+
+        var handler = new SubmitPatientInquiryCommandHandler(
+            harness.Provider.GetRequiredService<IPatientRepository>(),
+            harness.Provider.GetRequiredService<IPatientCommunicationsRepository>(),
+            harness.Provider.GetRequiredService<IUnitOfWork>(),
+            harness.Provider.GetRequiredService<IInteropPublisher>());
+
+        var act = async () => await handler.Handle(
+            new SubmitPatientInquiryCommand(
+                ClerkUserId: clerkUserId,
+                PatientId: null,
+                TenantId: "default-tenant",
+                FacilityId: "default-facility",
+                FacilityType: "Clinic",
+                FacilityName: "Primary Health Facility",
+                Category: MessageCategory.PostVisitFollowUp,
+                ContentText: "Hello clinic",
+                IsEmergencyConfirmed: false),
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<ValidationException>()
+            .WithMessage("*No active communication eligibility grant*");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   \t\n  ")]
+    public async Task SubmitPatientInquiry_WhenContentEmptyOrWhitespace_ThrowsValidationException(string contentText)
+    {
+        using var harness = new PatientInteropHarness();
+        var patientId = Guid.NewGuid();
+        const string clerkUserId = "user_empty_msg_181";
+
+        await harness.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Domain.Entities.Patient
+            {
+                Id = patientId,
+                ClerkUserId = clerkUserId,
+                FirstName = "Empty",
+                LastName = "Msg",
+                ClinicEzId = "CE-EMPTY-181"
+            });
+            await db.SaveChangesAsync();
+        });
+
+        var handler = new SubmitPatientInquiryCommandHandler(
+            harness.Provider.GetRequiredService<IPatientRepository>(),
+            harness.Provider.GetRequiredService<IPatientCommunicationsRepository>(),
+            harness.Provider.GetRequiredService<IUnitOfWork>(),
+            harness.Provider.GetRequiredService<IInteropPublisher>());
+
+        var act = async () => await handler.Handle(
+            new SubmitPatientInquiryCommand(
+                ClerkUserId: clerkUserId,
+                PatientId: null,
+                TenantId: "tenant-1",
+                FacilityId: "fac-1",
+                FacilityType: "Clinic",
+                FacilityName: "Clinic One",
+                Category: MessageCategory.Other,
+                ContentText: contentText,
+                IsEmergencyConfirmed: false),
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<ValidationException>()
+            .WithMessage("*cannot be empty*");
+    }
+
+    [Fact]
+    public async Task SubmitPatientInquiry_WhenContentExceeds1000Chars_ThrowsValidationException()
+    {
+        using var harness = new PatientInteropHarness();
+        const string clerkUserId = "user_long_msg_181";
+
+        await harness.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Domain.Entities.Patient
+            {
+                Id = Guid.NewGuid(),
+                ClerkUserId = clerkUserId,
+                FirstName = "Long",
+                LastName = "Msg",
+                ClinicEzId = "CE-LONG-181"
+            });
+            await db.SaveChangesAsync();
+        });
+
+        var handler = new SubmitPatientInquiryCommandHandler(
+            harness.Provider.GetRequiredService<IPatientRepository>(),
+            harness.Provider.GetRequiredService<IPatientCommunicationsRepository>(),
+            harness.Provider.GetRequiredService<IUnitOfWork>(),
+            harness.Provider.GetRequiredService<IInteropPublisher>());
+
+        var act = async () => await handler.Handle(
+            new SubmitPatientInquiryCommand(
+                ClerkUserId: clerkUserId,
+                PatientId: null,
+                TenantId: "tenant-1",
+                FacilityId: "fac-1",
+                FacilityType: "Clinic",
+                FacilityName: "Clinic One",
+                Category: MessageCategory.PostVisitFollowUp,
+                ContentText: new string('a', 1001),
+                IsEmergencyConfirmed: false),
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<ValidationException>()
+            .WithMessage("*1000 characters*");
+    }
+
+    [Fact]
+    public async Task SubmitPatientInquiry_WhenEmergencyConfirmed_ReturnsEmergencyRedirectWithZeroWrites()
+    {
+        using var harness = new PatientInteropHarness();
+        const string clerkUserId = "user_emergency_181";
+
+        var handler = new SubmitPatientInquiryCommandHandler(
+            harness.Provider.GetRequiredService<IPatientRepository>(),
+            harness.Provider.GetRequiredService<IPatientCommunicationsRepository>(),
+            harness.Provider.GetRequiredService<IUnitOfWork>(),
+            harness.Provider.GetRequiredService<IInteropPublisher>());
+
+        var result = await handler.Handle(
+            new SubmitPatientInquiryCommand(
+                ClerkUserId: clerkUserId,
+                PatientId: null,
+                TenantId: "tenant-1",
+                FacilityId: "fac-1",
+                FacilityType: "Clinic",
+                FacilityName: "Clinic One",
+                Category: MessageCategory.PostVisitFollowUp,
+                ContentText: "Severe chest pain",
+                IsEmergencyConfirmed: true),
+            CancellationToken.None);
+
+        result.IsEmergencyRedirect.Should().BeTrue();
+        result.ConversationId.Should().BeNull();
+        result.RedirectMessage.Should().Contain("911");
+
+        await harness.WithDbAsync(async db =>
+        {
+            (await db.PatientConversations.CountAsync()).Should().Be(0);
+            (await db.InteropOutbox.CountAsync()).Should().Be(0);
+        });
+    }
+
+    [Fact]
+    public async Task SubmitAndResendMessage_RespectsConversationHomeFacilityType_AndEnforcesMaxLength()
+    {
+        using var harness = new PatientInteropHarness();
+        var patientId = Guid.NewGuid();
+        var conversationId = Guid.NewGuid();
+        var failedMsgId = Guid.NewGuid();
+        const string clerkUserId = "user_pharmacy_reply_181";
+
+        await harness.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Domain.Entities.Patient
+            {
+                Id = patientId,
+                ClerkUserId = clerkUserId,
+                FirstName = "Maya",
+                LastName = "Lin",
+                ClinicEzId = "CE-MAYA-181"
+            });
+
+            db.PatientConversations.Add(new PatientConversation
+            {
+                Id = conversationId,
+                PatientId = patientId,
+                HomeTenantId = "tenant-rx",
+                HomeFacilityId = "pharmacy-9",
+                HomeFacilityType = "Pharmacy",
+                FacilityName = "Mercury Rx Hub",
+                Category = MessageCategory.PrescriptionRefill,
+                Subject = "PrescriptionRefill",
+                Status = RequestStatus.Routed
+            });
+
+            db.PatientMessages.Add(new PatientMessage
+            {
+                Id = failedMsgId,
+                ConversationId = conversationId,
+                Seq = 1,
+                ClientMessageId = Guid.NewGuid(),
+                SenderType = "Patient",
+                SenderId = patientId,
+                SenderName = "Maya Lin",
+                ContentText = "Previous unreceived message",
+                DeliveryState = DeliveryState.NotReceived,
+                RetentionDeadlineUtc = DateTime.UtcNow.AddMinutes(-5)
+            });
+
+            await db.SaveChangesAsync();
+        });
+
+        var submitHandler = new SubmitPatientMessageCommandHandler(
+            harness.Provider.GetRequiredService<IPatientRepository>(),
+            harness.Provider.GetRequiredService<IPatientCommunicationsRepository>(),
+            harness.Provider.GetRequiredService<IUnitOfWork>(),
+            harness.Provider.GetRequiredService<IInteropPublisher>());
+
+        // Over-limit reply should fail cleanly
+        var tooLongAct = async () => await submitHandler.Handle(
+            new SubmitPatientMessageCommand(conversationId, clerkUserId, new string('x', 1001)),
+            CancellationToken.None);
+        await tooLongAct.Should().ThrowAsync<ValidationException>()
+            .WithMessage("*1000 characters*");
+
+        // Valid reply should route to Pharmacy
+        var reply = await submitHandler.Handle(
+            new SubmitPatientMessageCommand(conversationId, clerkUserId, "Following up on pickup window."),
+            CancellationToken.None);
+        reply.Seq.Should().Be(2);
+
+        // Resend should also route to Pharmacy
+        var resendHandler = new ResendPatientMessageCommandHandler(
+            harness.Provider.GetRequiredService<IPatientRepository>(),
+            harness.Provider.GetRequiredService<IPatientCommunicationsRepository>(),
+            harness.Provider.GetRequiredService<IUnitOfWork>(),
+            harness.Provider.GetRequiredService<IInteropPublisher>());
+        await resendHandler.Handle(
+            new ResendPatientMessageCommand(conversationId, failedMsgId, clerkUserId),
+            CancellationToken.None);
+
+        await harness.WithDbAsync(async db =>
+        {
+            var envelopes = await db.InteropOutbox
+                .Where(o => o.Type == InteropTypes.CommsMessageSubmit)
+                .Select(o => o.EnvelopeJson)
+                .ToListAsync();
+
+            envelopes.Should().HaveCount(2);
+            foreach (var json in envelopes)
+            {
+                var env = System.Text.Json.JsonSerializer.Deserialize<InteropEnvelope>(json, InteropJson.Options);
+                env.Should().NotBeNull();
+                env!.To.FacilityType.Should().Be(FacilityType.Pharmacy);
+                env.To.FacilityId.Should().Be("pharmacy-9");
+            }
+        });
+    }
 }

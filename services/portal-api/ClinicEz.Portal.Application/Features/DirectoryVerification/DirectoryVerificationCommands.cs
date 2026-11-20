@@ -36,7 +36,14 @@ public sealed record SuspendPractitionerResult(
     Guid PractitionerId,
     PractitionerVerificationLevel Status,
     int SuspendedAffiliationsCount,
-    DateTime RevokedAtUtc);
+    DateTime RevokedAtUtc,
+    int ClosedPendingRequestsCount = 0);
+
+public sealed record ReinstatePractitionerResult(
+    Guid PractitionerId,
+    PractitionerVerificationLevel Status,
+    int ReinstatedAffiliationsCount,
+    DateTime ReinstatedAtUtc);
 
 public sealed record AffiliationConfirmationInfoDto(
     Guid RequestId,
@@ -83,7 +90,15 @@ public sealed record SuspendPractitionerCommand(
     Guid PractitionerId,
     string AdminUserId,
     string AdminName,
-    string? Reason = null) : IRequest<SuspendPractitionerResult>;
+    string? Reason = null,
+    string? AdminEmail = null) : IRequest<SuspendPractitionerResult>;
+
+public sealed record ReinstatePractitionerCommand(
+    Guid PractitionerId,
+    string AdminUserId,
+    string AdminName,
+    string? Reason = null,
+    string? AdminEmail = null) : IRequest<ReinstatePractitionerResult>;
 
 public sealed record GetAffiliationConfirmationQuery(string Token) : IRequest<AffiliationConfirmationInfoDto?>;
 
@@ -150,11 +165,14 @@ public sealed class ApproveVerificationRequestCommandHandler(
                     facility.Classification = snapshot.Classification.Trim();
                 if (!string.IsNullOrWhiteSpace(snapshot.OperatingHours))
                     facility.OperatingHours = snapshot.OperatingHours.Trim();
+                var (normContactNumber, normContactEmail) = DirectoryVerificationHelper.NormalizeFacilityContacts(
+                    snapshot.ContactNumber,
+                    snapshot.ContactEmail);
                 if (VerificationReviewerLookup.HasJsonPropertyKey(facilityReq.SubmittedSnapshotJson, "contactNumber")
-                    || !string.IsNullOrWhiteSpace(snapshot.ContactNumber))
-                    facility.ContactNumber = string.IsNullOrWhiteSpace(snapshot.ContactNumber) ? null : snapshot.ContactNumber.Trim();
-                if (!string.IsNullOrWhiteSpace(snapshot.ContactEmail))
-                    facility.ContactEmail = snapshot.ContactEmail.Trim();
+                    || !string.IsNullOrWhiteSpace(normContactNumber))
+                    facility.ContactNumber = normContactNumber;
+                if (!string.IsNullOrWhiteSpace(normContactEmail))
+                    facility.ContactEmail = normContactEmail;
                 else if (snapshot.ContactEmail is not null)
                     facility.ContactEmail = null;
                 if (VerificationReviewerLookup.HasJsonPropertyKey(facilityReq.SubmittedSnapshotJson, "philHealthAccreditationNumber")
@@ -177,6 +195,19 @@ public sealed class ApproveVerificationRequestCommandHandler(
                 {
                     if (targetSet is not null && !targetSet.Contains(childReq.Id))
                         continue;
+
+                    var existingCanonical = await ResolveExistingCanonicalPractitionerAsync(db, childReq, ct);
+                    if (existingCanonical is { VerificationStatus: PractitionerVerificationLevel.Suspended })
+                    {
+                        if (targetSet is not null)
+                        {
+                            throw new CodedConflictException(
+                                "practitioner_suspended",
+                                "Cannot approve a verification request while this practitioner is suspended across clinics. Reinstate the practitioner first.");
+                        }
+
+                        continue;
+                    }
 
                     var childSnap = DirectoryVerificationHelper.DeserializePractitionerSnapshot(childReq.SubmittedSnapshotJson);
                     var (practitioner, affiliation) = await DirectoryVerificationHelper.UpsertVerifiedPractitionerAndAffiliationAsync(
@@ -245,6 +276,14 @@ public sealed class ApproveVerificationRequestCommandHandler(
                 $"Practitioner verification request has already been {pracReq.Status}.");
         }
 
+        var existingPrac = await ResolveExistingCanonicalPractitionerAsync(db, pracReq, ct);
+        if (existingPrac is { VerificationStatus: PractitionerVerificationLevel.Suspended })
+        {
+            throw new CodedConflictException(
+                "practitioner_suspended",
+                "Cannot approve a verification request while this practitioner is suspended across clinics. Reinstate the practitioner first.");
+        }
+
         var (pracReviewerName, pracReviewerEmail) = await VerificationReviewerLookup.ResolveAsync(
             db, request.AdminUserId, request.AdminName, request.AdminEmail, ct);
 
@@ -288,6 +327,41 @@ public sealed class ApproveVerificationRequestCommandHandler(
             pracReq.FacilityId,
             [upsertedPrac.Id],
             now);
+    }
+
+    private static async Task<Practitioner?> ResolveExistingCanonicalPractitionerAsync(
+        IApplicationDbContext db,
+        PractitionerVerificationRequest pracReq,
+        CancellationToken ct)
+    {
+        if (pracReq.PractitionerId.HasValue)
+        {
+            var linked = await db.Practitioners
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == pracReq.PractitionerId.Value && !p.IsDeleted, ct);
+            if (linked is not null)
+            {
+                if (linked.MergedIntoPractitionerId is { } mergedId)
+                {
+                    return await db.Practitioners
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(p => p.Id == mergedId && !p.IsDeleted, ct)
+                        ?? linked;
+                }
+
+                return linked;
+            }
+        }
+
+        var professionKind = DirectoryVerificationHelper.NormalizeProfessionOrFallback(pracReq.ProfessionKind);
+        var normalizedPrc = DirectoryVerificationHelper.NormalizePrcOrFallback(pracReq.NormalizedPrcLicenseNo, pracReq.SubmittedPrcLicenseNo);
+
+        return await db.Practitioners
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => !p.IsDeleted
+                                      && p.MergedIntoPractitionerId == null
+                                      && p.ProfessionKind == professionKind
+                                      && p.NormalizedPrcLicenseNo == normalizedPrc, ct);
     }
 }
 
@@ -482,10 +556,183 @@ public sealed class SuspendPractitionerCommandHandler(
 {
     public async Task<SuspendPractitionerResult> Handle(SuspendPractitionerCommand request, CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw new ArgumentException("A compliance reason is required to suspend a practitioner.", nameof(request.Reason));
+
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var reason = string.IsNullOrWhiteSpace(request.Reason)
-            ? "Verification suspended by platform administrator."
-            : request.Reason.Trim();
+        var reason = request.Reason.Trim();
+
+        var practitioner = await db.Practitioners
+            .Include(p => p.Affiliations)
+                .ThenInclude(a => a.Facility)
+            .FirstOrDefaultAsync(p => p.Id == request.PractitionerId && !p.IsDeleted, ct)
+            ?? throw new KeyNotFoundException($"Practitioner '{request.PractitionerId}' was not found.");
+
+        var targetPractitionerIds = new HashSet<Guid> { request.PractitionerId, practitioner.Id };
+        if (practitioner.MergedIntoPractitionerId.HasValue)
+        {
+            var canonical = await db.Practitioners
+                .Include(p => p.Affiliations)
+                    .ThenInclude(a => a.Facility)
+                .FirstOrDefaultAsync(p => p.Id == practitioner.MergedIntoPractitionerId.Value && !p.IsDeleted, ct);
+            if (canonical is not null)
+            {
+                practitioner = canonical;
+                targetPractitionerIds.Add(canonical.Id);
+            }
+        }
+
+        var (reviewerName, reviewerEmail) = await VerificationReviewerLookup.ResolveAsync(
+            db, request.AdminUserId, request.AdminName, request.AdminEmail, ct);
+
+        practitioner.VerificationStatus = PractitionerVerificationLevel.Suspended;
+        practitioner.UpdatedAt = now;
+
+        var activeAffiliations = practitioner.Affiliations
+            .Where(a => !a.IsDeleted && a.AffiliationStatus == "Active")
+            .ToList();
+
+        foreach (var affiliation in activeAffiliations)
+        {
+            affiliation.AffiliationStatus = "Suspended";
+            affiliation.UpdatedAt = now;
+        }
+
+        // Unconfirmed pending affiliations (e.g. AwaitingConfirmation via OTP) must be rejected rather
+        // than suspended so later reinstatement cannot promote unconfirmed affiliations to Active.
+        foreach (var pendingAff in practitioner.Affiliations.Where(
+                     a => !a.IsDeleted
+                          && a.AffiliationStatus is not ("Active" or "Suspended" or "Withdrawn" or "Rejected")))
+        {
+            pendingAff.AffiliationStatus = "Rejected";
+            pendingAff.UpdatedAt = now;
+        }
+
+        var normProf = DirectoryVerificationHelper.NormalizeProfessionOrFallback(practitioner.ProfessionKind);
+        var normPrc = practitioner.NormalizedPrcLicenseNo;
+
+        var candidateOpenRequests = await db.PractitionerVerificationRequests
+            .Include(r => r.Facility)
+            .Where(r => !r.IsDeleted
+                        && (r.Status == "PendingReview" || r.Status == "AwaitingOtp")
+                        && ((r.PractitionerId.HasValue && targetPractitionerIds.Contains(r.PractitionerId.Value))
+                            || (!string.IsNullOrWhiteSpace(normPrc) && r.NormalizedPrcLicenseNo == normPrc)))
+            .ToListAsync(ct);
+
+        var openRequests = candidateOpenRequests
+            .Where(r => (r.PractitionerId.HasValue && targetPractitionerIds.Contains(r.PractitionerId.Value))
+                        || string.Equals(
+                            DirectoryVerificationHelper.NormalizeProfessionOrFallback(r.ProfessionKind),
+                            normProf,
+                            StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var openReq in openRequests)
+        {
+            openReq.PractitionerId ??= practitioner.Id;
+            openReq.Status = "Rejected";
+            openReq.OtpTokenHash = null;
+            openReq.OtpExpiresAtUtc = null;
+            openReq.ReviewedByAdminUserId = request.AdminUserId;
+            openReq.ReviewedByDisplayName = reviewerName;
+            openReq.ReviewedByEmail = reviewerEmail;
+            openReq.ReviewedAtUtc = now;
+            openReq.ReviewerNotes = $"Practitioner suspended: {reason}";
+            openReq.UpdatedAt = now;
+        }
+
+        DirectoryVerificationHelper.StagePractitionerRevokedForAll(
+            interopPublisher,
+            practitioner,
+            activeAffiliations.Select(a => (a, (Facility?)a.Facility)),
+            PractitionerVerificationLevel.Suspended,
+            reason,
+            now,
+            practitioner.Id);
+
+        var coveredFacilityStaffKeys = activeAffiliations
+            .Select(a => (a.FacilityId, a.ClinicStaffMemberId))
+            .ToHashSet();
+
+        foreach (var openReq in openRequests)
+        {
+            if (coveredFacilityStaffKeys.Contains((openReq.FacilityId, openReq.ClinicStaffMemberId)))
+                continue;
+
+            coveredFacilityStaffKeys.Add((openReq.FacilityId, openReq.ClinicStaffMemberId));
+
+            var fac = openReq.Facility;
+            if (fac is null || fac.IsDeleted || fac.Status is FacilityStatus.Suspended or FacilityStatus.Failed)
+                continue;
+
+            interopPublisher.Enqueue(
+                InteropTypes.PractitionerVerificationRevoked,
+                Party.Portal,
+                Party.ForFacility(openReq.TenantId.ToString(), openReq.FacilityId.ToString(), fac.FacilityType),
+                practitioner.Id,
+                new PractitionerVerificationRevokedPayload
+                {
+                    PractitionerId = practitioner.Id,
+                    TenantId = openReq.TenantId.ToString(),
+                    FacilityId = openReq.FacilityId,
+                    ClinicStaffMemberId = openReq.ClinicStaffMemberId,
+                    ProfessionKind = practitioner.ProfessionKind,
+                    NormalizedPrcLicenseNo = practitioner.NormalizedPrcLicenseNo,
+                    NewStatus = PractitionerVerificationLevel.Suspended,
+                    Reason = reason,
+                    RevokedAtUtc = now
+                });
+        }
+
+        var affectedTenantIds = activeAffiliations
+            .Select(a => a.TenantId)
+            .Concat(openRequests.Select(r => r.TenantId))
+            .Distinct()
+            .ToList();
+
+        foreach (var tenantId in affectedTenantIds)
+        {
+            DirectoryVerificationHelper.StageAuditEntry(
+                db,
+                tenantId,
+                request.AdminUserId,
+                request.AdminName,
+                "PlatformAdmin",
+                "practitioner-suspended",
+                new
+                {
+                    practitionerId = practitioner.Id,
+                    professionKind = practitioner.ProfessionKind,
+                    normalizedPrcLicenseNo = practitioner.NormalizedPrcLicenseNo,
+                    reason,
+                    closedPendingRequestIds = openRequests.Where(r => r.TenantId == tenantId).Select(r => r.Id).ToList()
+                });
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        return new SuspendPractitionerResult(
+            practitioner.Id,
+            practitioner.VerificationStatus,
+            activeAffiliations.Count,
+            now,
+            openRequests.Count);
+    }
+}
+
+public sealed class ReinstatePractitionerCommandHandler(
+    IApplicationDbContext db,
+    IInteropPublisher interopPublisher,
+    TimeProvider timeProvider)
+    : IRequestHandler<ReinstatePractitionerCommand, ReinstatePractitionerResult>
+{
+    public async Task<ReinstatePractitionerResult> Handle(ReinstatePractitionerCommand request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw new ArgumentException("A compliance reason is required to reinstate a practitioner.", nameof(request.Reason));
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var reason = request.Reason.Trim();
 
         var practitioner = await db.Practitioners
             .Include(p => p.Affiliations)
@@ -503,29 +750,63 @@ public sealed class SuspendPractitionerCommandHandler(
                 practitioner = canonical;
         }
 
-        practitioner.VerificationStatus = PractitionerVerificationLevel.Suspended;
-        practitioner.UpdatedAt = now;
-
-        var activeAffiliations = practitioner.Affiliations
-            .Where(a => !a.IsDeleted && a.AffiliationStatus != "Withdrawn")
-            .ToList();
-
-        foreach (var affiliation in activeAffiliations)
+        if (practitioner.VerificationStatus != PractitionerVerificationLevel.Suspended)
         {
-            affiliation.AffiliationStatus = "Suspended";
-            affiliation.UpdatedAt = now;
+            throw new CodedConflictException(
+                "practitioner_not_suspended",
+                $"Practitioner is currently {practitioner.VerificationStatus} and cannot be reinstated.");
         }
 
-        DirectoryVerificationHelper.StagePractitionerRevokedForAll(
-            interopPublisher,
-            practitioner,
-            activeAffiliations.Select(a => (a, (Facility?)a.Facility)),
-            PractitionerVerificationLevel.Suspended,
-            reason,
-            now,
-            practitioner.Id);
+        practitioner.VerificationStatus = PractitionerVerificationLevel.Verified;
+        practitioner.VerifiedAtUtc ??= now;
+        practitioner.VerifiedByAdminUserId = request.AdminUserId;
+        practitioner.UpdatedAt = now;
 
-        foreach (var tenantId in activeAffiliations.Select(a => a.TenantId).Distinct())
+        var suspendedAffiliations = practitioner.Affiliations
+            .Where(a => !a.IsDeleted && a.AffiliationStatus == "Suspended")
+            .ToList();
+
+        var stagedAnyIdentityUpdate = false;
+        foreach (var affiliation in suspendedAffiliations)
+        {
+            affiliation.AffiliationStatus = "Active";
+            affiliation.UpdatedAt = now;
+
+            if (affiliation.Facility is not null)
+            {
+                DirectoryVerificationHelper.StagePractitionerIdentityUpdated(
+                    interopPublisher, practitioner, affiliation, affiliation.Facility, practitioner.Id);
+                stagedAnyIdentityUpdate = true;
+            }
+        }
+
+        if (!stagedAnyIdentityUpdate)
+        {
+            interopPublisher.Enqueue(
+                InteropTypes.PractitionerIdentityUpdated,
+                Party.Portal,
+                new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient },
+                practitioner.Id,
+                new PractitionerIdentityUpdatedPayload
+                {
+                    PractitionerId = practitioner.Id,
+                    MergedIntoPractitionerId = practitioner.MergedIntoPractitionerId,
+                    ProfessionKind = practitioner.ProfessionKind,
+                    NormalizedPrcLicenseNo = practitioner.NormalizedPrcLicenseNo,
+                    DisplayPrcLicenseNo = practitioner.DisplayPrcLicenseNo,
+                    PrcExpiryDate = practitioner.PrcExpiryDate,
+                    VerificationLevel = practitioner.VerificationStatus,
+                    FirstName = practitioner.FirstName,
+                    LastName = practitioner.LastName,
+                    Title = practitioner.Title,
+                    PrimarySpecialty = practitioner.PrimarySpecialty,
+                    PublicBio = practitioner.PublicBio,
+                    AvatarUrl = practitioner.AvatarUrl,
+                    VerifiedAtUtc = practitioner.VerifiedAtUtc
+                });
+        }
+
+        foreach (var tenantId in suspendedAffiliations.Select(a => a.TenantId).Distinct())
         {
             DirectoryVerificationHelper.StageAuditEntry(
                 db,
@@ -533,7 +814,7 @@ public sealed class SuspendPractitionerCommandHandler(
                 request.AdminUserId,
                 request.AdminName,
                 "PlatformAdmin",
-                "practitioner-suspended",
+                "practitioner-reinstated",
                 new
                 {
                     practitionerId = practitioner.Id,
@@ -545,10 +826,10 @@ public sealed class SuspendPractitionerCommandHandler(
 
         await db.SaveChangesAsync(ct);
 
-        return new SuspendPractitionerResult(
+        return new ReinstatePractitionerResult(
             practitioner.Id,
             practitioner.VerificationStatus,
-            activeAffiliations.Count,
+            suspendedAffiliations.Count,
             now);
     }
 }
