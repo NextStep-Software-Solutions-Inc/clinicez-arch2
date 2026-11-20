@@ -474,6 +474,9 @@ public class AdminEndpoints : IEndpoint
             if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
 
             var body = await TryReadOptionalJsonBodyAsync<SuspendPractitionerHttpRequest>(httpContext, ct);
+            if (body is null || string.IsNullOrWhiteSpace(body.Reason))
+                return Results.BadRequest(new { Message = "A compliance reason is required to suspend a practitioner." });
+
             var adminUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? admin.Email;
 
             try
@@ -482,16 +485,67 @@ public class AdminEndpoints : IEndpoint
                     id,
                     adminUserId,
                     admin.FullName,
-                    body?.Reason), ct);
+                    body.Reason,
+                    admin.Email), ct);
                 return Results.Ok(result);
             }
             catch (KeyNotFoundException ex)
             {
                 return Results.NotFound(new { Message = ex.Message });
             }
+            catch (CodedConflictException ex)
+            {
+                return Results.Conflict(new { Message = ex.Message, Code = ex.Code });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
         })
         .WithName("SuspendVerifiedPractitioner")
-        .WithDescription("Suspends a verified practitioner and revokes all clinic affiliations across the Hub.")
+        .WithDescription("Suspends a verified practitioner, closes open submissions, and revokes all clinic affiliations across the Hub.")
+        .WithTags("Admin");
+
+        group.MapPost("/practitioners/{id:guid}/reinstate", async (
+            Guid id,
+            HttpContext httpContext,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.RevokeDirectoryVerification, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var body = await TryReadOptionalJsonBodyAsync<ReinstatePractitionerHttpRequest>(httpContext, ct);
+            if (body is null || string.IsNullOrWhiteSpace(body.Reason))
+                return Results.BadRequest(new { Message = "A compliance reason is required to reinstate a practitioner." });
+
+            var adminUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? admin.Email;
+
+            try
+            {
+                var result = await sender.Send(new ReinstatePractitionerCommand(
+                    id,
+                    adminUserId,
+                    admin.FullName,
+                    body.Reason,
+                    admin.Email), ct);
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (CodedConflictException ex)
+            {
+                return Results.Conflict(new { Message = ex.Message, Code = ex.Code });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .WithName("ReinstateSuspendedPractitioner")
+        .WithDescription("Reinstates a suspended practitioner to verified status and restores suspended clinic affiliations across the Hub.")
         .WithTags("Admin");
 
         // 6. BLOG CRUD
@@ -1162,6 +1216,8 @@ public record RejectVerificationHttpRequest(
     string? Notes = null);
 
 public record SuspendPractitionerHttpRequest(string? Reason = null);
+
+public record ReinstatePractitionerHttpRequest(string? Reason = null);
 
 public record InviteAdminUserRequest(
     string Email,

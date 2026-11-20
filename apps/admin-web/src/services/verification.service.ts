@@ -204,6 +204,8 @@ export interface VerificationRequestDetailDto {
   supportsTeleconsult?: boolean;
   updatedAtUtc?: string | null;
   resubmissionDiff?: ResubmissionDiffDto | null;
+  canonicalPractitionerId?: string | null;
+  canonicalPractitionerStatus?: PractitionerVerificationLevel | null;
 }
 
 export interface ApproveVerificationPayload {
@@ -236,7 +238,7 @@ export interface RejectVerificationResult {
 }
 
 export interface SuspendPractitionerPayload {
-  reason?: string;
+  reason: string;
 }
 
 export interface SuspendPractitionerResult {
@@ -244,6 +246,18 @@ export interface SuspendPractitionerResult {
   status: PractitionerVerificationLevel;
   suspendedAffiliationsCount: number;
   revokedAtUtc: string;
+  closedPendingRequestsCount?: number;
+}
+
+export interface ReinstatePractitionerPayload {
+  reason: string;
+}
+
+export interface ReinstatePractitionerResult {
+  practitionerId: string;
+  status: PractitionerVerificationLevel;
+  reinstatedAffiliationsCount: number;
+  reinstatedAtUtc: string;
 }
 
 export interface VerificationEvidenceBlobResult {
@@ -417,11 +431,31 @@ export const verificationService = {
   /** Suspends a verified practitioner across all active clinic affiliations (`POST /admin/practitioners/{id}/suspend`). */
   suspendPractitioner: async (
     practitionerId: string,
-    payload: SuspendPractitionerPayload = {},
+    payload: SuspendPractitionerPayload,
   ): Promise<SuspendPractitionerResult> => {
+    const reason = payload.reason?.trim();
+    if (!reason) {
+      throw new Error("A compliance reason is required to suspend a practitioner.");
+    }
     const res = await apiClient.post<SuspendPractitionerResult>(
       `/admin/practitioners/${encodeURIComponent(practitionerId)}/suspend`,
-      payload.reason?.trim() ? { reason: payload.reason.trim() } : {},
+      { reason },
+    );
+    return res.data;
+  },
+
+  /** Reinstates a suspended practitioner across affiliated clinics (`POST /admin/practitioners/{id}/reinstate`). */
+  reinstatePractitioner: async (
+    practitionerId: string,
+    payload: ReinstatePractitionerPayload,
+  ): Promise<ReinstatePractitionerResult> => {
+    const reason = payload.reason?.trim();
+    if (!reason) {
+      throw new Error("A compliance reason is required to reinstate a practitioner.");
+    }
+    const res = await apiClient.post<ReinstatePractitionerResult>(
+      `/admin/practitioners/${encodeURIComponent(practitionerId)}/reinstate`,
+      { reason },
     );
     return res.data;
   },

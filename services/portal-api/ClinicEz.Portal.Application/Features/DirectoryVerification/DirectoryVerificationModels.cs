@@ -82,6 +82,41 @@ public static class DirectoryVerificationHelper
     public static string GenerateOtpCode() =>
         RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
 
+    public static bool IsPureEmailAddress(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value.Trim();
+        if (trimmed.Any(char.IsWhiteSpace))
+            return false;
+
+        var atIndex = trimmed.IndexOf('@');
+        if (atIndex <= 0 || atIndex == trimmed.Length - 1)
+            return false;
+
+        if (!trimmed[(atIndex + 1)..].Contains('.'))
+            return false;
+
+        return MailAddress.TryCreate(trimmed, out var parsed)
+            && string.Equals(parsed.Address, trimmed, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static (string? ContactNumber, string? ContactEmail) NormalizeFacilityContacts(
+        string? rawContactNumber,
+        string? rawContactEmail)
+    {
+        var cleanPhone = string.IsNullOrWhiteSpace(rawContactNumber) ? null : rawContactNumber.Trim();
+        var cleanEmail = string.IsNullOrWhiteSpace(rawContactEmail) ? null : rawContactEmail.Trim();
+
+        if (IsPureEmailAddress(cleanPhone))
+        {
+            return (null, cleanEmail ?? cleanPhone);
+        }
+
+        return (cleanPhone, cleanEmail);
+    }
+
     public static string NormalizeProfessionOrFallback(string? professionKind) =>
         PractitionerIdentity.NormalizeProfessionKind(professionKind)
         ?? (string.IsNullOrWhiteSpace(professionKind) ? "Doctor" : professionKind.Trim());

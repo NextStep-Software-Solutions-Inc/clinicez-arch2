@@ -1085,4 +1085,167 @@ public sealed class DirectoryVerificationTests : IDisposable
         Assert.Equal("clinicez-portal-staging", customSvc.BucketName);
         customSvc.Dispose();
     }
+
+    [Fact]
+    public async Task Issue227_SuspendPractitioner_RequiresReason_ClosesOpenRequests_BlocksApprove_AndReinstateRestoresVerified()
+    {
+        var reqHandler = new PractitionerVerificationRequestedHandler(
+            _context, _clock, NullLogger<PractitionerVerificationRequestedHandler>.Instance);
+        var approveHandler = new ApproveVerificationRequestCommandHandler(
+            _context, TestSupport.ProvisioningPublisher(_context), NewInteropPublisher(), _clock);
+        var suspendHandler = new SuspendPractitionerCommandHandler(_context, NewInteropPublisher(), _clock);
+        var reinstateHandler = new ReinstatePractitionerCommandHandler(_context, NewInteropPublisher(), _clock);
+
+        var partyA = Party.ForFacility(_tenantA.Id.ToString(), _clinicA.Id.ToString(), FacilityType.Clinic);
+        var partyB = Party.ForFacility(_tenantB.Id.ToString(), _clinicB.Id.ToString(), FacilityType.Clinic);
+
+        // 1. Seed verified Clinic A practitioner (Dr. Jose Rizal)
+        var staffAId = Guid.NewGuid();
+        var req1Id = Guid.NewGuid();
+        var payload1 = new PractitionerVerificationRequestedPayload
+        {
+            RequestId = req1Id,
+            TenantId = _tenantA.Id.ToString(),
+            FacilityId = _clinicA.Id,
+            FacilityName = _clinicA.Name,
+            ClinicStaffMemberId = staffAId,
+            RequestKind = "Initial",
+            ProfessionKind = "Doctor",
+            FirstName = "Jose",
+            LastName = "Rizal",
+            Title = "Dr.",
+            SubmittedPrcLicenseNo = "0088112",
+            NormalizedPrcLicenseNo = "0088112",
+            PrcExpiryDate = new DateOnly(2029, 1, 1),
+            PrcEvidenceObjectKey = "prc/rizal-1.pdf",
+            VerificationContact = "rizal@alpha.ph",
+            Specialty = "Family Medicine",
+            SubmittedByClinicUserId = "alpha_admin",
+            SubmittedAtUtc = _clock.GetUtcNow().UtcDateTime
+        };
+        await reqHandler.HandleAsync(
+            payload1,
+            new InteropMessageContext(InteropEnvelope.Create(InteropTypes.PractitionerVerificationRequested, partyA, Party.Portal, req1Id, payload1)),
+            CancellationToken.None);
+
+        var approved = await approveHandler.Handle(
+            new ApproveVerificationRequestCommand(req1Id, "admin_1", "Reviewer One", "Verified PRC."),
+            CancellationToken.None);
+        var pracId = Assert.Single(approved.ApprovedPractitionerIds);
+
+        // 2. Submit a PendingReview resubmission at Clinic A and an AwaitingOtp affiliation at Clinic B
+        var resubReqId = Guid.NewGuid();
+        var resubPayload = payload1 with
+        {
+            RequestId = resubReqId,
+            RequestKind = "Resubmission",
+            SubmittedAtUtc = _clock.GetUtcNow().UtcDateTime.AddMinutes(5)
+        };
+        await reqHandler.HandleAsync(
+            resubPayload,
+            new InteropMessageContext(InteropEnvelope.Create(InteropTypes.PractitionerVerificationRequested, partyA, Party.Portal, resubReqId, resubPayload)),
+            CancellationToken.None);
+
+        // AwaitingOtp affiliation on Clinic B creates an AwaitingConfirmation affiliation (should be Rejected on suspend, not Suspended/promoted on reinstate)
+        var clinicBStaffId = Guid.NewGuid();
+        var clinicBReqId = Guid.NewGuid();
+        var clinicBPayload = payload1 with
+        {
+            RequestId = clinicBReqId,
+            TenantId = _tenantB.Id.ToString(),
+            FacilityId = _clinicB.Id,
+            FacilityName = _clinicB.Name,
+            ClinicStaffMemberId = clinicBStaffId,
+            RequestKind = "Affiliation",
+            FirstName = "Jose Protacio",
+            LastName = "Rizal",
+            SubmittedAtUtc = _clock.GetUtcNow().UtcDateTime.AddMinutes(6)
+        };
+        await reqHandler.HandleAsync(
+            clinicBPayload,
+            new InteropMessageContext(InteropEnvelope.Create(InteropTypes.PractitionerVerificationRequested, partyB, Party.Portal, clinicBReqId, clinicBPayload)),
+            CancellationToken.None);
+
+        // Blank compliance reason is rejected
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            suspendHandler.Handle(new SuspendPractitionerCommand(pracId, "admin_1", "Reviewer One", "   "), CancellationToken.None));
+
+        _context.InteropOutbox.RemoveRange(_context.InteropOutbox);
+        await _context.SaveChangesAsync();
+
+        // 3. Suspend practitioner with required compliance reason -> closes both open requests as Rejected & notifies Clinic A, Clinic B, and Patient
+        var suspendResult = await suspendHandler.Handle(
+            new SuspendPractitionerCommand(pracId, "admin_1", "Reviewer One", "PRC license suspended pending audit", "reviewer@clinicez.ph"),
+            CancellationToken.None);
+
+        Assert.Equal(PractitionerVerificationLevel.Suspended, suspendResult.Status);
+        Assert.Equal(1, suspendResult.SuspendedAffiliationsCount);
+        Assert.Equal(2, suspendResult.ClosedPendingRequestsCount);
+
+        var closedResub = await _context.PractitionerVerificationRequests.SingleAsync(r => r.Id == resubReqId);
+        Assert.Equal("Rejected", closedResub.Status);
+        Assert.Null(closedResub.OtpTokenHash);
+        Assert.Contains("PRC license suspended pending audit", closedResub.ReviewerNotes);
+
+        var closedClinicB = await _context.PractitionerVerificationRequests.SingleAsync(r => r.Id == clinicBReqId);
+        Assert.Equal("Rejected", closedClinicB.Status);
+        Assert.Null(closedClinicB.OtpTokenHash);
+        var closedClinicBAff = await _context.PractitionerAffiliations.SingleAsync(a => a.FacilityId == _clinicB.Id && a.ClinicStaffMemberId == clinicBStaffId);
+        Assert.Equal("Rejected", closedClinicBAff.AffiliationStatus);
+
+        var detailAfterSuspend = await new GetVerificationRequestDetailQueryHandler(_context)
+            .Handle(new GetVerificationRequestDetailQuery(resubReqId), CancellationToken.None);
+        Assert.NotNull(detailAfterSuspend);
+        Assert.Equal("Rejected", detailAfterSuspend.Status);
+        Assert.Equal(pracId, detailAfterSuspend.CanonicalPractitionerId);
+        Assert.Equal(PractitionerVerificationLevel.Suspended, detailAfterSuspend.CanonicalPractitionerStatus);
+
+        var revokedOutbox = TestSupport.Outbox(_context, InteropTypes.PractitionerVerificationRevoked);
+        Assert.Contains(revokedOutbox, m => m.To.Service == InteropServices.Patient);
+        Assert.Contains(revokedOutbox, m => m.To.FacilityId == _clinicA.Id.ToString());
+        Assert.Contains(revokedOutbox, m => m.To.FacilityId == _clinicB.Id.ToString());
+
+        // 4. Subsequent PendingReview submission while Suspended cannot be approved until reinstated
+        var newWhileSuspendedId = Guid.NewGuid();
+        var newWhileSuspendedPayload = payload1 with
+        {
+            RequestId = newWhileSuspendedId,
+            RequestKind = "Resubmission",
+            SubmittedAtUtc = _clock.GetUtcNow().UtcDateTime.AddMinutes(10)
+        };
+        await reqHandler.HandleAsync(
+            newWhileSuspendedPayload,
+            new InteropMessageContext(InteropEnvelope.Create(InteropTypes.PractitionerVerificationRequested, partyA, Party.Portal, newWhileSuspendedId, newWhileSuspendedPayload)),
+            CancellationToken.None);
+
+        var conflictEx = await Assert.ThrowsAsync<CodedConflictException>(() =>
+            approveHandler.Handle(new ApproveVerificationRequestCommand(newWhileSuspendedId, "admin_1", "Reviewer One"), CancellationToken.None));
+        Assert.Equal("practitioner_suspended", conflictEx.Code);
+
+        // 5. Reinstate requires reason, restores Verified + Active affiliations, emits PractitionerIdentityUpdated, and blocks duplicate reinstate
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            reinstateHandler.Handle(new ReinstatePractitionerCommand(pracId, "admin_1", "Reviewer One", "  "), CancellationToken.None));
+
+        _context.InteropOutbox.RemoveRange(_context.InteropOutbox);
+        await _context.SaveChangesAsync();
+
+        var reinstated = await reinstateHandler.Handle(
+            new ReinstatePractitionerCommand(pracId, "admin_1", "Reviewer One", "PRC clearance verified"),
+            CancellationToken.None);
+        Assert.Equal(PractitionerVerificationLevel.Verified, reinstated.Status);
+        Assert.Equal(1, reinstated.ReinstatedAffiliationsCount);
+        var clinicBAffAfterReinstate = await _context.PractitionerAffiliations.SingleAsync(a => a.FacilityId == _clinicB.Id && a.ClinicStaffMemberId == clinicBStaffId);
+        Assert.Equal("Rejected", clinicBAffAfterReinstate.AffiliationStatus);
+
+        var identityOutbox = TestSupport.Outbox(_context, InteropTypes.PractitionerIdentityUpdated);
+        Assert.Contains(identityOutbox, m => m.To.Service == InteropServices.Patient);
+        Assert.Contains(identityOutbox, m => m.To.FacilityId == _clinicA.Id.ToString()
+            && m.GetPayload<PractitionerIdentityUpdatedPayload>().VerificationLevel == PractitionerVerificationLevel.Verified
+            && m.GetPayload<PractitionerIdentityUpdatedPayload>().AffiliationStatus == "Active");
+        Assert.Contains(_context.WorkspaceAuditEntries, a => a.TenantId == _tenantA.Id && a.Action == "practitioner-reinstated");
+
+        var notSuspendedEx = await Assert.ThrowsAsync<CodedConflictException>(() =>
+            reinstateHandler.Handle(new ReinstatePractitionerCommand(pracId, "admin_1", "Reviewer One", "Already verified"), CancellationToken.None));
+        Assert.Equal("practitioner_not_suspended", notSuspendedEx.Code);
+    }
 }
