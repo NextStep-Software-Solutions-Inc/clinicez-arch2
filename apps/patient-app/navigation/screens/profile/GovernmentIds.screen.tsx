@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -163,13 +163,19 @@ export default function GovernmentIdsScreen() {
   const mod11Status = useMemo(() => validatePhilHealthPinMod11(philhealthId || ''), [philhealthId]);
 
   const [hasRecord, setHasRecord] = useState(false);
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
 
   const load = useCallback(async () => {
+    if (!patientId || isDirtyRef.current) return;
     try {
-      const row = await db.query.patientGovernmentIds.findFirst({
-        where: eq(patientGovernmentIds.patientId, patientId),
-      });
-      if (row) {
+      const rows = await db
+        .select()
+        .from(patientGovernmentIds)
+        .where(eq(patientGovernmentIds.patientId, patientId))
+        .limit(1);
+      const row = rows[0];
+      if (row && !isDirtyRef.current) {
         setHasRecord(true);
         reset({
           philhealthId: row.philhealthId ?? '',
@@ -246,11 +252,18 @@ export default function GovernmentIdsScreen() {
         hmoCoverageEnd: data.hmoCoverageEnd,
       };
 
-      if (hasRecord) {
+      const existingRows = await db
+        .select({ id: patientGovernmentIds.id })
+        .from(patientGovernmentIds)
+        .where(eq(patientGovernmentIds.patientId, patientId))
+        .limit(1);
+
+      if (hasRecord || existingRows.length > 0) {
         await db
           .update(patientGovernmentIds)
           .set({ ...payload, patientId, updatedAt: new Date() })
           .where(eq(patientGovernmentIds.patientId, patientId));
+        setHasRecord(true);
       } else {
         await db.insert(patientGovernmentIds).values({
           id: randomUUID(),

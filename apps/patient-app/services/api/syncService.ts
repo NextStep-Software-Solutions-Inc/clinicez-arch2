@@ -158,6 +158,13 @@ async function executePushSync(
     // Remap client IDs to server IDs immediately if backend returned ID mappings
     if (ack.items && Array.isArray(ack.items)) {
       for (const res of ack.items) {
+        if (
+          res.entityType === 'patient_government_ids' ||
+          res.entityType === 'patient' ||
+          SINGLETON_ENTITY_TYPES.has(res.entityType)
+        ) {
+          continue;
+        }
         if (res.clientId && res.serverId && res.clientId !== res.serverId && res.status !== 'Rejected') {
           try {
             const table = ENTITY_TYPE_TO_TABLE[res.entityType];

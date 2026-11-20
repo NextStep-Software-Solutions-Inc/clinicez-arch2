@@ -357,6 +357,9 @@ async function handleInterceptWrite(
         { idType: 'HMO', idNumber: values.hmoPolicyNumber },
       ];
 
+      const prevTs = preCapturedRow?.updatedAt ? new Date(preCapturedRow.updatedAt).getTime() : 0;
+      const safeUpdatedTime = Math.max(Date.now(), prevTs + 1000);
+
       let queuedCount = 0;
       for (const def of idDefs) {
         const existingServer = idMap[def.idType] || idMap[def.idType.toLowerCase()];
@@ -373,14 +376,14 @@ async function handleInterceptWrite(
             idType: def.idType,
             idNumber: trimmedNumber,
             clientId: clientUuid,
-            updatedAt: now.toISOString(),
+            updatedAt: new Date(safeUpdatedTime).toISOString(),
             ...(def.extra || {}),
           };
 
           const syncItem = {
             id: randomUUID(),
             entityType: 'patient_government_ids' as const,
-            entityId: isUpdate ? existingServer!.id : undefined,
+            entityId: isUpdate ? existingServer!.id : clientUuid,
             operation: isUpdate ? ('update' as const) : ('create' as const),
             payloadJson: JSON.stringify(itemPayload),
             status: 'pending' as const,
