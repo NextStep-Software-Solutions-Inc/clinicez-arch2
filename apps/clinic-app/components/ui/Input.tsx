@@ -255,6 +255,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     paddingHorizontal: theme.spacing.md,
     minHeight: theme.sizes.controlMd,
+    overflow: 'hidden',
   },
   inputMultiline: {
     minHeight: theme.sizes.controlLg + theme.sizes.controlMd,
@@ -285,6 +286,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    minWidth: 0,
     color: theme.colors.text,
     fontSize: theme.fontSizes.md,
     paddingVertical: theme.spacing.sm,

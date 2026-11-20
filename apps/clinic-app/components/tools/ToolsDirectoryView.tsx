@@ -17,6 +17,7 @@ import {
   type ClinicToolDefinition,
   type ToolCategoryKey,
 } from './toolsCatalog';
+import { FilterChip } from './ToolsUiHelpers';
 
 export interface ToolsDirectoryViewProps {
   tools: readonly ClinicToolDefinition[];
@@ -26,29 +27,52 @@ export interface ToolsDirectoryViewProps {
 type CategoryFilter = 'all' | ToolCategoryKey;
 type InteractionState = PressableStateCallbackType & { hovered?: boolean };
 
-const CATEGORY_META: Record<
-  ToolCategoryKey,
-  { label: string; subtitle: string; badgeVariant: BadgeVariant }
-> = {
+interface CategoryDisplayMeta {
+  label: string;
+  subtitle: string;
+  badgeVariant: BadgeVariant;
+  actionLabel: string;
+  iconBg: string;
+  iconBorder: string;
+  iconColor: string;
+}
+
+const CATEGORY_META: Record<ToolCategoryKey, CategoryDisplayMeta> = {
   calculators: {
     label: 'Clinical Calculators',
-    subtitle: 'Point-of-care anthropometry, CVD risk, pediatric growth, obstetric, and dosing calculators.',
+    subtitle: 'BMI, heart risk, child growth, pregnancy due date, dosing, and kidney calculators.',
     badgeVariant: 'routine',
+    actionLabel: 'Open calculator',
+    iconBg: theme.colors.primarySubtle,
+    iconBorder: theme.colors.primaryBorder,
+    iconColor: theme.colors.primary,
   },
   lookups: {
     label: 'Medical & Reference Lookups',
-    subtitle: 'Fast search for ICD-10 diagnoses, active clinic pricing, and Philippine PSGC address codes.',
+    subtitle: 'Quick search for diagnosis codes, clinic service fees, and Philippine addresses.',
     badgeVariant: 'info',
+    actionLabel: 'Open lookup',
+    iconBg: theme.colors.infoBg,
+    iconBorder: theme.colors.infoBorder,
+    iconColor: theme.colors.infoText,
   },
   yakap: {
     label: 'PhilHealth Yakap',
-    subtitle: 'PIN verification, GAMOT outpatient medicine ledger, UPSC validator, and catchment masterlist.',
+    subtitle: 'PhilHealth number check, GAMOT medicine benefits, prescription codes, and assigned patient list.',
     badgeVariant: 'success',
+    actionLabel: 'Open Yakap tool',
+    iconBg: theme.colors.successBg,
+    iconBorder: theme.colors.successBorder,
+    iconColor: theme.colors.successText,
   },
   operations: {
     label: 'Front-Desk & Operations',
-    subtitle: 'Patient Share QR scanner, waiting-room TV queue display links, and printable reception QR posters.',
+    subtitle: 'Patient QR check-in scanner, lobby TV queue links, and printable reception posters.',
     badgeVariant: 'purple',
+    actionLabel: 'Open tool',
+    iconBg: theme.colors.purpleBg,
+    iconBorder: theme.colors.purpleBorder,
+    iconColor: theme.colors.purpleText,
   },
 };
 
@@ -122,8 +146,16 @@ export default function ToolsDirectoryView({ tools, onOpenTool }: ToolsDirectory
         ]}
       >
         <View style={styles.toolCardTop}>
-          <View style={styles.toolIconTile}>
-            <Icon name={tool.icon} size={theme.sizes.iconMd} color={theme.colors.primary} />
+          <View
+            style={[
+              styles.toolIconTile,
+              {
+                backgroundColor: meta.iconBg,
+                borderColor: meta.iconBorder,
+              },
+            ]}
+          >
+            <Icon name={tool.icon} size={theme.sizes.iconMd} color={meta.iconColor} />
           </View>
           <Badge label={tool.badgeLabel} variant={meta.badgeVariant} size="sm" />
         </View>
@@ -139,7 +171,7 @@ export default function ToolsDirectoryView({ tools, onOpenTool }: ToolsDirectory
 
         <View style={styles.toolCardFooter}>
           <ThemedText variant="captionBold" color={theme.colors.primary}>
-            Open tool
+            {meta.actionLabel}
           </ThemedText>
           <Icon name="arrowRight" size={theme.sizes.iconSm} color={theme.colors.primary} />
         </View>
@@ -155,7 +187,7 @@ export default function ToolsDirectoryView({ tools, onOpenTool }: ToolsDirectory
           <View style={styles.flexFill}>
             <Input
               leftIcon="search"
-              placeholder="Search tools, calculators, ICD-10, PSGC, PhilHealth, or QR utilities..."
+              placeholder="Search tools by name, condition, PhilHealth PIN, address, or QR..."
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoCapitalize="none"
@@ -173,18 +205,16 @@ export default function ToolsDirectoryView({ tools, onOpenTool }: ToolsDirectory
         </View>
 
         <View style={styles.chipRow}>
-          <Button
-            size="sm"
-            variant={selectedCategory === 'all' ? 'primary' : 'secondary'}
-            title={`All (${categoryCounts.all})`}
+          <FilterChip
+            label={`All (${categoryCounts.all})`}
+            active={selectedCategory === 'all'}
             onPress={() => setSelectedCategory('all')}
           />
           {availableCategories.map((cat) => (
-            <Button
+            <FilterChip
               key={cat}
-              size="sm"
-              variant={selectedCategory === cat ? 'primary' : 'secondary'}
-              title={`${CATEGORY_META[cat].label} (${categoryCounts[cat]})`}
+              label={`${CATEGORY_META[cat].label} (${categoryCounts[cat]})`}
+              active={selectedCategory === cat}
               onPress={() => setSelectedCategory(cat)}
             />
           ))}
@@ -196,8 +226,8 @@ export default function ToolsDirectoryView({ tools, onOpenTool }: ToolsDirectory
         <Card>
           <EmptyState
             icon="search"
-            title="No matching utility tools"
-            description="Try a different keyword or reset the category filter to view all clinic utilities."
+            title="No matching tools"
+            description="Try a different keyword or clear the category filter to view all tools."
             actionTitle="Reset filters"
             onAction={() => {
               setSearchQuery('');
@@ -274,6 +304,7 @@ const styles = StyleSheet.create({
   cardsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignItems: 'stretch',
     gap: theme.spacing.md,
   },
   toolCard: {
@@ -293,16 +324,30 @@ const styles = StyleSheet.create({
     }),
   },
   toolCardDesktop: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: '31%',
-    minWidth: 260,
+    flexGrow: 0,
+    flexShrink: 0,
+    ...Platform.select({
+      web: {
+        width: `calc((100% - ${theme.spacing.md * 2}px) / 3)`,
+      } as any,
+      default: {
+        flexBasis: '31%',
+        minWidth: 260,
+      },
+    }),
   },
   toolCardTablet: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: '47%',
-    minWidth: 240,
+    flexGrow: 0,
+    flexShrink: 0,
+    ...Platform.select({
+      web: {
+        width: `calc((100% - ${theme.spacing.md}px) / 2)`,
+      } as any,
+      default: {
+        flexBasis: '48%',
+        minWidth: 240,
+      },
+    }),
   },
   toolCardMobile: {
     width: '100%',

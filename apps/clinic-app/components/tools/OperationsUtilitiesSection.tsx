@@ -85,8 +85,8 @@ export default function OperationsUtilitiesSection({
     if (canImportPatient) {
       opts.push({ value: 'share-import', label: 'Scan Share QR', icon: 'scan' });
     }
-    opts.push({ value: 'waiting-tv', label: 'Waiting Area TV', icon: 'tv' });
-    opts.push({ value: 'reception-placard', label: 'Reception QR', icon: 'qrCode' });
+    opts.push({ value: 'waiting-tv', label: 'Waiting TV', icon: 'tv' });
+    opts.push({ value: 'reception-placard', label: 'Check-In QR', icon: 'qrCode' });
     return opts;
   }, [canImportPatient]);
 
@@ -211,8 +211,8 @@ export default function OperationsUtilitiesSection({
         <Card>
           <EmptyState
             icon="lock"
-            title="Patient registration permission required"
-            description="Scanning and importing patient share QR codes requires patients:write permission."
+            title="Access restricted"
+            description="Ask a clinic administrator to enable patient registration access for your account."
           />
         </Card>
       );
@@ -222,15 +222,15 @@ export default function OperationsUtilitiesSection({
       <Card>
         <CardHeader
           title="Scan Patient Share QR / One-Time Code"
-          subtitle="Import a visiting patient’s ClinicEZ record using their QR code, pasted share token, or one-time code."
+          subtitle="Import a visiting patient’s profile using their QR code or 6-character share code."
           icon="scan"
         />
 
         <View style={rowStyle}>
           <View style={styles.flexFill}>
             <Input
-              label="Optional share token or link (pre-fill)"
-              placeholder="Paste a share token or leave blank to use the camera scanner..."
+              label="Optional share code or link"
+              placeholder="Paste a share code or leave blank to scan with the camera..."
               value={quickShareToken}
               onChangeText={setQuickShareToken}
               autoCapitalize="none"
@@ -248,12 +248,12 @@ export default function OperationsUtilitiesSection({
         </View>
 
         <View style={styles.infoPanel}>
-          <ThemedText variant="smallBold">How Patient Share Import works</ThemedText>
+          <ThemedText variant="smallBold">How Patient Check-In Import Works</ThemedText>
           <ThemedText variant="small" color={theme.colors.textSecondary}>
-            1. Ask the patient to display their Share QR or 6-character One-Time Code in the ClinicEZ Patient App.
+            1. Ask the patient to open their Share QR or 6-character code in the ClinicEZ Patient App.
           </ThemedText>
           <ThemedText variant="small" color={theme.colors.textSecondary}>
-            2. Scan via camera or enter the code on the scanner screen — optionally check them directly into today&apos;s OPD queue.
+            2. Scan with the camera or enter the code on the next screen — you can also add them to today&apos;s queue.
           </ThemedText>
         </View>
       </Card>
@@ -268,13 +268,13 @@ export default function OperationsUtilitiesSection({
     return (
       <Card>
         <CardHeader
-          title="Waiting Area TV Queue Display"
-          subtitle="Launch the unauthenticated lobby TV display screen on a clinic monitor or smart TV browser."
+          title="Waiting Room TV Queue Display"
+          subtitle="Open the waiting-room TV screen (no login required) on a lobby monitor or smart TV."
           icon="tv"
           rightAction={
             canViewSettings && onOpenSettingsTab ? (
               <Button
-                title="Configure TV"
+                title="TV Settings"
                 size="sm"
                 variant="outline"
                 icon="settings"
@@ -306,81 +306,83 @@ export default function OperationsUtilitiesSection({
               />
             </View>
 
-            {/* Local LAN Display */}
-            <View style={styles.linkCard}>
-              <View style={styles.linkHeader}>
-                <View style={styles.flexFill}>
-                  <ThemedText variant="bodyBold">Local Clinic LAN Kiosk</ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    Best for TVs connected to the same local clinic Wi-Fi or workstation.
-                  </ThemedText>
-                </View>
-                <Badge label="Recommended" variant="routine" size="sm" />
-              </View>
-              <View style={styles.urlBox}>
-                <ThemedText variant="caption" style={styles.urlText} numberOfLines={2}>
-                  {localLanTvUrl}
-                </ThemedText>
-              </View>
-              <View style={styles.actionsRow}>
-                <Button
-                  title="Launch Local TV"
-                  icon="externalLink"
-                  variant="primary"
-                  size="sm"
-                  onPress={() => openExternalUrl(localLanTvUrl, 'Could not open Local Waiting Area TV display.')}
-                />
-                <Button
-                  title="Copy URL"
-                  icon="copy"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => void copyUrlToClipboard(localLanTvUrl, 'Local TV Display URL')}
-                />
-              </View>
-            </View>
-
-            {/* Cloud Portal Display */}
-            <View style={styles.linkCard}>
-              <View style={styles.linkHeader}>
-                <View style={styles.flexFill}>
-                  <ThemedText variant="bodyBold">Cloud Portal TV Display</ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    Accessible from any internet-connected smart TV browser via your clinic&apos;s public slug.
-                  </ThemedText>
-                </View>
-              </View>
-              {cloudTvUrl ? (
-                <>
-                  <View style={styles.urlBox}>
-                    <ThemedText variant="caption" style={styles.urlText} numberOfLines={2}>
-                      {cloudTvUrl}
+            <View style={isCompact ? styles.tvLinksCol : styles.tvLinksRow}>
+              {/* Local Wi-Fi Display */}
+              <View style={[styles.linkCard, !isCompact && styles.flexFill]}>
+                <View style={styles.linkHeader}>
+                  <View style={styles.flexFill}>
+                    <ThemedText variant="bodyBold">Clinic Wi-Fi / Local TV Link</ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      Best for TVs connected to the same local clinic Wi-Fi.
                     </ThemedText>
                   </View>
-                  <View style={styles.actionsRow}>
-                    <Button
-                      title="Launch Cloud TV"
-                      icon="externalLink"
-                      variant="outline"
-                      size="sm"
-                      onPress={() => openExternalUrl(cloudTvUrl, 'Could not open Cloud TV display.')}
-                    />
-                    <Button
-                      title="Copy URL"
-                      icon="copy"
-                      variant="secondary"
-                      size="sm"
-                      onPress={() => void copyUrlToClipboard(cloudTvUrl, 'Cloud TV Display URL')}
-                    />
+                  <Badge label="Recommended" variant="routine" size="sm" />
+                </View>
+                <View style={styles.urlBox}>
+                  <ThemedText variant="caption" style={styles.urlText} numberOfLines={2}>
+                    {localLanTvUrl}
+                  </ThemedText>
+                </View>
+                <View style={styles.actionsRow}>
+                  <Button
+                    title="Open Local TV"
+                    icon="externalLink"
+                    variant="primary"
+                    size="sm"
+                    onPress={() => openExternalUrl(localLanTvUrl, 'Could not open Local Waiting Room TV display.')}
+                  />
+                  <Button
+                    title="Copy Link"
+                    icon="copy"
+                    variant="outline"
+                    size="sm"
+                    onPress={() => void copyUrlToClipboard(localLanTvUrl, 'Local TV Display link')}
+                  />
+                </View>
+              </View>
+
+              {/* Cloud Smart TV Display */}
+              <View style={[styles.linkCard, !isCompact && styles.flexFill]}>
+                <View style={styles.linkHeader}>
+                  <View style={styles.flexFill}>
+                    <ThemedText variant="bodyBold">Cloud Smart TV Link</ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      Open on any internet-connected smart TV using your clinic&apos;s web address.
+                    </ThemedText>
                   </View>
-                </>
-              ) : (
-                <EmptyState
-                  icon="tv"
-                  title="Cloud TV URL not configured yet"
-                  description="Connect your clinic workspace slug in Settings to enable the public Cloud TV link."
-                />
-              )}
+                </View>
+                {cloudTvUrl ? (
+                  <>
+                    <View style={styles.urlBox}>
+                      <ThemedText variant="caption" style={styles.urlText} numberOfLines={2}>
+                        {cloudTvUrl}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.actionsRow}>
+                      <Button
+                        title="Open Cloud TV"
+                        icon="externalLink"
+                        variant="outline"
+                        size="sm"
+                        onPress={() => openExternalUrl(cloudTvUrl, 'Could not open Cloud TV display.')}
+                      />
+                      <Button
+                        title="Copy Link"
+                        icon="copy"
+                        variant="secondary"
+                        size="sm"
+                        onPress={() => void copyUrlToClipboard(cloudTvUrl, 'Cloud TV Display link')}
+                      />
+                    </View>
+                  </>
+                ) : (
+                  <EmptyState
+                    icon="tv"
+                    title="Cloud TV link not set up yet"
+                    description="Set up your clinic web address in Settings to enable the Cloud Smart TV link."
+                  />
+                )}
+              </View>
             </View>
           </View>
         )}
@@ -391,7 +393,7 @@ export default function OperationsUtilitiesSection({
   const renderReceptionPlacard = () => (
     <Card>
       <CardHeader
-        title="Reception QR Check-In Placard"
+        title="Front-Desk Check-In QR Poster"
         subtitle="Share the walk-in check-in link or print a fresh front-desk QR poster for patients."
         icon="qrCode"
         rightAction={
@@ -532,6 +534,15 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
   },
+  tvLinksRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: theme.spacing.md,
+  },
+  tvLinksCol: {
+    flexDirection: 'column',
+    gap: theme.spacing.md,
+  },
   linkCard: {
     padding: theme.spacing.md,
     borderRadius: theme.radii.md,
@@ -539,6 +550,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceMuted,
     gap: theme.spacing.sm,
+    justifyContent: 'space-between',
   },
   linkHeader: {
     flexDirection: 'row',
