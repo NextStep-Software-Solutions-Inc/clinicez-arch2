@@ -244,7 +244,12 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   const patientId = record.demographics.id;
 
   const pendingQueue = await originalDb
-    .select({ entityId: syncQueue.entityId, payloadJson: syncQueue.payloadJson })
+    .select({
+      entityId: syncQueue.entityId,
+      entityType: syncQueue.entityType,
+      status: syncQueue.status,
+      payloadJson: syncQueue.payloadJson,
+    })
     .from(syncQueue);
   const pendingEntityIds = new Set<string>();
   for (const q of pendingQueue) {
@@ -260,6 +265,13 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       }
     }
   }
+  const hasPendingGovIds = pendingQueue.some(
+    (q) =>
+      q.entityType === 'patient_government_ids' &&
+      q.status !== 'synced' &&
+      q.status !== 'rejected' &&
+      q.status !== 'dead',
+  );
 
   // 1. demographics
   if (!pendingEntityIds.has(patientId)) {
@@ -267,69 +279,101 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   }
 
   // 2. government IDs: map the list of typed ID items into the singleton row
-  if (!pendingEntityIds.has(patientId)) {
+  if (!pendingEntityIds.has(patientId) && !hasPendingGovIds) {
     const govIds = record.governmentIds || [];
-    const findItem = (type: string) => {
-      const matching = govIds.filter((g) => g.idType?.toLowerCase() === type.toLowerCase());
-      return matching.length > 0 ? matching[matching.length - 1] : undefined;
-    };
+    const existingRows = await originalDb
+      .select()
+      .from(patientGovernmentIds)
+      .where(eq(patientGovernmentIds.patientId, patientId))
+      .limit(1);
+    const existingGov = existingRows[0];
 
-    const philhealth = findItem('philhealth');
-    const sss = findItem('sss');
-    const gsis = findItem('gsis');
-    const pagibig = findItem('pagibig');
-    const tin = findItem('tin');
-    const senior = findItem('seniorcitizen');
-    const pwd = findItem('pwd');
-    const hmo = findItem('hmo');
+    if (govIds.length > 0 || existingGov) {
+      const findItem = (type: string) => {
+        const matching = govIds.filter((g) => g.idType?.toLowerCase() === type.toLowerCase());
+        return matching.length > 0 ? matching[matching.length - 1] : undefined;
+      };
 
-    const idMap: Record<string, { id: string; clientId: string }> = {};
-    for (const g of govIds) {
-      if (g.idType) {
-        idMap[g.idType] = { id: g.id, clientId: g.clientId };
-        idMap[g.idType.toLowerCase()] = { id: g.id, clientId: g.clientId };
+      const pickNonEmpty = <T extends string>(
+        serverVal: T | null | undefined,
+        localVal: T | null | undefined,
+      ): T | null => {
+        if (typeof serverVal === 'string' && serverVal.trim().length > 0) return serverVal.trim() as T;
+        if (typeof localVal === 'string' && localVal.trim().length > 0) return localVal;
+        return null;
+      };
+
+      const philhealth = findItem('philhealth');
+      const sss = findItem('sss');
+      const gsis = findItem('gsis');
+      const pagibig = findItem('pagibig');
+      const tin = findItem('tin');
+      const senior = findItem('seniorcitizen');
+      const pwd = findItem('pwd');
+      const hmo = findItem('hmo');
+
+      const idMap: Record<string, { id: string; clientId: string }> = {};
+      if (existingGov?.serverId && existingGov.serverId.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(existingGov.serverId);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            Object.assign(idMap, parsed);
+          }
+        } catch {
+          // Ignore legacy non-JSON serverId markers
+        }
       }
+      for (const g of govIds) {
+        if (g.idType) {
+          idMap[g.idType] = { id: g.id, clientId: g.clientId };
+          idMap[g.idType.toLowerCase()] = { id: g.id, clientId: g.clientId };
+        }
+      }
+
+      const pwdIdNumber = pickNonEmpty(pwd?.idNumber, existingGov?.pwdIdNumber);
+
+      const govRow: typeof patientGovernmentIds.$inferInsert = {
+        id: existingGov?.id || patientId,
+        patientId,
+        philhealthId: pickNonEmpty(philhealth?.idNumber, existingGov?.philhealthId),
+        philhealthCategory: pickNonEmpty(
+          philhealth?.philhealthCategory as 'MM' | 'DD' | null | undefined,
+          existingGov?.philhealthCategory,
+        ),
+        sponsorPin: pickNonEmpty(philhealth?.sponsorPin, existingGov?.sponsorPin),
+        sponsorLastName: pickNonEmpty(philhealth?.sponsorLastName, existingGov?.sponsorLastName),
+        sponsorFirstName: pickNonEmpty(philhealth?.sponsorFirstName, existingGov?.sponsorFirstName),
+        sponsorMiddleName: pickNonEmpty(philhealth?.sponsorMiddleName, existingGov?.sponsorMiddleName),
+        sponsorSuffix: pickNonEmpty(philhealth?.sponsorSuffix, existingGov?.sponsorSuffix),
+        sponsorDob: pickNonEmpty(philhealth?.sponsorDob, existingGov?.sponsorDob),
+        sponsorRelationship: pickNonEmpty(
+          philhealth?.sponsorRelationship as 'S' | 'C' | 'P' | 'D' | null | undefined,
+          existingGov?.sponsorRelationship,
+        ),
+        sssNumber: pickNonEmpty(sss?.idNumber, existingGov?.sssNumber),
+        gsisNumber: pickNonEmpty(gsis?.idNumber, existingGov?.gsisNumber),
+        pagibigId: pickNonEmpty(pagibig?.idNumber, existingGov?.pagibigId),
+        tin: pickNonEmpty(tin?.idNumber, existingGov?.tin),
+        seniorCitizenId: pickNonEmpty(senior?.idNumber, existingGov?.seniorCitizenId),
+        isPwd: Boolean(pwdIdNumber) || (existingGov?.isPwd ?? false),
+        pwdIdNumber,
+        disabilityType: existingGov?.disabilityType ?? null,
+        hmoProvider: existingGov?.hmoProvider ?? null,
+        hmoPolicyNumber: pickNonEmpty(hmo?.idNumber, existingGov?.hmoPolicyNumber),
+        hmoPlanType: existingGov?.hmoPlanType ?? null,
+        hmoCoverageStart: existingGov?.hmoCoverageStart ?? null,
+        hmoCoverageEnd: existingGov?.hmoCoverageEnd ?? null,
+        createdAt: existingGov?.createdAt ?? ts,
+        updatedAt: ts,
+        syncedAt: ts,
+        serverId: JSON.stringify(idMap),
+      };
+
+      await originalDb
+        .insert(patientGovernmentIds)
+        .values(govRow)
+        .onConflictDoUpdate({ target: patientGovernmentIds.patientId, set: govRow });
     }
-
-    const existingGov = await originalDb.query.patientGovernmentIds.findFirst({
-      where: (t: any, { eq }: any) => eq(t.patientId, patientId),
-    });
-
-    const govRow: typeof patientGovernmentIds.$inferInsert = {
-      id: existingGov?.id || patientId,
-      patientId,
-      philhealthId: philhealth?.idNumber ?? existingGov?.philhealthId ?? null,
-      philhealthCategory: (philhealth as any)?.philhealthCategory ?? existingGov?.philhealthCategory ?? null,
-      sponsorPin: (philhealth as any)?.sponsorPin ?? existingGov?.sponsorPin ?? null,
-      sponsorLastName: (philhealth as any)?.sponsorLastName ?? existingGov?.sponsorLastName ?? null,
-      sponsorFirstName: (philhealth as any)?.sponsorFirstName ?? existingGov?.sponsorFirstName ?? null,
-      sponsorMiddleName: (philhealth as any)?.sponsorMiddleName ?? existingGov?.sponsorMiddleName ?? null,
-      sponsorSuffix: (philhealth as any)?.sponsorSuffix ?? existingGov?.sponsorSuffix ?? null,
-      sponsorDob: (philhealth as any)?.sponsorDob ?? existingGov?.sponsorDob ?? null,
-      sponsorRelationship: (philhealth as any)?.sponsorRelationship ?? existingGov?.sponsorRelationship ?? null,
-      sssNumber: sss?.idNumber ?? existingGov?.sssNumber ?? null,
-      gsisNumber: gsis?.idNumber ?? existingGov?.gsisNumber ?? null,
-      pagibigId: pagibig?.idNumber ?? existingGov?.pagibigId ?? null,
-      tin: tin?.idNumber ?? existingGov?.tin ?? null,
-      seniorCitizenId: senior?.idNumber ?? existingGov?.seniorCitizenId ?? null,
-      isPwd: Boolean(pwd?.idNumber) || (existingGov?.isPwd ?? false),
-      pwdIdNumber: pwd?.idNumber ?? existingGov?.pwdIdNumber ?? null,
-      disabilityType: existingGov?.disabilityType ?? null,
-      hmoProvider: existingGov?.hmoProvider ?? null,
-      hmoPolicyNumber: hmo?.idNumber ?? existingGov?.hmoPolicyNumber ?? null,
-      hmoPlanType: existingGov?.hmoPlanType ?? null,
-      hmoCoverageStart: existingGov?.hmoCoverageStart ?? null,
-      hmoCoverageEnd: existingGov?.hmoCoverageEnd ?? null,
-      createdAt: existingGov?.createdAt ?? ts,
-      updatedAt: ts,
-      syncedAt: ts,
-      serverId: JSON.stringify(idMap),
-    };
-
-    await originalDb
-      .insert(patientGovernmentIds)
-      .values(govRow)
-      .onConflictDoUpdate({ target: patientGovernmentIds.patientId, set: govRow });
   }
 
   // 3. addresses
