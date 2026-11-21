@@ -481,8 +481,8 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
 
     [Theory]
     [InlineData(VisitType.PreventiveHealthAssessment)]
-    [InlineData((VisitType)6)]
-    [InlineData((VisitType)7)]
+    [InlineData(VisitType.VitalsCheckOnly)]
+    [InlineData(VisitType.RetailPurchase)]
     [InlineData((VisitType)99)]
     public async Task TvDisplay_StrictlyExcludesAllNonConsultationVisitTypes_WhenInWaitingOrTriaged(VisitType nonConsultVisitType)
     {

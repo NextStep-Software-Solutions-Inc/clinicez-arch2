@@ -414,7 +414,7 @@ public class NonDoctorWorkflowsMilestone1Tests
             PatientName = "Retail Guest",
             Status = QueueStatus.Triaged,
             Priority = QueuePriority.Routine,
-            VisitType = (VisitType)6
+            VisitType = VisitType.RetailPurchase
         };
 
         // Ticket 5: PendingProcedure (Should appear in Up Next)
@@ -573,7 +573,7 @@ public class NonDoctorWorkflowsMilestone1Tests
             PatientId = Guid.NewGuid(),
             PatientName = "Stale Retail Patient",
             Status = QueueStatus.Triaged,
-            VisitType = (VisitType)6
+            VisitType = VisitType.RetailPurchase
         };
 
         var staleConsultTicket = new QueueItem

@@ -92,8 +92,8 @@ public class ClinicDispensingAndVisitValidityTests
     }
 
     [Theory]
-    [InlineData((VisitType)6)]
-    [InlineData((VisitType)7)]
+    [InlineData((VisitType)0)]
+    [InlineData((VisitType)13)]
     [InlineData((VisitType)99)]
     public async Task TwoScenarioRule_RejectsMedicineDispensing_WhenVisitIsNeitherConsultationNorVitalsCheck(VisitType disallowedVisitType)
     {

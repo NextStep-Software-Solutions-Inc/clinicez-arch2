@@ -463,7 +463,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Retail Walk-In Guest",
             QueueNumber = "Q-RETAIL",
             QueueDate = today,
-            VisitType = (VisitType)6,
+            VisitType = VisitType.RetailPurchase,
             Status = QueueStatus.Waiting,
             SequenceNumber = 6
         };
@@ -600,7 +600,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             PatientName = "Retail Guest",
             QueueNumber = "Q-RETAIL-CANCEL",
             QueueDate = today,
-            VisitType = (VisitType)6,
+            VisitType = VisitType.RetailPurchase,
             Status = QueueStatus.Waiting
         };
 
