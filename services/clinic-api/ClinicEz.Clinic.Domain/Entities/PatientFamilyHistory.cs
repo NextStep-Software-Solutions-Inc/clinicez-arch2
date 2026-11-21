@@ -1,14 +1,13 @@
 using System;
 using ClinicEz.Clinic.Domain.Common;
+using ClinicEz.Clinic.Domain.Enums;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class PatientFamilyHistory : BaseEntity
+public sealed class PatientFamilyHistory : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
     public Guid PatientId { get; set; }
-    public ClinicPatient? Patient { get; set; }
+    public Patient? Patient { get; set; }
 
     /// <summary>
     /// Clinical description of the hereditary/familial condition (e.g. "Diabetes Mellitus", "Coronary Artery Disease", "Cancer", "Hypertension").
@@ -31,12 +30,23 @@ public sealed class PatientFamilyHistory : BaseEntity
     public string? SpecificDescription { get; set; }
 
     /// <summary>
-    /// Relationship of the affected family member (e.g. "Father", "Mother", "Sibling", "Maternal Grandfather", "First-degree relative").
+    /// Relationship of the affected family member.
     /// </summary>
-    public string? Relationship { get; set; }
+    public FamilyRelationship Relationship { get; set; } = FamilyRelationship.Other;
+
+    public int? RelativeAgeAtOnset { get; set; }
+    public bool? IsRelativeDeceased { get; set; }
 
     /// <summary>
     /// Clinical notes or pedigree context (e.g. age of onset in relatives, lineage details).
     /// </summary>
     public string? ClinicalNotes { get; set; }
+
+    public string? ConditionCategoryCode { get; set; }
+    public decimal? FbsMgDl { get; set; }
+    public decimal? FbsMmolL { get; set; }
+    public DateOnly? FbsDate { get; set; }
+    public decimal? RbsMgDl { get; set; }
+    public decimal? RbsMmolL { get; set; }
+    public DateOnly? RbsDate { get; set; }
 }

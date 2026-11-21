@@ -7,3 +7,7 @@ export * from './bloodType';
 export * from './permissions';
 export * from './search';
 export * from './analytics';
+export * from './publicRoutes';
+export * from './options';
+export * from './allergies';
+export * from './webIdleMonitor';

@@ -2,6 +2,7 @@ using Scalar.AspNetCore;
 using ClinicEz.Organization.Api;
 using ClinicEz.Organization.Application;
 using ClinicEz.Organization.Infrastructure;
+using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Middlewares;
 using Hangfire;
 
@@ -20,13 +21,17 @@ builder.Services
     .AddInfrastructureServices(builder.Configuration, builder.Environment)
     .AddClinicEzCors(builder.Configuration, builder.Environment);
 
+builder.Services.AddFacilityLocalAuth(
+    builder.Configuration,
+    audience: "clinicez-organization");
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
-    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Organization Dashboard API"));
+    app.MapOpenApi().AllowAnonymous();
+    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Organization Dashboard API")).AllowAnonymous();
 }
 
 // 4. Add middleware

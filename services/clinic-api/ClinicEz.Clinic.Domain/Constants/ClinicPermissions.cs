@@ -17,6 +17,7 @@ public static class ClinicPermissions
     public const string QueueCheckIn = "queue:check-in";
     public const string QueueCall = "queue:call";
     public const string QueueComplete = "queue:complete";
+    public const string QueueCompleteNonDoctor = "queue:complete-non-doctor";
 
     // Triage
     public const string TriageRead = "triage:read";
@@ -86,6 +87,10 @@ public static class ClinicPermissions
     public const string AuditRead = "audit:read";
     public const string AuditExport = "audit:export";
 
+    // Teleconsultation & Media
+    public const string TeleconsultCall = "teleconsult:call";
+    public const string TeleconsultRecord = "teleconsult:record";
+
     /// <summary>
     /// Minimal permission set granted to trusted internal services (authenticated by the shared internal key),
     /// e.g. portal-api forwarding Yakap transmittal operations. Never includes staff/role/settings management.
@@ -108,6 +113,7 @@ public static class ClinicPermissions
         QueueCheckIn,
         QueueCall,
         QueueComplete,
+        QueueCompleteNonDoctor,
         TriageRead,
         TriageWrite,
         ConsultationsRead,
@@ -143,6 +149,8 @@ public static class ClinicPermissions
         SchedulesRead,
         SchedulesManage,
         AuditRead,
-        AuditExport
+        AuditExport,
+        TeleconsultCall,
+        TeleconsultRecord
     }.AsReadOnly();
 }

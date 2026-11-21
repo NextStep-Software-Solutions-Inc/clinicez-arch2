@@ -183,10 +183,20 @@ mock.module('../components/ui/TimeInput', () => {
     ...actualTimeInput,
     default: (props: any) => {
       lastRenderedTimeInputProps = props;
+      const inputTestId = props.inputTestID || (props.testID ? `${props.testID}-input` : 'time-input');
       return React.createElement(
         'div',
-        { 'data-component': 'TimeInput', 'data-label': props.label },
+        {
+          'data-component': 'TimeInput',
+          'data-label': props.label,
+          ...(props.testID ? { 'data-testid': props.testID } : {}),
+        },
         props.label,
+        React.createElement('div', {
+          'data-component': 'TextInput',
+          'data-testid': inputTestId,
+          'data-value': props.value,
+        }, props.value),
         props.value
       );
     },
@@ -405,6 +415,87 @@ describe('Adversarial Empirical Stress Test Suite: Milestone 1 Frontend Workstat
       expect(html).toContain('Transition to No-Show');
       expect(html).toContain('Clinical Invariant: Consultations currently in progress (In Consultation) and Completed encounters will NOT be altered or invalidated.');
     });
+
+    test('1.7 Post-EOD Success Dialog: Shows alert with Download Report and Close buttons', async () => {
+      mockReconcileResponse = {
+        reconciledCount: 3,
+        reconciliationDate: '2026-10-22',
+        reconciledAt: '2026-10-22T09:00:00Z',
+        affectedTicketNumbers: ['Q-001', 'Q-002', 'Q-003'],
+        summary: 'Successfully reconciled 3 leftover ticket(s) to No-Show for 2026-10-22.',
+      };
+
+      renderToStaticMarkup(
+        React.createElement(ForceEodConfirmationModal, {
+          visible: true,
+          activeTicketCount: 3,
+          date: '2026-10-22',
+          onClose: () => {},
+          onSuccess: () => {},
+        })
+      );
+
+      const confirmBtn = capturedButtons.find(b => b.title === 'Confirm & Close Day');
+      await confirmBtn!.onPress();
+
+      const alerts = getFeedbackState().alerts;
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0].title).toBe('End-of-Day Reconciliation Complete');
+      expect(alerts[0].message).toContain('2026-10-22');
+      const btnTexts = alerts[0].buttons.map((b: any) => b.text);
+      expect(btnTexts).toContain('Close');
+      expect(btnTexts).toContain('Download Report');
+    });
+
+    test('1.8 Post-EOD Failure Dialog: Shows alert with Retry and Close buttons; Retry re-triggers EOD and Close invokes onClose', async () => {
+      mockReconcileError = {
+        message: 'Database connection timeout during EOD reconciliation',
+        statusCode: 503,
+      };
+
+      let closeCalled = false;
+      let successCalled = false;
+
+      renderToStaticMarkup(
+        React.createElement(ForceEodConfirmationModal, {
+          visible: true,
+          activeTicketCount: 2,
+          date: '2026-10-22',
+          onClose: () => { closeCalled = true; },
+          onSuccess: () => { successCalled = true; },
+        })
+      );
+
+      const confirmBtn = capturedButtons.find(b => b.title === 'Confirm & Close Day');
+      await confirmBtn!.onPress();
+
+      const alerts = getFeedbackState().alerts;
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0].title).toBe('EOD Reconciliation Failed');
+      expect(alerts[0].message).toContain('Database connection timeout');
+
+      const closeBtn = alerts[0].buttons.find((b: any) => b.text === 'Close');
+      const retryBtn = alerts[0].buttons.find((b: any) => b.text === 'Retry');
+      expect(closeBtn).toBeDefined();
+      expect(retryBtn).toBeDefined();
+
+      // Clicking Close invokes onClose
+      closeBtn!.onPress?.();
+      expect(closeCalled).toBe(true);
+
+      // Clicking Retry re-invokes handleConfirm
+      mockReconcileError = null;
+      mockReconcileResponse = {
+        reconciledCount: 2,
+        reconciliationDate: '2026-10-22',
+        reconciledAt: '2026-10-22T09:05:00Z',
+        affectedTicketNumbers: ['Q-001', 'Q-002'],
+        summary: '2 tickets reconciled.',
+      };
+      await retryBtn!.onPress?.();
+      expect(reconcileCallCount).toBe(2);
+      expect(successCalled).toBe(true);
+    });
   });
 
   describe('Suite 2: EodReconciliationSettingsCard & Time Input Validation Stress', () => {
@@ -457,6 +548,7 @@ describe('Adversarial Empirical Stress Test Suite: Milestone 1 Frontend Workstat
         autoEodEnabled: true,
       };
 
+      // Clean render hides Save EOD Schedule when unchanged
       renderToStaticMarkup(
         React.createElement(EodReconciliationSettingsCard, {
           settings: {
@@ -467,6 +559,23 @@ describe('Adversarial Empirical Stress Test Suite: Milestone 1 Frontend Workstat
             autoEodEnabled: true,
             eodReconciliationTime: '21:00',
           } as any,
+        })
+      );
+      expect(capturedButtons.find(b => b.title === 'Save EOD Schedule')).toBeUndefined();
+
+      // Dirty render (user cleared cutoff time) reveals Save EOD Schedule and blocks invalid submission
+      capturedButtons = [];
+      renderToStaticMarkup(
+        React.createElement(EodReconciliationSettingsCard, {
+          settings: {
+            id: 'settings-1',
+            tenantId: 'tenant-1',
+            clinicId: 'clinic-1',
+            clinicName: 'Test Clinic',
+            autoEodEnabled: true,
+            eodReconciliationTime: '21:00',
+          } as any,
+          draftEodTime: '',
         })
       );
 
@@ -539,7 +648,7 @@ describe('Adversarial Empirical Stress Test Suite: Milestone 1 Frontend Workstat
       expect(html).toContain('End-of-Day (EOD) Reconciliation &amp; Day Closure');
       expect(html).toContain('Automated End-of-Day Reconciliation');
       expect(html).toContain('Daily EOD Cutoff Time (24h HH:MM)');
-      expect(html).toContain('Save EOD Schedule');
+      expect(html).not.toContain('Save EOD Schedule');
       expect(html).toContain('Force EOD / Close Clinic Day');
       expect(html).toContain('Auto-EOD Active');
     });

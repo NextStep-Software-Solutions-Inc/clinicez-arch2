@@ -63,6 +63,9 @@ mock.module('react-native-svg', () => ({
   TSpan: 'TSpan',
   Defs: 'Defs',
   Use: 'Use',
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  default: 'Svg',
 }));
 
 describe('Milestone 3 (F3.6): Queue Push Notification Settings UI & Logic', () => {

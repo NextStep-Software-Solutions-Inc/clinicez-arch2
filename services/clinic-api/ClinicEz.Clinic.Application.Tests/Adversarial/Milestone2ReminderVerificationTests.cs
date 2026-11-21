@@ -59,7 +59,7 @@ public class Milestone2ReminderVerificationTests
     }
 
     [Fact]
-    public void ClinicStaffNotification_StaffNotificationCategory_AppointmentValueEqualsFour()
+    public void StaffNotification_StaffNotificationCategory_AppointmentValueEqualsFour()
     {
         // Assert - Category enum value
         ((int)StaffNotificationCategory.Appointment).Should().Be(4, because: "R4 requires Appointment = 4 in StaffNotificationCategory");

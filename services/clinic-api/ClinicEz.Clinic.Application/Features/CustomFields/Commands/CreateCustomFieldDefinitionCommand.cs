@@ -1,13 +1,18 @@
 using System;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.CustomFields.DTOs;
+using ClinicEz.Clinic.Application.Features.CustomFields.Helpers;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
+using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 
 namespace ClinicEz.Clinic.Application.Features.CustomFields.Commands;
 
@@ -15,22 +20,32 @@ public sealed record CreateCustomFieldDefinitionCommand(
     string FieldKey,
     string Label,
     CustomFieldDataType DataType,
-    string? EntityType = "ClinicPatient",
+    string? EntityType = "Patient",
     string? Category = null,
     bool IsRequired = false,
     int DisplayOrder = 0,
     string? OptionsJson = null,
     string? Placeholder = null,
     string? VisibilityRuleJson = null,
-    string? ConditionalOptionsJson = null) : IRequest<ClinicCustomFieldDefinitionDto>;
+    string? ConditionalOptionsJson = null,
+    string? BoundaryMode = null) : IRequest<ClinicCustomFieldDefinitionDto>;
 
 public sealed class CreateCustomFieldDefinitionCommandValidator : AbstractValidator<CreateCustomFieldDefinitionCommand>
 {
+    private static readonly System.Collections.Generic.HashSet<string> AllowedBoundaryModes = new(StringComparer.Ordinal)
+    {
+        "pastOrToday",
+        "futureOrToday",
+        "futureOnly",
+        "any"
+    };
+
     public CreateCustomFieldDefinitionCommandValidator()
     {
         RuleFor(x => x.FieldKey)
             .NotEmpty().WithMessage("FieldKey is required.")
-            .MaximumLength(100).WithMessage("FieldKey cannot exceed 100 characters.");
+            .MaximumLength(100).WithMessage("FieldKey cannot exceed 100 characters.")
+            .Matches(@"\A[a-z0-9_]+\z").WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
 
         RuleFor(x => x.Label)
             .NotEmpty().WithMessage("Label is required.")
@@ -56,6 +71,11 @@ public sealed class CreateCustomFieldDefinitionCommandValidator : AbstractValida
 
         RuleFor(x => x.ConditionalOptionsJson)
             .Must(BeValidJsonOrNull).WithMessage("ConditionalOptionsJson must be a valid JSON string or null.");
+
+        RuleFor(x => x.BoundaryMode)
+            .MaximumLength(50).WithMessage("BoundaryMode cannot exceed 50 characters.")
+            .Must(mode => string.IsNullOrWhiteSpace(mode) || AllowedBoundaryModes.Contains(mode.Trim()))
+            .WithMessage("BoundaryMode must be one of: pastOrToday, futureOrToday, futureOnly, any.");
     }
 
     private static bool BeValidJsonOrNull(string? json)
@@ -75,12 +95,12 @@ public sealed class CreateCustomFieldDefinitionCommandValidator : AbstractValida
 
 public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<CreateCustomFieldDefinitionCommand, ClinicCustomFieldDefinitionDto>
 {
-    private readonly IRepository<ClinicCustomFieldDefinition> _repo;
+    private readonly IRepository<CustomFieldDefinition> _repo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public CreateCustomFieldDefinitionCommandHandler(
-        IRepository<ClinicCustomFieldDefinition> repo,
+        IRepository<CustomFieldDefinition> repo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -91,13 +111,41 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
 
     public async Task<ClinicCustomFieldDefinitionDto> Handle(CreateCustomFieldDefinitionCommand request, CancellationToken ct)
     {
-        var entity = new ClinicCustomFieldDefinition
+        var targetEntityType = string.IsNullOrWhiteSpace(request.EntityType) ? "Patient" : request.EntityType.Trim();
+        var normalizedKey = (request.FieldKey ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", "_");
+
+        if (string.IsNullOrWhiteSpace(normalizedKey) || !Regex.IsMatch(normalizedKey, @"\A[a-z0-9_]+\z"))
+        {
+            throw new ValidationException("Machine key must contain only lowercase alphanumeric characters and underscores.");
+        }
+
+        if (normalizedKey.Length > 100)
+        {
+            throw new ValidationException("FieldKey cannot exceed 100 characters.");
+        }
+
+        var conflict = await _repo.Query().AnyAsync(f =>
+            f.EntityType == targetEntityType &&
+            f.FieldKey == normalizedKey, ct);
+
+        if (conflict)
+        {
+            throw new ConflictException("A custom field with this machine key already exists.");
+        }
+
+        var normalizedVisibilityRule = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
+            request.VisibilityRuleJson,
+            targetEntityType,
+            _repo,
+            ct);
+
+        var entity = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,
-            EntityType = string.IsNullOrWhiteSpace(request.EntityType) ? "ClinicPatient" : request.EntityType.Trim(),
-            FieldKey = request.FieldKey.Trim().ToLowerInvariant().Replace(" ", "_"),
+            EntityType = targetEntityType,
+            FieldKey = normalizedKey,
             Label = request.Label.Trim(),
             DataType = request.DataType,
             Category = request.Category?.Trim(),
@@ -105,15 +153,23 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
             DisplayOrder = request.DisplayOrder,
             OptionsJson = request.OptionsJson,
             Placeholder = request.Placeholder?.Trim(),
-            VisibilityRuleJson = request.VisibilityRuleJson,
+            VisibilityRuleJson = normalizedVisibilityRule,
             ConditionalOptionsJson = request.ConditionalOptionsJson,
+            BoundaryMode = string.IsNullOrWhiteSpace(request.BoundaryMode) ? null : request.BoundaryMode.Trim(),
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = "ClinicAdmin"
         };
 
         await _repo.AddAsync(entity, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            throw new ConflictException("A custom field with this machine key already exists.");
+        }
 
         return new ClinicCustomFieldDefinitionDto(
             entity.Id,
@@ -131,6 +187,29 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
             entity.IsActive,
             entity.CreatedAt,
             entity.VisibilityRuleJson,
-            entity.ConditionalOptionsJson);
+            entity.ConditionalOptionsJson,
+            entity.BoundaryMode);
+    }
+
+    internal static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        for (Exception? current = ex; current is not null; current = current.InnerException)
+        {
+            var sqlStateProp = current.GetType().GetProperty("SqlState");
+            if (sqlStateProp?.GetValue(current) is string sqlState && sqlState == "23505")
+            {
+                return true;
+            }
+
+            if (current.Message.Contains("23505", StringComparison.OrdinalIgnoreCase) ||
+                current.Message.Contains("IX_CustomFieldDefinitions_TenantId_ClinicId_EntityType_FieldKey", StringComparison.OrdinalIgnoreCase) ||
+                current.Message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase) ||
+                current.Message.Contains("unique constraint", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

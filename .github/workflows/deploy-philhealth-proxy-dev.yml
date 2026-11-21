@@ -34,6 +34,10 @@ env:
   DEPLOY_DIR: "/opt/docker-stack/philhealth-proxy"
   ENVIRONMENT: Development
 
+concurrency:
+  group: deploy-philhealth-proxy-dev-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: Build Docker Image
@@ -74,6 +78,9 @@ jobs:
     name: Deploy to Server
     runs-on: ubuntu-latest
     environment: Development
+    concurrency:
+      group: deploy-philhealth-proxy-dev-deploy
+      cancel-in-progress: false
     needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
@@ -87,6 +94,7 @@ jobs:
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
         PORTAL_API_BASE_URL: ${{ vars.PORTAL_API_BASE_URL || secrets.PORTAL_API_BASE_URL }}
+        MEDIATR_LICENSE_KEY: ${{ secrets.MEDIATR_LICENSE_KEY || vars.MEDIATR_LICENSE_KEY }}
       run: |
         for var in PORTAL_API_BASE_URL; do
           if [ -z "$(printenv $var)" ]; then
@@ -94,7 +102,7 @@ jobs:
             exit 1
           fi
         done
-        for var in ASPNETCORE_ENVIRONMENT IMAGE_NAME IMAGE_TAG PORTAL_API_BASE_URL; do
+        for var in ASPNETCORE_ENVIRONMENT IMAGE_NAME IMAGE_TAG PORTAL_API_BASE_URL MEDIATR_LICENSE_KEY; do
           echo "$var=$(printenv $var)" >> deploy/philhealth-proxy/.env
         done
 

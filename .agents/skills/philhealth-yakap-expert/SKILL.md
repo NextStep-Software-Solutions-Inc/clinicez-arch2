@@ -1,143 +1,128 @@
 ---
 name: philhealth-yakap-expert
 description: >-
-  Technical guide and expert runbook for PhilHealth Yakap (Konsulta) integration in ClinicEZ.
-  Use this skill when generating, parsing, validating, encrypting, or transmitting PhilHealth Konsulta XML payloads (eKAS, eSER, Encounter, Masterlist),
-  validating XML structure against DTD & XSD schemas (KonsultaData_v1.14.dtd, KonsultaMasterlist_v1.4.dtd, KonsultaMasterlist_v1.5.xsd),
-  working with PhilHealth statutory catalogs & libraries (lib_immchild, lib_immyoungw, lib_immpregw, lib_immelderly, lib_zscore, lib_mdiseases, lib_ncdq, lib_icd, lib_heent, lib_chest, lib_heart, lib_abdomen, etc.),
-  referencing source Excel files in ClinicEz.Clinic.Infrastructure/PhilHealth/Catalog/Source (*.xlsx) and Seed JSON files in Catalog/Seed (*.json),
-  working with PhilHealthPayloadEncryptor, PhilHealthSoapClient, or SoapSandboxService, or routing PhilHealth messages through Interop Hub.
+  Technical guide and expert operational runbook for PhilHealth Yakap PCAPI v2.0 (rev20261026) integration in ClinicEZ.
+  Use this skill when developing, testing, or debugging PhilHealth Primary Care API microservices:
+  Services 01–08 (PCU Facial Liveness, Standing Validator, Empanelment MCA, Selection K-Tx, Masterlist,
+  Data Upload Annex A–F, Verification Code OTP, and Availment Slip PDF),
+  Annex C 0x00 null-byte padded AES-256-CBC cryptography, multi-branch credential routing & (tenantId, accre_no) token caching,
+  2-tier data-driven option architecture (EhrStaticOptions + ETag 304 revalidation), Zero-PHI HQ Portal isolation,
+  and Interop Hub platform dispatch (philhealth.request -> Party.PhilHealth).
 ---
 
-# PhilHealth Yakap (Konsulta) Integration Expert Skill
+# PhilHealth Yakap PCAPI v2.0 Integration Expert Skill
 
-PhilHealth Yakap (Konsulta) integration provides automated electronic transmission of outpatient encounters, electronic Primary Care Benefit (ePCB) registrations, electronic Konsulta Availment Slips (eKAS), electronic Summary of Encounter Reports (eSER), digital prescriptions, diagnostic orders, masterlist synchronization, and strict mapping against **PhilHealth Statutory Catalogs and Libraries (`lib_*`)**.
+PhilHealth Yakap PCAPI v2.0 (`rev20261026`) governs all electronic primary care benefits in the Republic of the Philippines under Republic Act No. 11223 (Universal Health Care Act). It supersedes the legacy Konsulta v1.14 XML/SOAP batch transmittal system with real-time RESTful APIs secured by Annex C cryptography.
 
-This skill details schema specifications, statutory libraries (with source Excel `.xlsx` files and JSON `.json` seed tables), XML generation pipelines, validation protocols, AES encryption wrappers, SOAP client communication, and Interop Hub routing.
+This skill provides the definitive implementation standard for ClinicEZ services (`clinic-api`, `philhealth-proxy`, `portal-api`, `patient-api`, `portal-web`, and `clinic-app`).
 
 ---
 
-## Architecture & Data Flow
+## 1. Architectural Architecture & Core Data Flow
 
 ```mermaid
 flowchart LR
-  subgraph CLINIC["ClinicEZ Clinic / Facility"]
-    SAV["Clinic Service<br/>(Saves Encounter)"]
-  end
+    subgraph WORKSTATION["Clinic Workstation (clinic-app / clinic-api)"]
+        EHR["Clinical Encounter"]
+        WIRE["PCAPI Wire Builders<br/>(Fpe, Consult, Diag, Med, Ref)"]
+        OPTIONS["2-Tier Options (Tier A Static / Tier B Dynamic)"]
+        EHR --> WIRE
+        OPTIONS --> WIRE
+    end
 
-  subgraph CATS["PhilHealth Statutory Libraries (lib_*)"]
-    SRC["Catalog/Source/*.xlsx<br/>Catalog/Seed/*.json"]
-    IMM["lib_immchild / immyoungw / immpregw / immelderly"]
-    ZSC["lib_zscore (Pediatric WHO 2006)"]
-    MED["lib_mdiseases, lib_medicine, lib_ncdq"]
-    PE["lib_heent, lib_chest, lib_heart, lib_abdomen, lib_icd"]
-    SRC --- IMM & ZSC & MED & PE
-  end
+    subgraph HUB["Interop Hub (PostgreSQL Mailbox)"]
+        REQ["philhealth.request<br/>(To = Party.PhilHealth)"]
+        RESP["philhealth.response"]
+    end
 
-  subgraph HUB["Interop Hub"]
-    MSG["philhealth.request"]
-  end
+    subgraph PROXY["PhilHealth Proxy Service"]
+        DISPATCH["PhilHealthRequestResponder"]
+        CACHE["(tenantId, accre_no) Token Cache<br/>(55m TTL, single-flight refresh)"]
+        CRYPTO["Annex C Encryptor<br/>(AES-256-CBC, 0x00 pad, SHA-256 pre-hash)"]
+        HTTP["PhilHealthPcapiClient"]
+        DISPATCH --> CACHE
+        DISPATCH --> CRYPTO
+        CRYPTO --> HTTP
+    end
 
-  subgraph PROXY["philhealth-proxy Service"]
-    GEN["KonsultaXmlGenerator.cs"]
-    VAL["KonsultaXmlValidator.cs<br/>(Validates DTD / XSD)"]
-    ENC["PhilHealthPayloadEncryptor.cs<br/>(AES-256-CBC)"]
-    SOAP["PhilHealthSoapClient.cs"]
-  end
+    subgraph PCAPI["PhilHealth PCAPI v2.0 Gateway"]
+        S01_08["Services 01–08 Endpoints (/api/v1/*)"]
+    end
 
-  CATS -. "Maps statutory codes" .-> GEN
-  SAV -- "Enqueue interop message" --> MSG
-  MSG --> PROXY
-  PROXY -- "1. Build XML" --> GEN
-  GEN -- "2. Validate XML" --> VAL
-  VAL -- "3. Encrypt" --> ENC
-  ENC -- "4. SOAP Request" --> SOAP
+    WIRE -- Transactional Outbox --> REQ
+    REQ --> DISPATCH
+    HTTP -- Bearer Token + AES Ciphertext --> S01_08
+    HTTP --> RESP
+    RESP --> EHR
 ```
 
 ---
 
-## Repository Locations for `lib_*.xlsx` & `lib_*.json`
+## 2. PCAPI v2.0 Services Summary (Services 01–08)
 
-PhilHealth statutory dictionaries are stored directly in the repository under the Clinic service infrastructure:
-
-1. **Source Excel Files (`*.xlsx`)**:
-   - Location: [`services/clinic-api/ClinicEz.Clinic.Infrastructure/PhilHealth/Catalog/Source/`](../../services/clinic-api/ClinicEz.Clinic.Infrastructure/PhilHealth/Catalog/Source)
-   - Contains raw PhilHealth statutory spreadsheets: `lib_immchild.xlsx`, `lib_immyoungw.xlsx`, `lib_immpregw.xlsx`, `lib_immelderly.xlsx`, `lib_zscore.xlsx`, `lib_mdiseases.xlsx`, `lib_ncdq.xlsx`, `lib_icd.xlsx`, `lib_medicine.xlsx`, `lib_heent.xlsx`, `lib_chest.xlsx`, `lib_heart.xlsx`, `lib_abdomen.xlsx`, `lib_genitourinary.xlsx`, `lib_digital_rectal.xlsx`, `lib_skin_extremities.xlsx`, `lib_neuro.xlsx`, `lib_diagnostic.xlsx`, `lib_management.xlsx`, `lib_signs_symptoms.xlsx`, `lib_chestxray_findings.xlsx`, `lib_chestxray_observation.xlsx`.
-
-2. **Database Seed JSON Files (`*.json`)**:
-   - Location: [`services/clinic-api/ClinicEz.Clinic.Infrastructure/PhilHealth/Catalog/Seed/`](../../services/clinic-api/ClinicEz.Clinic.Infrastructure/PhilHealth/Catalog/Seed)
-   - Pre-parsed JSON files used by Entity Framework migrations and seeders to populate database catalogs.
-
----
-
-## PhilHealth Statutory Catalogs & Libraries (`lib_*`)
-
-### 1. Immunization Statutory Catalogs (`lib_imm*`)
-
-| PhilHealth Library | Target Demographic | Code Examples | Source Excel | Seed JSON |
-|---|---|---|---|---|
-| `lib_immchild` | Children (0 to 17 years) | `C01` (BCG), `C02`-`C04` (OPV 1-3), `C05`-`C07` (DPT-HepB-Hib), `C08` (Measles) | `lib_immchild.xlsx` | `lib_immchild.json` |
-| `lib_immyoungw` | Adolescent & Young Women | `Y01` (HPV), `Y02` (MMR) | `lib_immyoungw.xlsx` | `lib_immyoungw.json` |
-| `lib_immpregw` | Pregnant Women | `P01` (Tetanus Toxoid / Td) | `lib_immpregw.xlsx` | `lib_immpregw.json` |
-| `lib_immelderly` | Senior Citizens (60+ years) | `E01` (Pneumococcal), `E02` (Seasonal Flu) | `lib_immelderly.xlsx` | `lib_immelderly.json` |
-
-### 2. Pediatric Growth & Z-Score Dataset (`lib_zscore`)
-
-- Source Spreadsheets & Seed Files: `lib_zscore.xlsx` (122 KB) / `lib_zscore.json` (656 KB).
-- Scope: Under-5 cohort (0 to 60 months). Evaluates Weight-for-Length/Height and Height-for-Age using WHO 2006 standards.
-- Bracket Lookup: Executes a two-stage bracket lookup matching continuous height/weight measurements against discrete 0.5 cm increments across 8 boundary weight points with defensive typo sanitization (e.g. item 1381 `"7..9"` -> `7.9`).
-
-### 3. Medical History & NCD Risk Libraries
-
-- `lib_mdiseases.xlsx` / `lib_mdiseases.json`: PhilHealth medical diseases catalog for 1:1 `<MEDHIST>` XML elements.
-- `lib_ncdq.xlsx` / `lib_ncdq.json`: Non-Communicable Disease (NCD) Risk Assessment 24-question survey catalog.
-- `lib_icd.xlsx` / `lib_icd.json`: PhilHealth ICD-10 diagnostic catalog table (1.25 MB JSON).
-
-### 4. Physical Examination Statutory Libraries (`lib_pe*`)
-
-- `lib_heent.xlsx` / `lib_heent.json`
-- `lib_chest.xlsx` / `lib_chest.json`
-- `lib_heart.xlsx` / `lib_heart.json`
-- `lib_abdomen.xlsx` / `lib_abdomen.json`
-- `lib_genitourinary.xlsx` / `lib_genitourinary.json`
-- `lib_digital_rectal.xlsx` / `lib_digital_rectal.json`
-- `lib_skin_extremities.xlsx` / `lib_skin_extremities.json`
-- `lib_neuro.xlsx` / `lib_neuro.json`
+| Service # | Endpoint | Description | Payloads / Annexes |
+|---|---|---|---|
+| **01: PCU** | `POST /api/v1/pcu`<br/>`POST /api/v1/pcu/verify` | Patient Confirmation Unit biometric facial liveness | `PcuStartRequest`<br/>`PcuVerifyRequest` |
+| **02: Validator** | `POST /api/v1/philhealth-yakap-validator` | Validates patient PhilHealth standing and active registration | `YakapValidateStandingRequest` |
+| **03: Empanelment** | `POST /api/v1/yakap-empanelment` | Empanels patient to facility; generates `yes_reference_no` (`MCA...`) | `YakapEmpanelmentRequest` |
+| **04: Selection** | `POST /api/v1/yakap-selection` | Assigns encounter to facility; generates K-transaction number | `YakapSelectionRequest` |
+| **05: Masterlist** | `POST /api/v1/yakap-selection-masterlist/individual`<br/>`POST /api/v1/yakap-selection-masterlist/batch` | Queries individual or 7-day batch masterlist of assigned beneficiaries | `MasterlistIndividualRequest`<br/>`MasterlistBatchRequest` (max 7d) |
+| **06: Data Upload** | `POST /api/v1/yakap-data-upload/{form}`<br/>`GET /api/v1/yakap-data-upload/{txNo}` | Encrypted clinical form upload and 23B transaction polling (`U...`) | Annex A: FPE<br/>Annex B: Consultation<br/>Annex C: Diag Request<br/>Annex D: Diag Results<br/>Annex E: Medicine<br/>Annex F: Referral |
+| **07: Patient OTP** | `POST /api/v1/yakap-patient-verification-code` | Validates SMS One-Time PIN for verification | `VerificationCodeRequest` |
+| **08: Availment Slip** | `POST /api/v1/yakap-availment-slip` | Generates encrypted Electronic Konsulta Availment Slip (eKAS PDF) | `AvailmentSlipRequest` -> Encrypted PDF |
 
 ---
 
-## Step-by-Step Integration Guide
+## 3. Annex C Cryptographic Standards
 
-### 1. Schema Specifications (`.dtd` and `.xsd`)
+Every clinical payload uploaded under Service 06 and every eKAS PDF downloaded under Service 08 is wrapped in an Annex C envelope:
 
-1. **`KonsultaData_v1.14.dtd`**: Schema for XML payload containing encounters, vitals, medical history, physical examinations, statutory library codes (`lib_*`), diagnostic orders/results, and medicine dispatches (`<KONSULTADATA>`).
-2. **`KonsultaMasterlist_v1.4.dtd`**: DTD validation of assigned member and beneficiary masterlists (`<PATIENTMASTERLIST>`).
-3. **`KonsultaMasterlist_v1.5.xsd`**: XSD validation of masterlists (`<object>`).
+```json
+{
+  "docMimeType": "application/json",
+  "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "key1": "",
+  "key2": "",
+  "iv": "3q2+7w==...",
+  "doc": "9xL4k..."
+}
+```
+
+### Encryption Rules:
+1. **Cipher Algorithm**: `AES-256-CBC`.
+2. **Padding**: **`0x00` null-byte padding only**.
+   - Use `PaddingMode.None`. Calculate `padLen = (16 - (plainBytes.Length % 16)) % 16`.
+   - If `plainBytes.Length % 16 == 0`, append **zero** bytes.
+3. **Pre-Encryption SHA-256 Hash**:
+   - Compute `SHA256(plainBytes)` on the **unpadded plaintext bytes**.
+   - Encode as a 64-character lowercase hexadecimal string: `Convert.ToHexString(hash).ToLowerInvariant()`.
+4. **PDF Handling**:
+   - For `"application/pdf"`, strip trailing whitespace and `%%EOF` markers during decryption if required.
+5. **Reference Test Vector**:
+   - Validated against Implementation Guide p.146 vector `PCAPI-TEST-CIPHER-KEY-0001`.
 
 ---
 
-### 2. XML Generation (`KonsultaXmlGenerator.cs`)
+## 4. 2-Tier Data-Driven Option Architecture
 
-Located in [`services/philhealth-proxy/ClinicEz.PhilHealthProxy.Infrastructure/Services/KonsultaXmlGenerator.cs`](../../services/philhealth-proxy/ClinicEz.PhilHealthProxy.Infrastructure/Services/KonsultaXmlGenerator.cs).
+ClinicEZ eliminates all hardcoded static option arrays in frontend clients:
 
----
-
-### 3. XML Validation (`KonsultaXmlValidator.cs`)
-
-Located in [`services/philhealth-proxy/ClinicEz.PhilHealthProxy.Infrastructure/Services/KonsultaXmlValidator.cs`](../../services/philhealth-proxy/ClinicEz.PhilHealthProxy.Infrastructure/Services/KonsultaXmlValidator.cs).
-
----
-
-### 4. Payload Encryption (`PhilHealthPayloadEncryptor.cs`)
-
-Located in [`services/philhealth-proxy/ClinicEz.PhilHealthProxy.Infrastructure/Services/PhilHealthPayloadEncryptor.cs`](../../services/philhealth-proxy/ClinicEz.PhilHealthProxy.Infrastructure/Services/PhilHealthPayloadEncryptor.cs).
+- **Tier A (Static Options)**:
+  - Source of Truth: `packages/shared-dotnet/Options/EhrStaticOptions.cs`.
+  - Canonical descriptors (`EhrOptionDescriptor`) with standard `Code`, `Label`, `PhilHealthCode`, and `PhilHealthLibrary`.
+  - Served via `GET /public/options`, `GET /api/v1/options`, and `GET /options` with deterministic SHA-256 `ETag`. Clients cache responses and send `If-None-Match`, receiving `304 Not Modified` on cache hits.
+- **Tier B (Dynamic Catalogs)**:
+  - ICD-10 (`lib_icd`), Drug Formulary (`lib_medicine`), and 10-Digit PSGC Locations (`PsgcLocation`).
+  - Stored in database, queryable with pagination and autocomplete.
 
 ---
 
-## Technical Specifications & Deep Dives
+## 5. Zero-PHI Architectural Rules
 
-- [Schemas & Statutory Libraries Reference](file:///c:/Users/User/projects/nextstep/github/clinicez-arch2/.agents/skills/philhealth-yakap-expert/references/schemas_and_xml_generation.md)
-- [Official Implementation Guide PDF](../../PhilHealth_Konsulta_Implementation_Guide%20for%20PKA%20v1.1.pdf)
-- [KonsultaData_v1.14.dtd](../../KonsultaData_v1.14.dtd)
-- [KonsultaMasterlist_v1.4.dtd](../../KonsultaMasterlist_v1.4.dtd)
-- [KonsultaMasterlist_v1.5.xsd](../../KonsultaMasterlist_v1.5.xsd)
+To guarantee patient privacy and statutory compliance (RA 10173 & RA 11223):
+1. **Cloud Control Plane (`portal-api` / `portal-web`) NEVER handles PHI**:
+   - Forbidden: `PatientName`, `PhilHealthPin`, `PrimaryDiagnosis`, raw `<PCB>` XML or unencrypted PCAPI JSON.
+   - Permitted: `PatientCode`, `SubmissionType`, 23B `LocalTransactionNo`, 23B `UploadTransactionNo` (`U...`), `YesReferenceNo` (`MCA...`), `ProcessingStatus`, `PayloadSha256Hash`, and statutory field error codes/messages.
+2. **Edge Isolation**:
+   - Patient records and clinical notes reside exclusively within the clinic's local Edge Cell database.
+   - Portal queries (`yakap.submission.requested`) are answered by `YakapSubmissionResponder`, which projects clinical records into Zero-PHI DTOs before dispatching envelopes over the Interop Hub.

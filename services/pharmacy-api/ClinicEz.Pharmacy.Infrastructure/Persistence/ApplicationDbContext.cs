@@ -2,6 +2,7 @@ using ClinicEz.Pharmacy.Domain.Entities;
 using ClinicEz.Pharmacy.Domain.Interfaces;
 using ClinicEz.Shared.Interop.Persistence;
 using ClinicEz.Shared.Workspace;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 
@@ -10,8 +11,9 @@ namespace ClinicEz.Pharmacy.Infrastructure.Persistence;
 public class ApplicationDbContext(
     DbContextOptions<ApplicationDbContext> options,
     Microsoft.Extensions.Configuration.IConfiguration configuration,
-    IPharmacyContext pharmacyContext) : DbContext(options), IInteropDbContext, IWorkspaceProfileDbContext
+    IPharmacyContext pharmacyContext) : DbContext(options), IInteropDbContext, IWorkspaceProfileDbContext, IDataProtectionKeyContext
 {
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
     public DbSet<Product> Products { get; set; }
     public DbSet<PharmacyInventoryItem> InventoryItems { get; set; }
     public DbSet<InventoryBatch> InventoryBatches { get; set; }

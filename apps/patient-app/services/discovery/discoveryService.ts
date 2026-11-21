@@ -1238,6 +1238,8 @@ export async function createBookingDraftOnline(
     payload: {
         clinicId: string;
         organizationId?: string | null;
+        providerId?: string | null;
+        providerName?: string | null;
         preferredDate?: string | null;
         preferredTime?: string | null;
         reason?: string | null;

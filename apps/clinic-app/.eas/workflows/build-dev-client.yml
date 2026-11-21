@@ -1,0 +1,41 @@
+name: Manual Dev Client Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Dev Client profile (development = iOS Simulator + Android APK; development-device = physical iOS + Android APK)"
+        type: choice
+        options:
+          - development
+          - development-device
+        required: true
+        default: "development"
+      platform:
+        description: "Target platform"
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+        required: true
+        default: "all"
+
+run_name: Manual Dev Client (${{ inputs.profile }} / ${{ inputs.platform }})
+
+jobs:
+  build_android:
+    name: Build Android Dev Client
+    if: ${{ inputs.platform == 'android' || inputs.platform == 'all' }}
+    type: build
+    params:
+      platform: android
+      profile: ${{ inputs.profile }}
+
+  build_ios:
+    name: Build iOS Dev Client
+    if: ${{ inputs.platform == 'ios' || inputs.platform == 'all' }}
+    type: build
+    params:
+      platform: ios
+      profile: ${{ inputs.profile }}

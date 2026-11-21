@@ -3,16 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Staff.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Documents.Configuration;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interop;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
-using ClinicEz.Shared.Documents.Configuration;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
@@ -35,7 +39,14 @@ public sealed record UpdateStaffMemberCommand(
     IReadOnlyList<Guid>? AssignedRoomIds = null,
     bool ClearAssignedRoom = false,
     string? SignatureSpecimen = null,
-    SignatureMode? DefaultSignatureMode = null) : IRequest<StaffMemberDto>;
+    SignatureMode? DefaultSignatureMode = null,
+    bool? IsDirectoryOptIn = null,
+    DateOnly? PrcExpiryDate = null,
+    string? PrcEvidenceObjectKey = null,
+    string? VerificationContact = null,
+    string? PublicBio = null,
+    string? AvatarUrl = null,
+    bool SkipPendingVerificationSync = false) : IRequest<StaffMemberDto>;
 
 public sealed class UpdateStaffMemberCommandValidator : AbstractValidator<UpdateStaffMemberCommand>
 {
@@ -57,26 +68,44 @@ public sealed class UpdateStaffMemberCommandValidator : AbstractValidator<Update
         {
             RuleFor(x => x.PhilHealthPan).MaximumLength(50);
         });
+
+        When(x => !string.IsNullOrWhiteSpace(x.Email), () =>
+        {
+            RuleFor(x => x.Email)
+                .EmailAddress()
+                .WithMessage("A valid email address is required.")
+                .MaximumLength(255);
+        });
     }
 }
 
 public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaffMemberCommand, StaffMemberDto>
 {
     private readonly IRepository<StaffMember> _staffRepository;
-    private readonly IRepository<ClinicRole> _roleRepository;
+    private readonly IRepository<Role> _roleRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     private readonly IStaffAccessInvalidator? _accessCache;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
+    private readonly IInteropPublisher? _interopPublisher;
+    private readonly IRepository<FacilitySettings>? _settingsRepository;
+    private readonly IRepository<DoctorScheduleTemplate>? _scheduleRepository;
+    private readonly IRepository<AuditEntry>? _auditRepository;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public UpdateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
-        IRepository<ClinicRole> roleRepository,
+        IRepository<Role> roleRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IStaffAccessInvalidator? accessCache = null,
-        IRepository<ClinicRoom>? roomRepository = null)
+        IRepository<Room>? roomRepository = null,
+        IInteropPublisher? interopPublisher = null,
+        IRepository<FacilitySettings>? settingsRepository = null,
+        IRepository<DoctorScheduleTemplate>? scheduleRepository = null,
+        IRepository<AuditEntry>? auditRepository = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _staffRepository = staffRepository;
         _roleRepository = roleRepository;
@@ -84,6 +113,11 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         _clinicContext = clinicContext;
         _accessCache = accessCache;
         _roomRepository = roomRepository;
+        _interopPublisher = interopPublisher;
+        _settingsRepository = settingsRepository;
+        _scheduleRepository = scheduleRepository;
+        _auditRepository = auditRepository;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<StaffMemberDto> Handle(UpdateStaffMemberCommand request, CancellationToken cancellationToken)
@@ -114,6 +148,22 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             }
         }
 
+        var normalizedEmail = StaffEmailUniquenessHelper.NormalizeEmail(request.Email);
+        if (normalizedEmail != null)
+        {
+            var duplicateEmail = await _staffRepository.Query(s =>
+                s.ClinicId == _clinicContext.ClinicId &&
+                s.Id != staff.Id &&
+                s.Email != null &&
+                s.Email.ToLower() == normalizedEmail)
+                .AnyAsync(cancellationToken);
+
+            if (duplicateEmail)
+            {
+                throw new ValidationException(StaffEmailUniquenessHelper.DuplicateStaffEmailMessage);
+            }
+        }
+
         // Guard: Cannot downgrade or deactivate the only active Administrator
         if (staff.Role == StaffRole.Admin && staff.IsActive && (request.Role != StaffRole.Admin || !request.IsActive))
         {
@@ -131,14 +181,14 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         }
 
         // Guard 1: Cannot downgrade, reassign, or deactivate the only active built-in System Administrator
-        bool isCurrentSystemAdmin = ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.IsSystemAdministrator(staff);
+        bool isCurrentSystemAdmin = GovernanceSafetyChecker.IsSystemAdministrator(staff);
         if (isCurrentSystemAdmin && staff.IsActive)
         {
             bool willLoseSystemAdmin = !request.IsActive ||
                 request.Role != StaffRole.Admin ||
-                (request.ClinicRoleId.HasValue && (staff.ClinicRole == null || request.ClinicRoleId.Value != staff.ClinicRoleId));
+                (request.ClinicRoleId.HasValue && (staff.ClinicRoleId == null || request.ClinicRoleId.Value != staff.ClinicRoleId));
 
-            await ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.EnsureActiveSystemAdminRemainsAsync(
+            await GovernanceSafetyChecker.EnsureActiveSystemAdminRemainsAsync(
                 _staffRepository,
                 _clinicContext.ClinicId,
                 staff.Id,
@@ -147,7 +197,7 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         }
 
         // Guard 2: Cannot reassign or deactivate the last active user holding critical governance permissions (roles:manage, staff:manage, settings:manage)
-        await ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.EnsureGovernancePermissionsRemainOnStaffChangeAsync(
+        await GovernanceSafetyChecker.EnsureGovernancePermissionsRemainOnStaffChangeAsync(
             _staffRepository,
             _roleRepository,
             _clinicContext.ClinicId,
@@ -213,18 +263,63 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             }
         }
 
+        var prevFirstName = staff.FirstName;
+        var prevLastName = staff.LastName;
+        var prevTitle = staff.Title;
+        var prevRole = staff.Role;
+        var prevSpecialty = staff.Specialty;
+        var previousPrc = staff.PrcLicenseNumber;
+        var prevExpiry = staff.PrcExpiryDate;
+        var prevProofKey = staff.PrcEvidenceObjectKey;
+        var prevVerificationContact = staff.VerificationContact;
+        var prevPublicBio = staff.PublicBio;
+        var prevAvatarUrl = staff.AvatarUrl;
+        var prevOptIn = staff.IsDirectoryOptIn;
+        var prevIsActive = staff.IsActive;
+        var wasVerified = staff.PublicVerificationStatus == PractitionerVerificationLevel.Verified;
+
+        var effectiveOptIn = request.IsDirectoryOptIn ?? (ClinicianDirectoryValidationHelper.IsClinicianRole(request.Role) && staff.IsDirectoryOptIn);
+        var effectivePrc = request.PrcLicenseNumber?.Trim();
+        var effectiveExpiry = request.PrcExpiryDate ?? staff.PrcExpiryDate;
+        var effectiveProofKey = request.PrcEvidenceObjectKey != null
+            ? (string.IsNullOrWhiteSpace(request.PrcEvidenceObjectKey) ? null : request.PrcEvidenceObjectKey.Trim())
+            : staff.PrcEvidenceObjectKey;
+        var effectiveContact = request.VerificationContact != null
+            ? (string.IsNullOrWhiteSpace(request.VerificationContact) ? null : request.VerificationContact.Trim())
+            : staff.VerificationContact;
+
+        ClinicianDirectoryValidationHelper.ValidateOptInRequirements(
+            request.Role,
+            effectiveOptIn,
+            effectivePrc,
+            effectiveExpiry,
+            effectiveProofKey,
+            effectiveContact);
+
         staff.FirstName = request.FirstName.Trim();
         staff.LastName = request.LastName.Trim();
         staff.MiddleName = request.MiddleName?.Trim();
         staff.Title = request.Title?.Trim();
         staff.Role = request.Role;
-        staff.Email = request.Email?.Trim();
+        staff.Email = normalizedEmail;
         staff.PhoneNumber = request.PhoneNumber?.Trim();
-        staff.PrcLicenseNumber = request.PrcLicenseNumber?.Trim();
+        staff.PrcLicenseNumber = effectivePrc;
         staff.PtrNumber = request.PtrNumber?.Trim();
         staff.S2LicenseNumber = request.S2LicenseNumber?.Trim();
         staff.Specialty = request.Specialty?.Trim();
         staff.PhilHealthPan = request.PhilHealthPan?.Trim();
+        staff.IsDirectoryOptIn = effectiveOptIn;
+        staff.PrcExpiryDate = effectiveExpiry;
+        staff.PrcEvidenceObjectKey = effectiveProofKey;
+        staff.VerificationContact = effectiveContact;
+        if (request.PublicBio != null)
+        {
+            staff.PublicBio = string.IsNullOrWhiteSpace(request.PublicBio) ? null : request.PublicBio.Trim();
+        }
+        if (request.AvatarUrl != null)
+        {
+            staff.AvatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl.Trim();
+        }
         if (request.SignatureSpecimen != null)
         {
             staff.SignatureSpecimen = string.IsNullOrWhiteSpace(request.SignatureSpecimen) ? null : request.SignatureSpecimen;
@@ -237,36 +332,100 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         staff.UpdatedAt = DateTime.UtcNow;
         staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
 
+        var triggeredPrcUpdateResubmission = false;
+        if (wasVerified
+            && staff.IsDirectoryOptIn
+            && ClinicianDirectoryValidationHelper.IsClinicianRole(staff.Role)
+            && ClinicianDirectoryValidationHelper.HasRegulatedPrcCredentialsChanged(
+                previousPrc,
+                staff.PrcLicenseNumber,
+                prevExpiry,
+                staff.PrcExpiryDate,
+                prevProofKey,
+                staff.PrcEvidenceObjectKey))
+        {
+            if (!PractitionerIdentity.IsValidPrcFormat(staff.PrcLicenseNumber))
+            {
+                throw new ValidationException("A valid PRC license number is required when updating a verified practitioner's license.");
+            }
+
+            staff.PublicVerificationStatus = PractitionerVerificationLevel.PendingVerification;
+            staff.PublicVerificationReason = null;
+
+            await PractitionerVerificationSubmissionHelper.EnqueueVerificationAndAuditAsync(
+                staff,
+                "PrcUpdate",
+                staff.UpdatedAt.Value,
+                _clinicContext,
+                _directorySyncService,
+                _interopPublisher,
+                _settingsRepository,
+                _scheduleRepository,
+                _auditRepository,
+                cancellationToken,
+                _staffRepository);
+            triggeredPrcUpdateResubmission = true;
+        }
+
         _staffRepository.Update(staff);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (StaffEmailUniquenessHelper.IsStaffEmailUniqueViolation(ex))
+        {
+            throw new ValidationException(StaffEmailUniquenessHelper.DuplicateStaffEmailMessage);
+        }
+
+        var directoryProfileChanged =
+            !string.Equals(prevFirstName, staff.FirstName, StringComparison.Ordinal) ||
+            !string.Equals(prevLastName, staff.LastName, StringComparison.Ordinal) ||
+            !string.Equals(prevTitle, staff.Title, StringComparison.Ordinal) ||
+            prevRole != staff.Role ||
+            !string.Equals(prevSpecialty, staff.Specialty, StringComparison.Ordinal) ||
+            !string.Equals(previousPrc, staff.PrcLicenseNumber, StringComparison.Ordinal) ||
+            prevExpiry != staff.PrcExpiryDate ||
+            !string.Equals(prevProofKey, staff.PrcEvidenceObjectKey, StringComparison.Ordinal) ||
+            !string.Equals(prevVerificationContact, staff.VerificationContact, StringComparison.Ordinal) ||
+            !string.Equals(prevPublicBio, staff.PublicBio, StringComparison.Ordinal) ||
+            !string.Equals(prevAvatarUrl, staff.AvatarUrl, StringComparison.Ordinal) ||
+            prevOptIn != staff.IsDirectoryOptIn ||
+            prevIsActive != staff.IsActive;
+
+        if (!request.SkipPendingVerificationSync
+            && !triggeredPrcUpdateResubmission
+            && directoryProfileChanged
+            && _directorySyncService != null)
+        {
+            if (staff.IsActive
+                && staff.IsDirectoryOptIn
+                && ClinicianDirectoryValidationHelper.IsClinicianRole(staff.Role)
+                && staff.PublicVerificationStatus == PractitionerVerificationLevel.PendingVerification)
+            {
+                await _directorySyncService.SyncPendingPractitionerVerificationAsync(
+                    staff.Id,
+                    throwOnConflict: false,
+                    _clinicContext.StaffId?.ToString(),
+                    _clinicContext.StaffName,
+                    cancellationToken);
+            }
+            else if ((prevOptIn || staff.IsDirectoryOptIn) && _settingsRepository != null)
+            {
+                var settings = await _settingsRepository.Query().FirstOrDefaultAsync(cancellationToken);
+                if (settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+                {
+                    await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                        settings,
+                        throwOnConflict: false,
+                        _clinicContext.StaffId?.ToString(),
+                        _clinicContext.StaffName,
+                        cancellationToken);
+                }
+            }
+        }
 
         _accessCache?.Invalidate(staff.Id);
 
-        return new StaffMemberDto(
-            staff.Id,
-            staff.TenantId,
-            staff.ClinicId,
-            staff.ClinicRoleId,
-            roleName,
-            staff.FirstName,
-            staff.LastName,
-            staff.MiddleName,
-            staff.Title,
-            staff.Role,
-            staff.Email,
-            staff.PhoneNumber,
-            staff.PrcLicenseNumber,
-            staff.PtrNumber,
-            staff.S2LicenseNumber,
-            staff.Specialty,
-            staff.IsActive,
-            staff.CreatedAt,
-            HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-            MustChangePassword: staff.MustChangePassword,
-            PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomIds: staff.GetAssignedRoomIds(),
-            AssignedRoomNames: assignedRoomNames,
-            SignatureSpecimen: staff.SignatureSpecimen,
-            DefaultSignatureMode: staff.DefaultSignatureMode);
+        return StaffMemberDto.FromEntity(staff, roleName, assignedRoomNames);
     }
 }

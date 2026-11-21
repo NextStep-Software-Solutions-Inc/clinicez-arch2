@@ -1,11 +1,13 @@
 using ClinicEz.Interop.Domain.Entities;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
 namespace ClinicEz.Interop.Infrastructure.Persistence;
 
-public class HubDbContext(DbContextOptions<HubDbContext> options, IConfiguration configuration) : DbContext(options)
+public class HubDbContext(DbContextOptions<HubDbContext> options, IConfiguration configuration) : DbContext(options), IDataProtectionKeyContext
 {
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
     public DbSet<HubCell> Cells { get; set; }
     public DbSet<HubClient> Clients { get; set; }
     public DbSet<HubFacility> Facilities { get; set; }

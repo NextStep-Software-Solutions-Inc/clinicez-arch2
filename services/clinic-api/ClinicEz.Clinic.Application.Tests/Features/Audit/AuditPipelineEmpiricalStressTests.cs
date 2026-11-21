@@ -41,18 +41,45 @@ public class StressFailingCommandValidator : AbstractValidator<StressFailingComm
     }
 }
 
+[Collection("NonParallelStressTests")]
 public class AuditPipelineEmpiricalStressTests
 {
     private readonly Guid _clinicId = Guid.NewGuid();
     private readonly Guid _staffId = Guid.NewGuid();
     private readonly string _tenantId = "tenant_stress_test";
 
+    private sealed class ThreadSafeClinicContext : IClinicContext
+    {
+        public ThreadSafeClinicContext(Guid clinicId, Guid? staffId, string tenantId)
+        {
+            ClinicId = clinicId;
+            StaffId = staffId;
+            TenantId = tenantId;
+        }
+
+        public string TenantId { get; }
+        public Guid ClinicId { get; }
+        public Guid? BranchId => null;
+        public Guid? StaffId { get; }
+        public string? StaffName => "Dr. Stress Tester";
+        public string? StaffRole => "Administrator";
+        public IReadOnlyList<string> Permissions { get; } = Array.Empty<string>();
+        public bool HasPermission(string permission) => true;
+    }
+
+    private sealed class ThreadSafeHttpContextAccessor : IHttpContextAccessor
+    {
+        public ThreadSafeHttpContextAccessor(HttpContext context)
+        {
+            HttpContext = context;
+        }
+
+        public HttpContext? HttpContext { get; set; }
+    }
+
     private (IClinicContext clinicContext, IHttpContextAccessor httpContextAccessor) CreateContexts()
     {
-        var clinicContext = Substitute.For<IClinicContext>();
-        clinicContext.ClinicId.Returns(_clinicId);
-        clinicContext.StaffId.Returns(_staffId);
-        clinicContext.TenantId.Returns(_tenantId);
+        var clinicContext = new ThreadSafeClinicContext(_clinicId, _staffId, _tenantId);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("10.0.0.42");
@@ -68,8 +95,7 @@ public class AuditPipelineEmpiricalStressTests
         };
         httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "StressAuth"));
 
-        var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
-        httpContextAccessor.HttpContext.Returns(httpContext);
+        var httpContextAccessor = new ThreadSafeHttpContextAccessor(httpContext);
 
         return (clinicContext, httpContextAccessor);
     }
@@ -364,14 +390,21 @@ public class AuditPipelineEmpiricalStressTests
         consultDescriptor.Action.Should().Be("clinical.consultation.signed");
         consultDescriptor.Category.Should().Be(ClinicAuditCategories.Clinical);
 
-        var voidDescriptor = AuditRequestMetadataRegistry.GetDescriptor(typeof(ClinicEz.Clinic.Application.Features.Yakap.Commands.VoidYakapTransmittal.VoidYakapTransmittalCommand));
-        voidDescriptor.IsAuditable.Should().BeTrue();
-        voidDescriptor.Action.Should().Be("philhealth.transmittal.voided");
-        voidDescriptor.Severity.Should().Be(ClinicAuditSeverities.Emergency);
+        var registerDescriptor = AuditRequestMetadataRegistry.GetDescriptor(typeof(ClinicEz.Clinic.Application.Features.Patients.Commands.RegisterClinicPatientCommand));
+        registerDescriptor.IsAuditable.Should().BeTrue();
+        registerDescriptor.Action.Should().Be("patient.registration.created");
+        registerDescriptor.Category.Should().Be(ClinicAuditCategories.Patient);
 
         var auditQueryDescriptor = AuditRequestMetadataRegistry.GetDescriptor(typeof(ClinicEz.Clinic.Application.Features.Audit.Queries.GetAuditLogsQuery));
         auditQueryDescriptor.IsAuditable.Should().BeTrue();
         auditQueryDescriptor.Action.Should().Be("audit.log.viewed");
+
+        var updateTriageDescriptor = AuditRequestMetadataRegistry.GetDescriptor(typeof(ClinicEz.Clinic.Application.Features.Triage.Commands.UpdateTriageVitalsCommand));
+        updateTriageDescriptor.IsAuditable.Should().BeTrue();
+        updateTriageDescriptor.Action.Should().Be("clinical.triage_vitals.updated");
+        updateTriageDescriptor.Category.Should().Be(ClinicAuditCategories.Clinical);
+        updateTriageDescriptor.Severity.Should().Be(ClinicAuditSeverities.Routine);
+        updateTriageDescriptor.TargetEntityType.Should().Be("PatientVitals");
 
         // 2. Unmapped command with heuristic fallback
         var unmappedDescriptor = AuditRequestMetadataRegistry.GetDescriptor(typeof(StressTestCommand));

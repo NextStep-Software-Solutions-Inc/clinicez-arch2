@@ -20,15 +20,15 @@ public record GetMorbidityReportQuery(
 public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReportQuery, MorbidityReportDto>
 {
     private readonly IRepository<ConsultationEncounter> _consultationRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
 
     public GetMorbidityReportQueryHandler(
         IRepository<ConsultationEncounter> consultationRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IClinicContext clinicContext,
-        IRepository<ClinicSettings>? settingsRepo = null)
+        IRepository<FacilitySettings>? settingsRepo = null)
     {
         _consultationRepo = consultationRepo;
         _patientRepo = patientRepo;
@@ -56,7 +56,7 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
 
         var patientIds = encounters.Select(e => e.PatientId).Distinct().ToList();
         var patients = await _patientRepo.Query(p => patientIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.DateOfBirth, p.Gender })
+            .Select(p => new { p.Id, p.DateOfBirth, p.Sex })
             .ToListAsync(cancellationToken);
         var patientLookup = patients.ToDictionary(p => p.Id);
 
@@ -73,7 +73,7 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
                 int calcAge = today.Year - patient.DateOfBirth.Year;
                 if (patient.DateOfBirth > today.AddYears(-calcAge)) calcAge--;
                 age = calcAge;
-                gender = patient.Gender;
+                gender = patient.Sex.ToString();
             }
 
             foreach (var diag in enc.Diagnoses)
@@ -126,7 +126,7 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
             })
             .ToList();
 
-        ClinicSettings? settings = null;
+        FacilitySettings? settings = null;
         if (_settingsRepo != null)
         {
             settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);

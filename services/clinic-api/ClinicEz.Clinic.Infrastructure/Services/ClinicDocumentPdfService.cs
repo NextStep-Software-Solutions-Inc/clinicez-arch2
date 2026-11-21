@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Clinic.Application.Features.Reports.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Infrastructure.Common;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Documents;
 using ClinicEz.Shared.Documents.Common;
 using ClinicEz.Shared.Documents.Components;
@@ -43,8 +44,8 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     public byte[] GenerateMedicalCertificatePdf(
         MedicalCertificate cert,
-        ClinicSettings settings,
-        ClinicPatient? patient = null,
+        FacilitySettings settings,
+        Patient? patient = null,
         StaffMember? doctor = null,
         SignatureMode? signatureMode = null)
     {
@@ -74,7 +75,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             patient?.DateOfBirth,
             cert.IssueDate,
             patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35);
-        var patientGender = patient?.Gender.ToString() ?? "Patient";
+        var patientGender = patient?.Sex.ToString() ?? "Patient";
 
         var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
         var docSignatureBytes = (mode == SignatureMode.ESignatureSpecimen)
@@ -155,7 +156,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         c.Item().Text(t =>
                         {
                             t.Span("Fitness Status: ").Bold().FontColor("#166534");
-                            t.Span(cert.FitnessStatus.ToUpperInvariant()).Bold().FontColor("#15803D");
+                            t.Span(MedicalCertificate.FormatFitnessStatus(cert.FitnessStatus)).Bold().FontColor("#15803D");
                         });
 
                         if (cert.RecommendedRestDays > 0)
@@ -214,7 +215,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     public byte[] GenerateLabRequisitionSlipPdf(
         LabOrderSlipDto slip,
-        ClinicSettings settings,
+        FacilitySettings settings,
         StaffMember? doctor = null,
         SignatureMode? signatureMode = null)
     {
@@ -412,7 +413,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     public byte[] GeneratePrescriptionPdf(
         PrescriptionSlipDto slip,
-        ClinicSettings settings,
+        FacilitySettings settings,
         StaffMember? doctor = null,
         SignatureMode? signatureMode = null)
     {
@@ -433,7 +434,11 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             slip.PrescriptionNumber,
             digest);
 
-        var qrBytes = _qrCodeService.GenerateQrCodePng(slip.QrPayload ?? verifyUrl, 4);
+        var rxVerifyUrl = !string.IsNullOrWhiteSpace(slip.PublicVerificationToken)
+            ? PublicRoutes.VerifyRx(slip.PublicVerificationToken, _verificationBaseUrl)
+            : (!string.IsNullOrWhiteSpace(slip.QrPayload) && !slip.QrPayload.StartsWith("CLINICEZ:RX:") ? slip.QrPayload : verifyUrl);
+
+        var qrBytes = _qrCodeService.GenerateQrCodePng(rxVerifyUrl, 4);
 
         var patientAge = ChronologicalAgeCalculator.FormatLongAge(
             slip.PatientDateOfBirth,
@@ -538,8 +543,14 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                     t.Span(item.Sig).FontColor("#1F2937").FontSize(9f);
                                 });
 
-                                var qtyText = $"Quantity: #{item.Quantity}";
-                                medItem.Item().PaddingTop(1).PaddingLeft(12).Text(qtyText).FontSize(8.5f).SemiBold().FontColor("#64748B");
+                                var clinicDispensedQty = (item.IsClinicDispensed || item.ClinicDispensedQuantity.GetValueOrDefault() > 0)
+                                    ? Math.Min(item.Quantity, Math.Max(0, item.ClinicDispensedQuantity.GetValueOrDefault()))
+                                    : 0;
+                                var remainingExternalQty = Math.Max(0, item.Quantity - clinicDispensedQty);
+                                var qtyText = clinicDispensedQty > 0
+                                    ? $"Quantity: #{item.Quantity} (Dispensed in Clinic: {clinicDispensedQty} • Remaining for External Purchase: {remainingExternalQty})"
+                                    : $"Quantity: #{item.Quantity}";
+                                medItem.Item().PaddingTop(1).PaddingLeft(12).Text(qtyText).FontSize(8.5f).SemiBold().FontColor(clinicDispensedQty > 0 ? "#0D6963" : "#64748B");
 
                                 if (!string.IsNullOrWhiteSpace(item.Remarks))
                                 {
@@ -584,8 +595,8 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     public byte[] GenerateReferralLetterPdf(
         ReferralLetter referral,
-        ClinicSettings settings,
-        ClinicPatient? patient = null,
+        FacilitySettings settings,
+        Patient? patient = null,
         StaffMember? doctor = null,
         SignatureMode? signatureMode = null)
     {
@@ -624,7 +635,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             patient?.DateOfBirth,
             referral.ReferralDate,
             patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35);
-        var patientGender = patient?.Gender.ToString() ?? "Patient";
+        var patientGender = patient?.Sex.ToString() ?? "Patient";
 
         var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
         var docSignatureBytes = (mode == SignatureMode.ESignatureSpecimen)
@@ -767,7 +778,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     }
 
     public byte[] GenerateReceptionPlacardPdf(
-        ClinicSettings settings,
+        FacilitySettings settings,
         string qrUrl,
         string? joinCode = null,
         string? expiresAtFormatted = null)
@@ -778,8 +789,8 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         var effectiveQrUrl = !string.IsNullOrWhiteSpace(qrUrl)
             ? qrUrl.Trim()
             : (!string.IsNullOrWhiteSpace(effectiveJoinCode)
-                ? $"{_verificationBaseUrl.TrimEnd('/')}/join/{Uri.EscapeDataString(effectiveJoinCode)}"
-                : $"{_verificationBaseUrl.TrimEnd('/')}/join/{settings.TenantSlug ?? settings.TenantId}/{settings.FacilitySlug ?? "main"}");
+                ? PublicRoutes.Join(_verificationBaseUrl, effectiveJoinCode)
+                : PublicRoutes.FacilityJoin(settings.TenantSlug ?? settings.TenantId, settings.FacilitySlug ?? "main", _verificationBaseUrl));
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(effectiveQrUrl, 10);
 
@@ -870,40 +881,114 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     public byte[] GenerateInvoicePdf(
         Invoice invoice,
-        ClinicSettings settings,
+        FacilitySettings settings,
         StaffMember? doctor = null,
-        ClinicPatient? patient = null,
+        Patient? patient = null,
         string? queueNumber = null)
+    {
+        return BuildBillingDocumentPdf(invoice, settings, doctor, patient, queueNumber, isOfficialReceipt: false);
+    }
+
+    public byte[] GenerateOfficialReceiptPdf(
+        Invoice invoice,
+        PaymentRecord? payment,
+        FacilitySettings settings,
+        StaffMember? doctor = null,
+        Patient? patient = null,
+        string? queueNumber = null)
+    {
+        return BuildBillingDocumentPdf(invoice, settings, doctor, patient, queueNumber, isOfficialReceipt: true, specificPayment: payment);
+    }
+
+    private byte[] BuildBillingDocumentPdf(
+        Invoice invoice,
+        FacilitySettings settings,
+        StaffMember? doctor,
+        Patient? patient,
+        string? queueNumber,
+        bool isOfficialReceipt,
+        PaymentRecord? specificPayment = null)
     {
         var config = MapToTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
 
         var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : (int?)null;
-        var patientGender = patient?.Gender.ToString();
-        var patientIdStr = patient?.PatientCode ?? (invoice.PatientId != Guid.Empty ? invoice.PatientId.ToString().Substring(0, 8) : "N/A");
+        var patientGender = patient?.Sex.ToString();
+        var patientIdStr = patient?.PatientCode ?? (invoice.PatientId.HasValue && invoice.PatientId.Value != Guid.Empty ? invoice.PatientId.Value.ToString("N")[..8] : "N/A");
         var docName = doctor != null
             ? (!string.IsNullOrWhiteSpace(doctor.Title) ? $"{doctor.Title} {doctor.FirstName} {doctor.LastName}" : $"Dr. {doctor.FirstName} {doctor.LastName}")
             : (invoice.LineItems.FirstOrDefault(li => !string.IsNullOrWhiteSpace(li.DoctorName))?.DoctorName ?? "Attending Clinician");
         var doctorPrc = doctor?.PrcLicenseNumber ?? "Registered Clinician";
 
-        var orPayment = invoice.Payments.OrderByDescending(p => p.PaymentDate).FirstOrDefault();
+        var orPayment = specificPayment ?? invoice.Payments.OrderByDescending(p => p.PaymentDate).FirstOrDefault();
         var isPaid = invoice.Status == Domain.Enums.InvoiceStatus.Paid;
-        var statusLabel = isPaid ? "OFFICIAL RECEIPT" : "STATEMENT OF ACCOUNT";
-        var statusBadgeColor = isPaid ? "#16A34A" : primaryColor;
 
+        string statusLabel;
+        string statusBadgeText;
+        string statusBadgeColor;
+        string statusBadgeBg;
+        string refText;
+        string digestDocType;
+        string digestDocNumber;
+        string verifyDocType;
+        string complianceNotice;
         var issuedDateTime = invoice.CreatedAt != default ? invoice.CreatedAt : invoice.InvoiceDate;
+
+        if (isOfficialReceipt)
+        {
+            var orNumber = orPayment?.PaymentNumber ?? invoice.InvoiceNumber;
+            statusLabel = "OFFICIAL RECEIPT";
+            statusBadgeText = "OFFICIAL RECEIPT";
+            statusBadgeColor = "#16A34A";
+            statusBadgeBg = "#F0FDF4";
+            var payDate = orPayment != null ? orPayment.PaymentDate : issuedDateTime;
+            refText = !string.IsNullOrWhiteSpace(orPayment?.PaymentNumber)
+                ? $"Official Receipt: #{orPayment.PaymentNumber} • Invoice Ref: #{invoice.InvoiceNumber} • Issued: {payDate:MMMM dd, yyyy}"
+                : $"Official Receipt Ref: #{invoice.InvoiceNumber} • Issued: {issuedDateTime:MMMM dd, yyyy}";
+            digestDocType = "OFFICIAL-RECEIPT";
+            digestDocNumber = orNumber;
+            verifyDocType = "receipt";
+            complianceNotice = "Official Clinic EZ Official Receipt • BIR Compliant Healthcare Document under RA 8792 & RA 10173";
+        }
+        else
+        {
+            statusLabel = "STATEMENT OF ACCOUNT";
+            statusBadgeText = invoice.Status.ToString().ToUpperInvariant();
+            if (isPaid)
+            {
+                statusBadgeColor = "#16A34A";
+                statusBadgeBg = "#F0FDF4";
+            }
+            else if (invoice.Status == Domain.Enums.InvoiceStatus.PartiallyPaid)
+            {
+                statusBadgeColor = "#D97706";
+                statusBadgeBg = "#FFFBEB";
+            }
+            else
+            {
+                statusBadgeColor = primaryColor;
+                statusBadgeBg = "#F0FDFA";
+            }
+
+            refText = $"Document Ref: #{invoice.InvoiceNumber} • Issued: {invoice.InvoiceDate:MMMM dd, yyyy}";
+            digestDocType = "INVOICE-SOA";
+            digestDocNumber = invoice.InvoiceNumber;
+            verifyDocType = "invoice";
+            complianceNotice = "Official Clinic EZ Statement of Account & Billing Invoice • Valid for healthcare accounting under RA 8792 & RA 10173";
+        }
+
         var digest = _securityService.ComputeDocumentDigest(
             invoice.TenantId ?? settings.TenantId,
-            isPaid ? "OFFICIAL-RECEIPT" : "INVOICE-SOA",
-            invoice.InvoiceNumber,
+            digestDocType,
+            digestDocNumber,
             invoice.PatientId,
             doctorPrc,
             issuedDateTime);
 
         var verifyUrl = _securityService.GenerateVerificationUrl(
             _verificationBaseUrl,
-            isPaid ? "receipt" : "invoice",
-            invoice.InvoiceNumber,
+            verifyDocType,
+            digestDocNumber,
             digest);
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(verifyUrl, 4);
@@ -932,33 +1017,34 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         r.RelativeItem().Column(titleCol =>
                         {
                             titleCol.Item().Text(statusLabel).FontSize(14).Bold().FontColor(statusBadgeColor);
-                            var refText = isPaid && !string.IsNullOrWhiteSpace(orPayment?.PaymentNumber)
-                                ? $"Official Receipt: #{orPayment.PaymentNumber} • Invoice Ref: #{invoice.InvoiceNumber} • Issued: {invoice.InvoiceDate:MMMM dd, yyyy}"
-                                : $"Document Ref: #{invoice.InvoiceNumber} • Issued: {invoice.InvoiceDate:MMMM dd, yyyy}";
                             titleCol.Item().Text(refText).FontSize(8.5f).SemiBold().FontColor("#6B7280");
                         });
 
                         r.ConstantItem(120).AlignRight().Column(badgeCol =>
                         {
-                            badgeCol.Item().Border(1).BorderColor(statusBadgeColor).Background(isPaid ? "#F0FDF4" : "#F0FDFA").PaddingVertical(3).PaddingHorizontal(8).AlignCenter().Text(isPaid ? "OFFICIAL RECEIPT" : invoice.Status.ToString().ToUpperInvariant()).FontSize(9).Bold().FontColor(statusBadgeColor);
+                            badgeCol.Item().Border(1).BorderColor(statusBadgeColor).Background(statusBadgeBg).PaddingVertical(3).PaddingHorizontal(8).AlignCenter().Text(statusBadgeText).FontSize(9).Bold().FontColor(statusBadgeColor);
                         });
                     });
 
                     // Patient & Attending Clinician Summary Box
                     col.Item().PaddingTop(8).Border(1).BorderColor("#E2E8F0").Background("#F8FAFC").Padding(10).Column(demog =>
                     {
+                        var isWalkInRetail = invoice.PatientId == Guid.Empty;
                         demog.Item().Row(r =>
                         {
                             r.RelativeItem().Column(c =>
                             {
                                 c.Item().Text(t =>
                                 {
-                                    t.Span("Patient: ").Bold().FontColor("#0F172A");
-                                    t.Span(invoice.PatientName).FontSize(10.5f).Bold().FontColor("#0F172A");
+                                    t.Span(isWalkInRetail ? "Customer: " : "Patient: ").Bold().FontColor("#0F172A");
+                                    var displayName = !string.IsNullOrWhiteSpace(invoice.PatientName) ? invoice.PatientName : "Walk-In Retail Guest";
+                                    t.Span(displayName).FontSize(10.5f).Bold().FontColor("#0F172A");
                                 });
-                                var demogText = $"ID: {patientIdStr}";
-                                if (patientAge.HasValue) demogText += $" • Age: {patientAge} yrs";
-                                if (!string.IsNullOrWhiteSpace(patientGender)) demogText += $" • Gender: {patientGender}";
+                                var demogText = isWalkInRetail
+                                    ? "Customer Type: Walk-In Retail POS"
+                                    : $"ID: {patientIdStr}";
+                                if (!isWalkInRetail && patientAge.HasValue) demogText += $" • Age: {patientAge} yrs";
+                                if (!isWalkInRetail && !string.IsNullOrWhiteSpace(patientGender)) demogText += $" • Gender: {patientGender}";
                                 if (!string.IsNullOrWhiteSpace(queueNumber)) demogText += $" • Queue: {queueNumber}";
                                 c.Item().PaddingTop(2).Text(demogText).FontSize(8.5f).FontColor("#475569");
 
@@ -970,15 +1056,35 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
                             r.RelativeItem().AlignRight().Column(c =>
                             {
-                                c.Item().Text(t =>
+                                if (isWalkInRetail)
                                 {
-                                    t.Span("Attending: ").SemiBold().FontColor("#475569");
-                                    t.Span(docName).Bold().FontColor("#0F172A");
-                                });
-                                c.Item().PaddingTop(2).Text($"PRC License: {doctorPrc}").FontSize(8.5f).FontColor("#475569");
-                                if (!string.IsNullOrWhiteSpace(invoice.BilledByStaffName))
+                                    var cashierDisplayName = (isOfficialReceipt && orPayment != null && !string.IsNullOrWhiteSpace(orPayment.ReceivedByStaffName))
+                                        ? orPayment.ReceivedByStaffName
+                                        : (!string.IsNullOrWhiteSpace(invoice.BilledByStaffName)
+                                            ? invoice.BilledByStaffName
+                                            : "Cashier Station");
+                                    c.Item().Text(t =>
+                                    {
+                                        t.Span(isOfficialReceipt ? "Received By: " : "Dispensed By: ").SemiBold().FontColor("#475569");
+                                        t.Span(cashierDisplayName).Bold().FontColor("#0F172A");
+                                    });
+                                    c.Item().PaddingTop(2).Text("Station: In-Clinic Cashier POS").FontSize(8.5f).FontColor("#475569");
+                                }
+                                else
                                 {
-                                    c.Item().PaddingTop(2).Text($"Cashier: {invoice.BilledByStaffName}").FontSize(8.5f).FontColor("#64748B");
+                                    c.Item().Text(t =>
+                                    {
+                                        t.Span("Attending: ").SemiBold().FontColor("#475569");
+                                        t.Span(docName).Bold().FontColor("#0F172A");
+                                    });
+                                    c.Item().PaddingTop(2).Text($"PRC License: {doctorPrc}").FontSize(8.5f).FontColor("#475569");
+                                    var cashierDisplayName = (isOfficialReceipt && orPayment != null && !string.IsNullOrWhiteSpace(orPayment.ReceivedByStaffName))
+                                        ? orPayment.ReceivedByStaffName
+                                        : invoice.BilledByStaffName;
+                                    if (!string.IsNullOrWhiteSpace(cashierDisplayName))
+                                    {
+                                        c.Item().PaddingTop(2).Text($"Cashier: {cashierDisplayName}").FontSize(8.5f).FontColor("#64748B");
+                                    }
                                 }
                             });
                         });
@@ -1062,17 +1168,71 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             r.RelativeItem().AlignRight().Text($"₱{invoice.NetAmount:N2}").FontSize(11.5f).Bold().FontColor(primaryColor);
                         });
 
-                        if (invoice.AmountPaid > 0)
+                        if (isOfficialReceipt)
                         {
+                            var payAmount = orPayment?.Amount ?? invoice.AmountPaid;
+                            var payMethod = orPayment?.Method.ToString() ?? "Cash";
+                            var refSuffix = !string.IsNullOrWhiteSpace(orPayment?.ReferenceNumber) ? $" (Ref: {orPayment.ReferenceNumber})" : "";
                             totals.Item().PaddingTop(2).Row(r =>
                             {
-                                var payRecord = invoice.Payments.FirstOrDefault();
-                                var payDesc = payRecord != null ? $"Paid ({payRecord.Method} - OR #{payRecord.PaymentNumber}):" : "Amount Paid:";
-                                r.RelativeItem().Text(payDesc).FontSize(8.5f).SemiBold().FontColor("#16A34A");
-                                r.RelativeItem().AlignRight().Text($"₱{invoice.AmountPaid:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
+                                r.RelativeItem().Text($"Paid ({payMethod}{refSuffix}):").FontSize(8.5f).SemiBold().FontColor("#16A34A");
+                                r.RelativeItem().AlignRight().Text($"₱{payAmount:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
                             });
 
-                            if (invoice.BalanceDue > 0)
+                            totals.Item().PaddingTop(2).Row(r =>
+                            {
+                                var balColor = invoice.BalanceDue > 0 ? "#DC2626" : "#16A34A";
+                                r.RelativeItem().Text("Balance Due:").FontSize(8.5f).Bold().FontColor(balColor);
+                                r.RelativeItem().AlignRight().Text($"₱{invoice.BalanceDue:N2}").FontSize(8.5f).Bold().FontColor(balColor);
+                            });
+                        }
+                        else
+                        {
+                            if (invoice.Payments.Any())
+                            {
+                                foreach (var payRecord in invoice.Payments.OrderBy(p => p.PaymentDate))
+                                {
+                                    totals.Item().PaddingTop(2).Row(r =>
+                                    {
+                                        var refTextPayment = !string.IsNullOrWhiteSpace(payRecord.ReferenceNumber) ? $" (Ref: {payRecord.ReferenceNumber})" : "";
+                                        var payDesc = $"Paid ({payRecord.Method} - OR #{payRecord.PaymentNumber}{refTextPayment}):";
+                                        r.RelativeItem().Text(payDesc).FontSize(8.5f).SemiBold().FontColor("#16A34A");
+                                        r.RelativeItem().AlignRight().Text($"₱{payRecord.Amount:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
+                                    });
+                                }
+
+                                if (invoice.Payments.Count > 1)
+                                {
+                                    totals.Item().PaddingTop(1).Row(r =>
+                                    {
+                                        r.RelativeItem().Text("Total Amount Paid:").FontSize(8.5f).SemiBold().FontColor("#16A34A");
+                                        r.RelativeItem().AlignRight().Text($"₱{invoice.AmountPaid:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
+                                    });
+                                }
+
+                                totals.Item().PaddingTop(2).Row(r =>
+                                {
+                                    var balColor = invoice.BalanceDue > 0 ? "#DC2626" : "#16A34A";
+                                    r.RelativeItem().Text("Balance Due:").FontSize(8.5f).Bold().FontColor(balColor);
+                                    r.RelativeItem().AlignRight().Text($"₱{invoice.BalanceDue:N2}").FontSize(8.5f).Bold().FontColor(balColor);
+                                });
+                            }
+                            else if (invoice.AmountPaid > 0)
+                            {
+                                totals.Item().PaddingTop(2).Row(r =>
+                                {
+                                    r.RelativeItem().Text("Amount Paid:").FontSize(8.5f).SemiBold().FontColor("#16A34A");
+                                    r.RelativeItem().AlignRight().Text($"₱{invoice.AmountPaid:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
+                                });
+
+                                totals.Item().PaddingTop(2).Row(r =>
+                                {
+                                    var balColor = invoice.BalanceDue > 0 ? "#DC2626" : "#16A34A";
+                                    r.RelativeItem().Text("Balance Due:").FontSize(8.5f).Bold().FontColor(balColor);
+                                    r.RelativeItem().AlignRight().Text($"₱{invoice.BalanceDue:N2}").FontSize(8.5f).Bold().FontColor(balColor);
+                                });
+                            }
+                            else
                             {
                                 totals.Item().PaddingTop(2).Row(r =>
                                 {
@@ -1097,13 +1257,13 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         Right = new SignatoryParty
                         {
                             SignatureSpaceHeight = 30,
-                            Name = invoice.BilledByStaffName ?? "Authorized Billing Officer",
-                            Title = "Billing Officer / Cashier",
+                            Name = (isOfficialReceipt && orPayment != null && !string.IsNullOrWhiteSpace(orPayment.ReceivedByStaffName))
+                                ? orPayment.ReceivedByStaffName
+                                : (invoice.BilledByStaffName ?? "Authorized Billing Officer"),
+                            Title = isOfficialReceipt ? "Cashier / Receiving Officer" : "Billing Officer / Cashier",
                             AlignCenter = true
                         },
-                        BottomComplianceNotice = isPaid
-                            ? "Official Clinic EZ Official Receipt • BIR Compliant Healthcare Document under RA 8792 & RA 10173"
-                            : "Official Clinic EZ Statement of Account & Billing Invoice • Valid for healthcare accounting under RA 8792 & RA 10173"
+                        BottomComplianceNotice = complianceNotice
                     });
                 });
 
@@ -1116,9 +1276,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     public byte[] GenerateInvoicePreviewPdf(
         InvoicePreviewRequest preview,
-        ClinicSettings settings,
+        FacilitySettings settings,
         StaffMember? doctor = null,
-        ClinicPatient? patient = null)
+        Patient? patient = null)
     {
         var tempInvoice = new Invoice
         {
@@ -1165,7 +1325,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     // STATUTORY & OPERATIONAL REPORT PDF BUILDERS
     // ==========================================
 
-    public byte[] GenerateDailyEodReportPdf(DailyEodReportDto report, ClinicSettings settings, string? preparedByName = null)
+    public byte[] GenerateDailyEodReportPdf(DailyEodReportDto report, FacilitySettings settings, string? preparedByName = null)
     {
         var config = MapToReportTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -1333,7 +1493,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
-    public byte[] GenerateMorbidityReportPdf(MorbidityReportDto report, ClinicSettings settings, string? preparedByName = null)
+    public byte[] GenerateMorbidityReportPdf(MorbidityReportDto report, FacilitySettings settings, string? preparedByName = null)
     {
         var config = MapToReportTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -1465,7 +1625,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
-    public byte[] GenerateTaxDiscountAuditReportPdf(TaxDiscountAuditReportDto report, ClinicSettings settings, string? preparedByName = null)
+    public byte[] GenerateTaxDiscountAuditReportPdf(TaxDiscountAuditReportDto report, FacilitySettings settings, string? preparedByName = null)
     {
         var config = MapToReportTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -1607,7 +1767,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
-    public byte[] GenerateDoctorSharesReportPdf(DoctorSharesReportDto report, ClinicSettings settings, string? preparedByName = null)
+    public byte[] GenerateDoctorSharesReportPdf(DoctorSharesReportDto report, FacilitySettings settings, string? preparedByName = null)
     {
         var config = MapToReportTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -1751,7 +1911,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
-    public byte[] GenerateClinicAnalyticsPdf(ClinicAnalyticsDto analytics, ClinicSettings settings, string? preparedByName = null)
+    public byte[] GenerateClinicAnalyticsPdf(ClinicAnalyticsDto analytics, FacilitySettings settings, string? preparedByName = null)
     {
         var config = MapToReportTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -2074,6 +2234,466 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
+    public byte[] GenerateClinicCensusReportPdf(ClinicCensusReportDto report, FacilitySettings settings, string? preparedByName = null)
+    {
+        var config = MapToReportTenantConfig(settings);
+        var primaryColor = config.GetSafePrimaryColorHex();
+
+        var issuedAt = DateTime.UtcNow;
+        var docNumber = $"CEN-{report.StartDate:yyyyMMdd}-{report.EndDate:yyyyMMdd}";
+        var (preparedBy, preparedTitle, approverName, approverTitle) = ResolveReportSignatories(
+            settings, "ClinicCensus", "Clinic Nurse / Medical Records Officer", "Medical Director / Supervising Officer", preparedByName);
+        var staffPrc = preparedBy;
+        var digest = _securityService.ComputeDocumentDigest(
+            report.TenantId,
+            "CLINIC-CENSUS",
+            docNumber,
+            null,
+            staffPrc,
+            issuedAt);
+
+        var verifyUrl = _securityService.GenerateVerificationUrl(
+            _verificationBaseUrl,
+            "clinic-census",
+            docNumber,
+            digest);
+
+        var qrBytes = _qrCodeService.GenerateQrCodePng(verifyUrl, 4);
+
+        var doc = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                var pageSize = config.PaperSize switch
+                {
+                    DocumentPaperSize.A4 => PageSizes.A4,
+                    DocumentPaperSize.A5 => PageSizes.A5,
+                    _ => PageSizes.Letter
+                };
+                page.Size(pageSize.Landscape());
+
+                page.Margin(config.PageMarginMm, Unit.Millimetre);
+                page.DefaultTextStyle(x => x.FontFamily("Geist").FontSize(8f).FontColor("#1F2937"));
+
+                page.Header().Component(new TenantLetterheadComponent(config));
+
+                page.Content().PaddingTop(4).Column(col =>
+                {
+                    // Banner
+                    ComposeReportBanner(col, "OFFICIAL OUTPATIENT CLINIC CENSUS REPORT", primaryColor,
+                        $"Reporting Period: {report.StartDate:MMMM dd, yyyy} to {report.EndDate:MMMM dd, yyyy} • Generated: {issuedAt:yyyy-MM-dd HH:mm UTC} • Prepared By: {preparedBy}");
+
+                    // Telemetry KPI Cards
+                    ComposeSectionTitle(col, "OPERATIONAL CENSUS TELEMETRY & ENCOUNTER SUMMARY", primaryColor);
+                    col.Item().Row(row =>
+                    {
+                        ComposeKpiCell(row, "TOTAL CENSUS", report.Summary.TotalCensus.ToString());
+                        ComposeKpiCell(row, "NEW PATIENTS", report.Summary.NewPatients.ToString(), $"Returning: {report.Summary.ReturningPatients}");
+                        ComposeKpiCell(row, "CONSULTATIONS", report.Summary.Consultations.ToString(), report.Summary.VitalsCheckVisits > 0 ? $"Vitals Check: {report.Summary.VitalsCheckVisits}" : null);
+                        ComposeKpiCell(row, "PROCEDURES", Math.Max(report.Summary.StandaloneProcedures, report.Summary.InClinicProceduresCount).ToString());
+                        ComposeKpiCell(row, "SENIOR / PWD", (report.Demographics.SeniorCount + report.Demographics.PwdCount).ToString(), $"PhilHealth: {report.Demographics.PhilHealthCount}");
+                        ComposeKpiCell(row, "URGENT / EMERG", (report.Acuity.UrgentCount + report.Acuity.EmergencyCount).ToString());
+                    });
+
+                    // Demographics & Acuity Summary Grid
+                    col.Item().PaddingTop(4).Border(1).BorderColor("#E2E8F0").Background("#F8FAFC").Padding(4).Row(dRow =>
+                    {
+                        dRow.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("AGE DISTRIBUTION").FontSize(6.5f).SemiBold().FontColor("#64748B");
+                            c.Item().Text($"Pediatric (<18): {report.Demographics.PediatricCount} ({report.Demographics.PediatricPercentage:0.0}%) | Adult (18-59): {report.Demographics.AdultCount} ({report.Demographics.AdultPercentage:0.0}%) | Senior (60+): {report.Demographics.SeniorCount} ({report.Demographics.SeniorPercentage:0.0}%)")
+                                .FontSize(7f).FontColor("#1E293B");
+                        });
+
+                        dRow.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("SEX & SPECIAL CATEGORIES").FontSize(6.5f).SemiBold().FontColor("#64748B");
+                            c.Item().Text($"Male: {report.Demographics.MaleCount} | Female: {report.Demographics.FemaleCount} | PWD: {report.Demographics.PwdCount} | PhilHealth: {report.Demographics.PhilHealthCount}")
+                                .FontSize(7f).FontColor("#1E293B");
+                        });
+
+                        dRow.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("TRIAGE ACUITY").FontSize(6.5f).SemiBold().FontColor("#64748B");
+                            c.Item().Text($"Routine: {report.Acuity.RoutineCount} | Urgent: {report.Acuity.UrgentCount} | Emergency: {report.Acuity.EmergencyCount}")
+                                .FontSize(7f).FontColor("#1E293B");
+                        });
+                    });
+
+                    // Multi-Service Availment Breakdown & Review of Systems (ROS) Breakdown Summary Parity
+                    var serviceBreakdown = ClinicCensusBreakdownResolver.ResolveServiceBreakdown(report);
+                    var rosBreakdown = ClinicCensusBreakdownResolver.ResolveRosBreakdown(report);
+
+                    col.Item().PaddingTop(4).Border(1).BorderColor("#E2E8F0").Background("#F8FAFC").Padding(4).Column(sBox =>
+                    {
+                        sBox.Item().Text("MULTI-SERVICE AVAILMENT BREAKDOWN").FontSize(6.5f).SemiBold().FontColor("#0D6963");
+                        var serviceParts = serviceBreakdown.Select(svc =>
+                        {
+                            if (svc.ServiceName == "Medicine Dispensing")
+                            {
+                                return $"{svc.ServiceName}: {svc.VisitCount} ({report.Summary.TotalDispensedLineItems} items / {report.Summary.TotalDispensedUnits} units)";
+                            }
+                            if (svc.ServiceName is "Prescription" or "Medical Certificate" or "Referral" or "Laboratory Requisition")
+                            {
+                                return svc.TotalVolume != svc.VisitCount && svc.VisitCount > 0
+                                    ? $"{svc.ServiceName}: {svc.TotalVolume} ({svc.VisitCount} visits)"
+                                    : $"{svc.ServiceName}: {svc.TotalVolume}";
+                            }
+                            return $"{svc.ServiceName}: {svc.VisitCount}";
+                        });
+                        sBox.Item().PaddingTop(1).Text(string.Join(" | ", serviceParts)).FontSize(7f).FontColor("#1E293B");
+
+                        sBox.Item().PaddingTop(3).Text("REVIEW OF SYSTEMS (ROS) BREAKDOWN").FontSize(6.5f).SemiBold().FontColor("#0D6963");
+                        var rosText = rosBreakdown.Count > 0
+                            ? string.Join(" | ", rosBreakdown.Select(r =>
+                                r.DispensingCount > 0
+                                    ? $"{r.RosCategory}: {r.VisitCount} ({r.Percentage:0.0}%, {r.DispensingCount} disp.)"
+                                    : $"{r.RosCategory}: {r.VisitCount} ({r.Percentage:0.0}%)"))
+                            : "No Review of Systems (ROS) categories recorded in this reporting period";
+                        sBox.Item().PaddingTop(1).Text(rosText).FontSize(7f).FontColor("#1E293B");
+                    });
+
+                    // Patient Encounter Census Register (Landscape Table: Grouped Visit + Per-Service Sub-Rows)
+                    ComposeSectionTitle(col, "PATIENT ENCOUNTER CENSUS REGISTER", primaryColor);
+                    col.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.ConstantColumn(20);   // 1. #
+                            columns.ConstantColumn(58);   // 2. Ticket, Date & Times
+                            columns.RelativeColumn(1.9f); // 3. Patient & Demographics
+                            columns.RelativeColumn(1.5f); // 4. Service Availed (Dedicated sub-row column)
+                            columns.RelativeColumn(1.6f); // 5. Attending Staff (Per-service performer)
+                            columns.RelativeColumn(2.0f); // 6. Triage & Vitals
+                            columns.RelativeColumn(2.6f); // 7. Doctor Dx & Systems (Blank on non-diagnosis services)
+                            columns.RelativeColumn(2.0f); // 8. Service Details & Outcome
+                            columns.RelativeColumn(1.3f); // 9. Status & Billing
+                        });
+
+                        table.Header(h =>
+                        {
+                            TableHeaderCell(h.Cell(), "#");
+                            TableHeaderCell(h.Cell(), "TICKET / DATE / TIME");
+                            TableHeaderCell(h.Cell(), "PATIENT & DEMOGRAPHICS");
+                            TableHeaderCell(h.Cell(), "SERVICE AVAILED");
+                            TableHeaderCell(h.Cell(), "ATTENDING STAFF");
+                            TableHeaderCell(h.Cell(), "TRIAGE & VITALS");
+                            TableHeaderCell(h.Cell(), "DOCTOR DX & SYSTEMS");
+                            TableHeaderCell(h.Cell(), "SERVICE DETAILS & OUTCOME");
+                            TableHeaderCell(h.Cell(), "STATUS / BILLING");
+                        });
+
+                        if (report.Items.Count == 0)
+                        {
+                            table.Cell().ColumnSpan(9).BorderBottom(0.5f).BorderColor("#E2E8F0").Padding(12).AlignCenter()
+                                .Text("No patient encounters recorded in this reporting period").Italic().FontSize(8.5f).FontColor("#6B7280");
+                        }
+                        else
+                        {
+                            int idx = 0;
+                            foreach (var item in report.Items)
+                            {
+                                var rowBg = (idx++ % 2 == 1) ? "#F8FAFC" : "#FFFFFF";
+                                var additionalSubRows = ClinicCensusBreakdownResolver.ResolveServiceRows(item);
+                                bool hasSubRows = additionalSubRows.Count > 0;
+                                bool isConsultationVisit = ClinicEz.Clinic.Domain.Enums.VisitTypeExtensions.IsPhysicianConsultationString(item.VisitType) || !string.IsNullOrWhiteSpace(item.DoctorDiagnosis);
+
+                                IContainer MainGroupedCell(IContainer c) => c
+                                    .Background(rowBg)
+                                    .BorderBottom(hasSubRows ? 0f : 0.65f)
+                                    .BorderColor("#CBD5E1")
+                                    .PaddingVertical(3f)
+                                    .PaddingHorizontal(3f);
+
+                                IContainer MainServiceCell(IContainer c) => c
+                                    .Background(rowBg)
+                                    .BorderBottom(hasSubRows ? 0.35f : 0.65f)
+                                    .BorderColor(hasSubRows ? "#E2E8F0" : "#CBD5E1")
+                                    .PaddingVertical(3f)
+                                    .PaddingHorizontal(3f);
+
+                                // --- Main Parent Visit Row ---
+                                // 1. Seq #
+                                MainGroupedCell(table.Cell()).AlignCenter().Text(item.SequenceNumber.ToString()).FontSize(7f).FontColor("#64748B");
+
+                                // 2. Ticket, Date & Time
+                                MainGroupedCell(table.Cell()).Column(c =>
+                                {
+                                    c.Item().Text(item.QueueNumber).FontSize(7.5f).Bold().FontColor("#0F172A");
+                                    c.Item().Text(item.CheckInTime.ToString("yyyy-MM-dd")).FontSize(6f).SemiBold().FontColor("#475569");
+                                    c.Item().Text($"In: {item.CheckInTime:HH:mm}").FontSize(6.5f).FontColor("#64748B");
+                                    if (item.CompletedTime.HasValue)
+                                    {
+                                        c.Item().Text($"Out: {item.CompletedTime.Value:HH:mm}").FontSize(6.5f).FontColor("#64748B");
+                                        c.Item().Text($"{item.TurnaroundMinutes ?? 0}m stay").FontSize(6f).SemiBold().FontColor("#0284C7");
+                                    }
+                                });
+
+                                // 3. Patient & Demographics
+                                MainGroupedCell(table.Cell()).Column(c =>
+                                {
+                                    c.Item().Text(item.PatientName).FontSize(7.5f).Bold().FontColor("#0F172A");
+                                    c.Item().Text($"{item.PatientCode} • {item.Age}y/{item.Sex}").FontSize(6.5f).FontColor("#475569");
+                                    c.Item().Text(item.Classification).FontSize(6.5f).SemiBold().FontColor("#0D6963");
+                                    if (!string.IsNullOrWhiteSpace(item.CustomFieldsSummary) && item.CustomFieldsSummary != "None")
+                                    {
+                                        c.Item().Text(item.CustomFieldsSummary).FontSize(6f).Italic().FontColor("#64748B");
+                                    }
+                                });
+
+                                // 4. Primary Service Availed
+                                MainServiceCell(table.Cell()).Column(c =>
+                                {
+                                    var primaryLabel = ClinicCensusBreakdownResolver.ResolvePrimaryServiceLabel(item);
+                                    c.Item().Text(primaryLabel).FontSize(6.5f).Bold().FontColor("#0D6963");
+                                    if (item.CalledTime.HasValue)
+                                    {
+                                        c.Item().Text(item.CalledTime.Value.ToString("HH:mm")).FontSize(6f).FontColor("#64748B");
+                                    }
+                                });
+
+                                // 5. Main Attending Staff (MD & RN)
+                                MainServiceCell(table.Cell()).Column(c =>
+                                {
+                                    var mainDoc = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.AttendingDoctor);
+                                    var mainNurse = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.AttendingNurse);
+                                    c.Item().Text($"MD: {(!string.IsNullOrEmpty(mainDoc) ? mainDoc : "—")}").FontSize(6.5f).SemiBold().FontColor("#1E293B");
+                                    c.Item().Text($"RN: {(!string.IsNullOrEmpty(mainNurse) ? mainNurse : "—")}").FontSize(6.5f).FontColor("#475569");
+                                });
+
+                                // 6. Triage & Vitals
+                                MainServiceCell(table.Cell()).Column(c =>
+                                {
+                                    var mainCc = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.ChiefComplaint);
+                                    var mainNurseAssess = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.NurseAssessment);
+                                    var mainVitals = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.VitalsSnapshot);
+                                    if (!string.IsNullOrEmpty(mainCc))
+                                    {
+                                        c.Item().Text($"CC: {mainCc}").FontSize(6f).FontColor("#334155");
+                                    }
+                                    if (!string.IsNullOrEmpty(mainNurseAssess) && mainNurseAssess != mainCc)
+                                    {
+                                        c.Item().Text(mainNurseAssess).FontSize(6.5f).FontColor("#1E293B");
+                                    }
+                                    if (!string.IsNullOrEmpty(mainVitals))
+                                    {
+                                        c.Item().Text(mainVitals).FontSize(6f).SemiBold().FontColor("#0369A1");
+                                    }
+                                });
+
+                                // 7. Doctor Dx & Systems (Strictly blank when visit has no diagnosis)
+                                MainServiceCell(table.Cell()).Column(c =>
+                                {
+                                    if (isConsultationVisit)
+                                    {
+                                        var mainDx = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.DoctorDiagnosis, "Pending diagnosis");
+                                        var mainAssess = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.ClinicalAssessment);
+                                        var mainSystems = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.SystemsReviewed);
+                                        if (!string.IsNullOrEmpty(mainDx))
+                                        {
+                                            c.Item().Text(mainDx).FontSize(6.5f).Bold().FontColor("#0F172A");
+                                        }
+                                        if (!string.IsNullOrEmpty(mainAssess))
+                                        {
+                                            c.Item().Text(mainAssess).FontSize(6f).FontColor("#475569");
+                                        }
+                                        if (!string.IsNullOrEmpty(mainSystems))
+                                        {
+                                            c.Item().Text(mainSystems).FontSize(6f).FontColor("#334155");
+                                        }
+                                    }
+                                });
+
+                                // 8. Service Details & Outcome
+                                MainServiceCell(table.Cell()).Column(c =>
+                                {
+                                    if (item.VisitType.Equals("StandaloneProcedure", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        var mainProc = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.ProceduresPerformed);
+                                        if (!string.IsNullOrEmpty(mainProc))
+                                        {
+                                            c.Item().Text(mainProc).FontSize(6.5f).SemiBold().FontColor("#4338CA");
+                                        }
+                                    }
+                                    c.Item().Text(item.Disposition).FontSize(6.5f).FontColor("#1E293B");
+                                });
+
+                                // 9. Status & Billing
+                                MainGroupedCell(table.Cell()).Column(c =>
+                                {
+                                    var (acuityColor, acuityBg) = item.Acuity.ToLowerInvariant() switch
+                                    {
+                                        "emergency" => ("#DC2626", "#FEE2E2"),
+                                        "urgent" => ("#D97706", "#FEF3C7"),
+                                        _ => ("#16A34A", "#DCFCE7")
+                                    };
+                                    c.Item().Background(acuityBg).PaddingHorizontal(3).PaddingVertical(1).Text(item.Acuity.ToUpperInvariant()).FontSize(5.5f).Bold().FontColor(acuityColor);
+                                    c.Item().PaddingTop(1).Text(item.BillingStatus).FontSize(6.5f).SemiBold().FontColor("#0F172A");
+                                    var totalVisitBilled = item.NetAmount > 0 ? item.NetAmount : (item.GrossAmount > 0 ? item.GrossAmount : item.TotalServiceFees);
+                                    if (totalVisitBilled > 0)
+                                    {
+                                        c.Item().Text($"Total: ₱{totalVisitBilled:N2}").FontSize(6f).SemiBold().FontColor("#0F172A");
+                                    }
+                                    c.Item().Text($"Paid: ₱{item.AmountPaid:N2}").FontSize(6.5f).FontColor("#475569");
+                                    if (!string.IsNullOrWhiteSpace(item.OfficialReceiptNumber))
+                                    {
+                                        c.Item().Text($"OR: {item.OfficialReceiptNumber}").FontSize(5.5f).FontColor("#64748B");
+                                    }
+                                });
+
+                                // --- Additional Per-Service Sub-Rows (availed on top of the visit) ---
+                                for (int sIdx = 0; sIdx < additionalSubRows.Count; sIdx++)
+                                {
+                                    var sub = additionalSubRows[sIdx];
+                                    bool isLastSub = sIdx == additionalSubRows.Count - 1;
+
+                                    IContainer SubGroupedEmptyCell(IContainer c) => c
+                                        .Background(rowBg)
+                                        .BorderBottom(isLastSub ? 0.65f : 0f)
+                                        .BorderColor("#CBD5E1")
+                                        .PaddingVertical(2f)
+                                        .PaddingHorizontal(3f);
+
+                                    IContainer SubServiceCell(IContainer c) => c
+                                        .Background(rowBg)
+                                        .BorderBottom(isLastSub ? 0.65f : 0.35f)
+                                        .BorderColor(isLastSub ? "#CBD5E1" : "#E2E8F0")
+                                        .PaddingVertical(2.5f)
+                                        .PaddingHorizontal(3f);
+
+                                    // 1-3. Grouped parent columns left blank on sub-rows
+                                    SubGroupedEmptyCell(table.Cell());
+                                    SubGroupedEmptyCell(table.Cell());
+                                    SubGroupedEmptyCell(table.Cell());
+
+                                    // 4. Additional Service Availed
+                                    SubServiceCell(table.Cell()).Column(c =>
+                                    {
+                                        c.Item().Text($"↳ {sub.ServiceName}").FontSize(6.5f).SemiBold().FontColor("#0D6963");
+                                        if (!string.IsNullOrWhiteSpace(sub.ServiceItemName) &&
+                                            !sub.ServiceItemName.Equals(sub.ServiceName, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            c.Item().Text(sub.ServiceItemName).FontSize(6f).Bold().FontColor("#0F172A");
+                                        }
+                                        if (sub.ServiceFee > 0m)
+                                        {
+                                            c.Item().Text($"₱{sub.ServiceFee:N2}").FontSize(5.8f).SemiBold().FontColor("#0369A1");
+                                        }
+                                        if (!string.IsNullOrWhiteSpace(sub.ReferenceNumber))
+                                        {
+                                            c.Item().Text(sub.ReferenceNumber).FontSize(5.8f).SemiBold().FontColor("#475569");
+                                        }
+                                        if (sub.ServiceTime.HasValue)
+                                        {
+                                            c.Item().Text(sub.ServiceTime.Value.ToString("HH:mm")).FontSize(5.8f).FontColor("#64748B");
+                                        }
+                                    });
+
+                                    // 5. Providing Staff for this Service
+                                    SubServiceCell(table.Cell()).Column(c =>
+                                    {
+                                        bool hasDoc = !string.IsNullOrWhiteSpace(sub.AttendingDoctor);
+                                        bool hasNurse = !string.IsNullOrWhiteSpace(sub.AttendingNurse);
+                                        if (hasDoc)
+                                        {
+                                            c.Item().Text($"MD: {sub.AttendingDoctor}").FontSize(6f).SemiBold().FontColor("#1E293B");
+                                        }
+                                        if (hasNurse)
+                                        {
+                                            c.Item().Text($"RN: {sub.AttendingNurse}").FontSize(6f).FontColor("#475569");
+                                        }
+                                        if (!hasDoc && !hasNurse)
+                                        {
+                                            c.Item().Text("—").FontSize(6f).FontColor("#94A3B8");
+                                        }
+                                    });
+
+                                    // 6-7. Triage & Doctor Dx strictly blank on auxiliary service sub-rows
+                                    SubServiceCell(table.Cell());
+                                    SubServiceCell(table.Cell());
+
+                                    // 8. Service Details & Outcome
+                                    SubServiceCell(table.Cell()).Column(c =>
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(sub.ServiceDetails))
+                                        {
+                                            c.Item().Text(sub.ServiceDetails).FontSize(6f).SemiBold().FontColor("#1E293B");
+                                        }
+                                        if (!string.IsNullOrWhiteSpace(sub.Disposition))
+                                        {
+                                            c.Item().Text(sub.Disposition).FontSize(5.8f).FontColor("#475569");
+                                        }
+                                    });
+
+                                    // 9. Grouped billing left blank on sub-rows
+                                    SubGroupedEmptyCell(table.Cell());
+                                }
+                            }
+                        }
+                    });
+
+                    if (report.DispensingLedger is { Count: > 0 })
+                    {
+                        ComposeSectionTitle(col, $"UNIFIED CLINIC MEDICINE & SUPPLY DISPENSING LEDGER ({report.DispensingLedger.Count} ENTRIES)", primaryColor);
+                        col.Item().Table(dTable =>
+                        {
+                            dTable.ColumnsDefinition(columns =>
+                            {
+                                columns.ConstantColumn(58);   // Time / Ticket
+                                columns.RelativeColumn(1.8f); // Patient
+                                columns.RelativeColumn(1.6f); // Source & Visit
+                                columns.RelativeColumn(2.4f); // Item &Qty
+                                columns.RelativeColumn(1.4f); // ROS
+                                columns.RelativeColumn(2.2f); // Directions
+                                columns.RelativeColumn(1.6f); // Staff / Review
+                            });
+
+                            dTable.Header(h =>
+                            {
+                                TableHeaderCell(h.Cell(), "TIME / TICKET");
+                                TableHeaderCell(h.Cell(), "PATIENT");
+                                TableHeaderCell(h.Cell(), "SOURCE");
+                                TableHeaderCell(h.Cell(), "DISPENSED ITEM & QTY");
+                                TableHeaderCell(h.Cell(), "ROS CATEGORY");
+                                TableHeaderCell(h.Cell(), "INSTRUCTIONS");
+                                TableHeaderCell(h.Cell(), "STAFF / MD REVIEW");
+                            });
+
+                            int dIdx = 0;
+                            foreach (var dEntry in report.DispensingLedger)
+                            {
+                                var dBg = (dIdx++ % 2 == 1) ? "#F8FAFC" : "#FFFFFF";
+                                IContainer DCell(IContainer c) => c.Background(dBg).BorderBottom(0.5f).BorderColor("#E2E8F0").PaddingVertical(2.5f).PaddingHorizontal(3f);
+
+                                DCell(dTable.Cell()).Text($"{dEntry.DispensedAt:HH:mm} • {dEntry.QueueNumber}").FontSize(6f).SemiBold().FontColor("#0F172A");
+                                DCell(dTable.Cell()).Text(dEntry.PatientName).FontSize(6.5f).Bold().FontColor("#0F172A");
+                                DCell(dTable.Cell()).Text(dEntry.Source).FontSize(6f).FontColor("#334155");
+                                DCell(dTable.Cell()).Text($"{dEntry.ItemName}{(!string.IsNullOrWhiteSpace(dEntry.DosageOrSpec) ? " " + dEntry.DosageOrSpec : "")} ({dEntry.QuantityDispensed} {dEntry.FormOrUnit})").FontSize(6.5f).SemiBold().FontColor("#0D6963");
+                                DCell(dTable.Cell()).Text(dEntry.RosCategory).FontSize(6f).FontColor("#334155");
+                                DCell(dTable.Cell()).Text(dEntry.DirectionsOrInstructions ?? "—").FontSize(6f).FontColor("#475569");
+                                var revLabel = !dEntry.RequiresDoctorReview
+                                    ? dEntry.DispensedByStaffName
+                                    : $"{dEntry.DispensedByStaffName} • {(dEntry.IsReviewedByDoctor ? "Reviewed" : "Pending MD")}";
+                                DCell(dTable.Cell()).Text(revLabel).FontSize(6f).FontColor("#334155");
+                            }
+                        });
+                    }
+
+                    // Statutory Attestation Note
+                    col.Item().PaddingTop(6).Text("This official outpatient clinic census report is an authentic record of clinical encounters maintained pursuant to DOH Administrative Orders and statutory regulations. All patient entries reflect recorded triage, physician encounters, diagnoses, procedures, and cashier collections.")
+                        .FontSize(6.5f).Italic().FontColor("#64748B");
+
+                    // Sign-off
+                    ComposeSignOffBlock(col, preparedBy, preparedTitle, approverName, approverTitle);
+                });
+
+                page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
+            });
+        });
+
+        return doc.GeneratePdf();
+    }
+
     // ==========================================
     // REPORT STYLING & COMPONENT HELPERS
     // ==========================================
@@ -2110,7 +2730,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     }
 
     private static (string PreparedBy, string PreparedTitle, string ApproverName, string ApproverTitle) ResolveReportSignatories(
-        ClinicSettings settings,
+        FacilitySettings settings,
         string reportKey,
         string defaultPreparedTitle,
         string defaultApproverTitle,
@@ -2208,7 +2828,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     /// then the product default.
     /// Reads the cached workspace profile only (no network), so printing never waits on the portal.
     /// </summary>
-    private string ResolveAccent(ClinicSettings settings)
+    private string ResolveAccent(FacilitySettings settings)
     {
         if (!string.IsNullOrWhiteSpace(settings.LetterheadAccentColorHex))
         {
@@ -2219,7 +2839,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return WorkspaceBrand.ResolveAccent(settings.PrimaryColorHex, workspaceAccent, LegacyDefaultAccent);
     }
 
-    private TenantPrintoutConfig MapToReportTenantConfig(ClinicSettings settings)
+    private TenantPrintoutConfig MapToReportTenantConfig(FacilitySettings settings)
     {
         var config = MapToTenantConfig(settings);
         if (string.IsNullOrWhiteSpace(settings.LetterheadFooter))
@@ -2229,8 +2849,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return config;
     }
 
-    private TenantPrintoutConfig MapToTenantConfig(ClinicSettings settings)
+    private TenantPrintoutConfig MapToTenantConfig(FacilitySettings settings)
     {
+        var workspaceProfile = _workspaceProfiles?.TryGetCached(settings.TenantId.ToString());
         return new TenantPrintoutConfig
         {
             FacilityName = settings.LetterheadHeader ?? settings.ClinicName,
@@ -2248,6 +2869,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 "a5" => DocumentPaperSize.A5,
                 _ => DocumentPaperSize.Letter
             },
+            TimeZoneId = ClinicEz.Clinic.Application.Common.Helpers.ClinicTimeZoneResolver.ResolveEffectiveTimeZoneId(settings, workspaceProfile),
+            DateFormat = ClinicEz.Clinic.Application.Common.Helpers.ClinicTimeZoneResolver.ResolveEffectiveDateFormat(settings, workspaceProfile),
+            TimeFormat = ClinicEz.Clinic.Application.Common.Helpers.ClinicTimeZoneResolver.ResolveEffectiveTimeFormat(settings),
             CustomDisclaimerText = settings.LetterheadFooter ?? "Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173."
         };
     }

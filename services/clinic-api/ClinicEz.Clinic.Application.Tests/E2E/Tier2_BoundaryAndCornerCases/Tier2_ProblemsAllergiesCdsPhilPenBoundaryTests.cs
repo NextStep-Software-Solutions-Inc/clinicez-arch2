@@ -63,8 +63,8 @@ public class Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests
     [Fact]
     public void F22_B5_ProblemList_MultipleProblemsWithSameIcd10_DistinguishedByOnsetDate()
     {
-        var ep1 = new PatientProblemDto(Guid.NewGuid(), _clinicId, _patientId, "J18.9", "Pneumonia", new DateOnly(2021, 3, 1), ProblemStatus.Resolved, new DateOnly(2021, 3, 20), null);
-        var ep2 = new PatientProblemDto(Guid.NewGuid(), _clinicId, _patientId, "J18.9", "Pneumonia recurrent", new DateOnly(2024, 8, 1), ProblemStatus.Active, null, null);
+        var ep1 = new PatientMedicalHistoryDto(Guid.NewGuid(), _clinicId, _patientId, "J18.9", "Pneumonia", new DateOnly(2021, 3, 1), ProblemStatus.Resolved, new DateOnly(2021, 3, 20), null);
+        var ep2 = new PatientMedicalHistoryDto(Guid.NewGuid(), _clinicId, _patientId, "J18.9", "Pneumonia recurrent", new DateOnly(2024, 8, 1), ProblemStatus.Active, null, null);
 
         ep1.Id.Should().NotBe(ep2.Id);
         ep1.Status.Should().NotBe(ep2.Status);
@@ -90,7 +90,7 @@ public class Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests
         };
 
         // Mushroom is a food allergy, should not alert for cephalexin drug cross reactivity
-        var alerts = Cds.EvaluateOrderSafety(new[] { "Cephalexin" }, allergies, new List<PatientProblemDto>());
+        var alerts = Cds.EvaluateOrderSafety(new[] { "Cephalexin" }, allergies, new List<PatientMedicalHistoryDto>());
 
         alerts.Should().BeEmpty();
     }
@@ -103,7 +103,7 @@ public class Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests
             new(Guid.NewGuid(), _clinicId, _patientId, AllergyClassification.Environmental, "Dust Mites", "Sneezing", AllergySeverity.Mild, false)
         };
 
-        var alerts = Cds.EvaluateOrderSafety(new[] { "Amoxicillin", "Ibuprofen" }, allergies, new List<PatientProblemDto>());
+        var alerts = Cds.EvaluateOrderSafety(new[] { "Amoxicillin", "Ibuprofen" }, allergies, new List<PatientMedicalHistoryDto>());
 
         alerts.Should().BeEmpty();
     }
@@ -116,7 +116,7 @@ public class Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests
             new(Guid.NewGuid(), _clinicId, _patientId, AllergyClassification.Drug, "Aspirin", "Anaphylactic shock", AllergySeverity.LifeThreateningAnaphylaxis, true)
         };
 
-        var alerts = Cds.EvaluateOrderSafety(new[] { "Aspirin" }, allergies, new List<PatientProblemDto>());
+        var alerts = Cds.EvaluateOrderSafety(new[] { "Aspirin" }, allergies, new List<PatientMedicalHistoryDto>());
 
         alerts.Should().ContainSingle(a => a.IsHardStop);
     }
@@ -140,7 +140,7 @@ public class Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests
             new(Guid.NewGuid(), _clinicId, _patientId, AllergyClassification.Drug, "Penicillin", "Anaphylaxis", AllergySeverity.LifeThreateningAnaphylaxis, true)
         };
 
-        var problems = new List<PatientProblemDto>
+        var problems = new List<PatientMedicalHistoryDto>
         {
             new(Guid.NewGuid(), _clinicId, _patientId, "K25.0", "Active Peptic Ulcer", new DateOnly(2026, 1, 1), ProblemStatus.Active, null, null)
         };
@@ -161,7 +161,7 @@ public class Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests
             new(Guid.NewGuid(), _clinicId, _patientId, AllergyClassification.Drug, "Penicillin", "Rash", AllergySeverity.Severe, true)
         };
 
-        var alerts = Cds.EvaluateOrderSafety(new List<string>(), allergies, new List<PatientProblemDto>());
+        var alerts = Cds.EvaluateOrderSafety(new List<string>(), allergies, new List<PatientMedicalHistoryDto>());
 
         alerts.Should().BeEmpty();
     }
@@ -174,7 +174,7 @@ public class Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests
             new(Guid.NewGuid(), _clinicId, _patientId, AllergyClassification.Drug, "Penicillin", "Rash", AllergySeverity.Severe, false)
         };
 
-        var problems = new List<PatientProblemDto>
+        var problems = new List<PatientMedicalHistoryDto>
         {
             new(Guid.NewGuid(), _clinicId, _patientId, "I10", "Hypertension", new DateOnly(2020, 1, 1), ProblemStatus.Active, null, null)
         };
@@ -188,7 +188,7 @@ public class Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests
     [Fact]
     public void F24_B4_CdsEvaluator_ResolvedProblem_DoesNotTriggerActiveDdiAlert()
     {
-        var resolvedUlcer = new List<PatientProblemDto>
+        var resolvedUlcer = new List<PatientMedicalHistoryDto>
         {
             new(Guid.NewGuid(), _clinicId, _patientId, "K25.0", "Peptic Ulcer Healed", new DateOnly(2020, 1, 1), ProblemStatus.Resolved, new DateOnly(2020, 4, 1), null)
         };
@@ -207,7 +207,7 @@ public class Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests
             new(Guid.NewGuid(), _clinicId, _patientId, AllergyClassification.Drug, "PENICILLIN", "Hives", AllergySeverity.Severe, true)
         };
 
-        var alerts = Cds.EvaluateOrderSafety(new[] { "penicillin" }, allergies, new List<PatientProblemDto>());
+        var alerts = Cds.EvaluateOrderSafety(new[] { "penicillin" }, allergies, new List<PatientMedicalHistoryDto>());
 
         alerts.Should().ContainSingle(a => a.RuleType == "DrugAllergy");
     }

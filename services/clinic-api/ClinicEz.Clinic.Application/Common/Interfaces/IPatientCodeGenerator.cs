@@ -36,4 +36,10 @@ public interface IPatientCodeGenerator
         int count,
         int? year = null,
         CancellationToken ct = default);
+
+    Task SynchronizeTrackerWithMaxExistingAsync(
+        string tenantId,
+        Guid clinicId,
+        int? year = null,
+        CancellationToken ct = default);
 }

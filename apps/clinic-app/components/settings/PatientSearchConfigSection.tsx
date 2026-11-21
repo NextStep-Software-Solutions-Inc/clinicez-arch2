@@ -101,7 +101,7 @@ export default function PatientSearchConfigSection({
     fullName: 'Penida, Marco',
     dateOfBirth: '1998-05-14',
     age: 28,
-    gender: 'Male',
+    sex: 'Male',
     civilStatus: 'Single',
     contactNumber: '+63 917 123 4567',
     philHealthNumber: '12-345678901-2',
@@ -111,6 +111,8 @@ export default function PatientSearchConfigSection({
     verificationStatus: 'Verified',
     createdAt: new Date().toISOString(),
     customFields: {
+      primary_barangay: 'Brgy. San Antonio',
+      primary_city: 'Pasig City',
       insurance_provider: 'PhilHealth Plus',
       department: 'Corporate Account',
       vip_status: 'Gold Tier',
@@ -118,19 +120,25 @@ export default function PatientSearchConfigSection({
     },
   };
 
+  const savedKeys = parseConfiguredSearchFields(settings?.patientSearchDisplayFieldsJson);
+  const isDirty =
+    Boolean(settings) && JSON.stringify(selectedKeys) !== JSON.stringify(savedKeys);
+
   return (
     <Card>
       <CardHeader
         title="Patient Search Result Display"
         subtitle="Configure which patient demographic and metadata fields appear when searching patients across the clinic workstation"
         rightAction={
-          <Button
-            title="Save Search Fields"
-            variant="primary"
-            size="sm"
-            loading={saving}
-            onPress={handleSaveConfig}
-          />
+          isDirty || saving ? (
+            <Button
+              title="Save Search Fields"
+              variant="primary"
+              size="sm"
+              loading={saving}
+              onPress={handleSaveConfig}
+            />
+          ) : undefined
         }
       />
       <CardContent>

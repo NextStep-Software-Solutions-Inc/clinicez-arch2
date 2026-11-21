@@ -141,7 +141,7 @@ public sealed class SendAppointmentReminderCommandTests
     }
 
     [Fact]
-    public async Task Handle_WhenAppointmentCancelled_ThrowsInvalidOperationException()
+    public async Task Handle_WhenAppointmentCancelled_ThrowsValidationException()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -169,14 +169,14 @@ public sealed class SendAppointmentReminderCommandTests
         Func<Task> act = async () => await handler.Handle(command, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
+        await act.Should().ThrowAsync<ValidationException>()
             .WithMessage("*Cancelled*");
         await dispatcher.DidNotReceive().DispatchAlertAsync(
             Arg.Any<Appointment>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenAppointmentCompleted_ThrowsInvalidOperationException()
+    public async Task Handle_WhenAppointmentCompleted_ThrowsValidationException()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -204,7 +204,7 @@ public sealed class SendAppointmentReminderCommandTests
         Func<Task> act = async () => await handler.Handle(command, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
+        await act.Should().ThrowAsync<ValidationException>()
             .WithMessage("*Completed*");
         await dispatcher.DidNotReceive().DispatchAlertAsync(
             Arg.Any<Appointment>(), Arg.Any<string>(), Arg.Any<CancellationToken>());

@@ -16,13 +16,13 @@ using Xunit;
 
 namespace ClinicEz.Clinic.Application.Tests.Features.Patients;
 
-public class RegisterClinicPatientStructuredAllergiesTests
+public class RegisterPatientStructuredAllergiesTests
 {
     private readonly IClinicContext _clinicContext;
     private readonly Guid _clinicId = Guid.NewGuid();
     private readonly string _tenantId = "tenant_allergy_test";
 
-    public RegisterClinicPatientStructuredAllergiesTests()
+    public RegisterPatientStructuredAllergiesTests()
     {
         _clinicContext = Substitute.For<IClinicContext>();
         _clinicContext.ClinicId.Returns(_clinicId);
@@ -34,7 +34,7 @@ public class RegisterClinicPatientStructuredAllergiesTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var allergyRepo = TestDbHelper.CreateRepository<PatientAllergy>(context, sieve);
 
         var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, allergyRepo);
@@ -45,7 +45,7 @@ public class RegisterClinicPatientStructuredAllergiesTests
             MiddleName: "de los Santos",
             Suffix: null,
             DateOfBirth: new DateOnly(1995, 3, 12),
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: "Single",
             ContactNumber: "09175551234",
             Email: null,
@@ -99,7 +99,7 @@ public class RegisterClinicPatientStructuredAllergiesTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var allergyRepo = TestDbHelper.CreateRepository<PatientAllergy>(context, sieve);
 
         var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, allergyRepo);
@@ -110,7 +110,7 @@ public class RegisterClinicPatientStructuredAllergiesTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1988, 7, 24),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09179998877",
             Email: null,
@@ -149,7 +149,7 @@ public class RegisterClinicPatientStructuredAllergiesTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext);
 
@@ -159,7 +159,7 @@ public class RegisterClinicPatientStructuredAllergiesTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1992, 4, 10),
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: null,
             ContactNumber: "09187776655",
             Email: null,

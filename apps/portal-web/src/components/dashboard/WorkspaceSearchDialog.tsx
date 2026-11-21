@@ -165,7 +165,7 @@ export function getNavigationItems(tenant: string): SearchItem[] {
     {
       id: "nav-yakap",
       title: "PhilHealth YAKAP",
-      subtitle: "Statutory accreditation, PMCC credentials & claims",
+      subtitle: "PhilHealth accreditation, clinic credentials & claims",
       category: "navigation",
       categoryLabel: "Pages & Navigation",
       icon: IconFileCertificate,
@@ -424,6 +424,8 @@ export function getBranchItems(branches: BranchDto[], tenant: string): SearchIte
       ? `PhilHealth Accredited${b.philHealthPmccNumber ? ` (${b.philHealthPmccNumber})` : ""}`
       : undefined;
 
+    const branchUrl = b.id ? `/${tenant}/dashboard/branches/${b.id}` : `/${tenant}/dashboard/branches`;
+
     const branchItem: SearchItem = {
       id: `branch-${b.id || Math.random().toString(36).substring(2, 7)}`,
       title: b.name || "Branch Location",
@@ -433,7 +435,7 @@ export function getBranchItems(branches: BranchDto[], tenant: string): SearchIte
       category: "branches",
       categoryLabel: "Branches & Locations",
       icon: IconBuilding,
-      url: `/${tenant}/dashboard/branches`,
+      url: branchUrl,
       keywords: [
         "branch",
         "branches",
@@ -482,7 +484,7 @@ export function getBranchItems(branches: BranchDto[], tenant: string): SearchIte
           category: "facilities",
           categoryLabel: "Facilities",
           icon: facIcon,
-          url: `/${tenant}/dashboard/branches`,
+          url: branchUrl,
           keywords: [
             "facility",
             rawType,

@@ -1,6 +1,24 @@
-import type { AxiosRequestConfig } from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import { clinicApiClient, clinicApiUrl } from './apiClient';
-import { SyncStatus, type SearchResponseDto, type ApiError } from '@shared/safe';
+import { SyncStatus, ApiError, publicRoutes, type SearchResponseDto, type EhrOptionDescriptor } from '@shared/safe';
+import { getSetting, getPortalBaseUrl } from './runtimeConfig';
+
+function toEvidenceUploadFormData(
+  fileInput: FormData | Blob | { uri: string; name: string; type: string },
+  fileName?: string,
+): FormData {
+  if (typeof FormData !== 'undefined' && fileInput instanceof FormData) {
+    return fileInput;
+  }
+  const formData = new FormData();
+  if (typeof Blob !== 'undefined' && fileInput instanceof Blob) {
+    const resolvedName = fileName || (fileInput as File).name || 'evidence';
+    formData.append('file', fileInput, resolvedName);
+  } else {
+    formData.append('file', fileInput as any);
+  }
+  return formData;
+}
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
 export type QueueStatus =
@@ -12,7 +30,34 @@ export type QueueStatus =
   | 'NoShow'
   | 'PendingProcedure'
   | 'ReEvaluation'
-  | 'OnHold';
+  | 'OnHold'
+  | 'DischargedNonDoctor'
+  | 'Diverted';
+
+export type VisitType =
+  | 'RoutineCheckup'
+  | 'AcuteIllnessConsultation'
+  | 'ChronicDiseaseFollowUp'
+  | 'PreventiveHealthAssessment'
+  | 'UrgentCareVisit';
+
+export function isPhysicianConsultationVisitType(visitType?: string | null): boolean {
+  switch ((visitType || '').trim()) {
+    case 'RoutineCheckup':
+    case 'AcuteIllnessConsultation':
+    case 'ChronicDiseaseFollowUp':
+    case 'UrgentCareVisit':
+    case 'Consultation':
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function isNurseAssessmentVisitType(visitType?: string | null): boolean {
+  const normalized = (visitType || '').trim();
+  return normalized === 'PreventiveHealthAssessment' || normalized === 'VitalsCheckOnly';
+}
 export type QueueView =
   | 'All'
   | 'MyRoom'
@@ -20,7 +65,7 @@ export type QueueView =
   | 'Triage'
   | 'PendingProcedure'
   | 'Completed';
-export type AppointmentStatus = 'Pending' | 'Confirmed' | 'CheckedIn' | 'InConsultation' | 'Completed' | 'Cancelled';
+export type AppointmentStatus = 'Pending' | 'Confirmed' | 'CheckedIn' | 'InConsultation' | 'Completed' | 'Cancelled' | 'NoShow';
 export type StaffRole = 'Doctor' | 'Nurse' | 'Receptionist' | 'Cashier' | 'Admin';
 export type InvoiceStatus = 'Draft' | 'Paid' | 'PartiallyPaid' | 'Voided' | 'Refunded';
 export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'CreditCard' | 'DebitCard' | 'PhilHealthKonsulta' | 'HmoInsurance';
@@ -60,6 +105,24 @@ export interface ClinicRole {
 
 export type SignatureMode = 'ESignatureSpecimen' | 'DigitalSealOnly' | 'WetSignature';
 
+export type StaffAccountStatus = 'Invited' | 'Active' | 'Suspended' | 'Revoked';
+
+export type PlatformVerificationStatus =
+  | 'Unverified'
+  | 'PendingReview'
+  | 'Verified'
+  | 'Rejected'
+  | 'Suspended';
+
+export type PractitionerVerificationLevel =
+  | 'Unverified'
+  | 'PendingVerification'
+  | 'AwaitingConfirmation'
+  | 'Verified'
+  | 'Rejected'
+  | 'Expired'
+  | 'Suspended';
+
 export interface StaffMember {
   id: string;
   tenantId: string;
@@ -85,10 +148,27 @@ export interface StaffMember {
   signatureSpecimen?: string | null;
   defaultSignatureMode?: SignatureMode;
   isActive: boolean;
+  status?: StaffAccountStatus;
+  invitationToken?: string | null;
+  invitationExpiresAt?: string | null;
+  inviteAcceptedAt?: string | null;
+  inviteUrl?: string | null;
+  isExpired?: boolean;
   createdAt: string;
   hasCredentials?: boolean;
   mustChangePassword?: boolean;
   temporaryPassword?: string | null;
+  isDirectoryOptIn?: boolean;
+  prcExpiryDate?: string | null;
+  prcEvidenceObjectKey?: string | null;
+  verificationContact?: string | null;
+  canonicalProviderId?: string | null;
+  publicBio?: string | null;
+  avatarUrl?: string | null;
+  publicVerificationStatus?: PractitionerVerificationLevel;
+  publicVerificationReason?: string | null;
+  affiliatedVerifiedClinicCount?: number;
+  preferencesJson?: string | null;
 }
 
 export interface CreateStaffPayload {
@@ -111,6 +191,28 @@ export interface CreateStaffPayload {
   defaultSignatureMode?: SignatureMode;
   initialPassword?: string;
   sendInviteEmail?: boolean;
+  isDirectoryOptIn?: boolean;
+  prcExpiryDate?: string | null;
+  prcEvidenceObjectKey?: string | null;
+  verificationContact?: string | null;
+  publicBio?: string | null;
+  avatarUrl?: string | null;
+}
+
+export interface PendingSyncMutationOptions {
+  skipPendingVerificationSync?: boolean;
+}
+
+export interface UploadStaffPrcProofOptions extends PendingSyncMutationOptions {
+  stageOnly?: boolean;
+}
+
+export function isVerificationConflictError(err?: ApiError | null): boolean {
+  return Boolean(
+    err &&
+      (err.errorCode === 'verification_request_not_pending' ||
+        (err.status === 409 && !err.errorCode))
+  );
 }
 
 export interface UpdateStaffPayload {
@@ -133,6 +235,13 @@ export interface UpdateStaffPayload {
   signatureSpecimen?: string | null;
   defaultSignatureMode?: SignatureMode;
   isActive?: boolean;
+  isDirectoryOptIn?: boolean;
+  prcExpiryDate?: string | null;
+  prcEvidenceObjectKey?: string | null;
+  verificationContact?: string | null;
+  publicBio?: string | null;
+  avatarUrl?: string | null;
+  skipPendingVerificationSync?: boolean;
 }
 
 export interface UpdateMyProfilePayload {
@@ -148,6 +257,14 @@ export interface UpdateMyProfilePayload {
   specialty?: string;
   signatureSpecimen?: string | null;
   defaultSignatureMode?: SignatureMode;
+  isDirectoryOptIn?: boolean;
+  prcExpiryDate?: string | null;
+  prcEvidenceObjectKey?: string | null;
+  verificationContact?: string | null;
+  publicBio?: string | null;
+  avatarUrl?: string | null;
+  preferencesJson?: string | null;
+  skipPendingVerificationSync?: boolean;
 }
 
 export interface ResetStaffPasswordResult {
@@ -156,6 +273,9 @@ export interface ResetStaffPasswordResult {
   email: string;
   temporaryPassword: string;
   message: string;
+  resetToken?: string | null;
+  resetUrl?: string | null;
+  emailSent?: boolean;
 }
 
 export interface FacilityLimits {
@@ -207,6 +327,18 @@ export interface PatientQueueItem {
   vitalsSummary?: string;
   roomOrStation?: string;
   roomId?: string | null;
+  visitType?: VisitType | string;
+  visitWorkflowMode?: VisitWorkflowMode;
+  dischargeNotes?: string;
+  dischargedAt?: string;
+  dischargedByStaffId?: string;
+  divertedToFacility?: string;
+  transportMode?: string;
+  paramedicOrEscortName?: string;
+  handoverSummary?: string;
+  divertedAt?: string;
+  divertedByStaffId?: string;
+  isDirectVisit?: boolean;
 }
 
 export interface GetQueueParams {
@@ -242,6 +374,93 @@ export interface QueueMetrics {
   completedToday: number;
   totalCheckedIn: number;
   averageWaitTimeMinutes?: number;
+}
+
+export type RosCategoryCode =
+  | 'EssentiallyNormal'
+  | 'General'
+  | 'Dermatologic'
+  | 'Heent'
+  | 'Respiratory'
+  | 'Cardiovascular'
+  | 'Gastrointestinal'
+  | 'Genitourinary'
+  | 'Musculoskeletal'
+  | 'Neurological'
+  | 'PsychiatricNeurodevelopmental'
+  | 'EndocrineMetabolic'
+  | 'HematologicLymphatic'
+  | 'AllergicImmunologic';
+
+export const ROS_CATEGORY_OPTIONS: ReadonlyArray<{ code: RosCategoryCode; label: string; shortLabel: string }> = [
+  { code: 'EssentiallyNormal', label: 'Essentially Normal', shortLabel: 'Essentially Normal' },
+  { code: 'General', label: 'General / Constitutional', shortLabel: 'General' },
+  { code: 'Dermatologic', label: 'Dermatologic', shortLabel: 'Derma' },
+  { code: 'Heent', label: 'HEENT', shortLabel: 'HEENT' },
+  { code: 'Respiratory', label: 'Respiratory', shortLabel: 'Respi' },
+  { code: 'Cardiovascular', label: 'Cardiovascular', shortLabel: 'Cardio' },
+  { code: 'Gastrointestinal', label: 'Gastrointestinal', shortLabel: 'GI' },
+  { code: 'Genitourinary', label: 'Genitourinary / OB-GYN', shortLabel: 'GU / OB-GYN' },
+  { code: 'Musculoskeletal', label: 'Musculoskeletal', shortLabel: 'MSK' },
+  { code: 'Neurological', label: 'Neurological', shortLabel: 'Neuro' },
+  { code: 'PsychiatricNeurodevelopmental', label: 'Psychiatric / Neurodevelopmental', shortLabel: 'Psych' },
+  { code: 'EndocrineMetabolic', label: 'Endocrine / Metabolic', shortLabel: 'Endocrine' },
+  { code: 'HematologicLymphatic', label: 'Hematologic / Lymphatic', shortLabel: 'Heme' },
+  { code: 'AllergicImmunologic', label: 'Allergic / Immunologic', shortLabel: 'Allergy / Immuno' },
+];
+
+export type ClinicDispenseSource = 'DoctorConsultation' | 'NurseVitalsCheck';
+export type ClinicDispenseItemCategory = 'Medicine' | 'MedicalSupply';
+
+export interface TriageDispensedItemInput {
+  id?: string;
+  itemName: string;
+  itemCategory?: ClinicDispenseItemCategory | string;
+  dosageOrSpec?: string;
+  formOrUnit?: string;
+  quantityDispensed: number;
+  directionsOrInstructions?: string;
+  rosCategory?: RosCategoryCode | string;
+  isDoctorReviewed?: boolean;
+  reviewedByDoctorName?: string | null;
+}
+
+export interface ClinicDispensingLogRecord {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  patientId: string;
+  patientName: string;
+  queueItemId: string;
+  queueNumber?: string | null;
+  visitType?: string | null;
+  source: ClinicDispenseSource | string;
+  consultationEncounterId?: string | null;
+  prescriptionItemId?: string | null;
+  patientVitalsId?: string | null;
+  itemName: string;
+  itemCategory: ClinicDispenseItemCategory | string;
+  dosageOrSpec?: string | null;
+  formOrUnit: string;
+  quantityDispensed: number;
+  directionsOrInstructions?: string | null;
+  rosCategory: RosCategoryCode | string;
+  rosCategoryLabel: string;
+  isConsultationValidated: boolean;
+  dispensedByStaffId?: string | null;
+  dispensedByStaffName: string;
+  dispensedByRole: string;
+  dispensedAt: string;
+  chiefComplaint?: string | null;
+  vitalsSummary?: string | null;
+  preAssessmentNotes?: string | null;
+  homeInstructions?: string | null;
+  requiresDoctorReview: boolean;
+  reviewedByDoctorId?: string | null;
+  reviewedByDoctorName?: string | null;
+  reviewedAt?: string | null;
+  doctorReviewNotes?: string | null;
+  interventionFlagged: boolean;
 }
 
 export interface TriageVitals {
@@ -284,6 +503,11 @@ export interface TriageVitals {
   preAssessmentNotes?: string;
   preAssessmentRemarks?: string;
   triageAcuityReason?: string;
+  homeInstructions?: string;
+  rosCategory?: RosCategoryCode | string;
+  rosCategoryLabel?: string;
+  chiefComplaint?: string;
+  dispensedItems?: ClinicDispensingLogRecord[];
 }
 
 export interface EncounterDiagnosis {
@@ -304,12 +528,209 @@ export interface PrescriptionItem {
   durationDays?: number;
   refills: number;
   isDangerousDrug: boolean;
-  remarks?: string;
   philHealthDrugCode?: string;
+  remarks?: string;
+  isClinicDispensed?: boolean;
+  clinicDispensedQuantity?: number;
+  clinicDispensedAt?: string;
+  clinicDispensedBy?: string;
+  rosCategory?: RosCategoryCode | string;
+  rosCategoryLabel?: string;
+}
+
+export type VisitWorkflowMode = 'Regular' | 'YakapAvailment';
+
+export interface PatientAddressDto {
+  id?: string;
+  addressType: 'Permanent' | 'Current' | 'Billing' | string;
+  isSameAsPermanent: boolean;
+  regionPsgc?: string | null;
+  provincePsgc?: string | null;
+  cityMunicipalityPsgc?: string | null;
+  barangayPsgc?: string | null;
+  regionName?: string | null;
+  provinceName?: string | null;
+  cityMunicipalityName?: string | null;
+  barangayName?: string | null;
+  streetAddress: string;
+  zipCode?: string | null;
+}
+
+export interface PatientGuardianDto {
+  id?: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string | null;
+  suffix?: string | null;
+  birthDate?: string | null;
+  sex?: string | null;
+  contactNumber: string;
+  relationshipCode: string;
+  relationshipOtherSpecify?: string | null;
+  philHealthPin?: string | null;
+  isPrimaryGuardian: boolean;
+  isEmergencyContact: boolean;
+}
+
+export interface EncounterReviewOfSystemsItemDto {
+  id?: string;
+  system?: string;
+  optionCode: string;
+  symptomName?: string;
+  isPertinentPositive?: boolean;
+  painSite?: string | null;
+  othersSpecifyText?: string | null;
+  remarks?: string;
+}
+
+export interface PatientPhysicalExamFindingDto {
+  id?: string;
+  system: string;
+  isNormal: boolean;
+  findingTitle: string;
+  optionCode?: string | null;
+  bodySite?: string | null;
+  laterality?: string | null;
+  remarks?: string | null;
+}
+
+export interface PatientPhysicalExamDto {
+  id?: string;
+  generalSurveyId?: string;
+  generalSurveyRemarks?: string;
+  findings: PatientPhysicalExamFindingDto[];
+}
+
+export interface EncounterObGyneExamDto {
+  id?: string;
+  gravidity?: number | null;
+  parity?: number | null;
+  termBirths?: number | null;
+  pretermBirths?: number | null;
+  abortions?: number | null;
+  livingChildren?: number | null;
+  lmp?: string | null;
+  edd?: string | null;
+  gestationalAgeWeeks?: number | null;
+  fundicHeightCm?: number | null;
+  fetalHeartToneBpm?: number | null;
+  fetalPresentation?: string | null;
+  remarks?: string | null;
+}
+
+export interface EncounterPediatricMilestoneDto {
+  id?: string;
+  milestoneVisitAge?: string | null;
+  grossMotorStatus?: string | null;
+  fineMotorStatus?: string | null;
+  languageStatus?: string | null;
+  cognitiveStatus?: string | null;
+  socialEmotionalStatus?: string | null;
+  dangerSigns?: string[];
+  remarks?: string | null;
+}
+
+export interface EncounterAdolescentAssessmentDto {
+  id?: string;
+  tannerStage?: number | null;
+  smrBreastRating?: string | null;
+  smrGenitalRating?: string | null;
+  smrPubicHairRating?: string | null;
+  menarcheAgeYears?: number | null;
+  isSexuallyActive?: boolean;
+  substanceUseNoted?: boolean;
+  depressionScreenPositive?: boolean;
+  remarks?: string | null;
+}
+
+export interface EncounterHeadsssDomainAssessmentDto {
+  id?: string;
+  domain: string;
+  assessmentText: string;
+  hasRedFlags?: boolean;
+  redFlags?: string[];
+}
+
+export interface PatientBpMonitoringLogDto {
+  id?: string;
+  recordedAt: string;
+  systolic: number;
+  diastolic: number;
+  pulseBpm?: number | null;
+  location?: string | null;
+  arm?: 'Left' | 'Right' | string | null;
+  remarks?: string | null;
+}
+
+export interface DraftDiagnosticOrderDto {
+  serviceItemId?: string;
+  code?: string;
+  name: string;
+  category: string;
+  standardPrice: number;
+  philHealthCode?: string;
+  fulfillmentMode: 'in_house' | 'outside';
+  instructions?: string;
+}
+
+export interface DraftProcedureOrderDto {
+  serviceItemId?: string;
+  code?: string;
+  name: string;
+  category: string;
+  standardPrice: number;
+  instructions?: string;
+  roomId?: string;
+  roomName?: string;
+  targetRoomId?: string;
+  targetRoomName?: string;
+  status?: 'draft' | 'sent_to_room' | string;
+  isHandedOff?: boolean;
+  handedOffAt?: string;
+  toothNumber?: number;
+  toothSurface?: string;
+  procedureId?: string;
+}
+
+export interface DraftDentalToothDto {
+  toothNumber: number;
+  status: string;
+  surface?: string | null;
+  notes?: string | null;
+}
+
+export interface ConsultationDraftWorkspaceDto {
+  cdsOverrideReason?: string | null;
+  cdsOverrideConfirmed?: boolean | null;
+  planHasMedicationPrescription?: boolean | null;
+  planHasReferral?: boolean | null;
+  planHasCancerScreening?: boolean | null;
+  planHasFollowUp?: boolean | null;
+  planDiagnosticServicesOption?: 'N' | 'Y' | 'R' | null;
+  medCertFitness?: string | null;
+  medCertRestDays?: string | null;
+  medCertPurpose?: string | null;
+  medCertRemarks?: string | null;
+  refFacility?: string | null;
+  refDepartment?: string | null;
+  refUrgency?: string | null;
+  refReason?: string | null;
+  refSummary?: string | null;
+  rxShowAddForm?: boolean | null;
+  rxDraftGeneric?: string | null;
+  rxDraftDosage?: string | null;
+  rxDraftForm?: string | null;
+  rxDraftSig?: string | null;
+  rxDraftQuantity?: string | null;
+  rxDraftClinicDispensedQty?: string | null;
+  rxDraftDangerous?: boolean | null;
+  rxDraftDrugCode?: string | null;
+  rosCategories?: RosCategoryCode[] | string[] | null;
 }
 
 export interface ConsultationRecord {
   id: string;
+  visitWorkflowMode?: VisitWorkflowMode;
   tenantId: string;
   clinicId: string;
   queueItemId?: string;
@@ -355,6 +776,215 @@ export interface ConsultationRecord {
   rxDispensedPharmacistPrc?: string;
   rxDispensedReceiptNumber?: string;
   rxDispenseNotes?: string;
+  physicalExams?: PatientPhysicalExamDto[];
+  reviewOfSystemsItems?: EncounterReviewOfSystemsItemDto[];
+  obGyneExam?: EncounterObGyneExamDto | null;
+  pediatricMilestones?: EncounterPediatricMilestoneDto[];
+  adolescentAssessment?: EncounterAdolescentAssessmentDto | null;
+  headsssAssessments?: EncounterHeadsssDomainAssessmentDto[];
+  bpMonitoringLogs?: PatientBpMonitoringLogDto[];
+  counselingCodes?: string | null;
+  routineVaccineName?: string | null;
+  routineVaccineDate?: string | null;
+  adultsRoutineScreeningCode?: string | null;
+  pediatricRoutineScreeningCode?: string | null;
+  prenatalScreeningServicesCode?: string | null;
+  cancerScreeningCodes?: string | null;
+  diagnosticServicesOption?: string | null;
+  hasMedicationPrescription?: boolean;
+  hasReferral?: boolean;
+  otherMedicalAdviceSpec?: string | null;
+  hasFollowUp?: boolean;
+  followUpDate?: string | null;
+  followUpScheduleText?: string | null;
+  followUpReason?: string | null;
+  followUpVaccineName?: string | null;
+  followUpVaccineNextDate?: string | null;
+  rosCategory?: RosCategoryCode | string;
+  rosCategoryLabel?: string;
+  rosCategories?: RosCategoryCode[] | string[] | null;
+  createdAt?: string;
+  updatedAt?: string;
+  draftDiagnosticOrders?: DraftDiagnosticOrderDto[] | null;
+  draftProcedures?: DraftProcedureOrderDto[] | null;
+  draftDentalTeeth?: DraftDentalToothDto[] | null;
+  draftWorkspace?: ConsultationDraftWorkspaceDto | null;
+}
+
+// ============================================================================
+// Teleconsultation & Virtual Care DTOs (Milestone 5)
+// ============================================================================
+
+export type TeleconsultPaymentPolicy = 'Prepaid' | 'Postpaid' | 'Exempt';
+export type TeleconsultPaymentStatus = 'Pending' | 'Paid' | 'Exempt' | 'Overridden';
+export type TeleconsultRecordingPolicy = 'Disabled' | 'WorkspaceVaultOnly' | 'Both';
+export type AppointmentType = 'InPerson' | 'Teleconsult';
+
+export interface EmergencyOverrideDto {
+  reasonCode?: string;
+  reasonNote?: string;
+}
+
+export type EmergencyOverrideInput = EmergencyOverrideDto;
+
+export interface AdmitTeleconsultPatientPayload {
+  appointmentId: string;
+  emergencyOverride?: EmergencyOverrideDto | null;
+}
+
+export interface TeleconsultAdmissionResultDto {
+  appointmentId: string;
+  callId: string;
+  roomName: string;
+  admittedAtUtc: string;
+  paymentStatus: TeleconsultPaymentStatus | string;
+  isEmergencyOverride: boolean;
+}
+
+export interface TeleconsultStatusDto {
+  appointmentId: string;
+  patientId: string;
+  patientName: string;
+  doctorId?: string;
+  clinicianName?: string;
+  scheduledAt?: string;
+  scheduledTime?: string;
+  appointmentType?: AppointmentType | string;
+  paymentPolicy: TeleconsultPaymentPolicy | string;
+  paymentStatus: TeleconsultPaymentStatus | string;
+  canAdmit: boolean;
+  hasActiveYakapEnlistment: boolean;
+  callId?: string | null;
+  isEmergencyOverride: boolean;
+  overrideReason?: string | null;
+  emergencyOverrideReasonCode?: string | null;
+  invoiceId?: string | null;
+  recordingPolicy?: 'Disabled' | 'WorkspaceVaultOnly' | 'Both' | string;
+  recordingConsentRequired?: boolean;
+  activeRecordingSessionId?: string | null;
+  isYakapExempt?: boolean;
+  admittedAtUtc?: string | null;
+}
+
+export interface TeleconsultCallJoinDto {
+  appointmentId?: string;
+  callId: string;
+  roomName: string;
+  relayUrl?: string | null;
+  clinicianToken?: string | null;
+  participantIdentity?: string;
+  mediaAvailable?: boolean;
+  mediaStatusMessage?: string | null;
+  recordingPolicy?: TeleconsultRecordingPolicy | string;
+  recordingConsentRequired?: boolean;
+  accessToken?: string | null;
+  token?: string | null;
+  liveKitServerUrl?: string | null;
+  isFallbackToken?: boolean;
+  expiresAtUtc?: string | null;
+}
+
+export interface TeleconsultCallEndResultDto {
+  appointmentId: string;
+  callId: string;
+  roomName: string;
+  endedAtUtc: string;
+  status: string;
+  recordingFinalized?: boolean;
+  wormAuditLogged?: boolean;
+  commsCallStateChangedEnqueued?: boolean;
+}
+
+export interface TeleconsultGuestInviteDto {
+  inviteToken: string;
+  inviteUrl: string;
+  otp: string;
+  expiresAtUtc: string;
+  dobHint?: string | null;
+}
+
+export interface RecordingSessionDto {
+  id: string;
+  tenantId?: string;
+  clinicId?: string;
+  callId: string;
+  appointmentId?: string | null;
+  consultationId?: string | null;
+  patientId?: string;
+  patientName?: string;
+  doctorId?: string;
+  doctorName?: string;
+  status?: 'Recording' | 'Finalized' | 'Purged' | string;
+  consentStatus?: 'none' | 'requested' | 'approved' | 'declined' | 'revoked' | string;
+  recordingState?:
+    | 'Initializing'
+    | 'ReadyToRecord'
+    | 'Recording'
+    | 'Paused'
+    | 'Blocked'
+    | 'Finalizing'
+    | 'Completed'
+    | 'Aborted'
+    | 'Purged'
+    | string;
+  storagePolicy?: string;
+  totalDurationSeconds?: number;
+  durationSeconds?: number;
+  segmentCount?: number;
+  totalSizeBytes?: number;
+  sizeBytes?: number;
+  containerFormat?: string;
+  manifestStorageKey?: string | null;
+  hasGaps?: boolean;
+  retentionPolicyDays?: number;
+  expiresAtUtc?: string | null;
+  isLegalHold?: boolean;
+  hasLegalHold?: boolean;
+  legalHoldReason?: string | null;
+  isPurged?: boolean;
+  createdAt?: string;
+}
+
+export type TeleconsultRecordingSessionDto = RecordingSessionDto;
+
+export interface RecordingSegmentDto {
+  id: string;
+  sessionId: string;
+  segmentIndex: number;
+  durationMs: number;
+  storageKey?: string;
+  sizeBytes?: number;
+  sha256Checksum?: string;
+  receivedAtUtc?: string;
+}
+
+export interface PlaybackTicketDto {
+  ticket: string;
+  expiresAtUtc: string;
+  streamUrl?: string;
+  durationSeconds?: number;
+  sizeBytes?: number;
+  hasLegalHold?: boolean;
+  legalHoldReason?: string;
+}
+
+export type TeleconsultPlaybackTicketDto = PlaybackTicketDto;
+
+export interface RequestRecordingConsentPayload {
+  callId?: string;
+  patientId?: string;
+  doctorId?: string;
+  appointmentId?: string | null;
+  consultationId?: string | null;
+  containerFormat?: string | null;
+  policy?: TeleconsultRecordingPolicy | string;
+}
+
+export interface PatientConsentPayload {
+  approved?: boolean;
+  consented?: boolean;
+  rejectionReason?: string | null;
+  refusalReason?: string | null;
 }
 
 export interface AppointmentItem {
@@ -379,6 +1009,23 @@ export interface AppointmentItem {
   reminder2hSentAt?: string | null;
   lastReminderSentAt?: string | null;
   lastReminderType?: string | null;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+  staffPreSlotNotifiedAt?: string | null;
+  staffOverdueNotifiedAt?: string | null;
+
+  // Teleconsultation properties (Milestone 2 & Milestone 5)
+  appointmentType?: 'InPerson' | 'Teleconsult' | string;
+  isTeleconsult?: boolean;
+  paymentPolicy?: TeleconsultPaymentPolicy | string;
+  paymentStatus?: TeleconsultPaymentStatus | string;
+  invoiceId?: string | null;
+  paidAmount?: number | null;
+  callId?: string | null;
+  admittedAtUtc?: string | null;
+  isEmergencyOverride?: boolean;
+  emergencyOverrideReasonCode?: string | null;
+  hasActiveYakapEnlistment?: boolean;
 }
 
 export interface GetAppointmentsOptions {
@@ -428,6 +1075,9 @@ export interface AvailableSlotItem {
   existingAppointmentId?: string;
   patientName?: string;
   notes?: string;
+  time?: string;
+  available?: boolean;
+  reason?: string;
 }
 
 export interface DoctorAvailabilityData {
@@ -437,6 +1087,7 @@ export interface DoctorAvailabilityData {
   isOnDuty: boolean;
   nonAvailabilityReason?: string;
   slots: AvailableSlotItem[];
+  availableSlots?: AvailableSlotItem[];
 }
 
 export interface DoctorLeaveItem {
@@ -471,6 +1122,7 @@ export interface ClinicServiceItem {
   philHealthCode?: string;
   philHealthDescription?: string;
   isPhilHealthFormulary?: boolean;
+  isNurseOrderable?: boolean;
 }
 
 export interface BulkImportServiceItem {
@@ -482,6 +1134,7 @@ export interface BulkImportServiceItem {
   philHealthCode?: string;
   philHealthDescription?: string;
   isPhilHealthFormulary?: boolean;
+  isNurseOrderable?: boolean;
 }
 
 export interface BulkImportResult {
@@ -523,8 +1176,11 @@ export interface InvoiceRecord {
   clinicId: string;
   invoiceNumber: string;
   invoiceDate: string;
-  patientId: string;
+  patientId?: string;
   patientName: string;
+  isWalkInRetail?: boolean;
+  walkInCustomerName?: string;
+  visitType?: VisitType;
   queueItemId?: string;
   appointmentId?: string;
   consultationId?: string;
@@ -576,6 +1232,7 @@ export interface ClinicalProcedureRecord {
   targetRoomName?: string | null;
   toothNumber?: number | null;
   toothSurface?: string | null;
+  createdBy?: string;
 }
 
 export interface ClinicLabOrderItem {
@@ -619,6 +1276,8 @@ export interface ClinicLabOrderRecord {
   patientId: string;
   patientName: string;
   consultationId?: string;
+  queueItemId?: string;
+  isSigned?: boolean;
   orderedByDoctorId?: string;
   orderedByDoctorName?: string;
   orderDate: string;
@@ -990,6 +1649,878 @@ export interface DoctorSharesReport {
   doctorShares: DoctorWorkloadDetail[];
 }
 
+export interface CensusSummary {
+  totalCensus: number;
+  newPatients: number;
+  returningPatients: number;
+  consultations: number;
+  standaloneProcedures: number;
+  diagnosticsOrLab: number;
+  nonDoctorVisits: number;
+  completedVisits: number;
+  inConsultationOrWaiting: number;
+  divertedVisits: number;
+  cancelledOrNoShow: number;
+  averageTurnaroundMinutes: number;
+  distinctPatientsCount?: number;
+  urgentAcuityCount?: number;
+  emergencyAcuityCount?: number;
+  // Aliases for compatibility
+  consultationCount?: number;
+  procedureCount?: number;
+  vitalsCheckOnlyCount?: number;
+  administrativeCount?: number;
+  pediatricCount?: number;
+  adultCount?: number;
+  seniorCount?: number;
+  pwdCount?: number;
+  philHealthCount?: number;
+  routineCount?: number;
+  urgentCount?: number;
+  emergencyCount?: number;
+  completedCount?: number;
+  divertedCount?: number;
+  noShowCount?: number;
+  cancelledCount?: number;
+  visitsWithMedicineDispensing?: number;
+  totalDispensedLineItems?: number;
+  totalDispensedUnits?: number;
+  prescriptionsIssued?: number;
+  medicalCertificatesIssued?: number;
+  referralsIssued?: number;
+  labRequisitionsIssued?: number;
+  vitalsCheckVisits?: number;
+  inClinicProceduresCount?: number;
+}
+
+export interface CensusServiceBreakdown {
+  serviceName: string;
+  visitCount: number;
+  totalVolume: number;
+  percentage: number;
+}
+
+export interface CensusRosBreakdown {
+  rosCategory: string;
+  visitCount: number;
+  dispensingCount: number;
+  percentage: number;
+}
+
+export interface CensusDemographicsBreakdown {
+  pediatricCount: number;
+  pediatricPercentage?: number;
+  adultCount: number;
+  adultPercentage?: number;
+  seniorCount: number;
+  seniorPercentage?: number;
+  maleCount: number;
+  malePercentage?: number;
+  femaleCount: number;
+  femalePercentage?: number;
+  otherGenderCount?: number;
+  otherGenderPercentage?: number;
+  otherCount?: number;
+  seniorCitizenCount?: number;
+  seniorOscaCount?: number;
+  pwdCount: number;
+  philHealthCount: number;
+}
+
+export interface CensusAcuityBreakdown {
+  routineCount: number;
+  routinePercentage?: number;
+  urgentCount: number;
+  urgentPercentage?: number;
+  emergencyCount: number;
+  emergencyPercentage?: number;
+}
+
+export interface CensusVisitTypeBreakdown {
+  visitType: string;
+  count: number;
+  percentage?: number;
+}
+
+export interface CensusProviderBreakdown {
+  staffId?: string;
+  staffName: string;
+  role: 'Doctor' | 'Nurse' | string;
+  totalEncounters: number;
+  completedEncounters: number;
+}
+
+export interface CensusServiceRow {
+  subRowIndex: number;
+  serviceName: string;
+  serviceItemName?: string | null;
+  serviceFee?: number;
+  serviceTime?: string | null;
+  referenceNumber?: string | null;
+  attendingDoctor?: string | null;
+  attendingNurse?: string | null;
+  chiefComplaint?: string | null;
+  nurseAssessment?: string | null;
+  vitalsSnapshot?: string | null;
+  doctorDiagnosis?: string | null;
+  clinicalAssessment?: string | null;
+  rosCategory?: string | null;
+  systemsReviewed?: string | null;
+  serviceDetails?: string | null;
+  acuity?: string | null;
+  disposition?: string | null;
+}
+
+export interface CensusItem {
+  id?: string;
+  sequenceNumber?: number;
+  queueNumber: string;
+  visitType: string;
+  acuity: 'Routine' | 'Urgent' | 'Emergency' | string;
+  outcomeStatus?: string;
+  checkInTime: string;
+  triageTime?: string | null;
+  calledTime?: string | null;
+  completedTime?: string | null;
+  turnaroundMinutes?: number | null;
+  patientId?: string;
+  patientCode: string;
+  patientName: string;
+  age: number;
+  sex: string;
+  civilStatus?: string | null;
+  classification?: string;
+  classifications?: string[];
+  customFields?: Record<string, any> | string | null;
+  customFieldsSummary?: string;
+  chiefComplaint?: string | null;
+  attendingNurse?: string | null;
+  nurseAssessment?: string | null;
+  nurseImpression?: string | null;
+  vitalsSnapshot?: string | null;
+  attendingDoctor?: string | null;
+  doctorDiagnosis?: string | null;
+  clinicalAssessment?: string | null;
+  systemsReviewed?: string | null;
+  proceduresPerformed?: string | null;
+  disposition?: string | null;
+  billingStatus?: string | null;
+  officialReceiptNumber?: string | null;
+  amountPaid?: number | null;
+  grossAmount?: number;
+  netAmount?: number;
+  balanceDue?: number;
+  isNewPatient?: boolean;
+  servicesAvailed?: string[];
+  servicesAvailedSummary?: string | null;
+  rosCategory?: string | null;
+  dispensedMedicinesSummary?: string | null;
+  prescriptionsCount?: number;
+  medicalCertificatesCount?: number;
+  referralsCount?: number;
+  labRequisitionsCount?: number;
+  serviceRows?: CensusServiceRow[];
+  totalServiceFees?: number;
+  consultationFee?: number;
+  vitalsFee?: number;
+}
+
+const CENSUS_EMPTY_SENTINELS = new Set([
+  '—',
+  '-',
+  'n/a',
+  'n/a - non-doctor visit',
+  'non-doctor visit',
+  'pending diagnosis',
+  'no vitals recorded',
+  'none recorded',
+  'none',
+]);
+
+function normalizeCensusField(value?: string | null): string {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (CENSUS_EMPTY_SENTINELS.has(trimmed.toLowerCase())) return '';
+  return trimmed;
+}
+
+export function mapCensusVisitTypeLabel(visitType?: string | null): string {
+  switch ((visitType || '').trim()) {
+    case 'RoutineCheckup':
+    case 'Routine Checkup':
+      return 'Routine Checkup';
+    case 'AcuteIllnessConsultation':
+    case 'Acute Illness Consultation':
+      return 'Acute Illness Consultation';
+    case 'ChronicDiseaseFollowUp':
+    case 'Chronic Disease Follow-Up':
+      return 'Chronic Disease Follow-Up';
+    case 'PreventiveHealthAssessment':
+    case 'Preventive Health Assessment':
+      return 'Preventive Health Assessment';
+    case 'UrgentCareVisit':
+    case 'Urgent Care Visit':
+      return 'Urgent Care Visit';
+    default:
+      return '';
+  }
+}
+
+export function normalizeCensusDisplayField(value?: string | null): string {
+  return normalizeCensusField(value);
+}
+
+/**
+ * Resolves additional per-service sub-rows availed on top of the parent visit row.
+ * Keeps the parent visit row (with its primary visit purpose, main attending MD & RN,
+ * triage vitals, consultation diagnosis, outcome, and billing) intact, and emits
+ * sub-rows only for additional services availed during that visit, each with its
+ * providing staff and service-specific details.
+ */
+export function resolveCensusVisitServiceRows(
+  item: CensusItem,
+  dispensingLedger?: CensusDispensingLedgerEntry[],
+): CensusServiceRow[] {
+  const primaryService = mapCensusVisitTypeLabel(item.visitType);
+
+  if (item.serviceRows) {
+    return item.serviceRows
+      .filter((row) => row.serviceName.trim().toLowerCase() !== primaryService.toLowerCase() || item.serviceRows!.length > 1 || row.subRowIndex >= 0)
+      .filter((row) => {
+        // Backend ServiceRows already contains only additional services on top of the visit;
+        // guard against any legacy synthetic single-row echo of the primary visit with no extra details.
+        if (
+          item.serviceRows!.length === 1 &&
+          row.serviceName.trim().toLowerCase() === primaryService.toLowerCase() &&
+          !normalizeCensusField(row.referenceNumber) &&
+          !normalizeCensusField(row.serviceDetails)
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .map((row, idx) => ({
+        subRowIndex: row.subRowIndex ?? idx,
+        serviceName: row.serviceName,
+        serviceItemName: normalizeCensusField(row.serviceItemName) || null,
+        serviceFee: typeof row.serviceFee === 'number' ? row.serviceFee : 0,
+        serviceTime: row.serviceTime ?? null,
+        referenceNumber: normalizeCensusField(row.referenceNumber) || null,
+        attendingDoctor: normalizeCensusField(row.attendingDoctor),
+        attendingNurse: normalizeCensusField(row.attendingNurse),
+        chiefComplaint: normalizeCensusField(row.chiefComplaint),
+        nurseAssessment: normalizeCensusField(row.nurseAssessment),
+        vitalsSnapshot: normalizeCensusField(row.vitalsSnapshot),
+        doctorDiagnosis: normalizeCensusField(row.doctorDiagnosis),
+        clinicalAssessment: normalizeCensusField(row.clinicalAssessment),
+        rosCategory: normalizeCensusField(row.rosCategory),
+        systemsReviewed: normalizeCensusField(row.systemsReviewed),
+        serviceDetails: normalizeCensusField(row.serviceDetails),
+        acuity: row.acuity || item.acuity || 'Routine',
+        disposition: normalizeCensusField(row.disposition) || 'Completed',
+      }));
+  }
+
+  const doc = normalizeCensusField(item.attendingDoctor);
+  const nurse = normalizeCensusField(item.attendingNurse);
+  const procs = normalizeCensusField(item.proceduresPerformed);
+  const dispensedSummary = normalizeCensusField(item.dispensedMedicinesSummary);
+
+  const rawServices =
+    item.servicesAvailed && item.servicesAvailed.length > 0 ? [...item.servicesAvailed] : [];
+
+  const matchingLedger = (dispensingLedger || []).filter(
+    (entry) =>
+      (item.id && entry.queueItemId && entry.queueItemId === item.id) ||
+      (entry.queueNumber && entry.queueNumber === item.queueNumber),
+  );
+
+  const resolved: CensusServiceRow[] = [];
+  let nextIdx = 0;
+
+  for (const svc of rawServices) {
+    const norm = svc.trim().toLowerCase();
+    if (norm === primaryService.toLowerCase()) {
+      // Primary visit is already displayed on the main visit row;
+      // only emit extra procedure sub-rows if StandaloneProcedure had multiple comma-separated procedures.
+      if (norm === 'in-clinic procedure' && procs.includes(',')) {
+        const extraProcs = procs
+          .split(',')
+          .map((p) => p.trim())
+          .filter(Boolean)
+          .slice(1);
+        for (const extraProc of extraProcs) {
+          resolved.push({
+            subRowIndex: nextIdx++,
+            serviceName: 'In-Clinic Procedure',
+            serviceTime: item.completedTime || item.calledTime || item.checkInTime,
+            referenceNumber: null,
+            attendingDoctor: '',
+            attendingNurse: nurse,
+            chiefComplaint: '',
+            nurseAssessment: '',
+            vitalsSnapshot: '',
+            doctorDiagnosis: '',
+            clinicalAssessment: '',
+            rosCategory: '',
+            systemsReviewed: '',
+            serviceDetails: extraProc,
+            acuity: item.acuity || 'Routine',
+            disposition: 'Completed',
+          });
+        }
+      }
+      continue;
+    }
+
+    if (norm === 'in-clinic procedure') {
+      const procParts = procs ? procs.split(',').map((p) => p.trim()).filter(Boolean) : [''];
+      for (const procName of procParts) {
+        resolved.push({
+          subRowIndex: nextIdx++,
+          serviceName: 'In-Clinic Procedure',
+          serviceItemName: procName || null,
+          serviceFee: 0,
+          serviceTime: item.calledTime || item.completedTime || item.checkInTime,
+          referenceNumber: null,
+          attendingDoctor: isPhysicianConsultationVisitType(item.visitType) ? doc : '',
+          attendingNurse: nurse,
+          chiefComplaint: '',
+          nurseAssessment: '',
+          vitalsSnapshot: '',
+          doctorDiagnosis: '',
+          clinicalAssessment: '',
+          rosCategory: '',
+          systemsReviewed: '',
+          serviceDetails: procName,
+          acuity: item.acuity || 'Routine',
+          disposition: 'Completed',
+        });
+      }
+      continue;
+    }
+
+    if (norm === 'medicine dispensing') {
+      if (matchingLedger.length > 0) {
+        for (const entry of matchingLedger) {
+          const isDoctorDisp = (entry.dispensedByRole || '').toLowerCase().includes('doctor');
+          const categoryTag = (entry.itemCategory || '').toLowerCase().includes('supply')
+            ? '[Supply]'
+            : '[Medicine]';
+          const detailParts = [
+            `${categoryTag} ${entry.itemName}${entry.dosageOrSpec ? ` ${entry.dosageOrSpec}` : ''} x${entry.quantityDispensed} ${entry.formOrUnit || 'pcs'}`,
+            entry.directionsOrInstructions ? entry.directionsOrInstructions : '',
+          ].filter(Boolean);
+          resolved.push({
+            subRowIndex: nextIdx++,
+            serviceName: 'Medicine Dispensing',
+            serviceItemName: `${entry.itemName}${entry.dosageOrSpec ? ` ${entry.dosageOrSpec}` : ''} (x${entry.quantityDispensed})`,
+            serviceFee: 0,
+            serviceTime: entry.dispensedAt,
+            referenceNumber: null,
+            attendingDoctor: isDoctorDisp
+              ? entry.dispensedByStaffName
+              : entry.reviewedByDoctorName || '',
+            attendingNurse: !isDoctorDisp ? entry.dispensedByStaffName : '',
+            chiefComplaint: '',
+            nurseAssessment: '',
+            vitalsSnapshot: '',
+            doctorDiagnosis: '',
+            clinicalAssessment: '',
+            rosCategory: '',
+            systemsReviewed: '',
+            serviceDetails: detailParts.join(' • '),
+            acuity: item.acuity || 'Routine',
+            disposition: 'Dispensed',
+          });
+        }
+      } else {
+        resolved.push({
+          subRowIndex: nextIdx++,
+          serviceName: 'Medicine Dispensing',
+          serviceItemName: dispensedSummary || null,
+          serviceFee: 0,
+          serviceTime: item.completedTime || item.checkInTime,
+          referenceNumber: null,
+          attendingDoctor: isPhysicianConsultationVisitType(item.visitType) ? doc : '',
+          attendingNurse: !isPhysicianConsultationVisitType(item.visitType) ? nurse : '',
+          chiefComplaint: '',
+          nurseAssessment: '',
+          vitalsSnapshot: '',
+          doctorDiagnosis: '',
+          clinicalAssessment: '',
+          rosCategory: '',
+          systemsReviewed: '',
+          serviceDetails: dispensedSummary ? `Dispensed: ${dispensedSummary}` : '',
+          acuity: item.acuity || 'Routine',
+          disposition: 'Dispensed',
+        });
+      }
+      continue;
+    }
+
+    if (norm === 'prescription') {
+      const rxCount = item.prescriptionsCount || 1;
+      resolved.push({
+        subRowIndex: nextIdx++,
+        serviceName: 'Prescription',
+        serviceItemName: `${rxCount} Rx item(s)`,
+        serviceFee: 0,
+        serviceTime: item.completedTime || item.checkInTime,
+        referenceNumber: null,
+        attendingDoctor: doc,
+        attendingNurse: '',
+        chiefComplaint: '',
+        nurseAssessment: '',
+        vitalsSnapshot: '',
+        doctorDiagnosis: '',
+        clinicalAssessment: '',
+        rosCategory: '',
+        systemsReviewed: '',
+        serviceDetails: `${rxCount} signed prescription item(s)`,
+        acuity: item.acuity || 'Routine',
+        disposition: 'Issued',
+      });
+      continue;
+    }
+
+    if (norm === 'medical certificate') {
+      const certCount = Math.max(1, item.medicalCertificatesCount || 1);
+      for (let cIdx = 0; cIdx < certCount; cIdx++) {
+        resolved.push({
+          subRowIndex: nextIdx++,
+          serviceName: 'Medical Certificate',
+          serviceItemName: 'Medical Certificate',
+          serviceFee: 0,
+          serviceTime: item.completedTime || item.checkInTime,
+          referenceNumber: null,
+          attendingDoctor: doc,
+          attendingNurse: '',
+          chiefComplaint: '',
+          nurseAssessment: '',
+          vitalsSnapshot: '',
+          doctorDiagnosis: '',
+          clinicalAssessment: '',
+          rosCategory: '',
+          systemsReviewed: '',
+          serviceDetails: 'Signed Medical Certificate',
+          acuity: item.acuity || 'Routine',
+          disposition: 'Issued',
+        });
+      }
+      continue;
+    }
+
+    if (norm === 'referral') {
+      const refCount = Math.max(1, item.referralsCount || 1);
+      for (let rIdx = 0; rIdx < refCount; rIdx++) {
+        resolved.push({
+          subRowIndex: nextIdx++,
+          serviceName: 'Referral',
+          serviceItemName: 'Clinical Referral',
+          serviceFee: 0,
+          serviceTime: item.completedTime || item.checkInTime,
+          referenceNumber: null,
+          attendingDoctor: doc,
+          attendingNurse: '',
+          chiefComplaint: '',
+          nurseAssessment: '',
+          vitalsSnapshot: '',
+          doctorDiagnosis: '',
+          clinicalAssessment: '',
+          rosCategory: '',
+          systemsReviewed: '',
+          serviceDetails: 'Signed Clinical Referral',
+          acuity: item.acuity || 'Routine',
+          disposition: 'Referred',
+        });
+      }
+      continue;
+    }
+
+    if (norm === 'laboratory requisition') {
+      const labCount = Math.max(1, item.labRequisitionsCount || 1);
+      for (let lIdx = 0; lIdx < labCount; lIdx++) {
+        resolved.push({
+          subRowIndex: nextIdx++,
+          serviceName: 'Laboratory Requisition',
+          serviceItemName: 'Outside Diagnostic Order',
+          serviceFee: 0,
+          serviceTime: item.completedTime || item.checkInTime,
+          referenceNumber: null,
+          attendingDoctor: doc,
+          attendingNurse: '',
+          chiefComplaint: '',
+          nurseAssessment: '',
+          vitalsSnapshot: '',
+          doctorDiagnosis: '',
+          clinicalAssessment: '',
+          rosCategory: '',
+          systemsReviewed: '',
+          serviceDetails: 'Signed Diagnostic Requisition',
+          acuity: item.acuity || 'Routine',
+          disposition: 'Issued',
+        });
+      }
+      continue;
+    }
+
+    resolved.push({
+      subRowIndex: nextIdx++,
+      serviceName: svc,
+      serviceItemName: null,
+      serviceFee: 0,
+      serviceTime: item.calledTime || item.completedTime || item.checkInTime,
+      referenceNumber: null,
+      attendingDoctor: doc,
+      attendingNurse: nurse,
+      chiefComplaint: '',
+      nurseAssessment: '',
+      vitalsSnapshot: '',
+      doctorDiagnosis: '',
+      clinicalAssessment: '',
+      rosCategory: '',
+      systemsReviewed: '',
+      serviceDetails: '',
+      acuity: item.acuity || 'Routine',
+      disposition: 'Completed',
+    });
+  }
+
+  return resolved;
+}
+
+/**
+ * Resolves the complete list of strictly isolated service sub-rows rendered during a visit:
+ * - Isolated "Vitals & Triage" sub-row (RN + CC + Vitals only)
+ * - Isolated "Doctor Consultation" sub-row (MD + Dx + ROS + Consultation Fee only)
+ * - Isolated 1..N "In-Clinic Procedure" sub-rows (each with specific procedure name & fee)
+ * - Isolated 1..N "In-Clinic Diagnostic" sub-rows (each with specific test name & fee)
+ * - Isolated 1 grouped "Diagnostic Order (Outside)" sub-row per outside requisition (₱0.00 clinic fee)
+ * - Isolated "Medicine Dispensing", "Prescription", "Medical Certificate" (with fee), and "Referral" sub-rows
+ */
+export function resolveCensusIsolatedServiceRows(
+  item: CensusItem,
+  dispensingLedger?: CensusDispensingLedgerEntry[],
+): CensusServiceRow[] {
+  const visitTypeLabel = mapCensusVisitTypeLabel(item.visitType);
+  const isConsultationVisit =
+    isPhysicianConsultationVisitType(item.visitType) ||
+    Boolean(normalizeCensusField(item.doctorDiagnosis)) ||
+    (item.consultationFee ?? 0) > 0;
+
+  const mainDoc = normalizeCensusField(item.attendingDoctor);
+  const mainNurse = normalizeCensusField(item.attendingNurse);
+  const mainCc = normalizeCensusField(item.chiefComplaint);
+  const mainImpression = normalizeCensusField(item.nurseImpression || item.nurseAssessment);
+  const mainVitals = normalizeCensusField(item.vitalsSnapshot);
+  const mainDx = isConsultationVisit ? normalizeCensusField(item.doctorDiagnosis) : '';
+  const mainRos = isConsultationVisit ? normalizeCensusField(item.rosCategory) : '';
+  const mainAssessment = isConsultationVisit ? normalizeCensusField(item.clinicalAssessment) : '';
+  const mainSystems = isConsultationVisit ? normalizeCensusField(item.systemsReviewed) : '';
+  const nonConsultRos = !isConsultationVisit ? normalizeCensusField(item.rosCategory) : '';
+  const nonConsultSystems = !isConsultationVisit ? normalizeCensusField(item.systemsReviewed) : '';
+
+  const additionalSubRows = resolveCensusVisitServiceRows(item, dispensingLedger);
+  const isolated: CensusServiceRow[] = [];
+  let rowIndex = 0;
+
+  const hasVitalsOrTriage =
+    Boolean(mainVitals) ||
+    Boolean(item.triageTime) ||
+    Boolean(mainImpression && mainImpression !== mainCc) ||
+    isNurseAssessmentVisitType(item.visitType) ||
+    (Boolean(mainNurse) && !additionalSubRows.some((r) => r.attendingNurse === mainNurse));
+
+  if (hasVitalsOrTriage) {
+    isolated.push({
+      subRowIndex: rowIndex++,
+      serviceName: 'Vitals & Triage',
+      serviceItemName: isNurseAssessmentVisitType(item.visitType)
+        ? 'Preventive Health Triage'
+        : null,
+      serviceFee: item.vitalsFee ?? 0,
+      serviceTime: item.triageTime || item.checkInTime,
+      referenceNumber: null,
+      attendingDoctor: '',
+      attendingNurse: mainNurse,
+      chiefComplaint: mainCc,
+      nurseAssessment: mainImpression,
+      vitalsSnapshot: mainVitals,
+      doctorDiagnosis: '',
+      clinicalAssessment: '',
+      rosCategory: nonConsultRos,
+      systemsReviewed: nonConsultSystems,
+      serviceDetails: '',
+      acuity: item.acuity || 'Routine',
+      disposition: mainVitals ? 'Recorded' : normalizeCensusField(item.disposition) || 'Recorded',
+    });
+  }
+
+  const hasDoctorConsultation =
+    isConsultationVisit &&
+    (Boolean(mainDoc) ||
+      Boolean(mainDx) ||
+      Boolean(mainAssessment) ||
+      Boolean(mainSystems) ||
+      (item.consultationFee ?? 0) > 0 ||
+      additionalSubRows.length === 0);
+
+  if (hasDoctorConsultation) {
+    isolated.push({
+      subRowIndex: rowIndex++,
+      serviceName: 'Doctor Consultation',
+      serviceItemName: visitTypeLabel || null,
+      serviceFee: item.consultationFee ?? 0,
+      serviceTime: item.calledTime || item.completedTime || item.checkInTime,
+      referenceNumber: null,
+      attendingDoctor: mainDoc,
+      attendingNurse: '',
+      chiefComplaint: !hasVitalsOrTriage ? mainCc : '',
+      nurseAssessment: '',
+      vitalsSnapshot: '',
+      doctorDiagnosis: mainDx,
+      clinicalAssessment: mainAssessment,
+      rosCategory: mainRos,
+      systemsReviewed: mainSystems,
+      serviceDetails: '',
+      acuity: item.acuity || 'Routine',
+      disposition: normalizeCensusField(item.disposition) || 'Completed',
+    });
+  }
+
+  for (const sub of additionalSubRows) {
+    if (
+      sub.serviceName === 'Laboratory Requisition' ||
+      sub.serviceName === 'Diagnostic Order (Outside)'
+    ) {
+      const rawItemName = (sub.serviceItemName || '').trim();
+      const isGroupedLabel =
+        !rawItemName ||
+        /^\d+\s+Tests/i.test(rawItemName) ||
+        /^Outside Diagnostic Order$/i.test(rawItemName) ||
+        rawItemName.includes(',');
+
+      if (isGroupedLabel) {
+        const [testsSegment, ...restSegments] = (sub.serviceDetails || '')
+          .split('•')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const parsedTests = (testsSegment || '')
+          .split(',')
+          .map((t) => t.trim())
+          .filter(
+            (t) =>
+              Boolean(t) &&
+              !/^signed diagnostic requisition$/i.test(t) &&
+              !/^diagnostic requisition$/i.test(t),
+          );
+
+        if (parsedTests.length > 0) {
+          for (const testName of parsedTests) {
+            isolated.push({
+              ...sub,
+              subRowIndex: rowIndex++,
+              serviceName: 'Diagnostic Order (Outside)',
+              serviceItemName: testName,
+              serviceDetails: [testName, ...restSegments].filter(Boolean).join(' • '),
+              serviceFee: 0,
+            });
+          }
+          continue;
+        }
+      }
+
+      const cleanedItemName = rawItemName
+        ? rawItemName.replace(/\s*\(Outside\)$/i, '').trim() || null
+        : null;
+
+      isolated.push({
+        ...sub,
+        subRowIndex: rowIndex++,
+        serviceName: 'Diagnostic Order (Outside)',
+        serviceItemName: cleanedItemName,
+        serviceFee: 0,
+      });
+      continue;
+    }
+
+    isolated.push({
+      ...sub,
+      subRowIndex: rowIndex++,
+      serviceName: sub.serviceName,
+      serviceFee: typeof sub.serviceFee === 'number' ? sub.serviceFee : 0,
+    });
+  }
+
+  if (isolated.length === 0) {
+    isolated.push({
+      subRowIndex: 0,
+      serviceName: 'Pending Visit',
+      serviceItemName: visitTypeLabel || null,
+      serviceFee: 0,
+      serviceTime: item.checkInTime,
+      referenceNumber: null,
+      attendingDoctor: mainDoc,
+      attendingNurse: mainNurse,
+      chiefComplaint: mainCc,
+      nurseAssessment: '',
+      vitalsSnapshot: '',
+      doctorDiagnosis: '',
+      clinicalAssessment: '',
+      rosCategory: '',
+      systemsReviewed: '',
+      serviceDetails: '',
+      acuity: item.acuity || 'Routine',
+      disposition: normalizeCensusField(item.disposition) || 'Waiting',
+    });
+  }
+
+  return isolated;
+}
+
+export interface CensusDispensingLedgerEntry {
+  id: string;
+  dispensedAt: string;
+  queueItemId?: string | null;
+  queueNumber?: string | null;
+  patientName: string;
+  visitType?: string | null;
+  source: ClinicDispenseSource | 'Doctor Consultation' | 'Nurse Vitals Check' | string;
+  itemName: string;
+  itemCategory: ClinicDispenseItemCategory | 'Medical Supply' | 'Medicine' | string;
+  dosageOrSpec?: string | null;
+  formOrUnit?: string | null;
+  quantityDispensed: number;
+  directionsOrInstructions?: string | null;
+  rosCategory: RosCategoryCode | string;
+  rosCategoryLabel?: string | null;
+  dispensedByStaffName: string;
+  dispensedByRole: string;
+  requiresDoctorReview?: boolean;
+  isReviewedByDoctor?: boolean;
+  reviewedAt?: string | null;
+  reviewedByDoctorName?: string | null;
+  interventionFlagged?: boolean;
+}
+
+export interface ResolvedCensusLedgerEntryMeta {
+  isDoctorSource: boolean;
+  sourceBadgeLabel: 'Doctor Consultation' | 'Nurse Vitals Check';
+  isMedicalSupply: boolean;
+  categoryBadgeLabel: 'Supply' | 'Medicine';
+  isReviewedByDoctor: boolean;
+  reviewBadgeLabel: string;
+  reviewBadgeVariant: 'success' | 'emergency' | 'warning';
+}
+
+export function resolveCensusLedgerEntryMeta(
+  entry: Pick<
+    CensusDispensingLedgerEntry,
+    | 'source'
+    | 'itemCategory'
+    | 'isReviewedByDoctor'
+    | 'reviewedAt'
+    | 'reviewedByDoctorName'
+    | 'interventionFlagged'
+  >,
+): ResolvedCensusLedgerEntryMeta {
+  const normalizedSource = (entry.source || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+  const isDoctorSource = normalizedSource === 'doctorconsultation' || normalizedSource.startsWith('doctor');
+
+  const normalizedCategory = (entry.itemCategory || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+  const isMedicalSupply =
+    normalizedCategory === 'medicalsupply' || normalizedCategory === 'supply' || normalizedCategory.includes('supply');
+
+  const isReviewedByDoctor = isDoctorSource || Boolean(entry.isReviewedByDoctor) || Boolean(entry.reviewedAt);
+
+  if (isDoctorSource) {
+    return {
+      isDoctorSource: true,
+      sourceBadgeLabel: 'Doctor Consultation',
+      isMedicalSupply,
+      categoryBadgeLabel: isMedicalSupply ? 'Supply' : 'Medicine',
+      isReviewedByDoctor: true,
+      reviewBadgeLabel: 'Signed Consultation',
+      reviewBadgeVariant: 'success',
+    };
+  }
+
+  if (isReviewedByDoctor) {
+    const doctorLabel = entry.reviewedByDoctorName || 'MD';
+    return {
+      isDoctorSource: false,
+      sourceBadgeLabel: 'Nurse Vitals Check',
+      isMedicalSupply,
+      categoryBadgeLabel: isMedicalSupply ? 'Supply' : 'Medicine',
+      isReviewedByDoctor: true,
+      reviewBadgeLabel: entry.interventionFlagged
+        ? `Intervention Flagged (${doctorLabel})`
+        : `Reviewed (${doctorLabel})`,
+      reviewBadgeVariant: entry.interventionFlagged ? 'emergency' : 'success',
+    };
+  }
+
+  return {
+    isDoctorSource: false,
+    sourceBadgeLabel: 'Nurse Vitals Check',
+    isMedicalSupply,
+    categoryBadgeLabel: isMedicalSupply ? 'Supply' : 'Medicine',
+    isReviewedByDoctor: false,
+    reviewBadgeLabel: 'Pending Async MD Review',
+    reviewBadgeVariant: 'warning',
+  };
+}
+
+export interface CensusServiceItemBreakdown {
+  itemName: string;
+  count: number;
+}
+
+export interface ClinicCensusReport {
+  startDate: string;
+  endDate: string;
+  tenantId?: string;
+  clinicId?: string;
+  clinicName?: string | null;
+  facilityName?: string;
+  facilityAddress?: string | null;
+  accreditationNumber?: string | null;
+  generatedAt: string;
+  generatedByStaffName?: string | null;
+  summary: CensusSummary;
+  demographics: CensusDemographicsBreakdown;
+  acuity?: CensusAcuityBreakdown;
+  visitTypes?: CensusVisitTypeBreakdown[];
+  providers?: CensusProviderBreakdown[];
+  items: CensusItem[];
+  dispensingLedger?: CensusDispensingLedgerEntry[];
+  serviceBreakdown?: CensusServiceBreakdown[];
+  rosBreakdown?: CensusRosBreakdown[];
+  pageNumber?: number;
+  pageSize?: number;
+  totalItems?: number;
+  totalPages?: number;
+  hasPreviousPage?: boolean;
+  hasNextPage?: boolean;
+  itemizedProcedures?: CensusServiceItemBreakdown[];
+  itemizedInClinicDiagnostics?: CensusServiceItemBreakdown[];
+  itemizedOutsideDiagnostics?: CensusServiceItemBreakdown[];
+}
+
+export interface CensusFilterOptions {
+  doctorId?: string;
+  nurseId?: string;
+  visitType?: string;
+  tableVisitType?: string;
+  acuity?: string;
+  status?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
 export interface PatientProblemRecord {
   id: string;
   clinicId: string;
@@ -1087,6 +2618,7 @@ export interface PatientPastMedicalHistory {
 export interface PatientMedicalHistoryResponse {
   items: PatientPastMedicalHistory[];
   personalMedicalHistoryNotes?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface MedicalHistoryEntryItem {
@@ -1101,7 +2633,7 @@ export interface MedicalHistoryEntryItem {
 
 export interface SavePatientMedicalHistoriesPayload {
   items: MedicalHistoryEntryItem[];
-  personalMedicalHistoryNotes?: string | null;
+  notes?: string | null;
 }
 
 export interface PatientFamilyHistory {
@@ -1119,6 +2651,7 @@ export interface PatientFamilyHistory {
 export interface PatientFamilyHistoryResponse {
   items: PatientFamilyHistory[];
   familyMedicalHistoryNotes?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface FamilyHistoryEntryItem {
@@ -1132,7 +2665,7 @@ export interface FamilyHistoryEntryItem {
 
 export interface SavePatientFamilyHistoriesPayload {
   items: FamilyHistoryEntryItem[];
-  familyMedicalHistoryNotes?: string | null;
+  notes?: string | null;
 }
 
 export interface PatientSocialHistory {
@@ -1160,6 +2693,7 @@ export interface PatientSocialHistory {
   dietaryHabits?: string;
   remarks?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface UpdatePatientSocialHistoryPayload {
@@ -1209,6 +2743,7 @@ export interface PatientReproductiveHistory {
   receivedFamilyPlanningCounseling: boolean;
   remarks?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface UpdatePatientReproductiveHistoryPayload {
@@ -1370,7 +2905,7 @@ export interface PediatricZScoreResult {
 
 export interface CalculatePediatricZScorePayload {
   dateOfBirth: string;
-  gender: string;
+  sex: string;
   lengthOrHeightCm: number;
   weightKg: number;
   isMeasuredRecumbent?: boolean;
@@ -1381,7 +2916,8 @@ export interface PatientDemographics {
   dob?: string;
   dateOfBirth?: string;
   age: number;
-  gender: string;
+  sex: string;
+  genderIdentity?: string | null;
   civilStatus?: string | null;
   contactNumber: string;
   email?: string | null;
@@ -1425,7 +2961,7 @@ export interface PatientImmunizationRecord {
   doseSequence: number;
   isSeriesCompleted: boolean;
   route: string;
-  injectionSite: string;
+  injectionSite?: string | null;
   administeredAtUtc: string; // ISO
   administeredByStaffId: string;
   administeredByStaffName: string;
@@ -1453,12 +2989,14 @@ export interface AdministerVaccinePayload {
   doseSequence: number;
   isSeriesCompleted: boolean;
   route: string;
-  injectionSite: string;
+  injectionSite?: string | null;
   administeredAtUtc: string; // ISO
   administeredByStaffId: string;
   administeredByStaffName: string;
   administeredByPrcLicense?: string | null;
   remarks?: string | null;
+  queueItemId?: string | null;
+  completeVisit?: boolean;
 }
 
 export interface RecordHistoricalImmunizationPayload {
@@ -1506,6 +3044,11 @@ export interface PatientChart {
   dentalChart?: DentalChart | null;
   dentalTeeth?: DentalToothRecord[];
   dentalProcedures?: ClinicalProcedureRecord[];
+  medicalCertificates?: MedicalCertificateRecord[];
+  referralLetters?: ReferralLetterRecord[];
+  addresses?: PatientAddressDto[];
+  guardians?: PatientGuardianDto[];
+  healthScreenings?: HealthScreeningRecord[];
 }
 
 export type ToothStatus =
@@ -1588,11 +3131,35 @@ export interface BatchSaveDentalChartPayload {
   }[];
 }
 
+export interface PatientDirectoryCounts {
+  all: number;
+  students: number;
+  employees: number;
+  alerts: number;
+  seniorPwd: number;
+  myPatients?: number;
+}
+
+
+export interface PatientActiveQueueTicket {
+  id: string;
+  queueNumber: string;
+  status: QueueStatus | string;
+  visitType: VisitType | string;
+  chiefComplaint?: string | null;
+  doctorId?: string | null;
+  doctorName?: string | null;
+  checkInTime?: string;
+  isDirectVisit?: boolean;
+  roomId?: string | null;
+}
+
 export interface ClinicPatient {
   id: string;
   tenantId: string;
   clinicId: string;
   patientCode: string;
+  clinicEzId?: string | null;
   firstName: string;
   lastName: string;
   middleName?: string;
@@ -1600,7 +3167,8 @@ export interface ClinicPatient {
   fullName: string;
   dateOfBirth: string;
   age: number;
-  gender: string;
+  sex: string;
+  genderIdentity?: string | null;
   civilStatus?: string;
   contactNumber: string;
   email?: string;
@@ -1626,7 +3194,16 @@ export interface ClinicPatient {
   createdAt: string;
   activeQueueTicket?: string | null;
   activeQueueItemId?: string | null;
+  activeQueueTickets?: PatientActiveQueueTicket[] | null;
   pastMedicalHistories?: MedicalHistoryItemPayload[];
+  structuredAllergies?: PatientAllergyRecord[];
+  addresses?: PatientAddressDto[];
+  guardians?: PatientGuardianDto[];
+  regionPsgc?: string | null;
+  provincePsgc?: string | null;
+  cityMunicipalityPsgc?: string | null;
+  barangayPsgc?: string | null;
+  zipCode?: string | null;
 }
 
 export interface DuplicateMatch {
@@ -1677,12 +3254,14 @@ export interface MedicalHistoryItemPayload {
 }
 
 export interface RegisterPatientPayload {
+  patientCode?: string;
   firstName: string;
   lastName: string;
   middleName?: string;
   suffix?: string;
   dateOfBirth: string;
-  gender: string;
+  sex: string;
+  genderIdentity?: string | null;
   civilStatus?: string;
   contactNumber: string;
   email?: string;
@@ -1704,13 +3283,22 @@ export interface RegisterPatientPayload {
   verificationStatus?: string;
   structuredAllergies?: CreateAllergyPayload[];
   medicalHistories?: MedicalHistoryItemPayload[];
+  addresses?: PatientAddressDto[];
+  guardians?: PatientGuardianDto[];
+  regionPsgc?: string | null;
+  provincePsgc?: string | null;
+  cityMunicipalityPsgc?: string | null;
+  barangayPsgc?: string | null;
+  zipCode?: string | null;
   sendToTriage?: boolean;
+  seriesPrefix?: string;
   priority?: 'Routine' | 'Urgent' | 'Emergency' | 'Normal';
   chiefComplaint?: string;
   doctorId?: string;
   doctorName?: string;
   roomId?: string;
   roomOrStation?: string;
+  queueDate?: string;
 }
 
 export interface VisibilityRule {
@@ -1725,6 +3313,8 @@ export interface ConditionalOptionsConfig {
   mapping: Record<string, string[]>;
   defaultOptions?: string[];
 }
+
+export type BoundaryMode = 'pastOrToday' | 'futureOrToday' | 'futureOnly' | 'any';
 
 export interface ClinicCustomFieldDefinition {
   id: string;
@@ -1743,6 +3333,7 @@ export interface ClinicCustomFieldDefinition {
   createdAt?: string;
   visibilityRuleJson?: string;
   conditionalOptionsJson?: string;
+  boundaryMode?: BoundaryMode | null;
 }
 
 export interface MedicalCertificateRecord {
@@ -1753,6 +3344,7 @@ export interface MedicalCertificateRecord {
   patientId: string;
   patientName: string;
   consultationId?: string;
+  queueItemId?: string;
   doctorId: string;
   doctorName: string;
   prcLicenseNumber: string;
@@ -1768,6 +3360,7 @@ export interface MedicalCertificateRecord {
   remarks?: string;
   isSigned: boolean;
   signedAt?: string;
+  securityDigest?: string;
   createdAt: string;
 }
 
@@ -1779,6 +3372,7 @@ export interface ReferralLetterRecord {
   patientId: string;
   patientName: string;
   consultationId?: string;
+  queueItemId?: string;
   referringDoctorId: string;
   referringDoctorName: string;
   referredToDoctor?: string;
@@ -1793,23 +3387,8 @@ export interface ReferralLetterRecord {
   attachedDiagnostics?: string;
   isSigned: boolean;
   signedAt?: string;
+  securityDigest?: string;
   createdAt: string;
-}
-
-export interface DocumentVerificationResult {
-  isVerified: boolean;
-  documentType: string;
-  documentNumber: string;
-  facilityName: string;
-  facilityAddress: string;
-  patientMaskedName: string;
-  doctorName: string;
-  doctorPrcLicense: string;
-  issueDate: string;
-  status: string;
-  securityDigest: string;
-  verificationMessage: string;
-  notes?: string;
 }
 
 export interface ClinicRecordAttachmentRecord {
@@ -1845,6 +3424,7 @@ export interface ClinicPublishingChecks {
   hasLicensedDoctors: boolean;
   hasActiveServices: boolean;
   hasLetterhead: boolean;
+  hasDohLtoOrProof?: boolean;
 }
 
 export interface ClinicPublishingReadiness {
@@ -1854,12 +3434,31 @@ export interface ClinicPublishingReadiness {
   licensedDoctorsCount: number;
   activeServicesCount: number;
   operatingHours?: string | null;
+  platformVerificationStatus?: PlatformVerificationStatus;
+  verificationRejectionReason?: string | null;
+  lastVerificationSubmittedAtUtc?: string | null;
+  letterheadDohLto?: string | null;
+  dohLtoExpiryDate?: string | null;
+  ltoEvidenceObjectKey?: string | null;
+  isOnlineBookingPaused?: boolean;
+  isDirectoryPublished?: boolean;
+  optedInDoctorsCount?: number;
+  optedInDoctorsReadyCount?: number;
+  optedInNursesCount?: number;
+  optedInNursesReadyCount?: number;
+  optedInCliniciansCount?: number;
+  optedInCliniciansReadyCount?: number;
+}
+
+export interface EvidenceProofUploadResult {
+  objectKey: string;
 }
 
 export interface ClinicPublishingResult {
   success: boolean;
   isPublished: boolean;
   message: string;
+  platformVerificationStatus?: PlatformVerificationStatus;
 }
 
 export interface ClinicBookingPauseResult {
@@ -1890,12 +3489,16 @@ export interface ClinicSettingsRecord {
   documentAccentColorHex?: string | null;
   letterheadDohLto?: string;
   dohLicenseToOperate?: string;
+  dohLtoExpiryDate?: string | null;
+  clearDohLtoExpiryDate?: boolean;
+  skipPendingVerificationSync?: boolean;
   paperSize?: 'Letter' | 'A4' | 'A5';
   preferredChartLayout?: 'modal' | 'split' | 'drawer';
   isJoinEnabled?: boolean;
   joinCode?: string | null;
   joinCodeExpiresAt?: string | null;
   clearJoinCode?: boolean;
+  clearJoinCodeExpiresAt?: boolean;
 
   cashierMode?: 'ClinicDesk' | 'CashierCounter';
 
@@ -1903,6 +3506,10 @@ export interface ClinicSettingsRecord {
   isDirectoryPublished?: boolean;
   isOnlineBookingPaused?: boolean;
   isWorkspaceEligible?: boolean;
+  platformVerificationStatus?: PlatformVerificationStatus;
+  verificationRejectionReason?: string | null;
+  lastVerificationSubmittedAtUtc?: string | null;
+  ltoEvidenceObjectKey?: string | null;
 
   patientSearchDisplayFieldsJson?: string | null;
   eodReconciliationTime?: string | null;
@@ -1916,6 +3523,11 @@ export interface ClinicSettingsRecord {
   enableStatVibrationAlert?: boolean;
   tenantSlug?: string;
   facilitySlug?: string;
+  tvDisplayPin?: string | null;
+  clearTvDisplayPin?: boolean;
+  tvDisplaySoundTheme?: 'classicChime' | 'doorbell' | 'marimba' | 'bell' | 'elevator' | 'silent' | string;
+  tvDisplayVoiceEnabled?: boolean;
+  tvDisplayShowPhysicianName?: boolean;
   primaryLogoUrl?: string | null;
   primaryColorHex?: string;
   specialtyMode?: 'Medical' | 'Dental' | 'Multi-Specialty' | 'MultiSpecialty';
@@ -1930,6 +3542,47 @@ export interface ClinicSettingsRecord {
   appointmentReminder24hEnabled?: boolean;
   appointmentReminder2hEnabled?: boolean;
   enableStaffAppointmentNotifications?: boolean;
+  enableStaffMorningDigest?: boolean;
+  enableStaffPreSlotReminders?: boolean;
+  enableStaffOverdueAlerts?: boolean;
+
+  // Regional Timezone, Date & Time Format Overrides (null/undefined = inherit from WorkspaceProfile)
+  timeZoneId?: string | null;
+  dateFormat?: string | null;
+  timeFormat?: '12h' | '24h' | string | null;
+
+  // Branch Baseline & Explicit PhilHealth Override (Milestone 2 Issue #70)
+  pmccNumber?: string | null;
+  softwareCertificateId?: string | null;
+  philHealthBaseUrl?: string | null;
+  isPhilHealthConfigured?: boolean;
+  isPhilHealthOverridden?: boolean;
+  branchId?: string | null;
+  branchName?: string | null;
+  branchPhilHealthAccreditationNumber?: string | null;
+  branchPmccNumber?: string | null;
+  branchSoftwareCertificateId?: string | null;
+  branchPhilHealthBaseUrl?: string | null;
+  isBranchPhilHealthAccredited?: boolean;
+
+  // Teleconsultation Settings (Milestone 1 & Milestone 5)
+  enableTeleconsultation?: boolean;
+  isWorkspaceTeleconsultEntitled?: boolean;
+  teleconsultRecordingPolicy?: TeleconsultRecordingPolicy | string;
+  teleconsultRecordingRetentionDays?: number;
+  teleconsultRecordingConsentRequired?: boolean;
+  teleconsultPaymentPolicy?: TeleconsultPaymentPolicy | string;
+  teleconsultDefaultFee?: number | null;
+
+  // Health Screening & PhilHealth YAKAP FPE Facilitator Settings
+  allowNurseMidwifeYakapFpeFacilitator?: boolean;
+  defaultHealthScreeningServiceItemId?: string | null;
+  defaultHealthScreeningServiceCode?: string | null;
+
+  // Workstation Session Lock & Timeout Policies
+  idleLockMinutes?: number;
+  maxLockedSessionHours?: number;
+  allowStaffPinUnlock?: boolean;
 }
 
 export interface DocumentSignatoryItemConfig {
@@ -2000,6 +3653,10 @@ export interface CheckInRequest {
   chiefComplaint?: string;
   roomOrStation?: string;
   roomId?: string;
+  queueDate?: string;
+  visitType?: VisitType | string;
+  seriesPrefix?: string;
+  allowDuplicateActive?: boolean;
 }
 
 export interface RecordTriageRequest {
@@ -2035,6 +3692,53 @@ export interface RecordTriageRequest {
   preAssessmentNotes?: string;
   preAssessmentRemarks?: string;
   triageAcuityReason?: string;
+  priority?: QueuePriority;
+  homeInstructions?: string;
+  rosCategory?: RosCategoryCode | string;
+  chiefComplaint?: string;
+  dispensedItems?: TriageDispensedItemInput[];
+}
+
+export interface UpdateTriageRequest {
+  nurseId?: string;
+  recordedByNurseName?: string;
+  systolicBp?: number | null;
+  diastolicBp?: number | null;
+  heartRateBpm?: number | null;
+  temperatureCelsius?: number | null;
+  respiratoryRateBreathsPerMin?: number | null;
+  oxygenSaturationPercent?: number | null;
+  heightCm?: number | null;
+  weightKg?: number | null;
+  painScore?: number | null;
+  notes?: string | null;
+  visualAcuityLeft?: string | null;
+  visualAcuityRight?: string | null;
+  headCircumferenceCm?: number | null;
+  midUpperArmCircumferenceCm?: number | null;
+  isMeasuredRecumbent?: boolean | null;
+  zScoreWeightForAge?: number | null;
+  zScoreLengthForAge?: number | null;
+  zScoreWeightForLength?: number | null;
+  philHealthZScoreCategory?: string | null;
+  philHealthZScoreCode?: string | null;
+  growthZScoreCategory?: string | null;
+  growthZScoreCode?: string | null;
+  waistCircumferenceCm?: number | null;
+  hipCircumferenceCm?: number | null;
+  bodyLengthCm?: number | null;
+  skinfoldThicknessMm?: number | null;
+  limbsCircumferenceCm?: number | null;
+  preAssessmentNotes?: string | null;
+  preAssessmentRemarks?: string | null;
+  triageAcuityReason?: string | null;
+  priority?: QueuePriority;
+  clearHeight?: boolean;
+  clearWeight?: boolean;
+  homeInstructions?: string | null;
+  rosCategory?: RosCategoryCode | string | null;
+  chiefComplaint?: string | null;
+  dispensedItems?: TriageDispensedItemInput[];
 }
 
 export interface CreateConsultationRequest {
@@ -2049,6 +3753,7 @@ export interface CreateConsultationRequest {
   assessment?: string;
   plan?: string;
   homeInstructions?: string;
+  rosCategory?: RosCategoryCode | string;
   diagnoses?: Array<{ icd10Code: string; description: string; isPrimary?: boolean }>;
   prescriptions?: Array<{
     genericName: string;
@@ -2062,6 +3767,8 @@ export interface CreateConsultationRequest {
     isDangerousDrug?: boolean;
     remarks?: string;
     philHealthDrugCode?: string;
+    clinicDispensedQuantity?: number;
+    rosCategory?: RosCategoryCode | string;
   }>;
   isYakapEligible?: boolean;
   philHealthSignSympCode?: string;
@@ -2075,11 +3782,46 @@ export interface CreateConsultationRequest {
   generalSurveyId?: string;
   generalSurveyRemarks?: string;
   physicalExamFindingsJson?: string;
+  visitWorkflowMode?: VisitWorkflowMode;
+  physicalExams?: PatientPhysicalExamDto[];
+  reviewOfSystemsItems?: EncounterReviewOfSystemsItemDto[];
+  obGyneExam?: EncounterObGyneExamDto | null;
+  pediatricMilestones?: EncounterPediatricMilestoneDto[];
+  adolescentAssessment?: EncounterAdolescentAssessmentDto | null;
+  headsssAssessments?: EncounterHeadsssDomainAssessmentDto[];
+  bpMonitoringLogs?: PatientBpMonitoringLogDto[];
+  counselingCodes?: string | null;
+  routineVaccineName?: string | null;
+  routineVaccineDate?: string | null;
+  adultsRoutineScreeningCode?: string | null;
+  pediatricRoutineScreeningCode?: string | null;
+  prenatalScreeningServicesCode?: string | null;
+  cancerScreeningCodes?: string | null;
+  diagnosticServicesOption?: string | null;
+  hasMedicationPrescription?: boolean;
+  hasReferral?: boolean;
+  otherMedicalAdviceSpec?: string | null;
+  hasFollowUp?: boolean;
+  followUpDate?: string | null;
+  followUpScheduleText?: string | null;
+  followUpReason?: string | null;
+  followUpVaccineName?: string | null;
+  followUpVaccineNextDate?: string | null;
+  doctorPrcLicense?: string;
+  doctorPtr?: string;
+  doctorS2License?: string;
+  draftDiagnosticOrders?: DraftDiagnosticOrderDto[] | null;
+  draftProcedures?: DraftProcedureOrderDto[] | null;
+  draftDentalTeeth?: DraftDentalToothDto[] | null;
+  draftWorkspace?: ConsultationDraftWorkspaceDto | null;
 }
 
 export interface CreateInvoiceRequest {
-  patientId: string;
-  patientName: string;
+  patientId?: string;
+  patientName?: string;
+  isWalkInRetail?: boolean;
+  walkInCustomerName?: string;
+  visitType?: VisitType;
   queueItemId?: string;
   appointmentId?: string;
   consultationId?: string;
@@ -2195,12 +3937,45 @@ export const clinicService = {
     return clinicApiClient.post<PatientQueueItem>('/queue/check-in', payload);
   },
 
+  async ensureDirectVisit(payload: {
+    patientId: string;
+    patientName: string;
+    doctorId?: string;
+    doctorName?: string;
+    roomOrStation?: string;
+    roomId?: string;
+    visitType?: VisitType | string;
+    visitWorkflowMode?: 'Regular' | 'YakapAvailment';
+    initialStatus?: QueueStatus;
+    chiefComplaint?: string;
+    queueDate?: string;
+    allowDuplicateActive?: boolean;
+  }) {
+    return clinicApiClient.post<PatientQueueItem>('/queue/direct-visit', payload);
+  },
+
   async callQueueItem(id: string, doctorId?: string, doctorName?: string, roomOrStation?: string, roomId?: string) {
     return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/call`, { doctorId, doctorName, roomOrStation, roomId });
   },
 
   async completeQueueItem(id: string) {
     return clinicApiClient.post<boolean>(`/queue/${id}/complete`);
+  },
+
+  async completeNonDoctorVisit(id: string, dischargeRemarks?: string) {
+    return clinicApiClient.post<boolean>(`/queue/${id}/discharge-non-doctor`, { dischargeRemarks });
+  },
+
+  async divertEmergencyPatient(
+    id: string,
+    payload: {
+      destinationHospital: string;
+      transportMode: string;
+      paramedicOrEscortName: string;
+      clinicalHandoverSummary: string;
+    }
+  ) {
+    return clinicApiClient.post<boolean>(`/queue/${id}/divert`, payload);
   },
 
   async markNoShow(id: string) {
@@ -2239,6 +4014,60 @@ export const clinicService = {
     return clinicApiClient.get<TriageVitals>(`/queue/${queueItemId}/triage`);
   },
 
+  async updateTriage(queueItemId: string, payload: UpdateTriageRequest) {
+    return clinicApiClient.put<TriageVitals>(`/queue/${queueItemId}/triage`, payload);
+  },
+
+  async escalateToConsultation(
+    queueItemId: string,
+    payload?: {
+      priority?: QueuePriority;
+      escalationReason?: string;
+      doctorId?: string;
+      doctorName?: string;
+      roomId?: string;
+      roomOrStation?: string;
+    }
+  ) {
+    return clinicApiClient.post<PatientQueueItem>(`/queue/${queueItemId}/escalate-to-consultation`, payload ?? {});
+  },
+
+  // Unified Clinic Dispensing Ledger (Doctor Starter Stock + Nurse OTC / Supply)
+  async getDispensingLogs(params?: {
+    startDate?: string;
+    endDate?: string;
+    source?: ClinicDispenseSource | string;
+    unreviewedOnly?: boolean;
+    patientId?: string;
+    queueItemId?: string;
+    rosCategory?: RosCategoryCode | string;
+    search?: string;
+  }) {
+    const qp = new URLSearchParams();
+    if (params?.startDate) qp.append('startDate', params.startDate);
+    if (params?.endDate) qp.append('endDate', params.endDate);
+    if (params?.source) qp.append('source', params.source);
+    if (typeof params?.unreviewedOnly === 'boolean') qp.append('unreviewedOnly', String(params.unreviewedOnly));
+    if (params?.patientId) qp.append('patientId', params.patientId);
+    if (params?.queueItemId) qp.append('queueItemId', params.queueItemId);
+    if (params?.rosCategory) qp.append('rosCategory', params.rosCategory);
+    if (params?.search) qp.append('search', params.search);
+    const qs = qp.toString();
+    return clinicApiClient.get<ClinicDispensingLogRecord[]>(`/dispensing-logs${qs ? `?${qs}` : ''}`);
+  },
+
+  async reviewDispensingLog(
+    id: string,
+    payload?: {
+      doctorId?: string;
+      doctorName?: string;
+      reviewNotes?: string;
+      interventionFlagged?: boolean;
+    }
+  ) {
+    return clinicApiClient.post<ClinicDispensingLogRecord>(`/dispensing-logs/${id}/review`, payload ?? {});
+  },
+
   // Appointments
   async getAppointments(
     paramsOrDate?: string | GetAppointmentsOptions,
@@ -2262,6 +4091,10 @@ export const clinicService = {
     return clinicApiClient.get<AppointmentItem[]>(`/appointments${qs ? `?${qs}` : ''}`);
   },
 
+  async getAppointment(id: string) {
+    return clinicApiClient.get<AppointmentItem>(`/appointments/${id}`);
+  },
+
   // Doctor EMR (SOAP Consultations)
   async getConsultations(patientId?: string, doctorId?: string, isSigned?: boolean) {
     const params = new URLSearchParams();
@@ -2282,6 +4115,23 @@ export const clinicService = {
 
   async updateConsultation(id: string, payload: Partial<CreateConsultationRequest>) {
     return clinicApiClient.put<ConsultationRecord>(`/consultations/${id}`, payload);
+  },
+
+  flushConsultationDraftKeepalive(
+    consultationId: string | null | undefined,
+    payload: CreateConsultationRequest,
+  ): boolean {
+    if (consultationId) {
+      return clinicApiClient.sendKeepaliveJson('PUT', `/consultations/${consultationId}`, payload);
+    }
+    return clinicApiClient.sendKeepaliveJson('POST', '/consultations', payload);
+  },
+
+  async abandonConsultation(id: string, options?: { reason?: string; cancelVisit?: boolean }) {
+    return clinicApiClient.post<boolean>(`/consultations/${id}/abandon`, {
+      reason: options?.reason,
+      cancelVisit: options?.cancelVisit ?? false,
+    });
   },
 
   async signConsultation(
@@ -2328,6 +4178,11 @@ export const clinicService = {
     return clinicApiClient.post<PrescriptionSlipData>(`/prescriptions/${consultationId}/record-external-dispense`, payload);
   },
 
+  async getOptionSet(optionSet: string): Promise<EhrOptionDescriptor[]> {
+    const { optionsService } = await import('./optionsService');
+    return optionsService.getOptionSet(optionSet);
+  },
+
   getPrescriptionSlipPdfUrl(consultationId: string, options?: { wet?: boolean }) {
     const qs = options?.wet !== undefined ? `?wet=${options.wet ? 'true' : 'false'}` : '';
     return clinicApiUrl(`/prescriptions/${consultationId}/slip-pdf${qs}`);
@@ -2370,6 +4225,11 @@ export const clinicService = {
     return clinicApiUrl(`/billing/invoices/${invoiceId}/pdf`);
   },
 
+  getReceiptPdfUrl(invoiceId: string, paymentId?: string) {
+    const qs = paymentId ? `?paymentId=${paymentId}` : '';
+    return clinicApiUrl(`/billing/invoices/${invoiceId}/receipt-pdf${qs}`);
+  },
+
   async downloadInvoicePreviewPdf(payload: {
     patientId?: string;
     patientName: string;
@@ -2409,8 +4269,14 @@ export const clinicService = {
     philHealthCode?: string;
     philHealthDescription?: string;
     isPhilHealthFormulary?: boolean;
+    skipPendingVerificationSync?: boolean;
   }) {
-    return clinicApiClient.post<ClinicServiceItem>('/services', payload);
+    const { skipPendingVerificationSync, ...rest } = payload;
+    const finalPayload =
+      skipPendingVerificationSync === true
+        ? { ...rest, skipPendingVerificationSync: true }
+        : rest;
+    return clinicApiClient.post<ClinicServiceItem>('/services', finalPayload);
   },
 
   async updateService(id: string, payload: {
@@ -2422,16 +4288,26 @@ export const clinicService = {
     philHealthCode?: string;
     philHealthDescription?: string;
     isPhilHealthFormulary?: boolean;
+    skipPendingVerificationSync?: boolean;
   }) {
-    return clinicApiClient.put<ClinicServiceItem>(`/services/${id}`, payload);
+    const { skipPendingVerificationSync, ...rest } = payload;
+    const finalPayload =
+      skipPendingVerificationSync === true
+        ? { ...rest, skipPendingVerificationSync: true }
+        : rest;
+    return clinicApiClient.put<ClinicServiceItem>(`/services/${id}`, finalPayload);
   },
 
-  async bulkImportServices(items: BulkImportServiceItem[]) {
-    return clinicApiClient.post<BulkImportResult>('/services/bulk-import', { items });
+  async bulkImportServices(items: BulkImportServiceItem[], options?: PendingSyncMutationOptions) {
+    return clinicApiClient.post<BulkImportResult>('/services/bulk-import', {
+      items,
+      ...(options?.skipPendingVerificationSync === true ? { skipPendingVerificationSync: true } : {}),
+    });
   },
 
-  async seedDentalServices() {
-    return clinicApiClient.post<ClinicServiceItem[]>('/services/seed-dental');
+  async seedDentalServices(options?: PendingSyncMutationOptions) {
+    const qs = options?.skipPendingVerificationSync === true ? '?skipPendingVerificationSync=true' : '';
+    return clinicApiClient.post<ClinicServiceItem[]>(`/services/seed-dental${qs}`);
   },
 
   // Procedures & Nursing Station
@@ -2474,16 +4350,27 @@ export const clinicService = {
     siteRoute?: string;
     clinicalNotes?: string;
     complications?: string;
+    requiresDoctorReEvaluation?: boolean;
   }) {
     return clinicApiClient.post<ClinicalProcedureRecord>(`/procedures/${id}/complete`, payload);
   },
 
+  async cancelProcedure(id: string, reason?: string) {
+    return clinicApiClient.post<ClinicalProcedureRecord>(`/procedures/${id}/cancel`, { reason });
+  },
+
   // Lab Orders & Diagnostic Requisitions
-  async getLabOrders(patientId?: string, status?: LabOrderStatus, date?: string) {
+  async getLabOrders(
+    patientId?: string,
+    status?: LabOrderStatus,
+    date?: string,
+    options?: { includeUnsigned?: boolean }
+  ) {
     const params = new URLSearchParams();
     if (patientId) params.append('patientId', patientId);
     if (status) params.append('status', status);
     if (date) params.append('date', date);
+    if (options?.includeUnsigned) params.append('includeUnsigned', 'true');
     const qs = params.toString();
     return clinicApiClient.get<ClinicLabOrderRecord[]>(`/lab-orders${qs ? `?${qs}` : ''}`);
   },
@@ -2496,9 +4383,23 @@ export const clinicService = {
     orderedByDoctorName?: string;
     clinicalDiagnosis?: string;
     notes?: string;
-    items?: Array<{ testName: string; category: string; instructions?: string }>;
+    items?: Array<{
+      testName: string;
+      category: string;
+      instructions?: string;
+      isDoneOutsideFacility?: boolean;
+      diagnosticFee?: number;
+      testCode?: string;
+    }>;
+    targetFacilityId?: string;
+    targetTenantId?: string;
+    queueItemId?: string;
   }) {
     return clinicApiClient.post<ClinicLabOrderRecord>('/lab-orders', payload);
+  },
+
+  async cancelLabOrder(id: string, reason?: string) {
+    return clinicApiClient.post<ClinicLabOrderRecord>(`/lab-orders/${id}/cancel`, { reason });
   },
 
   async getLabOrderSlip(orderId: string) {
@@ -2510,6 +4411,8 @@ export const clinicService = {
     documentType: 'Photo' | 'PDF';
     documentUrl?: string;
     fileBase64?: string;
+    contentType?: string;
+    fileName?: string;
     notes?: string;
     uploadedBy?: string;
   }) {
@@ -2672,6 +4575,57 @@ export const clinicService = {
     return this.getDoctorSharesPdfUrl(startDate, endDate);
   },
 
+  async getCensusReport(startDate?: string, endDate?: string, options?: CensusFilterOptions) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (options?.doctorId) params.append('doctorId', options.doctorId);
+    if (options?.nurseId) params.append('nurseId', options.nurseId);
+    if (options?.visitType) params.append('visitType', options.visitType);
+    if (options?.tableVisitType) params.append('tableVisitType', options.tableVisitType);
+    if (options?.acuity) params.append('acuity', options.acuity);
+    if (options?.status) params.append('status', options.status);
+    if (options?.search) params.append('search', options.search);
+    if (typeof options?.page === 'number') params.append('page', String(options.page));
+    if (typeof options?.pageSize === 'number') params.append('pageSize', String(options.pageSize));
+    const qs = params.toString();
+    return clinicApiClient.get<ClinicCensusReport>(`/reports/census${qs ? `?${qs}` : ''}`);
+  },
+
+  getCensusPdfUrl(startDate?: string, endDate?: string, options?: CensusFilterOptions): string {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (options?.doctorId) params.append('doctorId', options.doctorId);
+    if (options?.nurseId) params.append('nurseId', options.nurseId);
+    if (options?.visitType) params.append('visitType', options.visitType);
+    if (options?.acuity) params.append('acuity', options.acuity);
+    if (options?.status) params.append('status', options.status);
+    const qs = params.toString();
+    return clinicApiUrl(`/reports/census/pdf${qs ? `?${qs}` : ''}`);
+  },
+
+  getCensusReportPdfUrl(startDate?: string, endDate?: string, options?: CensusFilterOptions): string {
+    return this.getCensusPdfUrl(startDate, endDate, options);
+  },
+
+  getCensusExcelUrl(startDate?: string, endDate?: string, options?: CensusFilterOptions): string {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (options?.doctorId) params.append('doctorId', options.doctorId);
+    if (options?.nurseId) params.append('nurseId', options.nurseId);
+    if (options?.visitType) params.append('visitType', options.visitType);
+    if (options?.acuity) params.append('acuity', options.acuity);
+    if (options?.status) params.append('status', options.status);
+    const qs = params.toString();
+    return clinicApiUrl(`/reports/census/excel${qs ? `?${qs}` : ''}`);
+  },
+
+  getCensusReportExcelUrl(startDate?: string, endDate?: string, options?: CensusFilterOptions): string {
+    return this.getCensusExcelUrl(startDate, endDate, options);
+  },
+
   // Patient Chart
   async getPatientChart(patientId: string) {
     return clinicApiClient.get<PatientChart>(`/patients/${patientId}/chart`);
@@ -2829,7 +4783,12 @@ export const clinicService = {
   },
 
   async updateStaff(id: string, payload: UpdateStaffPayload) {
-    return clinicApiClient.put<StaffMember>(`/staff/${id}`, payload);
+    const { skipPendingVerificationSync, ...rest } = payload;
+    const finalPayload =
+      skipPendingVerificationSync === true
+        ? { ...rest, skipPendingVerificationSync: true }
+        : rest;
+    return clinicApiClient.put<StaffMember>(`/staff/${id}`, finalPayload);
   },
 
   async getMyProfile() {
@@ -2837,7 +4796,12 @@ export const clinicService = {
   },
 
   async updateMyProfile(payload: UpdateMyProfilePayload) {
-    return clinicApiClient.put<StaffMember>('/staff/me', payload);
+    const { skipPendingVerificationSync, ...rest } = payload;
+    const finalPayload =
+      skipPendingVerificationSync === true
+        ? { ...rest, skipPendingVerificationSync: true }
+        : rest;
+    return clinicApiClient.put<StaffMember>('/staff/me', finalPayload);
   },
 
   async deactivateStaff(id: string) {
@@ -2849,13 +4813,81 @@ export const clinicService = {
   },
 
   async reactivateStaff(id: string) {
-    return this.activateStaff(id);
+    return clinicApiClient.post<StaffMember>(`/staff/${id}/reactivate`, {});
   },
 
-  /** Sets or auto-generates a temporary password; the staff member must change it at next sign-in. Requires `staff:manage`. */
-  async resetStaffPassword(id: string, temporaryPassword?: string) {
+  async resendStaffInvitation(id: string, sendInviteEmail = true) {
+    return clinicApiClient.post<StaffMember>(`/staff/${id}/resend-invite`, { sendInviteEmail });
+  },
+
+  async revokeStaffInvitation(id: string) {
+    return clinicApiClient.post<boolean>(`/staff/${id}/revoke-invite`, {});
+  },
+
+  async reinviteStaffMember(id: string, sendInviteEmail = true) {
+    return clinicApiClient.post<StaffMember>(`/staff/${id}/reinvite`, { sendInviteEmail });
+  },
+
+  async removeStaffMember(id: string) {
+    return clinicApiClient.delete<boolean>(`/staff/${id}/permanent`);
+  },
+
+  async suspendStaffMember(id: string) {
+    return clinicApiClient.post<StaffMember>(`/staff/${id}/suspend`, {});
+  },
+
+  async uploadStaffPrcProof(
+    id: string,
+    fileInput: FormData | Blob | { uri: string; name: string; type: string },
+    fileName?: string,
+    options?: UploadStaffPrcProofOptions,
+  ) {
+    const formData = toEvidenceUploadFormData(fileInput, fileName);
+    const params = new URLSearchParams();
+    if (options?.skipPendingVerificationSync === true) {
+      params.set('skipPendingVerificationSync', 'true');
+    }
+    if (options?.stageOnly === true) {
+      params.set('stageOnly', 'true');
+    }
+    const qsStr = params.toString();
+    const qs = qsStr ? `?${qsStr}` : '';
+    return clinicApiClient.post<EvidenceProofUploadResult>(`/staff/${id}/prc-proof${qs}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
+  async updatePendingStaffVerification(id: string) {
+    return clinicApiClient.put<StaffMember>(`/staff/${id}/verification/pending`, {});
+  },
+
+  async fetchStaffPrcProofBlob(id: string) {
+    return clinicApiClient.getBlob(`/staff/${id}/prc-proof`);
+  },
+
+  async submitStaffVerification(id: string) {
+    return clinicApiClient.post<StaffMember>(`/staff/${id}/submit-verification`, {});
+  },
+
+  async withdrawStaffVerification(id: string, reason?: string) {
+    return clinicApiClient.post<StaffMember>(
+      `/staff/${id}/withdraw-verification`,
+      reason?.trim() ? { reason: reason.trim() } : {},
+    );
+  },
+
+  /** Sets or auto-generates a temporary password, or issues a password reset link/email; the staff member must change it at next sign-in. Requires `staff:manage`. */
+  async resetStaffPassword(
+    id: string,
+    temporaryPassword?: string,
+    options?: { sendResetEmail?: boolean; generateResetLink?: boolean }
+  ) {
     return clinicApiClient.post<ResetStaffPasswordResult>(`/staff/${id}/reset-password`, {
       temporaryPassword: temporaryPassword || undefined,
+      sendResetEmail: options?.sendResetEmail ?? false,
+      generateResetLink: options?.generateResetLink ?? false,
     });
   },
 
@@ -2871,6 +4903,88 @@ export const clinicService = {
 
   async getLicenseStatus() {
     return clinicApiClient.get<FacilityLicenseStatus>('/clinic/license');
+  },
+
+  /**
+   * Resolves a workspace input (which may be a tenant slug or a facility slug)
+   * into a verified facility license status with its true facilitySlug.
+   */
+  async resolveWorkspace(workspaceInput: string): Promise<[FacilityLicenseStatus | null, ApiError | null]> {
+    const clean = workspaceInput.trim().toLowerCase();
+    if (!clean) {
+      return [null, new ApiError('Workspace name is required.', 400)];
+    }
+
+    // 1. Direct facility probe against clinic server
+    const [directFacility, directErr] = await clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', {
+      headers: { 'X-Facility-Slug': clean },
+      params: { facilitySlug: clean },
+    });
+
+    if (directFacility && directFacility.status === 'Active' && directFacility.facilitySlug) {
+      return [directFacility, null];
+    }
+
+    // 2. Tenant workspace probe against clinic server
+    const [tenantFacility, tenantErr] = await clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', {
+      headers: { 'X-Tenant-Id': clean },
+      params: { tenant: clean },
+    });
+
+    if (tenantFacility && tenantFacility.facilitySlug && tenantFacility.status === 'Active') {
+      return [tenantFacility, null];
+    }
+
+    // 3. If tenant license check returned a clinic name without facilitySlug,
+    // derive candidate slug from the clinic name (e.g. "Nextstep OPD" -> "nextstep") and verify against clinic server
+    if (tenantFacility?.clinicName) {
+      const candidateSlug = tenantFacility.clinicName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .split('-')[0];
+      if (candidateSlug && candidateSlug !== clean) {
+        const [verifiedByClinicName] = await clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', {
+          headers: { 'X-Facility-Slug': candidateSlug },
+          params: { facilitySlug: candidateSlug },
+        });
+        if (verifiedByClinicName && verifiedByClinicName.status === 'Active' && verifiedByClinicName.facilitySlug) {
+          return [verifiedByClinicName, null];
+        }
+      }
+    }
+
+    // 4. Query Portal directory to resolve tenant -> facility mapping (if portal is reachable)
+    const portalUrl = getSetting('EXPO_PUBLIC_PORTAL_URL') || getPortalBaseUrl();
+    const cleanPortalBase = portalUrl.endsWith('/api/v1') ? portalUrl : `${portalUrl.replace(/\/+$/, '')}/api/v1`;
+    try {
+      const portalRes = await axios.get(`${cleanPortalBase}/tenants/lookup/${encodeURIComponent(clean)}`, {
+        timeout: 5000,
+      });
+      const data = portalRes?.data;
+      if (data?.exists) {
+        const resolvedFacilitySlug = data.facilitySlug || (data.facilityId ? clean : null);
+        if (resolvedFacilitySlug) {
+          const [verified] = await clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', {
+            headers: { 'X-Facility-Slug': resolvedFacilitySlug },
+            params: { facilitySlug: resolvedFacilitySlug },
+          });
+          if (verified && verified.status === 'Active' && verified.facilitySlug) {
+            return [verified, null];
+          }
+        }
+      }
+    } catch {
+      // Portal lookup unavailable; fall through
+    }
+
+    if (tenantFacility && tenantFacility.facilitySlug) {
+      return [tenantFacility, null];
+    }
+    if (directFacility && directFacility.facilitySlug) {
+      return [directFacility, null];
+    }
+
+    return [null, directErr || tenantErr || new ApiError(`Workspace "${clean}" was not found or has no active facilities registered.`, 404)];
   },
 
   async applyLicense(licenseToken: string) {
@@ -2943,17 +5057,47 @@ export const clinicService = {
     hasAlerts?: boolean,
     page: number = 1,
     pageSize: number = 50,
-    filterMode?: string
+    filterMode?: string,
+    staffId?: string,
+    doctorId?: string,
+    queueDate?: string,
+    roomIds?: string[]
   ) {
     const params = new URLSearchParams();
     if (search) params.append('search', search);
     if (typeof hasAlerts === 'boolean') params.append('hasAlerts', String(hasAlerts));
     if (filterMode) params.append('filterMode', filterMode);
+    if (staffId) params.append('staffId', staffId);
+    if (doctorId) params.append('doctorId', doctorId);
     params.append('page', String(page));
     params.append('pageSize', String(pageSize));
+    if (queueDate) params.append('queueDate', queueDate);
+    if (roomIds && roomIds.length > 0) {
+      roomIds.forEach((r) => params.append('roomIds', r));
+    }
     const qs = params.toString();
     return clinicApiClient.get<ClinicPatient[]>(`/patients?${qs}`);
   },
+
+  async getPatientCounts(
+    search?: string,
+    staffId?: string,
+    doctorId?: string,
+    roomIds?: string[],
+    queueDate?: string
+  ) {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (staffId) params.append('staffId', staffId);
+    if (doctorId) params.append('doctorId', doctorId);
+    if (queueDate) params.append('queueDate', queueDate);
+    if (roomIds && roomIds.length > 0) {
+      roomIds.forEach((r) => params.append('roomIds', r));
+    }
+    const qs = params.toString();
+    return clinicApiClient.get<PatientDirectoryCounts>(`/patients/counts${qs ? `?${qs}` : ''}`);
+  },
+
 
   async getPatientById(id: string) {
     return clinicApiClient.get<ClinicPatient>(`/patients/${id}`);
@@ -2991,6 +5135,8 @@ export const clinicService = {
     serviceType?: string;
     reason?: string;
     notes?: string;
+    appointmentType?: 'InPerson' | 'Teleconsult' | string;
+    paymentPolicy?: TeleconsultPaymentPolicy | string;
   }) {
     return clinicApiClient.post<AppointmentItem>('/appointments', payload);
   },
@@ -3001,6 +5147,10 @@ export const clinicService = {
 
   async cancelAppointment(id: string, reason?: string) {
     return clinicApiClient.put<AppointmentItem>(`/appointments/${id}/cancel`, { reason });
+  },
+
+  async markAppointmentNoShow(id: string, reason?: string) {
+    return clinicApiClient.put<AppointmentItem>(`/appointments/${id}/no-show`, { reason });
   },
 
   async sendAppointmentReminder(id: string) {
@@ -3024,12 +5174,23 @@ export const clinicService = {
     effectiveStartDate?: string;
     effectiveEndDate?: string;
     breaks?: DoctorBreakTimeItem[];
+    skipPendingVerificationSync?: boolean;
   }) {
-    return clinicApiClient.post<DoctorScheduleTemplateItem>(`/doctors/${doctorId}/schedules/templates`, payload);
+    const { skipPendingVerificationSync, ...rest } = payload;
+    const finalPayload =
+      skipPendingVerificationSync === true
+        ? { ...rest, skipPendingVerificationSync: true }
+        : rest;
+    return clinicApiClient.post<DoctorScheduleTemplateItem>(`/doctors/${doctorId}/schedules/templates`, finalPayload);
   },
 
-  async deleteDoctorScheduleTemplate(doctorId: string, templateId: string) {
-    return clinicApiClient.delete<boolean>(`/doctors/${doctorId}/schedules/templates/${templateId}`);
+  async deleteDoctorScheduleTemplate(
+    doctorId: string,
+    templateId: string,
+    options?: PendingSyncMutationOptions,
+  ) {
+    const qs = options?.skipPendingVerificationSync === true ? '?skipPendingVerificationSync=true' : '';
+    return clinicApiClient.delete<boolean>(`/doctors/${doctorId}/schedules/templates/${templateId}${qs}`);
   },
 
   async getDoctorAvailableSlots(doctorId: string, date: string, interval?: number) {
@@ -3062,6 +5223,7 @@ export const clinicService = {
     patientId: string;
     patientName: string;
     consultationId?: string;
+    queueItemId?: string;
     doctorId: string;
     doctorName: string;
     prcLicenseNumber: string;
@@ -3078,10 +5240,15 @@ export const clinicService = {
     return clinicApiClient.post<MedicalCertificateRecord>('/documents/medical-certificates', payload);
   },
 
-  async getMedicalCertificates(patientId?: string, doctorId?: string) {
+  async getMedicalCertificates(
+    patientId?: string,
+    doctorId?: string,
+    options?: { includeUnsigned?: boolean }
+  ) {
     const params = new URLSearchParams();
     if (patientId) params.append('patientId', patientId);
     if (doctorId) params.append('doctorId', doctorId);
+    if (options?.includeUnsigned) params.append('includeUnsigned', 'true');
     const qs = params.toString();
     return clinicApiClient.get<MedicalCertificateRecord[]>(`/documents/medical-certificates${qs ? `?${qs}` : ''}`);
   },
@@ -3095,6 +5262,7 @@ export const clinicService = {
     patientId: string;
     patientName: string;
     consultationId?: string;
+    queueItemId?: string;
     referringDoctorId: string;
     referringDoctorName: string;
     referredToDoctor?: string;
@@ -3110,10 +5278,15 @@ export const clinicService = {
     return clinicApiClient.post<ReferralLetterRecord>('/documents/referrals', payload);
   },
 
-  async getReferralLetters(patientId?: string, doctorId?: string) {
+  async getReferralLetters(
+    patientId?: string,
+    doctorId?: string,
+    options?: { includeUnsigned?: boolean }
+  ) {
     const params = new URLSearchParams();
     if (patientId) params.append('patientId', patientId);
     if (doctorId) params.append('doctorId', doctorId);
+    if (options?.includeUnsigned) params.append('includeUnsigned', 'true');
     const qs = params.toString();
     return clinicApiClient.get<ReferralLetterRecord[]>(`/documents/referrals${qs ? `?${qs}` : ''}`);
   },
@@ -3123,9 +5296,6 @@ export const clinicService = {
     return clinicApiUrl(`/documents/referrals/${id}/pdf${qs}`);
   },
 
-  async verifyDocument(securityDigestOrNumber: string) {
-    return clinicApiClient.get<DocumentVerificationResult>(`/documents/verify/${encodeURIComponent(securityDigestOrNumber)}`);
-  },
 
   // Records & Attachments
   async uploadRecordAttachment(payload: {
@@ -3150,10 +5320,18 @@ export const clinicService = {
     return clinicApiClient.get<ClinicRecordAttachmentRecord[]>(`/records/patients/${patientId}${qs}`);
   },
 
-  async verifyRecordAttachment(attachmentId: string, isApproved: boolean, rejectionReason?: string) {
+  async verifyRecordAttachment(
+    attachmentId: string,
+    isApproved: boolean,
+    rejectionReason?: string,
+    verifiedByStaffName?: string,
+    verifiedByStaffId?: string,
+  ) {
     return clinicApiClient.post<ClinicRecordAttachmentRecord>(`/records/attachments/${attachmentId}/verify`, {
       isApproved,
-      rejectionReason
+      rejectionReason,
+      verifiedByStaffName: verifiedByStaffName || undefined,
+      verifiedByStaffId: verifiedByStaffId || undefined,
     });
   },
 
@@ -3245,7 +5423,29 @@ export const clinicService = {
     } else if (finalPayload.letterheadDohLto !== undefined && finalPayload.dohLicenseToOperate === undefined) {
       finalPayload.dohLicenseToOperate = finalPayload.letterheadDohLto;
     }
+    if (finalPayload.dohLtoExpiryDate === '') {
+      delete finalPayload.dohLtoExpiryDate;
+    }
+    if (finalPayload.skipPendingVerificationSync !== true) {
+      delete finalPayload.skipPendingVerificationSync;
+    }
     return clinicApiClient.put<ClinicSettingsRecord>('/settings', finalPayload);
+  },
+
+  async overridePhilHealthSettings(payload: {
+    accreditationNumber: string;
+    pmccNumber: string;
+    softwareCertificateId: string;
+    secretKey?: string;
+    cipherKey?: string;
+    baseUrl?: string;
+    skipPendingVerificationSync?: boolean;
+  }) {
+    return clinicApiClient.post<ClinicSettingsRecord>('/settings/philhealth/override', payload);
+  },
+
+  async revertPhilHealthToBranch() {
+    return clinicApiClient.post<ClinicSettingsRecord>('/settings/philhealth/revert', {});
   },
 
   getSampleDocumentPdfUrl(docType: string, options?: { wet?: boolean; paperSize?: string }) {
@@ -3270,15 +5470,45 @@ export const clinicService = {
     return clinicApiClient.get<ClinicPublishingReadiness>('/clinic-settings/readiness');
   },
 
+  async uploadLtoProof(
+    fileInput: FormData | Blob | { uri: string; name: string; type: string },
+    fileName?: string,
+    options?: PendingSyncMutationOptions,
+  ) {
+    const formData = toEvidenceUploadFormData(fileInput, fileName);
+    const qs = options?.skipPendingVerificationSync === true ? '?skipPendingVerificationSync=true' : '';
+    return clinicApiClient.post<EvidenceProofUploadResult>(`/clinic-settings/lto-proof${qs}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
+  async updatePendingDirectoryVerification() {
+    return clinicApiClient.put<ClinicPublishingResult>('/clinic-settings/directory-publishing/pending', {});
+  },
+
+  async fetchLtoProofBlob() {
+    return clinicApiClient.getBlob('/clinic-settings/lto-proof');
+  },
+
   async publishToDirectory(isPublished: boolean) {
     return clinicApiClient.put<ClinicPublishingResult>('/clinic-settings/directory-publishing', {
       isPublished,
     });
   },
 
-  async toggleBookingPause(isPaused: boolean) {
+  async withdrawDirectoryPublishing(reason?: string) {
+    return clinicApiClient.post<ClinicPublishingResult>(
+      '/clinic-settings/directory-publishing/withdraw',
+      reason?.trim() ? { reason: reason.trim() } : {},
+    );
+  },
+
+  async toggleBookingPause(isPaused: boolean, options?: PendingSyncMutationOptions) {
     return clinicApiClient.put<ClinicBookingPauseResult>('/clinic-settings/booking-pause', {
       isPaused,
+      ...(options?.skipPendingVerificationSync === true ? { skipPendingVerificationSync: true } : {}),
     });
   },
 
@@ -3291,24 +5521,23 @@ export const clinicService = {
     return clinicApiUrl(`/settings/reception-placard-pdf${qs ? `?${qs}` : ''}`);
   },
 
-  async getPublicQueueDisplay(clinicId?: string, facilitySlug?: string, tenantSlug?: string) {
+  async getPublicQueueDisplay(clinicId?: string, facilitySlug?: string, tenantSlug?: string, pin?: string) {
     const params = new URLSearchParams();
     if (clinicId) params.append('clinicId', clinicId);
     if (facilitySlug) params.append('facilitySlug', facilitySlug);
     if (tenantSlug) params.append('tenantSlug', tenantSlug);
+    if (pin) params.append('pin', pin);
+    params.append('_t', Date.now().toString());
     const query = params.toString();
-    return clinicApiClient.get<any>(`/public/queue/display${query ? `?${query}` : ''}`);
+    const headers: Record<string, string> = {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+    };
+    if (pin) headers['X-Queue-Pin'] = pin;
+    return clinicApiClient.get<any>(`/public/queue/display${query ? `?${query}` : ''}`, { headers });
   },
 
-  // PhilHealth Yakap (formerly Konsulta)
-  async getYakapTransmittals(status?: string, year?: string) {
-    const params = new URLSearchParams();
-    if (status) params.append('status', status);
-    if (year) params.append('year', year);
-    const qs = params.toString();
-    return clinicApiClient.get<YakapTransmittal[]>(`/yakap/transmittals${qs ? `?${qs}` : ''}`);
-  },
-
+  // PhilHealth YAKAP 2.0 Services 01–08
   async getEligibleYakapEncounters(params?: {
     reportTagging?: string;
     startDate?: string;
@@ -3324,66 +5553,131 @@ export const clinicService = {
     return clinicApiClient.get<EligibleYakapEncounter[]>(`/yakap/encounters/eligible${qs ? `?${qs}` : ''}`);
   },
 
-  async getYakapTransmittalById(id: string) {
-    return clinicApiClient.get<YakapTransmittal>(`/yakap/transmittals/${id}`);
+  async validatePhilHealthPin(
+    pin: string,
+    excludePatientId?: string,
+    options?: { checkUniqueness?: boolean }
+  ) {
+    const queryParts: string[] = [];
+    if (excludePatientId) {
+      queryParts.push(`excludePatientId=${encodeURIComponent(excludePatientId)}`);
+    }
+    if (options?.checkUniqueness === false) {
+      queryParts.push('checkUniqueness=false');
+    }
+    const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+    return clinicApiClient.get<PinValidationResult>(`/yakap/pin/${encodeURIComponent(pin)}/validate${qs}`);
   },
 
-  async getYakapTransmittalRawXml(id: string) {
-    return clinicApiClient.get<string>(`/yakap/transmittals/${id}/raw-xml`);
+  async validatePatientYakapStanding(
+    patientId: string,
+    payload?: { effectiveYear?: number; consent?: boolean }
+  ) {
+    return clinicApiClient.post<YakapStandingCheckDto>(
+      `/yakap/patients/${patientId}/validate-standing`,
+      payload ?? { consent: true }
+    );
   },
 
-  async createYakapTransmittal(payload: CreateYakapTransmittalPayload) {
-    const body = {
-      ...payload,
-      consultationEncounterIds: payload.consultationEncounterIds || payload.encounterIds,
-    };
-    return clinicApiClient.post<YakapTransmittal>('/yakap/transmittals', body);
+  async startPatientPcuSession(patientId: string) {
+    return clinicApiClient.post<YakapPcuStartResultDto>(`/yakap/patients/${patientId}/pcu/start`, {});
   },
 
-  async validateYakapTransmittal(id: string) {
-    return clinicApiClient.post<YakapTransmittal>(`/yakap/transmittals/${id}/validate`, {});
+  async verifyPatientPcuSession(
+    patientId: string,
+    payload?: { verificationId?: string; livenessAuthorizationId?: string }
+  ) {
+    return clinicApiClient.post<YakapIdentityVerificationDto>(
+      `/yakap/patients/${patientId}/pcu/verify`,
+      payload ?? {}
+    );
   },
 
-  async submitYakapTransmittal(id: string) {
-    return clinicApiClient.post<YakapTransmittal>(`/yakap/transmittals/${id}/submit`, {});
+  async validatePatientOtp(
+    patientId: string,
+    payload: { oneTimePin: string; consent?: boolean }
+  ) {
+    return clinicApiClient.post<YakapIdentityVerificationDto>(
+      `/yakap/patients/${patientId}/otp/validate`,
+      { consent: true, ...payload }
+    );
   },
 
-  async validatePhilHealthPin(pin: string) {
-    return clinicApiClient.get<PinValidationResult>(`/yakap/pin/${encodeURIComponent(pin)}/validate`);
+  async recordPatientValidId(
+    patientId: string,
+    payload: { validIdTypeCode: string; validIdNumber?: string; attachmentId?: string; consent?: boolean }
+  ) {
+    return clinicApiClient.post<YakapIdentityVerificationDto>(
+      `/yakap/patients/${patientId}/valid-id`,
+      { consent: true, ...payload }
+    );
   },
 
-  async extractYakapMasterlist(payload: { hciAccreditationNumber: string; cipherKey: string }) {
-    return clinicApiClient.post<YakapMasterlistAssignment[]>('/yakap/masterlist/extract', payload);
+  async submitPatientYakapSelection(
+    patientId: string,
+    payload?: { selectionDate?: string; consent?: boolean }
+  ) {
+    return clinicApiClient.post<YakapSelectionResultDto>(
+      `/yakap/patients/${patientId}/select`,
+      { consent: true, ...(payload ?? {}) }
+    );
   },
 
-  // PhilHealth SOAP Sandbox & Simulation
-  async runSoapSimulation(payload?: { accreditationNumber?: string; cipherKey?: string }) {
-    return clinicApiClient.post<SoapSimulationReport>('/yakap/simulation/run-e2e', payload || {});
+  async getPatientAvailmentSlip(patientId: string, year?: number) {
+    const qs = year ? `?year=${year}` : '';
+    return clinicApiClient.get<AvailmentSlipResponse>(`/yakap/patients/${patientId}/availment-slip${qs}`);
   },
 
-  async getSoapSandboxStatus() {
-    return clinicApiClient.get<SoapSandboxStatus>('/yakap/simulation/status');
+  async getYakapSubmissionsSummary(branchId?: string) {
+    const qs = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+    return clinicApiClient.get<PortalYakapBranchSummaryDto>(`/yakap/submissions/summary${qs}`);
   },
 
-  async setSoapSandboxScenario(scenario: SoapSimulationScenario | number) {
-    return clinicApiClient.post<SoapSandboxStatus>('/yakap/simulation/scenario', { scenario });
+  async getYakapSubmissions(params?: {
+    status?: string;
+    submissionType?: string;
+    page?: number;
+    pageSize?: number;
+    branchId?: string;
+  }) {
+    const qp = new URLSearchParams();
+    if (params?.status) qp.append('status', params.status);
+    if (params?.submissionType) qp.append('submissionType', params.submissionType);
+    if (params?.page) qp.append('page', String(params.page));
+    if (params?.pageSize) qp.append('pageSize', String(params.pageSize));
+    if (params?.branchId) qp.append('branchId', params.branchId);
+    const qs = qp.toString();
+    return clinicApiClient.get<PortalYakapSubmissionDto[]>(`/yakap/submissions${qs ? `?${qs}` : ''}`);
   },
 
-  async resetSoapSandbox() {
-    return clinicApiClient.post<SoapSandboxStatus>('/yakap/simulation/reset', {});
+  async pollYakapSubmissionStatus(submissionId: string) {
+    return clinicApiClient.post<PortalYakapSubmissionDto>(`/yakap/submissions/${submissionId}/poll`, {});
   },
 
-  // PhilHealth Credential Configuration & Connectivity
-  async configurePhilHealthCredentials(payload: PhilHealthCredentialPayload) {
-    return clinicApiClient.post<PhilHealthConfigStatus>('/yakap/credentials/configure', payload);
+  async retryYakapSubmission(submissionId: string) {
+    return clinicApiClient.post<PortalYakapSubmissionDto>(`/yakap/submissions/${submissionId}/retry`, {});
   },
 
-  async getPhilHealthConfigStatus() {
-    return clinicApiClient.get<PhilHealthConfigStatus>('/yakap/credentials/status');
+  async syncYakapMasterlist(payload?: {
+    patientPin?: string;
+    effectiveYear?: number;
+    startDate?: string;
+    endDate?: string;
+    branchId?: string;
+  }) {
+    return clinicApiClient.post<PortalYakapMasterlistSyncResultDto>('/yakap/masterlist/sync', payload ?? {});
   },
 
-  async testPhilHealthConnection() {
-    return clinicApiClient.post<string>('/yakap/credentials/test-connection', {});
+  async getYakapSandboxStatus() {
+    return clinicApiClient.get<YakapSandboxStatus>('/yakap/sandbox/status');
+  },
+
+  async setYakapSandboxScenario(scenario: string) {
+    return clinicApiClient.post<YakapSandboxStatus>('/yakap/sandbox/scenario', { scenario });
+  },
+
+  async resetYakapSandbox() {
+    return clinicApiClient.post<YakapSandboxStatus>('/yakap/sandbox/reset', {});
   },
 
   // Standalone PhilHealth Patient Profile (Online, Offline & On-Premise)
@@ -3393,6 +5687,39 @@ export const clinicService = {
 
   async updatePhilHealthPatientProfile(patientId: string, profile: PhilHealthPatientProfile) {
     return clinicApiClient.put<PhilHealthPatientProfile>(`/yakap/patients/${patientId}/profile`, profile);
+  },
+
+  // 1NF PhilHealth Coverage & Annual YAKAP Lifecycle
+  async getPatientPhilHealthCoverage(patientId: string) {
+    return clinicApiClient.get<PatientPhilHealthCoverageDto>(`/patients/${patientId}/philhealth`);
+  },
+
+  async upsertPatientPhilHealthMembership(patientId: string, payload: UpsertPhilHealthMembershipPayload) {
+    return clinicApiClient.put<PatientPhilHealthMembershipDto>(`/patients/${patientId}/philhealth/membership`, payload);
+  },
+
+  // 4-Station Clinical Health Screening
+  async getPatientHealthScreenings(patientId: string, queueItemId?: string) {
+    const params = new URLSearchParams();
+    params.append('patientId', patientId);
+    if (queueItemId) params.append('queueItemId', queueItemId);
+    return clinicApiClient.get<HealthScreeningRecord[]>(`/health-screenings?${params.toString()}`);
+  },
+
+  async getHealthScreeningById(id: string) {
+    return clinicApiClient.get<HealthScreeningDetailRecord>(`/health-screenings/${id}`);
+  },
+
+  async saveHealthScreeningProgress(payload: SaveHealthScreeningProgressPayload) {
+    return clinicApiClient.post<HealthScreeningDetailRecord>('/health-screenings', payload);
+  },
+
+  async completeHealthScreening(id: string, payload: CompleteHealthScreeningPayload) {
+    return clinicApiClient.post<HealthScreeningDetailRecord>(`/health-screenings/${id}/complete`, payload);
+  },
+
+  async escalateHealthScreening(id: string, payload?: EscalateHealthScreeningPayload) {
+    return clinicApiClient.post<HealthScreeningDetailRecord>(`/health-screenings/${id}/escalate`, payload ?? {});
   },
 
 
@@ -3489,7 +5816,7 @@ export const clinicService = {
     return clinicApiClient.post<number>('/notifications/read-all');
   },
 
-  // ── Audit Trail & Forensic Logging (Milestone 3) ─────────────────────────
+  // â”€â”€ Audit Trail & Forensic Logging (Milestone 3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async getAuditLogs(params?: AuditFilterParams) {
     const qp = new URLSearchParams();
@@ -3598,6 +5925,225 @@ export const clinicService = {
 
   async voidToothRecord(patientId: string, recordId: string, reason?: string) {
     return this.voidDentalToothRecord(patientId, recordId, reason);
+  },
+
+  // ============================================================================
+  // Teleconsultation & Virtual Care API Client Methods (Milestone 5)
+  // ============================================================================
+
+  /** 1. Retrieves live teleconsult admission, payment gate status, and recording status. */
+  async getTeleconsultStatus(appointmentId: string) {
+    return clinicApiClient.get<TeleconsultStatusDto>(
+      `/teleconsult/appointments/${encodeURIComponent(appointmentId)}/status`,
+    );
+  },
+
+  /** 2. Updates the teleconsultation payment policy (Prepaid, Postpaid, Exempt). */
+  async updateTeleconsultPaymentPolicy(
+    appointmentId: string,
+    paymentPolicy: TeleconsultPaymentPolicy | string,
+  ) {
+    return clinicApiClient.put<TeleconsultStatusDto>(
+      `/teleconsult/appointments/${encodeURIComponent(appointmentId)}/payment-policy`,
+      { paymentPolicy },
+    );
+  },
+
+  /** 3. Admits patient from the virtual waiting room (with optional plain-note emergency override). */
+  async admitTeleconsultPatient(
+    appointmentId: string,
+    emergencyOverride?: EmergencyOverrideDto | null,
+  ) {
+    return clinicApiClient.post<TeleconsultAdmissionResultDto>('/teleconsult/admit', {
+      appointmentId,
+      emergencyOverride: emergencyOverride || undefined,
+    });
+  },
+
+  /** 4. Joins teleconsult call and requests zero-PHI room tokens from media broker. */
+  async joinTeleconsultCall(appointmentId: string) {
+    return clinicApiClient.post<TeleconsultCallJoinDto>(
+      `/teleconsult/appointments/${encodeURIComponent(appointmentId)}/join`,
+      {},
+    );
+  },
+
+  /** 5. Ends teleconsult call, marks appointment completed, and auto-finalizes recording. */
+  async endTeleconsultCall(appointmentId: string, endReason?: string) {
+    return clinicApiClient.post<TeleconsultCallEndResultDto>(
+      `/teleconsult/appointments/${encodeURIComponent(appointmentId)}/end`,
+      endReason ? { endReason } : {},
+    );
+  },
+
+  /** 6. Clinician initiates informed recording consent for a call session. */
+  async requestRecordingConsent(payload: RequestRecordingConsentPayload) {
+    return clinicApiClient.post<RecordingSessionDto>(
+      '/teleconsult/recordings/sessions/request-consent',
+      payload,
+    );
+  },
+
+  /** 7. Submits patient recording consent decision (approved or declined). */
+  async submitPatientRecordingConsent(
+    sessionId: string,
+    payload: PatientConsentPayload | { approved?: boolean; consented?: boolean; rejectionReason?: string | null; refusalReason?: string | null },
+  ) {
+    const approved = payload.approved ?? payload.consented ?? true;
+    const rejectionReason = payload.rejectionReason ?? payload.refusalReason ?? undefined;
+    return clinicApiClient.post<RecordingSessionDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/patient-consent`,
+      { approved, rejectionReason },
+    );
+  },
+
+  /** 8. Unilaterally revokes recording consent, halting active recording immediately. */
+  async revokeRecordingConsent(sessionId: string, reason?: string) {
+    return clinicApiClient.post<RecordingSessionDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/revoke-consent`,
+      reason ? { reason } : {},
+    );
+  },
+
+  /** 9. Streams a ~10s recording chunk for CMK AES-256-GCM envelope vault encryption. */
+  async uploadRecordingSegment(
+    sessionId: string,
+    segmentIndexOrChunk: number | Blob | Uint8Array | ArrayBuffer,
+    durationMsOrMeta?: number | { segmentIndex: number; durationMs: number; iv?: string; tag?: string },
+    chunk?: Blob | Uint8Array | ArrayBuffer,
+    encryptionMeta?: { iv?: string; tag?: string },
+  ) {
+    let segmentIndex = 0;
+    let durationMs = 0;
+    let payloadChunk: Blob | Uint8Array | ArrayBuffer;
+    let iv: string | undefined;
+    let tag: string | undefined;
+
+    if (typeof segmentIndexOrChunk === 'number') {
+      segmentIndex = segmentIndexOrChunk;
+      durationMs = typeof durationMsOrMeta === 'number' ? durationMsOrMeta : 0;
+      payloadChunk = chunk!;
+      iv = encryptionMeta?.iv;
+      tag = encryptionMeta?.tag;
+    } else {
+      payloadChunk = segmentIndexOrChunk;
+      if (typeof durationMsOrMeta === 'object' && durationMsOrMeta !== null) {
+        segmentIndex = durationMsOrMeta.segmentIndex ?? 0;
+        durationMs = durationMsOrMeta.durationMs ?? 0;
+        iv = durationMsOrMeta.iv;
+        tag = durationMsOrMeta.tag;
+      }
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/octet-stream',
+      'X-Segment-Index': segmentIndex.toString(),
+      'X-Segment-Duration-Ms': durationMs.toString(),
+    };
+    if (iv) headers['X-Encryption-Iv'] = iv;
+    if (tag) headers['X-Encryption-Tag'] = tag;
+
+    return clinicApiClient.post<RecordingSegmentDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/segments`,
+      payloadChunk,
+      { headers },
+    );
+  },
+
+  /** 10. Finalizes recording session, creates encrypted manifest, and schedules retention. */
+  async finalizeRecordingSession(sessionId: string) {
+    return clinicApiClient.post<RecordingSessionDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/finalize`,
+      {},
+    );
+  },
+
+  /** 11. Freezes automated retention deletion by placing a medico-legal hold (Admin only). */
+  async placeRecordingLegalHold(sessionId: string, reason: string) {
+    return clinicApiClient.post<RecordingSessionDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/legal-hold`,
+      { reason },
+    );
+  },
+
+  /** 12. Releases medico-legal hold, allowing normal retention scheduling (Admin only). */
+  async releaseRecordingLegalHold(sessionId: string, reason?: string) {
+    return clinicApiClient.post<RecordingSessionDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/release-legal-hold`,
+      reason ? { reason } : {},
+    );
+  },
+
+  /** 13. Mints short-lived 15-minute signed HMAC ticket for authorized clinical playback. */
+  async createRecordingPlaybackTicket(sessionId: string) {
+    return clinicApiClient.post<PlaybackTicketDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/playback-ticket`,
+      {},
+    );
+  },
+
+  /** 14. Synchronously builds the ticketed range-streaming playback URL for video seeking. */
+  buildRecordingStreamUrl(sessionId: string, ticket: string, segmentIndex?: number): string {
+    const segQuery =
+      segmentIndex !== undefined && segmentIndex !== null
+        ? `&segmentIndex=${encodeURIComponent(segmentIndex.toString())}`
+        : '';
+    return clinicApiUrl(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/stream?ticket=${encodeURIComponent(ticket)}${segQuery}`,
+    );
+  },
+
+  /** 14b. Alias for buildRecordingStreamUrl. */
+  getRecordingStreamUrl(sessionId: string, ticket: string, segmentIndex?: number): string {
+    return this.buildRecordingStreamUrl(sessionId, ticket, segmentIndex);
+  },
+
+  /** 15. Retrieves recording metadata linked to a consultation encounter for chart display. */
+  async getConsultationRecording(consultationId: string) {
+    return clinicApiClient.get<RecordingSessionDto | null>(
+      `/teleconsult/recordings/consultations/${encodeURIComponent(consultationId)}`,
+    );
+  },
+
+  /** 16. Lists all active or completed recording sessions associated with an appointment. */
+  async getAppointmentRecordings(appointmentId: string) {
+    return clinicApiClient.get<RecordingSessionDto[]>(
+      `/teleconsult/recordings/appointments/${encodeURIComponent(appointmentId)}`,
+    );
+  },
+
+  /** 16b. Alias for getAppointmentRecordings. */
+  async getAppointmentRecording(appointmentId: string) {
+    return this.getAppointmentRecordings(appointmentId);
+  },
+
+  /** 17. Retrieves single recording session details by session ID. */
+  async getRecordingSession(sessionId: string) {
+    return clinicApiClient.get<RecordingSessionDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}`,
+    );
+  },
+
+  /** 18. Creates a teleconsult guest invite for browser portal access. */
+  async createTeleconsultGuestInvite(appointmentId: string) {
+    const [res, err] = await clinicApiClient.post<TeleconsultGuestInviteDto>(
+      `/teleconsult/appointments/${encodeURIComponent(appointmentId)}/guest-invite`,
+      {},
+    );
+    if (res && res.inviteToken) {
+      const legacyHost = ['portal', 'clinicez', 'com'].join('.');
+      if (
+        !res.inviteUrl ||
+        res.inviteUrl.includes(legacyHost) ||
+        res.inviteUrl.includes('/guest/teleconsult')
+      ) {
+        res.inviteUrl = publicRoutes.teleconsultJoin({
+          baseUrl: getPortalBaseUrl(),
+          token: res.inviteToken,
+        });
+      }
+    }
+    return [res, err] as const;
   },
 };
 
@@ -3720,6 +6266,8 @@ export interface PrescriptionSlipItem {
   uniquePrescriptionSecurityCode?: string;
   isGamotCovered?: boolean;
   philHealthDrugCode?: string;
+  isClinicDispensed?: boolean;
+  clinicDispensedQuantity?: number | null;
 }
 
 export interface PrescriptionSlipData {
@@ -3780,43 +6328,6 @@ export interface RecordExternalDispensePayload {
   notes?: string;
 }
 
-export type YakapTransmittalStatus = 'Draft' | 'Validated' | 'Submitted' | 'Approved' | 'Failed';
-
-export interface YakapTransmittalItem {
-  id: string;
-  transmittalId: string;
-  patientId: string;
-  patientName: string;
-  philHealthIdentificationNumber: string;
-  consultationEncounterId?: string;
-  itemType: 'Enlistment' | 'Profile' | 'Soap';
-  reportStatus: 'U' | 'A' | 'D' | 'V' | 'F';
-  deficiencyRemarks?: string;
-  processedAt?: string;
-}
-
-export interface YakapTransmittal {
-  id: string;
-  transmittalNumber: string;
-  reportTagging: '1' | '2';
-  effectiveYear: string;
-  packageType: string;
-  status: YakapTransmittalStatus;
-  totalEnlistments: number;
-  totalProfiles: number;
-  totalSoaps: number;
-  totalMedicines: number;
-  philHealthTransactionNumber?: string;
-  validationErrors?: string[];
-  rawXmlPayload?: string;
-  encryptedPayloadHash?: string;
-  transmittedAt?: string;
-  validatedAt?: string;
-  notes?: string;
-  createdAt: string;
-  items: YakapTransmittalItem[];
-}
-
 export interface EligibleYakapEncounter {
   encounterId: string;
   patientId: string;
@@ -3833,78 +6344,448 @@ export interface EligibleYakapEncounter {
   totalMedicationAmount: number;
 }
 
-export interface CreateYakapTransmittalPayload {
-  reportTagging: '1' | '2';
-  effectiveYear?: string;
-  packageType?: string;
-  consultationEncounterIds?: string[];
-  encounterIds?: string[];
-  notes?: string;
+export interface YakapStandingCheckDto {
+  pin: string;
+  effectiveYear: number;
+  patientLastName?: string | null;
+  patientFirstName?: string | null;
+  pcuStatus: string;
+  pcuTransactionCode?: string | null;
+  selectionStatus: string;
+  selectionTransactionNo?: string | null;
+  selectionDate?: string | null;
+  empanelmentStatus: string;
+  yesReferenceNo?: string | null;
+  fpeStatus: string;
+  fpeTransactionNo?: string | null;
+  fpeUploadTransactionNo?: string | null;
+  consultationStatus: string;
+  localEnlistmentId?: string | null;
+  needsClinicSelection: boolean;
+  needsIdentityCheck: boolean;
+  canStartCheckup: boolean;
+  summaryMessage: string;
+}
+
+export interface YakapPcuStartResultDto {
+  verificationId: string;
+  sdkUrl: string;
+  livenessAuthorizationId: string;
+  status: string;
+  expiresInSeconds: number;
+}
+
+export interface YakapIdentityVerificationDto {
+  verificationId: string;
+  patientId: string;
+  mode: string;
+  verificationDate: string;
+  isVerified: boolean;
+  transactionCode?: string | null;
+  status?: string | null;
+  validIdTypeCode?: string | null;
+  verifiedAtUtc?: string | null;
+}
+
+export interface YakapSelectionResultDto {
+  enlistmentId: string;
+  patientId: string;
+  effectiveYear: number;
+  selectionStatus: string;
+  selectionTransactionNo?: string | null;
+  selectionDate: string;
+  caseNo?: string | null;
+  queuedForSync: boolean;
+  message: string;
+}
+
+export interface AvailmentSlipResponse {
+  patient_pin: string;
+  eff_year: string;
+  mime_type: string;
+  pdf_base64: string;
+}
+
+export interface PortalYakapBranchSummaryDto {
+  branchId: string;
+  accreditationNo?: string | null;
+  empaneledCount: number;
+  selectedCount: number;
+  acceptedUploadsCount: number;
+  pendingPollingCount: number;
+  rejectedOrFailedCount: number;
+  submissionsByType: Record<string, number>;
+  lastMasterlistSyncAtUtc?: string | null;
+  masterlistTotalCount: number;
+}
+
+export interface PortalYakapSubmissionErrorDto {
+  fieldPath: string;
+  issue: string;
+  errorCode?: string | null;
+}
+
+export interface PortalYakapSubmissionDto {
+  id: string;
+  patientCode: string;
+  accreditationNo: string;
+  caseNo: string;
+  submissionType: string;
+  reportStatus: string;
+  localTransactionNo: string;
+  uploadTransactionNo?: string | null;
+  yesReferenceNo?: string | null;
+  processingStatus: string;
+  payloadSha256Hash?: string | null;
+  submittedAtUtc?: string | null;
+  lastPolledAtUtc?: string | null;
+  completedAtUtc?: string | null;
+  attemptCount: number;
+  lastErrorMessage?: string | null;
+  errors: PortalYakapSubmissionErrorDto[];
+}
+
+export interface PortalYakapMasterlistSyncResultDto {
+  success: boolean;
+  recordsAdded: number;
+  recordsUpdated: number;
+  totalActiveCount: number;
+  syncedAtUtc: string;
+  message?: string | null;
+}
+
+export interface YakapSandboxStatus {
+  currentScenario: string;
+  beneficiariesCount: number;
+  selectionsCount: number;
+  empanelmentsCount: number;
+  uploadsCount: number;
+  otpsCount: number;
 }
 
 export interface PinValidationResult {
   isValid: boolean;
   formattedPin: string;
+  isSequenceValid?: boolean;
+  isPhilHealthVerified?: boolean;
+  memberName?: string | null;
   failureReason?: string;
+  isServerError?: boolean;
+  isUniqueInClinic?: boolean;
+  conflictingPatientName?: string | null;
+  conflictingPatientCode?: string | null;
 }
 
-export type SoapSimulationScenario =
-  | 'HappyPath'
-  | 'DtdValidationError'
-  | 'ExpiredToken'
-  | 'InvalidPin'
-  | 'NetworkTimeout'
-  | 'SoapFault500';
+export type PhilHealthMemberType = 'MM' | 'DD';
+export type PhilHealthDependentRelationship = 'S' | 'C' | 'P' | 'D';
 
-export type SoapSimulationStepStatus =
-  | 'Pending'
-  | 'Running'
-  | 'Passed'
-  | 'Failed'
-  | 'Skipped';
+export type YakapEnlistmentStatus =
+  | 'Active'
+  | 'Expired'
+  | 'Transferred'
+  | 'Draft'
+  | 'Registered'
+  | 'Verified'
+  | 'ProfilingCompleted'
+  | 'Transmitted'
+  | 'Suspended'
+  | 'Cancelled';
 
-export interface SoapSimulationStepResult {
-  stepNumber: number;
-  actionName: string;
-  status: SoapSimulationStepStatus | number;
-  durationMs: number;
-  summary: string;
-  requestXml?: string;
-  responseXml?: string;
-  errorMessage?: string;
+export type YakapEnlistmentSource =
+  | 'ClinicEnlistment'
+  | 'PhilHealthMasterlist'
+  | 'SelfReported'
+  | 'WalkIn'
+  | 'OnlinePortal'
+  | 'MasterlistSync'
+  | 'AssistedIntake';
+
+export type YakapPackageType =
+  | 'Konsulta'
+  | 'YakapPlus'
+  | 'FirstPatientEncounter'
+  | 'FollowUpEncounter'
+  | 'AnnualCheckup'
+  | 'NcdHypertension'
+  | 'NcdDiabetes'
+  | 'Comprehensive';
+
+export type YakapServiceDeliveryMethod = 'FacilityBased' | 'OutOfFacility' | 'SettingsBased';
+
+export interface PatientPhilHealthMembershipDto {
+  id?: string;
+  patientId: string;
+  memberType: PhilHealthMemberType;
+  dependentRelationship?: PhilHealthDependentRelationship | string | null;
+  philHealthPin?: string | null;
+  memberPin?: string | null;
+  principalMemberPin?: string | null;
+  principalLastName?: string | null;
+  principalFirstName?: string | null;
+  principalMiddleName?: string | null;
+  principalSuffix?: string | null;
+  principalDateOfBirth?: string | null;
+  principalSex?: string | null;
+  membershipCategoryCode?: string | null;
+  membershipCategoryDesc?: string | null;
+  employerPin?: string | null;
+  employerName?: string | null;
+  defaultWalkInAtc?: string | null;
+  principalMemberLandlineNumber?: string | null;
+  principalMemberMobileNumber?: string | null;
+  principalMemberEmail?: string | null;
+  updatedAtUtc?: string | null;
 }
 
-export interface SoapSimulationReport {
-  scenario: SoapSimulationScenario | number;
-  passed: boolean;
-  totalSteps: number;
-  passedSteps: number;
-  failedSteps: number;
-  totalDurationMs: number;
-  steps: SoapSimulationStepResult[];
-  timestamp: string;
+export interface PatientYakapEnlistmentDto {
+  id: string;
+  patientId: string;
+  effectiveYear: number;
+  status: YakapEnlistmentStatus | string;
+  source: YakapEnlistmentSource | string;
+  packageType: YakapPackageType | string;
+  enlistmentDate: string;
+  validUntil?: string | null;
+  caseNo?: string | null;
+  profilingTransNo?: string | null;
+  profilingDate?: string | null;
+  profilingAtc?: string | null;
+  isWalkedIn?: boolean;
+  hciAccreditationNumber?: string | null;
+  selectionControlNumber?: string | null;
+  yesReferenceNo?: string | null;
+  registrationStatusCode?: string | null;
+  empanelmentMethod?: string | null;
+  identityVerificationId?: string | null;
+  mcaFlag?: boolean;
+  profilingTime?: string | null;
+  fpeClassificationType?: string | null;
+  serviceDeliveryMethod?: YakapServiceDeliveryMethod | string | null;
+  facilitatorType?: string | null;
+  facilitatorName?: string | null;
+  hasCoPayment?: boolean;
+  coPaymentDate?: string | null;
+  coPaymentAmount?: number | null;
+  coPaymentBalance?: number | null;
+  remarks?: string | null;
 }
 
-export interface SoapSandboxStatus {
-  isActive: boolean;
-  activeScenario: SoapSimulationScenario | number;
-  endpointUrl: string;
-  totalSimulatedCalls: number;
-  availableScenarios: string[];
+export interface CurrentYearFpeStatusDto {
+  effectiveYear: number;
+  hasActiveEnlistment: boolean;
+  enlistmentId?: string | null;
+  isCompleted: boolean;
+  profilingDate?: string | null;
+  profilingTransNo?: string | null;
+  profilingAtc?: string | null;
+  selectionControlNumber?: string | null;
+  yesReferenceNo?: string | null;
+  registrationStatusCode?: string | null;
 }
 
-export interface YakapMasterlistAssignment {
-  philHealthIdentificationNumber: string;
-  memberPhilHealthIdentificationNumber?: string;
-  lastName: string;
-  firstName: string;
-  middleName?: string;
-  extensionName?: string;
-  birthDate: string;
-  gender: string;
-  packageType: string;
-  registrationDate: string;
-  effectivityYear: string;
+export interface PatientIdentityVerificationSummaryDto {
+  id: string;
+  mode: string;
+  verificationDate: string;
+  isVerifiedForToday: boolean;
+  pcuTransactionId?: string | null;
+  pcuStatus?: string | null;
+  otpStatus?: string | null;
+  validIdTypeCode?: string | null;
+  verifiedAtUtc?: string | null;
+}
+
+export interface PatientYakapSubmissionSummaryDto {
+  id: string;
+  submissionType: string;
+  localTransactionNo: string;
+  uploadTransactionNo?: string | null;
+  yesReferenceNo?: string | null;
+  processingStatus: string;
+  submittedAtUtc?: string | null;
+  completedAtUtc?: string | null;
+  lastErrorMessage?: string | null;
+}
+
+export interface PatientPhilHealthCoverageDto {
+  patientId: string;
+  philHealthNumber?: string | null;
+  membership?: PatientPhilHealthMembershipDto | null;
+  enlistments: PatientYakapEnlistmentDto[];
+  currentYearFpeStatus: CurrentYearFpeStatusDto;
+  latestIdentityVerification?: PatientIdentityVerificationSummaryDto | null;
+  latestFpeSubmission?: PatientYakapSubmissionSummaryDto | null;
+}
+
+export interface UpsertPhilHealthMembershipPayload {
+  memberType: PhilHealthMemberType;
+  dependentRelationship?: PhilHealthDependentRelationship | string | null;
+  philHealthPin?: string | null;
+  principalMemberPin?: string | null;
+  principalLastName?: string | null;
+  principalFirstName?: string | null;
+  principalMiddleName?: string | null;
+  principalSuffix?: string | null;
+  principalDateOfBirth?: string | null;
+  principalSex?: string | null;
+  membershipCategoryCode?: string | null;
+  membershipCategoryDesc?: string | null;
+  employerPin?: string | null;
+  employerName?: string | null;
+  defaultWalkInAtc?: string | null;
+}
+
+export type HealthScreeningType =
+  | 'RoutineWellness'
+  | 'AnnualPhysicalExam'
+  | 'PreEmployment'
+  | 'SchoolPhysical'
+  | 'YakapFpe'
+  | 'CommunityScreening';
+
+export type HealthScreeningStatus =
+  | 'InProgress'
+  | 'AwaitingDoctor'
+  | 'Completed'
+  | 'EscalatedToConsultation'
+  | 'Cancelled';
+
+export type HealthScreeningDisposition =
+  | 'Cleared'
+  | 'ClearedWithAdvice'
+  | 'ForWorkup'
+  | 'EscalatedToConsultation';
+
+export interface HealthScreeningRecord {
+  id: string;
+  clinicId?: string;
+  patientId: string;
+  queueItemId?: string | null;
+  consultationEncounterId?: string | null;
+  yakapEnlistmentId?: string | null;
+  patientVitalsId?: string | null;
+  patientPhysicalExamId?: string | null;
+  ncdRiskAssessmentId?: string | null;
+  serviceItemId?: string | null;
+  screeningType: HealthScreeningType;
+  workflowMode: 'Regular' | 'YakapAvailment';
+  status: HealthScreeningStatus;
+  disposition?: HealthScreeningDisposition | null;
+  screeningDateUtc: string;
+  screenedByNurseId?: string | null;
+  screenedByNurseName?: string | null;
+  nurseCompletedAtUtc?: string | null;
+  examinedByDoctorId?: string | null;
+  examinedByDoctorName?: string | null;
+  completedAtUtc?: string | null;
+  nurseScreeningNotes?: string | null;
+  clinicalImpression?: string | null;
+  preventiveCounselingNotes?: string | null;
+  recommendedFollowUpDate?: string | null;
+  adultRoutineScreeningCode?: string | null;
+  pediatricRoutineScreeningCode?: string | null;
+  prenatalScreeningServicesCode?: string | null;
+  breastCancerScreeningCode?: string | null;
+  cervicalCancerScreeningCode?: string | null;
+  colorectalCancerScreeningCode?: string | null;
+  prostateCancerScreeningCode?: string | null;
+  philHealthAtc?: string | null;
+  isWalkedIn?: boolean;
+  serviceDeliveryMethod?: YakapServiceDeliveryMethod | string | null;
+  fpeClassificationType?: string | null;
+  profilingTransNo?: string | null;
+  queueNumber?: string | null;
+}
+
+export interface YakapFpeReadinessDto {
+  isReady: boolean;
+  hasValidPin: boolean;
+  hasActiveEnlistment: boolean;
+  hasAtcOrWalkIn: boolean;
+  hasVitals: boolean;
+  hasPhysicalExam: boolean;
+  hasNcdRiskAssessment: boolean;
+  hasIdentityVerification?: boolean;
+  verificationMode?: string | null;
+  selectionStatus?: string | null;
+  yesReferenceNo?: string | null;
+  submissionStatus?: string | null;
+  uploadTransactionNo?: string | null;
+  alreadyCompletedThisYear?: boolean;
+  existingProfilingTransNo?: string | null;
+  existingProfilingDate?: string | null;
+  missingRequirements?: string[];
+  warnings?: string[];
+}
+
+export interface HealthScreeningDetailRecord extends HealthScreeningRecord {
+  vitals?: TriageVitals | null;
+  physicalExam?: PatientPhysicalExamProfile | null;
+  ncdRiskAssessment?: NcdRiskAssessment | null;
+  orderedLabs?: ClinicLabOrderRecord[];
+  yakapFpeReadiness?: YakapFpeReadinessDto | null;
+}
+
+export interface SaveHealthScreeningProgressPayload {
+  screeningId?: string | null;
+  patientId: string;
+  queueItemId?: string | null;
+  screeningType: HealthScreeningType;
+  workflowMode: 'Regular' | 'YakapAvailment';
+  allowDuplicateActive?: boolean;
+  sendToDoctor?: boolean;
+  patientVitalsId?: string | null;
+  patientPhysicalExamId?: string | null;
+  ncdRiskAssessmentId?: string | null;
+  serviceItemId?: string | null;
+  nurseScreeningNotes?: string | null;
+  clinicalImpression?: string | null;
+  preventiveCounselingNotes?: string | null;
+  recommendedFollowUpDate?: string | null;
+  adultRoutineScreeningCode?: string | null;
+  pediatricRoutineScreeningCode?: string | null;
+  prenatalScreeningServicesCode?: string | null;
+  breastCancerScreeningCode?: string | null;
+  cervicalCancerScreeningCode?: string | null;
+  colorectalCancerScreeningCode?: string | null;
+  prostateCancerScreeningCode?: string | null;
+  philHealthAtc?: string | null;
+  isWalkedIn?: boolean;
+  serviceDeliveryMethod?: YakapServiceDeliveryMethod | string | null;
+  fpeClassificationType?: string | null;
+}
+
+export interface CompleteHealthScreeningPayload {
+  disposition: HealthScreeningDisposition;
+  clinicalImpression?: string | null;
+  preventiveCounselingNotes?: string | null;
+  recommendedFollowUpDate?: string | null;
+  patientVitalsId?: string | null;
+  patientPhysicalExamId?: string | null;
+  ncdRiskAssessmentId?: string | null;
+  serviceItemId?: string | null;
+  adultRoutineScreeningCode?: string | null;
+  pediatricRoutineScreeningCode?: string | null;
+  prenatalScreeningServicesCode?: string | null;
+  breastCancerScreeningCode?: string | null;
+  cervicalCancerScreeningCode?: string | null;
+  colorectalCancerScreeningCode?: string | null;
+  prostateCancerScreeningCode?: string | null;
+  philHealthAtc?: string | null;
+  isWalkedIn?: boolean;
+  serviceDeliveryMethod?: YakapServiceDeliveryMethod | string | null;
+  fpeClassificationType?: string | null;
+  facilitatorType?: string | null;
+  facilitatorName?: string | null;
+}
+
+export interface EscalateHealthScreeningPayload {
+  escalationReason?: string | null;
+  isUrgent?: boolean;
+  doctorId?: string | null;
+  doctorName?: string | null;
+  roomId?: string | null;
+  roomOrStation?: string | null;
 }
 
 export interface PhilHealthConditionEntry {
@@ -4120,29 +7001,6 @@ export interface DispenseGamotPayload {
 export interface ReverseGamotPayload {
   reason: string;
   reversedBy: string;
-}
-
-export interface PhilHealthCredentialPayload {
-  facilityName: string;
-  accreditationNumber: string;
-  pmccNumber?: string;
-  softwareCertificateId?: string;
-  username: string;
-  password?: string;
-  cipherKey?: string;
-  konsultaEndpoint?: string;
-}
-
-export interface PhilHealthConfigStatus {
-  tenantId: string;
-  facilityName: string;
-  accreditationNumber: string;
-  pmccNumber?: string;
-  softwareCertificateId?: string;
-  konsultaEndpoint: string;
-  isConfigured: boolean;
-  isActive: boolean;
-  updatedAt?: string;
 }
 
 // ============================================================================
@@ -4388,6 +7246,309 @@ export function resolveWalkInDoctorRoomSelection(
     doctorRoomIds: validRooms,
   };
 }
+
+export type ClinicTimeFormat = '12h' | '24h';
+
+export interface ClinicRegionalConfig {
+  timeZoneId: string;
+  dateFormat: string;
+  timeFormat: ClinicTimeFormat;
+}
+
+export const CLINIC_DATE_FORMAT_OPTIONS = [
+  { value: 'MMM d, yyyy', example: 'Oct 22, 2026', label: 'Month Day, Year' },
+  { value: 'd MMM yyyy', example: '22 Oct 2026', label: 'Day Month Year' },
+  { value: 'dd/MM/yyyy', example: '22/10/2026', label: 'DD/MM/YYYY' },
+  { value: 'MM/dd/yyyy', example: '10/22/2026', label: 'MM/DD/YYYY' },
+  { value: 'yyyy-MM-dd', example: '2026-10-22', label: 'ISO (YYYY-MM-DD)' },
+] as const;
+
+export const CLINIC_TIME_FORMAT_OPTIONS: Array<{
+  value: ClinicTimeFormat;
+  label: string;
+  example: string;
+  description: string;
+}> = [
+  {
+    value: '12h',
+    label: '12-Hour (AM / PM)',
+    example: '08:45 AM',
+    description: 'Standard 12-hour clock with AM/PM period indicator',
+  },
+  {
+    value: '24h',
+    label: '24-Hour (Clinical / Military)',
+    example: '14:45',
+    description: '24-hour clinical clock (00:00 – 23:59) without AM/PM',
+  },
+];
+
+export const CLINIC_COMMON_TIMEZONES = [
+  'Asia/Manila',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Asia/Hong_Kong',
+  'Asia/Dubai',
+  'Europe/London',
+  'America/New_York',
+  'America/Chicago',
+  'America/Los_Angeles',
+  'Australia/Sydney',
+  'UTC',
+] as const;
+
+let activeClinicTimeZoneId = 'Asia/Manila';
+let activeClinicDateFormat = 'MMM d, yyyy';
+let activeClinicTimeFormat: ClinicTimeFormat = '12h';
+
+/**
+ * Sets the active clinic/workspace IANA time zone ID (e.g. from ClinicSettings.timeZoneId or WorkspaceProfile.timeZoneId).
+ * Falls back to 'Asia/Manila' when null or empty.
+ */
+export function setClinicTimeZoneId(timeZoneId?: string | null): void {
+  const trimmed = timeZoneId?.trim();
+  activeClinicTimeZoneId = trimmed || 'Asia/Manila';
+}
+
+/**
+ * Returns the currently configured clinic/workspace IANA time zone ID (defaults to 'Asia/Manila').
+ */
+export function getClinicTimeZoneId(): string {
+  return activeClinicTimeZoneId || 'Asia/Manila';
+}
+
+/**
+ * Sets the active clinic/workspace date format pattern (e.g. 'MMM d, yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd').
+ */
+export function setClinicDateFormat(dateFormat?: string | null): void {
+  const trimmed = dateFormat?.trim();
+  activeClinicDateFormat = trimmed || 'MMM d, yyyy';
+}
+
+/**
+ * Returns the currently configured clinic/workspace date format pattern (defaults to 'MMM d, yyyy').
+ */
+export function getClinicDateFormat(): string {
+  return activeClinicDateFormat || 'MMM d, yyyy';
+}
+
+/**
+ * Sets the active clinic time format ('12h' or '24h').
+ */
+export function setClinicTimeFormat(timeFormat?: string | null): void {
+  const trimmed = timeFormat?.trim().toLowerCase();
+  activeClinicTimeFormat = trimmed === '24h' || trimmed === 'hh:mm' ? '24h' : '12h';
+}
+
+/**
+ * Returns the currently configured clinic time format ('12h' or '24h').
+ */
+export function getClinicTimeFormat(): ClinicTimeFormat {
+  return activeClinicTimeFormat || '12h';
+}
+
+/**
+ * Updates all three active clinic regional settings at once.
+ */
+export function setClinicRegionalConfig(config: {
+  timeZoneId?: string | null;
+  dateFormat?: string | null;
+  timeFormat?: string | null;
+}): void {
+  if (config.timeZoneId !== undefined) setClinicTimeZoneId(config.timeZoneId);
+  if (config.dateFormat !== undefined) setClinicDateFormat(config.dateFormat);
+  if (config.timeFormat !== undefined) setClinicTimeFormat(config.timeFormat);
+}
+
+export function getClinicRegionalConfig(): ClinicRegionalConfig {
+  return {
+    timeZoneId: getClinicTimeZoneId(),
+    dateFormat: getClinicDateFormat(),
+    timeFormat: getClinicTimeFormat(),
+  };
+}
+
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Formats a date or timestamp according to the active clinic/workspace timezone and dateFormat.
+ * Pure calendar strings ('YYYY-MM-DD') are formatted without timezone day-shifting.
+ */
+export function formatClinicDate(
+  input: string | Date | number | null | undefined,
+  options?: { dateFormat?: string; timeZoneId?: string; fallback?: string }
+): string {
+  const fallback = options?.fallback ?? '—';
+  if (input === null || input === undefined || input === '') return fallback;
+
+  const targetFormat = options?.dateFormat?.trim() || activeClinicDateFormat || 'MMM d, yyyy';
+  const targetTz = options?.timeZoneId?.trim() || activeClinicTimeZoneId || 'Asia/Manila';
+
+  let year: number;
+  let month: number; // 1-12
+  let day: number;   // 1-31
+
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.trim())) {
+    const [y, m, d] = input.trim().split('-').map(Number);
+    if (!y || !m || !d) return fallback;
+    year = y;
+    month = m;
+    day = d;
+  } else {
+    const dateObj = input instanceof Date ? input : new Date(input);
+    if (Number.isNaN(dateObj.getTime())) return fallback;
+
+    const ymd = getClinicTodayStr(dateObj, targetTz);
+    const [y, m, d] = ymd.split('-').map(Number);
+    year = y;
+    month = m;
+    day = d;
+  }
+
+  const monthShort = SHORT_MONTHS[month - 1] || 'Jan';
+  const month2 = String(month).padStart(2, '0');
+  const day2 = String(day).padStart(2, '0');
+
+  switch (targetFormat) {
+    case 'd MMM yyyy':
+      return `${day} ${monthShort} ${year}`;
+    case 'dd/MM/yyyy':
+      return `${day2}/${month2}/${year}`;
+    case 'MM/dd/yyyy':
+      return `${month2}/${day2}/${year}`;
+    case 'yyyy-MM-dd':
+      return `${year}-${month2}-${day2}`;
+    case 'MMM d, yyyy':
+    default:
+      return `${monthShort} ${day}, ${year}`;
+  }
+}
+
+/**
+ * Formats a timestamp or Date object (or 'HH:mm' string) according to the active clinic timezone and timeFormat ('12h' or '24h').
+ */
+export function formatClinicTime(
+  input: string | Date | number | null | undefined,
+  options?: { timeFormat?: string; timeZoneId?: string; fallback?: string; includeSeconds?: boolean }
+): string {
+  const fallback = options?.fallback ?? '—';
+  if (input === null || input === undefined || input === '') return fallback;
+
+  const targetTimeFormat = (options?.timeFormat?.trim().toLowerCase() || activeClinicTimeFormat || '12h') === '24h' ? '24h' : '12h';
+  const targetTz = options?.timeZoneId?.trim() || activeClinicTimeZoneId || 'Asia/Manila';
+
+  // Handle raw 'HH:mm' or 'HH:mm:ss' strings
+  if (typeof input === 'string' && /^\d{1,2}:\d{2}(:\d{2})?$/.test(input.trim())) {
+    const parts = input.trim().split(':').map(Number);
+    const h = parts[0] ?? 0;
+    const m = parts[1] ?? 0;
+    if (targetTimeFormat === '24h') {
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+    const period = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+  }
+
+  const dateObj = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(dateObj.getTime())) return fallback;
+
+  const is12h = targetTimeFormat !== '24h';
+  const formatOpts: Intl.DateTimeFormatOptions = {
+    timeZone: targetTz,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: is12h,
+    ...(options?.includeSeconds ? { second: '2-digit' } : {}),
+  };
+
+  try {
+    return new Intl.DateTimeFormat('en-US', formatOpts).format(dateObj);
+  } catch {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: is12h,
+    }).format(dateObj);
+  }
+}
+
+/**
+ * Formats an ISO timestamp or Date into both date and time using the clinic's active timezone, dateFormat, and timeFormat.
+ */
+export function formatClinicDateTime(
+  input: string | Date | number | null | undefined,
+  options?: {
+    dateFormat?: string;
+    timeFormat?: string;
+    timeZoneId?: string;
+    separator?: string;
+    fallback?: string;
+    includeSeconds?: boolean;
+  }
+): string {
+  const fallback = options?.fallback ?? '—';
+  if (input === null || input === undefined || input === '') return fallback;
+
+  const dateObj = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(dateObj.getTime())) return fallback;
+
+  const dStr = formatClinicDate(dateObj, {
+    dateFormat: options?.dateFormat,
+    timeZoneId: options?.timeZoneId,
+    fallback,
+  });
+  const tStr = formatClinicTime(dateObj, {
+    timeFormat: options?.timeFormat,
+    timeZoneId: options?.timeZoneId,
+    fallback,
+    includeSeconds: options?.includeSeconds,
+  });
+
+  if (dStr === fallback || tStr === fallback) return fallback;
+  return `${dStr}${options?.separator ?? ', '}${tStr}`;
+}
+
+/**
+ * Returns today's calendar date (YYYY-MM-DD) in the configured clinic/workspace timezone
+ * (falling back to 'Asia/Manila', UTC+8).
+ * Prevents UTC midnight rollover mismatches where UTC is still on the previous calendar day.
+ */
+export function getClinicTodayStr(now: Date = new Date(), timeZoneId?: string): string {
+  const targetTz = timeZoneId?.trim() || activeClinicTimeZoneId || 'Asia/Manila';
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: targetTz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
+  } catch {
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(now);
+    } catch {
+      const manilaOffsetMs = 8 * 60 * 60 * 1000;
+      const manilaDate = new Date(now.getTime() + manilaOffsetMs);
+      return manilaDate.toISOString().split('T')[0];
+    }
+  }
+}
+
+/**
+ * Alias for `getClinicTodayStr` — returns today's calendar date (YYYY-MM-DD) in the configured
+ * clinic/workspace timezone (defaulting to Philippine Standard Time, Asia/Manila).
+ */
+export function getManilaTodayStr(now: Date = new Date(), timeZoneId?: string): string {
+  return getClinicTodayStr(now, timeZoneId);
+}
+
+
 
 
 

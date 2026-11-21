@@ -20,6 +20,40 @@ public static class InteropTypes
     /// <summary>Facility -> portal. Payload: <c>FacilityHeartbeatPayload</c> (liveness, app version, license expiry). Only accepted from the facility it describes.</summary>
     public const string FacilityHeartbeat = "facility.heartbeat";
 
+    // Portal projections (clinic/lab -> portal-api)
+    /// <summary>Clinic -> portal. Payload: <c>FacilityJoinSettingsUpdatedPayload</c> (join link settings, operating hours, address).</summary>
+    public const string FacilityJoinSettingsUpdated = "facility.join-settings.updated";
+    /// <summary>Clinic or Laboratory -> portal. Payload: <c>DocumentAttestationPublishedPayload</c> (zero-PHI cryptographic attestation for public verification).</summary>
+    public const string DocumentAttestationPublished = "document.attestation.published";
+    /// <summary>Clinic -> portal. Payload: <c>QueueBoardUpdatedPayload</c> (zero-PHI public waiting-area TV queue snapshot).</summary>
+    public const string QueueBoardUpdated = "facility.queue-board.updated";
+
+    // Directory & practitioner verification (clinic <-> portal <-> patient-api)
+    /// <summary>Clinic -> portal. Payload: <c>FacilityVerificationRequestedPayload</c>.</summary>
+    public const string FacilityVerificationRequested = "facility.verification.requested";
+    /// <summary>Clinic -> portal. Payload: <c>FacilityVerificationWithdrawnPayload</c>.</summary>
+    public const string FacilityVerificationWithdrawn = "facility.verification.withdrawn";
+    /// <summary>Portal -> clinic. Payload: <c>FacilityVerificationRejectedPayload</c>.</summary>
+    public const string FacilityVerificationRejected = "facility.verification.rejected";
+    /// <summary>Clinic -> portal. Payload: <c>PractitionerVerificationRequestedPayload</c>.</summary>
+    public const string PractitionerVerificationRequested = "practitioner.verification.requested";
+    /// <summary>Portal -> clinic / patient-api. Payload: <c>PractitionerIdentityUpdatedPayload</c>.</summary>
+    public const string PractitionerIdentityUpdated = "practitioner.identity.updated";
+    /// <summary>Portal -> clinic / patient-api. Payload: <c>PractitionerVerificationRevokedPayload</c>.</summary>
+    public const string PractitionerVerificationRevoked = "practitioner.verification.revoked";
+    /// <summary>Portal -> clinic. Payload: <c>VerificationEvidenceRequestedPayload</c>. Reply type: <see cref="VerificationEvidenceResponded"/>.</summary>
+    public const string VerificationEvidenceRequested = "verification.evidence.requested";
+    /// <summary>Clinic -> portal. Payload: <c>VerificationEvidenceRespondedPayload</c>.</summary>
+    public const string VerificationEvidenceResponded = "verification.evidence.responded";
+    /// <summary>Clinic -> portal. Payload: <c>FacilityVerificationUpdateRequestedPayload</c>. Reply type: <see cref="FacilityVerificationUpdateResponded"/>.</summary>
+    public const string FacilityVerificationUpdateRequested = "facility.verification.update.requested";
+    /// <summary>Portal -> clinic. Payload: <c>VerificationUpdateRespondedPayload</c>.</summary>
+    public const string FacilityVerificationUpdateResponded = "facility.verification.update.responded";
+    /// <summary>Clinic -> portal. Payload: <c>PractitionerVerificationUpdateRequestedPayload</c>. Reply type: <see cref="PractitionerVerificationUpdateResponded"/>.</summary>
+    public const string PractitionerVerificationUpdateRequested = "practitioner.verification.update.requested";
+    /// <summary>Portal -> clinic. Payload: <c>VerificationUpdateRespondedPayload</c>.</summary>
+    public const string PractitionerVerificationUpdateResponded = "practitioner.verification.update.responded";
+
     // Hub directory feed (portal -> hub). Handled by the hub itself.
     public const string DirectoryCellUpserted = "directory.cell.upserted";
     public const string DirectoryFacilityUpserted = "directory.facility.upserted";
@@ -60,7 +94,10 @@ public static class InteropTypes
     public const string RxIssued = "rx.issued";
     public const string RxStatusChanged = "rx.status.changed";
     public const string RxDispensed = "rx.dispensed";
+    /// <summary>Patient or Portal -> clinic. Payload: <c>ExternalPrescriptionDispensedEvent</c> (community pharmacy external dispensation with optional receipt).</summary>
     public const string RxExternalDispensed = "rx.external.dispensed";
+    /// <summary>Clinic -> pharmacy. Payload: <c>PharmacyOtcDispensedPayload</c>. Decrements retail/OTC medication and supply lots via FEFO.</summary>
+    public const string PharmacyOtcDispensed = "pharmacy.otc.dispensed";
 
     // Platform services (request/reply through the hub; replace direct service-to-service HTTP)
     /// <summary>Clinic -> pharmacy. Payload: <c>GamotLookupRequestedPayload</c>. Reply type: <see cref="GamotLookupResponded"/>.</summary>
@@ -90,11 +127,63 @@ public static class InteropTypes
     // Notifications (any facility -> portal mail)
     public const string NotificationEmailRequested = "notification.email.requested";
 
-    // PhilHealth YAKAP Transmittals (Portal <-> Clinic request/reply through the hub)
-    /// <summary>Portal -> clinic. Payload: <c>YakapTransmittalRequestedPayload</c>. Reply type: <see cref="YakapTransmittalResponded"/>.</summary>
-    public const string YakapTransmittalRequested = "yakap.transmittal.requested";
-    /// <summary>Clinic -> portal. Payload: <c>YakapTransmittalRespondedPayload</c>.</summary>
-    public const string YakapTransmittalResponded = "yakap.transmittal.responded";
+    // PhilHealth YAKAP 2.0 Submissions (Portal <-> Clinic request/reply through the hub)
+    /// <summary>Portal -> clinic. Payload: <c>YakapSubmissionRequestedPayload</c>. Reply type: <see cref="YakapSubmissionResponded"/>.</summary>
+    public const string YakapSubmissionRequested = "yakap.submission.requested";
+    /// <summary>Clinic -> portal. Payload: <c>YakapSubmissionRespondedPayload</c>.</summary>
+    public const string YakapSubmissionResponded = "yakap.submission.responded";
+
+    // Communications (comms-api <-> facilities / patient-api / portal-api)
+    /// <summary>Facility service -> comms. Payload: <c>CommsEligibilityGrantedPayload</c>.</summary>
+    public const string CommsEligibilityGranted = "comms.eligibility.granted";
+    /// <summary>Facility service -> comms. Payload: <c>CommsEligibilityRevokedPayload</c>.</summary>
+    public const string CommsEligibilityRevoked = "comms.eligibility.revoked";
+    /// <summary>Comms -> patient-api. Payload: <c>CommsEligibilitySyncedPayload</c>.</summary>
+    public const string CommsEligibilitySynced = "comms.eligibility.synced";
+    /// <summary>Patient-api -> comms. Payload: <c>CommsRequestSubmitPayload</c>.</summary>
+    public const string CommsRequestSubmit = "comms.request.submit";
+    /// <summary>Patient-api or cell replica -> home comms. Payload: <c>CommsMessageSubmitPayload</c>.</summary>
+    public const string CommsMessageSubmit = "comms.message.submit";
+    /// <summary>Home comms -> replicas. Payload: <c>CommsMessageReplicatePayload</c>.</summary>
+    public const string CommsMessageReplicate = "comms.message.replicate";
+    /// <summary>Recipient -> sender. Payload: <c>CommsMessageReceivedPayload</c>.</summary>
+    public const string CommsMessageReceived = "comms.message.received";
+    /// <summary>Patient-api -> comms. Payload: <c>CommsMessageAcknowledgedPayload</c>.</summary>
+    public const string CommsMessageAcknowledged = "comms.message.acknowledged";
+    /// <summary>Home comms -> replicas. Payload: <c>CommsThreadStateChangedPayload</c>.</summary>
+    public const string CommsThreadStateChanged = "comms.thread.state.changed";
+    /// <summary>Comms <-> patient-api / guest relay. Payload: <c>CommsCallStateChangedPayload</c>.</summary>
+    public const string CommsCallStateChanged = "comms.call.state.changed";
+    /// <summary>Patient-api -> comms. Payload: <c>CommsCallEventPayload</c>.</summary>
+    public const string CommsCallEvent = "comms.call.event";
+    /// <summary>Clinic -> comms. Payload: <c>CommsCallPaymentClearedPayload</c>.</summary>
+    public const string CommsCallPaymentCleared = "comms.call.payment.cleared";
+    /// <summary>Comms -> clinic. Payload: <c>CommsRecordingConsentLoggedPayload</c>.</summary>
+    public const string CommsRecordingConsentLogged = "comms.recording.consent.logged";
+    /// <summary>Comms -> facility. Payload: <c>CommsConversationArchivedPayload</c>.</summary>
+    public const string CommsConversationArchived = "comms.conversation.archived";
+    /// <summary>Comms -> facility. Auto-archival of closed patient conversation transcript. Payload: <c>CommsTranscriptArchivedPayload</c>.</summary>
+    public const string CommsTranscriptArchived = "comms.transcript.archived";
+    /// <summary>Comms -> clinic. Explicit clinician filing of attachment into EMR chart. Payload: <c>CommsAttachmentFiledPayload</c>.</summary>
+    public const string CommsAttachmentFiled = "comms.attachment.filed";
+    /// <summary>Portal -> comms. Payload: <c>GuestCallJoinRequestedPayload</c>.</summary>
+    public const string GuestCallJoinRequested = "comms.guest.call.join.requested";
+    /// <summary>Clinic -> portal. Payload: <c>GuestTeleconsultInviteIssuedPayload</c>.</summary>
+    public const string GuestTeleconsultInviteIssued = "portal.teleconsult.guest_invite_issued";
+    /// <summary>Facility -> portal. Payload: <c>GuestTeleconsultInviteRevokedPayload</c>.</summary>
+    public const string GuestTeleconsultInviteRevoked = "portal.teleconsult.guest_invite_revoked";
+
+    // Media broker (cloud platform service: room tokens & metering)
+    /// <summary>Comms -> Media. Payload: <c>MediaRoomRequestedPayload</c>. Reply type: <see cref="MediaRoomResponded"/>.</summary>
+    public const string MediaRoomRequested = "media.room.requested";
+    /// <summary>Media -> comms. Payload: <c>MediaRoomRespondedPayload</c>.</summary>
+    public const string MediaRoomResponded = "media.room.responded";
+    /// <summary>Facility -> Media. Payload: <c>MediaRoomEndedPayload</c>.</summary>
+    public const string MediaRoomEnded = "media.room.ended";
+    /// <summary>Portal -> Media. Payload: <c>MediaEntitlementUpdatedPayload</c>.</summary>
+    public const string MediaEntitlementUpdated = "media.entitlement.updated";
+    /// <summary>Media -> Portal. Payload: <c>MediaUsageRecordedPayload</c>.</summary>
+    public const string MediaUsageRecorded = "media.usage.recorded";
 
     /// <summary>Marker type so catalog consumers can detect hub-internal messages.</summary>
     public static bool IsHubInternal(string type) => type.StartsWith("directory.", StringComparison.Ordinal);

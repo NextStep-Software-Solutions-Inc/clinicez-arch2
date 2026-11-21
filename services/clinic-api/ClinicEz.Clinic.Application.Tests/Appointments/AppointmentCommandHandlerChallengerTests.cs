@@ -216,13 +216,13 @@ public sealed class AppointmentCommandHandlerChallengerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -232,12 +232,12 @@ public sealed class AppointmentCommandHandlerChallengerTests
             PatientCode = "P-UNLINKED",
             DateOfBirth = new DateOnly(1990, 1, 1),
             ContactNumber = "0917-000-1111",
-            SyncPatientId = null // Not linked to mobile app
+            CloudPatientId = null // Not linked to mobile app
         };
         await patientRepo.AddAsync(patient);
 
         var doctorId = Guid.NewGuid();
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -285,14 +285,14 @@ public sealed class AppointmentCommandHandlerChallengerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
         var syncPatientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -302,11 +302,11 @@ public sealed class AppointmentCommandHandlerChallengerTests
             PatientCode = "P-LINKED",
             DateOfBirth = new DateOnly(1995, 2, 2),
             ContactNumber = "0917-222-3333",
-            SyncPatientId = syncPatientId
+            CloudPatientId = syncPatientId
         };
         await patientRepo.AddAsync(patient);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -397,13 +397,13 @@ public sealed class AppointmentCommandHandlerChallengerTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,

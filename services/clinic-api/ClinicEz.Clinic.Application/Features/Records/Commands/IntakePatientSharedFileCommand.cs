@@ -6,6 +6,7 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Records.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using MediatR;
 
 namespace ClinicEz.Clinic.Application.Features.Records.Commands;
@@ -24,14 +25,14 @@ public sealed record IntakePatientSharedFileCommand(
 
 public sealed class IntakePatientSharedFileCommandHandler : IRequestHandler<IntakePatientSharedFileCommand, ClinicRecordAttachmentDto>
 {
-    private readonly IRepository<ClinicRecordAttachment> _attachmentRepo;
+    private readonly IRepository<RecordAttachment> _attachmentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IClinicEncryptionService _encryptionService;
     private readonly IClinicStorageService _storageService;
 
     public IntakePatientSharedFileCommandHandler(
-        IRepository<ClinicRecordAttachment> attachmentRepo,
+        IRepository<RecordAttachment> attachmentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IClinicEncryptionService encryptionService,
@@ -58,16 +59,26 @@ public sealed class IntakePatientSharedFileCommandHandler : IRequestHandler<Inta
         var tenantId = _clinicContext.TenantId ?? "default";
         var clinicId = _clinicContext.ClinicId;
 
-        // 1. Encrypt the file stream with the Clinic Master Key (CMK)
+        // 1. Authorization check: prevent cross-patient attachment linking & unauthorized storage overwrite
+        RecordAttachment? existing = null;
+        if (request.FileId.HasValue && request.FileId.Value != Guid.Empty)
+        {
+            existing = await _attachmentRepo.GetByIdAsync(attachmentId, ct);
+            if (existing != null && existing.PatientId != request.PatientId)
+            {
+                throw new ForbiddenException("Cross-patient attachment linking is prohibited. Attachment belongs to another patient.");
+            }
+        }
+
+        // 2. Encrypt the file stream with the Clinic Master Key (CMK) ONLY after authorization succeeds
         var encryptedPayload = await _encryptionService.EncryptAsync(request.FileBytes, tenantId, clinicId, ct);
 
-        // 2. Persist the encrypted ciphertext into the clinic's isolated storage
+        // 3. Persist the encrypted ciphertext into the clinic's isolated storage ONLY after authorization succeeds
         var storageKey = $"tenants/{tenantId}/clinics/{clinicId}/records/{attachmentId}.cez";
         await _storageService.SaveEncryptedFileAsync(storageKey, encryptedPayload.Ciphertext, ct);
 
-        // 3. Create or update the ClinicRecordAttachment in PendingVerification status
-        var existing = await _attachmentRepo.GetByIdAsync(attachmentId, ct);
-        var attachment = existing ?? new ClinicRecordAttachment
+        // 4. Create or update the RecordAttachment in PendingVerification status
+        var attachment = existing ?? new RecordAttachment
         {
             Id = attachmentId,
             TenantId = tenantId,

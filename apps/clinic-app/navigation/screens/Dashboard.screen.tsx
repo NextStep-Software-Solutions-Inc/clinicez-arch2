@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Linking, Pressable } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { View, StyleSheet, ScrollView, RefreshControl, Pressable, Platform } from 'react-native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
+import { usePersistedScrollPosition } from '../../hooks/usePersistedScrollPosition';
 import {
   ThemedText,
   Badge,
@@ -27,7 +29,7 @@ import { useClinic } from '@context/ClinicContext';
 import { useStaff, formatStaffName } from '@context/StaffContext';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import { Alert, notify } from '@utils/feedback';
-import { openDocument } from '../../services/documentOpener';
+import { openDocument, downloadDocument } from '../../services/documentOpener';
 import {
   TrendLineChart,
   TenderDonutChart,
@@ -38,8 +40,6 @@ import {
 } from '../../components/analytics';
 import DateRangePickerModal from '../../components/ui/DateRangePickerModal';
 import DatePickerModal from '../../components/ui/DatePickerModal';
-import { getPortalBaseUrl } from '../../services/runtimeConfig';
-import { resolveTenantContext } from '@shared/safe';
 import {
   clinicService,
   PatientQueueItem,
@@ -48,18 +48,131 @@ import {
   QueueMetrics,
   QueueStatus,
   QueuePriority,
+  TriageVitals,
   RecordTriageRequest,
   ClinicAnalytics,
   DailyEodReport,
   MorbidityReport,
   TaxDiscountAuditReport,
   DoctorSharesReport,
+  ClinicCensusReport,
+  CensusSummary,
+  CensusDemographicsBreakdown,
+  CensusAcuityBreakdown,
+  CensusProviderBreakdown,
+  CensusItem,
+  CensusFilterOptions,
+  VisitType,
+  VisitWorkflowMode,
+  HealthScreeningRecord,
+  ClinicDispensingLogRecord,
+  resolveCensusLedgerEntryMeta,
+  resolveCensusVisitServiceRows,
+  resolveCensusIsolatedServiceRows,
+  mapCensusVisitTypeLabel,
+  normalizeCensusDisplayField,
+  isPhysicianConsultationVisitType,
+  isNurseAssessmentVisitType,
+  RosCategoryCode,
+  TriageDispensedItemInput,
+  getManilaTodayStr,
+  formatClinicDate,
+  formatClinicTime,
 } from '../../services/clinicService';
 import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
+import DivertEmergencyModal from '../../components/queue/DivertEmergencyModal';
+import HealthScreeningModal from '../../components/screening/HealthScreeningModal';
+import IssueMedicalCertificateModal from '../../components/patient/IssueMedicalCertificateModal';
+import {
+  EditVitalsModal,
+  NurseCareAndOtcDispensingSection,
+  getRosShortLabel,
+  isVisitTypeEligibleForOtcDispensing,
+} from '../../components/consultation';
 
-type DashboardTab = 'QUEUE' | 'ANALYTICS' | 'REPORTS';
-type ReportType = 'DAILY_EOD' | 'MORBIDITY' | 'TAX_DISCOUNT' | 'DOCTOR_SHARES';
-type QueueFilter = 'ALL' | 'Waiting' | 'Triaged' | 'InConsultation' | 'OnHold' | 'NoShow' | 'Completed';
+export const DASHBOARD_TABS = ['QUEUE', 'ANALYTICS', 'REPORTS'] as const;
+export type DashboardTab = (typeof DASHBOARD_TABS)[number];
+
+export const REPORT_TYPES = [
+  'DAILY_EOD',
+  'CENSUS',
+  'DISPENSING_LEDGER',
+  'MORBIDITY',
+  'TAX_DISCOUNT',
+  'DOCTOR_SHARES',
+] as const;
+export type ReportType = (typeof REPORT_TYPES)[number];
+
+export const QUEUE_FILTERS = [
+  'ALL',
+  'Waiting',
+  'Triaged',
+  'InConsultation',
+  'PendingProcedure',
+  'OnHold',
+  'NoShow',
+  'Completed',
+] as const;
+export type QueueFilter = (typeof QUEUE_FILTERS)[number];
+
+export const DASHBOARD_ACTIVE_TAB_STORAGE_KEY = 'clinicez_dashboard_active_tab';
+export const DASHBOARD_REPORT_TYPE_STORAGE_KEY = 'clinicez_dashboard_report_type';
+export const DASHBOARD_QUEUE_FILTER_STORAGE_KEY = 'clinicez_dashboard_queue_filter';
+
+export const QUEUE_FILTER_VALUE_ALIASES: Record<string, QueueFilter> = {
+  all: 'ALL',
+  waiting: 'Waiting',
+  triage: 'Triaged',
+  triaged: 'Triaged',
+  in_consultation: 'InConsultation',
+  'in-consultation': 'InConsultation',
+  inconsultation: 'InConsultation',
+  consultation: 'InConsultation',
+  procedure: 'PendingProcedure',
+  procedure_bay: 'PendingProcedure',
+  'procedure-bay': 'PendingProcedure',
+  procedurebay: 'PendingProcedure',
+  pending_procedure: 'PendingProcedure',
+  'pending-procedure': 'PendingProcedure',
+  pendingprocedure: 'PendingProcedure',
+  on_hold: 'OnHold',
+  'on-hold': 'OnHold',
+  onhold: 'OnHold',
+  no_show: 'NoShow',
+  'no-show': 'NoShow',
+  noshow: 'NoShow',
+  completed: 'Completed',
+  done: 'Completed',
+};
+
+export interface DashboardRouteParams {
+  tab?: string;
+  report?: string;
+  status?: string;
+  queueStatus?: string;
+  queueFilter?: string;
+  preset?: string;
+  acuity?: string;
+  visitType?: string;
+  repPreset?: string;
+  repStart?: string;
+  repEnd?: string;
+  eodDate?: string;
+}
+
+export function isDashboardPathname(pathname?: string | null): boolean {
+  const clean = (pathname || '').trim().toLowerCase().replace(/\/+$/, '');
+  return clean === '' || clean === '/dashboard' || clean.endsWith('/dashboard');
+}
+
+function useOptionalDashboardRoute(): { params?: DashboardRouteParams } | null {
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return useRoute<any>();
+  } catch {
+    return null;
+  }
+}
 
 const PRIORITY_OPTIONS: QueuePriority[] = ['Routine', 'Urgent', 'Emergency'];
 
@@ -113,8 +226,31 @@ const statusBadge = (status: QueueStatus): { label: string; variant: BadgeVarian
       return { label: 'Re-evaluation', variant: 'emergency' };
     case 'Completed':
       return { label: 'Completed', variant: 'neutral' };
+    case 'DischargedNonDoctor':
+      return { label: 'Discharged (Non-Doctor)', variant: 'success', icon: 'check' };
+    case 'Diverted':
+      return { label: 'Diverted (ER Transfer)', variant: 'emergency', icon: 'alert' };
     default:
       return { label: status, variant: 'neutral' };
+  }
+};
+
+const getServiceBadge = (
+  visitType?: VisitType | string
+): { label: string; variant: BadgeVariant; icon?: string } => {
+  switch (visitType) {
+    case 'PreventiveHealthAssessment':
+      return { label: 'Preventive Health Assessment', variant: 'info', icon: 'heartPulse' };
+    case 'AcuteIllnessConsultation':
+      return { label: 'Acute Illness Consultation', variant: 'primary', icon: 'activity' };
+    case 'ChronicDiseaseFollowUp':
+      return { label: 'Chronic Disease Follow-Up', variant: 'primary', icon: 'refresh' };
+    case 'UrgentCareVisit':
+      return { label: 'Urgent Care Visit', variant: 'urgent', icon: 'emergency' };
+    case 'RoutineCheckup':
+      return { label: 'Routine Checkup', variant: 'primary', icon: 'stethoscope' };
+    default:
+      return { label: '', variant: 'neutral' };
   }
 };
 
@@ -148,6 +284,9 @@ interface TriageForm {
   priority: QueuePriority;
   preAssessmentNotes: string;
   preAssessmentRemarks: string;
+  homeInstructions: string;
+  rosCategory: RosCategoryCode;
+  dispensedItems: TriageDispensedItemInput[];
 }
 
 const EMPTY_TRIAGE: TriageForm = {
@@ -169,6 +308,9 @@ const EMPTY_TRIAGE: TriageForm = {
   priority: 'Routine',
   preAssessmentNotes: '',
   preAssessmentRemarks: '',
+  homeInstructions: '',
+  rosCategory: 'EssentiallyNormal',
+  dispensedItems: [],
 };
 
 function DataRow({ label, value, emphasize }: { label: string; value: string | number; emphasize?: boolean }) {
@@ -192,30 +334,39 @@ function LoadingBlock({ rows = 4 }: { rows?: number }) {
   );
 }
 
-function getManilaTodayStr(): string {
+
+function formatTimeOnly(timeStr?: string | null): string {
+  if (!timeStr) return '—';
   try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+    const d = new Date(timeStr);
+    if (Number.isNaN(d.getTime())) return timeStr;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   } catch {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return timeStr;
   }
 }
 
 function formatDateRangeLabel(start?: string, end?: string): string {
-  if (!start && !end) return 'Select Date Range';
+  if (!start && !end) return 'All Time';
   if (start && !end) return `From ${start}`;
   if (!start && end) return `Up to ${end}`;
   if (start && end && start === end) return start;
   return `${start} to ${end}`;
 }
 
-function computeDatePresetRange(preset: 'today' | '7d' | '30d' | 'ytd'): { start: string; end: string } {
+function computeDatePresetRange(preset: 'today' | 'yesterday' | '7d' | '30d' | 'this_month' | 'all' | 'ytd'): { start: string; end: string } {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
   if (preset === 'today') {
     return { start: todayStr, end: todayStr };
+  }
+  if (preset === 'yesterday') {
+    const d = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const yStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    return { start: yStr, end: yStr };
   }
   if (preset === '7d') {
     const d = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
@@ -225,11 +376,22 @@ function computeDatePresetRange(preset: 'today' | '7d' | '30d' | 'ytd'): { start
     const d = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000);
     return { start: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, end: todayStr };
   }
+  if (preset === 'this_month') {
+    const startOfMonth = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+    return { start: startOfMonth, end: todayStr };
+  }
+  if (preset === 'all') {
+    return { start: '', end: '' };
+  }
   return { start: `${now.getFullYear()}-01-01`, end: todayStr };
 }
 
-export default function DashboardScreen() {
+export default function DashboardScreen({
+  route: routeProp,
+}: { route?: { params?: DashboardRouteParams } } = {}) {
   const navigation = useNavigation<any>();
+  const hookRoute = useOptionalDashboardRoute();
+  const routeParams = routeProp?.params ?? hookRoute?.params;
   const { facilityName, letterhead, settings, rooms } = useClinic();
   const { current: currentStaff, currentName, staff: staffList } = useStaff();
   const activeDoctors = useMemo(
@@ -244,24 +406,54 @@ export default function DashboardScreen() {
   const [reassignDoctorId, setReassignDoctorId] = useState<string>('');
   const [reassignRoomId, setReassignRoomId] = useState<string>('');
   const [savingReassignment, setSavingReassignment] = useState<boolean>(false);
+  const [dischargeModalItem, setDischargeModalItem] = useState<PatientQueueItem | null>(null);
+  const [dischargeRemarks, setDischargeRemarks] = useState<string>('');
+  const [savingDischarge, setSavingDischarge] = useState<boolean>(false);
+  const [divertModalItem, setDivertModalItem] = useState<PatientQueueItem | null>(null);
+  const [healthScreeningsByQueueId, setHealthScreeningsByQueueId] = useState<Record<string, HealthScreeningRecord | null>>({});
+  const screeningHydrationSeqRef = useRef(0);
+  const lastScreeningKeyRef = useRef<string>('');
+  const [openingScreeningQueueId, setOpeningScreeningQueueId] = useState<string | null>(null);
+  const [screeningModalVisible, setScreeningModalVisible] = useState(false);
+  const [screeningPatient, setScreeningPatient] = useState<ClinicPatient | null>(null);
+  const [screeningQueueItemId, setScreeningQueueItemId] = useState<string | null>(null);
+  const [screeningInitialId, setScreeningInitialId] = useState<string | null>(null);
+  const [screeningInitialTrack, setScreeningInitialTrack] = useState<'Regular' | 'YakapAvailment'>('Regular');
+  const [medCertModalVisible, setMedCertModalVisible] = useState(false);
+  const [medCertPatient, setMedCertPatient] = useState<ClinicPatient | null>(null);
+  const [medCertQueueItemId, setMedCertQueueItemId] = useState<string | null>(null);
 
-  const handleOpenTvDisplay = useCallback(() => {
-    const portalBase = getPortalBaseUrl();
-    const ctx = resolveTenantContext();
-    const tenantSlug = ctx.tenantSlug || settings?.tenantSlug || settings?.tenantId || 'clinic';
-    const facilitySlug = ctx.facilitySlug || settings?.facilitySlug || 'main';
-    const tvUrl = `${portalBase}/queue-display/${encodeURIComponent(tenantSlug)}/${encodeURIComponent(facilitySlug)}`;
+  const activeTabRef = useRef<DashboardTab>('QUEUE');
+  const reportTypeRef = useRef<ReportType>('DAILY_EOD');
+  const queueFilterRef = useRef<QueueFilter>('ALL');
+  const resetScrollRef = useRef<((targetKey?: string) => void) | null>(null);
 
-    if (typeof window !== 'undefined' && window.open) {
-      window.open(tvUrl, '_blank');
-    } else {
-      Linking.openURL(tvUrl).catch(() => {
-        notify.error('Could not open TV display.');
-      });
-    }
-  }, [settings]);
+  const [activeTab, setActiveTab] = usePersistedTab<DashboardTab>({
+    storageKey: DASHBOARD_ACTIVE_TAB_STORAGE_KEY,
+    allowedValues: DASHBOARD_TABS,
+    defaultValue: 'QUEUE',
+    routeParam: routeParams?.tab,
+    queryParam: 'tab',
+    pathnameMatcher: isDashboardPathname,
+    navigation,
+    cleanupParamsByValue: {
+      QUEUE: ['report', 'subTab', 'reportType', 'repPreset', 'repStart', 'repEnd', 'eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      REPORTS: ['status', 'queueStatus', 'queueFilter', 'filter', 'preset', 'period', 'analyticsPreset'],
+      ANALYTICS: ['status', 'queueStatus', 'queueFilter', 'filter', 'report', 'subTab', 'reportType', 'repPreset', 'repStart', 'repEnd', 'eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+    },
+    onPersist: (nextTab) => {
+      activeTabRef.current = nextTab;
+      const scrollKey =
+        nextTab === 'REPORTS'
+          ? `clinicez.scroll.dashboard.REPORTS.${reportTypeRef.current}`
+          : nextTab === 'QUEUE'
+            ? `clinicez.scroll.dashboard.QUEUE.${queueFilterRef.current}`
+            : `clinicez.scroll.dashboard.${nextTab}`;
+      resetScrollRef.current?.(scrollKey);
+    },
+  });
+  activeTabRef.current = activeTab;
 
-  const [activeTab, setActiveTab] = useState<DashboardTab>('QUEUE');
   const [metrics, setMetrics] = useState<QueueMetrics | null>(null);
   const [queue, setQueue] = useState<PatientQueueItem[] | null>(null);
   const [queueError, setQueueError] = useState<string | null>(null);
@@ -270,7 +462,27 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actioningId, setActioningId] = useState<string | null>(null);
-  const [queueFilter, setQueueFilter] = useState<QueueFilter>('ALL');
+
+  const [queueFilter, setQueueFilter] = usePersistedTab<QueueFilter>({
+    storageKey: DASHBOARD_QUEUE_FILTER_STORAGE_KEY,
+    allowedValues: QUEUE_FILTERS,
+    defaultValue: 'ALL',
+    omitDefaultFromUrl: true,
+    routeParam: routeParams?.status || routeParams?.queueStatus || routeParams?.queueFilter,
+    queryParam: 'status',
+    queryParamAliases: ['queueStatus', 'queueFilter', 'filter'],
+    valueAliases: QUEUE_FILTER_VALUE_ALIASES,
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'QUEUE',
+    clearUrlOnInactive: true,
+    navigation,
+    onPersist: (nextFilter) => {
+      queueFilterRef.current = nextFilter;
+      resetScrollRef.current?.(`clinicez.scroll.dashboard.QUEUE.${nextFilter}`);
+    },
+  });
+  queueFilterRef.current = queueFilter;
+
   const [showForceEodModal, setShowForceEodModal] = useState(false);
 
   // Nurse triage modal state
@@ -279,58 +491,308 @@ export default function DashboardScreen() {
   const [zScorePreview, setZScorePreview] = useState<PediatricZScoreResult | null>(null);
   const [triage, setTriage] = useState<TriageForm>(EMPTY_TRIAGE);
   const [savingTriage, setSavingTriage] = useState(false);
+  const [editVitalsItem, setEditVitalsItem] = useState<PatientQueueItem | null>(null);
 
-  // Statutory reports and analytics state
-  const [reportType, setReportType] = useState<ReportType>('DAILY_EOD');
+  // Escalate VitalsCheckOnly -> Consultation modal state
+  const [escalateModalItem, setEscalateModalItem] = useState<PatientQueueItem | null>(null);
+  const [escalatePriority, setEscalatePriority] = useState<QueuePriority>('Emergency');
+  const [escalateReason, setEscalateReason] = useState<string>('');
+  const [savingEscalation, setSavingEscalation] = useState<boolean>(false);
+
+  // Asynchronous physician review of nurse OTC/supply dispensing
+  const [unreviewedOtcLogs, setUnreviewedOtcLogs] = useState<ClinicDispensingLogRecord[]>([]);
+  const [showOtcReviewModal, setShowOtcReviewModal] = useState<boolean>(false);
+  const [reviewNotesById, setReviewNotesById] = useState<Record<string, string>>({});
+  const [reviewingLogId, setReviewingLogId] = useState<string | null>(null);
+
+  // Clinic reports and analytics state
+  const [reportType, setReportType] = usePersistedTab<ReportType>({
+    storageKey: DASHBOARD_REPORT_TYPE_STORAGE_KEY,
+    allowedValues: REPORT_TYPES,
+    defaultValue: 'DAILY_EOD',
+    routeParam: routeParams?.report,
+    queryParam: 'report',
+    queryParamAliases: ['subTab', 'reportType'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS',
+    clearUrlOnInactive: true,
+    navigation,
+    cleanupParamsByValue: {
+      DAILY_EOD: ['repPreset', 'repStart', 'repEnd', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      CENSUS: ['eodDate'],
+      DISPENSING_LEDGER: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      MORBIDITY: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      TAX_DISCOUNT: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      DOCTOR_SHARES: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+    },
+    onPersist: (nextReport) => {
+      reportTypeRef.current = nextReport;
+      resetScrollRef.current?.(`clinicez.scroll.dashboard.REPORTS.${nextReport}`);
+    },
+  });
+  reportTypeRef.current = reportType;
+
+  const dashboardScrollKey =
+    activeTab === 'REPORTS'
+      ? `clinicez.scroll.dashboard.REPORTS.${reportType}`
+      : activeTab === 'QUEUE'
+        ? `clinicez.scroll.dashboard.QUEUE.${queueFilter}`
+        : `clinicez.scroll.dashboard.${activeTab}`;
+  const {
+    scrollViewRef: dashboardScrollRef,
+    onScroll: handleDashboardScroll,
+    onContentSizeChange: handleDashboardContentSizeChange,
+    resetScrollPosition: resetDashboardScrollPosition,
+  } = usePersistedScrollPosition({
+    storageKey: dashboardScrollKey,
+    ready: !loading,
+  });
+  resetScrollRef.current = resetDashboardScrollPosition;
   const [eodReport, setEodReport] = useState<DailyEodReport | null>(null);
+  const [censusReport, setCensusReport] = useState<ClinicCensusReport | null>(null);
   const [morbidityReport, setMorbidityReport] = useState<MorbidityReport | null>(null);
   const [taxReport, setTaxReport] = useState<TaxDiscountAuditReport | null>(null);
   const [doctorSharesReport, setDoctorSharesReport] = useState<DoctorSharesReport | null>(null);
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [censusSearchQuery, setCensusSearchQuery] = useState('');
+  const [censusAcuityFilter, setCensusAcuityFilter] = usePersistedTab<'ALL' | 'Routine' | 'Urgent' | 'Emergency'>({
+    storageKey: 'clinicez_dashboard_census_acuity',
+    allowedValues: ['ALL', 'Routine', 'Urgent', 'Emergency'],
+    defaultValue: 'ALL',
+    routeParam: routeParams?.acuity,
+    queryParam: 'acuity',
+    queryParamAliases: ['censusAcuity'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType === 'CENSUS',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const [censusVisitTypeFilter, setCensusVisitTypeFilter] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_census_visit_type',
+    allowedValues: [
+      'ALL',
+      'RoutineCheckup',
+      'AcuteIllnessConsultation',
+      'FollowUpConsultation',
+      'ChronicDiseaseManagement',
+      'PrescriptionRefill',
+      'DiagnosticLabFollowUp',
+      'VaccinationImmunization',
+      'WoundCareDressing',
+      'PediatricWellBabyVisit',
+      'PreEmploymentSchoolCheck',
+      'Other',
+    ],
+    defaultValue: 'ALL',
+    routeParam: routeParams?.visitType,
+    queryParam: 'visitType',
+    queryParamAliases: ['censusVisitType'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType === 'CENSUS',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const [censusPage, setCensusPage] = useState<number>(1);
+  const [censusPageSize, setCensusPageSize] = useState<10 | 20 | 50>(20);
+  const [censusPageLoading, setCensusPageLoading] = useState<boolean>(false);
+  const censusSearchMountedRef = useRef<boolean>(false);
+  const [dispensingSearchQuery, setDispensingSearchQuery] = useState<string>('');
+  const [dispensingSourceFilter, setDispensingSourceFilter] = useState<
+    'ALL' | 'Doctor Consultation' | 'Nurse Vitals Check'
+  >('ALL');
+  const [expandedCustomRows, setExpandedCustomRows] = useState<Record<string, boolean>>({});
+  const toggleCustomRow = useCallback((rowKey: string) => {
+    setExpandedCustomRows((prev) => ({
+      ...prev,
+      [rowKey]: !prev[rowKey],
+    }));
+  }, []);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analyticsStartDate, setAnalyticsStartDate] = useState('');
-  const [analyticsEndDate, setAnalyticsEndDate] = useState('');
-  const [reportsStartDate, setReportsStartDate] = useState('');
-  const [reportsEndDate, setReportsEndDate] = useState('');
-  const [eodDate, setEodDate] = useState('');
+  const [analyticsPreset, setAnalyticsPreset] = usePersistedTab<'today' | 'yesterday' | '7d' | '30d' | 'ytd'>({
+    storageKey: 'clinicez_dashboard_analytics_preset',
+    allowedValues: ['today', 'yesterday', '7d', '30d', 'ytd'],
+    defaultValue: '7d',
+    routeParam: routeParams?.preset as any,
+    queryParam: 'preset',
+    queryParamAliases: ['period', 'analyticsPreset'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'ANALYTICS',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const initialAnalyticsRange = useMemo(() => computeDatePresetRange(analyticsPreset), [analyticsPreset]);
+  const [analyticsStartDate, setAnalyticsStartDate] = useState(initialAnalyticsRange.start);
+  const [analyticsEndDate, setAnalyticsEndDate] = useState(initialAnalyticsRange.end);
+  const [reportsPreset, setReportsPreset] = usePersistedTab<'today' | 'yesterday' | '7d' | '30d' | 'this_month' | 'all' | 'custom'>({
+    storageKey: 'clinicez_dashboard_reports_preset',
+    allowedValues: ['today', 'yesterday', '7d', '30d', 'this_month', 'all', 'custom'],
+    defaultValue: 'today',
+    routeParam: routeParams?.repPreset as any,
+    queryParam: 'repPreset',
+    queryParamAliases: ['reportPreset'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType !== 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const defaultReportsRange = useMemo(() => {
+    return reportsPreset === 'custom'
+      ? { start: getManilaTodayStr(), end: getManilaTodayStr() }
+      : computeDatePresetRange(reportsPreset);
+  }, [reportsPreset]);
+  const [reportsStartDate, setReportsStartDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_reports_start',
+    defaultValue: defaultReportsRange.start,
+    routeParam: routeParams?.repStart,
+    queryParam: 'repStart',
+    queryParamAliases: ['reportStart', 'startDate'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType !== 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    navigation,
+  });
+  const [reportsEndDate, setReportsEndDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_reports_end',
+    defaultValue: defaultReportsRange.end,
+    routeParam: routeParams?.repEnd,
+    queryParam: 'repEnd',
+    queryParamAliases: ['reportEnd', 'endDate'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType !== 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    navigation,
+  });
+  const [eodDate, setEodDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_eod_date',
+    defaultValue: getManilaTodayStr(),
+    routeParam: routeParams?.eodDate,
+    queryParam: 'eodDate',
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType === 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    navigation,
+  });
   const [isAnalyticsDateRangeModalOpen, setIsAnalyticsDateRangeModalOpen] = useState(false);
   const [isReportsDateRangeModalOpen, setIsReportsDateRangeModalOpen] = useState(false);
   const [isEodDatePickerModalOpen, setIsEodDatePickerModalOpen] = useState(false);
 
+  const loadUnreviewedOtcLogs = useCallback(async () => {
+    const [logsData] = await clinicService.getDispensingLogs({ unreviewedOnly: true });
+    setUnreviewedOtcLogs(logsData ?? []);
+  }, []);
+
+  const hydrateActiveHealthScreenings = useCallback(async (items: PatientQueueItem[] | null, force = false) => {
+    const activeScreeningItems = (items ?? []).filter((item) => {
+      const terminal =
+        item.status === 'Completed' ||
+        item.status === 'DischargedNonDoctor' ||
+        item.status === 'Cancelled' ||
+        item.status === 'NoShow' ||
+        item.status === 'Diverted';
+      return !terminal && item.visitType === 'PreventiveHealthAssessment';
+    });
+    const key = activeScreeningItems.map((i) => `${i.id}:${i.status}`).sort().join('|');
+    if (!force && key === lastScreeningKeyRef.current) return;
+    lastScreeningKeyRef.current = key;
+    const seq = ++screeningHydrationSeqRef.current;
+    if (activeScreeningItems.length === 0) {
+      setHealthScreeningsByQueueId({});
+      return;
+    }
+    const results = await Promise.allSettled(
+      activeScreeningItems.map(async (item) => {
+        const [rows] = await clinicService.getPatientHealthScreenings(item.patientId, item.id);
+        const active = (rows ?? []).find((s) => s.status !== 'Cancelled') ?? null;
+        return [item.id, active] as const;
+      })
+    );
+    if (seq !== screeningHydrationSeqRef.current) return;
+    const nextMap: Record<string, HealthScreeningRecord | null> = {};
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        const [qId, record] = r.value;
+        nextMap[qId] = record;
+      }
+    }
+    setHealthScreeningsByQueueId(nextMap);
+  }, []);
+
   const loadData = useCallback(async () => {
+    const todayStr = getManilaTodayStr();
+    lastScreeningKeyRef.current = '';
     const [
       [metricsData, metricsErr],
       [queueData, queueErr],
       [analyticsData, analyticsErr],
       [eodData, eodErr],
+      [censusData, censusErr],
       [morbidityData, morbidityErr],
       [taxData, taxErr],
       [sharesData, sharesErr],
+      [otcLogsData],
     ] = await Promise.all([
-      clinicService.getQueueMetrics(),
-      clinicService.getQueue({ view: 'All' }),
+      clinicService.getQueueMetrics(todayStr),
+      clinicService.getQueue({ date: todayStr, view: 'All' }),
       clinicService.getClinicAnalytics(),
-      clinicService.getDailyEodReport(),
+      clinicService.getDailyEodReport(todayStr),
+      clinicService.getCensusReport(todayStr, todayStr, { page: 1, pageSize: 20 }),
       clinicService.getMorbidityReport(),
       clinicService.getTaxDiscountAuditReport(),
       clinicService.getDoctorSharesReport(),
+      clinicService.getDispensingLogs({ unreviewedOnly: true }),
     ]);
 
     setMetrics(metricsData ?? null);
     setQueue(queueData ?? null);
     setQueueError(queueErr || metricsErr ? (queueErr ?? metricsErr)?.message ?? 'Request failed' : null);
+    void hydrateActiveHealthScreenings(queueData ?? null, true);
 
     setAnalytics(analyticsData ?? null);
     setAnalyticsError(analyticsErr ? analyticsErr.message : null);
 
     setEodReport(eodData ?? null);
+    setCensusReport(censusData ?? null);
     setMorbidityReport(morbidityData ?? null);
     setTaxReport(taxData ?? null);
     setDoctorSharesReport(sharesData ?? null);
-    const reportErr = eodErr ?? morbidityErr ?? taxErr ?? sharesErr;
+    setUnreviewedOtcLogs(otcLogsData ?? []);
+    const reportErr = eodErr ?? censusErr ?? morbidityErr ?? taxErr ?? sharesErr;
     setReportsError(reportErr ? reportErr.message : null);
-  }, []);
+  }, [hydrateActiveHealthScreenings]);
+
+  useEffect(() => {
+    void hydrateActiveHealthScreenings(queue);
+  }, [queue, hydrateActiveHealthScreenings]);
+
+  const handleOpenHealthScreening = useCallback(async (item: PatientQueueItem) => {
+    setOpeningScreeningQueueId(item.id);
+    try {
+      const [patientRecord, patErr] = await clinicService.getPatientById(item.patientId);
+      if (patErr || !patientRecord) {
+        notify.error(patErr?.message || 'Unable to load patient details for health screening.');
+        return;
+      }
+      const existing = healthScreeningsByQueueId[item.id] ?? null;
+      const track: 'Regular' | 'YakapAvailment' =
+        existing?.workflowMode ??
+        ((item.visitWorkflowMode as VisitWorkflowMode | undefined) === 'YakapAvailment'
+          ? 'YakapAvailment'
+          : 'Regular');
+      setScreeningPatient(patientRecord);
+      setScreeningQueueItemId(item.id);
+      setScreeningInitialId(existing?.id ?? null);
+      setScreeningInitialTrack(track);
+      setScreeningModalVisible(true);
+    } finally {
+      setOpeningScreeningQueueId(null);
+    }
+  }, [healthScreeningsByQueueId]);
 
   const loadAnalytics = useCallback(async (start?: string, end?: string) => {
     setAnalyticsLoading(true);
@@ -348,26 +810,116 @@ export default function DashboardScreen() {
     setAnalyticsLoading(false);
   }, []);
 
-  const loadReports = useCallback(async (type: ReportType, start?: string, end?: string, date?: string) => {
-    setReportsError(null);
-    if (type === 'DAILY_EOD') {
-      const [data, err] = await clinicService.getDailyEodReport(date || undefined);
-      setEodReport(data ?? null);
-      if (err) setReportsError(err.message);
-    } else if (type === 'MORBIDITY') {
-      const [data, err] = await clinicService.getMorbidityReport(start || undefined, end || undefined);
-      setMorbidityReport(data ?? null);
-      if (err) setReportsError(err.message);
-    } else if (type === 'TAX_DISCOUNT') {
-      const [data, err] = await clinicService.getTaxDiscountAuditReport(start || undefined, end || undefined);
-      setTaxReport(data ?? null);
-      if (err) setReportsError(err.message);
-    } else if (type === 'DOCTOR_SHARES') {
-      const [data, err] = await clinicService.getDoctorSharesReport(start || undefined, end || undefined);
-      setDoctorSharesReport(data ?? null);
-      if (err) setReportsError(err.message);
+  const fetchCensusPage = useCallback(
+    async (params: {
+      start?: string;
+      end?: string;
+      page: number;
+      pageSize: 10 | 20 | 50;
+      acuity?: 'ALL' | 'Routine' | 'Urgent' | 'Emergency';
+      visitType?: string;
+      search?: string;
+    }) => {
+      setCensusPageLoading(true);
+      setReportsError(null);
+      const effectiveStart = params.start !== undefined ? params.start : reportsStartDate;
+      const effectiveEnd = params.end !== undefined ? params.end : reportsEndDate;
+      const [data, err] = await clinicService.getCensusReport(effectiveStart || undefined, effectiveEnd || undefined, {
+        page: params.page,
+        pageSize: params.pageSize,
+        acuity: params.acuity && params.acuity !== 'ALL' ? params.acuity : undefined,
+        tableVisitType:
+          params.visitType && params.visitType !== 'ALL' ? params.visitType : undefined,
+        search: params.search?.trim() ? params.search.trim() : undefined,
+      });
+      setCensusPageLoading(false);
+      if (data) {
+        setCensusReport(data);
+        setCensusPage(data.pageNumber ?? params.page);
+      }
+      if (err) {
+        setReportsError(err.message);
+      }
+    },
+    [reportsStartDate, reportsEndDate],
+  );
+
+  const loadReports = useCallback(
+    async (type: ReportType, start?: string, end?: string, date?: string) => {
+      setReportsError(null);
+      if (type === 'DAILY_EOD') {
+        const [data, err] = await clinicService.getDailyEodReport(date || getManilaTodayStr());
+        setEodReport(data ?? null);
+        if (err) setReportsError(err.message);
+      } else if (type === 'CENSUS' || type === 'DISPENSING_LEDGER') {
+        setCensusPage(1);
+        const [data, err] = await clinicService.getCensusReport(
+          start || undefined,
+          end || undefined,
+          {
+            page: 1,
+            pageSize: censusPageSize,
+            acuity:
+              type === 'CENSUS' && censusAcuityFilter !== 'ALL'
+                ? censusAcuityFilter
+                : undefined,
+            tableVisitType:
+              type === 'CENSUS' && censusVisitTypeFilter !== 'ALL'
+                ? censusVisitTypeFilter
+                : undefined,
+            search:
+              type === 'CENSUS' && censusSearchQuery.trim()
+                ? censusSearchQuery.trim()
+                : undefined,
+          },
+        );
+        setCensusReport(data ?? null);
+        if (err) setReportsError(err.message);
+      } else if (type === 'MORBIDITY') {
+        const [data, err] = await clinicService.getMorbidityReport(start || undefined, end || undefined);
+        setMorbidityReport(data ?? null);
+        if (err) setReportsError(err.message);
+      } else if (type === 'TAX_DISCOUNT') {
+        const [data, err] = await clinicService.getTaxDiscountAuditReport(start || undefined, end || undefined);
+        setTaxReport(data ?? null);
+        if (err) setReportsError(err.message);
+      } else if (type === 'DOCTOR_SHARES') {
+        const [data, err] = await clinicService.getDoctorSharesReport(start || undefined, end || undefined);
+        setDoctorSharesReport(data ?? null);
+        if (err) setReportsError(err.message);
+      }
+    },
+    [censusPageSize, censusAcuityFilter, censusVisitTypeFilter, censusSearchQuery],
+  );
+
+  useEffect(() => {
+    if (!censusSearchMountedRef.current) {
+      censusSearchMountedRef.current = true;
+      return;
     }
-  }, []);
+    if (activeTab !== 'REPORTS' || reportType !== 'CENSUS') {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCensusPage(1);
+      fetchCensusPage({
+        page: 1,
+        pageSize: censusPageSize,
+        acuity: censusAcuityFilter,
+        visitType: censusVisitTypeFilter,
+        search: censusSearchQuery,
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [
+    censusSearchQuery,
+    activeTab,
+    reportType,
+    censusPageSize,
+    censusAcuityFilter,
+    censusVisitTypeFilter,
+    fetchCensusPage,
+  ]);
 
   useEffect(() => {
     setLoading(true);
@@ -381,7 +933,7 @@ export default function DashboardScreen() {
   );
 
   const loadMetrics = useCallback(async () => {
-    const [metricsData] = await clinicService.getQueueMetrics();
+    const [metricsData] = await clinicService.getQueueMetrics(getManilaTodayStr());
     if (metricsData) setMetrics(metricsData);
   }, []);
 
@@ -425,6 +977,11 @@ export default function DashboardScreen() {
     setActioningId(null);
 
     if (err) {
+      if (err.status === 409 || err.errorCode === 'CONFLICT' || err.errorCode === 'active_queue_ticket_exists') {
+        notify.warning(err.message || 'This patient is already being attended by another provider.');
+        loadData();
+        return;
+      }
       notify.error(err.message || 'Could not call the patient.');
       return;
     }
@@ -458,6 +1015,32 @@ export default function DashboardScreen() {
         setTriage((prev) => ({ ...prev, posture: 'RECUMBENT' }));
       }
     }
+  };
+
+  const handleOpenEditVitals = (item: PatientQueueItem) => {
+    setEditVitalsItem(item);
+  };
+
+  const handleEditVitalsSuccess = (
+    _updatedVitals: TriageVitals,
+    summaryData?: { priority?: QueuePriority; vitalsSummary?: string; chiefComplaint?: string }
+  ) => {
+    if (!editVitalsItem) return;
+    setQueue((prev) =>
+      (prev ?? []).map((q) =>
+        q.id === editVitalsItem.id
+          ? {
+              ...q,
+              status: q.status === 'Waiting' ? ('Triaged' as QueueStatus) : q.status,
+              priority: summaryData?.priority ?? q.priority,
+              hasVitals: true,
+              vitalsSummary: summaryData?.vitalsSummary || q.vitalsSummary,
+              chiefComplaint: summaryData?.chiefComplaint || q.chiefComplaint,
+            }
+          : q
+      )
+    );
+    setEditVitalsItem(null);
   };
 
   const handlePutOnHold = async (item: PatientQueueItem) => {
@@ -562,6 +1145,37 @@ export default function DashboardScreen() {
     loadMetrics();
   };
 
+  const handleConfirmDischarge = async () => {
+    if (!dischargeModalItem || savingDischarge) return;
+    setSavingDischarge(true);
+    const [, err] = await clinicService.completeNonDoctorVisit(
+      dischargeModalItem.id,
+      dischargeRemarks.trim() || undefined,
+    );
+    setSavingDischarge(false);
+    if (err) {
+      notify.error(err.message || 'Could not discharge queue visit.');
+      return;
+    }
+    notify.success(`${dischargeModalItem.patientName} discharged successfully.`);
+    setQueue((prev) =>
+      (prev ?? []).map((q) =>
+        q.id === dischargeModalItem.id
+          ? {
+              ...q,
+              status: 'DischargedNonDoctor' as QueueStatus,
+              completedTime: new Date().toISOString(),
+              dischargeNotes: dischargeRemarks.trim() || undefined,
+              dischargedAt: new Date().toISOString(),
+            }
+          : q
+      )
+    );
+    setDischargeModalItem(null);
+    setDischargeRemarks('');
+    loadMetrics();
+  };
+
   const handleOpenReassign = (item: PatientQueueItem) => {
     setReassignModalItem(item);
     const docId = item.doctorId ?? '';
@@ -633,7 +1247,7 @@ export default function DashboardScreen() {
     }
     const heightCm = parseOptionalFloat(triage.height);
     const weightKg = parseOptionalFloat(triage.weight);
-    if (!heightCm || !weightKg || !triagePatient.dateOfBirth || !triagePatient.gender) {
+    if (!heightCm || !weightKg || !triagePatient.dateOfBirth || !triagePatient.sex) {
       setZScorePreview(null);
       return;
     }
@@ -642,7 +1256,7 @@ export default function DashboardScreen() {
     const timer = setTimeout(async () => {
       const [res] = await clinicService.calculatePediatricZScore({
         dateOfBirth: triagePatient.dateOfBirth,
-        gender: triagePatient.gender,
+        sex: triagePatient.sex,
         lengthOrHeightCm: heightCm,
         weightKg,
         isMeasuredRecumbent: triage.posture === 'RECUMBENT',
@@ -661,7 +1275,7 @@ export default function DashboardScreen() {
   const setTriageField = <K extends keyof TriageForm>(key: K, value: TriageForm[K]) =>
     setTriage((prev) => ({ ...prev, [key]: value }));
 
-  const handleSaveTriage = async () => {
+  const handleSaveTriage = async (escalateToDoctor: boolean = false) => {
     if (!triageItem) return;
     if (!requireStaff('record vitals')) return;
 
@@ -677,7 +1291,7 @@ export default function DashboardScreen() {
     const visualAcuityLeft = triage.visualAcuityLeft.trim() || undefined;
     const visualAcuityRight = triage.visualAcuityRight.trim() || undefined;
     const headCircumferenceCm = parseOptionalFloat(triage.headCircumference);
-    const midUpperArmCircumferenceCm = parseOptionalFloat(triage.midUpperArmCircumference);
+    const midUpperArmCircumferenceCm = parseOptionalFloat(triage.headCircumference ? triage.midUpperArmCircumference : triage.midUpperArmCircumference);
 
     const hasAnyVital = [
       systolicBp,
@@ -700,7 +1314,7 @@ export default function DashboardScreen() {
     const bmi =
       heightCm && weightKg ? Math.round((weightKg / ((heightCm / 100) * (heightCm / 100))) * 10) / 10 : undefined;
 
-    const payload: RecordTriageRequest = {
+    const request: RecordTriageRequest = {
       nurseId: currentStaff?.id,
       recordedByNurseName: currentName,
       systolicBp,
@@ -713,6 +1327,7 @@ export default function DashboardScreen() {
       weightKg,
       painScore,
       notes: triage.notes,
+      chiefComplaint: triage.notes.trim() || undefined,
       visualAcuityLeft,
       visualAcuityRight,
       headCircumferenceCm,
@@ -726,16 +1341,44 @@ export default function DashboardScreen() {
       preAssessmentNotes: triage.preAssessmentNotes.trim() || undefined,
       preAssessmentRemarks: triage.preAssessmentRemarks.trim() || undefined,
       triageAcuityReason: triage.priority,
+      priority: triage.priority,
+      homeInstructions: triage.homeInstructions.trim() || undefined,
+      rosCategory: triage.rosCategory,
+      dispensedItems:
+        isVisitTypeEligibleForOtcDispensing(triageItem.visitType) && triage.dispensedItems.length > 0
+          ? triage.dispensedItems.map((it) => ({
+              ...it,
+              rosCategory: it.rosCategory || triage.rosCategory,
+            }))
+          : undefined,
     };
 
     setSavingTriage(true);
-    const [, err] = await clinicService.recordTriage(triageItem.id, payload);
-    setSavingTriage(false);
+    const [, err] = await clinicService.recordTriage(triageItem.id, request);
 
     if (err) {
+      setSavingTriage(false);
       notify.error(err.message || 'Could not save vitals.');
       return;
     }
+
+    let escalatedVisit: PatientQueueItem | null = null;
+    if (escalateToDoctor) {
+      const escPriority: QueuePriority = triage.priority === 'Routine' ? 'Urgent' : triage.priority;
+      const [escRes, escErr] = await clinicService.escalateToConsultation(triageItem.id, {
+        priority: escPriority,
+        escalationReason:
+          triage.preAssessmentNotes.trim() ||
+          triage.notes.trim() ||
+          'Escalated from nurse vitals check to physician consultation',
+      });
+      if (escErr) {
+        notify.warning(escErr.message || 'Vitals saved, but could not escalate visit to consultation.');
+      } else {
+        escalatedVisit = escRes;
+      }
+    }
+    setSavingTriage(false);
 
     const summaryParts: string[] = [];
     if (systolicBp !== undefined && diastolicBp !== undefined) summaryParts.push(`BP ${systolicBp}/${diastolicBp}`);
@@ -752,8 +1395,9 @@ export default function DashboardScreen() {
         q.id === triageItem.id
           ? {
               ...q,
-              status: 'Triaged' as QueueStatus,
-              priority: triage.priority,
+              visitType: escalatedVisit?.visitType ?? q.visitType,
+              status: escalatedVisit?.status ?? (q.status === 'Waiting' ? ('Triaged' as QueueStatus) : q.status),
+              priority: escalatedVisit?.priority ?? triage.priority,
               hasVitals: true,
               vitalsSummary: summary || q.vitalsSummary,
               chiefComplaint: triage.notes || q.chiefComplaint,
@@ -761,10 +1405,56 @@ export default function DashboardScreen() {
           : q
       )
     );
-    notify.success('Vitals saved.');
+    notify.success(escalatedVisit ? 'Vitals saved and visit escalated to Physician Consultation.' : 'Vitals saved.');
+    if (triage.dispensedItems.length > 0) {
+      loadUnreviewedOtcLogs();
+    }
     setTriageItem(null);
     setTriagePatient(null);
     setZScorePreview(null);
+  };
+
+  const handleConfirmEscalateVisit = async () => {
+    if (!escalateModalItem || savingEscalation) return;
+    setSavingEscalation(true);
+    const [updatedVisit, err] = await clinicService.escalateToConsultation(escalateModalItem.id, {
+      priority: escalatePriority,
+      escalationReason:
+        escalateReason.trim() || 'Escalated from routine vitals check to physician consultation',
+    });
+    setSavingEscalation(false);
+    if (err || !updatedVisit) {
+      notify.error(err?.message || 'Could not escalate visit to physician consultation.');
+      return;
+    }
+    notify.success(`${escalateModalItem.patientName} escalated to Physician Consultation (${updatedVisit.priority}).`);
+    setQueue((prev) =>
+      (prev ?? []).map((q) => (q.id === updatedVisit.id ? { ...q, ...updatedVisit } : q))
+    );
+    setEscalateModalItem(null);
+    setEscalateReason('');
+    loadMetrics();
+  };
+
+  const handleReviewOtcDispenseLog = async (log: ClinicDispensingLogRecord, flagIntervention: boolean) => {
+    setReviewingLogId(log.id);
+    const notes = (reviewNotesById[log.id] || '').trim() || undefined;
+    const [, err] = await clinicService.reviewDispensingLog(log.id, {
+      reviewNotes: notes,
+      interventionFlagged: flagIntervention,
+    });
+    setReviewingLogId(null);
+    if (err) {
+      notify.error(err.message || 'Could not record physician review.');
+      return;
+    }
+    notify.success(
+      flagIntervention
+        ? `Follow-up intervention flagged for ${log.patientName}.`
+        : `Marked OTC dispensing for ${log.patientName} as reviewed.`
+    );
+    setUnreviewedOtcLogs((prev) => prev.filter((item) => item.id !== log.id));
+    loadReports('CENSUS', reportsStartDate, reportsEndDate);
   };
 
   const queueCounts = useMemo(() => {
@@ -775,14 +1465,21 @@ export default function DashboardScreen() {
       Waiting: count('Waiting'),
       Triaged: count('Triaged'),
       InConsultation: count('InConsultation'),
+      PendingProcedure: count('PendingProcedure'),
       OnHold: count('OnHold'),
       NoShow: count('NoShow'),
-      Completed: count('Completed'),
+      Completed: items.filter((q) => q.status === 'Completed' || q.status === 'DischargedNonDoctor').length,
     };
   }, [queue]);
 
   const filteredQueue = useMemo(() => {
-    const list = (queue ?? []).filter((item) => queueFilter === 'ALL' || item.status === queueFilter);
+    const list = (queue ?? []).filter((item) => {
+      if (queueFilter === 'ALL') return true;
+      if (queueFilter === 'Completed') {
+        return item.status === 'Completed' || item.status === 'DischargedNonDoctor';
+      }
+      return item.status === queueFilter;
+    });
     if (queueFilter === 'ALL') {
       const statusOrder: Record<string, number> = {
         InConsultation: 0,
@@ -792,8 +1489,10 @@ export default function DashboardScreen() {
         ReEvaluation: 4,
         OnHold: 5,
         Completed: 6,
-        NoShow: 7,
-        Cancelled: 8,
+        DischargedNonDoctor: 6,
+        Diverted: 7,
+        NoShow: 8,
+        Cancelled: 9,
       };
       return [...list].sort((a, b) => {
         const orderA = statusOrder[a.status] ?? 99;
@@ -807,6 +1506,8 @@ export default function DashboardScreen() {
 
   const reportTitle: Record<ReportType, string> = {
     DAILY_EOD: 'Daily end-of-day report',
+    CENSUS: 'Clinic census report',
+    DISPENSING_LEDGER: 'Clinic Medicine & Supply Dispensing Ledger',
     MORBIDITY: 'Morbidity report',
     TAX_DISCOUNT: 'Senior / PWD discount audit',
     DOCTOR_SHARES: 'Doctor shares',
@@ -816,6 +1517,12 @@ export default function DashboardScreen() {
     switch (reportType) {
       case 'DAILY_EOD':
         return clinicService.getDailyEodPdfUrl(eodDate || eodReport?.reportDate);
+      case 'CENSUS':
+      case 'DISPENSING_LEDGER':
+        return clinicService.getCensusPdfUrl(
+          reportsStartDate || censusReport?.startDate,
+          reportsEndDate || censusReport?.endDate
+        );
       case 'MORBIDITY':
         return clinicService.getMorbidityPdfUrl(
           reportsStartDate || morbidityReport?.startDate,
@@ -832,7 +1539,7 @@ export default function DashboardScreen() {
           reportsEndDate || doctorSharesReport?.endDate
         );
     }
-  }, [reportType, eodDate, eodReport, reportsStartDate, reportsEndDate, morbidityReport, taxReport, doctorSharesReport]);
+  }, [reportType, eodDate, eodReport, reportsStartDate, reportsEndDate, censusReport, morbidityReport, taxReport, doctorSharesReport]);
 
   const handleExportReportPdf = useCallback(async (customUrl?: string) => {
     if (isExportingPdf) return;
@@ -850,6 +1557,25 @@ export default function DashboardScreen() {
     }
   }, [isExportingPdf, getCurrentReportPdfUrl]);
 
+  const handleExportCensusExcel = useCallback(async () => {
+    if (isExportingExcel) return;
+    setIsExportingExcel(true);
+    const start = reportsStartDate || censusReport?.startDate || getManilaTodayStr();
+    const end = reportsEndDate || censusReport?.endDate || getManilaTodayStr();
+    const url = clinicService.getCensusExcelUrl(start, end);
+    const filename = `ClinicCensusReport-${start}-${end}.xlsx`;
+    try {
+      const downloaded = await downloadDocument(url, filename);
+      if (!downloaded) {
+        notify.error('Failed to download Excel file. Please try again.');
+      }
+    } catch (err: any) {
+      notify.error(err?.message ?? 'Failed to download Excel file.');
+    } finally {
+      setIsExportingExcel(false);
+    }
+  }, [isExportingExcel, reportsStartDate, reportsEndDate, censusReport]);
+
   const handleExportAnalyticsPdf = useCallback(async () => {
     const url = clinicService.getAnalyticsPdfUrl(
       analyticsStartDate || undefined,
@@ -860,6 +1586,8 @@ export default function DashboardScreen() {
 
   const currentReportReady =
     (reportType === 'DAILY_EOD' && !!eodReport) ||
+    (reportType === 'CENSUS' && !!censusReport) ||
+    (reportType === 'DISPENSING_LEDGER' && !!censusReport) ||
     (reportType === 'MORBIDITY' && !!morbidityReport) ||
     (reportType === 'TAX_DISCOUNT' && !!taxReport) ||
     (reportType === 'DOCTOR_SHARES' && !!doctorSharesReport);
@@ -918,6 +1646,36 @@ export default function DashboardScreen() {
           </Card>
         ) : null}
 
+        {unreviewedOtcLogs.length > 0 ? (
+          <Card>
+            <CardContent style={styles.otcReviewBanner}>
+              <View style={styles.otcReviewBannerInfo}>
+                <View style={styles.badgeWrapRow}>
+                  <Icon name="pill" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                  <ThemedText variant="bodyBold" color={theme.colors.text}>
+                    Nurse OTC &amp; Supply Dispensing — Physician Review Queue
+                  </ThemedText>
+                  <Badge
+                    label={`${unreviewedOtcLogs.length} unreviewed`}
+                    variant="warning"
+                    size="sm"
+                  />
+                </View>
+                <ThemedText variant="small" color={theme.colors.textSecondary}>
+                  Nurses logged routine OTC medicines/supplies during vitals checks. Doctors can review asynchronously and intervene if follow-up is needed.
+                </ThemedText>
+              </View>
+              <Button
+                title="Review Dispensed OTC"
+                variant="outline"
+                size="sm"
+                icon="eye"
+                onPress={() => setShowOtcReviewModal(true)}
+              />
+            </CardContent>
+          </Card>
+        ) : null}
+
         <View style={styles.queueActionsRow}>
           <View style={styles.queueFilterWrap}>
             <SegmentedControl<QueueFilter>
@@ -928,28 +1686,14 @@ export default function DashboardScreen() {
                 { value: 'Waiting', label: 'Waiting', count: queueCounts.Waiting },
                 { value: 'Triaged', label: 'Triaged', count: queueCounts.Triaged },
                 { value: 'InConsultation', label: 'In consultation', count: queueCounts.InConsultation },
+                { value: 'PendingProcedure', label: 'Procedure bay', count: queueCounts.PendingProcedure },
                 { value: 'OnHold', label: 'On hold', count: queueCounts.OnHold },
                 { value: 'NoShow', label: 'No show', count: queueCounts.NoShow },
                 { value: 'Completed', label: 'Completed', count: queueCounts.Completed },
               ]}
             />
           </View>
-          <View style={styles.queueButtonsWrap}>
-            <Button
-              title="Open TV Board"
-              variant="outline"
-              icon="maximize"
-              size="sm"
-              onPress={handleOpenTvDisplay}
-            />
-            <Button
-              title="Force EOD / Close Day"
-              variant="outline"
-              icon="clock"
-              size="sm"
-              onPress={() => setShowForceEodModal(true)}
-            />
-          </View>
+          <View style={styles.queueButtonsWrap} />
         </View>
 
         {showSkeleton ? (
@@ -974,43 +1718,81 @@ export default function DashboardScreen() {
           filteredQueue.map((item) => {
             const badge = statusBadge(item.status);
             const isActioning = actioningId === item.id;
-            const canCall = item.status === 'Waiting' || item.status === 'Triaged';
-            const isCompleted = item.status === 'Completed';
-            const canTriage = !isCompleted && item.status !== 'Cancelled' && item.status !== 'NoShow';
+            const isCompleted = item.status === 'Completed' || item.status === 'DischargedNonDoctor';
+            const isInConsult = item.status === 'InConsultation';
+            const isWaiting = item.status === 'Waiting';
+            const isTriaged = item.status === 'Triaged';
+            const isOnHold = item.status === 'OnHold';
+            const isTerminal = isCompleted || item.status === 'Cancelled' || item.status === 'NoShow' || item.status === 'Diverted';
 
             // Wait time calculation for all active waiting patients
-            const isWaitingState = item.status === 'Waiting' || item.status === 'Triaged' || item.status === 'OnHold';
+            const isWaitingState = isWaiting || isTriaged || isOnHold;
             const waited = isWaitingState ? waitingMinutes(item.checkInTime) : null;
             const isOverdueWait = waited !== null && waited > 60;
 
-            // Direct action eligibility
-            const canHold = item.status === 'Waiting' || item.status === 'Triaged';
-            const canNoShow = item.status === 'Waiting' || item.status === 'Triaged' || item.status === 'OnHold';
-            const canCancel = item.status !== 'Completed' && item.status !== 'Cancelled' && item.status !== 'NoShow';
-            const canReactivate = item.status === 'OnHold' || item.status === 'NoShow';
+            // Direct action eligibility - turn-based workstation workflow to prevent race conditions
+            const canCall = isWaiting || isTriaged;
+            const canExamine = isInConsult || isCompleted;
+            const canTriage = (isWaiting || isTriaged) && !isTerminal;
+            const canDischarge =
+              (isTriaged || isInConsult) &&
+              !isCompleted &&
+              !isTerminal;
+            const canDivert = !isTerminal;
+            const canHold = isWaiting || isTriaged;
+            const canNoShow = isWaiting || isTriaged || isOnHold;
+            const canCancel = !isTerminal;
+            const canReactivate = isOnHold || item.status === 'NoShow';
+            const canAssignOrReassign = !isTerminal;
+            const canExecuteProcedure = item.status === 'PendingProcedure';
+
+            const hasCareActions = canCall || canExamine || canTriage || canAssignOrReassign || canExecuteProcedure;
+            const hasFlowActions = canHold || canReactivate || canDischarge || isCompleted;
+            const hasExceptionActions = canNoShow || canCancel;
+            const hasEmergencyActions = canDivert;
+            const serviceBadge = getServiceBadge(item.visitType);
+            const activeScreening =
+              item.visitType === 'PreventiveHealthAssessment'
+                ? healthScreeningsByQueueId[item.id] ?? null
+                : null;
+            const isAwaitingDoctorPe = !isTerminal && activeScreening?.status === 'AwaitingDoctor';
+            const canLaunchScreening = !isTerminal && item.visitType === 'PreventiveHealthAssessment';
 
             return (
               <Card key={item.id}>
                 <CardContent style={styles.queueItem}>
                   <View style={styles.queueHeader}>
-                    <Badge label={item.queueNumber} variant={priorityVariant(item.priority)} />
-                    <View style={styles.queueTitle}>
-                      <ThemedText variant="bodyBold">{item.patientName}</ThemedText>
-                      <ThemedText
-                        variant="small"
-                        color={isOverdueWait ? theme.colors.emergencyText : theme.colors.textSecondary}
-                      >
-                        {item.doctorName ? item.doctorName : 'Unassigned'}
-                        {item.priority !== 'Routine' ? ` • ${item.priority}` : ''}
-                        {waited !== null ? ` • waiting ${waited} min` : ''}
-                      </ThemedText>
+                    <View style={styles.queueIdentityRow}>
+                      <Badge label={item.queueNumber} variant={priorityVariant(item.priority)} />
+                      <View style={styles.queueTitle}>
+                        <ThemedText variant="bodyBold">{item.patientName}</ThemedText>
+                        <ThemedText
+                          variant="small"
+                          color={isOverdueWait ? theme.colors.emergencyText : theme.colors.textSecondary}
+                        >
+                          {item.doctorName ? item.doctorName : 'Unassigned'}
+                          {item.priority !== 'Routine' ? ` • ${item.priority}` : ''}
+                          {waited !== null ? ` • waiting ${waited} min` : ''}
+                        </ThemedText>
+                      </View>
                     </View>
                     <View style={styles.badgeRow}>
+                      {serviceBadge.label ? (
+                        <Badge
+                          label={serviceBadge.label}
+                          variant={serviceBadge.variant}
+                          icon={serviceBadge.icon}
+                          size="sm"
+                        />
+                      ) : null}
                       {item.roomOrStation ? (
                         <Badge label={item.roomOrStation} variant="outline" size="sm" icon="clinic" />
                       ) : null}
                       {isOverdueWait ? (
                         <Badge label="Waiting > 60m" variant="emergency" icon="alert" />
+                      ) : null}
+                      {isAwaitingDoctorPe ? (
+                        <Badge label="Awaiting Doctor PE" variant="warning" size="sm" icon="stethoscope" />
                       ) : null}
                       <Badge label={badge.label} variant={badge.variant} icon={badge.icon} />
                     </View>
@@ -1036,120 +1818,242 @@ export default function DashboardScreen() {
                     </View>
                   ) : null}
 
-                  <View style={styles.actionRow}>
-                    {canTriage ? (
-                      <Button
-                        title={item.hasVitals ? 'Update vitals' : 'Record vitals'}
-                        variant="outline"
-                        size="sm"
-                        icon="activity"
-                        onPress={() => handleOpenTriage(item)}
-                      />
-                    ) : null}
-                    {item.status !== 'Completed' && item.status !== 'Cancelled' && item.status !== 'NoShow' ? (
-                      item.doctorName ? (
-                        <Button
-                          title="Reassign"
-                          variant="ghost"
-                          size="sm"
-                          icon="refresh"
-                          onPress={() => handleOpenReassign(item)}
-                        />
-                      ) : (
-                        <Button
-                          title="Assign doctor"
-                          variant="outline"
-                          size="sm"
-                          icon="userCheck"
-                          onPress={() => handleOpenReassign(item)}
-                        />
-                      )
-                    ) : null}
-                    {canCall ? (
-                      <Button
-                        title="Call patient"
-                        variant="primary"
-                        size="sm"
-                        icon="arrowRight"
-                        loading={isActioning}
-                        disabled={isActioning}
-                        onPress={() => handleCallPatient(item)}
-                      />
-                    ) : null}
-                    {item.status !== 'Cancelled' && item.status !== 'NoShow' ? (
-                      <Button
-                        title="Examine"
-                        variant="secondary"
-                        size="sm"
-                        icon="consultations"
-                        onPress={() =>
-                          navigation.navigate('Consultations', {
-                            patientId: item.patientId,
-                            patientName: item.patientName,
-                            queueId: item.id,
-                          })
-                        }
-                      />
-                    ) : null}
-                    {canHold ? (
-                      <Button
-                        title="Put on hold"
-                        variant="outline"
-                        size="sm"
-                        icon="clock"
-                        loading={isActioning}
-                        disabled={isActioning}
-                        onPress={() => handlePutOnHold(item)}
-                      />
-                    ) : null}
-                    {canReactivate ? (
-                      <Button
-                        title="Re-activate"
-                        variant="primary"
-                        size="sm"
-                        icon="refresh"
-                        loading={isActioning}
-                        disabled={isActioning}
-                        onPress={() => handleReactivate(item)}
-                      />
-                    ) : null}
-                    {canNoShow ? (
-                      <Button
-                        title="No-show"
-                        variant="outline"
-                        size="sm"
-                        icon="alertCircle"
-                        loading={isActioning}
-                        disabled={isActioning}
-                        onPress={() => handleMarkNoShow(item)}
-                      />
-                    ) : null}
-                    {canCancel ? (
-                      <Button
-                        title="Cancel visit"
-                        variant="ghost"
-                        size="sm"
-                        icon="trash"
-                        loading={isActioning}
-                        disabled={isActioning}
-                        onPress={() => handleCancelVisit(item)}
-                      />
-                    ) : null}
-                    {isCompleted ? (
-                      <Button
-                        title="Bill visit"
-                        variant="success"
-                        size="sm"
-                        icon="billing"
-                        onPress={() =>
-                          navigation.navigate('Billing', {
-                            patientId: item.patientId,
-                            patientName: item.patientName,
-                          })
-                        }
-                      />
-                    ) : null}
-                  </View>
+                  {item.status === 'Diverted' && item.divertedToFacility ? (
+                    <View style={styles.vitalsStrip}>
+                      <ThemedText variant="small" color={theme.colors.emergencyText}>
+                        ER Transfer: {item.divertedToFacility} ({item.transportMode || 'Ambulance'})
+                      </ThemedText>
+                    </View>
+                  ) : null}
+
+                  {hasCareActions || hasFlowActions || hasExceptionActions || hasEmergencyActions ? (
+                    <View style={styles.actionClustersWrap}>
+                      {hasCareActions || hasFlowActions ? (
+                        <View style={styles.primaryActionGroup}>
+                          {hasCareActions ? (
+                            <View style={styles.actionCluster} testID="care-encounter-cluster">
+                              {canCall ? (
+                                <Button
+                                  title="Call patient"
+                                  variant="primary"
+                                  size="sm"
+                                  icon="arrowRight"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handleCallPatient(item)}
+                                />
+                              ) : null}
+                              {canExamine ? (
+                                <Button
+                                  title="Examine"
+                                  variant={isInConsult && !canCall ? 'primary' : 'secondary'}
+                                  size="sm"
+                                  icon="consultations"
+                                  onPress={() =>
+                                    navigation.navigate('Consultations', {
+                                      patientId: item.patientId,
+                                      patientName: item.patientName,
+                                      queueId: item.id,
+                                    })
+                                  }
+                                />
+                              ) : null}
+                              {canExecuteProcedure ? (
+                                <Button
+                                  title="Perform procedure"
+                                  variant="primary"
+                                  size="sm"
+                                  icon="syringe"
+                                  onPress={() =>
+                                    navigation.navigate('Consultations', {
+                                      patientId: item.patientId,
+                                      patientName: item.patientName,
+                                      queueId: item.id,
+                                      initialChartTab: 'procedures',
+                                    })
+                                  }
+                                />
+                              ) : null}
+                              {canTriage ? (
+                                <Button
+                                  title={item.hasVitals ? 'Update vitals' : 'Record vitals'}
+                                  variant="outline"
+                                  size="sm"
+                                  icon="activity"
+                                  onPress={() => {
+                                    if (item.hasVitals) {
+                                      handleOpenEditVitals(item);
+                                    } else {
+                                      handleOpenTriage(item);
+                                    }
+                                  }}
+                                />
+                              ) : null}
+                              {canLaunchScreening ? (
+                                <Button
+                                  title="Health screening"
+                                  variant={isAwaitingDoctorPe ? 'primary' : 'outline'}
+                                  size="sm"
+                                  icon="heartPulse"
+                                  loading={openingScreeningQueueId === item.id}
+                                  disabled={Boolean(openingScreeningQueueId)}
+                                  onPress={() => handleOpenHealthScreening(item)}
+                                />
+                              ) : null}
+                              {isNurseAssessmentVisitType(item.visitType) &&
+                              item.status !== 'Cancelled' &&
+                              item.status !== 'NoShow' &&
+                              item.status !== 'Diverted' ? (
+                                <Button
+                                  title="Escalate to MD"
+                                  variant="dangerOutline"
+                                  size="sm"
+                                  icon="emergency"
+                                  onPress={() => {
+                                    setEscalateModalItem(item);
+                                    setEscalatePriority(item.priority === 'Routine' ? 'Emergency' : item.priority);
+                                    setEscalateReason('');
+                                  }}
+                                />
+                              ) : null}
+                              {canAssignOrReassign ? (
+                                item.doctorName ? (
+                                  <Button
+                                    title="Reassign"
+                                    variant="ghost"
+                                    size="sm"
+                                    icon="refresh"
+                                    onPress={() => handleOpenReassign(item)}
+                                  />
+                                ) : (
+                                  <Button
+                                    title="Assign doctor"
+                                    variant="outline"
+                                    size="sm"
+                                    icon="userCheck"
+                                    onPress={() => handleOpenReassign(item)}
+                                  />
+                                )
+                              ) : null}
+                            </View>
+                          ) : null}
+
+                          {hasCareActions && hasFlowActions ? (
+                            <View style={styles.actionClusterSeparator} testID="care-flow-separator" />
+                          ) : null}
+
+                          {hasFlowActions ? (
+                            <View style={styles.actionCluster} testID="flow-completion-cluster">
+                              {canHold ? (
+                                <Button
+                                  title="Put on hold"
+                                  variant="outline"
+                                  size="sm"
+                                  icon="clock"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handlePutOnHold(item)}
+                                />
+                              ) : null}
+                              {canReactivate ? (
+                                <Button
+                                  title="Re-activate"
+                                  variant="primary"
+                                  size="sm"
+                                  icon="refresh"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handleReactivate(item)}
+                                />
+                              ) : null}
+                              {canDischarge ? (
+                                <Button
+                                  title="Discharge visit"
+                                  variant="outline"
+                                  size="sm"
+                                  icon="check"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => {
+                                    setDischargeModalItem(item);
+                                    setDischargeRemarks('');
+                                  }}
+                                />
+                              ) : null}
+                              {isCompleted ? (
+                                <Button
+                                  title="Bill visit"
+                                  variant="success"
+                                  size="sm"
+                                  icon="billing"
+                                  onPress={() =>
+                                    navigation.navigate('Billing', {
+                                      patientId: item.patientId,
+                                      patientName: item.patientName,
+                                    })
+                                  }
+                                />
+                              ) : null}
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
+
+                      {hasExceptionActions || hasEmergencyActions ? (
+                        <View style={styles.trailingActionGroup}>
+                          {hasCareActions || hasFlowActions ? (
+                            <View style={styles.actionClusterSeparator} testID="workflow-exceptions-separator" />
+                          ) : null}
+
+                          {hasExceptionActions ? (
+                            <View style={styles.actionCluster} testID="exceptions-cluster">
+                              {canNoShow ? (
+                                <Button
+                                  title="No-show"
+                                  variant="outline"
+                                  size="sm"
+                                  icon="alertCircle"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handleMarkNoShow(item)}
+                                />
+                              ) : null}
+                              {canCancel ? (
+                                <Button
+                                  title="Cancel visit"
+                                  variant="ghost"
+                                  size="sm"
+                                  icon="trash"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handleCancelVisit(item)}
+                                />
+                              ) : null}
+                            </View>
+                          ) : null}
+
+                          {hasExceptionActions && hasEmergencyActions ? (
+                            <View style={styles.actionClusterSeparator} testID="exceptions-emergency-separator" />
+                          ) : null}
+
+                          {hasEmergencyActions ? (
+                            <View style={[styles.actionCluster, styles.emergencyCluster]} testID="emergency-cluster">
+                              <Button
+                                title="Divert to ER"
+                                variant="danger"
+                                size="sm"
+                                icon="alert"
+                                testID="divert-emergency-button"
+                                loading={isActioning}
+                                disabled={isActioning}
+                                onPress={() => setDivertModalItem(item)}
+                              />
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </CardContent>
               </Card>
             );
@@ -1216,22 +2120,20 @@ export default function DashboardScreen() {
                   ytd: 'Year to Date',
                 };
                 return (
-                  <Pressable
+                  <Button
                     key={preset}
-                    style={styles.presetChip}
+                    variant={analyticsPreset === preset ? 'primary' : 'subtle'}
+                    size="xs"
+                    title={labelMap[preset]}
                     onPress={() => {
+                      setAnalyticsPreset(preset);
                       const range = computeDatePresetRange(preset);
                       setAnalyticsStartDate(range.start);
                       setAnalyticsEndDate(range.end);
                       loadAnalytics(range.start, range.end);
                     }}
-                    accessibilityRole="button"
                     accessibilityLabel={`Select ${labelMap[preset]}`}
-                  >
-                    <ThemedText variant="caption" color={theme.colors.primaryDark}>
-                      {labelMap[preset]}
-                    </ThemedText>
-                  </Pressable>
+                  />
                 );
               })}
             </View>
@@ -1541,7 +2443,7 @@ export default function DashboardScreen() {
   };
 
   // ------------------------------------------------------------------
-  // Tab: statutory reports
+  // Tab: clinic reports
   // ------------------------------------------------------------------
   const renderReportBody = () => {
     if (loading && !currentReportReady) return <LoadingBlock rows={6} />;
@@ -1608,6 +2510,1519 @@ export default function DashboardScreen() {
             <DataRow label="Dangerous drug prescriptions" value={eodReport.totalDangerousDrugPrescriptions} />
           </CardContent>
         </Card>
+      );
+    }
+
+    if (reportType === 'CENSUS' && censusReport) {
+      const formatCustomFieldPills = (customFields?: Record<string, any> | string | null): string[] => {
+        if (!customFields) return [];
+        let parsed: any = {};
+        if (typeof customFields === 'string') {
+          try {
+            parsed = JSON.parse(customFields);
+          } catch {
+            return [customFields];
+          }
+        } else if (typeof customFields === 'object') {
+          parsed = customFields;
+        }
+
+        // Defensive guard: handle "null", primitives, or arrays returned by JSON.parse
+        if (!parsed || typeof parsed !== 'object') {
+          return typeof parsed === 'string' && parsed !== '' ? [parsed] : [];
+        }
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => String(item));
+        }
+
+        const pills: string[] = [];
+        for (const [key, val] of Object.entries(parsed)) {
+          if (val !== null && val !== undefined && val !== '') {
+            const cleanKey = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+            let formattedVal = '';
+            if (Array.isArray(val)) {
+              formattedVal = val
+                .map((v) => (v && typeof v === 'object' ? JSON.stringify(v) : String(v ?? '')))
+                .filter(Boolean)
+                .join(', ');
+            } else if (typeof val === 'object') {
+              formattedVal = Object.entries(val as Record<string, unknown>)
+                .filter(([, nested]) => nested !== null && nested !== undefined && nested !== '')
+                .map(([k, nested]) => `${k}: ${String(nested)}`)
+                .join(', ');
+            } else {
+              formattedVal = String(val);
+            }
+            if (formattedVal) {
+              pills.push(`${cleanKey}: ${formattedVal}`);
+            }
+          }
+        }
+        return pills;
+      };
+
+      const formatTurnaroundBadge = (mins?: number | null): string => {
+        if (mins === null || mins === undefined) return '—';
+        return `${mins}m`;
+      };
+
+      const getAcuityVariant = (acuity?: string): BadgeVariant => {
+        const norm = (acuity || '').toLowerCase();
+        if (norm === 'emergency' || norm === 'stat') return 'emergency';
+        if (norm === 'urgent') return 'urgent';
+        return 'routine';
+      };
+
+      const dispensingLedger = censusReport.dispensingLedger || [];
+      const isServerPaginated =
+        typeof censusReport.pageNumber === 'number' &&
+        typeof censusReport.totalItems === 'number' &&
+        (censusReport.pageSize ?? 0) > 0;
+
+      const q = censusSearchQuery.trim().toLowerCase();
+      const rawItems = censusReport.items || [];
+      const filteredItems = isServerPaginated
+        ? rawItems
+        : rawItems.filter((item) => {
+            if (censusAcuityFilter !== 'ALL' && (item.acuity || '').toLowerCase() !== censusAcuityFilter.toLowerCase()) {
+              return false;
+            }
+            if (censusVisitTypeFilter !== 'ALL' && (item.visitType || '').toLowerCase() !== censusVisitTypeFilter.toLowerCase()) {
+              return false;
+            }
+            if (!q) return true;
+
+            const pills = formatCustomFieldPills(item.customFields).join(' ').toLowerCase();
+            const subRowsBlob = resolveCensusVisitServiceRows(item, dispensingLedger)
+              .map((sr) =>
+                [
+                  sr.serviceName,
+                  sr.referenceNumber ?? '',
+                  sr.attendingDoctor ?? '',
+                  sr.attendingNurse ?? '',
+                  sr.doctorDiagnosis ?? '',
+                  sr.serviceDetails ?? '',
+                  sr.disposition ?? '',
+                ].join(' '),
+              )
+              .join(' ');
+            const searchableBlob = [
+              item.patientName,
+              item.patientCode,
+              item.queueNumber,
+              item.servicesAvailedSummary ?? '',
+              (item.servicesAvailed || []).join(' '),
+              item.rosCategory ?? '',
+              item.dispensedMedicinesSummary ?? '',
+              item.doctorDiagnosis ?? '',
+              item.clinicalAssessment ?? '',
+              item.nurseImpression ?? item.nurseAssessment ?? '',
+              item.attendingDoctor ?? '',
+              item.attendingNurse ?? '',
+              item.chiefComplaint ?? '',
+              item.systemsReviewed ?? '',
+              item.proceduresPerformed ?? '',
+              subRowsBlob,
+              pills,
+            ]
+              .join(' ')
+              .toLowerCase();
+
+            return searchableBlob.includes(q);
+          });
+
+      const effectivePage = censusReport.pageNumber ?? censusPage;
+      const effectivePageSize =
+        censusReport.pageSize && censusReport.pageSize > 0
+          ? censusReport.pageSize
+          : censusPageSize;
+      const totalMatchingEncounters =
+        typeof censusReport.totalItems === 'number'
+          ? censusReport.totalItems
+          : filteredItems.length;
+      const effectiveTotalPages = Math.max(
+        1,
+        censusReport.totalPages ??
+          Math.ceil(totalMatchingEncounters / Math.max(1, effectivePageSize)),
+      );
+      const hasPrevPage =
+        typeof censusReport.hasPreviousPage === 'boolean'
+          ? censusReport.hasPreviousPage
+          : effectivePage > 1;
+      const hasNextPage =
+        typeof censusReport.hasNextPage === 'boolean'
+          ? censusReport.hasNextPage
+          : effectivePage < effectiveTotalPages;
+      const rangeStart =
+        totalMatchingEncounters === 0
+          ? 0
+          : (effectivePage - 1) * effectivePageSize + 1;
+      const rangeEnd =
+        totalMatchingEncounters === 0
+          ? 0
+          : Math.min(totalMatchingEncounters, rangeStart + filteredItems.length - 1);
+
+      return (
+        <View style={styles.listGap}>
+          {/* Summary Telemetry KPI Cards */}
+          <View style={styles.statRow}>
+            <StatCard
+              style={styles.statItem}
+              label="Total Census"
+              value={censusReport.summary.totalCensus}
+              subtext={`${censusReport.summary.newPatients} New • ${censusReport.summary.returningPatients} Returning`}
+              icon="patients"
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Consultations"
+              value={censusReport.summary.consultations ?? censusReport.summary.consultationCount ?? 0}
+              subtext={`${Math.max(censusReport.summary.inClinicProceduresCount ?? 0, censusReport.summary.standaloneProcedures ?? censusReport.summary.procedureCount ?? 0)} Procedures • ${censusReport.summary.vitalsCheckVisits ?? censusReport.summary.vitalsCheckOnlyCount ?? 0} Vitals Check`}
+              icon="stethoscope"
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Medicine Dispensing"
+              value={censusReport.summary.visitsWithMedicineDispensing ?? 0}
+              subtext={`${censusReport.summary.totalDispensedUnits ?? 0} Units • ${dispensingLedger.length} Ledger Entries`}
+              icon="pill"
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Avg Turnaround"
+              value={`${(censusReport.summary.averageTurnaroundMinutes ?? 0).toFixed(1)} min`}
+              subtext={`${censusReport.summary.completedVisits ?? censusReport.summary.completedCount ?? 0} Completed • ${censusReport.summary.divertedVisits ?? censusReport.summary.divertedCount ?? 0} Diverted`}
+              icon="timer"
+            />
+          </View>
+
+          <View style={styles.statRow}>
+            <Card style={styles.statItem}>
+              <CardContent style={styles.demographicsCardContent}>
+                <View style={styles.cardHeaderSmall}>
+                  <Icon name="activity" size={16} color={theme.colors.primary} />
+                  <ThemedText variant="captionBold" color={theme.colors.text}>
+                    Demographics
+                  </ThemedText>
+                </View>
+                <View style={styles.badgeWrapRow}>
+                  <Badge
+                    label={`Pedia: ${censusReport.demographics?.pediatricCount ?? censusReport.summary?.pediatricCount ?? 0}`}
+                    variant="neutral"
+                    size="sm"
+                  />
+                  <Badge
+                    label={`Adult: ${censusReport.demographics?.adultCount ?? censusReport.summary?.adultCount ?? 0}`}
+                    variant="neutral"
+                    size="sm"
+                  />
+                  <Badge
+                    label={`Senior: ${censusReport.demographics?.seniorCount ?? censusReport.summary?.seniorCount ?? 0}`}
+                    variant="neutral"
+                    size="sm"
+                  />
+                  {(censusReport.demographics?.pwdCount ?? censusReport.summary?.pwdCount ?? 0) > 0 && (
+                    <Badge
+                      label={`PWD: ${censusReport.demographics?.pwdCount ?? censusReport.summary?.pwdCount ?? 0}`}
+                      variant="purple"
+                      size="sm"
+                    />
+                  )}
+                  {(censusReport.demographics?.philHealthCount ?? censusReport.summary?.philHealthCount ?? 0) > 0 && (
+                    <Badge
+                      label={`PhilHealth: ${censusReport.demographics?.philHealthCount ?? censusReport.summary?.philHealthCount ?? 0}`}
+                      variant="info"
+                      size="sm"
+                    />
+                  )}
+                </View>
+              </CardContent>
+            </Card>
+
+            <Card style={styles.statItem}>
+              <CardContent style={styles.demographicsCardContent}>
+                <View style={styles.cardHeaderSmall}>
+                  <Icon name="heartPulse" size={16} color={theme.colors.primary} />
+                  <ThemedText variant="captionBold" color={theme.colors.text}>
+                    Clinical Acuity
+                  </ThemedText>
+                </View>
+                <View style={styles.badgeWrapRow}>
+                  <Badge
+                    label={`Routine: ${censusReport.acuity?.routineCount ?? censusReport.summary.routineCount ?? 0}`}
+                    variant="routine"
+                    size="sm"
+                  />
+                  <Badge
+                    label={`Urgent: ${censusReport.acuity?.urgentCount ?? censusReport.summary.urgentCount ?? 0}`}
+                    variant="urgent"
+                    size="sm"
+                  />
+                  <Badge
+                    label={`Emergency: ${censusReport.acuity?.emergencyCount ?? censusReport.summary.emergencyCount ?? 0}`}
+                    variant="emergency"
+                    size="sm"
+                  />
+                </View>
+              </CardContent>
+            </Card>
+
+            <Card style={styles.statItem}>
+              <CardContent style={styles.demographicsCardContent}>
+                <View style={styles.cardHeaderSmall}>
+                  <Icon name="clipboard" size={16} color={theme.colors.primary} />
+                  <ThemedText variant="captionBold" color={theme.colors.text}>
+                    Services Availed Breakdown
+                  </ThemedText>
+                </View>
+                {(() => {
+                  const itemsList = censusReport.items ?? [];
+                  const svcList = censusReport.serviceBreakdown;
+                  const getSvcValue = (name: string, fallback: number, preferVolume = false) => {
+                    const found = svcList?.find((s) => s.serviceName.toLowerCase() === name.toLowerCase());
+                    if (found) return preferVolume ? found.totalVolume : found.visitCount;
+                    return fallback;
+                  };
+                  const consultCnt = getSvcValue(
+                    'Consultation',
+                    censusReport.summary.consultations ?? censusReport.summary.consultationCount ?? 0,
+                  );
+                  const vitalsCnt = getSvcValue(
+                    'Vitals Check',
+                    censusReport.summary.vitalsCheckVisits ??
+                      censusReport.summary.vitalsCheckOnlyCount ??
+                      itemsList.filter((i) => isNurseAssessmentVisitType(i.visitType) || i.servicesAvailed?.includes('Preventive Health Assessment') || i.servicesAvailed?.includes('Vitals Check')).length,
+                  );
+                  const procCnt = getSvcValue(
+                    'In-Clinic Procedure',
+                    censusReport.summary.inClinicProceduresCount ??
+                      censusReport.summary.standaloneProcedures ??
+                      censusReport.summary.procedureCount ??
+                      itemsList.filter((i) => i.servicesAvailed?.includes('In-Clinic Procedure')).length,
+                  );
+                  const dispCnt = getSvcValue(
+                    'Medicine Dispensing',
+                    censusReport.summary.visitsWithMedicineDispensing ?? 0,
+                  );
+                  const rxCnt = getSvcValue(
+                    'Prescription',
+                    censusReport.summary.prescriptionsIssued ?? 0,
+                    true,
+                  );
+                  const medCertCnt = getSvcValue(
+                    'Medical Certificate',
+                    censusReport.summary.medicalCertificatesIssued ?? 0,
+                    true,
+                  );
+                  const refCnt = getSvcValue(
+                    'Referral',
+                    censusReport.summary.referralsIssued ?? 0,
+                    true,
+                  );
+                  const labCnt = getSvcValue(
+                    'Laboratory Requisition',
+                    censusReport.summary.labRequisitionsIssued ?? 0,
+                    true,
+                  );
+
+                  const procItemCounts = new Map<string, number>();
+                  const inClinicDiagCounts = new Map<string, number>();
+                  const outsideDiagCounts = new Map<string, number>();
+
+                  if (
+                    censusReport.itemizedProcedures ||
+                    censusReport.itemizedInClinicDiagnostics ||
+                    censusReport.itemizedOutsideDiagnostics
+                  ) {
+                    for (const p of censusReport.itemizedProcedures ?? []) {
+                      if (p.itemName) procItemCounts.set(p.itemName, p.count);
+                    }
+                    for (const d of censusReport.itemizedInClinicDiagnostics ?? []) {
+                      if (d.itemName) inClinicDiagCounts.set(d.itemName, d.count);
+                    }
+                    for (const d of censusReport.itemizedOutsideDiagnostics ?? []) {
+                      if (d.itemName) outsideDiagCounts.set(d.itemName, d.count);
+                    }
+                  } else {
+                    for (const visitItem of itemsList) {
+                      const visitIsolated = resolveCensusIsolatedServiceRows(
+                        visitItem,
+                        dispensingLedger,
+                      );
+                      for (const sr of visitIsolated) {
+                        if (sr.serviceName === 'In-Clinic Procedure') {
+                          const pLabel = (
+                            sr.serviceItemName ||
+                            sr.serviceDetails?.split('•')[0] ||
+                            ''
+                          ).trim();
+                          if (pLabel) {
+                            procItemCounts.set(pLabel, (procItemCounts.get(pLabel) ?? 0) + 1);
+                          }
+                        } else if (sr.serviceName === 'In-Clinic Diagnostic') {
+                          const dLabel = (
+                            sr.serviceItemName ||
+                            sr.serviceDetails?.split('•')[0] ||
+                            ''
+                          ).trim();
+                          if (dLabel) {
+                            inClinicDiagCounts.set(
+                              dLabel,
+                              (inClinicDiagCounts.get(dLabel) ?? 0) + 1,
+                            );
+                          }
+                        } else if (sr.serviceName === 'Diagnostic Order (Outside)') {
+                          const outLabel = (
+                            sr.serviceItemName ||
+                            sr.referenceNumber ||
+                            'Diagnostic Requisition'
+                          ).trim();
+                          if (outLabel) {
+                            outsideDiagCounts.set(
+                              outLabel,
+                              (outsideDiagCounts.get(outLabel) ?? 0) + 1,
+                            );
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  const itemizedProcedures = Array.from(procItemCounts.entries());
+                  const itemizedInClinicDiags = Array.from(inClinicDiagCounts.entries());
+                  const itemizedOutsideDiags = Array.from(outsideDiagCounts.entries());
+
+                  return (
+                    <View style={styles.demographicsCardContent}>
+                      <View style={styles.badgeWrapRow}>
+                        <Badge label={`Consultation: ${consultCnt}`} variant="outline" size="sm" />
+                        <Badge label={`Vitals Check: ${vitalsCnt}`} variant="outline" size="sm" />
+                        <Badge label={`Procedures: ${procCnt}`} variant="outline" size="sm" />
+                        <Badge label={`Dispensing: ${dispCnt}`} variant="primary" size="sm" />
+                        <Badge label={`Rx: ${rxCnt}`} variant="info" size="sm" />
+                        <Badge label={`Med Certs: ${medCertCnt}`} variant="neutral" size="sm" />
+                        <Badge label={`Referrals: ${refCnt}`} variant="neutral" size="sm" />
+                        <Badge label={`Lab Reqs: ${labCnt}`} variant="purple" size="sm" />
+                      </View>
+                      {itemizedProcedures.length > 0 && (
+                        <View style={styles.badgeWrapRow}>
+                          <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                            Performed Procedures:
+                          </ThemedText>
+                          {itemizedProcedures.map(([pName, count]) => (
+                            <Badge
+                              key={`proc-item-${pName}`}
+                              label={`${pName}: ${count}`}
+                              variant="outline"
+                              size="xs"
+                            />
+                          ))}
+                        </View>
+                      )}
+                      {(itemizedInClinicDiags.length > 0 || itemizedOutsideDiags.length > 0) && (
+                        <View style={styles.badgeWrapRow}>
+                          <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                            Diagnostics:
+                          </ThemedText>
+                          {itemizedInClinicDiags.map(([dName, count]) => (
+                            <Badge
+                              key={`diag-in-${dName}`}
+                              label={`In-Clinic • ${dName}: ${count}`}
+                              variant="info"
+                              size="xs"
+                            />
+                          ))}
+                          {itemizedOutsideDiags.map(([dName, count]) => (
+                            <Badge
+                              key={`diag-out-${dName}`}
+                              label={`Outside • ${dName}: ${count}`}
+                              variant="purple"
+                              size="xs"
+                            />
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
+            <Card style={styles.statItem}>
+              <CardContent style={styles.demographicsCardContent}>
+                <View style={styles.cardHeaderSmall}>
+                  <Icon name="stethoscope" size={16} color={theme.colors.primary} />
+                  <ThemedText variant="captionBold" color={theme.colors.text}>
+                    Review of Systems (ROS) Breakdown
+                  </ThemedText>
+                </View>
+                {(() => {
+                  const explicitRos = censusReport.rosBreakdown;
+                  let rosRows: Array<{ rosCategory: string; visitCount: number; dispensingCount: number }> = [];
+                  if (explicitRos && explicitRos.length > 0) {
+                    rosRows = explicitRos;
+                  } else {
+                    const map = new Map<string, { rosCategory: string; visitCount: number; dispensingCount: number }>();
+                    for (const it of censusReport.items ?? []) {
+                      if (it.rosCategory && it.rosCategory.trim().length > 0) {
+                        const key = it.rosCategory.trim();
+                        const prev = map.get(key) ?? { rosCategory: key, visitCount: 0, dispensingCount: 0 };
+                        prev.visitCount += 1;
+                        map.set(key, prev);
+                      }
+                    }
+                    for (const dl of censusReport.dispensingLedger ?? []) {
+                      if (dl.rosCategory && dl.rosCategory.trim().length > 0) {
+                        const key = dl.rosCategory.trim();
+                        const prev = map.get(key) ?? { rosCategory: key, visitCount: 0, dispensingCount: 0 };
+                        prev.dispensingCount += 1;
+                        map.set(key, prev);
+                      }
+                    }
+                    rosRows = Array.from(map.values()).sort(
+                      (a, b) => b.visitCount - a.visitCount || b.dispensingCount - a.dispensingCount,
+                    );
+                  }
+
+                  if (rosRows.length === 0) {
+                    return (
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        No ROS categories recorded in this period
+                      </ThemedText>
+                    );
+                  }
+
+                  return (
+                    <View style={styles.badgeWrapRow}>
+                      {rosRows.map((ros) => (
+                        <Badge
+                          key={`ros-breakdown-${ros.rosCategory}`}
+                          label={`${ros.rosCategory}: ${ros.visitCount}`}
+                          variant={ros.rosCategory.toLowerCase().includes('normal') ? 'success' : 'neutral'}
+                          size="sm"
+                        />
+                      ))}
+                    </View>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          </View>
+
+          {/* Interactive Search & Filter Controls */}
+          <Card>
+            <CardContent style={styles.censusFilterCardContent}>
+              <View style={styles.censusSearchRow}>
+                <View style={styles.flexFill}>
+                  <Input
+                    label="Search Census Register"
+                    placeholder="Search by patient name, code, ticket, doctor, nurse, diagnosis, impression, custom fields..."
+                    value={censusSearchQuery}
+                    onChangeText={setCensusSearchQuery}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.censusFilterPillsRow}>
+                <View style={styles.censusFilterPillsGroup}>
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                    Acuity:
+                  </ThemedText>
+                  {(['ALL', 'Routine', 'Urgent', 'Emergency'] as const).map((acuity) => {
+                    const active = censusAcuityFilter === acuity;
+                    return (
+                      <Pressable
+                        key={acuity}
+                        style={[styles.filterChip, active && styles.filterChipActive]}
+                        onPress={() => {
+                          setCensusAcuityFilter(acuity);
+                          setCensusPage(1);
+                          fetchCensusPage({
+                            page: 1,
+                            pageSize: censusPageSize,
+                            acuity,
+                            visitType: censusVisitTypeFilter,
+                            search: censusSearchQuery,
+                          });
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Filter census acuity ${acuity}`}
+                      >
+                        <ThemedText
+                          variant="caption"
+                          color={active ? theme.colors.onPrimary : theme.colors.text}
+                        >
+                          {acuity}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.censusFilterPillsGroup}>
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                    Visit:
+                  </ThemedText>
+                  {(['ALL', 'RoutineCheckup', 'AcuteIllnessConsultation', 'ChronicDiseaseFollowUp', 'PreventiveHealthAssessment', 'UrgentCareVisit'] as const).map((vt) => {
+                    const active = censusVisitTypeFilter === vt;
+                    const label =
+                      vt === 'ALL'
+                        ? 'ALL'
+                        : vt === 'RoutineCheckup'
+                        ? 'Routine Checkup'
+                        : vt === 'AcuteIllnessConsultation'
+                        ? 'Acute Illness'
+                        : vt === 'ChronicDiseaseFollowUp'
+                        ? 'Follow-Up'
+                        : vt === 'PreventiveHealthAssessment'
+                        ? 'Health Assessment'
+                        : 'Urgent Care';
+                    return (
+                      <Pressable
+                        key={vt}
+                        style={[styles.filterChip, active && styles.filterChipActive]}
+                        onPress={() => {
+                          setCensusVisitTypeFilter(vt);
+                          setCensusPage(1);
+                          fetchCensusPage({
+                            page: 1,
+                            pageSize: censusPageSize,
+                            acuity: censusAcuityFilter,
+                            visitType: vt,
+                            search: censusSearchQuery,
+                          });
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Filter census visit type ${vt}`}
+                      >
+                        <ThemedText
+                          variant="caption"
+                          color={active ? theme.colors.onPrimary : theme.colors.text}
+                        >
+                          {label}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </CardContent>
+          </Card>
+
+          {/* Searchable 25-Column Patient Census Register Table */}
+          <Card style={styles.censusTableCard}>
+            <CardHeader
+              title="Census Register"
+              subtitle={
+                totalMatchingEncounters > 0
+                  ? `Showing ${rangeStart}–${rangeEnd} of ${totalMatchingEncounters} encounters • Page ${effectivePage} of ${effectiveTotalPages} • ${formatDateRangeLabel(reportsStartDate || censusReport.startDate, reportsEndDate || censusReport.endDate)}`
+                  : `Showing 0 of ${censusReport.summary.totalCensus ?? 0} encounters • ${formatDateRangeLabel(reportsStartDate || censusReport.startDate, reportsEndDate || censusReport.endDate)}`
+              }
+              rightAction={
+                <View style={styles.censusHeaderActions}>
+                  <Button
+                    title="Export Excel (.xlsx)"
+                    variant="outline"
+                    size="sm"
+                    icon="download"
+                    disabled={isExportingExcel}
+                    onPress={handleExportCensusExcel}
+                    accessibilityLabel="Export census spreadsheet Excel"
+                  />
+                  <Button
+                    title="Export PDF"
+                    variant="outline"
+                    size="sm"
+                    icon="download"
+                    disabled={isExportingPdf}
+                    onPress={() =>
+                      handleExportReportPdf(
+                        clinicService.getCensusPdfUrl(
+                          reportsStartDate || censusReport.startDate,
+                          reportsEndDate || censusReport.endDate
+                        )
+                      )
+                    }
+                    accessibilityLabel="Export report vector PDF"
+                  />
+                </View>
+              }
+            />
+            {filteredItems.length === 0 ? (
+              <EmptyState
+                icon="search"
+                title="No census encounters match"
+                description="Try clearing search or adjusting date and acuity filters."
+              />
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator
+                contentContainerStyle={styles.tableScrollContent}
+              >
+                <View style={styles.censusTableInner}>
+                  {/* Table Column Headers (grouped identically to data rows for exact horizontal alignment) */}
+                  <View style={styles.censusTableHeaderRow}>
+                    <View style={styles.headerCommonGroup}>
+                      <View style={styles.colTicket}>
+                        <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                          Ticket, Date &amp; Time
+                        </ThemedText>
+                      </View>
+                      <View style={styles.colVisitType}>
+                        <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                          Visit Type
+                        </ThemedText>
+                      </View>
+                      <View style={styles.colPatient}>
+                        <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                          Patient &amp; Demographics
+                        </ThemedText>
+                      </View>
+                      <View style={styles.colCustom}>
+                        <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                          Classifications &amp; Custom Fields
+                        </ThemedText>
+                      </View>
+                    </View>
+
+                    <View style={styles.headerServiceGroup}>
+                      <View style={styles.colService}>
+                        <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                          Service Availed
+                        </ThemedText>
+                      </View>
+                      <View style={styles.colStaff}>
+                        <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                          Attending Staff
+                        </ThemedText>
+                      </View>
+                      <View style={styles.colNurse}>
+                        <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                          Triage &amp; Vitals
+                        </ThemedText>
+                      </View>
+                      <View style={styles.colDoctor}>
+                        <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                          Doctor Diagnosis &amp; Systems
+                        </ThemedText>
+                      </View>
+                      <View style={styles.colOutcome}>
+                        <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                          Service Details &amp; Outcome
+                        </ThemedText>
+                      </View>
+                      <View style={styles.colServiceFee}>
+                        <ThemedText
+                          variant="captionBold"
+                          color={theme.colors.onPrimary}
+                          style={styles.rightAlignedText}
+                        >
+                          Service Fee
+                        </ThemedText>
+                      </View>
+                    </View>
+
+                    <View style={styles.headerBillingGroup}>
+                      <View style={styles.colBilling}>
+                        <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                          Billing &amp; Payment
+                        </ThemedText>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Table Data Rows: Parent Visit Properties + Strictly Isolated Per-Service Sub-Rows */}
+                  {filteredItems.map((item, idx) => {
+                    const customPills = formatCustomFieldPills(item.customFields);
+                    const classifications = item.classifications || (item.classification ? [item.classification] : []);
+                    const rowKey = item.id || `census-row-${item.queueNumber}-${idx}`;
+                    const isEven = idx % 2 === 0;
+                    const visitTypeLabel = mapCensusVisitTypeLabel(item.visitType);
+                    const isConsultationVisit =
+                      isPhysicianConsultationVisitType(item.visitType) ||
+                      Boolean(normalizeCensusDisplayField(item.doctorDiagnosis));
+                    const isolatedServiceRows = resolveCensusIsolatedServiceRows(item, dispensingLedger);
+                    const totalProcRows = isolatedServiceRows.filter(
+                      (r) => r.serviceName === 'In-Clinic Procedure',
+                    ).length;
+                    const totalInClinicDiagRows = isolatedServiceRows.filter(
+                      (r) => r.serviceName === 'In-Clinic Diagnostic',
+                    ).length;
+                    const totalOutsideDiagRows = isolatedServiceRows.filter(
+                      (r) => r.serviceName === 'Diagnostic Order (Outside)',
+                    ).length;
+                    let procOrdinal = 0;
+                    let inClinicDiagOrdinal = 0;
+                    let outsideDiagOrdinal = 0;
+
+                    const computedFeesSum = isolatedServiceRows.reduce(
+                      (acc, r) => acc + (r.serviceFee ?? 0),
+                      0,
+                    );
+                    const visitTotalBilled =
+                      (item.netAmount ?? 0) > 0
+                        ? (item.netAmount ?? 0)
+                        : (item.grossAmount ?? 0) > 0
+                          ? (item.grossAmount ?? 0)
+                          : (item.totalServiceFees ?? computedFeesSum);
+                    const visitBalanceDue = item.balanceDue ?? 0;
+
+                    return (
+                      <View
+                        key={rowKey}
+                        style={[
+                          styles.censusTableRow,
+                          !isEven && styles.censusTableRowAlt,
+                        ]}
+                      >
+                        {/* Grouped Visit Common Properties */}
+                        <View style={styles.visitCommonGroup}>
+                          {/* 1. Ticket, Date & Time */}
+                          <View style={styles.colTicket}>
+                            <View style={styles.rowBetween}>
+                              <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+                                {item.queueNumber}
+                              </ThemedText>
+                              <Badge
+                                label={formatTurnaroundBadge(item.turnaroundMinutes)}
+                                variant="neutral"
+                                size="xs"
+                              />
+                            </View>
+                            <ThemedText variant="captionBold" color={theme.colors.text}>
+                              {formatClinicDate(item.checkInTime)}
+                            </ThemedText>
+                            <ThemedText variant="caption" color={theme.colors.textMuted}>
+                              In: {formatTimeOnly(item.checkInTime)}
+                              {item.completedTime ? ` • Out: ${formatTimeOnly(item.completedTime)}` : ''}
+                            </ThemedText>
+                          </View>
+
+                          {/* 2. Visit Type (5 canonical clinical VisitTypes only; blank otherwise) */}
+                          <View style={styles.colVisitType}>
+                            {visitTypeLabel ? (
+                              <View style={styles.badgeWrapRow}>
+                                <Badge
+                                  label={visitTypeLabel}
+                                  variant={isConsultationVisit ? 'primary' : 'outline'}
+                                  size="xs"
+                                />
+                              </View>
+                            ) : null}
+                            <View style={styles.badgeWrapRow}>
+                              <Badge
+                                label={item.acuity || 'Routine'}
+                                variant={getAcuityVariant(item.acuity)}
+                                size="xs"
+                              />
+                            </View>
+                          </View>
+
+                          {/* 3. Patient & Demographics */}
+                          <View style={styles.colPatient}>
+                            <ThemedText variant="bodyBold" color={theme.colors.text}>
+                              {item.patientName}
+                            </ThemedText>
+                            <ThemedText variant="caption" color={theme.colors.textMuted}>
+                              {item.patientCode} • {item.age} yo • {item.sex}
+                              {item.civilStatus ? ` • ${item.civilStatus}` : ''}
+                            </ThemedText>
+                          </View>
+
+                          {/* 4. Classifications & Custom Fields */}
+                          <View style={styles.colCustom}>
+                            {(() => {
+                              const allCustomItems = [
+                                ...classifications.map((c, i) => ({
+                                  key: `cls-${i}`,
+                                  label: c,
+                                  variant: 'outline' as const,
+                                })),
+                                ...customPills.map((p, i) => ({
+                                  key: `cp-${i}`,
+                                  label: p,
+                                  variant: 'neutral' as const,
+                                })),
+                              ];
+                              const isExpanded = !!expandedCustomRows[rowKey];
+                              const visibleItems =
+                                isExpanded || allCustomItems.length <= 2
+                                  ? allCustomItems
+                                  : allCustomItems.slice(0, 2);
+                              const hiddenCount = allCustomItems.length - 2;
+
+                              return (
+                                <View style={styles.badgeWrapRow}>
+                                  {allCustomItems.length === 0 ? (
+                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                      None
+                                    </ThemedText>
+                                  ) : (
+                                    <>
+                                      {visibleItems.map((ci) => (
+                                        <Badge
+                                          key={ci.key}
+                                          label={ci.label}
+                                          variant={ci.variant}
+                                          size="xs"
+                                        />
+                                      ))}
+                                      {allCustomItems.length > 2 && (
+                                        <Button
+                                          variant="ghost"
+                                          size="xs"
+                                          title={isExpanded ? 'See less' : `+${hiddenCount} more`}
+                                          onPress={() => toggleCustomRow(rowKey)}
+                                          accessibilityLabel={
+                                            isExpanded
+                                              ? 'Collapse custom fields'
+                                              : `Show ${hiddenCount} more custom fields`
+                                          }
+                                        />
+                                      )}
+                                    </>
+                                  )}
+                                </View>
+                              );
+                            })()}
+                          </View>
+                        </View>
+
+                        {/* Strictly Isolated Per-Service Sub-Rows */}
+                        <View style={styles.serviceSubRowsGroup}>
+                          {isolatedServiceRows.map((sub, sIdx) => {
+                            const isProcRow = sub.serviceName === 'In-Clinic Procedure';
+                            const isInClinicDiagRow = sub.serviceName === 'In-Clinic Diagnostic';
+                            const isOutsideDiagRow = sub.serviceName === 'Diagnostic Order (Outside)';
+                            if (isProcRow) procOrdinal += 1;
+                            if (isInClinicDiagRow) inClinicDiagOrdinal += 1;
+                            if (isOutsideDiagRow) outsideDiagOrdinal += 1;
+
+                            const subBadgeVariant: BadgeVariant =
+                              sub.serviceName === 'Doctor Consultation'
+                                ? 'primary'
+                                : sub.serviceName === 'Vitals & Triage'
+                                  ? 'outline'
+                                  : isProcRow
+                                    ? 'warning'
+                                    : isInClinicDiagRow
+                                      ? 'info'
+                                      : isOutsideDiagRow
+                                        ? 'purple'
+                                        : sub.serviceName.includes('Dispensing')
+                                          ? 'info'
+                                          : 'outline';
+
+                            const ordinalLabel = isProcRow
+                              ? `${procOrdinal} of ${totalProcRows}`
+                              : isInClinicDiagRow
+                                ? `${inClinicDiagOrdinal} of ${totalInClinicDiagRows}`
+                                : isOutsideDiagRow
+                                  ? `${outsideDiagOrdinal} of ${totalOutsideDiagRows}`
+                                  : '';
+
+                            const rowFee = sub.serviceFee ?? 0;
+
+                            return (
+                              <View
+                                key={`${rowKey}-svc-${sub.subRowIndex}-${sIdx}`}
+                                style={[
+                                  styles.serviceSubRow,
+                                  sIdx > 0 && styles.serviceSubRowDivider,
+                                ]}
+                              >
+                                {/* 5. Service Availed + Specific Procedure / Test Item */}
+                                <View style={styles.colService}>
+                                  <View style={styles.badgeWrapRow}>
+                                    <Badge
+                                      label={sub.serviceName}
+                                      variant={subBadgeVariant}
+                                      size="xs"
+                                    />
+                                    {ordinalLabel ? (
+                                      <Badge
+                                        label={ordinalLabel}
+                                        variant="neutral"
+                                        size="xs"
+                                      />
+                                    ) : null}
+                                  </View>
+                                  {sub.serviceItemName &&
+                                  sub.serviceItemName.toLowerCase() !==
+                                    sub.serviceName.toLowerCase() ? (
+                                    <ThemedText variant="captionBold" color={theme.colors.text}>
+                                      {sub.serviceItemName}
+                                    </ThemedText>
+                                  ) : null}
+                                  {sub.referenceNumber ? (
+                                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                                      {sub.referenceNumber}
+                                    </ThemedText>
+                                  ) : null}
+                                  {sub.serviceTime ? (
+                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                      {formatTimeOnly(sub.serviceTime)}
+                                    </ThemedText>
+                                  ) : null}
+                                </View>
+
+                                {/* 6. Attending Staff (strictly isolated to this service) */}
+                                <View style={styles.colStaff}>
+                                  {sub.attendingDoctor ? (
+                                    <ThemedText variant="captionBold" color={theme.colors.text}>
+                                      MD: {sub.attendingDoctor}
+                                    </ThemedText>
+                                  ) : null}
+                                  {sub.attendingNurse ? (
+                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                      RN: {sub.attendingNurse}
+                                    </ThemedText>
+                                  ) : null}
+                                  {!sub.attendingDoctor && !sub.attendingNurse ? (
+                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                      —
+                                    </ThemedText>
+                                  ) : null}
+                                </View>
+
+                                {/* 7. Triage & Vitals (strictly isolated to Vitals & Triage) */}
+                                <View style={styles.colNurse}>
+                                  {sub.chiefComplaint ? (
+                                    <ThemedText variant="caption" color={theme.colors.text}>
+                                      CC: {sub.chiefComplaint}
+                                    </ThemedText>
+                                  ) : null}
+                                  {sub.nurseAssessment &&
+                                  sub.nurseAssessment !== sub.chiefComplaint ? (
+                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                      Impression: {sub.nurseAssessment}
+                                    </ThemedText>
+                                  ) : null}
+                                  {sub.vitalsSnapshot ? (
+                                    <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                                      Vitals: {sub.vitalsSnapshot}
+                                    </ThemedText>
+                                  ) : null}
+                                </View>
+
+                                {/* 8. Doctor Diagnosis & Systems (strictly isolated to Doctor Consultation) */}
+                                <View style={styles.colDoctor}>
+                                  {sub.doctorDiagnosis ? (
+                                    <ThemedText variant="captionBold" color={theme.colors.text}>
+                                      {sub.doctorDiagnosis}
+                                    </ThemedText>
+                                  ) : null}
+                                  {sub.rosCategory ? (
+                                    <View style={styles.badgeWrapRow}>
+                                      <Badge
+                                        label={`ROS: ${getRosShortLabel(sub.rosCategory)}`}
+                                        variant={
+                                          sub.rosCategory === 'EssentiallyNormal' ||
+                                          sub.rosCategory === 'Essentially Normal'
+                                            ? 'success'
+                                            : 'info'
+                                        }
+                                        size="xs"
+                                      />
+                                    </View>
+                                  ) : null}
+                                  {sub.clinicalAssessment ? (
+                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                      {sub.clinicalAssessment}
+                                    </ThemedText>
+                                  ) : null}
+                                  {sub.systemsReviewed ? (
+                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                      Systems: {sub.systemsReviewed}
+                                    </ThemedText>
+                                  ) : null}
+                                </View>
+
+                                {/* 9. Service Details & Outcome */}
+                                <View style={styles.colOutcome}>
+                                  {sub.serviceDetails ? (
+                                    <ThemedText variant="caption" color={theme.colors.text}>
+                                      {sub.serviceDetails}
+                                    </ThemedText>
+                                  ) : null}
+                                  {sub.disposition ? (
+                                    <View style={styles.badgeWrapRow}>
+                                      <Badge
+                                        label={sub.disposition}
+                                        variant={
+                                          sub.disposition.includes('Transfer') ||
+                                          sub.disposition.includes('Diversion')
+                                            ? 'emergency'
+                                            : 'outline'
+                                        }
+                                        size="xs"
+                                      />
+                                    </View>
+                                  ) : null}
+                                </View>
+
+                                {/* 10. Per-Service Fee / Cost */}
+                                <View style={styles.colServiceFee}>
+                                  <ThemedText
+                                    variant={rowFee > 0 ? 'captionBold' : 'caption'}
+                                    color={rowFee > 0 ? theme.colors.text : theme.colors.textMuted}
+                                    style={styles.rightAlignedText}
+                                  >
+                                    {peso(rowFee)}
+                                  </ThemedText>
+                                </View>
+                              </View>
+                            );
+                          })}
+                        </View>
+
+                        {/* 11. Grouped Visit Overall Billing & Payment */}
+                        <View style={styles.visitBillingGroup}>
+                          <View style={styles.colBilling}>
+                            <View style={styles.badgeWrapRow}>
+                              <Badge
+                                label={item.billingStatus || 'Unbilled'}
+                                variant={item.billingStatus === 'Paid' ? 'success' : 'neutral'}
+                                size="xs"
+                              />
+                            </View>
+                            <View style={styles.rowBetween}>
+                              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                Total:
+                              </ThemedText>
+                              <ThemedText variant="smallBold" color={theme.colors.text}>
+                                {peso(visitTotalBilled)}
+                              </ThemedText>
+                            </View>
+                            {(item.grossAmount ?? 0) > visitTotalBilled && visitTotalBilled > 0 ? (
+                              <View style={styles.rowBetween}>
+                                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                  Gross:
+                                </ThemedText>
+                                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                  {peso(item.grossAmount ?? 0)}
+                                </ThemedText>
+                              </View>
+                            ) : null}
+                            <View style={styles.rowBetween}>
+                              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                Paid:
+                              </ThemedText>
+                              <ThemedText
+                                variant="captionBold"
+                                color={
+                                  (item.amountPaid ?? 0) > 0
+                                    ? theme.colors.successText
+                                    : theme.colors.textMuted
+                                }
+                              >
+                                {peso(item.amountPaid)}
+                              </ThemedText>
+                            </View>
+                            {visitBalanceDue > 0 ? (
+                              <View style={styles.rowBetween}>
+                                <ThemedText variant="caption" color={theme.colors.warningText}>
+                                  Bal:
+                                </ThemedText>
+                                <ThemedText variant="captionBold" color={theme.colors.warningText}>
+                                  {peso(visitBalanceDue)}
+                                </ThemedText>
+                              </View>
+                            ) : null}
+                            {item.officialReceiptNumber ? (
+                              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                {item.officialReceiptNumber}
+                              </ThemedText>
+                            ) : null}
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            )}
+
+            {/* Server-Side Pagination Bar */}
+            <View style={styles.censusPaginationFooter} testID="census-server-pagination">
+              <View style={styles.censusPaginationInfoRow}>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  {totalMatchingEncounters > 0
+                    ? `Rows ${rangeStart}–${rangeEnd} of ${totalMatchingEncounters}`
+                    : '0 matching encounters'}
+                </ThemedText>
+                <View style={styles.censusFilterPillsGroup}>
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                    Per page:
+                  </ThemedText>
+                  {([10, 20, 50] as const).map((sz) => {
+                    const activeSize = censusPageSize === sz;
+                    return (
+                      <Pressable
+                        key={`census-ps-${sz}`}
+                        style={[styles.filterChip, activeSize && styles.filterChipActive]}
+                        onPress={() => {
+                          setCensusPageSize(sz);
+                          setCensusPage(1);
+                          fetchCensusPage({
+                            page: 1,
+                            pageSize: sz,
+                            acuity: censusAcuityFilter,
+                            visitType: censusVisitTypeFilter,
+                            search: censusSearchQuery,
+                          });
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Set census rows per page to ${sz}`}
+                      >
+                        <ThemedText
+                          variant="caption"
+                          color={activeSize ? theme.colors.onPrimary : theme.colors.text}
+                        >
+                          {sz}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.censusPaginationControls}>
+                <Button
+                  title="First"
+                  variant="outline"
+                  size="xs"
+                  disabled={!hasPrevPage || censusPageLoading}
+                  onPress={() =>
+                    fetchCensusPage({
+                      page: 1,
+                      pageSize: censusPageSize,
+                      acuity: censusAcuityFilter,
+                      visitType: censusVisitTypeFilter,
+                      search: censusSearchQuery,
+                    })
+                  }
+                  accessibilityLabel="First census page"
+                />
+                <Button
+                  title="Previous"
+                  variant="outline"
+                  size="xs"
+                  disabled={!hasPrevPage || censusPageLoading}
+                  onPress={() =>
+                    fetchCensusPage({
+                      page: Math.max(1, effectivePage - 1),
+                      pageSize: censusPageSize,
+                      acuity: censusAcuityFilter,
+                      visitType: censusVisitTypeFilter,
+                      search: censusSearchQuery,
+                    })
+                  }
+                  accessibilityLabel="Previous census page"
+                />
+                <Badge
+                  label={
+                    censusPageLoading
+                      ? 'Loading...'
+                      : `Page ${effectivePage} of ${effectiveTotalPages}`
+                  }
+                  variant="neutral"
+                  size="sm"
+                />
+                <Button
+                  title="Next"
+                  variant="outline"
+                  size="xs"
+                  disabled={!hasNextPage || censusPageLoading}
+                  onPress={() =>
+                    fetchCensusPage({
+                      page: Math.min(effectiveTotalPages, effectivePage + 1),
+                      pageSize: censusPageSize,
+                      acuity: censusAcuityFilter,
+                      visitType: censusVisitTypeFilter,
+                      search: censusSearchQuery,
+                    })
+                  }
+                  accessibilityLabel="Next census page"
+                />
+                <Button
+                  title="Last"
+                  variant="outline"
+                  size="xs"
+                  disabled={!hasNextPage || censusPageLoading}
+                  onPress={() =>
+                    fetchCensusPage({
+                      page: effectiveTotalPages,
+                      pageSize: censusPageSize,
+                      acuity: censusAcuityFilter,
+                      visitType: censusVisitTypeFilter,
+                      search: censusSearchQuery,
+                    })
+                  }
+                  accessibilityLabel="Last census page"
+                />
+              </View>
+            </View>
+          </Card>
+        </View>
+      );
+    }
+
+    if (reportType === 'DISPENSING_LEDGER' && censusReport) {
+      const dispensingLedger = censusReport.dispensingLedger || [];
+      const pendingReviewCount = dispensingLedger.filter((entry) => {
+        const meta = resolveCensusLedgerEntryMeta(entry);
+        return !meta.isReviewedByDoctor;
+      }).length;
+      const totalUnits =
+        censusReport.summary.totalDispensedUnits ??
+        dispensingLedger.reduce((sum, e) => sum + (e.quantityDispensed ?? 0), 0);
+      const visitsWithDispensing = censusReport.summary.visitsWithMedicineDispensing ?? 0;
+
+      const ledgerQuery = dispensingSearchQuery.trim().toLowerCase();
+      const filteredDispensingLedger = dispensingLedger.filter((entry) => {
+        const meta = resolveCensusLedgerEntryMeta(entry);
+        if (
+          dispensingSourceFilter !== 'ALL' &&
+          meta.sourceBadgeLabel !== dispensingSourceFilter
+        ) {
+          return false;
+        }
+        if (!ledgerQuery) return true;
+        const blob = [
+          entry.queueNumber ?? '',
+          entry.patientName,
+          entry.itemName,
+          entry.dosageOrSpec ?? '',
+          entry.dispensedByStaffName,
+          entry.rosCategoryLabel || getRosShortLabel(entry.rosCategory),
+          entry.directionsOrInstructions ?? '',
+          meta.sourceBadgeLabel,
+          meta.categoryBadgeLabel,
+        ]
+          .join(' ')
+          .toLowerCase();
+        return blob.includes(ledgerQuery);
+      });
+
+      return (
+        <View style={styles.listGap}>
+          <View style={styles.statRow}>
+            <StatCard
+              style={styles.statItem}
+              label="Ledger Entries"
+              value={dispensingLedger.length}
+              subtext={formatDateRangeLabel(
+                reportsStartDate || censusReport.startDate,
+                reportsEndDate || censusReport.endDate,
+              )}
+              icon="pill"
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Total Units Dispensed"
+              value={totalUnits}
+              subtext="Medicines & medical supplies"
+              icon="activity"
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Visits w/ Dispensing"
+              value={visitsWithDispensing}
+              subtext="Doctor starter stock & nurse OTC"
+              icon="patients"
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Pending MD Review"
+              value={pendingReviewCount}
+              subtext="Async physician oversight"
+              icon="stethoscope"
+            />
+          </View>
+
+          <Card>
+            <CardContent style={styles.censusFilterCardContent}>
+              <View style={styles.censusSearchRow}>
+                <View style={styles.flexFill}>
+                  <Input
+                    label="Search Dispensing Ledger"
+                    placeholder="Search by patient, ticket, medicine or supply, staff, ROS category..."
+                    value={dispensingSearchQuery}
+                    onChangeText={setDispensingSearchQuery}
+                  />
+                </View>
+              </View>
+              <View style={styles.censusFilterPillsRow}>
+                <View style={styles.censusFilterPillsGroup}>
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                    Source Workflow:
+                  </ThemedText>
+                  {(
+                    [
+                      'ALL',
+                      'Doctor Consultation',
+                      'Nurse Vitals Check',
+                    ] as const
+                  ).map((src) => {
+                    const active = dispensingSourceFilter === src;
+                    return (
+                      <Pressable
+                        key={src}
+                        style={[styles.filterChip, active && styles.filterChipActive]}
+                        onPress={() => setDispensingSourceFilter(src)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Filter dispensing source ${src}`}
+                      >
+                        <ThemedText
+                          variant="caption"
+                          color={active ? theme.colors.onPrimary : theme.colors.text}
+                        >
+                          {src}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </CardContent>
+          </Card>
+
+          {/* Unified Clinic Medicine & Medical Supply Dispensing Ledger */}
+          <Card style={styles.censusTableCard}>
+            <CardHeader
+              title="Clinic Medicine & Supply Dispensing Ledger"
+              subtitle={`Showing ${filteredDispensingLedger.length} of ${dispensingLedger.length} entries • Unified non-pharmacy ledger across Doctor Consultations & Nurse Vitals Checks`}
+            />
+            {filteredDispensingLedger.length === 0 ? (
+              <EmptyState
+                icon="pill"
+                title="No clinic stock medicines or supplies dispensed in this period"
+                description="Starter medicines handed out during signed doctor consultations and routine OTC items logged during nurse vitals checks appear here."
+              />
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator
+                contentContainerStyle={styles.tableScrollContent}
+              >
+                <View style={styles.dispensingLedgerInner}>
+                  <View style={styles.censusTableHeaderRow}>
+                    <View style={styles.colTicket}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Date, Time &amp; Ticket
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colStaff}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Source Workflow
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colPatient}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Patient &amp; ROS Category
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colNurse}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Dispensed Item &amp; Quantity
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colStaff}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Dispensed By
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colDoctor}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Instructions &amp; Physician Review
+                      </ThemedText>
+                    </View>
+                  </View>
+
+                  {filteredDispensingLedger.map((entry, idx) => {
+                    const isEven = idx % 2 === 0;
+                    const ledgerMeta = resolveCensusLedgerEntryMeta(entry);
+                    return (
+                      <View
+                        key={entry.id || `ledger-${idx}`}
+                        style={[styles.censusTableRow, !isEven && styles.censusTableRowAlt]}
+                      >
+                        <View style={styles.colTicket}>
+                          <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+                            {entry.queueNumber || '—'}
+                          </ThemedText>
+                          <ThemedText variant="caption" color={theme.colors.text}>
+                            {formatClinicDate(entry.dispensedAt)} • {formatTimeOnly(entry.dispensedAt)}
+                          </ThemedText>
+                        </View>
+
+                        <View style={styles.colStaff}>
+                          <Badge
+                            label={ledgerMeta.sourceBadgeLabel}
+                            variant={ledgerMeta.isDoctorSource ? 'primary' : 'info'}
+                            size="xs"
+                          />
+                        </View>
+
+                        <View style={styles.colPatient}>
+                          <ThemedText variant="bodyBold" color={theme.colors.text}>
+                            {entry.patientName}
+                          </ThemedText>
+                          <Badge
+                            label={`ROS: ${entry.rosCategoryLabel || getRosShortLabel(entry.rosCategory)}`}
+                            variant="neutral"
+                            size="xs"
+                          />
+                        </View>
+
+                        <View style={styles.colNurse}>
+                          <View style={styles.badgeWrapRow}>
+                            <ThemedText variant="smallBold" color={theme.colors.text}>
+                              {entry.itemName}
+                              {entry.dosageOrSpec ? ` ${entry.dosageOrSpec}` : ''}
+                            </ThemedText>
+                            <Badge
+                              label={ledgerMeta.categoryBadgeLabel}
+                              variant={ledgerMeta.isMedicalSupply ? 'info' : 'routine'}
+                              size="xs"
+                            />
+                          </View>
+                          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                            {entry.quantityDispensed} {entry.formOrUnit || 'pcs'}
+                          </ThemedText>
+                        </View>
+
+                        <View style={styles.colStaff}>
+                          <ThemedText variant="captionBold" color={theme.colors.text}>
+                            {entry.dispensedByStaffName}
+                          </ThemedText>
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            {entry.dispensedByRole}
+                          </ThemedText>
+                        </View>
+
+                        <View style={styles.colDoctor}>
+                          {entry.directionsOrInstructions ? (
+                            <ThemedText variant="caption" color={theme.colors.text}>
+                              {entry.directionsOrInstructions}
+                            </ThemedText>
+                          ) : null}
+                          <Badge
+                            label={ledgerMeta.reviewBadgeLabel}
+                            variant={ledgerMeta.reviewBadgeVariant}
+                            size="xs"
+                          />
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            )}
+          </Card>
+        </View>
       );
     }
 
@@ -1788,6 +4203,8 @@ export default function DashboardScreen() {
             onChange={setReportType}
             options={[
               { value: 'DAILY_EOD', label: 'End of day' },
+              { value: 'CENSUS', label: 'Clinic census' },
+              { value: 'DISPENSING_LEDGER', label: 'Dispensing ledger' },
               { value: 'MORBIDITY', label: 'Morbidity' },
               { value: 'TAX_DISCOUNT', label: 'Discount audit' },
               { value: 'DOCTOR_SHARES', label: 'Doctor shares' },
@@ -1795,6 +4212,17 @@ export default function DashboardScreen() {
           />
         </View>
         <View style={styles.reportActionsRow}>
+          {(reportType === 'CENSUS' || reportType === 'DISPENSING_LEDGER') && (
+            <Button
+              title={isExportingExcel ? 'Exporting...' : 'Export Excel (.xlsx)'}
+              variant="outline"
+              size="sm"
+              icon="download"
+              disabled={!currentReportReady || isExportingExcel}
+              onPress={() => handleExportCensusExcel()}
+              accessibilityLabel="Export census spreadsheet Excel"
+            />
+          )}
           <Button
             title={isExportingPdf ? 'Exporting...' : 'Export PDF'}
             variant="outline"
@@ -1837,37 +4265,34 @@ export default function DashboardScreen() {
             </Pressable>
 
             <View style={styles.presetChipsRow}>
-              <Pressable
-                style={styles.presetChip}
-                onPress={() => {
-                  const today = getManilaTodayStr();
-                  setEodDate(today);
-                  loadReports('DAILY_EOD', undefined, undefined, today);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Select Today for EOD"
-              >
-                <ThemedText variant="caption" color={theme.colors.primaryDark}>
-                  Today
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                style={styles.presetChip}
-                onPress={() => {
-                  const now = new Date();
-                  const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                  const pad = (n: number) => String(n).padStart(2, '0');
-                  const yStr = `${y.getFullYear()}-${pad(y.getMonth() + 1)}-${pad(y.getDate())}`;
-                  setEodDate(yStr);
-                  loadReports('DAILY_EOD', undefined, undefined, yStr);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Select Yesterday for EOD"
-              >
-                <ThemedText variant="caption" color={theme.colors.primaryDark}>
-                  Yesterday
-                </ThemedText>
-              </Pressable>
+              {([
+                { key: 'today', label: 'Today', date: getManilaTodayStr() },
+                {
+                  key: 'yesterday',
+                  label: 'Yesterday',
+                  date: (() => {
+                    const now = new Date();
+                    const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                    const pad = (n: number) => String(n).padStart(2, '0');
+                    return `${y.getFullYear()}-${pad(y.getMonth() + 1)}-${pad(y.getDate())}`;
+                  })(),
+                },
+              ] as const).map((p) => {
+                const isActive = (eodDate || getManilaTodayStr()) === p.date;
+                return (
+                  <Button
+                    key={p.key}
+                    variant={isActive ? 'primary' : 'subtle'}
+                    size="xs"
+                    title={p.label}
+                    onPress={() => {
+                      setEodDate(p.date);
+                      loadReports('DAILY_EOD', undefined, undefined, p.date);
+                    }}
+                    accessibilityLabel={`Select ${p.label} for EOD`}
+                  />
+                );
+              })}
             </View>
           </>
         ) : (
@@ -1889,29 +4314,35 @@ export default function DashboardScreen() {
             </Pressable>
 
             <View style={styles.presetChipsRow}>
-              {(['today', '7d', '30d'] as const).map((preset) => {
-                const labelMap = {
+              {(['today', 'yesterday', '7d', 'this_month', 'all'] as const).map((preset) => {
+                const labelMap: Record<string, string> = {
                   today: 'Today',
+                  yesterday: 'Yesterday',
                   '7d': 'Last 7 Days',
-                  '30d': 'This Month',
+                  this_month: 'This Month',
+                  all: 'All Time',
                 };
+                const range = computeDatePresetRange(preset);
+                const isActive =
+                  reportsPreset === preset ||
+                  (reportsPreset === 'custom' &&
+                    reportsStartDate === range.start &&
+                    reportsEndDate === range.end);
                 return (
-                  <Pressable
+                  <Button
                     key={preset}
-                    style={styles.presetChip}
+                    variant={isActive ? 'primary' : 'subtle'}
+                    size="xs"
+                    title={labelMap[preset]}
                     onPress={() => {
+                      setReportsPreset(preset);
                       const range = computeDatePresetRange(preset);
                       setReportsStartDate(range.start);
                       setReportsEndDate(range.end);
                       loadReports(reportType, range.start, range.end);
                     }}
-                    accessibilityRole="button"
                     accessibilityLabel={`Select ${labelMap[preset]}`}
-                  >
-                    <ThemedText variant="caption" color={theme.colors.primaryDark}>
-                      {labelMap[preset]}
-                    </ThemedText>
-                  </Pressable>
+                  />
                 );
               })}
             </View>
@@ -1954,6 +4385,15 @@ export default function DashboardScreen() {
         endDate={reportsEndDate}
         boundaryMode="pastOrToday"
         onApply={(start, end) => {
+          if (!start && !end) {
+            setReportsPreset('all');
+          } else {
+            const matchPreset = (['today', 'yesterday', '7d', 'this_month'] as const).find((p) => {
+              const r = computeDatePresetRange(p);
+              return r.start === start && r.end === end;
+            });
+            setReportsPreset(matchPreset ?? 'custom');
+          }
           setReportsStartDate(start);
           setReportsEndDate(end);
           setIsReportsDateRangeModalOpen(false);
@@ -1987,8 +4427,8 @@ export default function DashboardScreen() {
       actions={[
         {
           id: 'new-patient',
-          label: 'New patient',
-          shortLabel: 'New',
+          label: 'New Patient',
+          shortLabel: 'New Patient',
           icon: 'plus' as const,
           variant: 'primary' as const,
           primary: true,
@@ -1997,8 +4437,12 @@ export default function DashboardScreen() {
       ]}
     >
       <ScrollView
+        ref={dashboardScrollRef}
         style={styles.container}
         contentContainerStyle={styles.content}
+        onScroll={handleDashboardScroll}
+        onContentSizeChange={handleDashboardContentSizeChange}
+        scrollEventThrottle={16}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
       >
         <SegmentedControl<DashboardTab>
@@ -2028,11 +4472,11 @@ export default function DashboardScreen() {
         subtitle={
           triageItem
             ? `${triageItem.queueNumber} • ${triageItem.patientName}${
-                triagePatient ? ` (${triagePatient.age}yo ${triagePatient.gender})` : ''
+                triagePatient ? ` (${triagePatient.age}yo ${triagePatient.sex})` : ''
               }`
             : undefined
         }
-        maxWidth={580}
+        maxWidth={680}
         footer={
           <View style={styles.modalFooter}>
             <Button
@@ -2045,7 +4489,21 @@ export default function DashboardScreen() {
               }}
               disabled={savingTriage}
             />
-            <Button title="Save vitals" variant="primary" onPress={handleSaveTriage} loading={savingTriage} />
+            {(isNurseAssessmentVisitType(triageItem?.visitType) || triage.priority === 'Emergency') ? (
+              <Button
+                title="Save & Escalate to MD"
+                variant="dangerOutline"
+                icon="emergency"
+                onPress={() => handleSaveTriage(true)}
+                disabled={savingTriage}
+              />
+            ) : null}
+            <Button
+              title="Save vitals"
+              variant="primary"
+              onPress={() => handleSaveTriage(false)}
+              loading={savingTriage}
+            />
           </View>
         }
       >
@@ -2275,6 +4733,240 @@ export default function DashboardScreen() {
           multiline
           numberOfLines={2}
         />
+
+        <NurseCareAndOtcDispensingSection
+          hideChiefComplaint
+          allowDispensing={isVisitTypeEligibleForOtcDispensing(triageItem?.visitType)}
+          chiefComplaint={triage.notes}
+          onChangeChiefComplaint={(text) => setTriageField('notes', text)}
+          homeInstructions={triage.homeInstructions}
+          onChangeHomeInstructions={(text) => setTriageField('homeInstructions', text)}
+          rosCategory={triage.rosCategory}
+          onChangeRosCategory={(val) => setTriageField('rosCategory', val)}
+          dispensedItems={triage.dispensedItems}
+          onChangeDispensedItems={(items) => setTriageField('dispensedItems', items)}
+        />
+      </Modal>
+
+      {/* Edit vitals modal */}
+      <EditVitalsModal
+        visible={!!editVitalsItem}
+        queueItemId={editVitalsItem?.id ?? null}
+        visitType={editVitalsItem?.visitType}
+        patientId={editVitalsItem?.patientId}
+        currentStaffId={currentStaff?.id}
+        currentStaffName={currentName}
+        onClose={() => setEditVitalsItem(null)}
+        onEscalatedToConsultation={(updatedVisit) => {
+          setQueue((prev) =>
+            (prev ?? []).map((q) => (q.id === updatedVisit.id ? { ...q, ...updatedVisit } : q))
+          );
+          loadUnreviewedOtcLogs();
+        }}
+        onSuccess={(updatedVitals, summaryData) => {
+          handleEditVitalsSuccess(updatedVitals, summaryData);
+          loadUnreviewedOtcLogs();
+        }}
+      />
+
+      {/* Escalate VitalsCheckOnly -> Doctor Consultation Modal */}
+      <Modal
+        visible={!!escalateModalItem}
+        onClose={() => {
+          if (!savingEscalation) {
+            setEscalateModalItem(null);
+            setEscalateReason('');
+          }
+        }}
+        title="Escalate Vitals Check to Physician Consultation"
+        subtitle={
+          escalateModalItem
+            ? `Ticket ${escalateModalItem.queueNumber} • ${escalateModalItem.patientName}`
+            : undefined
+        }
+        maxWidth={520}
+        footer={
+          <View style={styles.modalFooter}>
+            <Button
+              title="Cancel"
+              variant="ghost"
+              disabled={savingEscalation}
+              onPress={() => {
+                setEscalateModalItem(null);
+                setEscalateReason('');
+              }}
+            />
+            <Button
+              title="Escalate to Doctor"
+              variant="danger"
+              icon="emergency"
+              loading={savingEscalation}
+              onPress={handleConfirmEscalateVisit}
+            />
+          </View>
+        }
+      >
+        <View style={styles.listGap}>
+          <ThemedText variant="body" color={theme.colors.text}>
+            Elevate this nurse Vitals Check visit into a Doctor Consultation while keeping the same visit ticket, recorded vitals, and dispensed care notes.
+          </ThemedText>
+          <SegmentedControl<QueuePriority>
+            value={escalatePriority}
+            onChange={setEscalatePriority}
+            options={[
+              { value: 'Emergency', label: 'STAT / Emergency' },
+              { value: 'Urgent', label: 'Urgent' },
+              { value: 'Routine', label: 'Routine' },
+            ]}
+          />
+          <Input
+            label="Clinical Reason / Red Flags"
+            placeholder="e.g. Hypertensive urgency BP 180/110, persistent severe pain, high fever..."
+            value={escalateReason}
+            onChangeText={setEscalateReason}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+      </Modal>
+
+      {/* Physician Asynchronous Review of Nurse OTC / Medical Supply Dispensing */}
+      <Modal
+        visible={showOtcReviewModal}
+        onClose={() => setShowOtcReviewModal(false)}
+        title="Nurse OTC & Supply Dispensing — Physician Review"
+        subtitle="Asynchronous physician oversight for routine OTC medicines & supplies dispensed during nurse vitals checks"
+        maxWidth={720}
+        footer={
+          <View style={styles.modalFooter}>
+            <Button
+              title="Close"
+              variant="outline"
+              onPress={() => setShowOtcReviewModal(false)}
+            />
+          </View>
+        }
+      >
+        {unreviewedOtcLogs.length === 0 ? (
+          <EmptyState
+            icon="checkCircle"
+            title="All nurse-dispensed OTC items have been reviewed"
+            description="New routine OTC medicines or supplies logged during nurse vitals checks will appear here automatically."
+          />
+        ) : (
+          <View style={styles.listGap}>
+            {unreviewedOtcLogs.map((log) => {
+              const isDoctorUser = currentStaff?.role === 'Doctor';
+              const isBusy = reviewingLogId === log.id;
+              return (
+                <View key={log.id} style={styles.otcReviewCard}>
+                  <View style={styles.rowBetween}>
+                    <View style={styles.badgeWrapRow}>
+                      <Badge label={log.queueNumber || 'Visit'} variant="primary" size="xs" />
+                      <ThemedText variant="bodyBold" color={theme.colors.text}>
+                        {log.patientName}
+                      </ThemedText>
+                      <Badge
+                        label={`ROS: ${log.rosCategoryLabel || getRosShortLabel(log.rosCategory)}`}
+                        variant="neutral"
+                        size="xs"
+                      />
+                    </View>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      {formatClinicDate(log.dispensedAt)} • {formatClinicTime(log.dispensedAt)}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.badgeWrapRow}>
+                    <Badge
+                      label={log.itemCategory === 'MedicalSupply' ? 'Medical Supply' : 'OTC Medicine'}
+                      variant={log.itemCategory === 'MedicalSupply' ? 'info' : 'routine'}
+                      size="xs"
+                    />
+                    <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+                      {log.itemName}
+                      {log.dosageOrSpec ? ` ${log.dosageOrSpec}` : ''} — {log.quantityDispensed} {log.formOrUnit || 'pcs'}
+                    </ThemedText>
+                  </View>
+
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    Logged by {log.dispensedByStaffName} ({log.dispensedByRole})
+                    {log.chiefComplaint ? ` • CC: ${log.chiefComplaint}` : ''}
+                  </ThemedText>
+
+                  {log.vitalsSummary ? (
+                    <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                      Vitals: {log.vitalsSummary}
+                    </ThemedText>
+                  ) : null}
+
+                  {log.directionsOrInstructions || log.homeInstructions ? (
+                    <ThemedText variant="caption" color={theme.colors.text}>
+                      Home Care / Directions: {[log.directionsOrInstructions, log.homeInstructions].filter(Boolean).join(' • ')}
+                    </ThemedText>
+                  ) : null}
+
+                  {isDoctorUser ? (
+                    <View style={styles.listGap}>
+                      <Input
+                        label="Physician Review Notes (optional)"
+                        placeholder="e.g. Appropriate symptomatic relief; advise follow-up if fever persists >48h..."
+                        value={reviewNotesById[log.id] || ''}
+                        onChangeText={(txt) =>
+                          setReviewNotesById((prev) => ({ ...prev, [log.id]: txt }))
+                        }
+                      />
+                      <View style={styles.otcReviewActions}>
+                        <Button
+                          title="Open Patient Chart"
+                          variant="ghost"
+                          size="xs"
+                          icon="file"
+                          onPress={() => {
+                            setShowOtcReviewModal(false);
+                            navigation.navigate('Patients', { patientId: log.patientId });
+                          }}
+                        />
+                        <Button
+                          title="Flag Intervention"
+                          variant="dangerOutline"
+                          size="xs"
+                          icon="alert"
+                          loading={isBusy}
+                          disabled={isBusy}
+                          onPress={() => handleReviewOtcDispenseLog(log, true)}
+                        />
+                        <Button
+                          title="Mark Reviewed"
+                          variant="success"
+                          size="xs"
+                          icon="check"
+                          loading={isBusy}
+                          disabled={isBusy}
+                          onPress={() => handleReviewOtcDispenseLog(log, false)}
+                        />
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.otcReviewActions}>
+                      <Badge label="Awaiting Physician Review" variant="warning" size="xs" />
+                      <Button
+                        title="Open Patient Chart"
+                        variant="ghost"
+                        size="xs"
+                        icon="file"
+                        onPress={() => {
+                          setShowOtcReviewModal(false);
+                          navigation.navigate('Patients', { patientId: log.patientId });
+                        }}
+                      />
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
       </Modal>
 
 
@@ -2328,6 +5020,120 @@ export default function DashboardScreen() {
           />
         </View>
       </Modal>
+
+      {/* Discharge / Complete Non-Doctor Visit Modal */}
+      <Modal
+        visible={!!dischargeModalItem}
+        onClose={() => !savingDischarge && setDischargeModalItem(null)}
+        title="Discharge / Complete Visit"
+        subtitle={
+          dischargeModalItem
+            ? `Ticket ${dischargeModalItem.queueNumber} · ${dischargeModalItem.patientName} (${getServiceBadge(dischargeModalItem.visitType).label})`
+            : ''
+        }
+        maxWidth={480}
+        footer={
+          <>
+            <Button
+              title="Cancel"
+              variant="ghost"
+              onPress={() => setDischargeModalItem(null)}
+              disabled={savingDischarge}
+            />
+            <Button
+              title="Confirm Discharge"
+              icon="check"
+              onPress={handleConfirmDischarge}
+              loading={savingDischarge}
+            />
+          </>
+        }
+      >
+        <View style={{ gap: theme.spacing.md }}>
+          <ThemedText variant="body" color={theme.colors.textSecondary}>
+            Complete this visit without physician consultation (e.g., vitals check, OTC medicine/supply dispensing, procedure, or specimen drop-off).
+          </ThemedText>
+          <Input
+            label="Discharge remarks (optional)"
+            placeholder="e.g. Vitals normal, patient advised home care..."
+            value={dischargeRemarks}
+            onChangeText={setDischargeRemarks}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+      </Modal>
+
+      {/* Divert Emergency Patient Modal */}
+      <DivertEmergencyModal
+        visible={!!divertModalItem}
+        ticket={divertModalItem}
+        onClose={() => setDivertModalItem(null)}
+        onSuccess={() => {
+          setDivertModalItem(null);
+          loadData();
+        }}
+      />
+
+      {/* Guided 4-Station Health Screening Modal (Outside ScrollView to preserve scroll & filter state) */}
+      <HealthScreeningModal
+        visible={screeningModalVisible}
+        onClose={() => {
+          setScreeningModalVisible(false);
+          setScreeningPatient(null);
+          setScreeningQueueItemId(null);
+          setScreeningInitialId(null);
+          setScreeningInitialTrack('Regular');
+        }}
+        patient={screeningPatient}
+        queueItemId={screeningQueueItemId}
+        initialScreeningId={screeningInitialId}
+        initialTrack={screeningInitialTrack}
+        onSuccess={() => {
+          void loadData();
+        }}
+        onIssueMedCert={({ patient: targetPatient, queueItemId: qId }) => {
+          setScreeningModalVisible(false);
+          setScreeningPatient(null);
+          setScreeningQueueItemId(null);
+          setScreeningInitialId(null);
+          setMedCertPatient(targetPatient);
+          setMedCertQueueItemId(qId);
+          setMedCertModalVisible(true);
+        }}
+        onEscalateToConsultation={({ patient: targetPatient, queueItemId: qId, workflowMode }) => {
+          setScreeningModalVisible(false);
+          setScreeningPatient(null);
+          setScreeningQueueItemId(null);
+          setScreeningInitialId(null);
+          navigation.navigate('Consultations', {
+            queueId: qId,
+            queueItemId: qId,
+            patientId: targetPatient.id,
+            patientName: targetPatient.fullName,
+            directVisitMode: workflowMode === 'YakapAvailment' ? 'yakap' : 'regular',
+          });
+        }}
+      />
+
+      {/* Post-Screening Medical Certificate / Fit-to-Work Modal */}
+      <IssueMedicalCertificateModal
+        visible={medCertModalVisible}
+        patient={medCertPatient}
+        queueItemId={medCertQueueItemId}
+        allowDuplicateActive
+        onClose={() => {
+          setMedCertModalVisible(false);
+          setMedCertPatient(null);
+          setMedCertQueueItemId(null);
+        }}
+        onSuccess={() => {
+          setMedCertModalVisible(false);
+          setMedCertPatient(null);
+          setMedCertQueueItemId(null);
+          void loadData();
+        }}
+      />
     </ResponsiveLayout>
   );
 }
@@ -2386,17 +5192,29 @@ const styles = StyleSheet.create({
   },
   queueHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  queueIdentityRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
+    flex: 1,
+    minWidth: 200,
   },
   queueTitle: {
     flex: 1,
+    minWidth: 0,
     gap: theme.spacing.xs,
   },
   badgeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: theme.spacing.xs,
+    maxWidth: '100%',
   },
   vitalsStrip: {
     backgroundColor: theme.colors.primaryLight,
@@ -2414,6 +5232,54 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
+  },
+  actionClustersWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+    paddingTop: theme.spacing.sm,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
+  primaryActionGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    maxWidth: '100%',
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  trailingActionGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginLeft: 'auto',
+    maxWidth: '100%',
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  actionCluster: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    maxWidth: '100%',
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  emergencyCluster: {
+    alignItems: 'center',
+  },
+  actionClusterSeparator: {
+    width: theme.sizes.borderWidth,
+    height: theme.sizes.iconMd,
+    backgroundColor: theme.colors.border,
+    alignSelf: 'center',
   },
   listGap: {
     gap: theme.spacing.md,
@@ -2613,14 +5479,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     flexWrap: 'wrap',
   },
-  presetChip: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 6,
-    borderRadius: theme.radii.full,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight,
-  },
   demographicGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -2634,6 +5492,252 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: theme.radii.md,
     padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  censusFilterCardContent: {
+    gap: theme.spacing.sm,
+  },
+  censusSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  censusFilterPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
+  censusFilterPillsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  filterChip: {
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+  },
+  filterChipActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primaryDark,
+  },
+  censusTableCard: {
+    overflow: 'hidden',
+  },
+  censusHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  tableScrollContent: {
+    flexGrow: 1,
+    minWidth: '100%',
+  },
+  censusTableInner: {
+    width: '100%',
+    minWidth: 2110,
+  },
+  censusTableHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primaryDark,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.border,
+  },
+  headerCommonGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRightWidth: theme.sizes.borderWidth,
+    borderRightColor: theme.colors.primaryBorder,
+  },
+  headerServiceGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: theme.spacing.sm,
+  },
+  headerBillingGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: theme.spacing.sm,
+    borderLeftWidth: theme.sizes.borderWidth,
+    borderLeftColor: theme.colors.primaryBorder,
+  },
+  censusTableRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    paddingHorizontal: theme.spacing.md,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  censusTableRowAlt: {
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  visitCommonGroup: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: theme.spacing.sm,
+    borderRightWidth: theme.sizes.borderWidth,
+    borderRightColor: theme.colors.borderLight,
+  },
+  serviceSubRowsGroup: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+  },
+  serviceSubRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: theme.spacing.sm,
+    paddingLeft: theme.spacing.sm,
+  },
+  serviceSubRowDivider: {
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
+  visitBillingGroup: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: theme.spacing.sm,
+    paddingLeft: theme.spacing.sm,
+    borderLeftWidth: theme.sizes.borderWidth,
+    borderLeftColor: theme.colors.borderLight,
+  },
+  colTicket: {
+    width: 155,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colVisitType: {
+    width: 165,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+    overflow: 'hidden',
+  },
+  colPatient: {
+    width: 205,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colCustom: {
+    width: 215,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+    overflow: 'hidden',
+  },
+  colService: {
+    width: 195,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+    overflow: 'hidden',
+  },
+  colStaff: {
+    width: 185,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colNurse: {
+    width: 215,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colDoctor: {
+    width: 235,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colOutcome: {
+    width: 215,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colServiceFee: {
+    width: 110,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colBilling: {
+    width: 165,
+    gap: theme.spacing.xs,
+  },
+  rightAlignedText: {
+    textAlign: 'right',
+  },
+  demographicsCardContent: {
+    gap: theme.spacing.sm,
+  },
+  cardHeaderSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  badgeWrapRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    maxWidth: '100%',
+    gap: theme.spacing.xs,
+    alignItems: 'center',
+  },
+  otcReviewBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
+  otcReviewBannerInfo: {
+    flex: 1,
+    minWidth: 260,
+    gap: theme.spacing.xs,
+  },
+  otcReviewCard: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    gap: theme.spacing.xs,
+  },
+  otcReviewActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  dispensingLedgerInner: {
+    width: '100%',
+    minWidth: 1200,
+  },
+  censusPaginationFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  censusPaginationInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
+  censusPaginationControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.xs,
   },
 });

@@ -15,9 +15,9 @@ public sealed record GetAuditLogDetailQuery(Guid Id) : IRequest<ClinicAuditEntry
 
 public sealed class GetAuditLogDetailQueryHandler : IRequestHandler<GetAuditLogDetailQuery, ClinicAuditEntryDetailDto?>
 {
-    private readonly IRepository<ClinicAuditEntry> _auditRepo;
+    private readonly IRepository<AuditEntry> _auditRepo;
 
-    public GetAuditLogDetailQueryHandler(IRepository<ClinicAuditEntry> auditRepo)
+    public GetAuditLogDetailQueryHandler(IRepository<AuditEntry> auditRepo)
     {
         _auditRepo = auditRepo ?? throw new ArgumentNullException(nameof(auditRepo));
     }

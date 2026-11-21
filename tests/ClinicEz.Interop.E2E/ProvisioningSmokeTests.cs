@@ -16,7 +16,7 @@ public class ProvisioningSmokeTests
         var lab = await cell.ProvisionAsync(Fac.Lab("tenant-a"));
         var pharmacy = await cell.ProvisionAsync(Fac.Pharmacy("tenant-a"));
 
-        (await cell.Clinic.DbAsync(db => Task.FromResult(db.ClinicSettings.IgnoreQueryFilters().Count(s => s.ClinicId == clinic.Id)))).Should().Be(1);
+        (await cell.Clinic.DbAsync(db => Task.FromResult(db.Settings.IgnoreQueryFilters().Count(s => s.ClinicId == clinic.Id)))).Should().Be(1);
 
         var portalMail = await cell.Hub.NewSdk(InteropServices.Portal).PullAsync(InteropServices.Portal, 50, 0, CancellationToken.None);
         portalMail.Select(m => m.Envelope.Type).Should().Equal(Enumerable.Repeat(InteropTypes.FacilityProvisioned, 3));

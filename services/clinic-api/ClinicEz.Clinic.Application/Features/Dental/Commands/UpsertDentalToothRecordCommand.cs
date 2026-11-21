@@ -26,13 +26,13 @@ public sealed record UpsertDentalToothRecordCommand(
 public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<UpsertDentalToothRecordCommand, DentalToothRecordDto>
 {
     private readonly IRepository<DentalToothRecord> _toothRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public UpsertDentalToothRecordCommandHandler(
         IRepository<DentalToothRecord> toothRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {

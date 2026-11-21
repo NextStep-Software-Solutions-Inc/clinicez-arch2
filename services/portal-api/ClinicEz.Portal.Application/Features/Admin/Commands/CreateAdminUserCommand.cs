@@ -22,7 +22,7 @@ public class CreateAdminUserCommandHandler(IApplicationDbContext context) : IReq
         if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.FullName)) return null;
 
         var existing = await context.AdminUsers.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower(), cancellationToken);
-        if (existing) throw new Exception("An admin with this email already exists.");
+        if (existing) throw new InvalidOperationException("An admin with this email already exists.");
 
         var user = new AdminUser
         {
@@ -31,6 +31,9 @@ public class CreateAdminUserCommandHandler(IApplicationDbContext context) : IReq
             FullName = request.FullName,
             RoleId = request.RoleId,
             IsActive = true,
+            Status = AdminUserStatus.Invited,
+            InvitationToken = ClinicEz.Portal.Application.Common.TokenGenerator.GenerateSecureToken(32),
+            InvitationExpiresAt = DateTime.UtcNow.AddDays(7),
             CreatedAt = DateTime.UtcNow,
             CreatedBy = request.CreatedBy
         };

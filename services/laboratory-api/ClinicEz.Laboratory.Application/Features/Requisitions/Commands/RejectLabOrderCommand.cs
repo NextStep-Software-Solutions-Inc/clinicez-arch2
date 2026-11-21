@@ -7,7 +7,10 @@ using ClinicEz.Laboratory.Application.Features.Requisitions.Queries;
 using ClinicEz.Laboratory.Domain.Entities;
 using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,15 +24,18 @@ public class RejectLabOrderCommandHandler : IRequestHandler<RejectLabOrderComman
     private readonly IRepository<LabRequisition> _requisitionRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILabOrderLifecycle _lifecycle;
+    private readonly IInteropPublisher? _publisher;
 
     public RejectLabOrderCommandHandler(
         IRepository<LabRequisition> requisitionRepository,
         IUnitOfWork unitOfWork,
-        ILabOrderLifecycle lifecycle)
+        ILabOrderLifecycle lifecycle,
+        IInteropPublisher? publisher = null)
     {
         _requisitionRepository = requisitionRepository;
         _unitOfWork = unitOfWork;
         _lifecycle = lifecycle;
+        _publisher = publisher;
     }
 
     public async Task<LabRequisitionDto> Handle(RejectLabOrderCommand request, CancellationToken cancellationToken)
@@ -53,6 +59,23 @@ public class RejectLabOrderCommandHandler : IRequestHandler<RejectLabOrderComman
         }
 
         _requisitionRepository.Update(requisition);
+
+        if (requisition.HasClinicEzPatient && requisition.PatientId != Guid.Empty && _publisher != null)
+        {
+            var grantId = CommsGrantIdGenerator.Create(requisition.TenantId, requisition.LaboratoryId.ToString(), "LabRequisition", requisition.Id.ToString());
+            var from = Party.ForFacility(requisition.TenantId, requisition.LaboratoryId.ToString(), FacilityType.Laboratory);
+            var toParty = Party.ForFacility(requisition.TenantId, requisition.LaboratoryId.ToString(), FacilityType.Laboratory, service: InteropServices.Comms);
+            var revokePayload = new CommsEligibilityRevokedPayload(
+                GrantId: grantId,
+                TenantId: requisition.TenantId,
+                FacilityId: requisition.LaboratoryId.ToString(),
+                PatientId: requisition.PatientId,
+                Reason: request.Reason.Trim(),
+                RevokedAtUtc: DateTime.UtcNow,
+                Version: 2);
+            _publisher.Enqueue(InteropTypes.CommsEligibilityRevoked, from, toParty, correlationId: grantId, revokePayload);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return GetWorklistQueryHandler.MapToDto(requisition);

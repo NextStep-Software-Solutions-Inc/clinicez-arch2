@@ -1,3 +1,4 @@
+using ClinicEz.Portal.Application.Common;
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
@@ -21,7 +22,8 @@ public record AcceptInvitationResultDto(
 public record AcceptInvitationCommand(
     string Token,
     string ClerkUserId,
-    string? UserEmail = null
+    string? UserEmail = null,
+    IReadOnlyList<string>? VerifiedEmails = null
 ) : IRequest<AcceptInvitationResultDto>;
 
 public class AcceptInvitationCommandValidator : AbstractValidator<AcceptInvitationCommand>
@@ -40,7 +42,8 @@ public class AcceptInvitationCommandValidator : AbstractValidator<AcceptInvitati
 public class AcceptInvitationCommandHandler(
     IApplicationDbContext context,
     IClerkMetadataSync clerkMetadata,
-    TimeProvider timeProvider) : IRequestHandler<AcceptInvitationCommand, AcceptInvitationResultDto>
+    TimeProvider timeProvider,
+    IClerkUserLookup? clerkLookup = null) : IRequestHandler<AcceptInvitationCommand, AcceptInvitationResultDto>
 {
     public async Task<AcceptInvitationResultDto> Handle(AcceptInvitationCommand request, CancellationToken cancellationToken)
     {
@@ -65,9 +68,14 @@ public class AcceptInvitationCommandHandler(
             return result;
         }
 
-        if (member.Status != MemberStatus.Invited)
+        if (member.Status == MemberStatus.Revoked)
         {
-            throw new InvalidOperationException("This invitation is no longer active or has already been used.");
+            throw new InvalidOperationException("This invitation has been revoked.");
+        }
+
+        if (member.Status == MemberStatus.Suspended)
+        {
+            throw new InvalidOperationException("This account is suspended.");
         }
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
@@ -76,15 +84,28 @@ public class AcceptInvitationCommandHandler(
             throw new InvalidOperationException("This invitation has expired. Please ask your clinic administrator to resend the invitation.");
         }
 
+        if (member.Status != MemberStatus.Invited)
+        {
+            throw new InvalidOperationException("This invitation is no longer active or has already been used.");
+        }
+
+        var matchedEmail = await InvitationEmailVerifier.EnsureEmailMatchesAsync(
+            member.Email,
+            request.UserEmail,
+            request.VerifiedEmails,
+            request.ClerkUserId,
+            clerkLookup,
+            cancellationToken);
+
         // The allow-list may have been tightened after this invitation was sent; check both the invited
-        // address and the address of the account that is accepting it.
+        // address and the verified address of the account that is accepting it.
         var allowedDomains = await context.WorkspaceSettings
             .AsNoTracking()
             .Where(s => s.TenantId == member.TenantId)
             .Select(s => s.AllowedInviteDomains)
             .FirstOrDefaultAsync(cancellationToken);
         if (!InviteDomains.IsAllowed(allowedDomains, member.Email) ||
-            (!string.IsNullOrWhiteSpace(request.UserEmail) && !InviteDomains.IsAllowed(allowedDomains, request.UserEmail)))
+            !InviteDomains.IsAllowed(allowedDomains, matchedEmail))
         {
             throw new InvalidOperationException("Your email domain is not permitted to join this workspace. Contact the workspace administrator.");
         }

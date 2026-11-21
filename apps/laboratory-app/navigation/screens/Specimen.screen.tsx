@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Alert, RefreshControl, Modal, ActivityIndicator } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import PaymentSummary from '../../components/PaymentSummary';
 import { laboratoryService, LabRequisitionItem, SpecimenItem, PrintableTubeStickerItem, RackInventoryItem, SpecimenContainerType, SpecimenRejectionReason, StorageTemperature } from '../../services/laboratoryService';
@@ -21,6 +22,7 @@ interface SpecimenWithMeta
 }
 
 export default function SpecimenScreen() {
+  const navigation = useNavigation<any>();
   const [specimens, setSpecimens] = useState<SpecimenWithMeta[]>([]);
   const [loading, setLoading] = useState(false);
   const [phlebName, setPhlebName] = useState('');
@@ -234,9 +236,18 @@ export default function SpecimenScreen() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={loadSpecimens} />}
     >
-      <View style={styles.header}>
-        <ThemedText style={styles.subtitle}>Phlebotomy & Sample Tracking</ThemedText>
-        <ThemedText style={styles.title}>Specimen Management</ThemedText>
+      <View style={styles.headerRow}>
+        <View style={styles.header}>
+          <ThemedText style={styles.subtitle}>Phlebotomy & Sample Tracking</ThemedText>
+          <ThemedText style={styles.title}>Specimen Management</ThemedText>
+        </View>
+        <Pressable
+          testID="walkin-intake-nav-btn"
+          style={styles.walkInIntakeBtn}
+          onPress={() => navigation?.navigate?.('WalkInIntake')}
+        >
+          <ThemedText style={styles.walkInIntakeBtnText}>+ Walk-In Intake</ThemedText>
+        </Pressable>
       </View>
 
       {/* Phlebotomist Bar & Quick Action */}
@@ -628,8 +639,26 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 16,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
   header: {
     gap: 4,
+  },
+  walkInIntakeBtn: {
+    backgroundColor: '#0D6963',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  walkInIntakeBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   subtitle: {
     fontSize: 13,

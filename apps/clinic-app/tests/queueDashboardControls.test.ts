@@ -452,7 +452,8 @@ describe('OPD Queue Dashboard Controls & Absence Management', () => {
       const [res, err] = await clinicService.getPublicQueueDisplay('c-1', 'main', 'st-jude');
       expect(err).toBeNull();
       expect(res.clinicName).toBe('St. Jude Family Clinic');
-      expect(lastGetUrl).toBe('/public/queue/display?clinicId=c-1&facilitySlug=main&tenantSlug=st-jude');
+      expect(lastGetUrl).toContain('/public/queue/display?clinicId=c-1&facilitySlug=main&tenantSlug=st-jude');
+      expect(lastGetUrl).toMatch(/_t=\d+/);
     });
 
     test('7.2 updateSettings persists tvDisplayMaskPatientNames via PUT /settings', async () => {

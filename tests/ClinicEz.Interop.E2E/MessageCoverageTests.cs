@@ -22,6 +22,8 @@ public class MessageCoverageTests
     private const string Organization = InteropServices.Organization;
     private const string PhilHealth = InteropServices.Philhealth;
     private const string Hub = InteropServices.Hub;
+    private const string Comms = InteropServices.Comms;
+    private const string Media = InteropServices.Media;
 
     private sealed record Route(string Type, string[] Senders, string[] Receivers);
 
@@ -29,10 +31,26 @@ public class MessageCoverageTests
     [
         new(InteropTypes.FacilityLicenseIssued, [Portal], [Clinic, Lab, Pharmacy, Billing, Organization]),
         new(InteropTypes.FacilityProvisioned, [Lab, Pharmacy, Organization], [Portal]),
-        new(InteropTypes.FacilityDirectoryUpdated, [Portal], [Patient]),
+        new(InteropTypes.FacilityDirectoryUpdated, [Portal, Clinic], [Patient, Clinic]),
         new(InteropTypes.WorkspaceProfileUpdated, [Portal], [Clinic, Lab, Pharmacy, Organization]),
         new(InteropTypes.EntitlementsChanged, [Portal], [Clinic, Lab, Pharmacy, Billing, Organization]),
         new(InteropTypes.FacilityHeartbeat, [Clinic, Lab, Pharmacy, Organization], [Portal]),
+        new(InteropTypes.FacilityJoinSettingsUpdated, [Clinic], [Portal]),
+        new(InteropTypes.DocumentAttestationPublished, [Clinic, Lab], [Portal]),
+        new(InteropTypes.QueueBoardUpdated, [Clinic], [Portal]),
+
+        new(InteropTypes.FacilityVerificationRequested, [Clinic], [Portal]),
+        new(InteropTypes.FacilityVerificationWithdrawn, [Clinic], [Portal]),
+        new(InteropTypes.FacilityVerificationRejected, [Portal], [Clinic]),
+        new(InteropTypes.PractitionerVerificationRequested, [Clinic], [Portal]),
+        new(InteropTypes.PractitionerIdentityUpdated, [Portal], [Patient, Clinic]),
+        new(InteropTypes.PractitionerVerificationRevoked, [Portal], [Patient, Clinic]),
+        new(InteropTypes.VerificationEvidenceRequested, [Portal], [Clinic]),
+        new(InteropTypes.VerificationEvidenceResponded, [Clinic], [Portal]),
+        new(InteropTypes.FacilityVerificationUpdateRequested, [Clinic], [Portal]),
+        new(InteropTypes.FacilityVerificationUpdateResponded, [Portal], [Clinic]),
+        new(InteropTypes.PractitionerVerificationUpdateRequested, [Clinic], [Portal]),
+        new(InteropTypes.PractitionerVerificationUpdateResponded, [Portal], [Clinic]),
 
         new(InteropTypes.DirectoryCellUpserted, [Portal], [Hub]),
         new(InteropTypes.DirectoryFacilityUpserted, [Portal], [Hub]),
@@ -60,7 +78,8 @@ public class MessageCoverageTests
         new(InteropTypes.RxIssued, [Clinic], [Pharmacy]),
         new(InteropTypes.RxStatusChanged, [Pharmacy], [Clinic, Patient]),
         new(InteropTypes.RxDispensed, [Pharmacy], [Clinic]),
-        new(InteropTypes.RxExternalDispensed, [Patient], [Clinic]),
+        new(InteropTypes.RxExternalDispensed, [Patient, Portal], [Clinic]),
+        new(InteropTypes.PharmacyOtcDispensed, [Clinic], [Pharmacy]),
 
         new(InteropTypes.GamotLookupRequested, [Clinic], [Pharmacy]),
         new(InteropTypes.GamotLookupResponded, [Pharmacy], [Clinic]),
@@ -75,12 +94,41 @@ public class MessageCoverageTests
         new(InteropTypes.YakapTransmittalRequested, [Portal], [Clinic]),
         new(InteropTypes.YakapTransmittalResponded, [Clinic], [Portal]),
 
+        new(InteropTypes.YakapSubmissionRequested, [Portal], [Clinic]),
+        new(InteropTypes.YakapSubmissionResponded, [Clinic], [Portal]),
+
         new(InteropTypes.BillingInvoiceRequested, [Clinic, Lab, Pharmacy], [Billing]),
         new(InteropTypes.BillingPaymentConfirmed, [Billing], [Clinic, Lab, Pharmacy]),
         new(InteropTypes.BillingInvoicePaid, [Billing], [Portal]),
         new(InteropTypes.BillingInvoiceVoided, [Billing], [Clinic, Lab, Pharmacy, Portal]),
 
-        new(InteropTypes.NotificationEmailRequested, [Portal], [Portal])
+        new(InteropTypes.NotificationEmailRequested, [Portal], [Portal]),
+
+        new(InteropTypes.CommsEligibilityGranted, [Clinic, Lab, Pharmacy], [Comms]),
+        new(InteropTypes.CommsEligibilityRevoked, [Clinic, Lab, Pharmacy], [Comms]),
+        new(InteropTypes.CommsEligibilitySynced, [Comms], [Comms, Patient]),
+        new(InteropTypes.CommsRequestSubmit, [Patient], [Comms]),
+        new(InteropTypes.CommsMessageSubmit, [Patient, Comms], [Comms]),
+        new(InteropTypes.CommsMessageReplicate, [Comms], [Comms, Patient]),
+        new(InteropTypes.CommsMessageReceived, [Clinic, Lab, Pharmacy, Patient, Comms], [Comms, Patient]),
+        new(InteropTypes.CommsMessageAcknowledged, [Patient], [Comms]),
+        new(InteropTypes.CommsThreadStateChanged, [Comms], [Comms, Patient]),
+        new(InteropTypes.CommsCallStateChanged, [Comms], [Comms, Patient]),
+        new(InteropTypes.CommsCallEvent, [Patient], [Comms]),
+        new(InteropTypes.CommsCallPaymentCleared, [Clinic], [Comms]),
+        new(InteropTypes.CommsRecordingConsentLogged, [Comms], [Clinic]),
+        new(InteropTypes.CommsConversationArchived, [Comms], [Comms]),
+        new(InteropTypes.CommsTranscriptArchived, [Comms], [Clinic]),
+        new(InteropTypes.CommsAttachmentFiled, [Comms], [Clinic]),
+        new(InteropTypes.GuestCallJoinRequested, [Portal], [Comms]),
+        new(InteropTypes.GuestTeleconsultInviteIssued, [Clinic], [Portal]),
+        new(InteropTypes.GuestTeleconsultInviteRevoked, [Clinic], [Portal]),
+
+        new(InteropTypes.MediaRoomRequested, [Clinic, Lab, Pharmacy, Comms], [Media]),
+        new(InteropTypes.MediaRoomResponded, [Media], [Comms, Clinic]),
+        new(InteropTypes.MediaRoomEnded, [Clinic, Lab, Pharmacy, Comms], [Media]),
+        new(InteropTypes.MediaEntitlementUpdated, [Portal], [Media]),
+        new(InteropTypes.MediaUsageRecorded, [Media], [Portal])
     ];
 
     [Fact]

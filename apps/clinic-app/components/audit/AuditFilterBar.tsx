@@ -5,7 +5,6 @@ import ThemedText from '../ui/ThemedText';
 import { TextInput } from '../ui/Text';
 import { IconSlot, type IconName } from '../ui/Icon';
 import Button from '../ui/Button';
-import ValidatedDateInput from '../ui/ValidatedDateInput';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import type { AuditDatePreset } from '../../services/clinicService';
 
@@ -30,7 +29,7 @@ export const CATEGORY_PILLS: CategoryPillItem[] = [
   { key: 'Operations', label: 'Operations', icon: 'settings', description: 'Schedules, rooms, custom fields, settings' },
   { key: 'Billing', label: 'Billing', icon: 'billing', description: 'Invoices, payments, receipts, voids, refunds' },
   { key: 'Clinical Access', label: 'Clinical Access', icon: 'consultations', description: 'Consultations, vitals, problems, chart views' },
-  { key: 'PhilHealth Yakap', label: 'PhilHealth Yakap', icon: 'yakap', description: 'PIN queries, eKAS, ATC, transmittals' },
+  { key: 'PhilHealth Yakap', label: 'PhilHealth Yakap', icon: 'yakap', description: 'PIN checks, eligibility, annual checkups, clinic submissions' },
 ];
 
 export const DATE_PRESETS: Array<{ key: AuditDatePreset; label: string }> = [
@@ -38,6 +37,7 @@ export const DATE_PRESETS: Array<{ key: AuditDatePreset; label: string }> = [
   { key: '7d', label: 'Last 7 Days' },
   { key: '30d', label: 'This Month' },
   { key: 'all', label: 'All Time' },
+  { key: 'custom', label: 'Custom' },
 ];
 
 export const SEVERITY_OPTIONS = [
@@ -119,6 +119,15 @@ export function AuditFilterBar({
     return preset ? preset.label : 'Date Range';
   }, [startDate, endDate, datePreset]);
 
+  const customRangeLabel = useMemo(() => {
+    if (startDate && endDate) {
+      return startDate === endDate ? startDate : `${startDate} → ${endDate}`;
+    }
+    if (startDate) return `From ${startDate}`;
+    if (endDate) return `Until ${endDate}`;
+    return '';
+  }, [startDate, endDate]);
+
   return (
     <View style={styles.container}>
       {/* Search & Mobile Filter Trigger Row */}
@@ -153,29 +162,14 @@ export function AuditFilterBar({
 
         {/* Mobile "More Filters" Trigger Button */}
         {isCompact && onOpenMoreFilters && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Filter options, ${activeFiltersCount} active`}
+          <Button
+            title={`Filters${activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ''}`}
+            variant={activeFiltersCount > 0 ? 'outline' : 'secondary'}
+            size="md"
+            icon="settings"
             onPress={onOpenMoreFilters}
-            style={[
-              styles.moreFiltersBtn,
-              activeFiltersCount > 0 ? styles.moreFiltersBtnActive : styles.moreFiltersBtnInactive,
-            ]}
-          >
-            <IconSlot
-              value="settings"
-              size={theme.sizes.iconSm}
-              color={activeFiltersCount > 0 ? theme.colors.primary : theme.colors.textSecondary}
-            />
-            <ThemedText
-              style={[
-                styles.moreFiltersBtnText,
-                activeFiltersCount > 0 ? styles.moreFiltersBtnTextActive : styles.moreFiltersBtnTextInactive,
-              ]}
-            >
-              Filters{activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ''}
-            </ThemedText>
-          </Pressable>
+            accessibilityLabel={`Filter options, ${activeFiltersCount} active`}
+          />
         )}
 
         {/* Desktop Severities Picker */}
@@ -293,19 +287,19 @@ export function AuditFilterBar({
 
         {/* On Mobile: Reset Quick Chip if filters active */}
         {isCompact && activeFiltersCount > 0 && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Reset all filters"
+          <Button
+            title="Clear"
+            variant="dangerOutline"
+            size="xs"
+            icon="close"
             onPress={onResetFilters}
+            accessibilityLabel="Reset all filters"
             style={styles.mobileResetChip}
-          >
-            <IconSlot value="close" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-            <ThemedText style={styles.mobileResetChipText}>Clear</ThemedText>
-          </Pressable>
+          />
         )}
       </ScrollView>
 
-      {/* Desktop Controls Row: Date Presets, Range Picker Trigger, Inputs & Action Buttons */}
+      {/* Desktop Controls Row: Date Presets & Action Buttons */}
       {!isCompact && (
         <View style={styles.controlsRow}>
           <View style={styles.datePresetsGroup}>
@@ -316,7 +310,14 @@ export function AuditFilterBar({
                   key={preset.key}
                   accessibilityRole="button"
                   accessibilityLabel={`Date preset ${preset.label}`}
-                  onPress={() => onDatePresetChange && onDatePresetChange(preset.key)}
+                  onPress={() => {
+                    if (preset.key === 'custom') {
+                      onDatePresetChange?.('custom');
+                      onOpenDateRangePicker?.();
+                    } else {
+                      onDatePresetChange?.(preset.key);
+                    }
+                  }}
                   style={[
                     styles.presetButton,
                     isSelected ? styles.presetButtonSelected : styles.presetButtonUnselected,
@@ -333,49 +334,22 @@ export function AuditFilterBar({
                 </Pressable>
               );
             })}
-          </View>
 
-          <View style={styles.dateInputsContainer}>
-            {onOpenDateRangePicker && (
+            {/* When Custom is selected and a date range is active: show the date range as an interactive badge */}
+            {datePreset === 'custom' && Boolean(customRangeLabel) && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Open date range calendar: ${dateLabel}`}
+                accessibilityLabel={`Selected date range: ${customRangeLabel}. Tap to change.`}
                 onPress={onOpenDateRangePicker}
-                style={styles.calendarTriggerBtn}
+                style={styles.customRangeBadge}
               >
                 <IconSlot value="calendar" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                <ThemedText style={styles.calendarTriggerText}>
-                  {dateLabel}
+                <ThemedText style={styles.customRangeText}>
+                  {customRangeLabel}
                 </ThemedText>
-                <IconSlot value="chevronDown" size={theme.fontSizes.xs} color={theme.colors.textMuted} />
+                <IconSlot value="chevronDown" size={theme.fontSizes.xs} color={theme.colors.primary} />
               </Pressable>
             )}
-
-            <View style={styles.dateField}>
-              <ValidatedDateInput
-                value={startDate}
-                onChangeText={onStartDateChange}
-                boundaryMode="pastOrToday"
-                placeholder="Start (YYYY-MM-DD)"
-                testID="audit-start-date"
-                containerStyle={styles.dateInputStyle}
-                hideValidFeedback={true}
-                onCalendarPress={onOpenDateRangePicker}
-              />
-            </View>
-            <ThemedText style={styles.dateRangeSeparator}>to</ThemedText>
-            <View style={styles.dateField}>
-              <ValidatedDateInput
-                value={endDate}
-                onChangeText={onEndDateChange}
-                boundaryMode="pastOrToday"
-                placeholder="End (YYYY-MM-DD)"
-                testID="audit-end-date"
-                containerStyle={styles.dateInputStyle}
-                hideValidFeedback={true}
-                onCalendarPress={onOpenDateRangePicker}
-              />
-            </View>
           </View>
 
           <View style={styles.actionsGroup}>
@@ -493,20 +467,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
   mobileResetChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
     borderRadius: theme.radii.full,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.emergencyBorder,
-    backgroundColor: theme.colors.emergencyBg,
-    minHeight: theme.sizes.controlSm,
-  },
-  mobileResetChipText: {
-    ...theme.typography.captionBold,
-    color: theme.colors.emergencyText,
   },
   searchRow: {
     flexDirection: 'row',
@@ -536,32 +497,6 @@ const styles = StyleSheet.create({
   },
   clearSearchButton: {
     padding: theme.spacing.xs,
-  },
-  moreFiltersBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    height: theme.sizes.controlMd,
-    paddingHorizontal: theme.spacing.sm,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-  },
-  moreFiltersBtnActive: {
-    backgroundColor: theme.colors.primaryLight,
-    borderColor: theme.colors.primary,
-  },
-  moreFiltersBtnInactive: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.borderDark,
-  },
-  moreFiltersBtnText: {
-    ...theme.typography.captionBold,
-  },
-  moreFiltersBtnTextActive: {
-    color: theme.colors.primary,
-  },
-  moreFiltersBtnTextInactive: {
-    color: theme.colors.textSecondary,
   },
   severityContainer: {
     flexDirection: 'row',
@@ -603,6 +538,8 @@ const styles = StyleSheet.create({
   },
   datePresetsGroup: {
     flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.xs,
   },
   presetButton: {
@@ -628,36 +565,20 @@ const styles = StyleSheet.create({
   presetTextUnselected: {
     color: theme.colors.textSecondary,
   },
-  dateInputsContainer: {
+  customRangeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-    flexWrap: 'wrap',
-  },
-  calendarTriggerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
+    paddingVertical: theme.spacing.xs,
     paddingHorizontal: theme.spacing.sm,
-    height: theme.sizes.controlMd,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    backgroundColor: theme.colors.primaryLight,
   },
-  calendarTriggerText: {
+  customRangeText: {
     ...theme.typography.captionBold,
-    color: theme.colors.text,
-  },
-  dateField: {
-    width: 140,
-  },
-  dateInputStyle: {
-    marginBottom: 0,
-  },
-  dateRangeSeparator: {
-    color: theme.colors.textMuted,
-    ...theme.typography.caption,
+    color: theme.colors.primary,
   },
   actionsGroup: {
     flexDirection: 'row',

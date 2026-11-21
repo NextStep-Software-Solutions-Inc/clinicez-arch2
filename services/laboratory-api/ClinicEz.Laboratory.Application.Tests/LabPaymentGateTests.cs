@@ -204,7 +204,7 @@ public class LabPaymentGateTests
         // The same order under a new message id (clinic retry) is skipped by the handler: no new rows either.
         await host.Dispatcher.DispatchAsync(LabInteropTestData.OrderEnvelope(order, LabInteropTestData.ClinicA), default);
 
-        afterFirst.Should().Be(2 * 2 + 1, "Routed + AwaitingPayment, each to the clinic and the patient, plus the invoice request");
+        afterFirst.Should().Be(2 * 2 + 1 + 1, "Routed + AwaitingPayment, each to the clinic and the patient, plus the invoice request, plus comms eligibility grant");
         (await host.OutboxAsync()).Should().HaveCount(afterFirst);
         (await host.RequisitionsAsync()).Should().ContainSingle();
     }

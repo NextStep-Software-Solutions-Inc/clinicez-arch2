@@ -102,7 +102,16 @@ mock.module('../services/apiClient', () => ({
   clinicApiUrl: (p: string) => `http://localhost:5000/api/v1${p}`,
 }));
 
-const { clinicService } = await import('../services/clinicService');
+const {
+  clinicService,
+  getManilaTodayStr,
+  setClinicTimeZoneId,
+  getClinicTimeZoneId,
+  setClinicRegionalConfig,
+  formatClinicDate,
+  formatClinicTime,
+  formatClinicDateTime,
+} = await import('../services/clinicService');
 const { validateTimeString } = await import('../components/ui/TimeInput');
 
 describe('Milestone 1: End-of-Day (EOD) Reconciliation & Force EOD', () => {
@@ -234,6 +243,67 @@ describe('Milestone 1: End-of-Day (EOD) Reconciliation & Force EOD', () => {
         (t) => t.status === 'InConsultation' || t.status === 'Completed'
       );
       expect(protectedTickets.every((t) => !activeEodTickets.includes(t))).toBe(true);
+    });
+
+    test('4.2 getManilaTodayStr resolves Philippine Standard Time (UTC+8) across midnight rollover (00:00-07:59 AM PHT)', () => {
+      setClinicTimeZoneId('Asia/Manila');
+      // 2026-10-21 23:38:00 UTC is 2026-10-22 07:38:00 AM in Asia/Manila (UTC+8)
+      const morningManilaUtc = new Date('2026-10-21T23:38:00Z');
+      expect(getManilaTodayStr(morningManilaUtc)).toBe('2026-10-22');
+
+      // 2026-10-21 15:59:59 UTC is 2026-10-21 23:59:59 PM in Asia/Manila (UTC+8)
+      const lateNightManilaUtc = new Date('2026-10-21T15:59:59Z');
+      expect(getManilaTodayStr(lateNightManilaUtc)).toBe('2026-10-21');
+    });
+
+    test('4.3 setClinicTimeZoneId syncs WorkspaceProfile.timeZoneId and falls back to Asia/Manila', () => {
+      const sampleUtc = new Date('2026-10-21T23:38:00Z');
+      // In America/New_York (UTC-4), 2026-10-21 23:38:00 UTC is 2026-10-21 19:38:00 EDT
+      setClinicTimeZoneId('America/New_York');
+      expect(getClinicTimeZoneId()).toBe('America/New_York');
+      expect(getManilaTodayStr(sampleUtc)).toBe('2026-10-21');
+
+      // Reset / empty falls back to Asia/Manila
+      setClinicTimeZoneId(null);
+      expect(getClinicTimeZoneId()).toBe('Asia/Manila');
+      expect(getManilaTodayStr(sampleUtc)).toBe('2026-10-22');
+    });
+
+    test('4.4 formatClinicDate, formatClinicTime, and formatClinicDateTime respect clinic overrides across all patterns', () => {
+      // 2026-10-22T06:45:00Z = 2026-10-22 14:45:00 in Asia/Manila (UTC+8)
+      const sampleIso = '2026-10-22T06:45:00Z';
+
+      setClinicRegionalConfig({
+        timeZoneId: 'Asia/Manila',
+        dateFormat: 'MMM d, yyyy',
+        timeFormat: '12h',
+      });
+      expect(formatClinicDate(sampleIso)).toBe('Oct 22, 2026');
+      expect(formatClinicTime(sampleIso)).toBe('02:45 PM');
+      expect(formatClinicDateTime(sampleIso)).toBe('Oct 22, 2026, 02:45 PM');
+
+      setClinicRegionalConfig({
+        timeZoneId: 'Asia/Manila',
+        dateFormat: 'dd/MM/yyyy',
+        timeFormat: '24h',
+      });
+      expect(formatClinicDate(sampleIso)).toBe('22/10/2026');
+      expect(formatClinicTime(sampleIso)).toBe('14:45');
+      expect(formatClinicDateTime(sampleIso)).toBe('22/10/2026, 14:45');
+
+      setClinicRegionalConfig({
+        timeZoneId: 'Asia/Manila',
+        dateFormat: 'yyyy-MM-dd',
+        timeFormat: '24h',
+      });
+      expect(formatClinicDate(sampleIso)).toBe('2026-10-22');
+
+      // Reset back to defaults
+      setClinicRegionalConfig({
+        timeZoneId: 'Asia/Manila',
+        dateFormat: 'MMM d, yyyy',
+        timeFormat: '12h',
+      });
     });
   });
 });

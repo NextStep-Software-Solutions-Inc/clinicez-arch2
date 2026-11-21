@@ -11,7 +11,6 @@ namespace ClinicEz.Patient.Infrastructure.Services.Jobs.Processors;
 public sealed class FileRecordSyncProcessor : ISyncEntityProcessor
 {
     private readonly IFileRecordRepository _fileRepository;
-    private readonly IPatientStorageProfileRepository _storageProfileRepository;
     private readonly IStorageService _storageService;
 
     private static readonly JsonSerializerOptions JsonOptions =
@@ -19,11 +18,9 @@ public sealed class FileRecordSyncProcessor : ISyncEntityProcessor
 
     public FileRecordSyncProcessor(
         IFileRecordRepository fileRepository,
-        IPatientStorageProfileRepository storageProfileRepository,
         IStorageService storageService)
     {
         _fileRepository = fileRepository;
-        _storageProfileRepository = storageProfileRepository;
         _storageService = storageService;
     }
 
@@ -38,15 +35,6 @@ public sealed class FileRecordSyncProcessor : ISyncEntityProcessor
 
             var toDelete = await _fileRepository.GetByIdAsync(log.EntityId.Value, ct);
             if (toDelete is null) return SyncProcessResult.Success(); // Idempotent
-
-            // Decrement Storage Quota
-            var profile = await _storageProfileRepository.GetByPatientIdAsync(log.PatientId, ct);
-            if (profile != null)
-            {
-                var bytesFreed = toDelete.EncryptedSizeBytes ?? toDelete.SizeBytes;
-                profile.UsedBytes = Math.Max(0, profile.UsedBytes - bytesFreed);
-                _storageProfileRepository.Update(profile);
-            }
 
             // Physically delete from Cloudflare R2
             if (!string.IsNullOrWhiteSpace(toDelete.StorageKey))
@@ -75,9 +63,7 @@ public sealed class FileRecordSyncProcessor : ISyncEntityProcessor
 
         if (log.Operation == SyncOperation.Create)
         {
-            // Creation of binary files MUST go through GenerateUploadUrlEndpoint + CompleteFileUploadEndpoint
-            // We do not support processing a 'Create' through the generic JSON SyncPayload route
-            return SyncProcessResult.Rejected("FileRecord creations are not supported via Bulk Sync. Use the /files/intent API instead.");
+            return SyncProcessResult.Rejected("FileRecord creations are not supported via Bulk Sync. Use the /records upload API instead.");
         }
 
         if (log.Operation == SyncOperation.Update)
@@ -98,7 +84,14 @@ public sealed class FileRecordSyncProcessor : ISyncEntityProcessor
             }
 
             file.FileName = payload.FileName;
-            file.FolderId = payload.FolderId;
+            if (!string.IsNullOrWhiteSpace(payload.Title))
+                file.Title = payload.Title;
+            if (payload.DocumentDate.HasValue)
+                file.DocumentDate = payload.DocumentDate;
+            if (payload.FacilityName is not null)
+                file.FacilityName = payload.FacilityName;
+            if (payload.Notes is not null)
+                file.Notes = payload.Notes;
             file.SyncStatus = FileSyncStatus.Synced;
             
             _fileRepository.Update(file);

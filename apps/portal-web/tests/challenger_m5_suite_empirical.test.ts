@@ -423,6 +423,7 @@ describe("Milestone 5 Adversarial Challenger: BIR Statutory Tax Math & numberToW
         close: () => {},
       },
     }
+    const hadWindow = typeof (globalThis as any).window !== "undefined"
     const origOpen = globalThis.window?.open
     globalThis.window = {
       ...globalThis.window,
@@ -448,7 +449,9 @@ describe("Milestone 5 Adversarial Challenger: BIR Statutory Tax Math & numberToW
       // Output contains the printable elements
       expect(writtenOutput.length).toBeGreaterThan(500)
     } finally {
-      if (origOpen) {
+      if (!hadWindow) {
+        delete (globalThis as any).window
+      } else if (origOpen) {
         globalThis.window.open = origOpen
       }
     }

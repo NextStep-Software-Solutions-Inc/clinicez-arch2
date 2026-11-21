@@ -58,7 +58,7 @@ public class StaffNotificationTests
         clinicContext.StaffId.Returns(_staffId);
 
         // 1. Broadcast Routine Notification (unread)
-        var n1 = new ClinicStaffNotification
+        var n1 = new StaffNotification
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -73,7 +73,7 @@ public class StaffNotificationTests
         };
 
         // 2. Direct STAT Panic Result for this staff (unread)
-        var n2 = new ClinicStaffNotification
+        var n2 = new StaffNotification
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -88,7 +88,7 @@ public class StaffNotificationTests
         };
 
         // 3. Notification for OTHER staff (unread) -> should NOT be visible
-        var n3 = new ClinicStaffNotification
+        var n3 = new StaffNotification
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -103,7 +103,7 @@ public class StaffNotificationTests
         };
 
         // 4. Soft-deleted notification -> should NOT be visible
-        var n4 = new ClinicStaffNotification
+        var n4 = new StaffNotification
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -121,7 +121,7 @@ public class StaffNotificationTests
         db.StaffNotifications.AddRange(n1, n2, n3, n4);
         await db.SaveChangesAsync();
 
-        var repo = new Repository<ClinicStaffNotification>(db, _sieveProcessor);
+        var repo = new Repository<StaffNotification>(db, _sieveProcessor);
         var handler = new GetStaffNotificationsQueryHandler(repo, clinicContext);
 
         // Act
@@ -149,7 +149,7 @@ public class StaffNotificationTests
         clinicContext.TenantId.Returns(_tenantId);
         clinicContext.StaffId.Returns(_staffId);
 
-        var notification = new ClinicStaffNotification
+        var notification = new StaffNotification
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -166,7 +166,7 @@ public class StaffNotificationTests
         db.StaffNotifications.Add(notification);
         await db.SaveChangesAsync();
 
-        var repo = new Repository<ClinicStaffNotification>(db, _sieveProcessor);
+        var repo = new Repository<StaffNotification>(db, _sieveProcessor);
         var uow = new UnitOfWork(db, _sieveProcessor, _productRepo);
         var handler = new MarkStaffNotificationReadCommandHandler(repo, clinicContext, uow);
 
@@ -191,7 +191,7 @@ public class StaffNotificationTests
         clinicContext.TenantId.Returns(_tenantId);
         clinicContext.StaffId.Returns(_staffId);
 
-        var n1 = new ClinicStaffNotification
+        var n1 = new StaffNotification
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -205,7 +205,7 @@ public class StaffNotificationTests
             CreatedAt = DateTime.UtcNow
         };
 
-        var n2 = new ClinicStaffNotification
+        var n2 = new StaffNotification
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -219,7 +219,7 @@ public class StaffNotificationTests
             CreatedAt = DateTime.UtcNow
         };
 
-        var nOther = new ClinicStaffNotification
+        var nOther = new StaffNotification
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -236,7 +236,7 @@ public class StaffNotificationTests
         db.StaffNotifications.AddRange(n1, n2, nOther);
         await db.SaveChangesAsync();
 
-        var repo = new Repository<ClinicStaffNotification>(db, _sieveProcessor);
+        var repo = new Repository<StaffNotification>(db, _sieveProcessor);
         var uow = new UnitOfWork(db, _sieveProcessor, _productRepo);
         var handler = new MarkAllStaffNotificationsReadCommandHandler(repo, clinicContext, uow);
 
@@ -289,8 +289,8 @@ public class StaffNotificationTests
             var db = setupScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
             // Setup Clinic Settings
-            db.ClinicSettings.AddRange(
-                new ClinicSettings
+            db.Settings.AddRange(
+                new FacilitySettings
                 {
                     ClinicId = clinic1Id,
                     TenantId = _tenantId,
@@ -298,7 +298,7 @@ public class StaffNotificationTests
                     StaffNotificationRetentionDays = 14,
                     IsDeleted = false
                 },
-                new ClinicSettings
+                new FacilitySettings
                 {
                     ClinicId = clinic2Id,
                     TenantId = _tenantId,
@@ -306,7 +306,7 @@ public class StaffNotificationTests
                     StaffNotificationRetentionDays = 0, // 0 = Keep indefinitely
                     IsDeleted = false
                 },
-                new ClinicSettings
+                new FacilitySettings
                 {
                     ClinicId = clinic3Id,
                     TenantId = _tenantId,
@@ -318,7 +318,7 @@ public class StaffNotificationTests
 
             // Clinic 1 Notifications:
             // Expired: Read 20 days ago (threshold 14) -> should be purged
-            db.StaffNotifications.Add(new ClinicStaffNotification
+            db.StaffNotifications.Add(new StaffNotification
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinic1Id,
@@ -334,7 +334,7 @@ public class StaffNotificationTests
             });
 
             // Active: Read 5 days ago (threshold 14) -> should NOT be purged
-            db.StaffNotifications.Add(new ClinicStaffNotification
+            db.StaffNotifications.Add(new StaffNotification
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinic1Id,
@@ -350,7 +350,7 @@ public class StaffNotificationTests
             });
 
             // Active: Unread created 30 days ago -> should NEVER be purged because unread
-            db.StaffNotifications.Add(new ClinicStaffNotification
+            db.StaffNotifications.Add(new StaffNotification
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinic1Id,
@@ -366,7 +366,7 @@ public class StaffNotificationTests
 
             // Clinic 2 Notifications:
             // Indefinite retention: Read 100 days ago -> should NOT be purged
-            db.StaffNotifications.Add(new ClinicStaffNotification
+            db.StaffNotifications.Add(new StaffNotification
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinic2Id,
@@ -383,7 +383,7 @@ public class StaffNotificationTests
 
             // Clinic 3 Notifications:
             // Expired: Read 10 days ago (threshold 7) -> should be purged
-            db.StaffNotifications.Add(new ClinicStaffNotification
+            db.StaffNotifications.Add(new StaffNotification
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinic3Id,

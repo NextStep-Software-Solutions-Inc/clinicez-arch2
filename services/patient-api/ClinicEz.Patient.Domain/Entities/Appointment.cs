@@ -19,6 +19,7 @@ public sealed class Appointment : BaseEntity
     public DateTime ScheduledAt { get; set; }
     public int DurationMinutes { get; set; }
     public AppointmentStatus Status { get; set; }
+    public DateTime? CheckedInAt { get; set; }
 
     // Raw payload from Clinic Dashboard for lossless deserialization
     public DateTime CachedAt { get; set; }

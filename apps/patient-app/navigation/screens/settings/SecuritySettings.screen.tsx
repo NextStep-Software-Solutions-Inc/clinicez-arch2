@@ -3,13 +3,9 @@ import { ScrollView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useAuth } from '../../../contexts/AuthContext';
-import { useAuth as useClerkAuth } from '@clerk/expo';
-import { usePatientId } from '../../../hooks/usePatientId';
-import * as Clipboard from 'expo-clipboard';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 import PinModal from '@ui/PinModal';
-import { regenerateFrk } from '../../../services/files/frkService';
 import { dialog } from '@utils/dialog';
 
 const LOCK_TIMEOUT_OPTIONS = [
@@ -32,10 +28,6 @@ export default function SecuritySettingsScreen() {
   const [biometricLabel, setBiometricLabel] = useState('Biometrics');
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pendingBiometricValue, setPendingBiometricValue] = useState<boolean | null>(null);
-  const [regenerateFrkPending, setRegenerateFrkPending] = useState(false);
-
-  const { getToken } = useClerkAuth();
-  const patientId = usePatientId();
 
   useEffect(() => {
     (async () => {
@@ -63,32 +55,6 @@ export default function SecuritySettingsScreen() {
     if (pendingBiometricValue !== null) {
       await setBiometricsEnabled(pendingBiometricValue);
       setPendingBiometricValue(null);
-    } else if (regenerateFrkPending) {
-      setRegenerateFrkPending(false);
-      try {
-        const newFrk = await regenerateFrk(patientId, getToken);
-        await Clipboard.setStringAsync(newFrk);
-        dialog.alert(
-          'Recovery Key Regenerated',
-          `Your new File Recovery Key is:\n\n${newFrk}\n\nIt has been copied to your clipboard. Please write this down immediately. Your old key will no longer work.`,
-        );
-      } catch (err: any) {
-        dialog.alert('Error', err.message || 'Failed to regenerate Recovery Key.');
-      }
-    }
-  };
-
-  const requestFrkRegeneration = async () => {
-    const confirmed = await dialog.confirm({
-      title: 'Regenerate Recovery Key?',
-      message:
-        'This will invalidate your current File Recovery Key. Any backups of the old key will no longer work to recover your files on a new device.\n\nAre you sure you want to proceed?',
-      confirmLabel: 'Regenerate',
-      destructive: true,
-    });
-    if (confirmed) {
-      setRegenerateFrkPending(true);
-      setPinModalVisible(true);
     }
   };
 
@@ -178,20 +144,6 @@ export default function SecuritySettingsScreen() {
         />
       </SettingsSection>
 
-      {/* End-to-End Encryption */}
-      <SettingsSection
-        title="End-to-End Encryption"
-        footer="Your File Recovery Key (FRK) is required to restore your encrypted files on a new device."
-      >
-        <SettingsRow
-          title="Regenerate Recovery Key"
-          icon={{ android: 'vpn_key', ios: 'key.icloud.fill' }}
-          iconColor={colors.warning}
-          right={{ type: 'none' }}
-          onPress={requestFrkRegeneration}
-        />
-      </SettingsSection>
-
       {/* Session */}
       <SettingsSection
         title="Session"
@@ -214,16 +166,11 @@ export default function SecuritySettingsScreen() {
       <PinModal
         visible={pinModalVisible}
         title="Confirm PIN"
-        subtitle={
-          regenerateFrkPending
-            ? 'Enter your PIN to regenerate your File Recovery Key.'
-            : `Enter your PIN to ${pendingBiometricValue ? 'enable' : 'disable'} ${biometricLabel}.`
-        }
+        subtitle={`Enter your PIN to ${pendingBiometricValue ? 'enable' : 'disable'} ${biometricLabel}.`}
         onSuccess={handlePinSuccess}
         onDismiss={() => {
           setPinModalVisible(false);
           setPendingBiometricValue(null);
-          setRegenerateFrkPending(false);
         }}
       />
     </ScrollView>

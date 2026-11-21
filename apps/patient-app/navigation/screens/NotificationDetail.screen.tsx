@@ -1,18 +1,22 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { format } from 'date-fns';
+import { eq } from 'drizzle-orm';
 import ThemedText from '../../components/ui/ThemedText';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
+import EmptyState from '../../components/ui/EmptyState';
+import { Skeleton } from '../../components/ui/Skeleton';
 import { AppIcon, type IconName } from '../../components/ui/Icon';
 import Screen from '../../components/layout/Screen';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { markAsRead } from '../../services/notifications/notificationService';
 import { useNotificationContext } from '../../contexts/NotificationContext';
 import type { getNotifications } from '../../services/notifications/notificationService';
-import type { NotificationType } from '../../db/schema/notifications';
+import { notifications, type NotificationType } from '../../db/schema/notifications';
+import { db } from '../../db/index';
 import { documentRouteForKind } from '../../services/documents/presentation';
 
 type NotificationRow = Awaited<ReturnType<typeof getNotifications>>[number];
@@ -156,21 +160,46 @@ export default function NotificationDetailScreen() {
   const { colors, spacing, radii, sizes } = useAppTheme();
   const { refreshNotifications } = useNotificationContext();
 
-  const notification = (route.params as { notification: NotificationRow }).notification;
-  const meta = CATEGORY_META[notification.category] ?? CATEGORY_META.system;
-  const deepLink = useMemo(() => getDeepLinkAction(notification), [notification]);
+  const rawParams = (route.params ?? {}) as any;
+  const initialNotification = rawParams?.notification as NotificationRow | undefined;
+  const notifId = rawParams?.id ?? initialNotification?.id;
+
+  const [notification, setNotification] = useState<NotificationRow | null>(
+    initialNotification ?? null
+  );
+  const [isLoading, setIsLoading] = useState(!initialNotification);
+
+  useEffect(() => {
+    if (!notification && notifId) {
+      db.select()
+        .from(notifications)
+        .where(eq(notifications.id, String(notifId)))
+        .limit(1)
+        .then((rows) => {
+          if (rows[0]) {
+            setNotification(rows[0] as any);
+          }
+        })
+        .finally(() => setIsLoading(false));
+    }
+  }, [notifId, notification]);
+
+  const meta = notification
+    ? CATEGORY_META[notification.category] ?? CATEGORY_META.system
+    : CATEGORY_META.system;
+  const deepLink = useMemo(() => (notification ? getDeepLinkAction(notification) : null), [notification]);
 
   const createdAt =
-    notification.createdAt instanceof Date
+    notification?.createdAt instanceof Date
       ? notification.createdAt
-      : new Date(notification.createdAt as number);
+      : new Date((notification?.createdAt as any) || Date.now());
 
   // Mark as read on open
   useEffect(() => {
-    if (!notification.isRead) {
+    if (notification && !notification.isRead) {
       markAsRead(notification.id).then(() => refreshNotifications());
     }
-  }, [notification.id, notification.isRead, refreshNotifications]);
+  }, [notification, refreshNotifications]);
 
   // "Done" in header right
   useEffect(() => {
@@ -190,6 +219,26 @@ export default function NotificationDetailScreen() {
     navigation.goBack();
     setTimeout(() => deepLink.navigate(navigation), 350);
   };
+
+  if (isLoading) {
+    return (
+      <Screen width="form" contentContainerStyle={{ gap: spacing.lg, padding: spacing.md }}>
+        <Skeleton height={200} radius={radii.lg} />
+      </Screen>
+    );
+  }
+
+  if (!notification) {
+    return (
+      <Screen width="form" contentContainerStyle={{ gap: spacing.lg, padding: spacing.md }}>
+        <EmptyState
+          icon="notifications"
+          title="Notification not found"
+          message="The notification you requested could not be located."
+        />
+      </Screen>
+    );
+  }
 
   return (
     <Screen width="form" contentContainerStyle={{ gap: spacing.lg }}>

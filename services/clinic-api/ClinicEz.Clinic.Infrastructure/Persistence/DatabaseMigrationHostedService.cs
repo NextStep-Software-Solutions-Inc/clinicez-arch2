@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Shared.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,6 +35,9 @@ public sealed class DatabaseMigrationHostedService : IHostedService
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         if (!db.Database.IsRelational()) return;
+
+        var env = scope.ServiceProvider.GetService<IHostEnvironment>();
+        await db.EnsureDevelopmentDatabaseCreatedAsync(env, _logger, cancellationToken);
 
         var pending = (await db.Database.GetPendingMigrationsAsync(cancellationToken)).ToList();
         if (pending.Count == 0) return;

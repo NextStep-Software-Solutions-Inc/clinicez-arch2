@@ -5,6 +5,7 @@ import ClaimPrescriptionScreen from './screens/ClaimPrescription.screen';
 import DispenseScreen from './screens/Dispense.screen';
 import InventoryScreen from './screens/Inventory.screen';
 import SettingsScreen from './screens/Settings.screen';
+import TriageScreen from './screens/Triage.screen';
 import { usePermission } from '../components/AuthGate';
 import { PERMISSIONS } from '../constants/permissions';
 
@@ -17,6 +18,13 @@ const Tab = createBottomTabNavigator({
       options: {
         title: 'Prescriptions',
         headerTitle: 'E-Prescription Queue',
+      },
+    },
+    Triage: {
+      screen: TriageScreen,
+      options: {
+        title: 'Clarifications',
+        headerTitle: 'Rx Clarification Queue',
       },
     },
     ClaimPrescription: {

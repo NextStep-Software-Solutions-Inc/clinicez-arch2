@@ -9,6 +9,7 @@ import NursingProceduresTab from './NursingProceduresTab';
 import StatutoryImmunizationsTab from './StatutoryImmunizationsTab';
 import HealthProfilesTab from './HealthProfilesTab';
 import ExternalDocumentVaultTab from './ExternalDocumentVaultTab';
+import AdministrativeDocumentsTab from './AdministrativeDocumentsTab';
 import DentalChartTab from './DentalChartTab';
 import type { ChartLayoutProps } from './types';
 
@@ -36,9 +37,11 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
     onAdministerVaccine,
     onRecordHistoricalVaccine,
     onRecordAefi,
+    onOrderProcedure,
+    onOrderDiagnostic,
   } = props;
 
-  if (loadingChart) {
+  if (loadingChart && !patientChart) {
     return (
       <View style={styles.loadingContainer}>
         <SkeletonList rows={6} />
@@ -87,13 +90,17 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           onOpenLabSlip={(order: any) => onViewLabSlip?.(order.id)}
           onAttachExternalResult={onAttachExternalResult}
           onRefreshChart={onRefreshChart}
+          onOrderDiagnostic={onOrderDiagnostic}
         />
       )}
       {activeTab === 'procedures' && (
         <NursingProceduresTab
           patient={patient}
           patientId={patient?.id}
+          queueItemId={props.queueItemId ?? undefined}
+          allowDuplicateActive={props.allowDuplicateActive}
           procedures={patientChart?.proceduresHistory || []}
+          onOrderProcedure={onOrderProcedure}
           onRefreshChart={onRefreshChart}
         />
       )}
@@ -107,6 +114,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           onRecordHistoricalVaccine={onRecordHistoricalVaccine}
           onRecordAefi={onRecordAefi}
           onRefreshChart={onRefreshChart}
+          queueItemId={props.queueItemId}
         />
       )}
       {activeTab === 'profiles' && patient && (
@@ -123,10 +131,24 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
         <ExternalDocumentVaultTab
           patient={patient}
           patientId={patient?.id}
-          attachments={patientChart?.attachments || patientAttachments}
+          attachments={
+            patientAttachments && patientAttachments.length > 0
+              ? patientAttachments
+              : (patientChart?.attachments || [])
+          }
           onUploadDocument={onUploadDocument}
           onVerifyAttachment={onVerifyAttachment}
           onDownloadAttachment={onDownloadAttachment}
+          onRefreshChart={onRefreshChart}
+        />
+      )}
+      {activeTab === 'documents' && (
+        <AdministrativeDocumentsTab
+          patient={patient}
+          patientId={patient?.id}
+          medicalCertificates={patientChart?.medicalCertificates || []}
+          referralLetters={patientChart?.referralLetters || []}
+          queueItemId={props.queueItemId}
           onRefreshChart={onRefreshChart}
         />
       )}

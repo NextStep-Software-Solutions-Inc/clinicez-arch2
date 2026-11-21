@@ -21,7 +21,7 @@ public class SampleDocumentGenerator : ISampleDocumentGenerator
         string docType,
         bool wetSignature,
         string? paperSize,
-        ClinicSettings settings)
+        FacilitySettings settings)
     {
         if (settings == null) throw new ArgumentNullException(nameof(settings));
 

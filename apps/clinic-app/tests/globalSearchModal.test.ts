@@ -1134,8 +1134,8 @@ describe('Milestone 3: Clinic Workstation Command Palette UX & Deep Navigation',
         });
       }
 
-      test('maps all 8 pre-defined SETTINGS_NAV_ITEMS directly via resolveSearchNavigation', () => {
-        expect(SETTINGS_NAV_ITEMS.length).toBe(8);
+      test('maps all 9 pre-defined SETTINGS_NAV_ITEMS directly via resolveSearchNavigation', () => {
+        expect(SETTINGS_NAV_ITEMS.length).toBe(9);
         const resolvedTabs = SETTINGS_NAV_ITEMS.map((navItem) => {
           const res = resolveSearchNavigation(navItem);
           expect(res.destinationRoute).toBe('Settings');
@@ -1151,7 +1151,18 @@ describe('Milestone 3: Clinic Workstation Command Palette UX & Deep Navigation',
           'fields',
           'philhealth',
           'license',
+          'teleconsultation',
         ]);
+
+        const teleconsultMatch = SETTINGS_NAV_ITEMS.find(
+          (item) =>
+            item.title.toLowerCase().includes('teleconsult') ||
+            item.subtitle.toLowerCase().includes('media vault')
+        );
+        expect(teleconsultMatch).toBeDefined();
+        expect(resolveSearchNavigation(teleconsultMatch!).destinationParams.tab).toBe(
+          'teleconsultation'
+        );
       });
     });
 

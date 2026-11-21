@@ -27,7 +27,7 @@ public sealed class ClinicRecipientResolver
     }
 
     /// <summary>The addressed clinic's settings, or null (and a warning) when this server hosts no such clinic.</summary>
-    public async Task<ClinicSettings?> ResolveAsync(InteropMessageContext context, CancellationToken ct)
+    public async Task<FacilitySettings?> ResolveAsync(InteropMessageContext context, CancellationToken ct)
     {
         var to = context.To;
         if (to.Kind != PartyKind.Facility
@@ -40,7 +40,7 @@ public sealed class ClinicRecipientResolver
         }
 
         var tenantId = to.TenantId.Trim().ToLower();
-        var clinic = await _db.ClinicSettings
+        var clinic = await _db.Settings
             .IgnoreQueryFilters()
             .AsNoTracking()
             .FirstOrDefaultAsync(s => !s.IsDeleted && s.ClinicId == clinicId && s.TenantId.ToLower() == tenantId, ct);

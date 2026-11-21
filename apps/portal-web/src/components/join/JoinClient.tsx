@@ -21,7 +21,8 @@ import {
   UserCheck,
   Smartphone,
 } from "lucide-react";
-import { useUser, SignInButton } from "@clerk/nextjs";
+import { useUser, SignInButton, useAuth } from "@clerk/nextjs";
+import { SelectField } from "@/components/ui/select";
 import {
   type PatientJoinRequestedPayload,
   type PatientJoinAllergyItem,
@@ -33,7 +34,10 @@ import {
   evaluateFieldVisibility,
   getCascadingChoices,
   sanitizeCustomFields,
+  INSTITUTIONAL_CUSTOM_FIELDS,
 } from "@/lib/join";
+
+export { INSTITUTIONAL_CUSTOM_FIELDS };
 import {
   formatPhilHealthPin,
   validatePhilHealthPinMod11,
@@ -41,7 +45,9 @@ import {
 import { JoinCodeModal } from "@/components/join/JoinCodeModal";
 import { OutsideDocumentDropzone } from "@/components/join/OutsideDocumentDropzone";
 import { DigitalPassCard } from "@/components/join/DigitalPassCard";
-import { apiBaseUrl } from "@/transport/apiClient";
+import { getPatientApiUrl, getPortalApiUrl } from "@/utils/domain";
+import PsgcAddressPicker, { type PsgcAddressValue } from "@/components/common/PsgcAddressPicker";
+import { useEhrOptions } from "@/hooks/useEhrOptions";
 
 interface JoinClientProps {
   tenantSlug: string;
@@ -51,96 +57,6 @@ interface JoinClientProps {
   facilityAddress?: string;
   initialJoinCode?: string;
 }
-
-export const INSTITUTIONAL_CUSTOM_FIELDS: CustomFieldDefinition[] = [
-  {
-    fieldKey: "affiliation",
-    label: "Institutional Affiliation",
-    isRequired: true,
-    dataType: "Select",
-    options: ["Student", "Faculty", "Employee", "Dependent", "Guest"],
-  },
-  {
-    fieldKey: "student_id",
-    label: "Student ID Number",
-    isRequired: true,
-    dataType: "Text",
-    placeholder: "e.g. 2026-100234",
-    visibilityCondition: {
-      parentKey: "affiliation",
-      operator: "equals",
-      value: "Student",
-    },
-  },
-  {
-    fieldKey: "college",
-    label: "College / Faculty Department",
-    isRequired: true,
-    dataType: "Select",
-    visibilityCondition: {
-      parentKey: "affiliation",
-      operator: "equals",
-      value: "Student",
-    },
-    options: [
-      "College of Engineering",
-      "College of Computer Studies",
-      "College of Nursing & Allied Health",
-      "College of Science & Mathematics",
-      "College of Business Administration",
-    ],
-  },
-  {
-    fieldKey: "program",
-    label: "Academic Degree Program",
-    isRequired: true,
-    dataType: "Select",
-    visibilityCondition: {
-      parentKey: "college",
-      operator: "not_empty",
-      value: "",
-    },
-    cascadingOptions: {
-      "College of Engineering": [
-        "BS Civil Engineering",
-        "BS Electrical Engineering",
-        "BS Mechanical Engineering",
-        "BS Computer Engineering",
-      ],
-      "College of Computer Studies": [
-        "BS Computer Science",
-        "BS Information Technology",
-        "BS Information Systems",
-      ],
-      "College of Nursing & Allied Health": [
-        "BS Nursing",
-        "BS Medical Technology",
-        "BS Physical Therapy",
-      ],
-      "College of Science & Mathematics": [
-        "BS Applied Physics",
-        "BS Chemistry",
-        "BS Mathematics",
-      ],
-      "College of Business Administration": [
-        "BS Accountancy",
-        "BS Business Administration",
-      ],
-    },
-  },
-  {
-    fieldKey: "year_level",
-    label: "Year Level",
-    isRequired: false,
-    dataType: "Select",
-    options: ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year", "Postgraduate"],
-    visibilityCondition: {
-      parentKey: "affiliation",
-      operator: "equals",
-      value: "Student",
-    },
-  },
-];
 
 const ALLERGY_QUICK_PICKS: Record<PatientJoinAllergyItem["category"], string[]> = {
   Medication: ["Penicillin", "Amoxicillin", "Aspirin", "Ibuprofen", "Co-amoxiclav", "Sulfonamides"],
@@ -175,6 +91,45 @@ export default function JoinClient({
   const [contactNumber, setContactNumber] = useState("");
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
+  const [psgcAddress, setPsgcAddress] = useState<Partial<PsgcAddressValue>>({});
+
+  // Dynamic EHR Options
+  const { selectOptions: rawSexOptions } = useEhrOptions("sex");
+  const { selectOptions: rawCivilStatusOptions } = useEhrOptions("civil_status");
+
+  const sexOptions = useMemo(() => {
+    if (rawSexOptions && rawSexOptions.length > 0) {
+      return rawSexOptions.map((o) => {
+        let val: "Male" | "Female" | "Other" = "Other";
+        const lowerVal = (o.value || "").toLowerCase();
+        const lowerLabel = (o.label || "").toLowerCase();
+        if (lowerVal === "male" || lowerLabel === "male") val = "Male";
+        else if (lowerVal === "female" || lowerLabel === "female") val = "Female";
+        return { label: o.label, value: val };
+      });
+    }
+    return [
+      { label: "Male", value: "Male" as const },
+      { label: "Female", value: "Female" as const },
+      { label: "Other", value: "Other" as const },
+    ];
+  }, [rawSexOptions]);
+
+  const civilStatusOptions = useMemo(() => {
+    if (rawCivilStatusOptions && rawCivilStatusOptions.length > 0) {
+      return rawCivilStatusOptions.map((o) => ({
+        label: o.label,
+        value: o.label,
+      }));
+    }
+    return [
+      { label: "Single", value: "Single" },
+      { label: "Married", value: "Married" },
+      { label: "Widowed", value: "Widowed" },
+      { label: "Separated", value: "Separated" },
+      { label: "Other", value: "Other" },
+    ];
+  }, [rawCivilStatusOptions]);
 
   // Form State: PhilHealth & Member Type
   const [memberType, setMemberType] = useState<"MM" | "DD">("MM");
@@ -218,10 +173,13 @@ export default function JoinClient({
   let clerkUser: ReturnType<typeof useUser>["user"] = null;
   let isSignedIn = false;
   let isInsideClerk = false;
+  let getToken: (() => Promise<string | null>) | null = null;
   try {
     const userHook = useUser();
+    const authHook = useAuth();
     clerkUser = userHook.user;
     isSignedIn = Boolean(userHook.isSignedIn);
+    getToken = authHook.getToken;
     isInsideClerk = true;
   } catch {
     // Graceful fallback outside ClerkProvider (e.g. testing)
@@ -238,8 +196,12 @@ export default function JoinClient({
     setIsHydratingProfile(true);
 
     try {
-      const response = await fetch("/api/v1/patients/me", {
-        headers: { Accept: "application/json" },
+      const token = getToken ? await getToken() : null;
+      const response = await fetch(`${getPatientApiUrl()}/patients/me`, {
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
 
       if (response.ok) {
@@ -256,6 +218,21 @@ export default function JoinClient({
         if (data.contactNumber || data.mobile) setContactNumber(data.contactNumber || data.mobile);
         if (data.email) setEmail(data.email);
         if (data.address) setAddress(data.address);
+        if (data.regionPsgc || data.cityMunicipalityPsgc) {
+          setPsgcAddress({
+            regionPsgc: data.regionPsgc,
+            provincePsgc: data.provincePsgc,
+            cityMunicipalityPsgc: data.cityMunicipalityPsgc,
+            barangayPsgc: data.barangayPsgc,
+            regionName: data.regionName,
+            provinceName: data.provinceName,
+            cityMunicipalityName: data.cityMunicipalityName,
+            barangayName: data.barangayName,
+            streetAddress: data.streetAddress,
+            zipCode: data.zipCode,
+            formattedAddress: data.address || "",
+          });
+        }
 
         const pin = data.philHealthPin || data.governmentIds?.find((g: any) => g.idType === "PHILHEALTH")?.idNumber;
         if (pin) {
@@ -468,6 +445,34 @@ export default function JoinClient({
       contactNumber: contactNumber.trim(),
       email: email.trim() || undefined,
       address: address.trim() || undefined,
+      regionPsgc: psgcAddress.regionPsgc || undefined,
+      provincePsgc: psgcAddress.provincePsgc || undefined,
+      cityMunicipalityPsgc: psgcAddress.cityMunicipalityPsgc || undefined,
+      barangayPsgc: psgcAddress.barangayPsgc || undefined,
+      regionName: psgcAddress.regionName || undefined,
+      provinceName: psgcAddress.provinceName || undefined,
+      cityMunicipalityName: psgcAddress.cityMunicipalityName || undefined,
+      barangayName: psgcAddress.barangayName || undefined,
+      streetAddress: psgcAddress.streetAddress?.trim() || undefined,
+      zipCode: psgcAddress.zipCode?.trim() || undefined,
+      addresses: psgcAddress.regionPsgc
+        ? [
+            {
+              addressType: "Current",
+              isSameAsPermanent: true,
+              regionPsgc: psgcAddress.regionPsgc,
+              provincePsgc: psgcAddress.provincePsgc,
+              cityMunicipalityPsgc: psgcAddress.cityMunicipalityPsgc,
+              barangayPsgc: psgcAddress.barangayPsgc,
+              regionName: psgcAddress.regionName,
+              provinceName: psgcAddress.provinceName,
+              cityMunicipalityName: psgcAddress.cityMunicipalityName,
+              barangayName: psgcAddress.barangayName,
+              streetAddress: psgcAddress.streetAddress?.trim() || undefined,
+              zipCode: psgcAddress.zipCode?.trim() || undefined,
+            },
+          ]
+        : undefined,
       philHealthPin: philHealthPin.trim() || undefined,
       memberType,
       principalMemberPin: memberType === "DD" ? principalPin.trim() : undefined,
@@ -485,7 +490,8 @@ export default function JoinClient({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/public/join`, {
+      const joinUrl = `${getPortalApiUrl()}/public/join`;
+      const response = await fetch(joinUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -679,11 +685,11 @@ export default function JoinClient({
           </div>
         ) : (
           <div
-            className="p-4 sm:p-5 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-sm"
+            className="p-4 sm:p-5 bg-primary/10 border border-primary/20 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-sm"
             data-testid="autofill-banner-authenticated"
           >
             <div className="flex items-start gap-3">
-              <span className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 shrink-0 mt-0.5">
+              <span className="p-2.5 rounded-xl bg-primary/20 text-primary shrink-0 mt-0.5">
                 <UserCheck className="w-5 h-5" />
               </span>
               <div className="space-y-0.5">
@@ -824,32 +830,28 @@ export default function JoinClient({
                 <label className="block text-xs font-bold text-foreground mb-1">
                   Sex at Birth *
                 </label>
-                <select
+                <SelectField
+                  ariaLabel="Sex at Birth"
                   value={sex}
-                  onChange={(e) => setSex(e.target.value as any)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-                >
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                </select>
+                  onValueChange={(v) => setSex(v as "Male" | "Female" | "Other")}
+                  size="md"
+                  className="text-sm"
+                  options={sexOptions}
+                />
               </div>
 
               <div className="sm:col-span-2">
                 <label className="block text-xs font-bold text-foreground mb-1">
                   Civil Status
                 </label>
-                <select
+                <SelectField
+                  ariaLabel="Civil Status"
                   value={civilStatus}
-                  onChange={(e) => setCivilStatus(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-                >
-                  <option value="Single">Single</option>
-                  <option value="Married">Married</option>
-                  <option value="Widowed">Widowed</option>
-                  <option value="Separated">Separated</option>
-                  <option value="Other">Other</option>
-                </select>
+                  onValueChange={setCivilStatus}
+                  size="md"
+                  className="text-sm"
+                  options={civilStatusOptions}
+                />
               </div>
 
               <div className="sm:col-span-2">
@@ -880,15 +882,12 @@ export default function JoinClient({
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-foreground mb-1">
-                  Home / Residential Address
-                </label>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="House No., Street, Barangay, City, Province"
-                  className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
+                <PsgcAddressPicker
+                  value={psgcAddress}
+                  onChange={(newAddress) => {
+                    setPsgcAddress(newAddress);
+                    setAddress(newAddress.formattedAddress);
+                  }}
                 />
               </div>
             </div>
@@ -901,7 +900,7 @@ export default function JoinClient({
                 <Shield className="w-4 h-4" />
               </span>
               <h2 className="text-base font-bold text-foreground">
-                2. PhilHealth & Statutory Welfare (RA 11223)
+                2. PhilHealth & Discount IDs
               </h2>
             </div>
 
@@ -946,8 +945,8 @@ export default function JoinClient({
                   Patient PhilHealth PIN (Optional)
                 </label>
                 {patientPinValidation?.isComplete && patientPinValidation.isValid && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                    <ShieldCheck className="w-3 h-3 text-emerald-600" /> Mod-11 Verified
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                    <ShieldCheck className="w-3 h-3 text-primary" /> Verified
                   </span>
                 )}
               </div>
@@ -978,12 +977,12 @@ export default function JoinClient({
                     </h3>
                   </div>
                   <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">
-                    Required for Konsulta
+                    Required for PhilHealth coverage
                   </span>
                 </div>
 
                 <p className="text-xs text-muted-foreground">
-                  PhilHealth statutory regulations require primary contributing sponsor credentials for dependent consultation claims.
+                  Enter the primary PhilHealth member details for dependent coverage.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1005,16 +1004,19 @@ export default function JoinClient({
                     <label className="block text-xs font-bold text-foreground mb-1">
                       Relationship to Principal *
                     </label>
-                    <select
+                    <SelectField
+                      ariaLabel="Relationship to Principal"
                       value={principalRelationship}
-                      onChange={(e) => setPrincipalRelationship(e.target.value as any)}
-                      className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-                    >
-                      <option value="C">Child (C) &bull; Under 21 years old</option>
-                      <option value="S">Spouse (S) &bull; Legitimate spouse</option>
-                      <option value="P">Parent (P) &bull; Dependent parent 60+</option>
-                      <option value="D">Disabled Dependent (D) &bull; 21+ with disability</option>
-                    </select>
+                      onValueChange={(v) => setPrincipalRelationship(v as "C" | "S" | "P" | "D")}
+                      size="md"
+                      className="text-sm"
+                      options={[
+                        { value: "C", label: "Child (C) • Under 21 years old" },
+                        { value: "S", label: "Spouse (S) • Legitimate spouse" },
+                        { value: "P", label: "Parent (P) • Dependent parent 60+" },
+                        { value: "D", label: "Disabled Dependent (D) • 21+ with disability" },
+                      ]}
+                    />
                   </div>
 
                   <div>
@@ -1023,8 +1025,8 @@ export default function JoinClient({
                         Principal PhilHealth PIN *
                       </label>
                       {principalPinValidation?.isComplete && principalPinValidation.isValid && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                          <ShieldCheck className="w-3 h-3 text-emerald-600" /> Verified
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                          <ShieldCheck className="w-3 h-3 text-primary" /> Verified
                         </span>
                       )}
                     </div>
@@ -1118,24 +1120,25 @@ export default function JoinClient({
                     </label>
 
                     {field.dataType === "Select" ? (
-                      <select
+                      <SelectField
+                        ariaLabel={field.label}
                         value={customFieldValues[field.fieldKey] || ""}
-                        onChange={(e) => handleCustomFieldChange(field.fieldKey, e.target.value)}
-                        className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-                      >
-                        <option value="">Select option...</option>
-                        {optionsToRender.map((opt) => (
-                          <option key={opt} value={opt}>
-                            {opt}
-                          </option>
-                        ))}
-                      </select>
+                        onValueChange={(v) => handleCustomFieldChange(field.fieldKey, v)}
+                        placeholder="Select option..."
+                        size="md"
+                        className="text-sm"
+                        options={[
+                          ...(field.isRequired ? [] : [{ value: "", label: "Select option..." }]),
+                          ...optionsToRender.map((opt) => ({ value: opt, label: opt })),
+                        ]}
+                      />
                     ) : (
                       <input
                         type="text"
                         value={customFieldValues[field.fieldKey] || ""}
                         onChange={(e) => handleCustomFieldChange(field.fieldKey, e.target.value)}
                         placeholder={field.placeholder}
+                        title={field.placeholder || undefined}
                         className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
                       />
                     )}
@@ -1203,33 +1206,39 @@ export default function JoinClient({
                       <label className="block text-[11px] font-bold text-muted-foreground mb-1">
                         Category
                       </label>
-                      <select
+                      <SelectField
+                        ariaLabel="Allergy Category"
                         value={newCategory}
-                        onChange={(e) => setNewCategory(e.target.value as any)}
-                        className="w-full px-3 py-1.5 rounded-lg border border-input text-xs bg-background text-foreground"
-                      >
-                        <option value="Medication">Medication</option>
-                        <option value="Food">Food</option>
-                        <option value="Environmental">Environmental</option>
-                        <option value="Biologic">Biologic</option>
-                        <option value="Other">Other</option>
-                      </select>
+                        onValueChange={(v) => setNewCategory(v as PatientJoinAllergyItem["category"])}
+                        size="sm"
+                        className="rounded-lg"
+                        options={[
+                          { value: "Medication", label: "Medication" },
+                          { value: "Food", label: "Food" },
+                          { value: "Environmental", label: "Environmental" },
+                          { value: "Biologic", label: "Biologic" },
+                          { value: "Other", label: "Other" },
+                        ]}
+                      />
                     </div>
 
                     <div>
                       <label className="block text-[11px] font-bold text-muted-foreground mb-1">
                         Severity
                       </label>
-                      <select
+                      <SelectField
+                        ariaLabel="Allergy Severity"
                         value={newSeverity}
-                        onChange={(e) => setNewSeverity(e.target.value as any)}
-                        className="w-full px-3 py-1.5 rounded-lg border border-input text-xs bg-background text-foreground"
-                      >
-                        <option value="Mild">Mild</option>
-                        <option value="Moderate">Moderate</option>
-                        <option value="Severe">Severe</option>
-                        <option value="LifeThreatening">Life-Threatening / Anaphylaxis</option>
-                      </select>
+                        onValueChange={(v) => setNewSeverity(v as PatientJoinAllergyItem["severity"])}
+                        size="sm"
+                        className="rounded-lg"
+                        options={[
+                          { value: "Mild", label: "Mild" },
+                          { value: "Moderate", label: "Moderate" },
+                          { value: "Severe", label: "Severe" },
+                          { value: "LifeThreatening", label: "Life-Threatening / Anaphylaxis" },
+                        ]}
+                      />
                     </div>
 
                     <div>
@@ -1301,7 +1310,7 @@ export default function JoinClient({
                         item.severity === "LifeThreatening"
                           ? "bg-destructive/10 text-destructive border-destructive/30"
                           : item.severity === "Severe"
-                          ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                          ? "bg-warning/10 text-warning border-warning/30"
                           : "bg-muted text-foreground border-border"
                       }`}
                     >

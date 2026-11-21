@@ -24,4 +24,6 @@ public sealed record ReferralLetterDto(
     string? AttachedDiagnostics,
     bool IsSigned,
     DateTime? SignedAt,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? SecurityDigest = null,
+    Guid? QueueItemId = null);

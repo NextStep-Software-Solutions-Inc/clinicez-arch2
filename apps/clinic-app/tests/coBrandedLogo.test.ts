@@ -32,6 +32,17 @@ mock.module('react-native', () => ({
   Image: createMockComponent('Image'),
   AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
+  Animated: {
+    Value: class {
+      constructor(public val: any) {}
+      setValue(val: any) { this.val = val; }
+      interpolate() { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb && cb() }),
+    spring: () => ({ start: (cb?: any) => cb && cb() }),
+    View: createMockComponent('Animated.View'),
+    Text: createMockComponent('Animated.Text'),
+  },
 }));
 
 mock.module('react-native-svg', () => ({
@@ -45,6 +56,9 @@ mock.module('react-native-svg', () => ({
   G: ({ children }: any) => children,
   Text: ({ children }: any) => children,
   Polyline: 'Polyline',
+  Circle: 'Circle',
+  Line: 'Line',
+  Polygon: 'Polygon',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -60,6 +74,7 @@ mock.module('@expo-google-fonts/geist-mono', () => ({
 
 const { default: CoBrandedLogo, getClinicInitials } = await import('../components/ui/CoBrandedLogo');
 const { BrandMark, AuthScreen } = await import('../components/auth/AuthScreen');
+const { ActivationBrandMark } = await import('../components/FacilityActivationGate');
 const { setDeviceItem } = await import('../utils/deviceStorage');
 const { CLINIC_LOGO_STORAGE_KEY } = await import('../context/ClinicContext');
 
@@ -174,5 +189,40 @@ describe('BrandMark & AuthScreen Co-Branding Integration', () => {
 
     // Clean up
     setDeviceItem(CLINIC_LOGO_STORAGE_KEY, null);
+  });
+
+  test('ActivationBrandMark renders ONLY Clinic EZ mark without co-branding when activeWorkspace is not set, even with stale cached logo', () => {
+    // Simulate stale logo left in storage from a previous clinic session
+    setDeviceItem(CLINIC_LOGO_STORAGE_KEY, 'https://example.com/stale-previous-clinic-logo.png');
+
+    const html = renderToStaticMarkup(
+      React.createElement(ActivationBrandMark, {
+        activeWorkspace: null,
+      })
+    );
+
+    // Must render ONLY the single Clinic EZ mark
+    expect(html).toContain('Svg');
+    // Must NOT render co-branding multiplication cross ("×")
+    expect(html).not.toContain('×');
+    // Must NOT leak stale clinic logo URL
+    expect(html).not.toContain('https://example.com/stale-previous-clinic-logo.png');
+
+    // Clean up
+    setDeviceItem(CLINIC_LOGO_STORAGE_KEY, null);
+  });
+
+  test('ActivationBrandMark renders co-branded mark when activeWorkspace is provided with clinic info', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ActivationBrandMark, {
+        activeWorkspace: 'nextstep',
+        clinicName: 'Nextstep OPD',
+        clinicLogo: 'https://example.com/nextstep-logo.svg',
+      })
+    );
+
+    expect(html).toContain('Svg');
+    expect(html).toContain('×');
+    expect(html).toContain('https://example.com/nextstep-logo.svg');
   });
 });

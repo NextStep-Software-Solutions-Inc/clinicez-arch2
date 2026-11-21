@@ -21,14 +21,4 @@ internal static class HttpClientExtensions
     }
 }
 
-/// <summary>
-/// Mirror of <c>ApiResponse&lt;T&gt;</c> for deserialising test responses without a
-/// direct project reference to the response type hierarchy.
-/// </summary>
 internal sealed record ApiResult<T>(bool Succeeded, string? Message, T? Data);
-
-internal sealed record KonsultaResult(
-    bool IsSuccess,
-    string? RawReturn,
-    string? ErrorCode,
-    string? ErrorMessage);

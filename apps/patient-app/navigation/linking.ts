@@ -1,8 +1,40 @@
+import { getPathFromState as defaultGetPathFromState } from '@react-navigation/core';
 import type { LinkingOptions } from '@react-navigation/native';
 import type { RootParamList } from './Navigation';
 
+export function normalizeStateParams(node: any): any {
+  if (!node || typeof node !== 'object') return node;
+  const routes = Array.isArray(node.routes)
+    ? node.routes.map((route: any) => {
+        const rawParams = route?.params;
+        let nextParams = rawParams;
+        if (rawParams && typeof rawParams === 'object' && !rawParams.id) {
+          const derivedId =
+            rawParams.clinicId ??
+            rawParams.organizationId ??
+            rawParams.appointmentId ??
+            rawParams.provider?.id ??
+            rawParams.notification?.id;
+          if (derivedId) {
+            nextParams = { ...rawParams, id: derivedId };
+          }
+        }
+        return {
+          ...route,
+          params: nextParams,
+          ...(route?.state ? { state: normalizeStateParams(route.state) } : {}),
+        };
+      })
+    : node.routes;
+
+  return { ...node, routes };
+}
+
 export const linking: LinkingOptions<RootParamList> = {
-  prefixes: ['/'],
+  prefixes: ['/', 'clinicez-patient://'],
+  getPathFromState(state, options) {
+    return defaultGetPathFromState(normalizeStateParams(state), options);
+  },
   config: {
     screens: {
       Loading: 'loading',
@@ -35,24 +67,26 @@ export const linking: LinkingOptions<RootParamList> = {
         screens: {
           BottomTabs: {
             screens: {
-              HomeScreen: 'home',
-              AppointmentsScreen: 'appointments',
-              FilesScreen: {
+              HomeScreen: {
                 screens: {
-                  FilesBrowserScreen: 'files',
-                  FilesUploadScreen: 'files/upload',
-                  StorageScreen: 'files/storage',
-                  FileFolderFormScreen: 'files/folder',
-                  FileMoveScreen: 'files/move',
-                  FileViewerScreen: 'files/view/:fileId',
-                  ExternalOpenConsentScreen: 'files/consent',
-                  FRKSetupScreen: 'files/frk-setup',
-                  FRKEntryScreen: 'files/frk-entry',
+                  Home: 'home',
+                  DirectorySearch: 'search',
                 },
               },
-              ProfileScreen: 'profile',
+              RecordsScreen: {
+                screens: {
+                  FilesBrowserScreen: 'records',
+                  FilesUploadScreen: 'records/upload',
+                  FileViewerScreen: 'records/view/:fileId',
+                  ExternalOpenConsentScreen: 'records/consent/:fileId',
+                },
+              },
+              AppointmentsScreen: 'appointments',
+              MessagesScreen: 'inbox',
             },
           },
+          ProfileScreen: 'profile',
+          DirectorySearchScreen: 'care-search',
           NotificationScreen: 'notifications',
           NotificationDetailScreen: 'notifications/:id',
           SettingsScreen: 'settings',
@@ -122,6 +156,14 @@ export const linking: LinkingOptions<RootParamList> = {
           ExternalDispenseScreen: 'documents/prescriptions/:id/dispense',
           LabResultDetailScreen: 'documents/results/:id',
           MedicalCertificateDetailScreen: 'documents/certificates/:id',
+
+          // Communications & Teleconsultation
+          MessagesInboxScreen: 'messages',
+          ConversationThreadScreen: 'messages/:conversationId',
+          NewMessageInquiryScreen: 'messages/new',
+          TeleconsultWaitingRoomScreen: 'teleconsult/waiting-room/:appointmentId',
+          TeleconsultCallScreen: 'teleconsult/call/:callId',
+          PrivacySettingsScreen: 'settings/privacy',
         },
       },
     },

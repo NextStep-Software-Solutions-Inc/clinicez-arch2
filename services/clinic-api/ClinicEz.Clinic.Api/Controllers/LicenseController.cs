@@ -34,7 +34,7 @@ public record FacilityLicenseStatusDto(
 [Route("api/v1/license")]
 public sealed class LicenseController : ControllerBase
 {
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IRepository<StaffMember> _staffRepo;
     private readonly IFacilityLicenseValidator _licenseValidator;
     private readonly IClinicContext _clinicContext;
@@ -42,7 +42,7 @@ public sealed class LicenseController : ControllerBase
     private readonly ITenantLookupService _tenantLookup;
 
     public LicenseController(
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IRepository<StaffMember> staffRepo,
         IFacilityLicenseValidator licenseValidator,
         IClinicContext clinicContext,
@@ -80,7 +80,7 @@ public sealed class LicenseController : ControllerBase
             ? tenantSlugHeader
             : _clinicContext.TenantId;
 
-        ClinicSettings? settings = null;
+        FacilitySettings? settings = null;
         TenantLookupDto? lookupInfo = null;
 
         // 1. Direct Facility Resolution (Strict: clinic slug is never interchangeable with tenant slug)
@@ -148,7 +148,11 @@ public sealed class LicenseController : ControllerBase
                 {
                     settings = await _settingsRepo.IgnoreQueryFilters()
                         .FirstOrDefaultAsync(s => !s.IsDeleted && s.ClinicId == clinicIdHeader &&
-                            (s.TenantId.ToLower() == tenantGuidStr || s.TenantId.ToLower() == tenantSlugStr || s.TenantId.ToLower() == rawTenantStr), ct);
+                            (s.TenantId.ToLower() == tenantGuidStr ||
+                             s.TenantId.ToLower() == tenantSlugStr ||
+                             s.TenantId.ToLower() == rawTenantStr ||
+                             (s.TenantSlug != null && (s.TenantSlug.ToLower() == tenantSlugStr || s.TenantSlug.ToLower() == rawTenantStr)) ||
+                             (s.FacilitySlug != null && (s.FacilitySlug.ToLower() == tenantSlugStr || s.FacilitySlug.ToLower() == rawTenantStr))), ct);
                 }
 
                 if (settings == null)
@@ -157,7 +161,9 @@ public sealed class LicenseController : ControllerBase
                         .Where(s => !s.IsDeleted && (
                             s.TenantId.ToLower() == tenantGuidStr ||
                             s.TenantId.ToLower() == tenantSlugStr ||
-                            s.TenantId.ToLower() == rawTenantStr
+                            s.TenantId.ToLower() == rawTenantStr ||
+                            (s.TenantSlug != null && (s.TenantSlug.ToLower() == tenantSlugStr || s.TenantSlug.ToLower() == rawTenantStr)) ||
+                            (s.FacilitySlug != null && (s.FacilitySlug.ToLower() == tenantSlugStr || s.FacilitySlug.ToLower() == rawTenantStr))
                         ))
                         .Take(2)
                         .ToListAsync(ct);
@@ -320,7 +326,7 @@ public sealed class LicenseController : ControllerBase
 
         var dummyDefaultId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-        ClinicSettings? settings = null;
+        FacilitySettings? settings = null;
         if (targetClinicId != Guid.Empty && targetClinicId != dummyDefaultId)
         {
             settings = await _settingsRepo.IgnoreQueryFilters()
@@ -353,7 +359,7 @@ public sealed class LicenseController : ControllerBase
 
         if (settings == null)
         {
-            settings = new ClinicSettings
+            settings = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 TenantId = targetTenantId,
@@ -383,6 +389,13 @@ public sealed class LicenseController : ControllerBase
             settings.MaxStaffLimit = payload?.Limits?.MaxStaff ?? 5;
             settings.LicenseExpiresAt = payload?.ExpiresAtUtc;
             settings.EntitlementVersion = payload?.EntitlementVersion ?? 0;
+        }
+
+        var hasTeleconsult = payload?.EnabledFeatures != null &&
+            payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+        if (!hasTeleconsult)
+        {
+            settings.EnableTeleconsultation = false;
         }
 
         await _unitOfWork.SaveChangesAsync(ct);

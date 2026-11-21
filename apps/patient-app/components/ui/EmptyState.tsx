@@ -1,19 +1,21 @@
-﻿import React from 'react';
-import { StyleSheet } from 'react-native';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
 import ThemedText from './ThemedText';
 import ThemedView from './ThemedView';
 import Button from './Button';
+import { AppIcon, type IconName } from './Icon';
 import { useAppTheme } from '../../contexts/ThemeContext';
 
 interface EmptyStateProps {
   title: string;
   message: string;
+  icon?: IconName;
   actionLabel?: string;
   onActionPress?: () => void;
 }
 
-export default function EmptyState({ title, message, actionLabel, onActionPress }: EmptyStateProps) {
-  const { colors, radii, spacing } = useAppTheme();
+export default function EmptyState({ title, message, icon, actionLabel, onActionPress }: EmptyStateProps) {
+  const { colors, radii, spacing, sizes } = useAppTheme();
 
   return (
     <ThemedView
@@ -28,6 +30,22 @@ export default function EmptyState({ title, message, actionLabel, onActionPress 
         },
       ]}
     >
+      {icon ? (
+        <View
+          style={[
+            styles.iconBox,
+            {
+              width: sizes.controlMd,
+              height: sizes.controlMd,
+              borderRadius: radii.md,
+              backgroundColor: colors.primaryLight,
+              marginBottom: spacing.xs,
+            },
+          ]}
+        >
+          <AppIcon name={icon} size={sizes.iconMd} color="primary" />
+        </View>
+      ) : null}
       <ThemedText variant="bodyBold">{title}</ThemedText>
       <ThemedText variant="small" color="textSecondary" style={styles.message}>
         {message}
@@ -48,6 +66,10 @@ export default function EmptyState({ title, message, actionLabel, onActionPress 
 const styles = StyleSheet.create({
   card: {
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  iconBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   message: {
     lineHeight: 19,

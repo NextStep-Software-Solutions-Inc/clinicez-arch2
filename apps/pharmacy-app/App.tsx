@@ -7,6 +7,9 @@ import { AuthGate } from './components/AuthGate';
 import { ConnectionGate } from './components/ConnectionGate';
 import { VercelInsights } from './components/analytics/VercelInsights';
 import { loadRuntimeConfig } from './services/runtimeConfig';
+import { PharmacyCommsProvider } from './context/PharmacyCommsContext';
+import PharmacyChatModal from './components/PharmacyChatModal';
+import { PharmacyChatTrigger } from './components/PharmacyChatTrigger';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -23,7 +26,11 @@ export default function App() {
       <ConnectionGate>
         <FacilityActivationGate>
           <AuthGate>
-            <Navigation />
+            <PharmacyCommsProvider>
+              <Navigation />
+              <PharmacyChatTrigger />
+              <PharmacyChatModal />
+            </PharmacyCommsProvider>
           </AuthGate>
         </FacilityActivationGate>
       </ConnectionGate>

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Documents.Configuration;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.DTOs;
@@ -31,8 +33,26 @@ public sealed record StaffMemberDto(
     IReadOnlyList<Guid>? AssignedRoomIds = null,
     IReadOnlyList<string>? AssignedRoomNames = null,
     string? SignatureSpecimen = null,
-    SignatureMode DefaultSignatureMode = SignatureMode.ESignatureSpecimen)
+    SignatureMode DefaultSignatureMode = SignatureMode.ESignatureSpecimen,
+    StaffAccountStatus Status = StaffAccountStatus.Active,
+    string? InvitationToken = null,
+    DateTime? InvitationExpiresAt = null,
+    DateTime? InviteAcceptedAt = null,
+    string? InviteUrl = null,
+    string? PreferencesJson = null,
+    bool IsDirectoryOptIn = false,
+    DateOnly? PrcExpiryDate = null,
+    string? PrcEvidenceObjectKey = null,
+    string? VerificationContact = null,
+    Guid? CanonicalProviderId = null,
+    string? PublicBio = null,
+    string? AvatarUrl = null,
+    PractitionerVerificationLevel PublicVerificationStatus = PractitionerVerificationLevel.Unverified,
+    string? PublicVerificationReason = null,
+    int AffiliatedVerifiedClinicCount = 0)
 {
+    public bool IsExpired => Status == StaffAccountStatus.Invited && InvitationExpiresAt.HasValue && InvitationExpiresAt.Value < DateTime.UtcNow;
+
     public StaffMemberDto(
         Guid Id,
         Guid ClinicId,
@@ -76,6 +96,57 @@ public sealed record StaffMemberDto(
             DefaultSignatureMode: DefaultSignatureMode)
     {
     }
+
+    public static StaffMemberDto FromEntity(
+        StaffMember staff,
+        string? roleName = null,
+        IReadOnlyList<string>? assignedRoomNames = null,
+        bool? hasCredentials = null,
+        string? temporaryPassword = null,
+        string? inviteUrl = null,
+        StaffAccountStatus? statusOverride = null) => new(
+            staff.Id,
+            staff.TenantId,
+            staff.ClinicId,
+            staff.ClinicRoleId,
+            roleName ?? staff.ClinicRole?.Name,
+            staff.FirstName,
+            staff.LastName,
+            staff.MiddleName,
+            staff.Title,
+            staff.Role,
+            staff.Email,
+            staff.PhoneNumber,
+            staff.PrcLicenseNumber,
+            staff.PtrNumber,
+            staff.S2LicenseNumber,
+            staff.Specialty,
+            staff.IsActive,
+            staff.CreatedAt,
+            HasCredentials: hasCredentials ?? !string.IsNullOrEmpty(staff.PasswordHash),
+            MustChangePassword: staff.MustChangePassword,
+            TemporaryPassword: temporaryPassword,
+            PhilHealthPan: staff.PhilHealthPan,
+            AssignedRoomIds: staff.GetAssignedRoomIds(),
+            AssignedRoomNames: assignedRoomNames ?? Array.Empty<string>(),
+            SignatureSpecimen: staff.SignatureSpecimen,
+            DefaultSignatureMode: staff.DefaultSignatureMode,
+            Status: statusOverride ?? staff.Status,
+            InvitationToken: staff.InvitationToken,
+            InvitationExpiresAt: staff.InvitationExpiresAt,
+            InviteAcceptedAt: staff.InviteAcceptedAt,
+            InviteUrl: inviteUrl,
+            PreferencesJson: staff.PreferencesJson,
+            IsDirectoryOptIn: staff.IsDirectoryOptIn,
+            PrcExpiryDate: staff.PrcExpiryDate,
+            PrcEvidenceObjectKey: staff.PrcEvidenceObjectKey,
+            VerificationContact: staff.VerificationContact,
+            CanonicalProviderId: staff.CanonicalProviderId,
+            PublicBio: staff.PublicBio,
+            AvatarUrl: staff.AvatarUrl,
+            PublicVerificationStatus: staff.PublicVerificationStatus,
+            PublicVerificationReason: staff.PublicVerificationReason,
+            AffiliatedVerifiedClinicCount: staff.AffiliatedVerifiedClinicCount);
 
     public string? UserId => TenantId;
     public string? Specialization => Specialty;

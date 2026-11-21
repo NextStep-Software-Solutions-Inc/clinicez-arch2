@@ -223,13 +223,13 @@ public class ReconcileEodTests
     }
 
     [Fact]
-    public async Task UpdateClinicSettings_PersistsEodConfiguration()
+    public async Task UpdateFacilitySettings_PersistsEodConfiguration()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var existingSettings = new ClinicSettings
+        var existingSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -272,7 +272,7 @@ public class ReconcileEodTests
         string utcTimestamp,
         bool expectedResult)
     {
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -306,8 +306,8 @@ public class ReconcileEodTests
 
         // Seed 2 clinics configured with auto-EOD
         var (seedContext, _, _) = TestDbHelper.CreateSharedTestContext(dbName, _clinicContext);
-        seedContext.ClinicSettings.AddRange(
-            new ClinicSettings
+        seedContext.Settings.AddRange(
+            new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 TenantId = "tenant1",
@@ -316,7 +316,7 @@ public class ReconcileEodTests
                 AutoEodEnabled = true,
                 EodReconciliationTime = "00:00"
             },
-            new ClinicSettings
+            new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 TenantId = "tenant2",

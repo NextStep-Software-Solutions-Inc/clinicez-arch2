@@ -10,18 +10,14 @@ export const patientGovernmentIds = sqliteTable('patient_government_ids', {
     .references(() => patients.id, { onDelete: 'cascade' }),
   // PhilHealth
   philhealthId: text('philhealth_id'),
-  philhealthCategory: text('philhealth_category', {
-    enum: ['MM', 'DD'],
-  }),
+  philhealthCategory: text('philhealth_category'),
   sponsorPin: text('sponsor_pin'),
   sponsorLastName: text('sponsor_last_name'),
   sponsorFirstName: text('sponsor_first_name'),
   sponsorMiddleName: text('sponsor_middle_name'),
   sponsorSuffix: text('sponsor_suffix'),
   sponsorDob: text('sponsor_dob'),
-  sponsorRelationship: text('sponsor_relationship', {
-    enum: ['S', 'C', 'P', 'D'],
-  }),
+  sponsorRelationship: text('sponsor_relationship'),
   // Other government IDs
   sssNumber: text('sss_number'),
   gsisNumber: text('gsis_number'),
@@ -31,13 +27,11 @@ export const patientGovernmentIds = sqliteTable('patient_government_ids', {
   // PWD
   isPwd: integer('is_pwd', { mode: 'boolean' }).default(false),
   pwdIdNumber: text('pwd_id_number'),
-  disabilityType: text('disability_type', {
-    enum: ['Physical', 'Sensory', 'Intellectual', 'Psychosocial'],
-  }),
+  disabilityType: text('disability_type'),
   // HMO
   hmoProvider: text('hmo_provider'),
   hmoPolicyNumber: text('hmo_policy_number'),
-  hmoPlanType: text('hmo_plan_type', { enum: ['Individual', 'Group', 'Family'] }),
+  hmoPlanType: text('hmo_plan_type'),
   hmoCoverageStart: text('hmo_coverage_start'), // YYYY-MM-DD
   hmoCoverageEnd: text('hmo_coverage_end'),     // YYYY-MM-DD
   // Timestamps

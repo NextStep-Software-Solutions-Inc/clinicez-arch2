@@ -1,7 +1,10 @@
 using ClinicEz.Portal.Api.Abstractions;
 using ClinicEz.Portal.Application.Features.Billing;
+using ClinicEz.Portal.Application.Features.Tenants;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop.Contracts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -28,6 +31,17 @@ public sealed class LookupTenantEndpoint : IEndpoint
             }
 
             var cleanSlug = slug.Trim().ToLowerInvariant();
+            if (ReservedTenantSlugs.IsReserved(cleanSlug))
+            {
+                return Results.NotFound(new
+                {
+                    Exists = false,
+                    IsReserved = true,
+                    Code = "slug_reserved",
+                    Message = $"Workspace URL '{slug}' is reserved by Clinic EZ."
+                });
+            }
+
             var tenant = await context.Tenants
                 .AsNoTracking()
                 .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == cleanSlug, ct);
@@ -57,12 +71,22 @@ public sealed class LookupTenantEndpoint : IEndpoint
                 return Results.NotFound(new { Exists = false, Message = $"Workspace or facility '{slug}' was not found." });
             }
 
+            var facilities = await context.Facilities
+                .AsNoTracking()
+                .Where(f => !f.IsDeleted && f.TenantId == tenant.Id)
+                .OrderBy(f => f.CreatedAt)
+                .ToListAsync(ct);
+
+            var primaryClinic = facilities.FirstOrDefault(f => f.FacilityType == FacilityType.Clinic) ?? facilities.FirstOrDefault();
+
             return Results.Ok(new
             {
                 Exists = true,
                 TenantId = tenant.Id.ToString(),
                 TenantSlug = tenant.TenantSlug,
-                Name = tenant.Name,
+                FacilityId = primaryClinic?.Id.ToString(),
+                FacilitySlug = primaryClinic?.Slug,
+                Name = primaryClinic?.Name ?? tenant.Name,
                 TenantType = tenant.TenantType,
                 Status = await StatusOfAsync(context, tenant.Id, timeProvider, ct)
             });

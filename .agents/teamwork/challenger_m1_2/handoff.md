@@ -1,224 +1,165 @@
-# Milestone 1 Adversarial Challenge Report: Regulatory PDEA S2 Safeguard & Controller `?wet=` Routing
+# Handoff Report: E2E Test Architecture Adversarial Challenge
 
-- **Agent**: `challenger_m1_2`
-- **Roles**: critic, specialist (Empirical Challenger)
-- **Working Directory**: `/Users/macuser/projects/github/nextstep/clinicez-docs-studio/.agents/teamwork/challenger_m1_2`
-- **Target Subsystem**: `services/clinic-api` (Regulatory PDEA S2 Safeguards, Controller `?wet=` routing, and Public Document Verification)
-- **Verdict**: **VERDICT: APPROVE**
+**Agent**: `challenger_m1_2` (Empirical Challenger & Adversarial Specialist)  
+**Milestone**: E2E-M1 Test Architecture Verification  
+**Target Specification**: `/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/TEST_INFRA.md`  
+**Date**: 2026-11-14T12:17:00Z  
 
 ---
 
 ## 1. Observation
 
-### 1.1 Source Code Architecture Observations
+Direct empirical observations from executing the verification commands and inspecting the codebase:
 
-#### Observation 1.1: Defense-in-Depth in `ClinicDocumentPdfService.cs` (lines 426–433)
-In `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService.cs`:
-```csharp
-bool hasDangerousDrug = slip.Items.Any(i => i.IsDangerousDrug);
-var preferredMode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
-var mode = hasDangerousDrug ? SignatureMode.WetSignature : preferredMode;
+### 1.1 Backend .NET 10 Verification Commands
+- **Media Broker Suite**:
+  ```bash
+  /Users/macuser/.dotnet/dotnet test services/media-broker/ClinicEz.MediaBroker.Tests/ClinicEz.MediaBroker.Tests.csproj
+  ```
+  Output: `Passed! - Failed: 0, Passed: 42, Skipped: 0, Total: 42, Duration: 430 ms - ClinicEz.MediaBroker.Tests.dll (net10.0)`
+- **Portal API Suite**:
+  ```bash
+  /Users/macuser/.dotnet/dotnet test services/portal-api/ClinicEz.Portal.Tests/ClinicEz.Portal.Tests.csproj
+  ```
+  Output: `Passed! - Failed: 0, Passed: 1637, Skipped: 0, Total: 1637, Duration: 6 s - ClinicEz.Portal.Tests.dll (net10.0)`
+- **Clinic API Governance & Teleconsult Suite**:
+  ```bash
+  /Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Teleconsult|FullyQualifiedName~License|FullyQualifiedName~Entitlements"
+  ```
+  Output: `Passed! - Failed: 0, Passed: 617, Skipped: 0, Total: 617, Duration: 6 s - ClinicEz.Clinic.Application.Tests.dll (net10.0)`
+- **Interop Hub Platform Routing Suite**:
+  ```bash
+  /Users/macuser/.dotnet/dotnet test services/interop-hub/ClinicEz.Interop.Tests/ClinicEz.Interop.Tests.csproj
+  ```
+  Output: `Passed! - Failed: 0, Passed: 190, Skipped: 0, Total: 190, Duration: 36 s - ClinicEz.Interop.Tests.dll (net10.0)`
+- **Patient API Teleconsult Suite**:
+  ```bash
+  /Users/macuser/.dotnet/dotnet test services/patient-api/ClinicEz.Patient.Application.Tests/ClinicEz.Patient.Application.Tests.csproj --filter "FullyQualifiedName~CallStateChanged"
+  ```
+  Output: `Passed! - Failed: 0, Passed: 7, Skipped: 0, Total: 7, Duration: 1 s - ClinicEz.Patient.Application.Tests.dll (net10.0)`
 
-var docSignatureBytes = (mode == SignatureMode.ESignatureSpecimen)
-    ? (ImageDecoderHelper.TryDecode(doctor?.SignatureSpecimen) ?? config.DoctorSignatureBytes)
-    : null;
-```
-- When `hasDangerousDrug == true` (i.e. `slip.Items.Any(i => i.IsDangerousDrug)`), `mode` is unconditionally set to `SignatureMode.WetSignature`.
-- `docSignatureBytes` is forcibly set to `null` because `mode == SignatureMode.ESignatureSpecimen` is false.
-- Blank 42pt spacing is allocated above the physician name block for physical ink signing.
+### 1.2 Frontend Bun Test & Typecheck Verification Commands
+- **Comms SDK Tests**:
+  ```bash
+  cd packages/comms-sdk && bun test tests && bun run typecheck
+  ```
+  Output: `481 pass, 2 fail, 47973 expect() calls. Ran 483 tests across 38 files. [276.00ms]`
+  Verbatim Failures:
+  - `✗ Feature F18: CallStage Video Surface & In-Call Controls (Native & Web) > Tier 5: Milestone 8 Adaptations: Dock, PiP, and Orientation > Native & Web: renders icon-only Copy Invite button at top-left with hover tooltip and omits center Message Patient button [0.29ms]`
+  - `✗ Feature F18: CallStage Video Surface & In-Call Controls (Native & Web) > Tier 5: Milestone 8 Adaptations: Dock, PiP, and Orientation > Native & Web: active stage pills, invite CTAs, and end button apply brand and semantic drop shadows [0.21ms]`
+  Source: `packages/comms-sdk/tests/ui/call-stage.test.ts` lines 642–645, 809–819, 855–861 asserting non-null `btn-stage-copy-invite`.
+- **Clinic App Core Suites**:
+  ```bash
+  cd apps/clinic-app && bun test tests/commsBrandTheming.test.ts tests/challenger_m6_adversarial_clinic.test.ts tests/challenger_m8_adversarial_clinic.test.ts tests/challenger_m9_adversarial_clinic.test.ts tests/teleconsultWorkflow.test.ts
+  ```
+  Output: `168 pass, 0 fail, 11714 expect() calls. Ran 168 tests across 5 files. [505.00ms]`
+- **Clinic App Isolated Issue #139**:
+  ```bash
+  cd apps/clinic-app && bun test tests/comms_issue139_resilience_and_polish.test.ts
+  ```
+  Output: `12 pass, 0 fail, 29 expect() calls. Ran 12 tests across 1 file. [225.00ms]`
+- **Portal Web Suites**:
+  ```bash
+  cd apps/portal-web && bun test tests/guestTeleconsultJoin.test.tsx tests/guestTeleconsultAdversarial.test.tsx tests/planAndAllocationMetrics.test.ts tests/tenantBillingAndReceipts.test.ts
+  ```
+  Output: `58 pass, 0 fail, 254 expect() calls. Ran 58 tests across 4 files. [391.00ms]`
+- **Admin Web Suites**:
+  ```bash
+  cd apps/admin-web && bun test tests/adminPlansAndEntitlements.test.ts tests/challenger_m3_plan_entitlements.test.ts
+  ```
+  Output: `14 pass, 0 fail, 110 expect() calls. Ran 14 tests across 2 files. [441.00ms]`
+- **Monorepo Package Typechecks**:
+  `bun run typecheck:comms`, `bun run typecheck:clinic`, `bun run typecheck:portal`, `bun run typecheck:admin` all exited with code 0.
 
-#### Observation 1.2: PDEA S2 Statutory Regulatory Warning & Item Highlighting (lines 532–538, 584–588)
-In `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService.cs`:
-```csharp
-if (hasDangerousDrug)
-{
-    col.Item().PaddingTop(6).Background("#FEF2F2").Border(1).BorderColor("#EF4444").Padding(6).Row(r =>
-    {
-        r.RelativeItem().Text("⚠️ PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations.")
-            .FontSize(8.5f).Bold().FontColor("#991B1B");
-    });
-}
-```
-And on individual medication cards:
-```csharp
-if (item.IsDangerousDrug)
-{
-    r.ConstantItem(130).AlignRight().Text("⚠️ Dangerous Drug (PDEA S2)").FontSize(7.5f).Bold().FontColor("#DC2626");
-}
-```
-
-#### Observation 1.3: Controller Routing in `PrescriptionsController.cs` (lines 65–70, 98–103)
-In `services/clinic-api/ClinicEz.Clinic.Api/Controllers/PrescriptionsController.cs`:
-```csharp
-var signatureMode = wet == true
-    ? SignatureMode.WetSignature
-    : (wet == false ? SignatureMode.ESignatureSpecimen : (slip.Items.Any(i => i.IsDangerousDrug) ? SignatureMode.WetSignature : SignatureMode.ESignatureSpecimen));
-
-var pdfBytes = _pdfService.GeneratePrescriptionPdf(slip, settings, doctor: null, signatureMode: signatureMode);
-return File(pdfBytes, "application/pdf", $"Prescription-{slip.PrescriptionNumber}.pdf");
-```
-- If a caller passes `?wet=false`, the controller passes `signatureMode = ESignatureSpecimen` to `_pdfService`.
-- However, as verified in Observation 1.1, `ClinicDocumentPdfService` overrides `mode` to `WetSignature` whenever `hasDangerousDrug == true`, guaranteeing that callers cannot bypass statutory regulations.
-
-#### Observation 1.4: Universal Verification Endpoint in `DocumentsController.cs` (lines 142–248)
-In `services/clinic-api/ClinicEz.Clinic.Api/Controllers/DocumentsController.cs`:
-```csharp
-[HttpGet("verify/{securityDigestOrNumber}")]
-[AllowAnonymous]
-public async Task<ActionResult<ApiResponse<DocumentVerificationResultDto>>> VerifyDocument(
-    [FromRoute] string securityDigestOrNumber,
-    CancellationToken ct = default)
-```
-- Validates inputs across four entity repositories:
-  1. Medical Certificates: `c.CertificateNumber == trimmed || c.SecurityDigest == trimmed`
-  2. Referral Letters: `r.ReferralNumber == trimmed || r.SecurityDigest == trimmed`
-  3. Electronic Prescriptions: `e.PrescriptionNumber == trimmed || e.RxPublicVerificationToken == trimmed`
-  4. Lab Requisitions: `l.OrderNumber == trimmed || l.ClaimToken == trimmed`
-- Returns HTTP 200 OK with `DocumentVerificationResultDto` for valid records.
-- Returns HTTP 404 NotFound with `ApiResponse.Fail` for non-existent or tampered digests.
-
----
-
-### 1.2 Direct Empirical Tool Execution Results
-
-A dedicated adversarial test suite with 17 empirical test scenarios was written to `services/clinic-api/ClinicEz.Clinic.Application.Tests/Adversarial/ChallengerM1_2RegulatoryRoutingTests.cs`.
-
-Executing:
-```bash
-~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ChallengerM1_2RegulatoryRoutingTests"
-```
-Yielded the following verbatim output:
-```text
-  Determining projects to restore...
-  All projects are up-to-date for restore.
-  ClinicEz.Shared -> /Users/macuser/projects/github/nextstep/clinicez-docs-studio/packages/shared-dotnet/bin/Debug/net10.0/ClinicEz.Shared.dll
-  ClinicEz.Clinic.Domain -> /Users/macuser/projects/github/nextstep/clinicez-docs-studio/services/clinic-api/ClinicEz.Clinic.Domain/bin/Debug/net10.0/ClinicEz.Clinic.Domain.dll
-  ClinicEz.Clinic.Application -> /Users/macuser/projects/github/nextstep/clinicez-docs-studio/services/clinic-api/ClinicEz.Clinic.Application/bin/Debug/net10.0/ClinicEz.Clinic.Application.dll
-  ClinicEz.Clinic.Infrastructure -> /Users/macuser/projects/github/nextstep/clinicez-docs-studio/services/clinic-api/ClinicEz.Clinic.Infrastructure/bin/Debug/net10.0/ClinicEz.Clinic.Infrastructure.dll
-  ClinicEz.Clinic.Api -> /Users/macuser/projects/github/nextstep/clinicez-docs-studio/services/clinic-api/ClinicEz.Clinic.Api/bin/Debug/net10.0/ClinicEz.Clinic.Api.dll
-  ClinicEz.Clinic.Application.Tests -> /Users/macuser/projects/github/nextstep/clinicez-docs-studio/services/clinic-api/ClinicEz.Clinic.Application.Tests/bin/Debug/net10.0/ClinicEz.Clinic.Application.Tests.dll
-Test run for /Users/macuser/projects/github/nextstep/clinicez-docs-studio/services/clinic-api/ClinicEz.Clinic.Application.Tests/bin/Debug/net10.0/ClinicEz.Clinic.Application.Tests.dll (.NETCoreApp,Version=v10.0)
-A total of 1 test files matched the specified pattern.
-
-Passed!  - Failed:     0, Passed:    17, Skipped:     0, Total:    17, Duration: 1 s - ClinicEz.Clinic.Application.Tests.dll (net10.0)
-```
-
-Executing the baseline suite:
-```bash
-~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~HardenedDocumentGenerationTests"
-```
-Yielded:
-```text
-Passed!  - Failed:     0, Passed:    58, Skipped:     0, Total:    58, Duration: 1 s - ClinicEz.Clinic.Application.Tests.dll (net10.0)
-```
+### 1.3 Project Invariants Verification
+- **`COMMS_ICON_MAP` Invariant**: `tests/challenger_m8_adversarial_clinic.test.ts` confirms exactly 17 keys. `TEST_INFRA.md` specifies using the optional `renderParticipantsIcon` prop on `CallStage` with `<Icon name="patients" />` in `TeleconsultWaitingRoomModal.tsx`, successfully preventing any new key from being added to `COMMS_ICON_MAP`.
+- **Design Token Lint**:
+  - `bun run lint:tokens`: `Token guard: 0 violation(s) in 0 file(s). Token guard OK (no regressions vs baseline).`
+  - `bun run lint:clinic`: `Token guard: 0 violation(s) in 0 file(s). Host/catalog gate OK (339 files scanned).`
+  - `bun run lint:comms`: `Comms SDK token guard: 4 violation(s) across 49 source file(s). error: script "lint:comms" exited with code 1`. Violations located in `packages/comms-sdk/src/web-ui/OverlayTooltip.tsx` lines 62–64 (`#0F172A`, `#FFFFFF`, `#334155`).
+- **External Host Gate**: `apps/clinic-app/scripts/check-no-external-hosts.mjs` scanned 339 files; 0 unapproved external hosts detected.
+- **Expo Dev Server on Port 8081**:
+  ```bash
+  curl -I http://localhost:8081
+  ```
+  Output: `HTTP/1.1 200 OK`, `Content-Type: text/html`, Connection active and undisturbed.
 
 ---
 
 ## 2. Logic Chain
 
-### 2.1 Attack Scenario: Adversarial Attempt to Force E-Signature on Dangerous Drug Prescription
-1. **Hypothesis**: An adversary or malicious client sends `GET /api/v1/prescriptions/{consultationId}/slip-pdf?wet=false` on a prescription containing Morphine Sulfate (PDEA S2 regulated substance).
-2. **Controller Behavior**: `PrescriptionsController.cs` receives `wet == false`, evaluates `signatureMode = SignatureMode.ESignatureSpecimen`, and invokes `_pdfService.GeneratePrescriptionPdf(slip, settings, null, SignatureMode.ESignatureSpecimen)`.
-3. **Engine Defense-in-Depth**: `ClinicDocumentPdfService.cs` inspects `bool hasDangerousDrug = slip.Items.Any(i => i.IsDangerousDrug)`. Because `hasDangerousDrug == true`, line 428 evaluates:
-   ```csharp
-   var mode = hasDangerousDrug ? SignatureMode.WetSignature : preferredMode;
-   ```
-   The engine overrides `mode` to `SignatureMode.WetSignature`, completely discarding `SignatureMode.ESignatureSpecimen`.
-4. **Rendered Output**:
-   - The digital certification badge (`✓ Officially Signed e-Prescription (FDA Circular 2020-004)`) is suppressed.
-   - Doctor signature specimen image bytes are omitted (`null`), rendering a blank 42pt ink pen line.
-   - The statutory red warning banner (`⚠️ PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required...`) is rendered.
-   - The document security hash (`Security Hash: <digest>`) and QR code in the footer remain intact.
-5. **Empirical Proof**: Verified by tests `PrescriptionsController_WithDangerousDrug_WhenWetFalse_MustStillEnforceWetSignatureAndRenderWarningBadge` and `PrescriptionsController_ByPrescriptionNumber_WithDangerousDrug_AcrossAllWetModes_MustEnforceWetSignature(wetParam: False)`. Both passed.
+1. **Architecture & Scope Alignment**:
+   - `TEST_INFRA.md` maps all 29 features across Requirements R1 through R6 (Section 2) and defines an 82-test matrix across 4 tiers (36 Tier 1 feature tests, 36 Tier 2 boundary tests, 6 Tier 3 pairwise integration flows, and 4 Tier 4 real-world clinical workloads).
+   - This structure directly satisfies the opaque-box testing requirements established in `ORIGINAL_REQUEST.md`, `SCOPE.md`, and `implementation_plan.md`.
 
-### 2.2 Clean Prescription Routing Integrity
-1. **Scenario A (`?wet=true`)**: Clean prescription (e.g. Amoxicillin). Doctor explicitly requests wet signing mode. `PrescriptionsController` sets `signatureMode = WetSignature`. In the rendered PDF, the digital seal badge is suppressed, signature image is omitted, PDEA S2 warning box is absent, and the security verification hash is retained. (Verified by test `PrescriptionsController_CleanPrescription_WhenWetTrue_ShouldEnforceWetModeAndSuppressDigitalSeal`).
-2. **Scenario B (`?wet=false` or omitted `null`)**: Clean prescription. `signatureMode = ESignatureSpecimen`. Rendered PDF includes digital certification badge (`Officially Signed`), embeds physician signature specimen image when available, does not render PDEA warning, and retains security verification hash. (Verified by tests `PrescriptionsController_CleanPrescription_WhenWetFalse_ShouldHonorESignatureMode` and `PrescriptionsController_CleanPrescription_WhenWetOmitted_ShouldDefaultToESignatureMode`).
+2. **Verifiable Assertions & Anti-Facade**:
+   - Every test case in Section 4 specifies verifiable assertions: explicit component testIDs (`btn-toggle-participants`, `badge-participants-count`, `panel-participants-roster`, `btn-roster-copy-pin`), exact HTTP response status codes (HTTP 403 `ForbiddenException`, HTTP 410 `GUEST_CONSULTATION_ENDED`, HTTP 423 Locked), LiveKit data channel payloads (`call_ended_by_clinician`), and transactional outbox message types (`MediaEntitlementUpdated`, `GuestTeleconsultInviteRevoked`, `MediaRoomEnded`).
+   - No vague hand-waving or dummy assertions exist.
 
-### 2.3 Cross-Document Controller `?wet=` Routing Parity
-1. **Medical Certificates** (`DocumentsController.DownloadMedicalCertificatePdf`):
-   - `?wet=true` forces `SignatureMode.WetSignature`: suppresses `"Digitally Certified & Locked"`, leaves physical blank line, preserves footer security hash.
-   - `?wet=false` forces `SignatureMode.ESignatureSpecimen`: includes green digital certification badge, preserves footer security hash. (Verified by `DocumentsController_MedicalCertificate_WetModeRouting_ShouldSuppressDigitalBadgeAndPreserveDigest`).
-2. **Referral Letters** (`DocumentsController.DownloadReferralLetterPdf`):
-   - `?wet=true` suppresses digital certification badge, preserves footer security hash.
-   - `?wet=false` preserves digital seal badge and footer security hash. (Verified by `DocumentsController_ReferralLetter_WetModeRouting_ShouldSuppressDigitalBadgeAndPreserveDigest`).
-3. **Lab Requisition Slips** (`LabOrdersController.DownloadLabOrderSlipPdf`):
-   - `?wet=true` suppresses digital badge, preserves footer security hash.
-   - `?wet=false` preserves digital badge and footer security hash. (Verified by `LabOrdersController_LabOrderSlip_WetModeRouting_ShouldSuppressDigitalBadgeAndPreserveDigest`).
+3. **Invariants Compliance**:
+   - The test plan rigorously honors the `COMMS_ICON_MAP` 17-key constraint by designing `renderParticipantsIcon` to bypass key additions.
+   - Zero PHI is enforced in signaling identifiers via regex patterns (`^call-[0-9a-fA-F\-]{32,36}$` and `^(staff|patient|guest|participant)...`).
+   - Port 8081 remains healthy and undisturbed.
 
-### 2.4 Public Document Security Digest Verification Resolution
-1. **Endpoint**: `GET /api/v1/documents/verify/{securityDigestOrNumber}` (Anonymous).
-2. **Medical Certificate**: Resolves via `CertificateNumber` or `SecurityDigest` (SHA256 hex string). Returns HTTP 200 with `DocumentType: "Medical Certificate"`, `Status: "Valid"`. (Verified by `DocumentsController_VerifyDocument_WhenMedicalCertificateDigestOrNumberProvided_ShouldReturnSuccessResult`).
-3. **Clinical Referral**: Resolves via `ReferralNumber` or `SecurityDigest`. Returns HTTP 200 with `DocumentType: "Clinical Referral Letter"`, `Status: "Valid"`. (Verified by `DocumentsController_VerifyDocument_WhenReferralLetterDigestOrNumberProvided_ShouldReturnSuccessResult`).
-4. **Electronic Prescription**: Resolves via `PrescriptionNumber` or `RxPublicVerificationToken`. Returns HTTP 200 with `DocumentType: "Electronic Prescription"`, `Status: "Valid"`. (Verified by `DocumentsController_VerifyDocument_WhenPrescriptionNumberOrTokenProvided_ShouldReturnSuccessResult`).
-5. **Lab Order**: Resolves via `OrderNumber` or `ClaimToken`. Returns HTTP 200 with `DocumentType: "Laboratory Requisition Slip"`, `Status: "Valid"`. (Verified by `DocumentsController_VerifyDocument_WhenLabOrderNumberOrClaimTokenProvided_ShouldReturnSuccessResult`).
-6. **Adversarial / Invalid / Tampered Hash**: Non-existent hex strings or malformed inputs return HTTP 404 NotFound with `ApiResponse.Fail`. Whitespace-padded strings are trimmed and resolved accurately. (Verified by `DocumentsController_VerifyDocument_WhenDigestNotFound_ShouldReturn404NotFound` and `DocumentsController_VerifyDocument_WhenInputContainsWhitespace_ShouldTrimAndResolve`).
+4. **Empirical Failure Root-Cause Analysis**:
+   - The 2 test failures in `packages/comms-sdk` (`call-stage.test.ts`) occur because `native-ui/CallStage.tsx` has already implemented Requirement R1 by removing `btn-stage-copy-invite`, but `call-stage.test.ts` was not yet updated to reflect this removal.
+   - The failure of `bun run lint:comms` occurs because `OverlayTooltip.tsx` contains 4 raw hex colors in the worktree.
+   - Both issues are concrete worktree artifacts that do not undermine the architectural validity of the `TEST_INFRA.md` specification, but must be scheduled for refactoring during Milestone 2 test authoring.
 
 ---
 
-## 3. Adversarial Challenges & Stress Scenarios
+## 3. Caveats
 
-| # | Challenge / Scenario | Expected Outcome | Actual Outcome | Status |
-|---|----------------------|------------------|----------------|:------:|
-| 1 | Dangerous drug prescription + `?wet=false` | Wet signature forced, warning banner rendered, digital badge suppressed | WetSignature enforced by `ClinicDocumentPdfService:428`, digital badge omitted | **PASS** |
-| 2 | Dangerous drug prescription + `?wet=true` | Wet signature forced, warning banner rendered, digital badge suppressed | WetSignature enforced, digital badge omitted | **PASS** |
-| 3 | Dangerous drug prescription + `wet` omitted (`null`) | Wet signature default, warning banner rendered, digital badge suppressed | WetSignature enforced, digital badge omitted | **PASS** |
-| 4 | Clean prescription + `?wet=false` | E-Signature honored, digital badge rendered, no PDEA warning | ESignatureSpecimen honored, digital badge rendered | **PASS** |
-| 5 | Clean prescription + `?wet=true` | Wet signature honored, digital badge suppressed, no PDEA warning | WetSignature honored, digital badge suppressed | **PASS** |
-| 6 | Clean prescription + `wet` omitted (`null`) | Defaults to E-Signature, digital badge rendered | ESignatureSpecimen default, digital badge rendered | **PASS** |
-| 7 | MedCert endpoint + `?wet=true` vs `?wet=false` | Wet mode suppresses badge; e-sign renders badge; both retain security hash | Verified on PDF output bytes | **PASS** |
-| 8 | Referral endpoint + `?wet=true` vs `?wet=false` | Wet mode suppresses badge; e-sign renders badge; both retain security hash | Verified on PDF output bytes | **PASS** |
-| 9 | Lab Order endpoint + `?wet=true` vs `?wet=false` | Wet mode suppresses badge; e-sign renders badge; both retain security hash | Verified on PDF output bytes | **PASS** |
-| 10 | `/verify/{digest}` with MedCert `SecurityDigest` | Returns 200 OK with `DocumentVerificationResultDto` | HTTP 200, valid status, populated metadata | **PASS** |
-| 11 | `/verify/{digest}` with Referral `SecurityDigest` | Returns 200 OK with `DocumentVerificationResultDto` | HTTP 200, valid status, populated metadata | **PASS** |
-| 12 | `/verify/{digest}` with Rx `PublicVerificationToken` | Returns 200 OK with `DocumentVerificationResultDto` | HTTP 200, valid status, populated metadata | **PASS** |
-| 13 | `/verify/{digest}` with Lab `ClaimToken` | Returns 200 OK with `DocumentVerificationResultDto` | HTTP 200, valid status, populated metadata | **PASS** |
-| 14 | `/verify/{digest}` with non-existent SHA256 hex | Returns 404 NotFound | HTTP 404, `ApiResponse.Fail` | **PASS** |
-| 15 | `/verify/{digest}` with whitespace padding | Trims input and resolves successfully | HTTP 200, valid status | **PASS** |
+- **LiveKit Cloud Signaling**: LiveKit Cloud edge cluster WebRTC traversal over real WAN connections is mocked via `LiveKitMediaAdapter` with `mockMode: true` in accordance with opaque-box specification guidelines.
+- **Third-Party Payment Gateways**: Automated credit card billing gateways (e.g. Xendit) are outside the scope of internal teleconsultation pay-as-you-go metering.
 
 ---
 
-## 4. Caveats
+## 4. Conclusion
 
-- **QuestPDF Font Subsetting & CMap Glyphs**: Standard ASCII text operators inside QuestPDF decompress cleanly via zlib. However, Unicode emojis (such as `⚠️` U+26A0) and checkmarks (`✓` U+2713) are mapped to Identity-H font glyph subsets and split across text runs in canvas operators. Assertions must target font-safe substrings (e.g. `ContainAny("PDEA S2", "Dangerous Drug", "DOH-PDEA", "Regulated Substance")` rather than raw emoji strings).
-- **Public Verification Endpoint Scoping**: The `/api/v1/documents/verify/{securityDigestOrNumber}` endpoint uses `[AllowAnonymous]` without tenant filtering by design to enable public QR scanning from any mobile device or external pharmacy.
-
----
-
-## 5. Conclusion
-
-The implementation of the PDEA S2 regulatory safeguard and controller `?wet=` query parameter routing in `services/clinic-api` is robust, regulatory-compliant, and hardened with defense-in-depth:
-1. Callers cannot bypass the PDEA S2 wet signature requirement on dangerous drug prescriptions even if they supply `?wet=false`.
-2. Clean prescriptions cleanly respect `?wet=true`, `?wet=false`, and default signature mode preferences.
-3. Medical Certificates, Referral Letters, and Lab Requisitions exhibit consistent `?wet=` routing behavior.
-4. The public verification endpoint reliably resolves documents by document number, claim token, or SHA256 security digest across all four clinical document types.
+`TEST_INFRA.md` provides an exhaustive, mathematically sound, and executable test architecture that completely covers Requirements R1 through R6. The empirical challenges identified have clear, scoped mitigations that should be executed by test engineers during Milestone 2.
 
 **VERDICT: APPROVE**
 
+### Milestone 2 Recommendations:
+1. Update `packages/comms-sdk/tests/ui/call-stage.test.ts` to assert `expect(nativeCopyBtn).toBeNull()`, retiring obsolete assertions for `btn-stage-copy-invite` in accordance with Requirement R1 / TC-T1.1.1.
+2. Refactor raw hex literals in `packages/comms-sdk/src/web-ui/OverlayTooltip.tsx` (`#0F172A`, `#FFFFFF`, `#334155`) to use semantic tokens from `@clinicez/design-tokens` so `bun run lint:comms` passes cleanly.
+3. Supplement the Tier 2 boundary test suite with explicit tests for negative rate/budget injection and modality switching on unentitled facilities.
+4. Add newly authored test files into Section 5 runner commands once written.
+
 ---
 
-## 6. Verification Method
+## 5. Verification Method
 
-To independently reproduce and verify this challenge report:
+To independently verify this evaluation, run the following commands from the project root:
 
-1. Navigate to the repository root:
-   ```bash
-   cd /Users/macuser/projects/github/nextstep/clinicez-docs-studio
-   ```
+```bash
+# 1. Verify Backend .NET Suites
+/Users/macuser/.dotnet/dotnet test services/media-broker/ClinicEz.MediaBroker.Tests/ClinicEz.MediaBroker.Tests.csproj
+/Users/macuser/.dotnet/dotnet test services/portal-api/ClinicEz.Portal.Tests/ClinicEz.Portal.Tests.csproj
+/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Teleconsult|FullyQualifiedName~License|FullyQualifiedName~Entitlements"
+/Users/macuser/.dotnet/dotnet test services/interop-hub/ClinicEz.Interop.Tests/ClinicEz.Interop.Tests.csproj
+/Users/macuser/.dotnet/dotnet test services/patient-api/ClinicEz.Patient.Application.Tests/ClinicEz.Patient.Application.Tests.csproj --filter "FullyQualifiedName~CallStateChanged"
 
-2. Run the dedicated empirical adversarial test suite:
-   ```bash
-   ~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ChallengerM1_2RegulatoryRoutingTests"
-   ```
-   **Expected Result**: All 17 tests pass with 0 failures:
-   `Passed! - Failed: 0, Passed: 17, Skipped: 0, Total: 17, Duration: 1 s`
+# 2. Verify Frontend Bun Test Suites
+cd apps/clinic-app && bun test tests/commsBrandTheming.test.ts tests/challenger_m6_adversarial_clinic.test.ts tests/challenger_m8_adversarial_clinic.test.ts tests/challenger_m9_adversarial_clinic.test.ts tests/teleconsultWorkflow.test.ts
+cd apps/clinic-app && bun test tests/comms_issue139_resilience_and_polish.test.ts
+cd ../portal-web && bun test tests/guestTeleconsultJoin.test.tsx tests/guestTeleconsultAdversarial.test.tsx tests/planAndAllocationMetrics.test.ts tests/tenantBillingAndReceipts.test.ts
+cd ../admin-web && bun test tests/adminPlansAndEntitlements.test.ts tests/challenger_m3_plan_entitlements.test.ts
 
-3. Run the baseline document generation test suite:
-   ```bash
-   ~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~HardenedDocumentGenerationTests"
-   ```
-   **Expected Result**: All 58 tests pass with 0 failures:
-   `Passed! - Failed: 0, Passed: 58, Skipped: 0, Total: 58, Duration: 1 s`
+# 3. Verify Monorepo Typechecks & Guards
+cd ../..
+bun run typecheck:comms
+bun run typecheck:clinic
+bun run typecheck:portal
+bun run typecheck:admin
+bun run lint:tokens
+cd apps/clinic-app && bun run lint:hosts
 
-4. Inspect the test implementation:
-   - File: `services/clinic-api/ClinicEz.Clinic.Application.Tests/Adversarial/ChallengerM1_2RegulatoryRoutingTests.cs`
+# 4. Verify Live Dev Server Port 8081
+curl -I http://localhost:8081
+
+# 5. Reproduce Comms SDK Legacy Test & Token Lint Findings
+cd ../../packages/comms-sdk && bun test tests/ui/call-stage.test.ts
+bun packages/comms-sdk/scripts/check-tokens.mjs --strict
+```

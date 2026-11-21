@@ -141,6 +141,13 @@ mock.module('react-native-svg', () => ({
   Rect: createMockComponent('rect'),
   Line: createMockComponent('line'),
   default: createMockComponent('svg'),
+  Polyline: createMockComponent('polyline'),
+  Polygon: createMockComponent('polygon'),
+  Defs: createMockComponent('defs'),
+  LinearGradient: createMockComponent('lineargradient'),
+  Stop: createMockComponent('stop'),
+  G: createMockComponent('g'),
+  Text: createMockComponent('text'),
 }));
 
 mock.module('../utils/useBreakpoint', () => ({
@@ -199,20 +206,37 @@ let mockReminderResult: [any, any] = [null, null];
 let mockReminderThrows: boolean = false;
 let sendReminderCallCount = 0;
 let lastRemindedAppointmentId: string | null = null;
+let mockGetAppointmentResult: [any, any] = [null, null];
+let mockGetAppointmentThrows: boolean = false;
+let getAppointmentCallCount = 0;
+let lastGetAppointmentId: string | null = null;
 
 const { clinicService } = require('../services/clinicService');
 const origUpdateSettings = clinicService.updateSettings;
 const origSendAppointmentReminder = clinicService.sendAppointmentReminder;
+const origGetAppointment = clinicService.getAppointment;
 
-clinicService.updateSettings = async (payload: any) => [{ id: 'settings-1', ...payload }, null];
-clinicService.sendAppointmentReminder = async (id: string) => {
-  sendReminderCallCount++;
-  lastRemindedAppointmentId = id;
-  if (mockReminderThrows) {
-    throw new Error('Fatal socket network timeout');
-  }
-  return mockReminderResult;
+const installServiceMocks = () => {
+  clinicService.updateSettings = async (payload: any) => [{ id: 'settings-1', ...payload }, null];
+  clinicService.sendAppointmentReminder = async (id: string) => {
+    sendReminderCallCount++;
+    lastRemindedAppointmentId = id;
+    if (mockReminderThrows) {
+      throw new Error('Fatal socket network timeout');
+    }
+    return mockReminderResult;
+  };
+  clinicService.getAppointment = async (id: string) => {
+    getAppointmentCallCount++;
+    lastGetAppointmentId = id;
+    if (mockGetAppointmentThrows) {
+      throw new Error('Simulated getAppointment network failure');
+    }
+    return mockGetAppointmentResult;
+  };
 };
+
+installServiceMocks();
 
 // Import components under test
 const { AppointmentInspectionModal } = require('../components/calendar/AppointmentInspectionModal');
@@ -228,7 +252,7 @@ const baseAppointment: ExtendedAppointmentItem = {
   patientName: 'Elena Rostova',
   doctorId: 'doc-10',
   doctorName: 'Dr. Gregory House',
-  scheduledAt: '2026-10-25T10:30:00Z',
+  scheduledAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
   durationMinutes: 45,
   status: 'Confirmed',
   createdAt: '2026-10-20T08:00:00Z',
@@ -249,7 +273,11 @@ describe('Empirical Challenger: Milestone 5 Stress Tests', () => {
     lastNavigatedRoute = null;
     sendReminderCallCount = 0;
     lastRemindedAppointmentId = null;
+    getAppointmentCallCount = 0;
+    lastGetAppointmentId = null;
     mockReminderThrows = false;
+    mockGetAppointmentThrows = false;
+    mockGetAppointmentResult = [baseAppointment, null];
     mockReminderResult = [
       {
         id: 'appt-stress-100',
@@ -258,6 +286,8 @@ describe('Empirical Challenger: Milestone 5 Stress Tests', () => {
       },
       null,
     ];
+    installServiceMocks();
+    delete (globalThis as any).__mockClinicContext;
     for (const key of Object.keys(registeredPressables)) {
       delete registeredPressables[key];
     }
@@ -388,6 +418,8 @@ describe('Empirical Challenger: Milestone 5 Stress Tests', () => {
       await btn.onPress?.();
 
       expect(sendReminderCallCount).toBe(1);
+      expect(getAppointmentCallCount).toBe(1);
+      expect(lastGetAppointmentId).toBe('appt-stress-100');
       expect(lastErrorNotification).toBe('Patient opted out of mobile push alerts.');
       expect(lastSuccessNotification).toBeNull();
     });
@@ -407,6 +439,8 @@ describe('Empirical Challenger: Milestone 5 Stress Tests', () => {
       await btn.onPress?.();
 
       expect(sendReminderCallCount).toBe(1);
+      expect(getAppointmentCallCount).toBe(1);
+      expect(lastGetAppointmentId).toBe('appt-stress-100');
       expect(lastErrorNotification).toBe('Failed to dispatch appointment push reminder.');
     });
 
@@ -425,6 +459,8 @@ describe('Empirical Challenger: Milestone 5 Stress Tests', () => {
       await btn.onPress?.();
 
       expect(sendReminderCallCount).toBe(1);
+      expect(getAppointmentCallCount).toBe(1);
+      expect(lastGetAppointmentId).toBe('appt-stress-100');
       expect(lastErrorNotification).toBe('Failed to dispatch appointment push reminder.');
       expect(lastSuccessNotification).toBeNull();
     });
@@ -684,7 +720,10 @@ describe('Empirical Challenger: Milestone 5 Stress Tests', () => {
   afterAll(() => {
     notify.success = origSuccess;
     notify.error = origError;
+    Alert.alert = origAlert;
     clinicService.updateSettings = origUpdateSettings;
     clinicService.sendAppointmentReminder = origSendAppointmentReminder;
+    clinicService.getAppointment = origGetAppointment;
+    delete (globalThis as any).__mockClinicContext;
   });
 });

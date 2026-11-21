@@ -57,6 +57,17 @@ public class Phase3EndpointAuthorizationTests
     }
 
     [Fact]
+    public void Updating_Triage_Vitals_Needs_Triage_Write_Permission_And_Is_Never_Anonymous()
+    {
+        var action = Action(typeof(QueueController), nameof(QueueController.UpdateTriage));
+
+        Permissions(action).Should().Equal(ClinicPermissions.TriageWrite);
+        action.GetCustomAttribute<AllowAnonymousAttribute>().Should().BeNull();
+        action.GetCustomAttribute<HttpPutAttribute>().Should().NotBeNull();
+        action.GetCustomAttribute<HttpPutAttribute>()!.Template.Should().Be("{id:guid}/triage");
+    }
+
+    [Fact]
     public void Every_Mutating_Action_Of_The_New_Controllers_Is_Guarded_Or_Explicitly_Anonymous()
     {
         var unguarded = new List<string>();

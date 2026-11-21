@@ -320,12 +320,12 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, room2);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, room2);
 
         var doctor = new StaffMember
         {
@@ -362,11 +362,11 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        await context.ClinicRooms.AddAsync(room1);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        await context.Rooms.AddAsync(room1);
 
         var inactiveStaff = new StaffMember
         {
@@ -399,13 +399,13 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, room2);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, room2);
 
         var doctor = new StaffMember
         {
@@ -445,13 +445,13 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, room2);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, room2);
 
         var doctor = new StaffMember
         {
@@ -490,12 +490,12 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, room2);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, room2);
 
         var doctor = new StaffMember
         {
@@ -528,14 +528,14 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
 
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, room2);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, room2);
 
         var doctor = new StaffMember
         {
@@ -578,14 +578,14 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
 
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, room2);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, room2);
 
         var doctor = new StaffMember
         {
@@ -631,13 +631,13 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, room2);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, room2);
 
         var doctor = new StaffMember
         {
@@ -686,14 +686,14 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
-        var consultRoom = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Exam Room A", Code = "EX-A", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var txRoom = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Treatment Bay", Code = "TX-B", Type = ClinicRoomType.Treatment, DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(consultRoom, txRoom);
+        var consultRoom = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Exam Room A", Code = "EX-A", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var txRoom = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Treatment Bay", Code = "TX-B", Type = ClinicRoomType.Treatment, DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(consultRoom, txRoom);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Title = "Dr.", FirstName = "Marco", LastName = "V", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { consultRoom.Id });
@@ -767,11 +767,11 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room A", Code = "A", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        await context.ClinicRooms.AddAsync(roomA);
+        var roomA = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room A", Code = "A", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        await context.Rooms.AddAsync(roomA);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, FirstName = "Solo", LastName = "Doc", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id });
@@ -791,13 +791,13 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
 
-        var consultRoom = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Main Consult", Code = "MC", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        await context.ClinicRooms.AddAsync(consultRoom);
+        var consultRoom = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Main Consult", Code = "MC", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        await context.Rooms.AddAsync(consultRoom);
 
         // Doctor with 0 assigned rooms (floating)
         var floatDoc = new StaffMember { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Title = "Dr.", FirstName = "Float", LastName = "Physician", Role = StaffRole.Doctor, IsActive = true };
@@ -829,12 +829,12 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var room = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Original", Code = "RO", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        await context.ClinicRooms.AddAsync(room);
+        var room = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Original", Code = "RO", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        await context.Rooms.AddAsync(room);
 
         var activeItem = new QueueItem
         {
@@ -893,14 +893,14 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
 
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Station Alpha", Code = "A", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Station Beta", Code = "B", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, room2);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Station Alpha", Code = "A", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Station Beta", Code = "B", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, room2);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Title = "Dr.", FirstName = "Pair", LastName = "Wise", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { room1.Id, room2.Id });
@@ -932,13 +932,13 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, room2);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2", Code = "RM-2", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, room2);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Title = "Dr.", FirstName = "Doc", LastName = "One", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { room1.Id, room2.Id });
@@ -978,14 +978,14 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var sharedRoom = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Shared Suite", Code = "SS", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        var room3 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 3", Code = "RM-3", Type = ClinicRoomType.Consultation, DisplayOrder = 3, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, sharedRoom, room3);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1", Code = "RM-1", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var sharedRoom = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Shared Suite", Code = "SS", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        var room3 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 3", Code = "RM-3", Type = ClinicRoomType.Consultation, DisplayOrder = 3, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, sharedRoom, room3);
 
         // Dr. A covers Room 1 and Shared Suite
         var drA = new StaffMember { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Title = "Dr.", FirstName = "A", LastName = "Smith", Role = StaffRole.Doctor, IsActive = true };
@@ -1024,19 +1024,19 @@ public class MultiRoomE2ETests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         // 1. SETUP CLINIC INFRASTRUCTURE
-        var roomPedia = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1 - Pedia", Code = "PED", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var roomGeneral = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2 - General", Code = "GEN", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        var roomInternal = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 3 - Internal Med", Code = "IM", Type = ClinicRoomType.Consultation, DisplayOrder = 3, IsActive = true };
-        var roomTriage = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Triage Station", Code = "TRI", Type = ClinicRoomType.Triage, DisplayOrder = 4, IsActive = true };
-        var roomTreatment = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Treatment Room", Code = "TX", Type = ClinicRoomType.Treatment, DisplayOrder = 5, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomPedia, roomGeneral, roomInternal, roomTriage, roomTreatment);
+        var roomPedia = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 1 - Pedia", Code = "PED", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var roomGeneral = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 2 - General", Code = "GEN", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        var roomInternal = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room 3 - Internal Med", Code = "IM", Type = ClinicRoomType.Consultation, DisplayOrder = 3, IsActive = true };
+        var roomTriage = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Triage Station", Code = "TRI", Type = ClinicRoomType.Triage, DisplayOrder = 4, IsActive = true };
+        var roomTreatment = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Treatment Room", Code = "TX", Type = ClinicRoomType.Treatment, DisplayOrder = 5, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomPedia, roomGeneral, roomInternal, roomTriage, roomTreatment);
 
         // 2. SETUP STAFF ROSTER
         // Dr. Alice: dual-room coverage (Pedia + General)

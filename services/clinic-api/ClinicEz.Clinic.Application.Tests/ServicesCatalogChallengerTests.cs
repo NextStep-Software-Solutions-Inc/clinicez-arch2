@@ -92,10 +92,10 @@ public class ServicesCatalogChallengerTests
     public async Task AutoSeeding_HighChurnSequentialQueries_SeedsOnlyOnceAndRemainsConsistent()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -123,10 +123,10 @@ public class ServicesCatalogChallengerTests
     public async Task SpecialtyModeTransition_DoesNotWipeOrDuplicateExistingServices()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -156,9 +156,9 @@ public class ServicesCatalogChallengerTests
         await uow.SaveChangesAsync();
 
         var multiResult = await queryHandler.Handle(new GetClinicServicesQuery(), CancellationToken.None);
-        multiResult.Should().HaveCount(19); // 10 dental + 9 medical presets seeded idempotently without duplicates
+        multiResult.Should().HaveCount(20); // 10 dental + 10 medical presets seeded idempotently without duplicates
         multiResult.Count(x => x.Category == "Dental").Should().Be(10);
-        multiResult.Count(x => x.Category != "Dental").Should().Be(9);
+        multiResult.Count(x => x.Category != "Dental").Should().Be(10);
 
         // Step 5: Transition from Medical (existing medical items) to Dental idempotently adds all 10 dental presets
         var clinicId2 = Guid.NewGuid();
@@ -167,10 +167,10 @@ public class ServicesCatalogChallengerTests
         clinicContext2.ClinicId.Returns(clinicId2);
 
         var (context2, uow2, sieve2) = TestDbHelper.CreateTestContext(clinicContext2);
-        var repo2 = TestDbHelper.CreateRepository<ClinicServiceItem>(context2, sieve2);
-        var settingsRepo2 = TestDbHelper.CreateRepository<ClinicSettings>(context2, sieve2);
+        var repo2 = TestDbHelper.CreateRepository<ServiceItem>(context2, sieve2);
+        var settingsRepo2 = TestDbHelper.CreateRepository<FacilitySettings>(context2, sieve2);
 
-        var settings2 = new ClinicSettings
+        var settings2 = new FacilitySettings
         {
             TenantId = TenantId,
             ClinicId = clinicId2,
@@ -182,30 +182,31 @@ public class ServicesCatalogChallengerTests
 
         var handler2 = new GetClinicServicesQueryHandler(repo2, uow2, clinicContext2, settingsRepo2);
         var medResult = await handler2.Handle(new GetClinicServicesQuery(), CancellationToken.None);
-        medResult.Should().HaveCount(9);
+        medResult.Should().HaveCount(10);
+        medResult.Should().Contain(x => x.Code == "HEALTH-SCREEN" && x.Category == "Consultation");
 
         settings2.SpecialtyMode = "Dental";
         await uow2.SaveChangesAsync();
 
         var dentalResult = await handler2.Handle(new GetClinicServicesQuery(), CancellationToken.None);
-        dentalResult.Should().HaveCount(19);
+        dentalResult.Should().HaveCount(20);
         dentalResult.Count(x => x.Category == "Dental").Should().Be(10);
-        dentalResult.Count(x => x.Category != "Dental").Should().Be(9);
+        dentalResult.Count(x => x.Category != "Dental").Should().Be(10);
     }
 
     [Theory]
     [InlineData("Dental", 10, true)]
     [InlineData("dental", 10, true)]
     [InlineData("   DENTAL   ", 10, true)]
-    [InlineData("MultiSpecialty", 19, false)]
-    [InlineData("Multi-Specialty", 19, false)]
-    [InlineData("multispecialty", 19, false)]
-    [InlineData("  multi-specialty  ", 19, false)]
-    [InlineData("Medical", 9, false)]
-    [InlineData("medical", 9, false)]
-    [InlineData("", 9, false)]
-    [InlineData(null, 9, false)]
-    [InlineData("ArbitraryCardiology", 9, false)]
+    [InlineData("MultiSpecialty", 20, false)]
+    [InlineData("Multi-Specialty", 20, false)]
+    [InlineData("multispecialty", 20, false)]
+    [InlineData("  multi-specialty  ", 20, false)]
+    [InlineData("Medical", 10, false)]
+    [InlineData("medical", 10, false)]
+    [InlineData("", 10, false)]
+    [InlineData(null, 10, false)]
+    [InlineData("ArbitraryCardiology", 10, false)]
     public async Task AutoSeeding_SpecialtyModeParsing_HandlesAllVariationsSafely(
         string? specialtyMode,
         int expectedCount,
@@ -217,12 +218,12 @@ public class ServicesCatalogChallengerTests
         contextMock.TenantId.Returns("tenant-variation-test");
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(contextMock);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         if (specialtyMode != null)
         {
-            await settingsRepo.AddAsync(new ClinicSettings
+            await settingsRepo.AddAsync(new FacilitySettings
             {
                 TenantId = "tenant-variation-test",
                 ClinicId = testClinicId,
@@ -240,10 +241,10 @@ public class ServicesCatalogChallengerTests
         {
             result.All(x => x.Category == "Dental").Should().BeTrue();
         }
-        else if (expectedCount == 19)
+        else if (expectedCount == 20)
         {
             result.Count(x => x.Category == "Dental").Should().Be(10);
-            result.Count(x => x.Category != "Dental").Should().Be(9);
+            result.Count(x => x.Category != "Dental").Should().Be(10);
         }
         else
         {
@@ -259,7 +260,7 @@ public class ServicesCatalogChallengerTests
     public async Task SeedDentalServices_RepeatedFiftyTimes_RemainsStrictlyIdempotent()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContext);
 
         for (int i = 0; i < 50; i++)
@@ -277,11 +278,11 @@ public class ServicesCatalogChallengerTests
     public async Task SeedDentalServices_PreservesMultipleCustomPricesAndDescriptions()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContext);
 
         // Pre-create 3 dental services with customized prices, names, and case-varied codes
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -292,7 +293,7 @@ public class ServicesCatalogChallengerTests
             Description = "VIP specialized 60-minute examination",
             IsActive = true
         });
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -303,7 +304,7 @@ public class ServicesCatalogChallengerTests
             Description = "Dual-stage ultrasonic subgingival cleaning",
             IsActive = true
         });
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -356,9 +357,9 @@ public class ServicesCatalogChallengerTests
     public async Task DirectoryPublishing_FiltersOutInactiveDentalServices_IncludesOnlyActive()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         // Active doctor required for publishing readiness
@@ -378,7 +379,7 @@ public class ServicesCatalogChallengerTests
         foreach (var code in activeCodes)
         {
             var def = DentalCatalogDefaults.Defaults.First(d => d.Code == code);
-            await servicesRepo.AddAsync(new ClinicServiceItem
+            await servicesRepo.AddAsync(new ServiceItem
             {
                 TenantId = TenantId,
                 ClinicId = _clinicId,
@@ -397,7 +398,7 @@ public class ServicesCatalogChallengerTests
         {
             var def = DentalCatalogDefaults.Defaults.First(d => d.Code == code);
             inactiveNames.Add(def.Name);
-            await servicesRepo.AddAsync(new ClinicServiceItem
+            await servicesRepo.AddAsync(new ServiceItem
             {
                 TenantId = TenantId,
                 ClinicId = _clinicId,
@@ -410,7 +411,7 @@ public class ServicesCatalogChallengerTests
         }
 
         // Add 2 active general medical services and 1 inactive medical service
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -420,7 +421,7 @@ public class ServicesCatalogChallengerTests
             StandardPrice = 500m,
             IsActive = true
         });
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -430,7 +431,7 @@ public class ServicesCatalogChallengerTests
             StandardPrice = 350m,
             IsActive = true
         });
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -441,13 +442,16 @@ public class ServicesCatalogChallengerTests
             IsActive = false
         });
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
             ClinicName = "Active Directory Dental Care",
             OperatingHours = "Mon-Sat 8:00 AM - 6:00 PM",
+            LetterheadDohLto = "DOH-LTO-2026-040",
             SpecialtyMode = "MultiSpecialty",
+            IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings);

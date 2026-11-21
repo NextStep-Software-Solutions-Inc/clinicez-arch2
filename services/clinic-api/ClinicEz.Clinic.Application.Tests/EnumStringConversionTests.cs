@@ -64,7 +64,7 @@ public class EnumStringConversionTests
         scopes.GetProviderClrType().Should().Be(typeof(string));
         scopes.GetMaxLength().Should().Be(200);
 
-        var grantScopes = context.Model.FindEntityType(typeof(ClinicPatient))!.FindProperty(nameof(ClinicPatient.ShareGrantScopes))!;
+        var grantScopes = context.Model.FindEntityType(typeof(Patient))!.FindProperty(nameof(Patient.ShareGrantScopes))!;
         grantScopes.GetProviderClrType().Should().Be(typeof(string));
         grantScopes.GetMaxLength().Should().Be(200);
     }

@@ -1,0 +1,69 @@
+# docker-compose.yml
+# Deploy compose for Media Broker on Server (Dev environment).
+#
+# All secrets are injected via .env written at deploy time by GitHub Actions.
+# No host ports exposed; routed via npm-default (NPM) and connected to data-network.
+
+name: media-broker
+
+services:
+  media-broker:
+    image: ${IMAGE_NAME:-media-broker}:${IMAGE_TAG:-dev}
+    container_name: ${CONTAINER_NAME:-media-broker}
+    labels:
+      - "project=clinicez"
+      - "environment=dev"
+    expose:
+      - "8080"
+    networks:
+      - data-network
+      - npm-default
+    # Proportional Resource Allocation (Production VPS 1 vCPU / 2GB RAM Standard)
+    # Work-conserving: active services burst to 100% of CPU and available RAM; zero idle resources wasted.
+    cpu_shares: ${MEDIA_CPU_SHARES:-768}
+    deploy:
+      resources:
+        reservations:
+          cpus: '${MEDIA_CPUS_RESERVATION:-0.10}'
+          memory: ${MEDIA_MEM_RESERVATION:-90M}
+        limits:
+          cpus: '${MEDIA_CPUS_LIMIT:-0.95}'
+          memory: ${MEDIA_MEM_LIMIT:-280M}
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      # Low-memory & 1 vCPU tuning for Production VPS (130.94.50.27)
+      - DOTNET_GCHeapHardLimitPercent=75
+      - DOTNET_gcServer=0
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING:?CONNECTION_STRING must be set}
+      - DbSchema=${DB_SCHEMA:-media}
+      - MediaBroker__AutoMigrate=${MEDIA_BROKER_AUTO_MIGRATE:-true}
+      - MediaBroker__AutoProvisionDefaultEntitlement=${MEDIA_BROKER_AUTO_PROVISION:-true}
+      - MediaMetering__AutoProvisionDefaultEntitlement=${MEDIA_BROKER_AUTO_PROVISION:-true}
+      # Interop hub
+      - Messaging__Transport=Hub
+      - Messaging__Service=media
+      - Messaging__HubUrl=${HUB_URL:?HUB_URL must be set}
+      - Messaging__ClientId=${MEDIA_HUB_CLIENT_ID:-media-broker}
+      - Messaging__ClientSecret=${MEDIA_HUB_CLIENT_SECRET:?MEDIA_HUB_CLIENT_SECRET must be set}
+      - Messaging__SigningKey=${MEDIA_HUB_SIGNING_KEY:?MEDIA_HUB_SIGNING_KEY must be set}
+      # LiveKit Credentials
+      - LIVEKIT_URL=${LIVEKIT_URL:?LIVEKIT_URL must be set}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:?LIVEKIT_API_KEY must be set}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET must be set}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && head -n1 <&3 | grep -q \" 200 \"'"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+networks:
+  data-network:
+    external: true
+    name: ${DATA_NETWORK:-data-network}
+  npm-default:
+    external: true
+    name: ${NPM_NETWORK:-npm-default}

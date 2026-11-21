@@ -2,9 +2,11 @@ using System.Security.Claims;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interfaces;
 using ClinicEz.Shared.Security.ClaimTokens;
+using ClinicEz.Shared.Security;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
+using ClinicEz.Shared.Persistence;
 using ClinicEz.Patient.Application.Features.Appointments.Interop;
 using ClinicEz.Patient.Application.Features.Documents.Interop;
 using ClinicEz.Patient.Application.Features.Sharing;
@@ -26,11 +28,16 @@ using ClinicEz.Patient.Infrastructure.Persistence;
 using ClinicEz.Patient.Infrastructure.Persistence.Repositories;
 using ClinicEz.Patient.Infrastructure.Services;
 using ClinicEz.Patient.Infrastructure.Services.Auth;
+using ClinicEz.Patient.Infrastructure.Services.Encryption;
 using ClinicEz.Patient.Infrastructure.Services.Jobs;
 using ClinicEz.Patient.Infrastructure.Services.Jobs.Processors;
 using ClinicEz.Patient.Infrastructure.Services.Storage;
 using ClinicEz.Patient.Infrastructure.Services.Notifications;
+using ClinicEz.Patient.Infrastructure.Services.Home;
+using ClinicEz.Patient.Infrastructure.Services.Search;
 using ClinicEz.Patient.Infrastructure.Interop;
+using ClinicEz.Patient.Infrastructure.Locations;
+using ClinicEz.Shared.Search;
 
 namespace ClinicEz.Patient.Infrastructure;
 
@@ -89,22 +96,29 @@ public static class DependencyInjection
         services.AddScoped<IClinicMembershipRepository, ClinicMembershipRepository>();
         services.AddScoped<IBookingDraftRepository, BookingDraftRepository>();
         services.AddScoped<INotificationPreferencesRepository, NotificationPreferencesRepository>();
-        services.AddScoped<IPatientStorageProfileRepository, PatientStorageProfileRepository>();
-        services.AddScoped<IFileFolderRepository, FileFolderRepository>();
         services.AddScoped<IFileRecordRepository, FileRecordRepository>();
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IPatientAccessRepository, PatientAccessRepository>();
         services.AddScoped<IShareCodeRepository, ShareCodeRepository>();
         services.AddScoped<IPatientDocumentRepository, PatientDocumentRepository>();
+        services.AddScoped<IPatientCommunicationsRepository, PatientCommunicationsRepository>();
 
         // ── Application Services ──────────────────────────────────────────────
         services.AddSingleton<IStorageService, R2StorageService>();
+        services.AddSingleton(sp => PatientEncryptionKeyRing.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddScoped<IPatientEncryptionService, PatientEncryptionService>();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IBackgroundJobEnqueuer, HangfireJobEnqueuer>();
         services.AddSingleton<IPushNotificationService, FirebasePushNotificationService>();
         services.AddClaimTokenService();
+        services.AddPersistentDataProtection<ApplicationDbContext>(configuration, env, "ClinicEz.Patient");
+        services.AddScoped<ClinicEz.Patient.Application.Common.Interfaces.IImageConversionService, ClinicEz.Patient.Infrastructure.Services.ImageConversionService>();
+        services.AddSingleton<IPsgcLocationService, PsgcLocationService>();
+        services.AddScoped<IPatientHomeService, PatientHomeService>();
+        services.AddScoped<IDirectoryCatalogSearchService, DirectoryCatalogSearchService>();
+        services.AddPluggableSearch<DirectoryCatalogSearchService>();
 
         // ── Sync entity processors ────────────────────────────────────────────
         // Core
@@ -137,13 +151,14 @@ public static class DependencyInjection
         services.AddScoped<ISyncEntityProcessor, PatientDentalVisionSyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, PatientNcdQuestionnaireSyncProcessor>();
         // Files
-        services.AddScoped<ISyncEntityProcessor, FileFolderSyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, FileRecordSyncProcessor>();
 
         // ── Sync processing engine ───────────────────────────────────────────
         services.AddScoped<ISyncPayloadProcessor, SyncPayloadProcessor>();
         services.AddScoped<ISyncPayloadJob, SyncPayloadJobProcessor>();
-        services.AddScoped<IFileUploadReconciliationJob, FileUploadReconciliationJob>();
+
+        // ── Delivery Retention Sweeper ─────────────────────────────────────────
+        services.AddHostedService<ClinicEz.Patient.Infrastructure.BackgroundServices.DeliveryRetentionSweeper>();
 
         // ── Clerk JWT Bearer Authentication ───────────────────────────────────
         services.AddClerkAuthentication(configuration);
@@ -153,6 +168,7 @@ public static class DependencyInjection
         {
             using var scope = services.BuildServiceProvider().CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            dbContext.EnsureDevelopmentDatabaseCreated(env);
             dbContext.Database.Migrate();
             if (env.IsDevelopment())
             {
@@ -172,6 +188,8 @@ public static class DependencyInjection
         IConfiguration configuration) =>
         services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
             .Handle<FacilityCreatedEvent, FacilityDirectoryUpdatedInteropHandler>(InteropTypes.FacilityDirectoryUpdated)
+            .Handle<PractitionerIdentityUpdatedPayload, PractitionerIdentityUpdatedInteropHandler>(InteropTypes.PractitionerIdentityUpdated)
+            .Handle<PractitionerVerificationRevokedPayload, PractitionerVerificationRevokedInteropHandler>(InteropTypes.PractitionerVerificationRevoked)
             .Handle<ClinicRecordVerifiedEvent, ClinicRecordVerifiedInteropHandler>(InteropTypes.ClinicRecordVerified)
             .Handle<ClinicAppointmentUpdatedEvent, ClinicAppointmentUpdatedInteropHandler>(InteropTypes.ClinicAppointmentUpdated)
             .Handle<PatientShareRedeemPayload, PatientShareRedeemInteropHandler>(InteropTypes.PatientShareRedeem)
@@ -181,7 +199,12 @@ public static class DependencyInjection
             .Handle<LabResultReviewedPayload, LabResultReviewedInteropHandler>(InteropTypes.LabResultReviewed)
             .Handle<ClinicalImmunizationAdministeredPayload, ClinicalImmunizationAdministeredInteropHandler>(InteropTypes.ClinicalImmunizationAdministered)
             .Handle<PatientQueueAlertPayload, PatientQueueAlertInteropHandler>(InteropTypes.PatientQueueAlert)
-            .Handle<PatientAppointmentAlertPayload, PatientAppointmentAlertInteropHandler>(InteropTypes.PatientAppointmentAlert));
+            .Handle<PatientAppointmentAlertPayload, PatientAppointmentAlertInteropHandler>(InteropTypes.PatientAppointmentAlert)
+            .Handle<CommsMessageReplicatePayload, CommsMessageReplicateInteropHandler>(InteropTypes.CommsMessageReplicate)
+            .Handle<CommsMessageReceivedPayload, CommsMessageReceivedInteropHandler>(InteropTypes.CommsMessageReceived)
+            .Handle<CommsThreadStateChangedPayload, CommsThreadStateChangedInteropHandler>(InteropTypes.CommsThreadStateChanged)
+            .Handle<CommsEligibilitySyncedPayload, CommsEligibilitySyncedInteropHandler>(InteropTypes.CommsEligibilitySynced)
+            .Handle<CommsCallStateChangedPayload, CommsCallStateChangedInteropHandler>(InteropTypes.CommsCallStateChanged));
 
     public static IServiceCollection AddClerkAuthentication(
         this IServiceCollection services,

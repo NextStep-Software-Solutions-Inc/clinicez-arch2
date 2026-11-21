@@ -44,10 +44,9 @@ public sealed class PortalTenantClientTests
             accreditationNumber = "H91001234",
             pmccNumber = "Z15445",
             softwareCertificateId = "KON-DUMMYCERTS-Z15445",
-            username = "portal_user",
-            password = "portal_password",
+            secretKey = "portal_secret_key",
             cipherKey = "CLINICEZ-YAKAP-KEY-32BYTES-LONG!",
-            konsultaEndpoint = "https://staging.philhealth.gov.ph/KONSULTA/SOAP",
+            baseUrl = "https://staging.philhealth.gov.ph",
             isActive = true
         });
 
@@ -74,13 +73,13 @@ public sealed class PortalTenantClientTests
         result1!.TenantId.Should().Be(tenantId);
         result1.PmccNumber.Should().Be("Z15445");
         result1.AccreditationNumber.Should().Be("H91001234");
+        result1.BaseUrl.Should().Be("https://staging.philhealth.gov.ph");
         result1.IsActive.Should().BeTrue();
         httpCallCount.Should().Be(1);
 
         // Verify credentials were encrypted via DataProtection
         var protector = dataProtection.CreateProtector("ClinicEz.PhilHealthProxy.TenantCredentials");
-        protector.Unprotect(result1.EncryptedUsername).Should().Be("portal_user");
-        protector.Unprotect(result1.EncryptedPassword).Should().Be("portal_password");
+        protector.Unprotect(result1.EncryptedSecretKey).Should().Be("portal_secret_key");
         protector.Unprotect(result1.EncryptedCipherKey).Should().Be("CLINICEZ-YAKAP-KEY-32BYTES-LONG!");
 
         // Act 2: Second call within 1 hour (cache hit)
@@ -93,7 +92,7 @@ public sealed class PortalTenantClientTests
     }
 
     [Fact]
-    public async Task GetByBranchIdAsync_CacheMiss_FetchesFromPortal_AndCachesUnderBothBranchAndTenant()
+    public async Task GetByBranchIdAsync_CacheMiss_FetchesFromPortal_AndCachesUnderBranchKey_WithoutClobberingTenant()
     {
         // Arrange
         var tenantId = Guid.NewGuid();
@@ -108,10 +107,9 @@ public sealed class PortalTenantClientTests
             accreditationNumber = "H92005678",
             pmccNumber = "Z1002",
             softwareCertificateId = "KON-UPTOWN-Z1002",
-            username = "uptown_user",
-            password = "uptown_password",
+            secretKey = "uptown_secret",
             cipherKey = "UPTOWN-CIPHER-KEY-32BYTES-LONG!",
-            konsultaEndpoint = "https://staging.philhealth.gov.ph/KONSULTA/SOAP",
+            baseUrl = "https://staging.philhealth.gov.ph",
             isActive = true
         });
 
@@ -138,11 +136,17 @@ public sealed class PortalTenantClientTests
         branchResult!.PmccNumber.Should().Be("Z1002");
         httpCallCount.Should().Be(1);
 
-        // Act 2: Fetch by TenantId (should hit the cache populated during branch resolution!)
-        var tenantResult = await client.GetByTenantIdAsync(tenantId);
-        tenantResult.Should().NotBeNull();
-        tenantResult!.PmccNumber.Should().Be("Z1002");
+        // Act 2: Second call by BranchId hits cache
+        var branchResult2 = await client.GetByBranchIdAsync(branchId);
+        branchResult2.Should().NotBeNull();
+        branchResult2!.PmccNumber.Should().Be("Z1002");
         httpCallCount.Should().Be(1); // No second HTTP call!
+
+        // Act 3: Invalidate cache and call again (cache miss)
+        client.InvalidateCache(tenantId, branchId);
+        var branchResult3 = await client.GetByBranchIdAsync(branchId);
+        branchResult3.Should().NotBeNull();
+        httpCallCount.Should().Be(2); // New HTTP call after invalidation!
     }
 
     [Fact]

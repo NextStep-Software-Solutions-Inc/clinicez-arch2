@@ -37,6 +37,17 @@ public sealed class PatientSeedResult
     public int AllergiesCreated { get; set; }
     public int ProblemsCreated { get; set; }
     public int ImmunizationsCreated { get; set; }
+    public int AddressesCreated { get; set; }
+    public int GuardiansCreated { get; set; }
+    public int IdentityVerificationsCreated { get; set; }
+    public int HospitalizationHistoriesCreated { get; set; }
+    public int InjuryHistoriesCreated { get; set; }
+    public int HomeMedicationsCreated { get; set; }
+    public int SexualHistoriesCreated { get; set; }
+    public int ReviewOfSystemsItemsCreated { get; set; }
+    public int SpecificFormsCreated { get; set; }
+    public int BpMonitoringLogsCreated { get; set; }
+    public int YakapSubmissionsCreated { get; set; }
     public TimeSpan Elapsed { get; set; }
     public List<string> SamplePatientCodes { get; set; } = new();
     public string TenantId { get; set; } = string.Empty;
@@ -494,12 +505,12 @@ public static class DevPatientSeeder
         // 1. Resolve target Clinic and Tenant strictly for this request
         Guid clinicId;
         string tenantId;
-        ClinicSettings? existingSettings;
+        FacilitySettings? existingSettings;
 
         if (options.ClinicId.HasValue && options.ClinicId.Value != Guid.Empty)
         {
             clinicId = options.ClinicId.Value;
-            existingSettings = await dbContext.ClinicSettings.IgnoreQueryFilters()
+            existingSettings = await dbContext.Settings.IgnoreQueryFilters()
                 .FirstOrDefaultAsync(s => s.ClinicId == clinicId, ct);
             tenantId = options.TenantId 
                 ?? existingSettings?.TenantId 
@@ -507,14 +518,14 @@ public static class DevPatientSeeder
         }
         else
         {
-            existingSettings = await dbContext.ClinicSettings.IgnoreQueryFilters().FirstOrDefaultAsync(ct);
+            existingSettings = await dbContext.Settings.IgnoreQueryFilters().FirstOrDefaultAsync(ct);
             clinicId = existingSettings?.ClinicId ?? Guid.Parse("11111111-1111-1111-1111-111111111111");
             tenantId = options.TenantId ?? existingSettings?.TenantId ?? "tenant_default";
         }
 
         if (existingSettings == null)
         {
-            existingSettings = new ClinicSettings
+            existingSettings = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -531,7 +542,7 @@ public static class DevPatientSeeder
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "System:DevPatientSeeder"
             };
-            dbContext.ClinicSettings.Add(existingSettings);
+            dbContext.Settings.Add(existingSettings);
             await dbContext.SaveChangesAsync(ct);
             logger?.LogInformation("[DevPatientSeeder] Created ClinicSettings for Clinic: {ClinicId} (Tenant: {TenantId})", clinicId, tenantId);
         }
@@ -628,18 +639,39 @@ public static class DevPatientSeeder
         while (totalCreated < targetCount)
         {
             var currentBatchSize = Math.Min(batchSize, targetCount - totalCreated);
-            var batchPatients = new List<ClinicPatient>(currentBatchSize);
-            var batchPastMedHist = new List<PatientPastMedicalHistory>();
+            var batchPatients = new List<Patient>(currentBatchSize);
+            var batchPhilHealthMemberships = new List<PatientPhilHealthMembership>();
+            var batchYakapEnlistments = new List<PatientYakapEnlistment>();
+            var batchAlerts = new List<PatientAlert>();
+            var batchVitals = new List<PatientVitals>();
+            var batchPastMedHist = new List<PatientMedicalHistory>();
             var batchFamilyHist = new List<PatientFamilyHistory>();
             var batchSocialHist = new List<PatientSocialHistory>();
             var batchSurgHist = new List<PatientSurgicalHistory>();
             var batchReprodHist = new List<PatientReproductiveHistory>();
-            var batchPhysExam = new List<PatientPhysicalExamProfile>();
+            var batchPhysExam = new List<PatientPhysicalExam>();
+            var batchPhysExamFindings = new List<PatientPhysicalExamFinding>();
             var batchAllergies = new List<PatientAllergy>();
-            var batchProblems = new List<PatientProblem>();
+            var batchProblems = new List<PatientMedicalHistory>();
             var batchImmunizations = new List<PatientImmunization>();
             var batchEncounters = new List<ConsultationEncounter>();
             var batchMedCerts = new List<MedicalCertificate>();
+            var batchAddresses = new List<PatientAddress>();
+            var batchGuardians = new List<PatientGuardian>();
+            var batchIdentityVerifs = new List<PatientIdentityVerification>();
+            var batchHospitalizations = new List<PatientHospitalizationHistory>();
+            var batchInjuries = new List<PatientInjuryHistory>();
+            var batchHomeMeds = new List<PatientHomeMedication>();
+            var batchSexualHistories = new List<PatientSexualHistory>();
+            var batchBpLogs = new List<PatientBpMonitoringLog>();
+            var batchBpDays = new List<PatientBpMonitoringDay>();
+            var batchRosItems = new List<EncounterReviewOfSystemsItem>();
+            var batchObGyneExams = new List<EncounterObGyneExam>();
+            var batchPediatricMilestones = new List<EncounterPediatricMilestone>();
+            var batchPediatricDangerSigns = new List<EncounterPediatricDangerSign>();
+            var batchAdolescentAssessments = new List<EncounterAdolescentAssessment>();
+            var batchHeadsssAssessments = new List<EncounterHeadsssDomainAssessment>();
+            var batchYakapSubmissions = new List<YakapSubmission>();
 
             for (var i = 0; i < currentBatchSize; i++)
             {
@@ -724,9 +756,124 @@ public static class DevPatientSeeder
                     ? MaleFirstNames[rng.Next(MaleFirstNames.Length)]
                     : FemaleFirstNames[rng.Next(FemaleFirstNames.Length)];
                 var emergencyLastName = LastNames[rng.Next(LastNames.Length)];
-
                 var patientCode = $"{prefix}{currentSeq:D5}";
-                var patient = new ClinicPatient
+                var emergencyPhone = $"{mobilePrefixes[rng.Next(mobilePrefixes.Length)]}-{rng.Next(100, 999)}-{rng.Next(1000, 9999)}";
+                var emergencyRel = civilStatus == "Married" ? "Spouse" : (ageYears < 25 ? "Mother" : "Sibling");
+                var emergencyName = $"{emergencyLastName}, {emergencyFirstName}";
+
+                var classification = ageYears < 22 ? "Student" : (ageYears >= 60 ? "Retiree" : "Employee");
+                var customFields = new Dictionary<string, object?>
+                {
+                    { "classification", classification },
+                    { "category", classification },
+                    { "workplace", loc.City },
+                    { "seeded_batch", "scale_test_1000" },
+                    { "primary_address_line", loc.Street },
+                    { "primary_barangay", loc.Barangay },
+                    { "primary_city", loc.City },
+                    { "primary_province", loc.Province },
+                    { "emergency_contact_name", emergencyName },
+                    { "emergency_contact_phone", emergencyPhone },
+                    { "emergency_contact_relationship", emergencyRel }
+                };
+                if (classification == "Student")
+                {
+                    var studentColleges = new[]
+                    {
+                        ("College of Information Technology and Computing", "BS Information Technology"),
+                        ("College of Engineering and Architecture", "BS Civil Engineering"),
+                        ("College of Science and Mathematics", "BS Applied Mathematics"),
+                        ("College of Technology", "Bachelor of Engineering Technology"),
+                        ("College of Science and Technology Education", "BSEd Major in Sciences")
+                    };
+                    var studentYearLevels = new[] { "1st Year", "2nd Year", "3rd Year", "4th Year" };
+                    var (col, prog) = studentColleges[rng.Next(studentColleges.Length)];
+
+                    customFields["affiliation"] = "Student";
+                    customFields["student_id"] = $"STU-{now.Year}-{rng.Next(1000, 9999)}";
+                    customFields["college"] = col;
+                    customFields["program"] = prog;
+                    customFields["year_level"] = studentYearLevels[rng.Next(studentYearLevels.Length)];
+                }
+                else if (classification == "Employee")
+                {
+                    var employeeDepartments = new[] { "Office of Student Affairs", "HRMO", "College of Engineering", "Health Services Center" };
+                    customFields["affiliation"] = "Employee/Faculty";
+                    customFields["employee_id"] = $"EMP-{rng.Next(1000, 9999)}";
+                    customFields["department"] = employeeDepartments[rng.Next(employeeDepartments.Length)];
+                }
+                else
+                {
+                    customFields["affiliation"] = "Guest";
+                }
+
+                var patientCreatedAt = now.AddDays(-rng.Next(30, 720));
+
+                // Seed active PhilHealth YAKAP enlistment when PhilHealthNumber is present
+                if (!string.IsNullOrWhiteSpace(philHealthNo))
+                {
+                    var currentYear = now.Year;
+                    var enlistedDate = DateOnly.FromDateTime(now.AddMonths(-rng.Next(1, 6)));
+                    var validUntilDate = new DateOnly(currentYear, 12, 31);
+                    var seqNum = rng.Next(1, 99999);
+                    const string accre9 = "H00000921";
+                    var caseNo = $"C{accre9}{enlistedDate:yyyyMMdd}{seqNum:D5}";
+                    var profilingTransNo = $"P{accre9}{enlistedDate:yyyyMMdd}{seqNum:D5}";
+
+                    batchPhilHealthMemberships.Add(new PatientPhilHealthMembership
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        MemberType = PhilHealthMemberType.MM,
+                        MemberPin = philHealthNo,
+                        DefaultWalkInAtc = "ATC01",
+                        CreatedAt = patientCreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+
+                    batchYakapEnlistments.Add(new PatientYakapEnlistment
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        EffectiveYear = currentYear,
+                        Status = YakapEnlistmentStatus.Active,
+                        Source = YakapEnlistmentSource.AssistedIntake,
+                        PackageType = YakapPackageType.YakapPrimaryCare,
+                        EnlistmentDate = enlistedDate,
+                        ValidUntil = validUntilDate,
+                        CaseNo = caseNo,
+                        ProfilingTransNo = profilingTransNo,
+                        CreatedAt = patientCreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                var bloodTypeEnum = bloodType switch
+                {
+                    "O+" => BloodType.OPositive,
+                    "A+" => BloodType.APositive,
+                    "B+" => BloodType.BPositive,
+                    "AB+" => BloodType.ABPositive,
+                    "O-" => BloodType.ONegative,
+                    "A-" => BloodType.ANegative,
+                    "B-" => BloodType.BNegative,
+                    "AB-" => BloodType.ABNegative,
+                    _ => BloodType.Unknown
+                };
+
+                var civilStatusEnum = civilStatus switch
+                {
+                    "Married" => CivilStatus.Married,
+                    "Widowed" => CivilStatus.Widowed,
+                    "Separated" => CivilStatus.Separated,
+                    _ => CivilStatus.Single
+                };
+
+                var patient = new Patient
                 {
                     Id = patientId,
                     TenantId = tenantId,
@@ -737,34 +884,17 @@ public static class DevPatientSeeder
                     MiddleName = middleName,
                     Suffix = suffix,
                     DateOfBirth = dateOfBirth,
-                    Gender = isFemale ? "Female" : "Male",
-                    CivilStatus = civilStatus,
+                    Sex = isFemale ? BiologicalSex.Female : BiologicalSex.Male,
+                    CivilStatus = civilStatusEnum,
                     ContactNumber = contactNumber,
                     Email = email,
-                    AddressLine = loc.Street,
-                    Barangay = loc.Barangay,
-                    City = loc.City,
-                    Province = loc.Province,
-                    EmergencyContactName = $"{emergencyLastName}, {emergencyFirstName}",
-                    EmergencyContactPhone = $"{mobilePrefixes[rng.Next(mobilePrefixes.Length)]}-{rng.Next(100, 999)}-{rng.Next(1000, 9999)}",
-                    EmergencyContactRelationship = civilStatus == "Married" ? "Spouse" : (ageYears < 25 ? "Mother" : "Sibling"),
                     PhilHealthNumber = philHealthNo,
                     SeniorCitizenId = seniorCitizenId,
                     PwdId = pwdId,
-                    BloodType = bloodType,
-                    Allergies = allergiesSummary,
-                    ChronicConditions = chronicConditions,
-                    Alerts = alerts,
-                    VerificationStatus = rng.NextDouble() < 0.92 ? "Verified" : "PendingVerification",
-                    PersonalMedicalHistoryNotes = chronicConditions != null ? $"Patient maintained on oral therapy. Baseline profile reviewed." : null,
-                    FamilyMedicalHistoryNotes = "Strong familial predisposition to cardiovascular/metabolic conditions in 1st degree relatives.",
-                    CustomFields = new Dictionary<string, object?>
-                    {
-                        { "category", ageYears < 22 ? "Student" : (ageYears >= 60 ? "Retiree" : "Employee") },
-                        { "workplace", loc.City },
-                        { "seeded_batch", "scale_test_1000" }
-                    },
-                    CreatedAt = now.AddDays(-rng.Next(30, 720)),
+                    BloodType = bloodTypeEnum,
+                    VerificationStatus = rng.NextDouble() < 0.92 ? PatientVerificationStatus.Verified : PatientVerificationStatus.PendingVerification,
+                    CustomFields = customFields,
+                    CreatedAt = patientCreatedAt,
                     CreatedBy = "System:DevPatientSeeder",
                     UpdatedAt = now,
                     UpdatedBy = "System:DevPatientSeeder"
@@ -776,12 +906,198 @@ public static class DevPatientSeeder
                     result.SamplePatientCodes.Add(patientCode);
                 }
 
+                // Seed 1NF structured address with 10-digit PSGC
+                batchAddresses.Add(new PatientAddress
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ClinicId = clinicId,
+                    PatientId = patientId,
+                    AddressType = PatientAddressType.Permanent,
+                    RegionPsgc = "1300000000",
+                    ProvincePsgc = "1374000000",
+                    CityMunicipalityPsgc = "1374040000",
+                    BarangayPsgc = "1374040001",
+                    StreetAddress = loc.Street,
+                    ZipCode = "1100",
+                    CreatedAt = patientCreatedAt,
+                    CreatedBy = "System:DevPatientSeeder"
+                });
+
+                if (ageYears < 18 || rng.NextDouble() < 0.20)
+                {
+                    batchGuardians.Add(new PatientGuardian
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        FirstName = emergencyFirstName,
+                        LastName = emergencyLastName,
+                        RelationshipCode = ageYears < 18 ? "MOTHER" : "SPOUSE",
+                        ContactNumber = emergencyPhone,
+                        CreatedAt = patientCreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                batchIdentityVerifs.Add(new PatientIdentityVerification
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ClinicId = clinicId,
+                    PatientId = patientId,
+                    VerificationDate = DateOnly.FromDateTime(patientCreatedAt),
+                    Mode = YakapVerificationMode.VALID_ID,
+                    ValidIdTypeCode = "01",
+                    ValidIdNumber = seniorCitizenId ?? pwdId ?? philHealthNo,
+                    CreatedAt = patientCreatedAt,
+                    CreatedBy = "System:DevPatientSeeder"
+                });
+
+                if (rng.NextDouble() < 0.15)
+                {
+                    batchHospitalizations.Add(new PatientHospitalizationHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        AdmissionDate = DateOnly.FromDateTime(now.AddYears(-rng.Next(1, 5))),
+                        DischargeDate = DateOnly.FromDateTime(now.AddYears(-rng.Next(1, 5)).AddDays(3)),
+                        ReasonForAdmission = "Acute Gastroenteritis with moderate dehydration",
+                        HospitalFacilityName = "Quezon City General Hospital",
+                        CreatedAt = patientCreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                if (rng.NextDouble() < 0.10)
+                {
+                    batchInjuries.Add(new PatientInjuryHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        InjuryDate = DateOnly.FromDateTime(now.AddYears(-rng.Next(1, 4))),
+                        InjuryDescription = "Closed fracture of radius from accidental fall",
+                        CreatedAt = patientCreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                if (chronicList.Count > 0)
+                {
+                    batchHomeMeds.Add(new PatientHomeMedication
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        GenericDrugName = "Amlodipine",
+                        DoseStrength = "5mg tablet",
+                        Frequency = "Once daily in the morning",
+                        CreatedAt = patientCreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                if (ageYears >= 15)
+                {
+                    batchSexualHistories.Add(new PatientSexualHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        IsSexuallyActive = civilStatus == "Married" || rng.NextDouble() < 0.5,
+                        EverHadSex = true,
+                        AgeAtFirstSexualContact = 18,
+                        CreatedAt = patientCreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                if (chronicList.Contains("Hypertension Stage 2"))
+                {
+                    var bpLogId = Guid.NewGuid();
+                    batchBpLogs.Add(new PatientBpMonitoringLog
+                    {
+                        Id = bpLogId,
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        StartDate = DateOnly.FromDateTime(now.AddDays(-7)),
+                        EndDate = DateOnly.FromDateTime(now),
+                        CreatedAt = patientCreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+
+                    for (var d = 1; d <= 7; d++)
+                    {
+                        batchBpDays.Add(new PatientBpMonitoringDay
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ClinicId = clinicId,
+                            BpMonitoringLogId = bpLogId,
+                            DayNumber = d,
+                            MeasurementDate = DateOnly.FromDateTime(now.AddDays(-7 + d)),
+                            AmSystolic = 130 + rng.Next(-5, 10),
+                            AmDiastolic = 85 + rng.Next(-5, 5),
+                            PmSystolic = 135 + rng.Next(-5, 10),
+                            PmDiastolic = 88 + rng.Next(-5, 5),
+                            CreatedAt = patientCreatedAt,
+                            CreatedBy = "System:DevPatientSeeder"
+                        });
+                    }
+                }
+
+                if (hasAlert)
+                {
+                    batchAlerts.Add(new PatientAlert
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        Category = PatientAlertCategory.ClinicalSafety,
+                        Severity = PatientAlertSeverity.Warning,
+                        Status = PatientAlertStatus.Active,
+                        Title = alerts ?? "Clinical Alert",
+                        CreatedAt = patientCreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                batchVitals.Add(new PatientVitals
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ClinicId = clinicId,
+                    PatientId = patientId,
+                    SystolicBp = rng.Next(110, 135),
+                    DiastolicBp = rng.Next(70, 85),
+                    HeartRateBpm = rng.Next(65, 85),
+                    RespiratoryRateBreathsPerMin = rng.Next(14, 20),
+                    TemperatureCelsius = Math.Round((decimal)(36.4 + rng.NextDouble() * 0.8), 1),
+                    OxygenSaturationPercent = rng.Next(97, 100),
+                    HeightCm = Math.Round((decimal)(150 + rng.Next(0, 30)), 1),
+                    WeightKg = Math.Round((decimal)(45 + rng.Next(0, 40)), 1),
+                    RecordedAt = patientCreatedAt,
+                    NurseId = doctor.Id,
+                    RecordedByNurseName = $"{doctor.Title} {doctor.FirstName} {doctor.LastName}",
+                    CreatedAt = patientCreatedAt,
+                    CreatedBy = "System:DevPatientSeeder"
+                });
+
                 // 4a. Past Medical Histories (1 to 3 items)
                 var medHistCount = rng.Next(1, 4);
                 var pickedProblems = ProblemTemplates.OrderBy(_ => rng.Next()).Take(medHistCount).ToList();
                 foreach (var prob in pickedProblems)
                 {
-                    batchPastMedHist.Add(new PatientPastMedicalHistory
+                    batchPastMedHist.Add(new PatientMedicalHistory
                     {
                         Id = Guid.NewGuid(),
                         TenantId = tenantId,
@@ -792,7 +1108,7 @@ public static class DevPatientSeeder
                         Icd10Code = prob.Code,
                         SpecificDescription = prob.Title,
                         OnsetDate = new DateOnly(now.Year - rng.Next(1, 10), rng.Next(1, 13), 1),
-                        IsResolved = !prob.IsChronic && rng.NextDouble() < 0.6,
+                        Status = (!prob.IsChronic && rng.NextDouble() < 0.6) ? ProblemStatus.Resolved : ProblemStatus.Active,
                         ClinicalNotes = prob.IsChronic ? "Maintained on prescription therapy." : "Resolved with treatment.",
                         CreatedAt = patient.CreatedAt,
                         CreatedBy = "System:DevPatientSeeder"
@@ -801,7 +1117,14 @@ public static class DevPatientSeeder
 
                 // 4b. Family Histories (1 to 2 items)
                 var famCount = rng.Next(1, 3);
-                var relationships = new[] { "Father", "Mother", "Maternal Grandfather", "Paternal Grandmother", "Sibling" };
+                var relationships = new[]
+                {
+                    FamilyRelationship.Father,
+                    FamilyRelationship.Mother,
+                    FamilyRelationship.Grandfather,
+                    FamilyRelationship.Grandmother,
+                    FamilyRelationship.Sibling
+                };
                 foreach (var prob in pickedProblems.Take(famCount))
                 {
                     batchFamilyHist.Add(new PatientFamilyHistory
@@ -900,30 +1223,44 @@ public static class DevPatientSeeder
                 }
 
                 // 4f. Baseline Physical Exam Profile
-                batchPhysExam.Add(new PatientPhysicalExamProfile
+                var physExamId = Guid.NewGuid();
+                batchPhysExam.Add(new PatientPhysicalExam
                 {
-                    Id = Guid.NewGuid(),
+                    Id = physExamId,
                     TenantId = tenantId,
                     ClinicId = clinicId,
                     PatientId = patientId,
                     GenSurveyId = "1", // Essentially normal / Ambulatory
-                    GenSurveyRemarks = "Conscious, coherent, ambulatory, not in cardiopulmonary distress.",
+                    GeneralSurveyRemarks = "Conscious, coherent, ambulatory, not in cardiopulmonary distress.",
                     SkinId = "1",
                     SkinRemarks = "Warm, good turgor, no active lesions or jaundice.",
                     HeentId = "11",
                     HeentRemarks = "Anicteric sclerae, pink palpebral conjunctivae, supple neck, no cervical lymphadenopathy.",
                     ChestId = "6",
-                    ChestRemarks = "Symmetrical chest expansion, clear breath sounds, no rales or rhonchi.",
+                    ChestLungsRemarks = "Symmetrical chest expansion, clear breath sounds, no rales or rhonchi.",
                     HeartId = "5",
                     HeartRemarks = "Adynamic precordium, normal rate, regular rhythm, normal S1 and S2.",
                     AbdomenId = "7",
                     AbdomenRemarks = "Flat, soft, non-tender, normoactive bowel sounds, no palpable organomegaly.",
                     NeuroId = "6",
-                    NeuroRemarks = "Oriented x 3, intact cranial nerves, motor 5/5 on all extremities.",
+                    NeurologicalRemarks = "Oriented x 3, intact cranial nerves, motor 5/5 on all extremities.",
                     RectalId = "1",
-                    RectalRemarks = "Deferred on initial general consultation.",
+                    DigitalRectalRemarks = "Deferred on initial general consultation.",
                     GuId = "1",
-                    GuRemarks = "No flank tenderness, normal external genitalia.",
+                    GenitourinaryRemarks = "No flank tenderness, normal external genitalia.",
+                    CreatedAt = patient.CreatedAt,
+                    CreatedBy = "System:DevPatientSeeder"
+                });
+
+                batchPhysExamFindings.Add(new PatientPhysicalExamFinding
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ClinicId = clinicId,
+                    PhysicalExamId = physExamId,
+                    System = PhysicalExamSystem.GeneralSurvey,
+                    FindingTitle = "Essentially normal / Ambulatory",
+                    IsNormal = true,
                     CreatedAt = patient.CreatedAt,
                     CreatedBy = "System:DevPatientSeeder"
                 });
@@ -955,22 +1292,23 @@ public static class DevPatientSeeder
                 if (rng.NextDouble() < 0.60)
                 {
                     var prb = ProblemTemplates[rng.Next(ProblemTemplates.Length)];
-                    batchProblems.Add(new PatientProblem
+                    batchProblems.Add(new PatientMedicalHistory
                     {
                         Id = Guid.NewGuid(),
                         TenantId = tenantId,
                         ClinicId = clinicId,
                         PatientId = patientId,
+                        Category = MedicalHistoryCategory.ProblemListItem,
+                        ConditionTitle = prb.Title,
                         Icd10Code = prb.Code,
-                        ProblemTitle = prb.Title,
                         PhilHealthMdiseaseCode = prb.Mdisease,
                         Status = ProblemStatus.Active,
                         Severity = prb.Severity,
                         IsChronicNcd = prb.IsChronic,
                         OnsetDate = new DateOnly(now.Year - rng.Next(1, 8), rng.Next(1, 13), 1),
                         ClinicalNotes = "Regular monitoring at OPD clinic.",
-                        RecordedByDoctorId = doctor.Id,
-                        RecordedByDoctorName = $"{doctor.Title} {doctor.FirstName} {doctor.LastName}",
+                        RecordedByStaffId = doctor.Id,
+                        RecordedByStaffName = $"{doctor.Title} {doctor.FirstName} {doctor.LastName}",
                         CreatedAt = patient.CreatedAt,
                         CreatedBy = "System:DevPatientSeeder"
                     });
@@ -1019,6 +1357,10 @@ public static class DevPatientSeeder
                     var encounterId = Guid.NewGuid();
                     var rxNumber = $"RX-{encounterDate:yyyyMMdd}-{currentRxSeq++:D5}-{Guid.NewGuid().ToString("N")[..4].ToUpperInvariant()}";
 
+                    var visitWorkflowMode = !string.IsNullOrWhiteSpace(philHealthNo) && rng.NextDouble() < 0.5
+                        ? VisitWorkflowMode.YakapAvailment
+                        : VisitWorkflowMode.Regular;
+
                     var encounter = new ConsultationEncounter
                     {
                         Id = encounterId,
@@ -1031,6 +1373,7 @@ public static class DevPatientSeeder
                         DoctorPrcLicense = doctor.PrcLicenseNumber,
                         DoctorPtr = doctor.PtrNumber,
                         DoctorS2License = doctor.S2LicenseNumber,
+                        VisitWorkflowMode = visitWorkflowMode,
                         EncounterDate = encounterDate,
                         Subjective = template.Subjective,
                         Objective = template.Objective,
@@ -1081,6 +1424,111 @@ public static class DevPatientSeeder
                     batchEncounters.Add(encounter);
                     result.EncountersCreated++;
 
+                    batchRosItems.Add(new EncounterReviewOfSystemsItem
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        ConsultationEncounterId = encounterId,
+                        System = RosSystem.General,
+                        SymptomCode = "00",
+                        SymptomTitle = "No fever or weight loss",
+                        IsNormal = true,
+                        CreatedAt = encounterDate,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+
+                    if (isFemale && ageYears >= 18 && ageYears <= 49 && rng.NextDouble() < 0.35)
+                    {
+                        batchObGyneExams.Add(new EncounterObGyneExam
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ClinicId = clinicId,
+                            ConsultationEncounterId = encounterId,
+                            SpeculumExam = "Normal cervix, no lesions",
+                            InternalExam = "No masses or tenderness",
+                            CreatedAt = encounterDate,
+                            CreatedBy = "System:DevPatientSeeder"
+                        });
+                    }
+
+                    if (ageYears <= 5)
+                    {
+                        var mId = Guid.NewGuid();
+                        batchPediatricMilestones.Add(new EncounterPediatricMilestone
+                        {
+                            Id = mId,
+                            TenantId = tenantId,
+                            ClinicId = clinicId,
+                            ConsultationEncounterId = encounterId,
+                            MilestoneVisitAgeCode = "24M",
+                            IsGrossMotorAtPar = true,
+                            IsOverallDevelopmentAtPar = true,
+                            GrossMotorRemarks = "Walks steadily",
+                            CreatedAt = encounterDate,
+                            CreatedBy = "System:DevPatientSeeder"
+                        });
+                        batchPediatricDangerSigns.Add(new EncounterPediatricDangerSign
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ClinicId = clinicId,
+                            PediatricMilestoneId = mId,
+                            Domain = PediatricDevelopmentDomain.GrossMotor,
+                            DangerSignCode = "NONE",
+                            Description = "No danger sign",
+                            IsPresent = false,
+                            CreatedAt = encounterDate,
+                            CreatedBy = "System:DevPatientSeeder"
+                        });
+                    }
+
+                    if (ageYears >= 10 && ageYears <= 19)
+                    {
+                        batchAdolescentAssessments.Add(new EncounterAdolescentAssessment
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ClinicId = clinicId,
+                            ConsultationEncounterId = encounterId,
+                            CreatedAt = encounterDate,
+                            CreatedBy = "System:DevPatientSeeder"
+                        });
+                        batchHeadsssAssessments.Add(new EncounterHeadsssDomainAssessment
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ClinicId = clinicId,
+                            ConsultationEncounterId = encounterId,
+                            Domain = HeadsssDomain.Home,
+                            AssentConsentStatus = true,
+                            CreatedAt = encounterDate,
+                            CreatedBy = "System:DevPatientSeeder"
+                        });
+                    }
+
+                    if (visitWorkflowMode == VisitWorkflowMode.YakapAvailment)
+                    {
+                        batchYakapSubmissions.Add(new YakapSubmission
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ClinicId = clinicId,
+                            PatientId = patientId,
+                            ConsultationEncounterId = encounterId,
+                            AccreditationNo = "H92000001",
+                            CaseNo = $"C000921{now.Year}{rng.Next(10000, 99999)}",
+                            SubmissionType = YakapSubmissionType.Consultation,
+                            LocalTransactionNo = $"S000921{now.Year}{rng.Next(10000, 99999)}",
+                            ProcessingStatus = YakapProcessingStatus.Accepted,
+                            SubmittedAtUtc = encounterDate,
+                            CompletedAtUtc = encounterDate.AddMinutes(5),
+                            CreatedAt = encounterDate,
+                            CreatedBy = "System:DevPatientSeeder"
+                        });
+                    }
+
                     // 4k. Medical Certificate (issued for ~30% of encounters)
                     if (rng.NextDouble() < 0.32)
                     {
@@ -1120,16 +1568,37 @@ public static class DevPatientSeeder
 
             // 5. Persist this batch
             dbContext.Patients.AddRange(batchPatients);
-            dbContext.PatientPastMedicalHistories.AddRange(batchPastMedHist);
+            dbContext.PatientAddresses.AddRange(batchAddresses);
+            dbContext.PatientGuardians.AddRange(batchGuardians);
+            dbContext.PatientIdentityVerifications.AddRange(batchIdentityVerifs);
+            dbContext.PatientHospitalizationHistories.AddRange(batchHospitalizations);
+            dbContext.PatientInjuryHistories.AddRange(batchInjuries);
+            dbContext.PatientHomeMedications.AddRange(batchHomeMeds);
+            dbContext.PatientSexualHistories.AddRange(batchSexualHistories);
+            dbContext.PatientBpMonitoringLogs.AddRange(batchBpLogs);
+            dbContext.PatientBpMonitoringDays.AddRange(batchBpDays);
+            dbContext.PatientPhilHealthMemberships.AddRange(batchPhilHealthMemberships);
+            dbContext.PatientYakapEnlistments.AddRange(batchYakapEnlistments);
+            dbContext.PatientAlerts.AddRange(batchAlerts);
+            dbContext.PatientVitals.AddRange(batchVitals);
+            dbContext.PatientMedicalHistories.AddRange(batchPastMedHist);
             dbContext.PatientFamilyHistories.AddRange(batchFamilyHist);
             dbContext.PatientSocialHistories.AddRange(batchSocialHist);
             dbContext.PatientSurgicalHistories.AddRange(batchSurgHist);
             dbContext.PatientReproductiveHistories.AddRange(batchReprodHist);
-            dbContext.PatientPhysicalExamProfiles.AddRange(batchPhysExam);
+            dbContext.PatientPhysicalExams.AddRange(batchPhysExam);
+            dbContext.PatientPhysicalExamFindings.AddRange(batchPhysExamFindings);
             dbContext.PatientAllergies.AddRange(batchAllergies);
-            dbContext.PatientProblems.AddRange(batchProblems);
+            dbContext.PatientMedicalHistories.AddRange(batchProblems);
             dbContext.PatientImmunizations.AddRange(batchImmunizations);
             dbContext.Consultations.AddRange(batchEncounters);
+            dbContext.EncounterReviewOfSystemsItems.AddRange(batchRosItems);
+            dbContext.EncounterObGyneExams.AddRange(batchObGyneExams);
+            dbContext.EncounterPediatricMilestones.AddRange(batchPediatricMilestones);
+            dbContext.EncounterPediatricDangerSigns.AddRange(batchPediatricDangerSigns);
+            dbContext.EncounterAdolescentAssessments.AddRange(batchAdolescentAssessments);
+            dbContext.EncounterHeadsssDomainAssessments.AddRange(batchHeadsssAssessments);
+            dbContext.YakapSubmissions.AddRange(batchYakapSubmissions);
             dbContext.MedicalCertificates.AddRange(batchMedCerts);
 
             await dbContext.SaveChangesAsync(ct);
@@ -1148,16 +1617,29 @@ public static class DevPatientSeeder
             result.AllergiesCreated += batchAllergies.Count;
             result.ProblemsCreated += batchProblems.Count;
             result.ImmunizationsCreated += batchImmunizations.Count;
+            result.AddressesCreated += batchAddresses.Count;
+            result.GuardiansCreated += batchGuardians.Count;
+            result.IdentityVerificationsCreated += batchIdentityVerifs.Count;
+            result.HospitalizationHistoriesCreated += batchHospitalizations.Count;
+            result.InjuryHistoriesCreated += batchInjuries.Count;
+            result.HomeMedicationsCreated += batchHomeMeds.Count;
+            result.SexualHistoriesCreated += batchSexualHistories.Count;
+            result.ReviewOfSystemsItemsCreated += batchRosItems.Count;
+            result.SpecificFormsCreated += batchObGyneExams.Count + batchPediatricMilestones.Count + batchAdolescentAssessments.Count;
+            result.BpMonitoringLogsCreated += batchBpLogs.Count;
+            result.YakapSubmissionsCreated += batchYakapSubmissions.Count;
 
             options.ProgressCallback?.Invoke(totalCreated, targetCount);
             logger?.LogInformation("[DevPatientSeeder] Batch committed: {TotalCreated}/{TargetCount} patients ({Percent:F1}%)...",
                 totalCreated, targetCount, (double)totalCreated / targetCount * 100);
         }
 
-        // 6. Update patient code sequence tracker in DB so future regular registrations don't collide
-        tracker = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.ClinicId == clinicId && t.Year == year, ct);
+        // 6. Update patient code sequence tracker(s) in DB so future regular registrations don't collide
+        var clinicTrackers = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
+            .Where(t => t.ClinicId == clinicId && t.Year == year)
+            .ToListAsync(ct);
 
+        tracker = clinicTrackers.FirstOrDefault(t => t.TenantId == tenantId);
         if (tracker == null)
         {
             dbContext.PatientCodeSequenceTrackers.Add(new PatientCodeSequenceTracker
@@ -1172,11 +1654,15 @@ public static class DevPatientSeeder
                 CreatedBy = "System:DevPatientSeeder"
             });
         }
-        else if (tracker.CurrentSequence < currentSeq)
+
+        foreach (var existingTracker in clinicTrackers)
         {
-            tracker.CurrentSequence = currentSeq;
-            tracker.LastAssignedAt = DateTime.UtcNow;
-            tracker.UpdatedAt = DateTime.UtcNow;
+            if (existingTracker.CurrentSequence < currentSeq)
+            {
+                existingTracker.CurrentSequence = currentSeq;
+                existingTracker.LastAssignedAt = DateTime.UtcNow;
+                existingTracker.UpdatedAt = DateTime.UtcNow;
+            }
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -1208,7 +1694,7 @@ public static class DevPatientSeeder
             dbContext.Database.SetCommandTimeout(300);
         }
 
-        IQueryable<ClinicPatient> query = dbContext.Patients.IgnoreQueryFilters()
+        IQueryable<Patient> query = dbContext.Patients.IgnoreQueryFilters()
             .Where(p => p.ClinicId == clinicId);
 
         if (!purgeAll)
@@ -1232,7 +1718,7 @@ public static class DevPatientSeeder
             {
                 var chunkList = chunk.ToList();
 
-                // 1. Encounter Diagnoses & Prescriptions
+                // 1. Encounter children
                 var encounterIds = await dbContext.Consultations.IgnoreQueryFilters()
                     .Where(c => c.ClinicId == clinicId && chunkList.Contains(c.PatientId))
                     .Select(c => c.Id)
@@ -1240,6 +1726,44 @@ public static class DevPatientSeeder
 
                 if (encounterIds.Count > 0)
                 {
+                    // 1a. Headsss Domain Assessments & Adolescent Assessments
+                    var headsss = await dbContext.EncounterHeadsssDomainAssessments.IgnoreQueryFilters()
+                        .Where(h => h.ClinicId == clinicId && encounterIds.Contains(h.ConsultationEncounterId))
+                        .ToListAsync(ct);
+                    if (headsss.Count > 0) dbContext.EncounterHeadsssDomainAssessments.RemoveRange(headsss);
+
+                    var adol = await dbContext.EncounterAdolescentAssessments.IgnoreQueryFilters()
+                        .Where(a => a.ClinicId == clinicId && encounterIds.Contains(a.ConsultationEncounterId))
+                        .ToListAsync(ct);
+                    if (adol.Count > 0) dbContext.EncounterAdolescentAssessments.RemoveRange(adol);
+
+                    // 1b. Pediatric Danger Signs & Milestones
+                    var pMilestones = await dbContext.EncounterPediatricMilestones.IgnoreQueryFilters()
+                        .Where(m => m.ClinicId == clinicId && encounterIds.Contains(m.ConsultationEncounterId))
+                        .ToListAsync(ct);
+                    if (pMilestones.Count > 0)
+                    {
+                        var mIds = pMilestones.Select(m => m.Id).ToList();
+                        var dSigns = await dbContext.EncounterPediatricDangerSigns.IgnoreQueryFilters()
+                            .Where(d => mIds.Contains(d.PediatricMilestoneId))
+                            .ToListAsync(ct);
+                        if (dSigns.Count > 0) dbContext.EncounterPediatricDangerSigns.RemoveRange(dSigns);
+                        dbContext.EncounterPediatricMilestones.RemoveRange(pMilestones);
+                    }
+
+                    // 1c. ObGyne Exams
+                    var obGyne = await dbContext.EncounterObGyneExams.IgnoreQueryFilters()
+                        .Where(o => o.ClinicId == clinicId && encounterIds.Contains(o.ConsultationEncounterId))
+                        .ToListAsync(ct);
+                    if (obGyne.Count > 0) dbContext.EncounterObGyneExams.RemoveRange(obGyne);
+
+                    // 1d. Review of Systems
+                    var ros = await dbContext.EncounterReviewOfSystemsItems.IgnoreQueryFilters()
+                        .Where(r => r.ClinicId == clinicId && encounterIds.Contains(r.ConsultationEncounterId))
+                        .ToListAsync(ct);
+                    if (ros.Count > 0) dbContext.EncounterReviewOfSystemsItems.RemoveRange(ros);
+
+                    // 1e. Diagnoses & Prescriptions
                     var diagnoses = await dbContext.Diagnoses.IgnoreQueryFilters()
                         .Where(d => encounterIds.Contains(d.ConsultationEncounterId))
                         .ToListAsync(ct);
@@ -1251,7 +1775,21 @@ public static class DevPatientSeeder
                     if (prescriptions.Count > 0) dbContext.Prescriptions.RemoveRange(prescriptions);
                 }
 
-                // 2. Encounters & Medical Certificates
+                // 2. Yakap Submissions & Errors (may link to encounter or patient directly)
+                var yakapSubmissions = await dbContext.YakapSubmissions.IgnoreQueryFilters()
+                    .Where(y => y.ClinicId == clinicId && chunkList.Contains(y.PatientId))
+                    .ToListAsync(ct);
+                if (yakapSubmissions.Count > 0)
+                {
+                    var yIds = yakapSubmissions.Select(y => y.Id).ToList();
+                    var yErrors = await dbContext.YakapSubmissionErrors.IgnoreQueryFilters()
+                        .Where(e => yIds.Contains(e.YakapSubmissionId))
+                        .ToListAsync(ct);
+                    if (yErrors.Count > 0) dbContext.YakapSubmissionErrors.RemoveRange(yErrors);
+                    dbContext.YakapSubmissions.RemoveRange(yakapSubmissions);
+                }
+
+                // 3. Encounters & Medical Certificates
                 var encounters = await dbContext.Consultations.IgnoreQueryFilters()
                     .Where(c => c.ClinicId == clinicId && chunkList.Contains(c.PatientId))
                     .ToListAsync(ct);
@@ -1262,11 +1800,54 @@ public static class DevPatientSeeder
                     .ToListAsync(ct);
                 if (medCerts.Count > 0) dbContext.MedicalCertificates.RemoveRange(medCerts);
 
-                // 3. Structured medical histories, immunizations, allergies, problems
-                var pastHist = await dbContext.PatientPastMedicalHistories.IgnoreQueryFilters()
+                // 4. BP Monitoring Logs & Days
+                var bpLogs = await dbContext.PatientBpMonitoringLogs.IgnoreQueryFilters()
+                    .Where(b => b.ClinicId == clinicId && chunkList.Contains(b.PatientId))
+                    .ToListAsync(ct);
+                if (bpLogs.Count > 0)
+                {
+                    var bIds = bpLogs.Select(b => b.Id).ToList();
+                    var bpDays = await dbContext.PatientBpMonitoringDays.IgnoreQueryFilters()
+                        .Where(d => bIds.Contains(d.BpMonitoringLogId))
+                        .ToListAsync(ct);
+                    if (bpDays.Count > 0) dbContext.PatientBpMonitoringDays.RemoveRange(bpDays);
+                    dbContext.PatientBpMonitoringLogs.RemoveRange(bpLogs);
+                }
+
+                // 5. Patient 1NF Demographics & Histories
+                var addrs = await dbContext.PatientAddresses.IgnoreQueryFilters()
+                    .Where(a => a.ClinicId == clinicId && chunkList.Contains(a.PatientId)).ToListAsync(ct);
+                if (addrs.Count > 0) dbContext.PatientAddresses.RemoveRange(addrs);
+
+                var guards = await dbContext.PatientGuardians.IgnoreQueryFilters()
+                    .Where(g => g.ClinicId == clinicId && chunkList.Contains(g.PatientId)).ToListAsync(ct);
+                if (guards.Count > 0) dbContext.PatientGuardians.RemoveRange(guards);
+
+                var idVerifs = await dbContext.PatientIdentityVerifications.IgnoreQueryFilters()
+                    .Where(v => v.ClinicId == clinicId && chunkList.Contains(v.PatientId)).ToListAsync(ct);
+                if (idVerifs.Count > 0) dbContext.PatientIdentityVerifications.RemoveRange(idVerifs);
+
+                var hosps = await dbContext.PatientHospitalizationHistories.IgnoreQueryFilters()
+                    .Where(h => h.ClinicId == clinicId && chunkList.Contains(h.PatientId)).ToListAsync(ct);
+                if (hosps.Count > 0) dbContext.PatientHospitalizationHistories.RemoveRange(hosps);
+
+                var injs = await dbContext.PatientInjuryHistories.IgnoreQueryFilters()
+                    .Where(i => i.ClinicId == clinicId && chunkList.Contains(i.PatientId)).ToListAsync(ct);
+                if (injs.Count > 0) dbContext.PatientInjuryHistories.RemoveRange(injs);
+
+                var homeMeds = await dbContext.PatientHomeMedications.IgnoreQueryFilters()
+                    .Where(m => m.ClinicId == clinicId && chunkList.Contains(m.PatientId)).ToListAsync(ct);
+                if (homeMeds.Count > 0) dbContext.PatientHomeMedications.RemoveRange(homeMeds);
+
+                var sexHist = await dbContext.PatientSexualHistories.IgnoreQueryFilters()
+                    .Where(s => s.ClinicId == clinicId && chunkList.Contains(s.PatientId)).ToListAsync(ct);
+                if (sexHist.Count > 0) dbContext.PatientSexualHistories.RemoveRange(sexHist);
+
+                // 6. Structured medical histories, immunizations, allergies, problems
+                var pastHist = await dbContext.PatientMedicalHistories.IgnoreQueryFilters()
                     .Where(h => h.ClinicId == clinicId && chunkList.Contains(h.PatientId))
                     .ToListAsync(ct);
-                if (pastHist.Count > 0) dbContext.PatientPastMedicalHistories.RemoveRange(pastHist);
+                if (pastHist.Count > 0) dbContext.PatientMedicalHistories.RemoveRange(pastHist);
 
                 var famHist = await dbContext.PatientFamilyHistories.IgnoreQueryFilters()
                     .Where(h => h.ClinicId == clinicId && chunkList.Contains(h.PatientId))
@@ -1288,37 +1869,59 @@ public static class DevPatientSeeder
                     .ToListAsync(ct);
                 if (reproHist.Count > 0) dbContext.PatientReproductiveHistories.RemoveRange(reproHist);
 
-                var physExam = await dbContext.PatientPhysicalExamProfiles.IgnoreQueryFilters()
+                var examIds = await dbContext.PatientPhysicalExams.IgnoreQueryFilters()
+                    .Where(h => h.ClinicId == clinicId && chunkList.Contains(h.PatientId))
+                    .Select(h => h.Id)
+                    .ToListAsync(ct);
+                if (examIds.Count > 0)
+                {
+                    var findings = await dbContext.PatientPhysicalExamFindings.IgnoreQueryFilters()
+                        .Where(f => examIds.Contains(f.PhysicalExamId))
+                        .ToListAsync(ct);
+                    if (findings.Count > 0) dbContext.PatientPhysicalExamFindings.RemoveRange(findings);
+                }
+
+                var physExam = await dbContext.PatientPhysicalExams.IgnoreQueryFilters()
                     .Where(h => h.ClinicId == clinicId && chunkList.Contains(h.PatientId))
                     .ToListAsync(ct);
-                if (physExam.Count > 0) dbContext.PatientPhysicalExamProfiles.RemoveRange(physExam);
+                if (physExam.Count > 0) dbContext.PatientPhysicalExams.RemoveRange(physExam);
+
+                var memberships = await dbContext.PatientPhilHealthMemberships.IgnoreQueryFilters()
+                    .Where(m => m.ClinicId == clinicId && chunkList.Contains(m.PatientId))
+                    .ToListAsync(ct);
+                if (memberships.Count > 0) dbContext.PatientPhilHealthMemberships.RemoveRange(memberships);
+
+                var yakap = await dbContext.PatientYakapEnlistments.IgnoreQueryFilters()
+                    .Where(y => y.ClinicId == clinicId && chunkList.Contains(y.PatientId))
+                    .ToListAsync(ct);
+                if (yakap.Count > 0) dbContext.PatientYakapEnlistments.RemoveRange(yakap);
+
+                var alerts = await dbContext.PatientAlerts.IgnoreQueryFilters()
+                    .Where(a => a.ClinicId == clinicId && chunkList.Contains(a.PatientId))
+                    .ToListAsync(ct);
+                if (alerts.Count > 0) dbContext.PatientAlerts.RemoveRange(alerts);
 
                 var allergies = await dbContext.PatientAllergies.IgnoreQueryFilters()
                     .Where(a => a.ClinicId == clinicId && chunkList.Contains(a.PatientId))
                     .ToListAsync(ct);
                 if (allergies.Count > 0) dbContext.PatientAllergies.RemoveRange(allergies);
 
-                var problems = await dbContext.PatientProblems.IgnoreQueryFilters()
-                    .Where(p => p.ClinicId == clinicId && chunkList.Contains(p.PatientId))
-                    .ToListAsync(ct);
-                if (problems.Count > 0) dbContext.PatientProblems.RemoveRange(problems);
-
                 var imms = await dbContext.PatientImmunizations.IgnoreQueryFilters()
                     .Where(i => i.ClinicId == clinicId && chunkList.Contains(i.PatientId))
                     .ToListAsync(ct);
                 if (imms.Count > 0) dbContext.PatientImmunizations.RemoveRange(imms);
 
-                var triageVitals = await dbContext.TriageVitals.IgnoreQueryFilters()
+                var triageVitals = await dbContext.PatientVitals.IgnoreQueryFilters()
                     .Where(v => v.ClinicId == clinicId && chunkList.Contains(v.PatientId))
                     .ToListAsync(ct);
-                if (triageVitals.Count > 0) dbContext.TriageVitals.RemoveRange(triageVitals);
+                if (triageVitals.Count > 0) dbContext.PatientVitals.RemoveRange(triageVitals);
 
                 var queueItems = await dbContext.QueueItems.IgnoreQueryFilters()
                     .Where(q => q.ClinicId == clinicId && chunkList.Contains(q.PatientId))
                     .ToListAsync(ct);
                 if (queueItems.Count > 0) dbContext.QueueItems.RemoveRange(queueItems);
 
-                // 4. Finally delete the patients
+                // 7. Finally delete the patients
                 var patients = await dbContext.Patients.IgnoreQueryFilters()
                     .Where(p => chunkList.Contains(p.Id))
                     .ToListAsync(ct);
@@ -1329,7 +1932,7 @@ public static class DevPatientSeeder
             }
         }
 
-        // 5. Clean any orphaned records for this clinic if purgeAll is true
+        // 8. Clean any orphaned records for this clinic if purgeAll is true
         if (purgeAll)
         {
             var orphanCerts = await dbContext.MedicalCertificates.IgnoreQueryFilters()
@@ -1341,6 +1944,22 @@ public static class DevPatientSeeder
             if (orphanConsults.Count > 0)
             {
                 var oIds = orphanConsults.Select(c => c.Id).ToList();
+                var oHeadsss = await dbContext.EncounterHeadsssDomainAssessments.IgnoreQueryFilters().Where(h => oIds.Contains(h.ConsultationEncounterId)).ToListAsync(ct);
+                if (oHeadsss.Count > 0) dbContext.EncounterHeadsssDomainAssessments.RemoveRange(oHeadsss);
+                var oAdol = await dbContext.EncounterAdolescentAssessments.IgnoreQueryFilters().Where(a => oIds.Contains(a.ConsultationEncounterId)).ToListAsync(ct);
+                if (oAdol.Count > 0) dbContext.EncounterAdolescentAssessments.RemoveRange(oAdol);
+                var oMilestones = await dbContext.EncounterPediatricMilestones.IgnoreQueryFilters().Where(m => oIds.Contains(m.ConsultationEncounterId)).ToListAsync(ct);
+                if (oMilestones.Count > 0)
+                {
+                    var mIds = oMilestones.Select(m => m.Id).ToList();
+                    var oDanger = await dbContext.EncounterPediatricDangerSigns.IgnoreQueryFilters().Where(d => mIds.Contains(d.PediatricMilestoneId)).ToListAsync(ct);
+                    if (oDanger.Count > 0) dbContext.EncounterPediatricDangerSigns.RemoveRange(oDanger);
+                    dbContext.EncounterPediatricMilestones.RemoveRange(oMilestones);
+                }
+                var oObGyne = await dbContext.EncounterObGyneExams.IgnoreQueryFilters().Where(o => oIds.Contains(o.ConsultationEncounterId)).ToListAsync(ct);
+                if (oObGyne.Count > 0) dbContext.EncounterObGyneExams.RemoveRange(oObGyne);
+                var oRos = await dbContext.EncounterReviewOfSystemsItems.IgnoreQueryFilters().Where(r => oIds.Contains(r.ConsultationEncounterId)).ToListAsync(ct);
+                if (oRos.Count > 0) dbContext.EncounterReviewOfSystemsItems.RemoveRange(oRos);
                 var oDiag = await dbContext.Diagnoses.IgnoreQueryFilters().Where(d => oIds.Contains(d.ConsultationEncounterId)).ToListAsync(ct);
                 if (oDiag.Count > 0) dbContext.Diagnoses.RemoveRange(oDiag);
                 var oPresc = await dbContext.Prescriptions.IgnoreQueryFilters().Where(p => oIds.Contains(p.ConsultationEncounterId)).ToListAsync(ct);
@@ -1348,11 +1967,50 @@ public static class DevPatientSeeder
                 dbContext.Consultations.RemoveRange(orphanConsults);
             }
 
+            var orphanYakap = await dbContext.YakapSubmissions.IgnoreQueryFilters().Where(y => y.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanYakap.Count > 0)
+            {
+                var yIds = orphanYakap.Select(y => y.Id).ToList();
+                var yErr = await dbContext.YakapSubmissionErrors.IgnoreQueryFilters().Where(e => yIds.Contains(e.YakapSubmissionId)).ToListAsync(ct);
+                if (yErr.Count > 0) dbContext.YakapSubmissionErrors.RemoveRange(yErr);
+                dbContext.YakapSubmissions.RemoveRange(orphanYakap);
+            }
+
+            var orphanBp = await dbContext.PatientBpMonitoringLogs.IgnoreQueryFilters().Where(b => b.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanBp.Count > 0)
+            {
+                var bIds = orphanBp.Select(b => b.Id).ToList();
+                var bDays = await dbContext.PatientBpMonitoringDays.IgnoreQueryFilters().Where(d => bIds.Contains(d.BpMonitoringLogId)).ToListAsync(ct);
+                if (bDays.Count > 0) dbContext.PatientBpMonitoringDays.RemoveRange(bDays);
+                dbContext.PatientBpMonitoringLogs.RemoveRange(orphanBp);
+            }
+
+            var orphanAddrs = await dbContext.PatientAddresses.IgnoreQueryFilters().Where(a => a.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanAddrs.Count > 0) dbContext.PatientAddresses.RemoveRange(orphanAddrs);
+
+            var orphanGuards = await dbContext.PatientGuardians.IgnoreQueryFilters().Where(g => g.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanGuards.Count > 0) dbContext.PatientGuardians.RemoveRange(orphanGuards);
+
+            var orphanVerifs = await dbContext.PatientIdentityVerifications.IgnoreQueryFilters().Where(v => v.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanVerifs.Count > 0) dbContext.PatientIdentityVerifications.RemoveRange(orphanVerifs);
+
+            var orphanHosps = await dbContext.PatientHospitalizationHistories.IgnoreQueryFilters().Where(h => h.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanHosps.Count > 0) dbContext.PatientHospitalizationHistories.RemoveRange(orphanHosps);
+
+            var orphanInjs = await dbContext.PatientInjuryHistories.IgnoreQueryFilters().Where(i => i.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanInjs.Count > 0) dbContext.PatientInjuryHistories.RemoveRange(orphanInjs);
+
+            var orphanHomeMeds = await dbContext.PatientHomeMedications.IgnoreQueryFilters().Where(m => m.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanHomeMeds.Count > 0) dbContext.PatientHomeMedications.RemoveRange(orphanHomeMeds);
+
+            var orphanSexHist = await dbContext.PatientSexualHistories.IgnoreQueryFilters().Where(s => s.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanSexHist.Count > 0) dbContext.PatientSexualHistories.RemoveRange(orphanSexHist);
+
             var orphanImms = await dbContext.PatientImmunizations.IgnoreQueryFilters().Where(i => i.ClinicId == clinicId).ToListAsync(ct);
             if (orphanImms.Count > 0) dbContext.PatientImmunizations.RemoveRange(orphanImms);
 
-            var orphanProbs = await dbContext.PatientProblems.IgnoreQueryFilters().Where(p => p.ClinicId == clinicId).ToListAsync(ct);
-            if (orphanProbs.Count > 0) dbContext.PatientProblems.RemoveRange(orphanProbs);
+            var orphanProbs = await dbContext.PatientMedicalHistories.IgnoreQueryFilters().Where(p => p.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanProbs.Count > 0) dbContext.PatientMedicalHistories.RemoveRange(orphanProbs);
 
             var orphanAllergies = await dbContext.PatientAllergies.IgnoreQueryFilters().Where(a => a.ClinicId == clinicId).ToListAsync(ct);
             if (orphanAllergies.Count > 0) dbContext.PatientAllergies.RemoveRange(orphanAllergies);
@@ -1376,12 +2034,17 @@ public static class DevPatientSeeder
                 remainingMaxSeq = s;
         }
 
-        var tracker = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(t => t.ClinicId == clinicId && (tenantId == null || t.TenantId == tenantId) && t.Year == year, ct);
-        if (tracker != null)
+        var trackers = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
+            .Where(t => t.ClinicId == clinicId && t.Year == year)
+            .ToListAsync(ct);
+        if (trackers.Count > 0)
         {
-            tracker.CurrentSequence = remainingMaxSeq;
-            tracker.LastAssignedAt = DateTime.UtcNow;
+            foreach (var tracker in trackers)
+            {
+                tracker.CurrentSequence = remainingMaxSeq;
+                tracker.LastAssignedAt = DateTime.UtcNow;
+                tracker.UpdatedAt = DateTime.UtcNow;
+            }
             await dbContext.SaveChangesAsync(ct);
         }
 

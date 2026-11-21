@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { getPortalApiUrl } from "@/utils/domain";
 
 export interface MobileAppStoreBadgesProps {
   appleStoreUrl?: string;
@@ -43,7 +44,7 @@ export function MobileAppStoreBadges({
     if (propAppleUrl === undefined && propGoogleUrl === undefined) {
       const fetchPlatformSettings = async () => {
         try {
-          const res = await fetch("/api/v1/public/settings", {
+          const res = await fetch(`${getPortalApiUrl()}/public/settings`, {
             headers: { Accept: "application/json" },
           });
           if (res.ok) {

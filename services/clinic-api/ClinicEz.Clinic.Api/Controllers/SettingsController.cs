@@ -19,17 +19,18 @@ namespace ClinicEz.Clinic.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/settings")]
+[Route("api/v1/clinic/settings")]
 public sealed class SettingsController : ControllerBase
 {
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService? _pdfService;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
     private readonly ISampleDocumentGenerator? _sampleDocGenerator;
 
     public SettingsController(
         ISender sender,
         IClinicDocumentPdfService? pdfService = null,
-        IRepository<ClinicSettings>? settingsRepo = null,
+        IRepository<FacilitySettings>? settingsRepo = null,
         ISampleDocumentGenerator? sampleDocGenerator = null)
     {
         _sender = sender;
@@ -63,7 +64,7 @@ public sealed class SettingsController : ControllerBase
             ? await _settingsRepo.Query().FirstOrDefaultAsync(ct)
             : null;
 
-        settings ??= new ClinicSettings
+        settings ??= new FacilitySettings
         {
             TenantId = "default",
             ClinicName = "Clinic EZ Partner Medical Clinic"
@@ -90,7 +91,7 @@ public sealed class SettingsController : ControllerBase
             ? await _settingsRepo.Query().FirstOrDefaultAsync(ct)
             : null;
 
-        settings ??= new ClinicSettings
+        settings ??= new FacilitySettings
         {
             TenantId = "default",
             ClinicName = "Clinic EZ Partner Medical Clinic",
@@ -125,5 +126,25 @@ public sealed class SettingsController : ControllerBase
     {
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicSettingsDto>.Success(result, "Clinic preferences updated successfully."));
+    }
+
+    [HttpPost("philhealth/override")]
+    [HasPermission(ClinicPermissions.SettingsManage)]
+    public async Task<ActionResult<ApiResponse<ClinicSettingsDto>>> OverridePhilHealth(
+        [FromBody] OverridePhilHealthSettingsCommand command,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<ClinicSettingsDto>.Success(result, "Clinic PhilHealth credentials overridden successfully."));
+    }
+
+    [HttpPost("philhealth/revert")]
+    [HasPermission(ClinicPermissions.SettingsManage)]
+    public async Task<ActionResult<ApiResponse<ClinicSettingsDto>>> RevertPhilHealthToBranch(
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new RevertPhilHealthToBranchCommand(skipPendingVerificationSync), ct);
+        return Ok(ApiResponse<ClinicSettingsDto>.Success(result, "Clinic PhilHealth settings reverted to branch baseline."));
     }
 }

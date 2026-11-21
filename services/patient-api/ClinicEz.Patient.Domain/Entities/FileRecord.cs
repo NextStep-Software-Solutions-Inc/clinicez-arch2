@@ -9,8 +9,11 @@ public sealed class FileRecord : BaseEntity, ISyncable
     public Guid PatientId { get; set; }
     public Patient Patient { get; set; } = null!;
     public Guid? ClinicId { get; set; }
-    public Guid? FolderId { get; set; }
-    public FileFolder? Folder { get; set; }
+
+    public string Title { get; set; } = string.Empty;
+    public DateOnly? DocumentDate { get; set; }
+    public string? FacilityName { get; set; }
+    public string? Notes { get; set; }
 
     public string FileName { get; set; } = string.Empty;
     public string? MimeType { get; set; }

@@ -1,16 +1,17 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { formatDistanceToNowStrict, isToday, isYesterday, format } from 'date-fns';
 import ThemedText from '../../components/ui/ThemedText';
-import Card from '../../components/ui/Card';
-import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import { AppIcon, type IconName } from '../../components/ui/Icon';
 import EmptyState from '../../components/ui/EmptyState';
+import { FilterChipBar, type FilterChipItem } from '../../components/ui/FilterChipBar';
 import Screen from '../../components/layout/Screen';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useNotificationContext } from '../../contexts/NotificationContext';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import { usePatientId } from '../../hooks/usePatientId';
 import {
   getNotifications,
@@ -64,11 +65,16 @@ function relativeTime(date: Date): string {
 
 export default function NotificationScreenWeb() {
   const { colors, spacing, radii, sizes } = useAppTheme();
+  const { isCompact } = useBreakpoint();
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { unreadCount, refreshNotifications } = useNotificationContext();
 
-  const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all');
+  const [activeFilter, setActiveFilter] = usePersistedTab<NotificationFilter>({
+    key: 'notifications.filter',
+    defaultValue: 'all',
+    queryParam: 'filter',
+  });
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -146,6 +152,16 @@ export default function NotificationScreenWeb() {
     [refreshNotifications]
   );
 
+  const filterItems: ReadonlyArray<FilterChipItem<NotificationFilter>> = useMemo(
+    () =>
+      FILTERS.map((f) => ({
+        key: f.key,
+        label: f.label,
+        count: f.key === 'unread' ? unreadCount : undefined,
+      })),
+    [unreadCount]
+  );
+
   // Group items by date
   const grouped: Array<{ title: string; data: NotificationRow[] }> = useMemo(() => {
     const groups = new Map<string, NotificationRow[]>();
@@ -159,17 +175,29 @@ export default function NotificationScreenWeb() {
     return Array.from(groups.entries()).map(([title, data]) => ({ title, data }));
   }, [items]);
 
+  const verticalRhythm = isCompact ? spacing.md : spacing.lg;
+
   return (
-    <Screen width="form" refreshing={isRefreshing} onRefresh={() => loadData(true)}>
-      {/* Page Header */}
-      <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
-          <ThemedText variant="display">Notifications</ThemedText>
-          <ThemedText variant="bodyLarge" color="textSecondary">
-            Updates regarding appointments, prescriptions, and clinics.
-          </ThemedText>
-        </View>
-        {unreadCount > 0 && (
+    <Screen
+      width="form"
+      padded={false}
+      refreshing={isRefreshing}
+      onRefresh={() => loadData(true)}
+      contentContainerStyle={{
+        paddingHorizontal: verticalRhythm,
+        paddingTop: verticalRhythm,
+        gap: verticalRhythm,
+      }}
+    >
+      {/* Filter chips (symmetrical top === bottom spacing via verticalRhythm) */}
+      <FilterChipBar
+        items={filterItems}
+        selectedKey={activeFilter}
+        onSelect={setActiveFilter}
+      />
+
+      {unreadCount > 0 && (
+        <View style={styles.markAllRow}>
           <Button
             label="Mark all as read"
             variant="ghost"
@@ -177,53 +205,13 @@ export default function NotificationScreenWeb() {
             icon="check"
             onPress={handleMarkAllRead}
           />
-        )}
-      </View>
-
-      {/* Filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.filterRow, { gap: spacing.sm, paddingVertical: spacing.md }]}
-      >
-        {FILTERS.map((f) => {
-          const isActive = f.key === activeFilter;
-          return (
-            <Pressable
-              key={f.key}
-              onPress={() => setActiveFilter(f.key)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isActive }}
-              style={(state: any) => [
-                styles.filterChip,
-                {
-                  backgroundColor: isActive
-                    ? colors.primary
-                    : state.hovered
-                    ? colors.surfaceSubtle
-                    : colors.card,
-                  borderColor: isActive ? colors.primary : colors.border,
-                  borderRadius: radii.full,
-                  paddingHorizontal: spacing.md,
-                  paddingVertical: spacing.sm,
-                },
-              ]}
-            >
-              <ThemedText
-                variant="smallBold"
-                color={isActive ? 'onPrimary' : 'textSecondary'}
-              >
-                {f.label}
-                {f.key === 'unread' && unreadCount > 0 ? ` (${unreadCount})` : ''}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+        </View>
+      )}
 
       {/* Notification items */}
       {grouped.length === 0 && !isLoading ? (
         <EmptyState
+          icon="notifications"
           title={activeFilter === 'all' ? 'No notifications yet' : `No ${activeFilter} notifications`}
           message={
             activeFilter === 'all'
@@ -261,7 +249,7 @@ export default function NotificationScreenWeb() {
                       },
                     ]}
                   >
-                    <View style={styles.itemMainRow}>
+                    <View style={[styles.itemMainRow, { gap: spacing.md }]}>
                       <View
                         style={[
                           styles.categoryIconCircle,
@@ -276,8 +264,8 @@ export default function NotificationScreenWeb() {
                         <AppIcon name={meta.icon} size={sizes.iconMd} color={meta.color} />
                       </View>
 
-                      <View style={styles.itemContent}>
-                        <View style={styles.itemTitleRow}>
+                      <View style={[styles.itemContent, { gap: spacing.xxs }]}>
+                        <View style={[styles.itemTitleRow, { gap: spacing.sm }]}>
                           <ThemedText
                             variant={item.isRead ? 'body' : 'bodyBold'}
                             color="text"
@@ -303,8 +291,8 @@ export default function NotificationScreenWeb() {
                         </ThemedText>
                       </View>
 
-                      {/* Web inline actions on hover */}
-                      <View style={styles.itemActions}>
+                      {/* Web inline actions */}
+                      <View style={[styles.itemActions, { gap: spacing.xxs }]}>
                         {!item.isRead && (
                           <Pressable
                             onPress={(e) => handleMarkReadSingle(item.id, e)}
@@ -315,6 +303,7 @@ export default function NotificationScreenWeb() {
                               {
                                 backgroundColor: s.hovered ? colors.primaryLight : colors.transparent,
                                 borderRadius: radii.md,
+                                padding: spacing.xs,
                               },
                             ]}
                           >
@@ -330,6 +319,7 @@ export default function NotificationScreenWeb() {
                             {
                               backgroundColor: s.hovered ? colors.emergencyBg : colors.transparent,
                               borderRadius: radii.md,
+                              padding: spacing.xs,
                             },
                           ]}
                         >
@@ -356,24 +346,9 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  headerRow: {
+  markAllRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 8,
-  },
-  headerLeft: {
-    gap: 4,
-  },
-  filterRow: {
-    flexDirection: 'row',
-  },
-  filterChip: {
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
   },
   sectionHeader: {
     textTransform: 'uppercase',
@@ -385,7 +360,6 @@ const styles = StyleSheet.create({
   itemMainRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
   },
   categoryIconCircle: {
     alignItems: 'center',
@@ -394,12 +368,11 @@ const styles = StyleSheet.create({
   },
   itemContent: {
     flex: 1,
-    gap: 4,
+    minWidth: 0,
   },
   itemTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   unreadIndicator: {
     width: 8,
@@ -408,10 +381,8 @@ const styles = StyleSheet.create({
   itemActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   actionBtn: {
-    padding: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },

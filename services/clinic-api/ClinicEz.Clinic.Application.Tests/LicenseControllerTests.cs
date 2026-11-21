@@ -27,7 +27,7 @@ public class LicenseControllerTests
         clinicContext.ClinicId.Returns(Guid.Empty);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = new Repository<ClinicSettings>(context, sieve);
+        var settingsRepo = new Repository<FacilitySettings>(context, sieve);
         var staffRepo = new Repository<StaffMember>(context, sieve);
 
         var tenantLookup = Substitute.For<ITenantLookupService>();
@@ -50,7 +50,7 @@ public class LicenseControllerTests
         clinicContext.ClinicId.Returns(Guid.Empty);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = new Repository<ClinicSettings>(context, sieve);
+        var settingsRepo = new Repository<FacilitySettings>(context, sieve);
         var staffRepo = new Repository<StaffMember>(context, sieve);
 
         var tenantLookup = Substitute.For<ITenantLookupService>();
@@ -78,7 +78,7 @@ public class LicenseControllerTests
         clinicContext.ClinicId.Returns(facilityId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = new Repository<ClinicSettings>(context, sieve);
+        var settingsRepo = new Repository<FacilitySettings>(context, sieve);
         var staffRepo = new Repository<StaffMember>(context, sieve);
 
         var tenantLookup = Substitute.For<ITenantLookupService>();
@@ -121,7 +121,7 @@ public class LicenseControllerTests
         clinicContext.ClinicId.Returns(facilityId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = new Repository<ClinicSettings>(context, sieve);
+        var settingsRepo = new Repository<FacilitySettings>(context, sieve);
         var staffRepo = new Repository<StaffMember>(context, sieve);
 
         var tenantLookup = Substitute.For<ITenantLookupService>();
@@ -159,7 +159,7 @@ public class LicenseControllerTests
         clinicContext.ClinicId.Returns(Guid.Empty);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = new Repository<ClinicSettings>(context, sieve);
+        var settingsRepo = new Repository<FacilitySettings>(context, sieve);
         var staffRepo = new Repository<StaffMember>(context, sieve);
 
         // Pre-seed facility settings
@@ -174,7 +174,7 @@ public class LicenseControllerTests
             ExpiresAtUtc = DateTime.UtcNow.AddYears(1)
         });
 
-        await context.ClinicSettings.AddAsync(new ClinicSettings
+        await context.Settings.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantGuid.ToString(),
@@ -216,7 +216,7 @@ public class LicenseControllerTests
         clinicContext.ClinicId.Returns(Guid.Empty);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = new Repository<ClinicSettings>(context, sieve);
+        var settingsRepo = new Repository<FacilitySettings>(context, sieve);
         var staffRepo = new Repository<StaffMember>(context, sieve);
 
         // Seed Clinic B into DB as already activated
@@ -230,7 +230,7 @@ public class LicenseControllerTests
             ExpiresAtUtc = DateTime.UtcNow.AddYears(1)
         });
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantGuid.ToString(),
@@ -276,7 +276,7 @@ public class LicenseControllerTests
         clinicContext.ClinicId.Returns(Guid.Empty);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = new Repository<ClinicSettings>(context, sieve);
+        var settingsRepo = new Repository<FacilitySettings>(context, sieve);
         var staffRepo = new Repository<StaffMember>(context, sieve);
 
         // Sign token for Clinic B

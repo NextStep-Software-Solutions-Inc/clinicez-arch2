@@ -25,7 +25,8 @@ public sealed record UpdateCustomFieldDefinitionRequest(
     bool IsActive = true,
     string? VisibilityRuleJson = null,
     string? ConditionalOptionsJson = null,
-    string? FieldKey = null);
+    string? FieldKey = null,
+    string? BoundaryMode = null);
 
 public sealed record ReorderCustomFieldsRequest(
     IReadOnlyList<CustomFieldOrderItem>? Items = null,
@@ -44,7 +45,7 @@ public sealed class CustomFieldsController : ControllerBase
     }
 
     [HttpGet]
-    [HasPermission(ClinicPermissions.SettingsRead)]
+    [HasAnyPermission(ClinicPermissions.SettingsRead, ClinicPermissions.PatientsRead)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<ClinicCustomFieldDefinitionDto>>>> GetCustomFields(
         [FromQuery] string? entityType = "ClinicPatient",
         [FromQuery] string? category = null,
@@ -83,7 +84,8 @@ public sealed class CustomFieldsController : ControllerBase
             request.IsActive,
             request.VisibilityRuleJson,
             request.ConditionalOptionsJson,
-            request.FieldKey);
+            request.FieldKey,
+            request.BoundaryMode);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicCustomFieldDefinitionDto>.Success(result, "Custom field updated successfully."));

@@ -17,15 +17,15 @@ public record GetPublicRxVerificationInfoQuery(string Token) : IRequest<PublicRx
 public class GetPublicRxVerificationInfoQueryHandler : IRequestHandler<GetPublicRxVerificationInfoQuery, PublicRxVerificationInfoDto>
 {
     private readonly IRepository<ConsultationEncounter> _encounterRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<StaffMember> _staffRepo;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
 
     public GetPublicRxVerificationInfoQueryHandler(
         IRepository<ConsultationEncounter> encounterRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<StaffMember> staffRepo,
-        IRepository<ClinicSettings> settingsRepo)
+        IRepository<FacilitySettings> settingsRepo)
     {
         _encounterRepo = encounterRepo;
         _patientRepo = patientRepo;
@@ -40,6 +40,17 @@ public class GetPublicRxVerificationInfoQueryHandler : IRequestHandler<GetPublic
             throw new BadRequestException("Verification token is required.");
         }
 
+        var cleanToken = request.Token.Trim().ToLowerInvariant();
+        if (cleanToken.StartsWith("mc-") || cleanToken.StartsWith("ref-") || cleanToken.StartsWith("lab-") || cleanToken.StartsWith("sec-sha256-"))
+        {
+            throw new BadRequestException("The provided reference is for a non-prescription clinical document.");
+        }
+
+        if (cleanToken.Length >= 50 && cleanToken.Length <= 60 && cleanToken.IndexOf('.') == 32)
+        {
+            throw new BadRequestException("The provided token is a laboratory upload token, not an e-prescription verification token.");
+        }
+
         var encounter = await _encounterRepo.Query(e => e.RxPublicVerificationToken == request.Token)
             .Include(e => e.Prescriptions)
             .FirstOrDefaultAsync(cancellationToken);
@@ -47,6 +58,11 @@ public class GetPublicRxVerificationInfoQueryHandler : IRequestHandler<GetPublic
         if (encounter == null)
         {
             throw new NotFoundException("Invalid or expired e-prescription verification token.");
+        }
+
+        if (!encounter.IsSigned)
+        {
+            throw new BadRequestException("Prescription has not been signed by the attending physician and is not valid.");
         }
 
         var patient = await _patientRepo.GetByIdAsync(encounter.PatientId, cancellationToken);
@@ -77,8 +93,8 @@ public class GetPublicRxVerificationInfoQueryHandler : IRequestHandler<GetPublic
             encounter.PatientName,
             patientInitials,
             patientAge,
-            patient?.Gender.ToString() ?? "Unknown",
-            patient?.Allergies,
+            patient?.Sex.ToString() ?? "Unknown",
+            patient?.Allergies != null && patient.Allergies.Count > 0 ? string.Join(", ", patient.Allergies.Select(a => a.Allergen)) : null,
             encounter.Assessment,
             encounter.Prescriptions.Select(p => new PrescriptionSlipItemDto(
                 p.Id,
@@ -91,7 +107,9 @@ public class GetPublicRxVerificationInfoQueryHandler : IRequestHandler<GetPublic
                 p.DurationDays,
                 p.Refills,
                 p.IsDangerousDrug,
-                p.Remarks
+                p.Remarks,
+                p.IsClinicDispensed,
+                p.ClinicDispensedQuantity
             )).ToList(),
             encounter.RxDispenseStatus.ToString(),
             IsValid: encounter.IsSigned,

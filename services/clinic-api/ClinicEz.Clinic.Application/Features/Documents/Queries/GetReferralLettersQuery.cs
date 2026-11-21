@@ -14,7 +14,8 @@ namespace ClinicEz.Clinic.Application.Features.Documents.Queries;
 
 public sealed record GetReferralLettersQuery(
     Guid? PatientId = null,
-    Guid? ReferringDoctorId = null) : IRequest<IReadOnlyList<ReferralLetterDto>>;
+    Guid? ReferringDoctorId = null,
+    bool IncludeUnsigned = false) : IRequest<IReadOnlyList<ReferralLetterDto>>;
 
 public sealed class GetReferralLettersQueryHandler : IRequestHandler<GetReferralLettersQuery, IReadOnlyList<ReferralLetterDto>>
 {
@@ -28,6 +29,11 @@ public sealed class GetReferralLettersQueryHandler : IRequestHandler<GetReferral
     public async Task<IReadOnlyList<ReferralLetterDto>> Handle(GetReferralLettersQuery request, CancellationToken ct)
     {
         var query = _referralRepo.Query().AsNoTracking();
+
+        if (!request.IncludeUnsigned)
+        {
+            query = query.Where(r => r.IsSigned);
+        }
 
         if (request.PatientId.HasValue)
         {
@@ -65,6 +71,8 @@ public sealed class GetReferralLettersQueryHandler : IRequestHandler<GetReferral
             referral.AttachedDiagnostics,
             referral.IsSigned,
             referral.SignedAt,
-            referral.CreatedAt)).ToList().AsReadOnly();
+            referral.CreatedAt,
+            referral.SecurityDigest,
+            referral.QueueItemId)).ToList().AsReadOnly();
     }
 }

@@ -1,6 +1,7 @@
 // token-guard:ignore-file
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 (globalThis as any).__DEV__ = true;
 
@@ -133,7 +134,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     fullName: 'Maria Delos Santos Jr.',
     dateOfBirth: '1990-01-01',
     age: 34,
-    gender: 'Female',
+    sex: 'Female',
     civilStatus: 'Married',
     contactNumber: '0917-123-4567',
     email: 'maria.santos@example.com',
@@ -153,6 +154,13 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     alerts: 'High fall risk',
     verificationStatus: 'Verified',
     customFields: {
+      primary_address_line: '123 Rizal Ave',
+      primary_barangay: 'Barangay 10',
+      primary_city: 'San Pedro',
+      primary_province: 'Laguna',
+      emergency_contact_name: 'Juan Santos',
+      emergency_contact_phone: '0918-987-6543',
+      emergency_contact_relationship: 'Spouse',
       classification: 'Student',
       student_id: '2026-9042',
       college: 'College of Science',
@@ -162,12 +170,12 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     createdAt: '2026-01-01T00:00:00Z',
   };
 
-  test('F1: Gender options include Male, Female, and Other, and persist to update payload', async () => {
+  test('F1: Sex options are Male and Female per PhilHealth, and persist to update payload', async () => {
     const payload: RegisterPatientPayload = {
       firstName: 'Alex',
       lastName: 'Dela Cruz',
       dateOfBirth: '1995-05-15',
-      gender: 'Other',
+      sex: 'Female',
       civilStatus: 'Single',
       contactNumber: '0919-555-1234',
       verificationStatus: 'Verified',
@@ -176,7 +184,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     const [updated, err] = await clinicService.updatePatient('pat-test-id', payload);
     expect(err).toBeNull();
     expect(lastPutUrl).toBe('/patients/pat-test-id');
-    expect(lastPutPayload.gender).toBe('Other');
+    expect(lastPutPayload.sex).toBe('Female');
     expect(lastPutPayload.civilStatus).toBe('Single');
   });
 
@@ -187,17 +195,10 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       middleName: 'Mendoza',
       suffix: 'III',
       dateOfBirth: '1985-10-20',
-      gender: 'Male',
+      sex: 'Male',
       civilStatus: 'Separated',
       contactNumber: '0917-000-1111',
       email: 'juan.delacruz@example.com',
-      addressLine: 'Block 4 Lot 10 Phase 2',
-      barangay: 'San Vicente',
-      city: 'Biñan',
-      province: 'Laguna',
-      emergencyContactName: 'Elena Dela Cruz',
-      emergencyContactPhone: '0918-000-2222',
-      emergencyContactRelationship: 'Sister',
       philHealthNumber: '01-025000001-0',
       seniorCitizenId: 'SC-2026-001',
       pwdId: 'PWD-2026-002',
@@ -206,6 +207,13 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       chronicConditions: 'Asthma',
       alerts: 'Hearing impaired',
       customFields: {
+        primary_address_line: 'Block 4 Lot 10 Phase 2',
+        primary_barangay: 'San Vicente',
+        primary_city: 'Biñan',
+        primary_province: 'Laguna',
+        emergency_contact_name: 'Elena Dela Cruz',
+        emergency_contact_phone: '0918-000-2222',
+        emergency_contact_relationship: 'Sister',
         classification: 'Employee',
         employee_id: 'EMP-2026-001',
         department: 'Registrar Office',
@@ -218,10 +226,27 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     expect(lastPutUrl).toBe('/patients/pat-juan-id');
     expect(lastPutPayload.firstName).toBe('Juan');
     expect(lastPutPayload.suffix).toBe('III');
-    expect(lastPutPayload.gender).toBe('Male');
+    expect(lastPutPayload.sex).toBe('Male');
     expect(lastPutPayload.civilStatus).toBe('Separated');
     expect(lastPutPayload.bloodType).toBe('A+');
     expect(lastPutPayload.philHealthNumber).toBe('01-025000001-0');
+
+    // Unified customFields assertions: address & emergency contact must NOT be top-level
+    expect(lastPutPayload.addressLine).toBeUndefined();
+    expect(lastPutPayload.barangay).toBeUndefined();
+    expect(lastPutPayload.city).toBeUndefined();
+    expect(lastPutPayload.province).toBeUndefined();
+    expect(lastPutPayload.emergencyContactName).toBeUndefined();
+    expect(lastPutPayload.emergencyContactPhone).toBeUndefined();
+    expect(lastPutPayload.emergencyContactRelationship).toBeUndefined();
+
+    expect(lastPutPayload.customFields.primary_address_line).toBe('Block 4 Lot 10 Phase 2');
+    expect(lastPutPayload.customFields.primary_barangay).toBe('San Vicente');
+    expect(lastPutPayload.customFields.primary_city).toBe('Biñan');
+    expect(lastPutPayload.customFields.primary_province).toBe('Laguna');
+    expect(lastPutPayload.customFields.emergency_contact_name).toBe('Elena Dela Cruz');
+    expect(lastPutPayload.customFields.emergency_contact_phone).toBe('0918-000-2222');
+    expect(lastPutPayload.customFields.emergency_contact_relationship).toBe('Sister');
     expect(lastPutPayload.customFields.classification).toBe('Employee');
     expect(lastPutPayload.customFields.employee_id).toBe('EMP-2026-001');
     expect(lastPutPayload.verificationStatus).toBe('Verified');
@@ -241,8 +266,24 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     expect(element).toBeDefined();
     expect(element.props.visible).toBe(true);
     expect(element.props.patient.firstName).toBe('Maria');
-    expect(element.props.patient.gender).toBe('Female');
+    expect(element.props.patient.sex).toBe('Female');
     expect(element.props.patient.civilStatus).toBe('Married');
+  });
+
+  test('F2: Verification status quick chips render and include Verified, Pending Verification, and Unverified', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(EditPatientModal, {
+        visible: true,
+        patient: { ...samplePatient, verificationStatus: 'PendingVerification' },
+        onClose: () => {},
+        onSaved: () => {},
+      })
+    );
+
+    expect(markup).toContain('Verification Status');
+    expect(markup).toContain('aria-label="Verification Status: Verified"');
+    expect(markup).toContain('aria-label="Verification Status: Pending Verification"');
+    expect(markup).toContain('aria-label="Verification Status: Unverified"');
   });
 
   test('F3 & F6: Demographic formatting shows long age and verified identity', () => {
@@ -254,7 +295,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     // Demographics string construction matching patient card pattern
     const cardDemographics = [
       longAge,
-      samplePatient.gender,
+      samplePatient.sex,
       samplePatient.civilStatus,
       samplePatient.bloodType ? `Blood type ${samplePatient.bloodType}` : null,
     ].filter(Boolean).join(' • ');
@@ -267,7 +308,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       firstName: 'Pedro',
       lastName: 'Penduko',
       dateOfBirth: '2000-02-02',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0912-345-6789',
       verificationStatus: 'Unverified',
     };
@@ -281,7 +322,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       firstName: 'Bea',
       lastName: 'Reyes',
       dateOfBirth: '2004-03-12',
-      gender: 'Female',
+      sex: 'Female',
       civilStatus: 'Single',
       contactNumber: '0922-123-4567',
       customFields: {
@@ -308,7 +349,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       firstName: 'Bea',
       lastName: 'Reyes',
       dateOfBirth: '2004-03-12',
-      gender: 'Female',
+      sex: 'Female',
       civilStatus: 'Single',
       contactNumber: '0922-123-4567',
       customFields: {
@@ -337,7 +378,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       firstName: 'Jose',
       lastName: 'Rizal',
       dateOfBirth: '1980-06-19',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0917-111-2222',
       philHealthNumber: '12-345678901-2', // invalid check digit
     };
@@ -360,7 +401,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       fullName: 'Ana Cruz',
       dateOfBirth: '2001-01-01',
       age: 25,
-      gender: 'Female',
+      sex: 'Female',
       contactNumber: '09170000000',
       createdAt: '2026-01-01T00:00:00Z',
     };
@@ -419,7 +460,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       firstName: 'Maria',
       lastName: 'Santos',
       dateOfBirth: '1990-01-01',
-      gender: 'Female',
+      sex: 'Female',
       contactNumber: '0917-123-4567',
       allergies: 'Amoxicillin (Medication - STAT), Eggs (Food)',
       structuredAllergies: [

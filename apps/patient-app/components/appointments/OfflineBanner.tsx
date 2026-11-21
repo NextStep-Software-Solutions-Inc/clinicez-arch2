@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, View } from 'react-native';
 import { useNetInfo } from '@react-native-community/netinfo';
 import ThemedText from '@ui/ThemedText';
@@ -43,15 +43,27 @@ export default function OfflineBanner({ isFromCache = false }: OfflineBannerProp
   const shouldShow = isWeb ? isOffline : (isOffline || isFromCache);
 
   const heightAnim = useRef(new Animated.Value(0)).current;
+  const [rendered, setRendered] = useState(shouldShow);
 
   useEffect(() => {
+    if (shouldShow) {
+      setRendered(true);
+    }
     Animated.spring(heightAnim, {
       toValue: shouldShow ? 1 : 0,
       useNativeDriver: false,
       tension: 240,
       friction: 22,
-    }).start();
+    }).start(({ finished }) => {
+      if (finished && !shouldShow) {
+        setRendered(false);
+      }
+    });
   }, [shouldShow, heightAnim]);
+
+  if (!rendered && !shouldShow) {
+    return null;
+  }
 
   const animatedHeight = heightAnim.interpolate({
     inputRange: [0, 1],

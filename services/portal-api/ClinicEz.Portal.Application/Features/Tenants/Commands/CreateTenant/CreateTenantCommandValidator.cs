@@ -16,8 +16,12 @@ public class CreateTenantCommandValidator : AbstractValidator<CreateTenantComman
 
         RuleFor(x => x.TenantSlug)
             .NotEmpty().WithMessage("Workplace URL slug is required.")
-            .Matches(@"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-            .WithMessage("Slug can only contain lowercase letters, numbers, and hyphens.");
+            .MaximumLength(ReservedTenantSlugs.MaxSlugLength)
+            .WithMessage($"Slug cannot exceed {ReservedTenantSlugs.MaxSlugLength} characters.")
+            .Matches(ReservedTenantSlugs.DnsLabelPattern)
+            .WithMessage("Slug can only contain lowercase letters, numbers, and hyphens.")
+            .Must(slug => !ReservedTenantSlugs.IsReserved(slug))
+            .WithMessage("This workplace URL slug is reserved by Clinic EZ. Please choose another.");
 
         RuleFor(x => x.TenantType)
             .NotEmpty().WithMessage("Tenant type is required.");

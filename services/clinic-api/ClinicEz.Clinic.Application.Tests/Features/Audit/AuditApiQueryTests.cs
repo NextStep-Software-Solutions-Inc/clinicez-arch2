@@ -23,7 +23,7 @@ using Xunit;
 
 public class AuditApiQueryTests
 {
-    private static (ApplicationDbContext context, Guid clinicId, string tenantId, IRepository<ClinicAuditEntry> repo)
+    private static (ApplicationDbContext context, Guid clinicId, string tenantId, IRepository<AuditEntry> repo)
         CreateTestContext()
     {
         var clinicId = Guid.NewGuid();
@@ -46,7 +46,7 @@ public class AuditApiQueryTests
         clinicContext.TenantId.Returns(tenantId);
 
         var context = new ApplicationDbContext(options, config, clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, null!);
+        var repo = TestDbHelper.CreateRepository<AuditEntry>(context, null!);
 
         return (context, clinicId, tenantId, repo);
     }
@@ -58,10 +58,10 @@ public class AuditApiQueryTests
         var (context, clinicId, tenantId, repo) = CreateTestContext();
         var now = DateTime.UtcNow;
 
-        var entries = new List<ClinicAuditEntry>();
+        var entries = new List<AuditEntry>();
         for (int i = 0; i < 15; i++)
         {
-            entries.Add(new ClinicAuditEntry
+            entries.Add(new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -80,7 +80,7 @@ public class AuditApiQueryTests
             });
         }
 
-        await context.ClinicAuditEntries.AddRangeAsync(entries);
+        await context.AuditEntries.AddRangeAsync(entries);
         await context.SaveChangesAsync();
 
         var handler = new GetAuditLogsQueryHandler(repo);
@@ -120,8 +120,8 @@ public class AuditApiQueryTests
         var (context, clinicId, tenantId, repo) = CreateTestContext();
         var now = DateTime.UtcNow;
 
-        await context.ClinicAuditEntries.AddRangeAsync(
-            new ClinicAuditEntry
+        await context.AuditEntries.AddRangeAsync(
+            new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -137,7 +137,7 @@ public class AuditApiQueryTests
                 Description = "Failed password attempt",
                 MetadataJson = "{}"
             },
-            new ClinicAuditEntry
+            new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -177,8 +177,8 @@ public class AuditApiQueryTests
         var (context, clinicId, tenantId, repo) = CreateTestContext();
         var baseDate = new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc);
 
-        await context.ClinicAuditEntries.AddRangeAsync(
-            new ClinicAuditEntry
+        await context.AuditEntries.AddRangeAsync(
+            new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -189,12 +189,12 @@ public class AuditApiQueryTests
                 Action = "operations.settings.updated",
                 ActorName = "Admin",
                 ActorRole = "Administrator",
-                TargetEntityType = "ClinicSettings",
+                TargetEntityType = "FacilitySettings",
                 Outcome = ClinicAuditOutcomes.Success,
                 Description = "Old update",
                 MetadataJson = "{}"
             },
-            new ClinicAuditEntry
+            new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -205,12 +205,12 @@ public class AuditApiQueryTests
                 Action = "operations.settings.updated",
                 ActorName = "Admin",
                 ActorRole = "Administrator",
-                TargetEntityType = "ClinicSettings",
+                TargetEntityType = "FacilitySettings",
                 Outcome = ClinicAuditOutcomes.Success,
                 Description = "Target date update",
                 MetadataJson = "{}"
             },
-            new ClinicAuditEntry
+            new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -221,7 +221,7 @@ public class AuditApiQueryTests
                 Action = "operations.settings.updated",
                 ActorName = "Admin",
                 ActorRole = "Administrator",
-                TargetEntityType = "ClinicSettings",
+                TargetEntityType = "FacilitySettings",
                 Outcome = ClinicAuditOutcomes.Success,
                 Description = "Future update",
                 MetadataJson = "{}"
@@ -247,8 +247,8 @@ public class AuditApiQueryTests
         // Arrange
         var (context, clinicId, tenantId, repo) = CreateTestContext();
 
-        await context.ClinicAuditEntries.AddRangeAsync(
-            new ClinicAuditEntry
+        await context.AuditEntries.AddRangeAsync(
+            new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -293,7 +293,7 @@ public class AuditApiQueryTests
 
         var metadataWithChecksums = "{\"subjective\":\"[Clinical Text Redacted - DPA RA 10173]\",\"subjectiveChecksum\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"}";
 
-        await context.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+        await context.AuditEntries.AddAsync(new AuditEntry
         {
             Id = entryId,
             TenantId = tenantId,
@@ -347,7 +347,7 @@ public class AuditApiQueryTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        await context.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+        await context.AuditEntries.AddAsync(new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -396,7 +396,7 @@ public class AuditApiQueryTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        await context.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+        await context.AuditEntries.AddAsync(new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,

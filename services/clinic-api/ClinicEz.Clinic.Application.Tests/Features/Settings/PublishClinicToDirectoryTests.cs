@@ -7,6 +7,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -44,9 +45,9 @@ public class PublishClinicToDirectoryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         await staffRepo.AddAsync(new StaffMember
@@ -57,10 +58,11 @@ public class PublishClinicToDirectoryTests
             LastName = "Santos",
             Role = StaffRole.Doctor,
             PrcLicenseNumber = "PRC-998877",
+            IsDirectoryOptIn = true,
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _testClinicId,
             Code = "SRV-01",
@@ -70,13 +72,16 @@ public class PublishClinicToDirectoryTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
             ClinicName = "Metro Clinic",
             OperatingHours = "Mon-Fri 8:00 AM - 5:00 PM",
+            LetterheadDohLto = "DOH-LTO-2026-001",
             SpecialtyMode = specialtyMode!,
+            IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
@@ -101,8 +106,124 @@ public class PublishClinicToDirectoryTests
             Arg.Is<FacilityCreatedEvent>(e =>
                 e.Classification == expectedClassification &&
                 e.IsPublic == true &&
+                e.IsPlatformVerified == true &&
+                e.DirectorySource == DirectorySourceKind.ClinicSelfPublish &&
+                e.ReplaceProvidersSnapshot == true &&
+                e.IsWorkspaceEligible == true &&
+                e.IsDirectoryPublished == true &&
                 e.Providers != null && e.Providers.Count == 1 &&
                 e.Services != null && e.Services.Count == 1));
+    }
+
+    [Fact]
+    public async Task PublishClinic_WhenUnverified_SetsPendingReview_AndEmitsFacilityVerificationRequestedToPortal()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var scheduleRepo = TestDbHelper.CreateRepository<DoctorScheduleTemplate>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
+        var interopPublisher = Substitute.For<IInteropPublisher>();
+
+        var doctorId = Guid.NewGuid();
+        await staffRepo.AddAsync(new StaffMember
+        {
+            Id = doctorId,
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            FirstName = "Maria",
+            LastName = "Santos",
+            Role = StaffRole.Doctor,
+            PrcLicenseNumber = "PRC-998877",
+            PrcExpiryDate = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+            PrcEvidenceObjectKey = "tenants/t/clinics/c/prc-doc.pdf",
+            VerificationContact = "dr.santos@clinic.ph",
+            IsDirectoryOptIn = true,
+            IsActive = true
+        }, CancellationToken.None);
+
+        // Non-clinician must never be published
+        await staffRepo.AddAsync(new StaffMember
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            FirstName = "Front",
+            LastName = "Desk",
+            Role = StaffRole.Receptionist,
+            IsDirectoryOptIn = false,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await scheduleRepo.AddAsync(new DoctorScheduleTemplate
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            DoctorId = doctorId,
+            DoctorName = "Dr. Maria Santos",
+            DayOfWeek = DayOfWeek.Monday,
+            StartTime = new TimeOnly(9, 0),
+            EndTime = new TimeOnly(17, 0),
+            SlotDurationMinutes = 30,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await servicesRepo.AddAsync(new ServiceItem
+        {
+            ClinicId = _testClinicId,
+            Code = "SRV-01",
+            Name = "Clinical Consultation",
+            Category = "Consultation",
+            StandardPrice = 800.00m,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var settings = new FacilitySettings
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            ClinicName = "Metro Clinic",
+            OperatingHours = "Mon-Fri 8:00 AM - 5:00 PM",
+            LtoEvidenceObjectKey = "tenants/t/clinics/c/lto.pdf",
+            SpecialtyMode = "Medical",
+            IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Unverified,
+            IsDirectoryPublished = false
+        };
+        await settingsRepo.AddAsync(settings, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new PublishClinicToDirectoryCommandHandler(
+            settingsRepo, staffRepo, servicesRepo, _clinicContext, uow, interopPublisher,
+            scheduleRepo: scheduleRepo, auditRepo: auditRepo);
+
+        // Act
+        var result = await handler.Handle(new PublishClinicToDirectoryCommand(true), CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.IsPublished.Should().BeTrue();
+        result.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.PendingReview);
+        settings.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.PendingReview);
+        settings.LastVerificationSubmittedAtUtc.Should().NotBeNull();
+        settings.VerificationRejectionReason.Should().BeNull();
+
+        interopPublisher.Received(1).Enqueue(
+            InteropTypes.FacilityVerificationRequested,
+            Arg.Is<Party>(p => p.FacilityId == _testClinicId.ToString() && p.FacilityType == FacilityType.Clinic),
+            Arg.Is<Party>(p => p.Kind == PartyKind.ControlPlane && p.Service == InteropServices.Portal),
+            _testClinicId,
+            Arg.Is<FacilityVerificationRequestedPayload>(p =>
+                p.FacilityId == _testClinicId &&
+                p.LtoEvidenceObjectKey == "tenants/t/clinics/c/lto.pdf" &&
+                p.Practitioners.Count == 1 &&
+                p.Practitioners[0].ClinicStaffMemberId == doctorId &&
+                p.Practitioners[0].NormalizedPrcLicenseNo == "0998877" &&
+                p.Practitioners[0].Availabilities.Count == 1));
+
+        interopPublisher.DidNotReceiveWithAnyArgs().Enqueue<FacilityCreatedEvent>(default!, default!, default!, default, default!);
+        context.AuditEntries.Local.Should().Contain(a => a.Action == "operations.facility_verification.submitted");
     }
 
     [Fact]
@@ -110,18 +231,19 @@ public class PublishClinicToDirectoryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
             ClinicName = "Metro Dental Studio",
             OperatingHours = "Mon-Sat 9:00 AM - 6:00 PM",
             SpecialtyMode = "Dental",
+            IsWorkspaceEligible = true,
             IsDirectoryPublished = true
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
@@ -145,7 +267,9 @@ public class PublishClinicToDirectoryTests
             _testClinicId,
             Arg.Is<FacilityCreatedEvent>(e =>
                 e.Classification == "Dental Clinic" &&
-                e.IsPublic == false));
+                e.IsPublic == false &&
+                e.IsDirectoryPublished == false &&
+                e.IsWorkspaceEligible == true));
     }
 
     [Fact]
@@ -153,13 +277,13 @@ public class PublishClinicToDirectoryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         // Missing doctor and missing operating hours
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -189,9 +313,9 @@ public class PublishClinicToDirectoryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         await staffRepo.AddAsync(new StaffMember
@@ -205,7 +329,7 @@ public class PublishClinicToDirectoryTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -216,7 +340,7 @@ public class PublishClinicToDirectoryTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -228,7 +352,7 @@ public class PublishClinicToDirectoryTests
         }, CancellationToken.None);
 
         // Inactive service should be excluded from published active services
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -239,13 +363,16 @@ public class PublishClinicToDirectoryTests
             IsActive = false
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
             ClinicName = "Apex Dental Studio",
             OperatingHours = "Mon-Fri 9:00 AM - 5:00 PM",
+            LetterheadDohLto = "DOH-LTO-2026-002",
             SpecialtyMode = "Dental",
+            IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
@@ -269,8 +396,114 @@ public class PublishClinicToDirectoryTests
             Arg.Is<FacilityCreatedEvent>(e =>
                 e.Classification == "Dental Clinic" &&
                 e.IsPublic == true &&
+                e.IsWorkspaceEligible == true &&
+                e.IsDirectoryPublished == true &&
                 e.Services != null &&
                 e.Services.Count == 2 &&
                 e.Services.All(s => s.Category == "Dental" && s.IsActive)));
+    }
+
+    [Fact]
+    public async Task PublishClinic_WhenWorkspaceIneligible_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var interopPublisher = Substitute.For<IInteropPublisher>();
+
+        await staffRepo.AddAsync(new StaffMember
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            FirstName = "Maria",
+            LastName = "Santos",
+            Role = StaffRole.Doctor,
+            PrcLicenseNumber = "PRC-998877",
+            IsActive = true
+        }, CancellationToken.None);
+
+        await servicesRepo.AddAsync(new ServiceItem
+        {
+            ClinicId = _testClinicId,
+            Code = "SRV-01",
+            Name = "Clinical Consultation",
+            Category = "Consultation",
+            StandardPrice = 800.00m,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var settings = new FacilitySettings
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            ClinicName = "Metro Clinic",
+            OperatingHours = "Mon-Fri 8:00 AM - 5:00 PM",
+            SpecialtyMode = "Medical",
+            IsWorkspaceEligible = false,
+            IsDirectoryPublished = false
+        };
+        await settingsRepo.AddAsync(settings, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new PublishClinicToDirectoryCommandHandler(
+            settingsRepo, staffRepo, servicesRepo, _clinicContext, uow, interopPublisher);
+
+        // Act
+        var act = async () => await handler.Handle(new PublishClinicToDirectoryCommand(true), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*readiness checks failed*");
+
+        settings.IsDirectoryPublished.Should().BeFalse();
+        interopPublisher.DidNotReceiveWithAnyArgs().Enqueue<FacilityCreatedEvent>(default!, default!, default!, default, default!);
+    }
+
+    [Fact]
+    public async Task PublishClinic_WhenWorkspaceIneligible_AllowsUnpublishing()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var interopPublisher = Substitute.For<IInteropPublisher>();
+
+        var settings = new FacilitySettings
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            ClinicName = "Metro Dental Studio",
+            OperatingHours = "Mon-Sat 9:00 AM - 6:00 PM",
+            SpecialtyMode = "Dental",
+            IsWorkspaceEligible = false,
+            IsDirectoryPublished = true
+        };
+        await settingsRepo.AddAsync(settings, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new PublishClinicToDirectoryCommandHandler(
+            settingsRepo, staffRepo, servicesRepo, _clinicContext, uow, interopPublisher);
+
+        // Act
+        var result = await handler.Handle(new PublishClinicToDirectoryCommand(false), CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.IsPublished.Should().BeFalse();
+        settings.IsDirectoryPublished.Should().BeFalse();
+
+        interopPublisher.Received(1).Enqueue(
+            InteropTypes.FacilityDirectoryUpdated,
+            Arg.Any<Party>(),
+            Arg.Any<Party>(),
+            _testClinicId,
+            Arg.Is<FacilityCreatedEvent>(e =>
+                e.Classification == "Dental Clinic" &&
+                e.IsPublic == false &&
+                e.IsDirectoryPublished == false &&
+                e.IsWorkspaceEligible == false));
     }
 }

@@ -28,6 +28,7 @@ export interface TimeInputProps {
   containerStyle?: StyleProp<ViewStyle>;
   inputStyle?: StyleProp<TextStyle>;
   testID?: string;
+  inputTestID?: string;
 }
 
 export function formatTimeMask(raw: string): string {
@@ -90,6 +91,7 @@ export default function TimeInput({
   containerStyle,
   inputStyle,
   testID = 'time-input',
+  inputTestID,
 }: TimeInputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -160,7 +162,7 @@ export default function TimeInput({
       {label ? (
         <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
           {label}
-          {required ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
+          {required ? <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText> : null}
         </ThemedText>
       ) : null}
 
@@ -172,6 +174,8 @@ export default function TimeInput({
         ]}
       >
         <TextInput
+          data-testid={inputTestID || (testID ? `${testID}-input` : undefined)}
+          testID={inputTestID || (testID ? `${testID}-input` : undefined)}
           style={[styles.input, inputStyle]}
           value={value}
           onChangeText={handleChangeText}
@@ -187,26 +191,26 @@ export default function TimeInput({
         />
 
         {value.length > 0 && isInteractive ? (
-          <Pressable
+          <Button
+            variant="ghost"
+            size="xs"
+            icon="close"
+            iconOnly
             onPress={() => onChangeText('')}
-            style={styles.actionBtn}
-            hitSlop={theme.spacing.sm}
             accessibilityLabel="Clear time"
-          >
-            <IconSlot value="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-          </Pressable>
+          />
         ) : null}
 
         {isInteractive ? (
-          <Pressable
+          <Button
+            variant="ghost"
+            size="xs"
+            icon="clock"
+            iconOnly
             onPress={handleOpenPicker}
-            style={styles.actionBtn}
-            hitSlop={theme.spacing.sm}
             testID={`${testID}-picker-btn`}
             accessibilityLabel="Open time picker"
-          >
-            <IconSlot value="clock" size={theme.sizes.iconSm} color={theme.colors.primary} />
-          </Pressable>
+          />
         ) : null}
       </View>
 

@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { View, StyleSheet, Pressable, Animated } from 'react-native';
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
 import {
   ThemedText,
   Badge,
@@ -40,7 +40,7 @@ const XML_IDENTIFIERS: [RegExp, string][] = [
   [new RegExp('\\b' + 'p' + 'DoctorPan' + '\\b', 'gi'), 'Doctor PAN'],
   [new RegExp('\\b' + 'p' + 'DoctorPrc' + '\\b', 'gi'), 'Doctor PRC license'],
   [new RegExp('\\b' + 'p' + 'Pin' + '\\b', 'gi'), 'Patient PIN'],
-  [new RegExp('\\b' + 'p' + 'PhilHealthAtc' + '\\b', 'gi'), 'Authorization Transaction Code (ATC)'],
+  [new RegExp('\\b' + 'p' + 'PhilHealthAtc' + '\\b', 'gi'), 'PhilHealth Visit Code'],
   [new RegExp('\\b' + 'p' + 'SignSympCode' + '\\b', 'gi'), 'Chief complaint'],
   [new RegExp('\\b' + 'p' + 'PeSpecific' + '\\b', 'gi'), 'Physical examination findings'],
   [new RegExp('\\b' + 'PE' + 'SPECIFIC' + '\\b', 'gi'), 'Physical examination findings'],
@@ -48,11 +48,11 @@ const XML_IDENTIFIERS: [RegExp, string][] = [
   [new RegExp('\\b' + 'p' + 'Vitals' + '\\b', 'gi'), 'Triage vitals'],
   [new RegExp('\\b' + 'VITALS' + '\\b', 'gi'), 'Triage vitals'],
   [new RegExp('\\b' + 'p' + 'DrugCode' + '\\b', 'gi'), 'PhilHealth formulary medication'],
-  [new RegExp('\\b' + 'p' + 'HciCaseNo' + '\\b', 'gi'), 'Encounter case number'],
-  [new RegExp('\\b' + 'p' + 'HciTransNo' + '\\b', 'gi'), 'Facility transaction number'],
-  [new RegExp('\\b' + 'p' + 'SoapTransNo' + '\\b', 'gi'), 'Consultation transaction number'],
-  [new RegExp('\\b' + 'KONSULTA' + 'DATA' + '\\b', 'gi'), 'PhilHealth Konsulta consultation data'],
-  [new RegExp('KonsultaData_' + 'v1(?:\\.[0-9]+)?(?:\\.dtd|\\.xsd)?', 'gi'), 'PhilHealth Konsulta standard'],
+  [new RegExp('\\b' + 'p' + 'HciCaseNo' + '\\b', 'gi'), 'Visit case number'],
+  [new RegExp('\\b' + 'p' + 'HciTransNo' + '\\b', 'gi'), 'Clinic reference number'],
+  [new RegExp('\\b' + 'p' + 'SoapTransNo' + '\\b', 'gi'), 'Consultation reference number'],
+  [new RegExp('\\b' + 'KONSULTA' + 'DATA' + '\\b', 'gi'), 'PhilHealth YAKAP visit data'],
+  [new RegExp('KonsultaData_' + 'v1(?:\\.[0-9]+)?(?:\\.dtd|\\.xsd)?', 'gi'), 'PhilHealth YAKAP standard'],
   [new RegExp('\\bDTD' + '(?:\\s+v[0-9.]+)?', 'gi'), 'PhilHealth standard'],
   [new RegExp('Auto-' + 'Snap' + 'shot(?:ted|ting)?', 'gi'), 'Verified'],
   [new RegExp('Snap' + 'shot(?:ted|ting)?', 'gi'), 'Recorded'],
@@ -189,9 +189,9 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
     {
       key: 'atc',
       sectionKey: 'atc',
-      label: 'Encounter ATC Code',
+      label: 'PhilHealth Visit Code',
       isValid: atcValid,
-      missingReason: 'Authorization Transaction Code is required',
+      missingReason: 'PhilHealth visit code is required',
     },
     {
       key: 'symptoms',
@@ -248,28 +248,10 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
 
   const passedCount = statutoryConditions.filter((c) => c.isValid).length;
 
-  let spinAnim: any;
-  try {
-    spinAnim = useRef(new Animated.Value(0)).current;
-  } catch {
-    spinAnim = new Animated.Value(0);
-  }
-
   const handleRevalidate = () => {
-    spinAnim.setValue(0);
-    Animated.timing(spinAnim, {
-      toValue: 1,
-      duration: 650,
-      useNativeDriver: false,
-    }).start();
     notify.info('PhilHealth Yakap claim readiness checklist revalidated.');
     onRevalidate();
   };
-
-  const spin = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
 
   const resolveMissingSection = (text: string): StatutorySectionKey => {
     if (!text || typeof text !== 'string') return 'atc';
@@ -320,23 +302,16 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
         rightAction={
           <View style={styles.headerRight}>
             {!isSigned && (
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                title="Revalidate"
+                variant="outline"
+                size="sm"
+                icon="refresh"
+                loading={Boolean(isValidating)}
+                disabled={Boolean(isValidating)}
                 accessibilityLabel="Revalidate checklist"
-                disabled={isValidating}
                 onPress={handleRevalidate}
-                style={({ pressed }: any) => [
-                  styles.revalidateButton,
-                  pressed && styles.revalidateButtonPressed,
-                ]}
-              >
-                <Animated.View style={{ transform: [{ rotate: spin }] }}>
-                  <Icon name="refresh" size={16} color={theme.colors.primary} />
-                </Animated.View>
-                <ThemedText variant="smallBold" color={theme.colors.primary}>
-                  Revalidate
-                </ThemedText>
-              </Pressable>
+              />
             )}
           </View>
         }
@@ -421,14 +396,13 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
                   {formatMissingRequirement(field)}
                 </ThemedText>
                 {!isSigned && (
-                  <Pressable
-                    style={styles.jumpLink}
+                  <Button
+                    title="Jump to section"
+                    variant="ghost"
+                    size="xs"
+                    rightIcon="arrowRight"
                     onPress={() => onJumpToSection(resolveMissingSection(field))}
-                  >
-                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                      Jump to section →
-                    </ThemedText>
-                  </Pressable>
+                  />
                 )}
               </View>
             ))}
@@ -461,7 +435,7 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
           />
           <ThemedText variant="smallBold" color={isReady ? theme.colors.successText : theme.colors.emergencyText}>
             {isReady
-              ? 'Encounter meets 100% of PhilHealth Konsulta requirements. Claim transmittal ready for signing.'
+              ? 'Encounter meets all PhilHealth YAKAP requirements and is ready for signing.'
               : 'Signing is locked. Resolve the missing requirements above to enable encounter signing.'}
           </ThemedText>
         </View>
@@ -493,21 +467,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-  },
-  revalidateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-  },
-  revalidateButtonPressed: {
-    backgroundColor: theme.colors.primaryLighter,
-    borderColor: theme.colors.primary,
   },
   progressContainer: {
     marginBottom: theme.spacing.md,
@@ -593,10 +552,6 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
-  },
-  jumpLink: {
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 2,
   },
   gatekeeperBar: {
     marginTop: theme.spacing.md,

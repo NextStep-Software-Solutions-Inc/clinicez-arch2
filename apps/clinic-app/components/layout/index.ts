@@ -1,7 +1,7 @@
-export { default as ClinicHeaderBar, ClinicHeaderBarProps, HeaderAction } from './ClinicHeaderBar';
-export { default as WorkstationSidebar, WorkstationSidebarProps, WORKSTATION_NAV_ITEMS, NavItem } from './WorkstationSidebar';
-export { default as ResponsiveLayout, ResponsiveLayoutProps } from './ResponsiveLayout';
-export { default as UserMenu, UserMenuProps } from './UserMenu';
+export { default as ClinicHeaderBar, type ClinicHeaderBarProps, type HeaderAction } from './ClinicHeaderBar';
+export { default as WorkstationSidebar, type WorkstationSidebarProps, WORKSTATION_NAV_ITEMS, type NavItem } from './WorkstationSidebar';
+export { default as ResponsiveLayout, type ResponsiveLayoutProps } from './ResponsiveLayout';
+export { default as UserMenu, type UserMenuProps } from './UserMenu';
 export { default as MobileBottomTabBar } from './MobileBottomTabBar';
 export {
   SidebarProvider,

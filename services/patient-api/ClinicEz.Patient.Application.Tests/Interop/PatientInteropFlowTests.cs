@@ -237,6 +237,7 @@ public sealed class PatientInteropFlowTests
             db.FileRecords.Add(new FileRecord
             {
                 Id = attachmentId, ClientId = Guid.NewGuid(), PatientId = patientId, FileName = "xray.pdf",
+                Title = "Outside Record",
                 StorageKey = "k", DocumentTypeId = Guid.NewGuid(), SyncStatus = FileSyncStatus.Queued, UploadedAt = DateTime.UtcNow
             });
             await db.SaveChangesAsync();
@@ -453,7 +454,7 @@ public sealed class PatientInteropFlowTests
         using var h = new PatientInteropHarness();
         var clinicId = Guid.NewGuid();
 
-        // 1. Portal sends directory update enabling discovery eligibility
+        // 1. Portal sends directory update enabling discovery eligibility and platform verification
         var portalPayload = new FacilityCreatedEvent
         {
             ResourceId = clinicId,
@@ -461,13 +462,16 @@ public sealed class PatientInteropFlowTests
             FacilityType = FacilityType.Clinic,
             Name = "St. Jude Family Care",
             IsPublic = true,
-            IsWorkspaceEligible = true
+            IsWorkspaceEligible = true,
+            IsPlatformVerified = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified
         };
         await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, portalPayload));
 
-        // Eligible in workspace, but not published by clinic -> IsPublic MUST BE FALSE
+        // Eligible in workspace and verified, but not published by clinic -> IsPublic MUST BE FALSE
         var clinicAfterPortal = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
         clinicAfterPortal.IsWorkspaceEligible.Should().BeTrue();
+        clinicAfterPortal.IsPlatformVerified.Should().BeTrue();
         clinicAfterPortal.IsDirectoryPublished.Should().BeFalse();
         clinicAfterPortal.IsPublic.Should().BeFalse();
 
@@ -481,10 +485,11 @@ public sealed class PatientInteropFlowTests
         var clinicSender = PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA);
         await h.DeliverAsync(DirectoryUpdate(clinicSender, clinicPayload));
 
-        // Both tiers satisfied -> IsPublic MUST NOW BE TRUE
+        // All three gates satisfied -> IsPublic MUST NOW BE TRUE
         var clinicAfterBoth = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
         clinicAfterBoth.IsWorkspaceEligible.Should().BeTrue();
         clinicAfterBoth.IsDirectoryPublished.Should().BeTrue();
+        clinicAfterBoth.IsPlatformVerified.Should().BeTrue();
         clinicAfterBoth.IsPublic.Should().BeTrue();
     }
 
@@ -511,21 +516,24 @@ public sealed class PatientInteropFlowTests
         // Clinic published, but workspace not yet eligible -> IsPublic MUST BE FALSE
         var clinicAfterClinic = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
         clinicAfterClinic.IsWorkspaceEligible.Should().BeFalse();
+        clinicAfterClinic.IsPlatformVerified.Should().BeFalse();
         clinicAfterClinic.IsDirectoryPublished.Should().BeTrue();
         clinicAfterClinic.IsPublic.Should().BeFalse();
 
-        // 2. Portal later grants discovery eligibility
+        // 2. Portal later grants discovery eligibility & platform verification
         var portalPayload = clinicPayload with
         {
             IsPublic = true,
-            IsWorkspaceEligible = true
+            IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified
         };
         await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, portalPayload));
 
-        // Both tiers satisfied -> IsPublic MUST NOW BE TRUE
+        // All three gates satisfied -> IsPublic MUST NOW BE TRUE
         var clinicAfterBoth = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
         clinicAfterBoth.IsWorkspaceEligible.Should().BeTrue();
         clinicAfterBoth.IsDirectoryPublished.Should().BeTrue();
+        clinicAfterBoth.IsPlatformVerified.Should().BeTrue();
         clinicAfterBoth.IsPublic.Should().BeTrue();
     }
 
@@ -535,14 +543,15 @@ public sealed class PatientInteropFlowTests
         using var h = new PatientInteropHarness();
         var clinicId = Guid.NewGuid();
 
-        // Setup: Clinic is in State 3 (Fully Published)
+        // Setup: Clinic is fully verified and published
         var payload = new FacilityCreatedEvent
         {
             ResourceId = clinicId,
             TenantId = PatientInteropHarness.TenantA,
             FacilityType = FacilityType.Clinic,
             Name = "Makati Medical Center",
-            IsPublic = true
+            IsPublic = true,
+            IsPlatformVerified = true
         };
         await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, payload));
         await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA), payload));
@@ -555,6 +564,7 @@ public sealed class PatientInteropFlowTests
         var revokedClinic = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
         revokedClinic.IsWorkspaceEligible.Should().BeFalse();
         revokedClinic.IsDirectoryPublished.Should().BeTrue(); // Clinic state preserved!
+        revokedClinic.IsPlatformVerified.Should().BeTrue();
         revokedClinic.IsPublic.Should().BeFalse();             // Hidden from patients
 
         // Portal re-enables eligibility
@@ -563,6 +573,7 @@ public sealed class PatientInteropFlowTests
         var restoredClinic = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
         restoredClinic.IsWorkspaceEligible.Should().BeTrue();
         restoredClinic.IsDirectoryPublished.Should().BeTrue();
+        restoredClinic.IsPlatformVerified.Should().BeTrue();
         restoredClinic.IsPublic.Should().BeTrue();             // Automatically restored!
     }
 
@@ -578,7 +589,8 @@ public sealed class PatientInteropFlowTests
             TenantId = PatientInteropHarness.TenantA,
             FacilityType = FacilityType.Clinic,
             Name = "Cebu Doctors Clinic",
-            IsPublic = true
+            IsPublic = true,
+            IsPlatformVerified = true
         };
         await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, payload));
         await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA), payload));
@@ -614,7 +626,8 @@ public sealed class PatientInteropFlowTests
             TenantId = PatientInteropHarness.TenantA,
             FacilityType = FacilityType.Clinic,
             Name = "Davao Wellness Clinic",
-            IsPublic = true
+            IsPublic = true,
+            IsPlatformVerified = true
         };
         await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, payload));
         await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA), payload));
@@ -940,14 +953,504 @@ public sealed class PatientInteropFlowTests
     }
 
     [Fact]
+    public async Task ThreeGateGovernance_RemainsPrivateUntilPlatformVerified_AndPortalSuspensionHidesClinic()
+    {
+        using var h = new PatientInteropHarness();
+        var clinicId = Guid.NewGuid();
+
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "St. Jude Clinic",
+            IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.PendingReview
+        }));
+
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA), new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "St. Jude Clinic",
+            IsDirectoryPublished = true
+        }));
+
+        var beforeVerify = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        beforeVerify.IsWorkspaceEligible.Should().BeTrue();
+        beforeVerify.IsDirectoryPublished.Should().BeTrue();
+        beforeVerify.IsPlatformVerified.Should().BeFalse();
+        beforeVerify.IsPublic.Should().BeFalse();
+
+        // Portal approves verification
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "St. Jude Clinic",
+            IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
+            ReplaceProvidersSnapshot = false
+        }));
+
+        var verified = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        verified.IsPlatformVerified.Should().BeTrue();
+        verified.IsPublic.Should().BeTrue();
+
+        // Portal suspends clinic
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "St. Jude Clinic",
+            PlatformVerificationStatus = PlatformVerificationStatus.Suspended,
+            ReplaceProvidersSnapshot = false
+        }));
+
+        var suspended = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        suspended.IsPlatformVerified.Should().BeFalse();
+        suspended.IsWorkspaceEligible.Should().BeTrue();
+        suspended.IsDirectoryPublished.Should().BeTrue();
+        suspended.IsPublic.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Directory_update_with_ReplaceProvidersSnapshotFalse_and_null_providers_never_deactivates_existing_providers()
+    {
+        using var h = new PatientInteropHarness();
+        var clinicId = Guid.NewGuid();
+        var providerId = Guid.NewGuid();
+        var clinicParty = PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA);
+
+        await h.DeliverAsync(DirectoryUpdate(clinicParty, new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Clinic With Clinicians",
+            IsDirectoryPublished = true,
+            Providers =
+            [
+                new FacilityProviderDto(providerId, "Dr. Ana Cruz", "Pediatrics", "PRC-0045678", true, 1, Role: "Doctor")
+            ]
+        }));
+
+        // Portal sends directory update with ReplaceProvidersSnapshot = false and Providers = null
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Clinic With Clinicians",
+            IsWorkspaceEligible = true,
+            IsPlatformVerified = true,
+            Providers = null,
+            ReplaceProvidersSnapshot = false
+        }));
+
+        var provider = await h.WithDbAsync(db => db.ClinicHealthcareProviders.AsNoTracking().SingleAsync(p => p.Id == providerId));
+        provider.IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Directory_update_from_clinic_filters_non_clinical_roles_and_syncs_availabilities_idempotently()
+    {
+        using var h = new PatientInteropHarness();
+        var clinicId = Guid.NewGuid();
+        var doctorId = Guid.NewGuid();
+        var nurseId = Guid.NewGuid();
+        var receptionistId = Guid.NewGuid();
+        var canonicalDocId = Guid.NewGuid();
+        var clinicParty = PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA);
+
+        await h.WithDbAsync(async db =>
+        {
+            db.Practitioners.Add(new Practitioner
+            {
+                Id = canonicalDocId,
+                ProfessionKind = "Doctor",
+                NormalizedPrcLicenseNo = "0012345",
+                DisplayPrcLicenseNo = "PRC-12345",
+                VerificationLevel = PractitionerVerificationLevel.Verified,
+                Name = "Dr. Juan Luna",
+                FirstName = "Juan",
+                LastName = "Luna",
+                PrimarySpecialty = "Family Medicine"
+            });
+            await db.SaveChangesAsync();
+        });
+
+        var initialPayload = new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Metro Care",
+            IsDirectoryPublished = true,
+            Providers =
+            [
+                new FacilityProviderDto(
+                    doctorId, "Dr. Juan Luna", "Family Medicine", "PRC-12345", true, 1,
+                    Role: "Doctor",
+                    CanonicalProviderId: canonicalDocId,
+                    NormalizedLicenseNo: "0012345",
+                    IsDirectoryOptIn: true,
+                    Availabilities:
+                    [
+                        new ProviderAvailabilityWindowDto(DayOfWeek.Monday, "09:00", "12:00"),
+                        new ProviderAvailabilityWindowDto(DayOfWeek.Wednesday, "13:00", "17:00")
+                    ]),
+                new FacilityProviderDto(
+                    nurseId, "RN Maria Clara", "Triage", "PRC-54321", true, 2,
+                    Role: "Nurse",
+                    IsDirectoryOptIn: false),
+                new FacilityProviderDto(
+                    receptionistId, "Bob Frontdesk", "Admin", null, true, 3,
+                    Role: "Receptionist")
+            ]
+        };
+
+        await h.DeliverAsync(DirectoryUpdate(clinicParty, initialPayload));
+        // Replay identical snapshot under a new message id
+        await h.Dispatcher.DispatchAsync(DirectoryUpdate(clinicParty, initialPayload) with { MessageId = Guid.NewGuid() }, default);
+
+        var providers = await h.WithDbAsync(db => db.ClinicHealthcareProviders
+            .Include(p => p.ProviderAvailabilities)
+            .AsNoTracking()
+            .Where(p => p.ClinicId == clinicId)
+            .ToListAsync());
+
+        providers.Should().HaveCount(2);
+        providers.Select(p => p.Id).Should().NotContain(receptionistId);
+
+        var doc = providers.Single(p => p.Id == doctorId);
+        doc.Role.Should().Be("Doctor");
+        doc.PractitionerId.Should().Be(canonicalDocId);
+        doc.NormalizedLicenseNo.Should().Be("0012345");
+        doc.IsDirectoryOptIn.Should().BeTrue();
+        doc.ProviderAvailabilities.Should().HaveCount(2);
+
+        var nurse = providers.Single(p => p.Id == nurseId);
+        nurse.Role.Should().Be("Nurse");
+        nurse.IsDirectoryOptIn.Should().BeFalse();
+
+        // Update availability schedule removes Wednesday and adds Friday
+        var updatedPayload = initialPayload with
+        {
+            Providers =
+            [
+                new FacilityProviderDto(
+                    doctorId, "Dr. Juan Luna", "Family Medicine", "PRC-12345", true, 1,
+                    Role: "Doctor",
+                    CanonicalProviderId: canonicalDocId,
+                    NormalizedLicenseNo: "0012345",
+                    IsDirectoryOptIn: true,
+                    Availabilities:
+                    [
+                        new ProviderAvailabilityWindowDto(DayOfWeek.Monday, "09:00", "12:00"),
+                        new ProviderAvailabilityWindowDto(DayOfWeek.Friday, "08:00", "11:00")
+                    ])
+            ]
+        };
+        await h.DeliverAsync(DirectoryUpdate(clinicParty, updatedPayload));
+
+        var docAfter = await h.WithDbAsync(db => db.ClinicHealthcareProviders
+            .Include(p => p.ProviderAvailabilities)
+            .AsNoTracking()
+            .SingleAsync(p => p.Id == doctorId));
+        docAfter.ProviderAvailabilities.Select(a => a.DayOfWeek).Should().BeEquivalentTo([DayOfWeek.Monday, DayOfWeek.Friday]);
+        var nurseAfter = await h.WithDbAsync(db => db.ClinicHealthcareProviders.AsNoTracking().SingleAsync(p => p.Id == nurseId));
+        nurseAfter.IsActive.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Directory_update_with_unknown_canonical_provider_keeps_practitioner_id_null_until_identity_update_arrives()
+    {
+        using var h = new PatientInteropHarness();
+        var clinicId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var canonicalDocId = Guid.NewGuid();
+        var clinicParty = PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA);
+
+        // Out-of-order: clinic directory update arrives before portal practitioner.identity.updated
+        await h.DeliverAsync(DirectoryUpdate(clinicParty, new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Out Of Order Clinic",
+            IsDirectoryPublished = true,
+            Providers =
+            [
+                new FacilityProviderDto(
+                    staffId, "Dr. Clara Rizal", "Pediatrics", "PRC-0091234", true, 1,
+                    Role: "Doctor",
+                    CanonicalProviderId: canonicalDocId,
+                    NormalizedLicenseNo: "0091234",
+                    IsDirectoryOptIn: true)
+            ]
+        }));
+
+        var beforeIdentity = await h.WithDbAsync(db => db.ClinicHealthcareProviders.AsNoTracking().SingleAsync(p => p.Id == staffId));
+        beforeIdentity.PractitionerId.Should().BeNull("FK target Practitioner does not exist yet");
+        beforeIdentity.NormalizedLicenseNo.Should().Be("0091234");
+
+        // Portal practitioner.identity.updated arrives next and links the provider by staff/license
+        await h.DeliverAsync(InteropEnvelope.Create(
+            InteropTypes.PractitionerIdentityUpdated,
+            PatientInteropHarness.Portal,
+            new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient },
+            Guid.NewGuid(),
+            new PractitionerIdentityUpdatedPayload
+            {
+                PractitionerId = canonicalDocId,
+                ProfessionKind = "Doctor",
+                NormalizedPrcLicenseNo = "0091234",
+                DisplayPrcLicenseNo = "PRC-0091234",
+                VerificationLevel = PractitionerVerificationLevel.Verified,
+                FirstName = "Clara",
+                LastName = "Rizal",
+                Title = "Dr.",
+                PrimarySpecialty = "Pediatrics",
+                TenantId = PatientInteropHarness.TenantA,
+                FacilityId = clinicId,
+                ClinicStaffMemberId = staffId,
+                AffiliationStatus = "Active"
+            }));
+
+        var afterIdentity = await h.WithDbAsync(db => db.ClinicHealthcareProviders.AsNoTracking().SingleAsync(p => p.Id == staffId));
+        afterIdentity.PractitionerId.Should().Be(canonicalDocId);
+    }
+
+    [Fact]
+    public async Task Practitioner_identity_updated_from_portal_upserts_practitioner_handles_merge_and_links_clinic_provider()
+    {
+        using var h = new PatientInteropHarness();
+        var clinicId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var oldPractitionerId = Guid.NewGuid();
+        var canonicalPractitionerId = Guid.NewGuid();
+
+        await h.WithDbAsync(async db =>
+        {
+            db.Clinics.Add(new Clinic
+            {
+                Id = clinicId,
+                Name = "St. Paul Clinic",
+                TenantId = PatientInteropHarness.TenantA,
+                IsWorkspaceEligible = true,
+                IsDirectoryPublished = true,
+                IsPlatformVerified = true,
+                IsPublic = true
+            });
+            db.Practitioners.Add(new Practitioner
+            {
+                Id = oldPractitionerId,
+                ProfessionKind = "Doctor",
+                NormalizedPrcLicenseNo = "0099887",
+                DisplayPrcLicenseNo = "PRC-0099887",
+                VerificationLevel = PractitionerVerificationLevel.PendingVerification,
+                Name = "Dr. Elena Gomez",
+                FirstName = "Elena",
+                LastName = "Gomez",
+                PrimarySpecialty = "General Practice"
+            });
+            db.ClinicHealthcareProviders.Add(new ClinicHealthcareProvider
+            {
+                Id = staffId,
+                ClinicId = clinicId,
+                PractitionerId = oldPractitionerId,
+                Name = "Dr. Elena Gomez",
+                Specialty = "General Practice",
+                Role = "Doctor",
+                NormalizedLicenseNo = "0099887"
+            });
+            await db.SaveChangesAsync();
+        });
+
+        // Forged message from non-Portal sender must be ignored
+        var payload = new PractitionerIdentityUpdatedPayload
+        {
+            PractitionerId = oldPractitionerId,
+            MergedIntoPractitionerId = canonicalPractitionerId,
+            ProfessionKind = "Doctor",
+            NormalizedPrcLicenseNo = "0099887",
+            DisplayPrcLicenseNo = "PRC-0099887",
+            PrcExpiryDate = new DateOnly(2029, 12, 31),
+            VerificationLevel = PractitionerVerificationLevel.Verified,
+            FirstName = "Elena",
+            LastName = "Gomez",
+            Title = "Dr.",
+            PrimarySpecialty = "Cardiology",
+            PublicBio = "Fellow of Philippine Heart Association.",
+            AvatarUrl = "https://cdn.example.test/elena.jpg",
+            VerifiedAtUtc = DateTime.UtcNow,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityId = clinicId,
+            ClinicStaffMemberId = staffId,
+            AffiliationStatus = "Active",
+            LocalSpecialty = "Clinical Cardiology",
+            Availabilities =
+            [
+                new ProviderAvailabilityWindowDto(DayOfWeek.Tuesday, "09:00", "15:00")
+            ]
+        };
+
+        var forgedEnvelope = InteropEnvelope.Create(
+            InteropTypes.PractitionerIdentityUpdated,
+            PatientInteropHarness.Clinic(clinicId),
+            new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient },
+            Guid.NewGuid(),
+            payload);
+        await h.DeliverAsync(forgedEnvelope);
+
+        (await h.WithDbAsync(db => db.Practitioners.AsNoTracking().SingleAsync(p => p.Id == oldPractitionerId)))
+            .VerificationLevel.Should().Be(PractitionerVerificationLevel.PendingVerification);
+
+        // Authorized Portal message applies merge + upsert + affiliation link + availabilities
+        var portalEnvelope = InteropEnvelope.Create(
+            InteropTypes.PractitionerIdentityUpdated,
+            PatientInteropHarness.Portal,
+            new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient },
+            Guid.NewGuid(),
+            payload);
+        await h.DeliverAsync(portalEnvelope);
+
+        var mergedOld = await h.WithDbAsync(db => db.Practitioners.AsNoTracking().SingleAsync(p => p.Id == oldPractitionerId));
+        mergedOld.MergedIntoPractitionerId.Should().Be(canonicalPractitionerId);
+
+        var canonical = await h.WithDbAsync(db => db.Practitioners.AsNoTracking().SingleAsync(p => p.Id == canonicalPractitionerId));
+        canonical.VerificationLevel.Should().Be(PractitionerVerificationLevel.Verified);
+        canonical.Name.Should().Be("Dr. Elena Gomez");
+        canonical.Bio.Should().Be("Fellow of Philippine Heart Association.");
+        canonical.AvatarUrl.Should().Be("https://cdn.example.test/elena.jpg");
+
+        var staff = await h.WithDbAsync(db => db.ClinicHealthcareProviders
+            .Include(p => p.ProviderAvailabilities)
+            .AsNoTracking()
+            .SingleAsync(p => p.Id == staffId));
+        staff.PractitionerId.Should().Be(canonicalPractitionerId);
+        staff.Specialty.Should().Be("Clinical Cardiology");
+        staff.AffiliationStatus.Should().Be("Active");
+        staff.AvatarUrl.Should().Be("https://cdn.example.test/elena.jpg");
+        staff.ProviderAvailabilities.Should().ContainSingle(a => a.DayOfWeek == DayOfWeek.Tuesday);
+    }
+
+    [Fact]
+    public async Task Practitioner_verification_revoked_updates_level_and_marks_targeted_and_all_affiliations()
+    {
+        using var h = new PatientInteropHarness();
+        var clinicA = Guid.NewGuid();
+        var clinicB = Guid.NewGuid();
+        var staffA = Guid.NewGuid();
+        var staffB = Guid.NewGuid();
+        var practitionerId = Guid.NewGuid();
+
+        await h.WithDbAsync(async db =>
+        {
+            db.Clinics.AddRange(
+                new Clinic { Id = clinicA, Name = "Clinic A", TenantId = PatientInteropHarness.TenantA, IsPublic = true },
+                new Clinic { Id = clinicB, Name = "Clinic B", TenantId = PatientInteropHarness.TenantB, IsPublic = true });
+            db.Practitioners.Add(new Practitioner
+            {
+                Id = practitionerId,
+                ProfessionKind = "Doctor",
+                NormalizedPrcLicenseNo = "0055555",
+                DisplayPrcLicenseNo = "PRC-0055555",
+                VerificationLevel = PractitionerVerificationLevel.Verified,
+                Name = "Dr. Marco Cruz",
+                FirstName = "Marco",
+                LastName = "Cruz",
+                PrimarySpecialty = "Surgery"
+            });
+            db.ClinicHealthcareProviders.AddRange(
+                new ClinicHealthcareProvider
+                {
+                    Id = staffA,
+                    ClinicId = clinicA,
+                    PractitionerId = practitionerId,
+                    Name = "Dr. Marco Cruz",
+                    Specialty = "Surgery",
+                    Role = "Doctor",
+                    NormalizedLicenseNo = "0055555",
+                    AffiliationStatus = "Active"
+                },
+                new ClinicHealthcareProvider
+                {
+                    Id = staffB,
+                    ClinicId = clinicB,
+                    PractitionerId = practitionerId,
+                    Name = "Dr. Marco Cruz",
+                    Specialty = "Surgery",
+                    Role = "Doctor",
+                    NormalizedLicenseNo = "0055555",
+                    AffiliationStatus = "Active"
+                });
+            await db.SaveChangesAsync();
+        });
+
+        // 1. Targeted affiliation suspension at Clinic A only
+        var targetedPayload = new PractitionerVerificationRevokedPayload
+        {
+            PractitionerId = practitionerId,
+            FacilityId = clinicA,
+            ClinicStaffMemberId = staffA,
+            ProfessionKind = "Doctor",
+            NormalizedPrcLicenseNo = "0055555",
+            NewStatus = PractitionerVerificationLevel.Suspended,
+            Reason = "Suspended at Clinic A"
+        };
+        await h.DeliverAsync(InteropEnvelope.Create(
+            InteropTypes.PractitionerVerificationRevoked,
+            PatientInteropHarness.Portal,
+            new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient },
+            Guid.NewGuid(),
+            targetedPayload));
+
+        var afterTargetedA = await h.WithDbAsync(db => db.ClinicHealthcareProviders.AsNoTracking().SingleAsync(p => p.Id == staffA));
+        var afterTargetedB = await h.WithDbAsync(db => db.ClinicHealthcareProviders.AsNoTracking().SingleAsync(p => p.Id == staffB));
+        afterTargetedA.AffiliationStatus.Should().Be("Suspended");
+        afterTargetedB.AffiliationStatus.Should().Be("Active");
+
+        // 2. Practitioner-wide revocation marks all remaining affiliations Revoked
+        var allPayload = new PractitionerVerificationRevokedPayload
+        {
+            PractitionerId = practitionerId,
+            ProfessionKind = "Doctor",
+            NormalizedPrcLicenseNo = "0055555",
+            NewStatus = PractitionerVerificationLevel.Expired,
+            Reason = "PRC license expired"
+        };
+        await h.DeliverAsync(InteropEnvelope.Create(
+            InteropTypes.PractitionerVerificationRevoked,
+            PatientInteropHarness.Portal,
+            new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient },
+            Guid.NewGuid(),
+            allPayload));
+
+        var practAfter = await h.WithDbAsync(db => db.Practitioners.AsNoTracking().SingleAsync(p => p.Id == practitionerId));
+        practAfter.VerificationLevel.Should().Be(PractitionerVerificationLevel.Expired);
+        var allProviders = await h.WithDbAsync(db => db.ClinicHealthcareProviders.AsNoTracking().Where(p => p.PractitionerId == practitionerId).ToListAsync());
+        allProviders.Should().OnlyContain(p => p.AffiliationStatus == "Revoked");
+    }
+
+    [Fact]
     public void Every_message_type_patient_api_receives_has_a_handler()
     {
         using var h = new PatientInteropHarness();
 
         h.Provider.GetRequiredService<InteropHandlerRegistry>().RegisteredTypes.Should().BeEquivalentTo(
-            InteropTypes.FacilityDirectoryUpdated, InteropTypes.ClinicRecordVerified, InteropTypes.ClinicAppointmentUpdated,
+            InteropTypes.FacilityDirectoryUpdated,
+            InteropTypes.PractitionerIdentityUpdated, InteropTypes.PractitionerVerificationRevoked,
+            InteropTypes.ClinicRecordVerified, InteropTypes.ClinicAppointmentUpdated,
             InteropTypes.PatientShareRedeem, InteropTypes.PatientDocumentIssued, InteropTypes.LabOrderStatusChanged,
             InteropTypes.RxStatusChanged, InteropTypes.LabResultReviewed, InteropTypes.ClinicalImmunizationAdministered,
-            InteropTypes.PatientQueueAlert, InteropTypes.PatientAppointmentAlert);
+            InteropTypes.PatientQueueAlert, InteropTypes.PatientAppointmentAlert,
+            InteropTypes.CommsMessageReplicate, InteropTypes.CommsMessageReceived,
+            InteropTypes.CommsThreadStateChanged, InteropTypes.CommsEligibilitySynced,
+            InteropTypes.CommsCallStateChanged);
     }
 }

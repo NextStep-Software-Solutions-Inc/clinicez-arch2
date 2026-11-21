@@ -44,14 +44,14 @@ public class CreatePatientProblemValidator : AbstractValidator<CreatePatientProb
 
 public class CreatePatientProblemCommandHandler : IRequestHandler<CreatePatientProblemCommand, PatientProblemDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<PatientProblem> _problemRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<PatientMedicalHistory> _problemRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public CreatePatientProblemCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<PatientProblem> problemRepo,
+        IRepository<Patient> patientRepo,
+        IRepository<PatientMedicalHistory> problemRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -84,23 +84,24 @@ public class CreatePatientProblemCommandHandler : IRequestHandler<CreatePatientP
             ? command.RecordedByDoctorName.Trim()
             : "Attending Physician";
 
-        var problem = new PatientProblem
+        var problem = new PatientMedicalHistory
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,
             PatientId = command.PatientId,
+            Category = MedicalHistoryCategory.ProblemListItem,
             ConsultationEncounterId = command.ConsultationEncounterId,
             Icd10Code = command.Icd10Code.Trim().ToUpperInvariant(),
-            ProblemTitle = command.ProblemTitle.Trim(),
+            ConditionTitle = command.ProblemTitle.Trim(),
             PhilHealthMdiseaseCode = command.PhilHealthMdiseaseCode?.Trim(),
             Status = status,
             Severity = severity,
             IsChronicNcd = command.IsChronicNcd,
             OnsetDate = command.OnsetDate,
             ClinicalNotes = command.ClinicalNotes?.Trim(),
-            RecordedByDoctorId = doctorId,
-            RecordedByDoctorName = doctorName
+            RecordedByStaffId = doctorId,
+            RecordedByStaffName = doctorName
         };
 
         await _problemRepo.AddAsync(problem, cancellationToken);
@@ -112,16 +113,16 @@ public class CreatePatientProblemCommandHandler : IRequestHandler<CreatePatientP
             problem.PatientId,
             problem.ConsultationEncounterId,
             problem.Icd10Code,
-            problem.ProblemTitle,
+            problem.ConditionTitle,
             problem.PhilHealthMdiseaseCode,
             problem.Status.ToString(),
-            problem.Severity.ToString(),
+            problem.Severity?.ToString() ?? "Moderate",
             problem.IsChronicNcd,
             problem.OnsetDate,
             problem.ResolvedDate,
             problem.ClinicalNotes,
-            problem.RecordedByDoctorId,
-            problem.RecordedByDoctorName,
+            problem.RecordedByStaffId ?? Guid.Empty,
+            problem.RecordedByStaffName,
             problem.CreatedAt
         );
     }

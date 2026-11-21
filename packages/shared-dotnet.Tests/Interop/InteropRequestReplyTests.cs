@@ -177,7 +177,7 @@ public class InteropRequestReplyTests
 
         var reply = await clinic.Client.RequestAsync<PhilHealthRequestPayload, PhilHealthResponsePayload>(
             InteropTypes.PhilHealthRequest, InteropTypes.PhilHealthResponse, Clinic, Party.PhilHealth,
-            new PhilHealthRequestPayload { Operation = PhilHealthOperations.YakapPinValidate, Argument = "12-345" },
+            new PhilHealthRequestPayload { Operation = PhilHealthOperations.YakapValidateStanding, Argument = "12-345" },
             TimeSpan.FromSeconds(5));
         stop.Cancel();
         await pump;

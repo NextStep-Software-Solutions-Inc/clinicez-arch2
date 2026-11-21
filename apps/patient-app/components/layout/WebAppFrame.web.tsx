@@ -3,7 +3,12 @@ import { StyleSheet, View } from 'react-native';
 import type { NavigationState, ParamListBase } from '@react-navigation/native';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useAppTheme } from '../../contexts/ThemeContext';
-import { isTabRoute } from '../../navigation/webSections';
+import {
+  HeaderSearchProvider,
+  useHeaderSearchEntry,
+  useWebHeaderOverride,
+} from '../../contexts/HeaderSearchContext';
+import { resolveFocusedScreenName, resolveWebHeaderState } from '../../navigation/webSections';
 import { useWebKeyboardShortcuts } from '../../hooks/useWebKeyboardShortcuts.web';
 import WebSidebar from './WebSidebar.web';
 import WebPageHeader from './WebPageHeader.web';
@@ -15,31 +20,62 @@ interface WebAppFrameProps {
   children: ReactNode;
 }
 
-/**
- * Navigator `layout` for the web Main stack.
- *
- * >= 768px  : persistent sidebar + content column (centered, max width from tokens)
- * <  768px  : full-width content; the compact bottom tab bar is rendered by the tab navigator
- *
- * Pushed (non-tab) pages get a header with back + title. Tab pages draw their own page header.
- */
-export default function WebAppFrame({ state, navigation, descriptors, children }: WebAppFrameProps) {
+const SELF_HEADER_PUSHED_SCREENS = new Set([
+  'DirectorySearchScreen',
+  'AppointmentDetailScreen',
+  'BookingDraftScreen',
+]);
+
+function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFrameProps) {
   const { colors, sizes } = useAppTheme();
-  const { isWorkstation, isDesktop } = useBreakpoint();
+  const { isWorkstation, isDesktop, isCompact } = useBreakpoint();
   useWebKeyboardShortcuts(navigation);
 
-  const focused = state.routes[state.index];
-  const showHeader = !isTabRoute(state);
-  const title = focused ? descriptors[focused.key]?.options.title : undefined;
+  const headerInfo = resolveWebHeaderState(state, descriptors);
+  const focusedScreenName = resolveFocusedScreenName(state);
+  const headerOverride = useWebHeaderOverride(!headerInfo.isRootTab ? focusedScreenName : undefined);
+  const showBackHeader = !headerInfo.isRootTab && !(focusedScreenName && SELF_HEADER_PUSHED_SCREENS.has(focusedScreenName));
+  const showCompactTabHeader =
+    headerInfo.isRootTab &&
+    isCompact &&
+    headerInfo.tabKey !== 'HomeScreen' &&
+    headerInfo.tabKey !== 'AppointmentsScreen';
+  const activeSearch = useHeaderSearchEntry(headerInfo.isRootTab ? headerInfo.tabKey : undefined);
 
   const onBack = () => {
+    if (headerInfo.isNestedTabPush && (headerInfo.tabKey === 'RecordsScreen' || headerInfo.tabKey === 'FilesScreen')) {
+      navigation.navigate('BottomTabs', {
+        screen: headerInfo.tabKey,
+        params: { screen: 'FilesBrowserScreen' },
+      });
+      return;
+    }
     if (navigation.canGoBack()) navigation.goBack();
     else navigation.navigate('BottomTabs', { screen: 'HomeScreen' });
   };
 
   const content = (
     <View style={styles.column}>
-      {showHeader ? <WebPageHeader title={title} onBack={onBack} /> : null}
+      {showBackHeader ? (
+        <WebPageHeader
+          title={headerOverride?.title || headerInfo.title}
+          subtitle={headerOverride?.subtitle ?? headerInfo.subtitle}
+          categoryLabel={headerOverride?.categoryLabel}
+          onShare={headerOverride?.onShare}
+          onBack={onBack}
+        />
+      ) : showCompactTabHeader ? (
+        <WebPageHeader
+          title={headerInfo.title}
+          subtitle={headerInfo.subtitle}
+          showBrand
+          showAccountActions
+          onOpenSearch={activeSearch?.openSearch}
+          hasActiveSearch={activeSearch?.hasActiveSearch}
+          onOpenNotifications={() => navigation.navigate('NotificationScreen')}
+          onOpenSettings={() => navigation.navigate('SettingsScreen')}
+        />
+      ) : null}
       <View style={styles.contentOuter}>
         <View style={[styles.contentInner, { maxWidth: sizes.contentMaxWidth }]}>{children}</View>
       </View>
@@ -48,9 +84,29 @@ export default function WebAppFrame({ state, navigation, descriptors, children }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {isWorkstation ? <WebSidebar state={state} navigation={navigation} collapsed={!isDesktop} /> : null}
+      {isWorkstation ? (
+        <WebSidebar state={state} navigation={navigation} collapsed={!isDesktop} />
+      ) : null}
       {content}
     </View>
+  );
+}
+
+/**
+ * Navigator `layout` for the web Main stack.
+ *
+ * >= 768px  : persistent sidebar + content column (centered, max width from tokens)
+ * <  768px  : full-width content with a persistent top header and compact bottom tab bar
+ *
+ * Pushed (non-tab) pages and nested tab sub-pages (e.g. Add Health Record) get a header
+ * with back + title on all viewports. Root tab pages get the compact header with brand mark,
+ * title, optional Search button, and Notification/Settings actions when < 768px.
+ */
+export default function WebAppFrame(props: WebAppFrameProps) {
+  return (
+    <HeaderSearchProvider>
+      <WebAppFrameInner {...props} />
+    </HeaderSearchProvider>
   );
 }
 

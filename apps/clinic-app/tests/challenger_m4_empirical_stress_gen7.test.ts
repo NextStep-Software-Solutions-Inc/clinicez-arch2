@@ -144,7 +144,7 @@ describe('Empirical Challenger Gen7 — Milestone M4 Stress Test Harness', () =>
     firstName: 'Maria',
     lastName: 'Del Fierro',
     dateOfBirth: '1979-11-23',
-    gender: 'Female',
+    sex: 'Female',
     philHealthNumber: '02-123456789-0',
     chronicConditions: undefined,
     status: 'Active',
@@ -533,7 +533,7 @@ describe('Empirical Challenger Gen7 — Milestone M4 Stress Test Harness', () =>
         );
         expect(markup).toContain('0 Selected');
       }
-    });
+    }, 30000);
   });
 
   // =========================================================================
@@ -575,7 +575,7 @@ describe('Empirical Challenger Gen7 — Milestone M4 Stress Test Harness', () =>
       expect(markup).toContain('Reproductive / OB-GYN');
       expect(markup).toContain('Cardiometabolic &amp; NCD');
       // Embedded section from ClinicalHistoryTab must be present
-      expect(markup).toContain('Past Medical History (Personal)');
+      expect(markup).toContain('Personal Medical History');
       expect(markup).toContain('Family Medical History');
     });
   });

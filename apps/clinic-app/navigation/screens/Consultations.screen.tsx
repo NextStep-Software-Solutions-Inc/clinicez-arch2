@@ -35,6 +35,7 @@ import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
 import {
   PatientSummarySpine,
+  reconcileChartWithPatient,
   ExecutiveSummaryTab,
   EncountersTimelineTab,
   DiagnosticLabTab,
@@ -42,14 +43,34 @@ import {
   StatutoryImmunizationsTab,
   HealthProfilesTab,
   ExternalDocumentVaultTab,
+  AdministrativeDocumentsTab,
   AttachExternalDocumentModal,
   DentalChartTab,
+  CHART_TAB_LABELS,
+  pushChartTabHistory,
+  popChartTabHistory,
 } from '../../components/chart';
-import type { DentalToothRecord } from '../../services/clinicService';
+import type {
+  DentalToothRecord,
+  VisitWorkflowMode,
+  EncounterReviewOfSystemsItemDto,
+  EncounterObGyneExamDto,
+  EncounterPediatricMilestoneDto,
+  EncounterAdolescentAssessmentDto,
+  EncounterHeadsssDomainAssessmentDto,
+  PatientBpMonitoringLogDto,
+  RosCategoryCode,
+  CreateConsultationRequest,
+  ConsultationRecord,
+  DraftDiagnosticOrderDto,
+  DraftProcedureOrderDto,
+  DraftDentalToothDto,
+  ConsultationDraftWorkspaceDto,
+} from '../../services/clinicService';
 import EditPatientModal from '../../components/patient/EditPatientModal';
-import { extractPhilHealthProfileData } from '../../components/patient/memberType';
 import { formatLongAge } from '../../utils/age';
 import { getSessionItem, setSessionItem, getDeviceItem, setDeviceItem } from '../../utils/deviceStorage';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   InlinePhysicalExamCard,
   DEFAULT_PHYSICAL_EXAM_NORMAL,
@@ -57,10 +78,42 @@ import {
   YakapClaimReadinessCard,
   StatutorySectionKey,
   RecordVitalsModal,
+  EditVitalsModal,
   OrderCatalogSearchModal,
   OrderCatalogItemPayload,
   InlineDentalChartCard,
   DentalToothState,
+  WorkflowModeSelector,
+  type DraftSaveStatus,
+  NursePreAssessmentCard,
+  ReviewOfSystemsChecklist,
+  SpecificEncounterFormsCard,
+  PlanManagementCard,
+  DEFAULT_YAKAP_PLAN_MANAGEMENT,
+  YakapPlanManagementState,
+  hydratePlanManagementFromEncounter,
+  buildPlanManagementPayload,
+  to1NFFindings,
+  from1NFFindings,
+  RosCategorySelectorSection,
+  normalizeRosCategoryCode,
+  normalizeRosCategoryList,
+  getRosShortLabel,
+  parseBooleanRouteParam,
+  formatDraftSavedTimestamp,
+  extractStagedDentalTeethForDraft,
+  buildConsultationDraftPayload,
+  rehydrateEncounterPlanManagementWithWorkspace,
+  validateRxClinicDispensedQuantity,
+  saveLocalConsultationDraft,
+  readLocalConsultationDraft,
+  clearLocalConsultationDraft,
+  shouldOverlayLocalConsultationDraft,
+  mergeConsultationRecordWithLocalDraft,
+  type BuildConsultationDraftPayloadInput,
+  HOME_INSTRUCTION_PRESETS,
+  toggleHomeInstructionPreset,
+  type HomeInstructionPreset,
 } from '../../components/consultation';
 import {
   normalizeTeethToMultiRecord,
@@ -68,13 +121,21 @@ import {
   voidConditionOnTooth,
 } from '../../components/dental';
 import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhilHealthCatalog';
+import { formatDispenseFormLabel, parseMedicineSelection } from '@utils/medicineParser';
+import { syncSubjectiveWithToggledSymptoms } from '@utils/subjectiveNarrative';
+import { registerBeforeLockHook } from '../../services/sessionHooks';
 import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
 import { useClinic } from '../../context/ClinicContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
+import { useAuth } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../constants/permissions';
 import { openDocument, openDocumentBlob } from '../../services/documentOpener';
 import {
   clinicService,
   computeScopedStations,
+  getManilaTodayStr,
+  formatClinicDate,
+  formatClinicTime,
   isPatientVisibleToStaff,
   resolveCallToRoom,
   PatientQueueItem,
@@ -99,6 +160,11 @@ import {
 import {
   type PrintLetterhead,
 } from '../../utils/printHelper';
+import {
+  normalizeActiveQueueItemId,
+  matchVisitDocument,
+  belongsToActiveUnsignedVisit,
+} from '../../utils/visitDocumentDrafts';
 
 interface LocalPrescription {
   id: string;
@@ -110,6 +176,8 @@ interface LocalPrescription {
   durationDays?: number;
   isDangerousDrug: boolean;
   philHealthDrugCode?: string;
+  clinicDispensedQuantity?: number;
+  rosCategory?: RosCategoryCode | string;
 }
 
 interface LocalDiagnosis {
@@ -148,6 +216,7 @@ export interface LocalProcedureOrder {
   handedOffAt?: string;
   toothNumber?: number;
   toothSurface?: string;
+  procedureId?: string;
 }
 
 export interface EditingOrderItemState {
@@ -182,10 +251,58 @@ const REFERRAL_URGENCIES = ['Routine', 'Urgent', 'Emergency'];
 /** "ResultsReceived" -> "Results Received" */
 const humanize = (value: string) => value.replace(/([a-z])([A-Z])/g, '$1 $2');
 
+async function fetchVisitDocumentDrafts(params: {
+  patientId: string;
+  consultationId?: string | null;
+  queueItemId?: string | null;
+  chartData?: PatientChart | null;
+  isEncounterSigned: boolean;
+}) {
+  const { patientId, consultationId, queueItemId, chartData, isEncounterSigned } = params;
+  let matchedMedCert = matchVisitDocument(chartData?.medicalCertificates, {
+    consultationId,
+    queueItemId,
+  });
+  let matchedReferral = matchVisitDocument(chartData?.referralLetters, {
+    consultationId,
+    queueItemId,
+  });
+  let medCertFetchFailed = false;
+  let referralFetchFailed = false;
+
+  const hasVisitIdentifiers = Boolean(
+    (consultationId && !consultationId.startsWith('local-draft-')) ||
+      normalizeActiveQueueItemId(queueItemId),
+  );
+
+  if (!isEncounterSigned && hasVisitIdentifiers && (!matchedMedCert || !matchedReferral)) {
+    const [draftCertsRes, draftRefsRes] = await Promise.all([
+      !matchedMedCert
+        ? clinicService.getMedicalCertificates(patientId, undefined, { includeUnsigned: true })
+        : Promise.resolve([null, null] as const),
+      !matchedReferral
+        ? clinicService.getReferralLetters(patientId, undefined, { includeUnsigned: true })
+        : Promise.resolve([null, null] as const),
+    ]);
+    const [draftCerts, draftCertsErr] = draftCertsRes;
+    const [draftRefs, draftRefsErr] = draftRefsRes;
+    medCertFetchFailed = Boolean(!matchedMedCert && draftCertsErr);
+    referralFetchFailed = Boolean(!matchedReferral && draftRefsErr);
+
+    if (!matchedMedCert && draftCerts) {
+      matchedMedCert = matchVisitDocument(draftCerts, { consultationId, queueItemId });
+    }
+    if (!matchedReferral && draftRefs) {
+      matchedReferral = matchVisitDocument(draftRefs, { consultationId, queueItemId });
+    }
+  }
+
+  return { matchedMedCert, matchedReferral, medCertFetchFailed, referralFetchFailed };
+}
+
 const formatDate = (iso?: string) => {
   if (!iso) return '';
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString();
+  return formatClinicDate(iso, { fallback: '' });
 };
 
 const priorityVariant = (priority: string): BadgeVariant =>
@@ -311,12 +428,25 @@ function CheckRow({ checked, onPress, label, disabled }: CheckRowProps) {
   );
 }
 
+export {
+  formatDraftSavedTimestamp,
+  extractStagedDentalTeethForDraft,
+  buildConsultationDraftPayload,
+  rehydrateEncounterPlanManagementWithWorkspace,
+  type BuildConsultationDraftPayloadInput,
+  HOME_INSTRUCTION_PRESETS,
+  type HomeInstructionPreset,
+  toggleHomeInstructionPreset,
+};
+
 export default function ConsultationsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead, rooms = [], settings } = useClinic();
   const allowChipLevelCalling = Boolean(settings?.enableChipLevelQueueCalling);
   const { current, staff, reload: reloadStaff } = useStaff();
+  const { user: authUser, can } = useAuth();
+  const canRecordVitals = authUser ? can(PERMISSIONS.triageWrite) : true;
 
   const activeRooms = useMemo(() => (rooms || []).filter((r) => r.isActive), [rooms]);
   const treatmentRooms = useMemo(
@@ -369,6 +499,7 @@ export default function ConsultationsScreen() {
     | 'immunizations'
     | 'profiles'
     | 'vault'
+    | 'documents'
     | 'dental';
   const CHART_TAB_DESCRIPTIONS: Record<ChartReviewTab, string> = {
     summary: 'Executive clinical summary, problems, and vital trends',
@@ -378,20 +509,60 @@ export default function ConsultationsScreen() {
     immunizations: 'Statutory immunizations, schedules, and adverse events (AEFI)',
     profiles: 'Past medical history, surgical, social, and NCD risk profiles',
     vault: 'External document vault, outside imaging films, and clearances',
+    documents: 'Issued medical certificates and referral letters',
     dental: 'Odontogram findings, tooth condition, surfaces, and dental procedures',
   };
-  const [activeChartTab, setActiveChartTab] = useState<ChartReviewTab>(() => {
-    const saved = getSessionItem('clinicez_consultations_active_chart_tab') as ChartReviewTab | null;
-    if (saved && ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault', 'dental'].includes(saved)) {
-      return saved;
-    }
-    return 'summary';
+  const [activeChartTab, setActiveChartTab] = usePersistedTab<ChartReviewTab>({
+    storageKey: 'clinicez_consultations_active_chart_tab',
+    allowedValues: ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault', 'documents', 'dental'],
+    defaultValue: 'summary',
+    routeParam: (route?.params as any)?.chartTab,
+    queryParam: 'chartTab',
+    queryParamAliases: ['tab', 'section'],
+    syncUrl: Boolean(selectedPatient),
+    clearUrlOnInactive: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('consultations'),
   });
 
+  const [chartTabHistory, setChartTabHistory] = useState<ChartReviewTab[]>([]);
+
   const handleSelectChartTab = (tab: ChartReviewTab) => {
+    if (tab === activeChartTab) return;
+    setChartTabHistory((prev) => pushChartTabHistory(prev, activeChartTab, tab));
     setActiveChartTab(tab);
-    setSessionItem('clinicez_consultations_active_chart_tab', tab);
   };
+  const [isWorkspaceExpanded, setIsWorkspaceExpanded] = useState<boolean>(() => {
+    return getSessionItem('clinicez_consultations_workspace_expanded') === 'true';
+  });
+  const [isChartExpanded, setIsChartExpanded] = useState<boolean>(() => {
+    if (getSessionItem('clinicez_consultations_workspace_expanded') === 'true') {
+      return false;
+    }
+    return getSessionItem('clinicez_consultations_chart_expanded') === 'true';
+  });
+  const handleToggleWorkspaceExpand = useCallback(() => {
+    setIsWorkspaceExpanded((prev) => {
+      const next = !prev;
+      setSessionItem('clinicez_consultations_workspace_expanded', next ? 'true' : 'false');
+      if (next) {
+        setIsChartExpanded(false);
+        setSessionItem('clinicez_consultations_chart_expanded', 'false');
+      }
+      return next;
+    });
+  }, []);
+  const handleToggleChartExpand = useCallback(() => {
+    setIsChartExpanded((prev) => {
+      const next = !prev;
+      setSessionItem('clinicez_consultations_chart_expanded', next ? 'true' : 'false');
+      if (next) {
+        setIsWorkspaceExpanded(false);
+        setSessionItem('clinicez_consultations_workspace_expanded', 'false');
+      }
+      return next;
+    });
+  }, []);
   const [mobileWorkstationView, setMobileWorkstationView] = useState<'soap' | 'chart'>('soap');
   const [uploadDocModalVisible, setUploadDocModalVisible] = useState(false);
   const [postEncounterModalVisible, setPostEncounterModalVisible] = useState(false);
@@ -405,14 +576,24 @@ export default function ConsultationsScreen() {
   // Multi-Provider Queue Room / Station & Status Filter States (Persistent per staff)
   const staffKey = current?.id ? `clinicez:consultations:${current.id}` : 'clinicez:consultations:default';
 
-  const [queueViewFilter, setQueueViewFilter] = useState<QueueView>(() => {
-    const saved = getDeviceItem(`${staffKey}:queueView`);
-    return saved === 'WaitingForDoctor' || saved === 'MyRoom' || saved === 'PendingProcedure' || saved === 'Completed' || saved === 'All'
-      ? saved
-      : 'WaitingForDoctor';
+  const [queueViewFilter, setQueueViewFilter] = usePersistedTab<QueueView>({
+    storageKey: `${staffKey}:queueView`,
+    allowedValues: ['WaitingForDoctor', 'MyRoom', 'PendingProcedure', 'Completed', 'All'],
+    defaultValue: 'WaitingForDoctor',
+    routeParam: (route?.params as any)?.queueView,
+    queryParam: 'queueView',
+    queryParamAliases: ['view', 'status'],
+    pathnameMatcher: (p) => (p || '').includes('consultations'),
+    navigation,
   });
-  const [selectedStationFilter, setSelectedStationFilter] = useState<string>(() => {
-    return getDeviceItem(`${staffKey}:station`) || 'ALL';
+  const [selectedStationFilter, setSelectedStationFilter] = usePersistedTab<string>({
+    storageKey: `${staffKey}:station`,
+    defaultValue: 'ALL',
+    routeParam: (route?.params as any)?.station,
+    queryParam: 'station',
+    omitDefaultFromUrl: true,
+    pathnameMatcher: (p) => (p || '').includes('consultations'),
+    navigation,
   });
   const didApplyStaffRoomDefaults = useRef(false);
 
@@ -490,7 +671,13 @@ export default function ConsultationsScreen() {
 
   const nextEligiblePatient = useMemo(() => {
     const eligibleStatuses: QueueStatus[] = ['Triaged', 'ReEvaluation', 'Waiting'];
-    return displayedPatients.find((p) => eligibleStatuses.includes(p.status));
+    return displayedPatients.find(
+      (p) =>
+        eligibleStatuses.includes(p.status) &&
+        !p.isDirectVisit &&
+        !p.queueNumber?.startsWith('DV-') &&
+        !p.id.startsWith('ephemeral-')
+    );
   }, [displayedPatients]);
 
   // PhilHealth Yakap Claim Readiness States (Feature 17)
@@ -504,16 +691,73 @@ export default function ConsultationsScreen() {
   const sectionOffsets = useRef<Record<string, number>>({});
   const soapPaneOffsetY = useRef<number>(0);
 
-  const handleJumpToSection = (section: StatutorySectionKey) => {
-    if (section === 'vitals') {
+  const latestDisplayedVitals = vitals ?? patientChart?.vitalsHistory?.[0] ?? null;
+
+  const latestVitalsRecordedMeta = useMemo(() => {
+    if (!latestDisplayedVitals) return null;
+
+    const matchedHistoryEntry = patientChart?.vitalsHistory?.find(
+      (v) =>
+        (latestDisplayedVitals.id && v.id === latestDisplayedVitals.id) ||
+        (latestDisplayedVitals.queueItemId && v.queueItemId === latestDisplayedVitals.queueItemId),
+    );
+    const matchedStaff = latestDisplayedVitals.nurseId
+      ? staff.find((s) => s.id === latestDisplayedVitals.nurseId)
+      : undefined;
+    const recorderName =
+      latestDisplayedVitals.recordedByNurseName?.trim() ||
+      matchedHistoryEntry?.recordedByNurseName?.trim() ||
+      (matchedStaff ? formatStaffName(matchedStaff) : null);
+
+    let whenLabel: string | null = null;
+    if (latestDisplayedVitals.recordedAt) {
+      const recordedYmd = formatClinicDate(latestDisplayedVitals.recordedAt, {
+        dateFormat: 'yyyy-MM-dd',
+        fallback: '',
+      });
+      const timeStr = formatClinicTime(latestDisplayedVitals.recordedAt, { fallback: '' });
+      if (recordedYmd && recordedYmd !== getManilaTodayStr()) {
+        const dateStr = formatClinicDate(latestDisplayedVitals.recordedAt, { fallback: '' });
+        whenLabel = dateStr && timeStr ? `${dateStr} • ${timeStr}` : dateStr || timeStr || null;
+      } else if (timeStr) {
+        whenLabel = timeStr;
+      }
+    }
+
+    if (whenLabel && recorderName) {
+      return `${whenLabel} by ${recorderName}`;
+    }
+    if (whenLabel) {
+      return `Recorded ${whenLabel}`;
+    }
+    if (recorderName) {
+      return `Recorded by ${recorderName}`;
+    }
+    return null;
+  }, [latestDisplayedVitals, patientChart?.vitalsHistory, staff]);
+
+  const handleOpenVitalsModal = () => {
+    if (latestDisplayedVitals) {
+      setEditVitalsModalVisible(true);
+    } else {
       setRecordVitalsModalVisible(true);
+    }
+  };
+
+  const handleJumpToSection = (section: StatutorySectionKey) => {
+    if (section === 'vitals' && canRecordVitals) {
+      handleOpenVitalsModal();
     }
     if (mobileWorkstationView !== 'soap') {
       setMobileWorkstationView('soap');
     }
+    const isSpineSection = section === 'patient-pin' || section === 'vitals';
+    if (isDesktopWorkstation && isChartExpanded && !isSpineSection) {
+      setIsChartExpanded(false);
+      setSessionItem('clinicez_consultations_chart_expanded', 'false');
+    }
     const rawY = sectionOffsets.current[section];
     if (rawY != null) {
-      const isSpineSection = section === 'patient-pin' || section === 'vitals';
       if (isDesktopWorkstation) {
         if (isSpineSection) {
           scrollViewRef.current?.scrollTo({ y: Math.max(0, rawY - 24), animated: true });
@@ -533,6 +777,7 @@ export default function ConsultationsScreen() {
   // SOAP Inputs
   const [subjective, setSubjective] = useState('');
   const [objective, setObjective] = useState('');
+  const [importedProcedureIds, setImportedProcedureIds] = useState<string[]>([]);
   const [assessment, setAssessment] = useState('');
   const [plan, setPlan] = useState('');
   const [homeInstructions, setHomeInstructions] = useState('');
@@ -575,6 +820,34 @@ export default function ConsultationsScreen() {
     ]
   );
 
+  const availableChartTabIds = useMemo<ChartReviewTab[]>(
+    () => [
+      'summary',
+      'encounters',
+      'diagnostics',
+      'procedures',
+      'immunizations',
+      'profiles',
+      'vault',
+      'documents',
+      ...(isDentalEnabled ? (['dental'] as ChartReviewTab[]) : []),
+    ],
+    [isDentalEnabled],
+  );
+
+  const { previousTab: previousChartTab } = useMemo(
+    () => popChartTabHistory(chartTabHistory, availableChartTabIds),
+    [chartTabHistory, availableChartTabIds],
+  );
+
+  const handleChartTabBack = useCallback(() => {
+    const { previousTab: target, nextHistory } = popChartTabHistory(chartTabHistory, availableChartTabIds);
+    if (!target) return;
+    setChartTabHistory(nextHistory);
+    setActiveChartTab(target);
+    setSessionItem('clinicez_consultations_active_chart_tab', target);
+  }, [chartTabHistory, availableChartTabIds]);
+
   const handleDentalChartChange = useCallback((nextChart: Record<number, any>) => {
     // Only stage changes in the right-side active encounter dentalChart state while unsigned.
     // The left-side Patient Chart (patientChart.dentalTeeth) remains read-only historical status
@@ -588,6 +861,7 @@ export default function ConsultationsScreen() {
   const [orderSearchInitialCategory, setOrderSearchInitialCategory] = useState<'Diagnostic' | 'Procedure' | 'Dental' | 'All'>('All');
   const [editPatientModalVisible, setEditPatientModalVisible] = useState(false);
   const [recordVitalsModalVisible, setRecordVitalsModalVisible] = useState(false);
+  const [editVitalsModalVisible, setEditVitalsModalVisible] = useState(false);
 
   // New Prescription Form State
   const [showAddRx, setShowAddRx] = useState(false);
@@ -596,15 +870,100 @@ export default function ConsultationsScreen() {
   const [newRxForm, setNewRxForm] = useState('Tablet');
   const [newRxSig, setNewRxSig] = useState('');
   const [newRxQuantity, setNewRxQuantity] = useState('30');
+  const [newRxClinicDispensedQty, setNewRxClinicDispensedQty] = useState('');
   const [newRxDangerous, setNewRxDangerous] = useState(false);
   const [newRxDrugCode, setNewRxDrugCode] = useState<string>('');
+  const [selectedCatalogMedId, setSelectedCatalogMedId] = useState<string>('');
 
-  // PhilHealth Yakap Tagging & Statutory Mapping State
+  // Dual-Workflow Mode & PhilHealth Yakap Tagging State
+  const [visitWorkflowMode, setVisitWorkflowMode] = useState<VisitWorkflowMode>('Regular');
   const [isYakapEligible, setIsYakapEligible] = useState<boolean>(false);
   const [philHealthAtc, setPhilHealthAtc] = useState<string>('WALKEDIN');
+  const [rosCategory, setRosCategory] = useState<RosCategoryCode>('EssentiallyNormal');
+  const [rosCategories, setRosCategories] = useState<RosCategoryCode[]>([]);
+  const [isAbandoningDraft, setIsAbandoningDraft] = useState(false);
   const [selectedSymptomCodes, setSelectedSymptomCodes] = useState<string[]>([]);
+  const [rosItems, setRosItems] = useState<EncounterReviewOfSystemsItemDto[]>([]);
   const [symptomOtherDesc, setSymptomOtherDesc] = useState<string>('');
   const [symptomPainSite, setSymptomPainSite] = useState<string>('');
+
+  const applyRosCategories = useCallback((nextCategories: ReadonlyArray<RosCategoryCode | string>) => {
+    const normalized = normalizeRosCategoryList(nextCategories, { allowEmpty: true });
+    setRosCategories(normalized);
+    const primary =
+      normalized.find((c) => c !== 'EssentiallyNormal') ??
+      normalized[0] ??
+      'EssentiallyNormal';
+    setRosCategory(primary);
+  }, []);
+
+  // PhilHealth YAKAP Specific Encounter Form Cohort States
+  const [obGyneExam, setObGyneExam] = useState<EncounterObGyneExamDto | null>(null);
+  const [pediatricMilestones, setPediatricMilestones] = useState<EncounterPediatricMilestoneDto[]>([]);
+  const [adolescentAssessment, setAdolescentAssessment] = useState<EncounterAdolescentAssessmentDto | null>(null);
+  const [headsssAssessments, setHeadsssAssessments] = useState<EncounterHeadsssDomainAssessmentDto[]>([]);
+  const [bpMonitoringLogs, setBpMonitoringLogs] = useState<PatientBpMonitoringLogDto[]>([]);
+  const [planManagement, setPlanManagement] = useState<YakapPlanManagementState>({
+    ...DEFAULT_YAKAP_PLAN_MANAGEMENT,
+  });
+
+  const handleWorkflowModeChange = (mode: VisitWorkflowMode) => {
+    if (isSigned) return;
+    setVisitWorkflowMode(mode);
+    const yakap = mode === 'YakapAvailment';
+    setIsYakapEligible(yakap);
+    if (yakap && !philHealthAtc.trim()) {
+      setPhilHealthAtc('WALKEDIN');
+    }
+    setSelectedPatient((prev) => (prev ? { ...prev, visitWorkflowMode: mode } : prev));
+    setPatients((prev) =>
+      (prev || []).map((item) =>
+        selectedPatient && item.id === selectedPatient.id
+          ? { ...item, visitWorkflowMode: mode }
+          : item,
+      ),
+    );
+  };
+
+  const handleRosChange = (items: EncounterReviewOfSystemsItemDto[]) => {
+    if (isSigned) return;
+    const prevItems = rosItems;
+    setRosItems(items);
+    const newCodes = items.map((i) => i.optionCode);
+    setSelectedSymptomCodes(newCodes);
+
+    // Sync pain site input when present or cleared in items
+    const painItem = items.find(
+      (i) =>
+        i.optionCode === '38' ||
+        i.optionCode.toLowerCase().includes('pain') ||
+        (i.symptomName?.toLowerCase() ?? '').includes('pain'),
+    );
+    if (painItem !== undefined) {
+      const nextPainSite = painItem.painSite ?? '';
+      if (nextPainSite !== symptomPainSite) {
+        setSymptomPainSite(nextPainSite);
+      }
+    }
+    // Sync other complaint input when present or cleared in items
+    const otherItem = items.find(
+      (i) =>
+        i.optionCode.toUpperCase() === 'X' ||
+        i.optionCode.toLowerCase().includes('other') ||
+        (i.symptomName?.toLowerCase() ?? '').includes('other'),
+    );
+    if (otherItem !== undefined) {
+      const nextOtherDesc = otherItem.othersSpecifyText ?? '';
+      if (nextOtherDesc !== symptomOtherDesc) {
+        setSymptomOtherDesc(nextOtherDesc);
+      }
+    }
+
+    // Add newly selected symptoms and remove untoggled symptoms in subjective narrative
+    if (prevItems.length !== items.length) {
+      setSubjective((prev) => syncSubjectiveWithToggledSymptoms(prev, prevItems, items));
+    }
+  };
 
   // PhilHealth signs and symptoms come from the catalog (cached on the device), never from literals.
   const symptomLibrary = usePhilHealthCatalog('lib_signs_symptoms', isYakapEligible);
@@ -617,8 +976,8 @@ export default function ConsultationsScreen() {
       })),
     [symptomLibrary.items],
   );
-  const painSymptomCode = symptoms.find((s) => isCatalogTerm(s, 'pain'))?.code;
-  const otherSymptomCode = symptoms.find((s) => isCatalogTerm(s, 'others'))?.code;
+  const painSymptomCode = symptoms.find((s) => isCatalogTerm(s, 'pain'))?.code ?? '38';
+  const otherSymptomCode = symptoms.find((s) => isCatalogTerm(s, 'others'))?.code ?? 'X';
   const painSymptomSelected = Boolean(painSymptomCode && selectedSymptomCodes.includes(painSymptomCode));
   const otherSymptomSelected = Boolean(otherSymptomCode && selectedSymptomCodes.includes(otherSymptomCode));
 
@@ -629,32 +988,48 @@ export default function ConsultationsScreen() {
   const [isFollowUpEncounter, setIsFollowUpEncounter] = useState(false);
   const [banner, setBanner] = useState<{ text: string; isError?: boolean } | null>(null);
 
-  const handleToggleSymptom = (symptom: StatutorySymptom) => {
-    if (isSigned) return;
-    const exists = selectedSymptomCodes.includes(symptom.code);
-    let updated: string[];
-    if (exists) {
-      updated = selectedSymptomCodes.filter((c) => c !== symptom.code);
-    } else {
-      updated = [...selectedSymptomCodes, symptom.code];
-      // When selected, automatically seed/append into the free-text subjective narrative.
-      if (!subjective.trim()) {
-        setSubjective(`${symptom.name}, `);
-      } else if (!subjective.toLowerCase().includes(symptom.name.toLowerCase())) {
-        const separator = subjective.endsWith(',') || subjective.endsWith('.') ? ' ' : ', ';
-        setSubjective((prev) => `${prev.trim()}${separator}${symptom.name}`);
-      }
-    }
-    setSelectedSymptomCodes(updated);
-  };
-
   // PhilHealth medicine lookup for a new medication order (thousands of rows, searched on the server).
   const [rxCatalogQuery, setRxCatalogQuery] = useState('');
-  const rxCatalogSearch = usePhilHealthCatalogSearch('lib_medicine', isYakapEligible && showAddRx ? rxCatalogQuery : '', { take: 15 });
+  const rxMetaEnabled = isYakapEligible && showAddRx;
+  const rxCatalogSearch = usePhilHealthCatalogSearch('lib_medicine', rxMetaEnabled ? rxCatalogQuery : '', { take: 15 });
+  const rxStrengthCatalog = usePhilHealthCatalog('lib_medicine_strength', rxMetaEnabled);
+  const rxFormCatalog = usePhilHealthCatalog('lib_medicine_form', rxMetaEnabled);
+  const rxUnitCatalog = usePhilHealthCatalog('lib_medicine_unit', rxMetaEnabled);
+  const rxGenericCatalog = usePhilHealthCatalog('lib_medicine_generic', rxMetaEnabled);
+
+  const rxStrengthLookup = useMemo(
+    () => new Map(rxStrengthCatalog.items.map((entry) => [entry.code, entry.description])),
+    [rxStrengthCatalog.items],
+  );
+  const rxFormLookup = useMemo(
+    () => new Map(rxFormCatalog.items.map((entry) => [entry.code, entry.description])),
+    [rxFormCatalog.items],
+  );
+  const rxUnitLookup = useMemo(
+    () => new Map(rxUnitCatalog.items.map((entry) => [entry.code, entry.description])),
+    [rxUnitCatalog.items],
+  );
+  const rxGenericLookup = useMemo(
+    () => new Map(rxGenericCatalog.items.map((entry) => [entry.code, entry.description])),
+    [rxGenericCatalog.items],
+  );
 
   const handleSelectPhilHealthMedicine = (item: PhilHealthCatalogItem) => {
-    setNewRxGeneric(item.description);
+    const parsed = parseMedicineSelection({
+      description: item.description,
+      attributes: item.attributes,
+      strengthLookup: rxStrengthLookup,
+      formLookup: rxFormLookup,
+      unitLookup: rxUnitLookup,
+      genericLookup: rxGenericLookup,
+    });
+    setNewRxGeneric(parsed.genericName);
+    if (parsed.dosage) {
+      setNewRxDosage(parsed.dosage);
+    }
+    setNewRxForm(parsed.form);
     setNewRxDrugCode(item.code);
+    setSelectedCatalogMedId('');
     setRxCatalogQuery('');
   };
   // Tenant Mapped Services & Formulary Catalog (fee schedule)
@@ -687,10 +1062,14 @@ export default function ConsultationsScreen() {
   const consultationFee = catalogByCategory('consultation')[0];
 
   const handleSelectCatalogMedicine = (item: ClinicServiceItem) => {
-    setNewRxGeneric(item.name);
-    if (item.philHealthCode) {
-      setNewRxDrugCode(item.philHealthCode);
+    const parsed = parseMedicineSelection({ description: item.name });
+    setNewRxGeneric(parsed.genericName);
+    if (parsed.dosage) {
+      setNewRxDosage(parsed.dosage);
     }
+    setNewRxForm(parsed.form);
+    setSelectedCatalogMedId(item.id);
+    setNewRxDrugCode(item.philHealthCode ?? '');
     if (item.description && !newRxSig) {
       setNewRxSig(item.description);
     }
@@ -720,11 +1099,23 @@ export default function ConsultationsScreen() {
   const signerPtr = signerStaff?.ptrNumber ?? '';
   const signerS2 = signerStaff?.s2LicenseNumber ?? '';
   const signerPan = signerStaff?.philHealthPan ?? '';
+  const prevSignerStaffIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    setDoctorPrc(signerPrc);
-    setDoctorPtr(signerPtr);
-    setDoctorS2(signerS2);
-    setDoctorPan(signerPan);
+    const switchedActiveStaff =
+      prevSignerStaffIdRef.current !== undefined &&
+      prevSignerStaffIdRef.current !== signerStaffId;
+    prevSignerStaffIdRef.current = signerStaffId;
+    if (switchedActiveStaff) {
+      setDoctorPrc(signerPrc);
+      setDoctorPtr(signerPtr);
+      setDoctorS2(signerS2);
+      setDoctorPan(signerPan);
+    } else {
+      setDoctorPrc((prev) => prev || signerPrc);
+      setDoctorPtr((prev) => prev || signerPtr);
+      setDoctorS2((prev) => prev || signerS2);
+      setDoctorPan((prev) => prev || signerPan);
+    }
   }, [signerStaffId, signerPrc, signerPtr, signerS2, signerPan]);
 
   const requireSigner = () => {
@@ -754,6 +1145,8 @@ export default function ConsultationsScreen() {
   const [refUrgency, setRefUrgency] = useState('Routine');
   const [refReason, setRefReason] = useState('');
   const [refSummary, setRefSummary] = useState('');
+  const [refDiagnosis, setRefDiagnosis] = useState('');
+  const [refValidationAttempted, setRefValidationAttempted] = useState(false);
   const [issuedReferral, setIssuedReferral] = useState<ReferralLetterRecord | null>(null);
 
   const [previewDocModal, setPreviewDocModal] = useState(false);
@@ -793,6 +1186,28 @@ export default function ConsultationsScreen() {
   const [prescriptionSlip, setPrescriptionSlip] = useState<PrescriptionSlipData | null>(null);
   const [prescriptionSlipModalVisible, setPrescriptionSlipModalVisible] = useState(false);
 
+  // Implicit Background Consultation Draft Persistence States & Refs
+  const [draftSaveStatus, setDraftSaveStatus] = useState<DraftSaveStatus>('idle');
+  const [lastDraftSavedAt, setLastDraftSavedAt] = useState<string | null>(null);
+  const consultationIdRef = useRef<string | null>(null);
+  const savedConsultationByVisitRef = useRef<Record<string, string>>({});
+  const needsBaselineCaptureRef = useRef<boolean>(true);
+  const lastPersistedFingerprintRef = useRef<string>('');
+  const inFlightFingerprintRef = useRef<string>('');
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightDraftSavePromiseRef = useRef<Promise<string | null> | null>(null);
+  const draftSaveEpochRef = useRef<number>(0);
+  const materializingVisitPromiseRef = useRef<Promise<PatientQueueItem | null> | null>(null);
+
+  useEffect(() => {
+    consultationIdRef.current = signedConsultationId;
+  }, [signedConsultationId]);
+
+  const draftSavedAtLabel = useMemo(
+    () => formatDraftSavedTimestamp(lastDraftSavedAt),
+    [lastDraftSavedAt],
+  );
+
   // Lab Results & STAT Panic Alerts
   const [panicModalVisible, setPanicModalVisible] = useState(false);
   const [selectedPanicOrder, setSelectedPanicOrder] = useState<ClinicLabOrderRecord | null>(null);
@@ -818,7 +1233,7 @@ export default function ConsultationsScreen() {
 
   const handleOpenPrescriptionSlip = async () => {
     if (!selectedPatient) return;
-    if (signedConsultationId) {
+    if (signedConsultationId && isSigned) {
       setLoadingSlip(true);
       const [slip, slipErr] = await clinicService.getPrescriptionSlip(signedConsultationId);
       setLoadingSlip(false);
@@ -853,7 +1268,7 @@ export default function ConsultationsScreen() {
       patientId: selectedPatient.patientId,
       patientName: selectedPatient.patientName,
       patientAge: patientRecord.age,
-      patientGender: patientRecord.gender,
+      patientGender: patientRecord.sex,
       philHealthNumber: patientRecord.philHealthNumber,
       patientAllergies: patientRecord.allergies || undefined,
       clinicalDiagnosis: assessment || undefined,
@@ -870,6 +1285,8 @@ export default function ConsultationsScreen() {
         refills: 0,
         isDangerousDrug: p.isDangerousDrug,
         philHealthDrugCode: p.philHealthDrugCode,
+        isClinicDispensed: (p.clinicDispensedQuantity ?? 0) > 0,
+        clinicDispensedQuantity: p.clinicDispensedQuantity,
       })),
       publicVerificationToken: '',
       publicVerificationUrl: '',
@@ -882,6 +1299,619 @@ export default function ConsultationsScreen() {
 
   const primaryDiagnosisText = () =>
     assessment.trim() || selectedDiagnoses.find((d) => d.isPrimary)?.description || selectedDiagnoses[0]?.description || '';
+
+  type DraftSaveSnapshot = {
+    epoch: number;
+    visit: PatientQueueItem;
+    doctor: { id: string; name: string };
+    consultationId: string | null;
+    isFollowUpEncounter: boolean;
+    payload: CreateConsultationRequest;
+    fingerprint: string;
+  };
+
+  const queuedDraftSnapshotRef = useRef<DraftSaveSnapshot | null>(null);
+  const latestUnsavedSnapshotRef = useRef<DraftSaveSnapshot | null>(null);
+
+  const completedLabResultsCountForDraft = useMemo(
+    () =>
+      labOrders.filter(
+        (o) => o.status === 'Completed' || o.status === 'CompletedWithExternalReport',
+      ).length,
+    [labOrders],
+  );
+
+  const currentDraftPayload = useMemo<CreateConsultationRequest | null>(() => {
+    if (!selectedPatient || !signer) return null;
+    return buildConsultationDraftPayload({
+      patientId: selectedPatient.patientId,
+      patientName: selectedPatient.patientName,
+      doctorId: signer.id,
+      doctorName: signer.name,
+      queueItemId: selectedPatient.id.startsWith('ephemeral-') ? undefined : selectedPatient.id,
+      appointmentId: selectedPatient.appointmentId,
+      hasExistingConsultation: true,
+      specialtyMode: settings?.specialtyMode,
+      isDentalEnabled,
+      visitWorkflowMode,
+      isYakapEligible,
+      philHealthAtc,
+      doctorPrc,
+      doctorPtr,
+      doctorS2,
+      doctorPan,
+      fallbackPrc: signerStaff?.prcLicenseNumber ?? undefined,
+      fallbackPtr: signerStaff?.ptrNumber ?? undefined,
+      fallbackS2: signerStaff?.s2LicenseNumber ?? undefined,
+      fallbackPan: signerStaff?.philHealthPan ?? undefined,
+      subjective,
+      objective,
+      assessment,
+      plan,
+      homeInstructions,
+      rosCategory,
+      rosCategories,
+      rosItems,
+      selectedSymptomCodes,
+      painSymptomSelected,
+      otherSymptomSelected,
+      symptomPainSite,
+      symptomOtherDesc,
+      physicalExamFindings,
+      obGyneExam,
+      pediatricMilestones,
+      adolescentAssessment,
+      headsssAssessments,
+      bpMonitoringLogs,
+      planManagement,
+      completedLabResultsCount: completedLabResultsCountForDraft,
+      hasIssuedReferral: Boolean(issuedReferral),
+      selectedDiagnoses,
+      prescriptions,
+      orderedLabs,
+      orderedProcedures,
+      dentalChart,
+      cdsOverrideReason,
+      overrideConfirmed,
+      medCertFitness,
+      medCertRestDays,
+      medCertPurpose,
+      medCertRemarks,
+      refFacility,
+      refDepartment,
+      refUrgency,
+      refReason,
+      refSummary,
+      showAddRx,
+      newRxGeneric,
+      newRxDosage,
+      newRxForm,
+      newRxSig,
+      newRxQuantity,
+      newRxClinicDispensedQty,
+      newRxDangerous,
+      newRxDrugCode,
+    });
+  }, [
+    selectedPatient,
+    signer?.id,
+    signer?.name,
+    settings?.specialtyMode,
+    isDentalEnabled,
+    visitWorkflowMode,
+    isYakapEligible,
+    philHealthAtc,
+    doctorPrc,
+    doctorPtr,
+    doctorS2,
+    doctorPan,
+    signerStaff?.prcLicenseNumber,
+    signerStaff?.ptrNumber,
+    signerStaff?.s2LicenseNumber,
+    signerStaff?.philHealthPan,
+    subjective,
+    objective,
+    assessment,
+    plan,
+    homeInstructions,
+    rosCategory,
+    rosCategories,
+    rosItems,
+    selectedSymptomCodes,
+    painSymptomSelected,
+    otherSymptomSelected,
+    symptomPainSite,
+    symptomOtherDesc,
+    physicalExamFindings,
+    obGyneExam,
+    pediatricMilestones,
+    adolescentAssessment,
+    headsssAssessments,
+    bpMonitoringLogs,
+    planManagement,
+    completedLabResultsCountForDraft,
+    issuedReferral,
+    selectedDiagnoses,
+    prescriptions,
+    orderedLabs,
+    orderedProcedures,
+    dentalChart,
+    cdsOverrideReason,
+    overrideConfirmed,
+    medCertFitness,
+    medCertRestDays,
+    medCertPurpose,
+    medCertRemarks,
+    refFacility,
+    refDepartment,
+    refUrgency,
+    refReason,
+    refSummary,
+    showAddRx,
+    newRxGeneric,
+    newRxDosage,
+    newRxForm,
+    newRxSig,
+    newRxQuantity,
+    newRxClinicDispensedQty,
+    newRxDangerous,
+    newRxDrugCode,
+  ]);
+
+  const currentDraftFingerprint = useMemo(() => {
+    if (!currentDraftPayload) return '';
+    const { queueItemId: _omitQueueItemId, ...fingerprintPayload } = currentDraftPayload;
+    return JSON.stringify(fingerprintPayload);
+  }, [currentDraftPayload]);
+
+  const flushOutgoingDraftSnapshot = async (snapshot: DraftSaveSnapshot): Promise<void> => {
+    try {
+      if (inFlightDraftSavePromiseRef.current) {
+        await inFlightDraftSavePromiseRef.current.catch(() => null);
+      }
+      let queueItemId = snapshot.visit.id;
+      if (queueItemId.startsWith('ephemeral-')) {
+        const isYakap =
+          snapshot.payload.visitWorkflowMode === 'YakapAvailment' ||
+          Boolean(snapshot.payload.isYakapEligible) ||
+          snapshot.visit.visitType === 'YakapAvailment';
+        const [directVisit, visitErr] = await clinicService.ensureDirectVisit({
+          patientId: snapshot.visit.patientId,
+          patientName: snapshot.visit.patientName,
+          doctorId: snapshot.doctor.id,
+          doctorName: snapshot.doctor.name,
+          visitType: 'RoutineCheckup',
+          visitWorkflowMode: isYakap ? 'YakapAvailment' : 'Regular',
+          initialStatus: 'InConsultation',
+          chiefComplaint: snapshot.visit.chiefComplaint,
+          allowDuplicateActive: snapshot.isFollowUpEncounter,
+        });
+        if (visitErr || !directVisit) return;
+        queueItemId = directVisit.id;
+        setPatients((prev) =>
+          (prev || []).map((item) =>
+            item.id === snapshot.visit.id
+              ? { ...snapshot.visit, ...directVisit, isDirectVisit: true }
+              : item,
+          ),
+        );
+      }
+      const payloadWithQueue: CreateConsultationRequest = {
+        ...snapshot.payload,
+        queueItemId,
+      };
+      const resolvedConsultationId =
+        snapshot.consultationId || savedConsultationByVisitRef.current[queueItemId] || null;
+      if (resolvedConsultationId) {
+        const [updated] = await clinicService.updateConsultation(
+          resolvedConsultationId,
+          payloadWithQueue,
+        );
+        if (updated?.id) {
+          savedConsultationByVisitRef.current[queueItemId] = updated.id;
+        }
+      } else {
+        const [created] = await clinicService.createConsultation(payloadWithQueue);
+        if (created?.id) {
+          savedConsultationByVisitRef.current[queueItemId] = created.id;
+        }
+      }
+    } catch {
+      // Never allow background outgoing patient flush to disrupt incoming patient context
+    }
+  };
+
+  const persistDraftSnapshot = async (snapshot: DraftSaveSnapshot): Promise<string | null> => {
+    if (snapshot.fingerprint === lastPersistedFingerprintRef.current) {
+      return consultationIdRef.current;
+    }
+    if (inFlightDraftSavePromiseRef.current) {
+      if (snapshot.fingerprint !== inFlightFingerprintRef.current) {
+        queuedDraftSnapshotRef.current = snapshot;
+      }
+      return inFlightDraftSavePromiseRef.current;
+    }
+
+    const executeSave = async (): Promise<string | null> => {
+      if (snapshot.epoch !== draftSaveEpochRef.current) {
+        return null;
+      }
+      inFlightFingerprintRef.current = snapshot.fingerprint;
+      setDraftSaveStatus('saving');
+
+      let activeVisit: PatientQueueItem | null = snapshot.visit;
+      if (activeVisit.id.startsWith('ephemeral-')) {
+        activeVisit = await materializeVisitIfNeeded('InConsultation');
+        if (!activeVisit) {
+          if (snapshot.epoch === draftSaveEpochRef.current) {
+            setDraftSaveStatus('error');
+          }
+          return null;
+        }
+      }
+
+      if (snapshot.epoch !== draftSaveEpochRef.current) {
+        return null;
+      }
+
+      const payloadWithQueue: CreateConsultationRequest = {
+        ...snapshot.payload,
+        queueItemId: activeVisit.id,
+        appointmentId: activeVisit.appointmentId ?? snapshot.payload.appointmentId,
+      };
+
+      const existingId =
+        consultationIdRef.current ||
+        snapshot.consultationId ||
+        savedConsultationByVisitRef.current[activeVisit.id] ||
+        null;
+
+      const [saved, saveErr] = existingId
+        ? await clinicService.updateConsultation(existingId, payloadWithQueue)
+        : await clinicService.createConsultation(payloadWithQueue);
+
+      if (snapshot.epoch !== draftSaveEpochRef.current) {
+        if (saved?.id) {
+          savedConsultationByVisitRef.current[activeVisit.id] = saved.id;
+        }
+        return saved?.id ?? null;
+      }
+
+      if (saveErr || !saved?.id) {
+        setDraftSaveStatus('error');
+        return null;
+      }
+
+      savedConsultationByVisitRef.current[activeVisit.id] = saved.id;
+      consultationIdRef.current = saved.id;
+      setSignedConsultationId(saved.id);
+      const clientSavedAtIso = new Date().toISOString();
+      const savedAtIso = saved.updatedAt || saved.createdAt || clientSavedAtIso;
+      saveLocalConsultationDraft({
+        version: 1,
+        savedAt: clientSavedAtIso,
+        clinicId: activeVisit.clinicId || settings?.clinicId || null,
+        visitId: activeVisit.id,
+        patientId: activeVisit.patientId,
+        consultationId: saved.id,
+        fingerprint: snapshot.fingerprint,
+        payload: payloadWithQueue,
+      });
+      lastPersistedFingerprintRef.current = snapshot.fingerprint;
+      if (latestUnsavedSnapshotRef.current?.fingerprint === snapshot.fingerprint) {
+        latestUnsavedSnapshotRef.current = null;
+      }
+      setDraftSaveStatus('saved');
+      setLastDraftSavedAt(savedAtIso);
+      return saved.id;
+    };
+
+    const promise = executeSave().finally(() => {
+      inFlightFingerprintRef.current = '';
+      inFlightDraftSavePromiseRef.current = null;
+      const nextQueued = queuedDraftSnapshotRef.current;
+      queuedDraftSnapshotRef.current = null;
+      if (
+        nextQueued &&
+        nextQueued.epoch === draftSaveEpochRef.current &&
+        nextQueued.fingerprint !== lastPersistedFingerprintRef.current
+      ) {
+        void persistDraftSnapshot(nextQueued);
+      }
+    });
+
+    inFlightDraftSavePromiseRef.current = promise;
+    return promise;
+  };
+
+  useEffect(() => {
+    if (
+      !selectedPatient ||
+      !signer ||
+      !currentDraftPayload ||
+      !currentDraftFingerprint ||
+      contextLoading ||
+      isSigned ||
+      isSigning ||
+      isAbandoningDraft
+    ) {
+      return;
+    }
+
+    if (needsBaselineCaptureRef.current) {
+      lastPersistedFingerprintRef.current = currentDraftFingerprint;
+      latestUnsavedSnapshotRef.current = null;
+      needsBaselineCaptureRef.current = false;
+      return;
+    }
+
+    if (currentDraftFingerprint === lastPersistedFingerprintRef.current) {
+      latestUnsavedSnapshotRef.current = null;
+      return;
+    }
+
+    if (currentDraftFingerprint === inFlightFingerprintRef.current) {
+      return;
+    }
+
+    if (serverReadiness !== null) {
+      setServerReadiness(null);
+    }
+
+    const snapshot: DraftSaveSnapshot = {
+      epoch: draftSaveEpochRef.current,
+      visit: selectedPatient,
+      doctor: { id: signer.id, name: signer.name },
+      consultationId: consultationIdRef.current,
+      isFollowUpEncounter,
+      payload: currentDraftPayload,
+      fingerprint: currentDraftFingerprint,
+    };
+
+    latestUnsavedSnapshotRef.current = snapshot;
+    saveLocalConsultationDraft({
+      version: 1,
+      savedAt: new Date().toISOString(),
+      clinicId: selectedPatient.clinicId || settings?.clinicId || null,
+      visitId: selectedPatient.id,
+      patientId: selectedPatient.patientId,
+      consultationId: consultationIdRef.current,
+      fingerprint: currentDraftFingerprint,
+      payload: currentDraftPayload,
+    });
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveTimerRef.current = null;
+      void persistDraftSnapshot(snapshot);
+    }, 500);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [
+    selectedPatient,
+    signer?.id,
+    signer?.name,
+    currentDraftPayload,
+    currentDraftFingerprint,
+    contextLoading,
+    isSigned,
+    isSigning,
+    isAbandoningDraft,
+    isFollowUpEncounter,
+    serverReadiness,
+  ]);
+
+  useEffect(() => {
+    const flushPendingSnapshot = (preferKeepalive: boolean) => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      const pending = latestUnsavedSnapshotRef.current;
+      if (!pending) return;
+      latestUnsavedSnapshotRef.current = null;
+
+      if (preferKeepalive && !pending.visit.id.startsWith('ephemeral-')) {
+        const resolvedId =
+          consultationIdRef.current ||
+          pending.consultationId ||
+          savedConsultationByVisitRef.current[pending.visit.id] ||
+          null;
+        if (!resolvedId && inFlightDraftSavePromiseRef.current) {
+          return;
+        }
+        const dispatched = clinicService.flushConsultationDraftKeepalive(resolvedId, {
+          ...pending.payload,
+          queueItemId: pending.visit.id,
+          appointmentId: pending.visit.appointmentId ?? pending.payload.appointmentId,
+        });
+        if (dispatched) {
+          return;
+        }
+      }
+      void flushOutgoingDraftSnapshot(pending);
+    };
+
+    const handlePageUnload = () => {
+      flushPendingSnapshot(true);
+    };
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        flushPendingSnapshot(true);
+      }
+    };
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('pagehide', handlePageUnload);
+      window.addEventListener('beforeunload', handlePageUnload);
+      window.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    const unregisterBeforeLock = registerBeforeLockHook(() => {
+      flushPendingSnapshot(true);
+    });
+
+    return () => {
+      unregisterBeforeLock();
+      if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+        window.removeEventListener('pagehide', handlePageUnload);
+        window.removeEventListener('beforeunload', handlePageUnload);
+        window.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+      flushPendingSnapshot(false);
+    };
+  }, []);
+
+  const handleRetryDraftSave = () => {
+    if (!selectedPatient || !signer || !currentDraftPayload || isSigned || isSigning) return;
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    const snapshot: DraftSaveSnapshot = {
+      epoch: draftSaveEpochRef.current,
+      visit: selectedPatient,
+      doctor: { id: signer.id, name: signer.name },
+      consultationId: consultationIdRef.current,
+      isFollowUpEncounter,
+      payload: currentDraftPayload,
+      fingerprint: currentDraftFingerprint,
+    };
+    latestUnsavedSnapshotRef.current = snapshot;
+    void persistDraftSnapshot(snapshot);
+  };
+
+  const ensureDraftConsultationSaved = async (
+    activeVisit: PatientQueueItem,
+    doctor: { id: string; name: string },
+  ): Promise<string | null> => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    queuedDraftSnapshotRef.current = null;
+    if (inFlightDraftSavePromiseRef.current) {
+      await inFlightDraftSavePromiseRef.current.catch(() => null);
+    }
+    const basePayload =
+      currentDraftPayload ??
+      buildConsultationDraftPayload({
+        patientId: activeVisit.patientId,
+        patientName: activeVisit.patientName,
+        doctorId: doctor.id,
+        doctorName: doctor.name,
+        queueItemId: activeVisit.id,
+        appointmentId: activeVisit.appointmentId,
+        hasExistingConsultation: true,
+        specialtyMode: settings?.specialtyMode,
+        isDentalEnabled,
+        visitWorkflowMode,
+        isYakapEligible,
+        philHealthAtc,
+        doctorPrc,
+        doctorPtr,
+        doctorS2,
+        doctorPan,
+        fallbackPrc: signerStaff?.prcLicenseNumber ?? undefined,
+        fallbackPtr: signerStaff?.ptrNumber ?? undefined,
+        fallbackS2: signerStaff?.s2LicenseNumber ?? undefined,
+        fallbackPan: signerStaff?.philHealthPan ?? undefined,
+        subjective,
+        objective,
+        assessment,
+        plan,
+        homeInstructions,
+        rosCategory,
+        rosCategories,
+        rosItems,
+        selectedSymptomCodes,
+        painSymptomSelected,
+        otherSymptomSelected,
+        symptomPainSite,
+        symptomOtherDesc,
+        physicalExamFindings,
+        obGyneExam,
+        pediatricMilestones,
+        adolescentAssessment,
+        headsssAssessments,
+        bpMonitoringLogs,
+        planManagement,
+        completedLabResultsCount: completedLabResultsCountForDraft,
+        hasIssuedReferral: Boolean(issuedReferral),
+        selectedDiagnoses,
+        prescriptions,
+        orderedLabs,
+        orderedProcedures,
+        dentalChart,
+        cdsOverrideReason,
+        overrideConfirmed,
+        medCertFitness,
+        medCertRestDays,
+        medCertPurpose,
+        medCertRemarks,
+        refFacility,
+        refDepartment,
+        refUrgency,
+        refReason,
+        refSummary,
+        showAddRx,
+        newRxGeneric,
+        newRxDosage,
+        newRxForm,
+        newRxSig,
+        newRxQuantity,
+        newRxClinicDispensedQty,
+        newRxDangerous,
+        newRxDrugCode,
+      });
+
+    const payloadWithQueue: CreateConsultationRequest = {
+      ...basePayload,
+      patientId: activeVisit.patientId,
+      patientName: activeVisit.patientName,
+      doctorId: doctor.id,
+      doctorName: doctor.name,
+      queueItemId: activeVisit.id,
+      appointmentId: activeVisit.appointmentId,
+    };
+
+    const existingId =
+      consultationIdRef.current ||
+      signedConsultationId ||
+      savedConsultationByVisitRef.current[activeVisit.id] ||
+      null;
+
+    setDraftSaveStatus('saving');
+    const [draft, draftErr] = existingId
+      ? await clinicService.updateConsultation(existingId, payloadWithQueue)
+      : await clinicService.createConsultation(payloadWithQueue);
+
+    if (draftErr || !draft?.id) {
+      setDraftSaveStatus('error');
+      Alert.alert(
+        'Unable to stage consultation draft',
+        draftErr?.message || 'Could not initialize the unsigned consultation encounter.',
+      );
+      return null;
+    }
+
+    savedConsultationByVisitRef.current[activeVisit.id] = draft.id;
+    consultationIdRef.current = draft.id;
+    setSignedConsultationId(draft.id);
+    const { queueItemId: _omitQueueItemId, ...fingerprintPayload } = payloadWithQueue;
+    lastPersistedFingerprintRef.current = JSON.stringify(fingerprintPayload);
+    latestUnsavedSnapshotRef.current = null;
+    setDraftSaveStatus('saved');
+    setLastDraftSavedAt(draft.updatedAt || draft.createdAt || new Date().toISOString());
+    return draft.id;
+  };
 
   const handleIssueMedCert = async () => {
     if (!selectedPatient) return;
@@ -897,9 +1927,21 @@ export default function ConsultationsScreen() {
       return;
     }
     setIssuingMedCert(true);
+    const activeVisit = await materializeVisitIfNeeded('InConsultation');
+    if (!activeVisit) {
+      setIssuingMedCert(false);
+      return;
+    }
+    const linkedConsultationId = await ensureDraftConsultationSaved(activeVisit, doctor);
+    if (!linkedConsultationId) {
+      setIssuingMedCert(false);
+      return;
+    }
     const [cert, certErr] = await clinicService.issueMedicalCertificate({
-      patientId: selectedPatient.patientId,
-      patientName: selectedPatient.patientName,
+      patientId: activeVisit.patientId,
+      patientName: activeVisit.patientName,
+      consultationId: linkedConsultationId,
+      queueItemId: activeVisit.id,
       doctorId: doctor.id,
       doctorName: doctor.name,
       prcLicenseNumber: doctorPrc.trim(),
@@ -917,33 +1959,74 @@ export default function ConsultationsScreen() {
       Alert.alert('Certificate not issued', certErr?.message || 'The medical certificate could not be issued. Please try again.');
       return;
     }
-    setIssuedMedCert(cert);
+    setIssuedMedCert(isSigned ? cert : { ...cert, isSigned: false });
     setMedCertModalVisible(false);
     setPreviewType('MEDCERT');
     setPreviewDocModal(true);
+  };
+
+  const handleOpenIssueReferral = () => {
+    if (!refDiagnosis.trim()) {
+      setRefDiagnosis(primaryDiagnosisText());
+    }
+    if (!refSummary.trim() && subjective.trim()) {
+      setRefSummary(subjective.trim());
+    }
+    setRefValidationAttempted(false);
+    setReferralModalVisible(true);
   };
 
   const handleIssueReferral = async () => {
     if (!selectedPatient) return;
     const doctor = requireSigner();
     if (!doctor) return;
-    if (!refFacility.trim() || !refDepartment.trim()) {
-      Alert.alert('Incomplete referral', 'Enter the receiving facility and department / specialty.');
+
+    setRefValidationAttempted(true);
+
+    if (!refFacility.trim()) {
+      Alert.alert('Missing Destination', 'Please enter the receiving facility name.');
       return;
     }
-    const diagnosis = primaryDiagnosisText();
-    const summary = refSummary.trim() || subjective.trim();
-    if (!diagnosis || !summary || !refReason.trim()) {
+    if (!refDepartment.trim()) {
+      Alert.alert('Missing Destination', 'Please enter the receiving department or specialty.');
+      return;
+    }
+    if (!refReason.trim()) {
+      Alert.alert('Missing Reason', 'Please specify the reason for referral.');
+      return;
+    }
+    const diagnosis = refDiagnosis.trim() || primaryDiagnosisText();
+    if (!diagnosis) {
       Alert.alert(
-        'Incomplete referral',
-        'Enter the reason for referral, a clinical summary (or subjective notes) and an assessment before issuing.',
+        'Missing Diagnosis',
+        'Please provide a provisional diagnosis or assessment for the referral letter.',
+      );
+      return;
+    }
+    const summary = refSummary.trim() || subjective.trim();
+    if (!summary) {
+      Alert.alert(
+        'Missing Clinical Summary',
+        'Please provide a brief clinical summary or enter subjective consultation notes.',
       );
       return;
     }
     setIssuingReferral(true);
+    const activeVisit = await materializeVisitIfNeeded('InConsultation');
+    if (!activeVisit) {
+      setIssuingReferral(false);
+      return;
+    }
+    const linkedConsultationId = await ensureDraftConsultationSaved(activeVisit, doctor);
+    if (!linkedConsultationId) {
+      setIssuingReferral(false);
+      return;
+    }
     const [ref, refErr] = await clinicService.issueReferralLetter({
-      patientId: selectedPatient.patientId,
-      patientName: selectedPatient.patientName,
+      patientId: activeVisit.patientId,
+      patientName: activeVisit.patientName,
+      consultationId: linkedConsultationId,
+      queueItemId: activeVisit.id,
       referringDoctorId: doctor.id,
       referringDoctorName: doctor.name,
       referredToFacility: refFacility.trim(),
@@ -959,7 +2042,7 @@ export default function ConsultationsScreen() {
       Alert.alert('Referral not issued', refErr?.message || 'The referral letter could not be issued. Please try again.');
       return;
     }
-    setIssuedReferral(ref);
+    setIssuedReferral(isSigned ? ref : { ...ref, isSigned: false });
     setReferralModalVisible(false);
     setPreviewType('REFERRAL');
     setPreviewDocModal(true);
@@ -973,6 +2056,7 @@ export default function ConsultationsScreen() {
         ? undefined
         : activeRooms.find((r) => r.name === selectedStationFilter);
     const [queueData, queueErr] = await clinicService.getQueue({
+      date: getManilaTodayStr(),
       view: queueViewFilter,
       doctorId: queueViewFilter === 'MyRoom' ? doctorId : undefined,
       roomId: selectedRoomObj?.id,
@@ -985,6 +2069,11 @@ export default function ConsultationsScreen() {
         isPatientVisibleToStaff(item, current, activeRooms),
       );
       setPatients(filtered);
+      setSelectedPatient((prev) => {
+        if (!prev) return prev;
+        const fresh = filtered.find((item) => item.id === prev.id);
+        return fresh ? { ...prev, ...fresh } : prev;
+      });
       setQueueError(null);
     }
     setQueueLoading(false);
@@ -997,30 +2086,105 @@ export default function ConsultationsScreen() {
   // Load triage vitals, the patient record (allergies, age, PhilHealth) and lab results for a queue item.
   const loadPatientContext = useCallback(async (p: PatientQueueItem) => {
     activePatientId.current = p.id;
+    needsBaselineCaptureRef.current = true;
     setContextLoading(true);
-    const [triageRes, recordRes, labRes, chartRes, dentalRes] = await Promise.all([
-      clinicService.getTriage(p.id),
+    const [triageRes, recordRes, labRes, chartRes, dentalRes, consultationsRes] = await Promise.all([
+      p.id.startsWith('ephemeral-') ? Promise.resolve([null, { status: 404, message: '' }] as const) : clinicService.getTriage(p.id),
       clinicService.getPatientById(p.patientId),
       clinicService.getLabOrders(p.patientId),
       clinicService.getPatientChart(p.patientId),
       clinicService.getPatientDentalChart(p.patientId),
+      clinicService.getConsultations(p.patientId),
     ]);
     if (activePatientId.current !== p.id) return;
 
     const [dentalData] = dentalRes;
     const [chartData] = chartRes;
-    const matchedEncounter = chartData?.consultations?.find((c) => c.queueItemId === p.id);
-    if (dentalData?.teeth && dentalData.teeth.length > 0) {
-      const taggedTeeth = dentalData.teeth.map((t) => ({
-        ...t,
-        isCurrentEncounter: Boolean(matchedEncounter?.id && t.consultationId === matchedEncounter.id),
+    const [patientConsultations] = consultationsRes;
+    const candidateEncounters =
+      Array.isArray(patientConsultations) && patientConsultations.length > 0
+        ? patientConsultations
+        : chartData?.consultations ?? [];
+    const todayStr = getManilaTodayStr();
+    const isStandardEphemeral = p.id === `ephemeral-${p.patientId}`;
+    const serverMatchedEncounter =
+      candidateEncounters.find((c) => c.queueItemId === p.id) ??
+      (isStandardEphemeral
+        ? candidateEncounters.find(
+            (c) =>
+              !c.isSigned &&
+              Boolean(c.queueItemId) &&
+              formatClinicDate(c.encounterDate, { dateFormat: 'yyyy-MM-dd', fallback: '' }) === todayStr,
+          )
+        : undefined);
+
+    let effectiveVisitId = p.id;
+    let resolvedTriageRes = triageRes;
+    if (isStandardEphemeral && serverMatchedEncounter?.queueItemId) {
+      effectiveVisitId = serverMatchedEncounter.queueItemId;
+      activePatientId.current = effectiveVisitId;
+      const currentRouteParams = route.params as Record<string, any> | undefined;
+      appliedRouteKey.current = `${effectiveVisitId}|${p.patientId}|std|${currentRouteParams?.directVisitMode ?? ''}`;
+      (navigation as any).setParams?.({
+        queueId: effectiveVisitId,
+        queueItemId: effectiveVisitId,
+        patientId: p.patientId,
+        forceSeparateVisit: undefined,
+      });
+      setSelectedPatient((prev) =>
+        prev && prev.id === p.id ? { ...prev, id: effectiveVisitId, isDirectVisit: true } : prev,
+      );
+      setPatients((prev) =>
+        (prev || []).map((item) =>
+          item.id === p.id ? { ...item, id: effectiveVisitId, isDirectVisit: true } : item,
+        ),
+      );
+      resolvedTriageRes = await clinicService.getTriage(effectiveVisitId);
+      if (activePatientId.current !== effectiveVisitId) return;
+    }
+
+    const localDraft = readLocalConsultationDraft({
+      clinicId: p.clinicId || settings?.clinicId || null,
+      visitId: effectiveVisitId,
+      patientId: p.patientId,
+      consultationId: serverMatchedEncounter?.id ?? null,
+    });
+    const matchedEncounter =
+      shouldOverlayLocalConsultationDraft(serverMatchedEncounter, localDraft) && localDraft
+        ? mergeConsultationRecordWithLocalDraft(serverMatchedEncounter, localDraft)
+        : serverMatchedEncounter;
+
+    const baseDentalTeeth: DentalToothRecord[] = (dentalData?.teeth || []).map((t) => ({
+      ...t,
+      isCurrentEncounter: Boolean(matchedEncounter?.id && t.consultationId === matchedEncounter.id),
+    }));
+    if (!matchedEncounter?.isSigned && Array.isArray(matchedEncounter?.draftDentalTeeth)) {
+      const stagedDraftTeeth: DentalToothRecord[] = matchedEncounter.draftDentalTeeth.map((dt, idx) => ({
+        id: `draft-tooth-${matchedEncounter.id}-${dt.toothNumber}-${idx}`,
+        tenantId: p.tenantId || '',
+        clinicId: p.clinicId || '',
+        patientId: p.patientId,
+        consultationId: matchedEncounter.id,
+        toothNumber: dt.toothNumber,
+        status: dt.status as DentalToothRecord['status'],
+        surface: dt.surface ?? null,
+        notes: dt.notes ?? null,
+        recordedAt: matchedEncounter.updatedAt || matchedEncounter.encounterDate,
+        createdAt: matchedEncounter.updatedAt || matchedEncounter.encounterDate,
+        isCurrentEncounter: true,
       }));
-      setDentalChart(normalizeTeethToMultiRecord(taggedTeeth));
+      const filteredHistorical = baseDentalTeeth.filter(
+        (t) => !(matchedEncounter.id && t.consultationId === matchedEncounter.id),
+      );
+      const mergedTeeth = [...filteredHistorical, ...stagedDraftTeeth];
+      setDentalChart(mergedTeeth.length > 0 ? normalizeTeethToMultiRecord(mergedTeeth) : {});
+    } else if (baseDentalTeeth.length > 0) {
+      setDentalChart(normalizeTeethToMultiRecord(baseDentalTeeth));
     } else {
       setDentalChart({});
     }
 
-    const [triageData, triageErr] = triageRes;
+    const [triageData, triageErr] = resolvedTriageRes;
     if (triageErr) {
       setVitals(null);
       // 404 means triage has simply not been recorded yet.
@@ -1040,21 +2204,73 @@ export default function ConsultationsScreen() {
     }
 
     if (chartData) {
-      setPatientChart(chartData);
-      const existingEncounter = chartData.consultations?.find((c) => c.queueItemId === p.id);
+      setPatientChart(record ? reconcileChartWithPatient(chartData, record) : chartData);
+    } else {
+      setPatientChart(null);
+    }
+
+    if (chartData || matchedEncounter) {
+      const existingEncounter = matchedEncounter;
       if (existingEncounter) {
-        setSignedConsultationId(existingEncounter.id);
+        const isLocalOnlyEncounter = existingEncounter.id.startsWith('local-draft-');
+        if (!isLocalOnlyEncounter) {
+          savedConsultationByVisitRef.current[effectiveVisitId] = existingEncounter.id;
+          consultationIdRef.current = existingEncounter.id;
+          setSignedConsultationId(existingEncounter.id);
+        } else {
+          consultationIdRef.current = null;
+          setSignedConsultationId(null);
+          needsBaselineCaptureRef.current = false;
+        }
         setIsSigned(Boolean(existingEncounter.isSigned));
         setSignedAt(
           existingEncounter.signedAt
-            ? new Date(existingEncounter.signedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            ? formatClinicTime(existingEncounter.signedAt)
             : null,
         );
-        if (existingEncounter.subjective) setSubjective(existingEncounter.subjective);
-        if (existingEncounter.objective) setObjective(existingEncounter.objective);
-        if (existingEncounter.assessment) setAssessment(existingEncounter.assessment);
-        if (existingEncounter.plan) setPlan(existingEncounter.plan);
-        if (existingEncounter.homeInstructions) setHomeInstructions(existingEncounter.homeInstructions);
+        if (existingEncounter.isSigned) {
+          setDraftSaveStatus('idle');
+          setLastDraftSavedAt(null);
+        } else {
+          setDraftSaveStatus('saved');
+          setLastDraftSavedAt(
+            existingEncounter.updatedAt ||
+              existingEncounter.createdAt ||
+              existingEncounter.encounterDate,
+          );
+        }
+        const workspaceRosCategories = existingEncounter.draftWorkspace?.rosCategories;
+        const encounterRosCategories = existingEncounter.rosCategories;
+        if (Array.isArray(workspaceRosCategories)) {
+          applyRosCategories(workspaceRosCategories);
+        } else if (Array.isArray(encounterRosCategories)) {
+          applyRosCategories(encounterRosCategories);
+        } else if (existingEncounter.rosCategory) {
+          const norm = normalizeRosCategoryCode(existingEncounter.rosCategory);
+          applyRosCategories(norm !== 'EssentiallyNormal' ? [norm] : []);
+        } else if (triageData?.rosCategory) {
+          const norm = normalizeRosCategoryCode(triageData.rosCategory);
+          applyRosCategories(norm !== 'EssentiallyNormal' ? [norm] : []);
+        } else {
+          applyRosCategories([]);
+        }
+        setSubjective(existingEncounter.subjective ?? '');
+        setObjective(existingEncounter.objective ?? '');
+        setAssessment(existingEncounter.assessment ?? '');
+        setPlan(existingEncounter.plan ?? '');
+        setHomeInstructions(existingEncounter.homeInstructions ?? '');
+        if (existingEncounter.doctorPrcLicense) {
+          setDoctorPrc(existingEncounter.doctorPrcLicense);
+        }
+        if (existingEncounter.doctorPtr) {
+          setDoctorPtr(existingEncounter.doctorPtr);
+        }
+        if (existingEncounter.doctorS2License) {
+          setDoctorS2(existingEncounter.doctorS2License);
+        }
+        if (existingEncounter.doctorPhilHealthPan) {
+          setDoctorPan(existingEncounter.doctorPhilHealthPan);
+        }
         if (existingEncounter.diagnoses?.length) {
           setSelectedDiagnoses(
             existingEncounter.diagnoses.map((d) => ({
@@ -1063,10 +2279,11 @@ export default function ConsultationsScreen() {
               isPrimary: d.isPrimary,
             })),
           );
+        } else {
+          setSelectedDiagnoses([]);
         }
-        if (existingEncounter.prescriptions?.length) {
-          setPrescriptions(
-            existingEncounter.prescriptions.map((rx) => ({
+        const hydratedRx: LocalPrescription[] = existingEncounter.prescriptions?.length
+          ? existingEncounter.prescriptions.map((rx) => ({
               id: rx.id,
               genericName: rx.genericName,
               dosage: rx.dosage,
@@ -1076,30 +2293,169 @@ export default function ConsultationsScreen() {
               durationDays: rx.durationDays,
               isDangerousDrug: rx.isDangerousDrug,
               philHealthDrugCode: rx.philHealthDrugCode,
+              clinicDispensedQuantity: rx.clinicDispensedQuantity ?? undefined,
+              rosCategory: rx.rosCategory ?? existingEncounter.rosCategory,
+            }))
+          : [];
+        setPrescriptions(hydratedRx);
+        const { matchedMedCert, matchedReferral } = await fetchVisitDocumentDrafts({
+          patientId: p.patientId,
+          consultationId: isLocalOnlyEncounter ? null : existingEncounter.id,
+          queueItemId: effectiveVisitId,
+          chartData,
+          isEncounterSigned: Boolean(existingEncounter.isSigned),
+        });
+        if (activePatientId.current !== effectiveVisitId) return;
+        setIssuedMedCert(
+          matchedMedCert
+            ? existingEncounter.isSigned
+              ? matchedMedCert
+              : { ...matchedMedCert, isSigned: false }
+            : null,
+        );
+        setIssuedReferral(
+          matchedReferral
+            ? existingEncounter.isSigned
+              ? matchedReferral
+              : { ...matchedReferral, isSigned: false }
+            : null,
+        );
+
+        const ws = !existingEncounter.isSigned ? existingEncounter.draftWorkspace : undefined;
+        if (ws?.cdsOverrideReason) {
+          setCdsOverrideReason(ws.cdsOverrideReason);
+        }
+        if (ws?.cdsOverrideConfirmed !== undefined) {
+          setOverrideConfirmed(Boolean(ws.cdsOverrideConfirmed));
+          if (ws.cdsOverrideConfirmed || ws.cdsOverrideReason) {
+            setShowOverrideInput(true);
+          }
+        }
+        if (!existingEncounter.isSigned && hydratedRx.length > 0) {
+          void runCdsScreening(hydratedRx, {
+            patientId: p.patientId,
+            allergies: record?.allergies ?? '',
+            labOrdersList: labRes[0] ?? [],
+            preserveOverrideState: Boolean(ws?.cdsOverrideConfirmed || ws?.cdsOverrideReason),
+          });
+        }
+        if (matchedMedCert) {
+          setMedCertFitness(matchedMedCert.fitnessStatus || ws?.medCertFitness || 'FitToWork');
+          setMedCertRestDays(
+            matchedMedCert.recommendedRestDays != null
+              ? String(matchedMedCert.recommendedRestDays)
+              : ws?.medCertRestDays || '',
+          );
+          setMedCertPurpose(matchedMedCert.purpose || ws?.medCertPurpose || '');
+          setMedCertRemarks(matchedMedCert.remarks || ws?.medCertRemarks || '');
+        } else if (ws) {
+          if (ws.medCertFitness) setMedCertFitness(ws.medCertFitness);
+          if (ws.medCertRestDays != null) setMedCertRestDays(ws.medCertRestDays);
+          if (ws.medCertPurpose != null) setMedCertPurpose(ws.medCertPurpose);
+          if (ws.medCertRemarks != null) setMedCertRemarks(ws.medCertRemarks);
+        }
+        if (matchedReferral) {
+          setRefFacility(matchedReferral.referredToFacility || ws?.refFacility || '');
+          setRefDepartment(matchedReferral.referredDepartment || ws?.refDepartment || '');
+          setRefUrgency(matchedReferral.urgency || ws?.refUrgency || 'Routine');
+          setRefReason(matchedReferral.reasonForReferral || ws?.refReason || '');
+          setRefSummary(matchedReferral.clinicalSummary || ws?.refSummary || '');
+        } else if (ws) {
+          if (ws.refFacility != null) setRefFacility(ws.refFacility);
+          if (ws.refDepartment != null) setRefDepartment(ws.refDepartment);
+          if (ws.refUrgency) setRefUrgency(ws.refUrgency);
+          if (ws.refReason != null) setRefReason(ws.refReason);
+          if (ws.refSummary != null) setRefSummary(ws.refSummary);
+        }
+        if (ws) {
+          if (ws.rxShowAddForm !== undefined) setShowAddRx(Boolean(ws.rxShowAddForm));
+          if (ws.rxDraftGeneric != null) setNewRxGeneric(ws.rxDraftGeneric);
+          if (ws.rxDraftDosage != null) setNewRxDosage(ws.rxDraftDosage);
+          if (ws.rxDraftForm) setNewRxForm(ws.rxDraftForm);
+          if (ws.rxDraftSig != null) setNewRxSig(ws.rxDraftSig);
+          if (ws.rxDraftQuantity != null) setNewRxQuantity(ws.rxDraftQuantity);
+          if (ws.rxDraftClinicDispensedQty != null) {
+            setNewRxClinicDispensedQty(ws.rxDraftClinicDispensedQty);
+          }
+          if (ws.rxDraftDangerous !== undefined) setNewRxDangerous(Boolean(ws.rxDraftDangerous));
+          if (ws.rxDraftDrugCode != null) setNewRxDrugCode(ws.rxDraftDrugCode);
+        }
+
+        const hydratedMode: VisitWorkflowMode | null = existingEncounter.visitWorkflowMode
+          ? existingEncounter.visitWorkflowMode
+          : existingEncounter.isYakapEligible != null
+            ? existingEncounter.isYakapEligible
+              ? 'YakapAvailment'
+              : 'Regular'
+            : null;
+        if (hydratedMode) {
+          setVisitWorkflowMode(hydratedMode);
+          setIsYakapEligible(hydratedMode === 'YakapAvailment');
+          setSelectedPatient((prev) =>
+            prev && prev.id === effectiveVisitId
+              ? { ...prev, visitWorkflowMode: hydratedMode }
+              : prev,
+          );
+          setPatients((prev) =>
+            (prev || []).map((item) =>
+              item.id === effectiveVisitId
+                ? { ...item, visitWorkflowMode: hydratedMode }
+                : item,
+            ),
+          );
+        }
+        setPhilHealthAtc(existingEncounter.philHealthAtc?.trim() ? existingEncounter.philHealthAtc : 'WALKEDIN');
+        const positiveRosItems = (existingEncounter.reviewOfSystemsItems || []).filter(
+          (item) => item.isPertinentPositive !== false && item.optionCode !== '00',
+        );
+        if (positiveRosItems.length > 0) {
+          setRosItems(positiveRosItems);
+          setSelectedSymptomCodes(positiveRosItems.map((i) => i.optionCode));
+          const hydratedPain = positiveRosItems.find((i) => Boolean(i.painSite));
+          if (!existingEncounter.philHealthPainSite && hydratedPain?.painSite) {
+            setSymptomPainSite(hydratedPain.painSite);
+          }
+          const hydratedOther = positiveRosItems.find((i) => Boolean(i.othersSpecifyText));
+          if (!existingEncounter.philHealthOtherComplaint && hydratedOther?.othersSpecifyText) {
+            setSymptomOtherDesc(hydratedOther.othersSpecifyText);
+          }
+        } else if (existingEncounter.philHealthSignSympCode) {
+          const codes = existingEncounter.philHealthSignSympCode
+            .split(',')
+            .map((s) => s.trim())
+            .filter((code) => Boolean(code) && code !== '00');
+          setSelectedSymptomCodes(codes);
+          setRosItems(
+            codes.map((c) => ({
+              optionCode: c,
+              symptomName: c,
+              isPertinentPositive: true,
             })),
           );
+        } else {
+          setRosItems([]);
+          setSelectedSymptomCodes([]);
         }
-        if (existingEncounter.isYakapEligible != null) {
-          setIsYakapEligible(existingEncounter.isYakapEligible);
-        }
-        if (existingEncounter.philHealthAtc) {
-          setPhilHealthAtc(existingEncounter.philHealthAtc);
-        }
-        if (existingEncounter.philHealthSignSympCode) {
-          setSelectedSymptomCodes(
-            existingEncounter.philHealthSignSympCode
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean),
-          );
-        }
-        if (existingEncounter.philHealthOtherComplaint) {
+        setObGyneExam(existingEncounter.obGyneExam ?? null);
+        setPediatricMilestones(existingEncounter.pediatricMilestones ?? []);
+        setAdolescentAssessment(existingEncounter.adolescentAssessment ?? null);
+        setHeadsssAssessments(existingEncounter.headsssAssessments ?? []);
+        setBpMonitoringLogs(existingEncounter.bpMonitoringLogs ?? []);
+        if (existingEncounter.philHealthOtherComplaint != null) {
           setSymptomOtherDesc(existingEncounter.philHealthOtherComplaint);
         }
-        if (existingEncounter.philHealthPainSite) {
+        if (existingEncounter.philHealthPainSite != null) {
           setSymptomPainSite(existingEncounter.philHealthPainSite);
         }
-        if (existingEncounter.physicalExamFindingsJson) {
+        setPlanManagement(rehydrateEncounterPlanManagementWithWorkspace(existingEncounter));
+        // Bidirectional Physical Exam Hydration: 1NF relational child rows first, fallback to JSON blob
+        const reconstructed1NF = existingEncounter.physicalExams?.length
+          ? from1NFFindings(existingEncounter.physicalExams)
+          : null;
+
+        if (reconstructed1NF) {
+          setPhysicalExamFindings(reconstructed1NF);
+        } else if (existingEncounter.physicalExamFindingsJson) {
           try {
             const parsedPe = JSON.parse(existingEncounter.physicalExamFindingsJson);
             if (parsedPe && typeof parsedPe === 'object') {
@@ -1110,98 +2466,129 @@ export default function ConsultationsScreen() {
           }
         }
 
-        // Rehydrate orderedLabs from invoice diagnostic items (in-house) and lab orders (outside)
-        const rehydratedLabs: LocalLabOrder[] = [];
-        const existingInvoice = chartData.invoicesHistory?.find(
+        const existingInvoice = chartData?.invoicesHistory?.find(
           (inv) =>
             (existingEncounter.id && inv.consultationId === existingEncounter.id) ||
-            (p.id && inv.queueItemId === p.id)
+            (effectiveVisitId && inv.queueItemId === effectiveVisitId)
         );
 
-        if (existingInvoice?.lineItems?.length) {
-          const diagItems = existingInvoice.lineItems.filter(
-            (item) => (item.category || '').toLowerCase() === 'diagnostic'
+        // Rehydrate orderedLabs: prefer persisted draftDiagnosticOrders when unsigned, else invoice + labOrders
+        if (!existingEncounter.isSigned && Array.isArray(existingEncounter.draftDiagnosticOrders)) {
+          setOrderedLabs(
+            existingEncounter.draftDiagnosticOrders.map((d) => ({
+              serviceItemId: d.serviceItemId,
+              code: d.code,
+              name: d.name,
+              category: d.category || 'Diagnostic',
+              standardPrice: d.standardPrice ?? 0,
+              philHealthCode: d.philHealthCode,
+              fulfillmentMode: d.fulfillmentMode === 'outside' ? 'outside' : 'in_house',
+              instructions: d.instructions,
+            })),
           );
-          for (const item of diagItems) {
-            const cleanName = item.description
-              ? item.description.replace(/\s*\(PhilHealth Yakap.*?\)$/i, '').trim()
-              : item.description;
-            const matchedDiag = diagnosticCatalog.find(
-              (d) =>
-                (item.serviceItemId && d.id === item.serviceItemId) ||
-                (item.itemCode && d.code === item.itemCode) ||
-                d.name.toLowerCase() === cleanName.toLowerCase()
+        } else {
+          // Rehydrate orderedLabs from invoice diagnostic items (in-house) and lab orders (outside)
+          const rehydratedLabs: LocalLabOrder[] = [];
+          if (existingInvoice?.lineItems?.length) {
+            const diagItems = existingInvoice.lineItems.filter(
+              (item) => (item.category || '').toLowerCase() === 'diagnostic'
             );
-            rehydratedLabs.push({
-              serviceItemId: item.serviceItemId || matchedDiag?.id,
-              code: item.itemCode || matchedDiag?.code,
-              name: matchedDiag?.name || cleanName,
-              category: item.category || matchedDiag?.category || 'Diagnostic',
-              standardPrice: matchedDiag?.standardPrice ?? item.unitPrice,
-              philHealthCode: matchedDiag?.philHealthCode,
-              fulfillmentMode: 'in_house',
-            });
+            for (const item of diagItems) {
+              const cleanName = item.description
+                ? item.description.replace(/\s*\(PhilHealth Yakap.*?\)$/i, '').trim()
+                : item.description;
+              const matchedDiag = diagnosticCatalog.find(
+                (d) =>
+                  (item.serviceItemId && d.id === item.serviceItemId) ||
+                  (item.itemCode && d.code === item.itemCode) ||
+                  d.name.toLowerCase() === cleanName.toLowerCase()
+              );
+              rehydratedLabs.push({
+                serviceItemId: item.serviceItemId || matchedDiag?.id,
+                code: item.itemCode || matchedDiag?.code,
+                name: matchedDiag?.name || cleanName,
+                category: item.category || matchedDiag?.category || 'Diagnostic',
+                standardPrice: matchedDiag?.standardPrice ?? item.unitPrice,
+                philHealthCode: matchedDiag?.philHealthCode,
+                fulfillmentMode: 'in_house',
+              });
+            }
           }
-        }
 
-        const existingLabOrders = chartData.labOrdersHistory?.filter(
-          (lo) =>
-            (existingEncounter.id && lo.consultationId === existingEncounter.id) ||
-            (p.id && (lo as any).queueItemId === p.id)
-        );
-        if (existingLabOrders?.length) {
-          for (const lo of existingLabOrders) {
-            if (lo.items?.length) {
-              for (const item of lo.items) {
+          let labSourceList = chartData?.labOrdersHistory || [];
+          if (!existingEncounter.isSigned) {
+            const [unsignedLabOrders] = await clinicService.getLabOrders(
+              p.patientId,
+              undefined,
+              undefined,
+              { includeUnsigned: true },
+            );
+            if (unsignedLabOrders?.length) {
+              labSourceList = unsignedLabOrders;
+            }
+          }
+
+          const existingLabOrders = labSourceList.filter(
+            (lo) =>
+              lo.status !== 'Cancelled' &&
+              ((existingEncounter.id && lo.consultationId === existingEncounter.id) ||
+                (effectiveVisitId && (lo as any).queueItemId === effectiveVisitId))
+          );
+          if (existingLabOrders?.length) {
+            for (const lo of existingLabOrders) {
+              if (lo.items?.length) {
+                for (const item of lo.items) {
+                  const matchedDiag = diagnosticCatalog.find(
+                    (d) => d.name.toLowerCase() === item.testName.toLowerCase()
+                  );
+                  rehydratedLabs.push({
+                    serviceItemId: matchedDiag?.id,
+                    code: matchedDiag?.code,
+                    name: item.testName,
+                    category: item.category || matchedDiag?.category || 'Diagnostic',
+                    standardPrice: matchedDiag?.standardPrice ?? 0,
+                    philHealthCode: matchedDiag?.philHealthCode,
+                    fulfillmentMode: 'outside',
+                    instructions: item.instructions,
+                  });
+                }
+              } else if (lo.testName) {
                 const matchedDiag = diagnosticCatalog.find(
-                  (d) => d.name.toLowerCase() === item.testName.toLowerCase()
+                  (d) => d.name.toLowerCase() === lo.testName?.toLowerCase()
                 );
                 rehydratedLabs.push({
                   serviceItemId: matchedDiag?.id,
                   code: matchedDiag?.code,
-                  name: item.testName,
-                  category: item.category || matchedDiag?.category || 'Diagnostic',
+                  name: lo.testName,
+                  category: matchedDiag?.category || 'Diagnostic',
                   standardPrice: matchedDiag?.standardPrice ?? 0,
                   philHealthCode: matchedDiag?.philHealthCode,
                   fulfillmentMode: 'outside',
-                  instructions: item.instructions,
+                  instructions: lo.notes,
                 });
               }
-            } else if (lo.testName) {
-              const matchedDiag = diagnosticCatalog.find(
-                (d) => d.name.toLowerCase() === lo.testName?.toLowerCase()
-              );
-              rehydratedLabs.push({
-                serviceItemId: matchedDiag?.id,
-                code: matchedDiag?.code,
-                name: lo.testName,
-                category: matchedDiag?.category || 'Diagnostic',
-                standardPrice: matchedDiag?.standardPrice ?? 0,
-                philHealthCode: matchedDiag?.philHealthCode,
-                fulfillmentMode: 'outside',
-                instructions: lo.notes,
-              });
             }
           }
-        }
 
-        // Deduplicate rehydratedLabs by name
-        const uniqueLabs: LocalLabOrder[] = [];
-        const seenLabNames = new Set<string>();
-        for (const lab of rehydratedLabs) {
-          const lower = lab.name.toLowerCase();
-          if (!seenLabNames.has(lower)) {
-            seenLabNames.add(lower);
-            uniqueLabs.push(lab);
+          // Deduplicate rehydratedLabs by name
+          const uniqueLabs: LocalLabOrder[] = [];
+          const seenLabNames = new Set<string>();
+          for (const lab of rehydratedLabs) {
+            const lower = lab.name.toLowerCase();
+            if (!seenLabNames.has(lower)) {
+              seenLabNames.add(lower);
+              uniqueLabs.push(lab);
+            }
           }
+          setOrderedLabs(uniqueLabs);
         }
-        setOrderedLabs(uniqueLabs);
 
-        // Rehydrate orderedProcedures from proceduresHistory and invoice line items
-        const existingProcedures = chartData.proceduresHistory?.filter(
+        // Rehydrate orderedProcedures from proceduresHistory, persisted draftProcedures, and invoice line items
+        const existingProcedures = chartData?.proceduresHistory?.filter(
           (proc) =>
-            (existingEncounter.id && proc.consultationId === existingEncounter.id) ||
-            (p.id && proc.queueItemId === p.id)
+            proc.status !== 'Cancelled' &&
+            ((existingEncounter.id && proc.consultationId === existingEncounter.id) ||
+              (effectiveVisitId && proc.queueItemId === effectiveVisitId))
         );
         const rehydratedProcs: LocalProcedureOrder[] = [];
         const seenProcKeys = new Set<string>();
@@ -1215,17 +2602,23 @@ export default function ConsultationsScreen() {
               seenProcKeys.add(procKey);
               const matchedCatalog = procedureCatalog.find((pc) => pc.name.toLowerCase() === lower);
               rehydratedProcs.push({
+                procedureId: pr.id,
                 serviceItemId: matchedCatalog?.id,
                 code: pr.procedureCode || matchedCatalog?.code,
                 name: pr.procedureName,
                 category: pr.category || matchedCatalog?.category || 'Procedure',
                 standardPrice: matchedCatalog?.standardPrice ?? 0,
                 instructions: pr.clinicalNotes || undefined,
+                roomId: pr.targetRoomId || undefined,
+                roomName: pr.targetRoomName || undefined,
                 targetRoomId: pr.targetRoomId || undefined,
                 targetRoomName: pr.targetRoomName || undefined,
+                sentToRoomId: pr.targetRoomId || undefined,
+                sentToRoomName: pr.targetRoomName || undefined,
+                status: 'sent_to_room',
                 isHandedOff: true,
                 handedOffAt: pr.scheduledAt
-                  ? new Date(pr.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  ? formatClinicTime(pr.scheduledAt)
                   : undefined,
                 toothNumber: pr.toothNumber ?? undefined,
                 toothSurface: pr.toothSurface ?? undefined,
@@ -1234,33 +2627,130 @@ export default function ConsultationsScreen() {
           }
         }
 
-        const invoiceProcLineItems = (existingInvoice?.lineItems || []).filter((li) => {
-          const cat = (li.category || '').toLowerCase();
-          return cat === 'procedure' || cat === 'nursingservice';
-        });
+        if (!existingEncounter.isSigned && Array.isArray(existingEncounter.draftProcedures)) {
+          for (const dp of existingEncounter.draftProcedures) {
+            if (!dp.name) continue;
+            const lower = dp.name.toLowerCase();
+            const procKey = `${lower}-${dp.toothNumber ?? '0'}`;
+            if (!seenProcKeys.has(procKey)) {
+              seenProcKeys.add(procKey);
+              rehydratedProcs.push({
+                serviceItemId: dp.serviceItemId,
+                code: dp.code,
+                name: dp.name,
+                category: dp.category || 'Procedure',
+                standardPrice: dp.standardPrice ?? 0,
+                instructions: dp.instructions,
+                roomId: dp.roomId,
+                roomName: dp.roomName,
+                targetRoomId: dp.targetRoomId,
+                targetRoomName: dp.targetRoomName,
+                status: dp.status === 'sent_to_room' ? 'sent_to_room' : 'draft',
+                isHandedOff: Boolean(dp.isHandedOff),
+                toothNumber: dp.toothNumber,
+                toothSurface: dp.toothSurface,
+              });
+            }
+          }
+        } else {
+          const invoiceProcLineItems = (existingInvoice?.lineItems || []).filter((li) => {
+            const cat = (li.category || '').toLowerCase();
+            return cat === 'procedure' || cat === 'nursingservice';
+          });
 
-        for (const li of invoiceProcLineItems) {
-          if (!li.description) continue;
-          const lower = li.description.toLowerCase();
-          const procKey = `${lower}-0`;
-          if (!seenProcKeys.has(procKey)) {
-            seenProcKeys.add(procKey);
-            const matchedCatalog = procedureCatalog.find((pc) => pc.name.toLowerCase() === lower);
-            rehydratedProcs.push({
-              serviceItemId: li.serviceItemId || matchedCatalog?.id,
-              code: li.itemCode || matchedCatalog?.code,
-              name: li.description,
-              category: li.category || matchedCatalog?.category || 'Procedure',
-              standardPrice: li.unitPrice || matchedCatalog?.standardPrice || 0,
-              isHandedOff: false,
-            });
+          for (const li of invoiceProcLineItems) {
+            if (!li.description) continue;
+            const lower = li.description.toLowerCase();
+            const procKey = `${lower}-0`;
+            if (!seenProcKeys.has(procKey)) {
+              seenProcKeys.add(procKey);
+              const matchedCatalog = procedureCatalog.find((pc) => pc.name.toLowerCase() === lower);
+              rehydratedProcs.push({
+                serviceItemId: li.serviceItemId || matchedCatalog?.id,
+                code: li.itemCode || matchedCatalog?.code,
+                name: li.description,
+                category: li.category || matchedCatalog?.category || 'Procedure',
+                standardPrice: li.unitPrice || matchedCatalog?.standardPrice || 0,
+                isHandedOff: false,
+              });
+            }
           }
         }
 
         setOrderedProcedures(rehydratedProcs);
+      } else {
+        consultationIdRef.current = null;
+        setDraftSaveStatus('idle');
+        setLastDraftSavedAt(null);
+        const triageRos = triageData?.rosCategory
+          ? normalizeRosCategoryCode(triageData.rosCategory)
+          : null;
+        applyRosCategories(
+          triageRos && triageRos !== 'EssentiallyNormal' ? [triageRos] : [],
+        );
       }
+    } else if (triageData?.rosCategory) {
+      consultationIdRef.current = null;
+      setDraftSaveStatus('idle');
+      setLastDraftSavedAt(null);
+      const triageRos = normalizeRosCategoryCode(triageData.rosCategory);
+      applyRosCategories(triageRos !== 'EssentiallyNormal' ? [triageRos] : []);
     } else {
-      setPatientChart(null);
+      consultationIdRef.current = null;
+      setDraftSaveStatus('idle');
+      setLastDraftSavedAt(null);
+      applyRosCategories([]);
+    }
+
+    if (!matchedEncounter) {
+      const activeQueueItemId = normalizeActiveQueueItemId(effectiveVisitId);
+      if (activeQueueItemId) {
+        const { matchedMedCert, matchedReferral } = await fetchVisitDocumentDrafts({
+          patientId: p.patientId,
+          consultationId: null,
+          queueItemId: activeQueueItemId,
+          chartData,
+          isEncounterSigned: false,
+        });
+        if (activePatientId.current !== effectiveVisitId) return;
+        setIssuedMedCert(
+          matchedMedCert
+            ? matchedMedCert.isSigned === true
+              ? matchedMedCert
+              : { ...matchedMedCert, isSigned: false }
+            : null,
+        );
+        setIssuedReferral(
+          matchedReferral
+            ? matchedReferral.isSigned === true
+              ? matchedReferral
+              : { ...matchedReferral, isSigned: false }
+            : null,
+        );
+        if (matchedMedCert) {
+          setMedCertFitness(matchedMedCert.fitnessStatus || 'FitToWork');
+          setMedCertRestDays(
+            matchedMedCert.recommendedRestDays != null
+              ? String(matchedMedCert.recommendedRestDays)
+              : '',
+          );
+          setMedCertPurpose(matchedMedCert.purpose || '');
+          setMedCertRemarks(matchedMedCert.remarks || '');
+        }
+        if (matchedReferral) {
+          setRefFacility(matchedReferral.referredToFacility || '');
+          setRefDepartment(matchedReferral.referredDepartment || '');
+          setRefUrgency(matchedReferral.urgency || 'Routine');
+          setRefReason(matchedReferral.reasonForReferral || '');
+          setRefSummary(matchedReferral.clinicalSummary || '');
+          if (matchedReferral.provisionalDiagnosis) {
+            setRefDiagnosis(matchedReferral.provisionalDiagnosis);
+          }
+        }
+      } else {
+        setIssuedMedCert(null);
+        setIssuedReferral(null);
+      }
     }
 
     const [labData, labErr] = labRes;
@@ -1275,12 +2765,18 @@ export default function ConsultationsScreen() {
   }, []);
 
   const resetEncounter = (p: PatientQueueItem) => {
+    needsBaselineCaptureRef.current = true;
+    consultationIdRef.current = null;
+    setDraftSaveStatus('idle');
+    setLastDraftSavedAt(null);
+    setServerReadiness(null);
     setIsSigned(false);
     setSignedAt(null);
     setIsFollowUpEncounter(false);
     setBanner(null);
     setSubjective(p.chiefComplaint ? `Patient presents with: ${p.chiefComplaint}.` : '');
     setObjective('');
+    setImportedProcedureIds([]);
     setAssessment('');
     setPlan('');
     setHomeInstructions('');
@@ -1299,6 +2795,21 @@ export default function ConsultationsScreen() {
     setCdsOverrideReason('');
     setShowOverrideInput(false);
     setOverrideConfirmed(false);
+    setMedCertFitness('FitToWork');
+    setMedCertRestDays('');
+    setMedCertPurpose('');
+    setMedCertRemarks('');
+    setRefFacility('');
+    setRefDepartment('');
+    setRefUrgency('Routine');
+    setRefReason('');
+    setRefSummary('');
+    setRefDiagnosis('');
+    setRefValidationAttempted(false);
+    setDoctorPrc(signerPrc);
+    setDoctorPtr(signerPtr);
+    setDoctorS2(signerS2);
+    setDoctorPan(signerPan);
     setIssuedMedCert(null);
     setIssuedReferral(null);
     setSignedConsultationId(null);
@@ -1315,15 +2826,138 @@ export default function ConsultationsScreen() {
     setRecordError(null);
     setLabOrders([]);
     setLabError(null);
-    setIsYakapEligible(false);
+    const initialYakap =
+      p.visitWorkflowMode === 'YakapAvailment' || p.visitType === 'YakapAvailment';
+    setIsYakapEligible(initialYakap);
+    setVisitWorkflowMode(initialYakap ? 'YakapAvailment' : 'Regular');
+    setRosCategory('EssentiallyNormal');
+    setRosCategories([]);
+    setNewRxGeneric('');
+    setNewRxDosage('');
+    setNewRxForm('Tablet');
+    setNewRxSig('');
+    setNewRxQuantity('30');
+    setNewRxClinicDispensedQty('');
+    setNewRxDangerous(false);
+    setNewRxDrugCode('');
+    setSelectedCatalogMedId('');
+    setRxCatalogQuery('');
+    setRosItems([]);
+    setObGyneExam(null);
+    setPediatricMilestones([]);
+    setAdolescentAssessment(null);
+    setHeadsssAssessments([]);
+    setBpMonitoringLogs([]);
+    setPlanManagement({ ...DEFAULT_YAKAP_PLAN_MANAGEMENT });
     setPhilHealthAtc('WALKEDIN');
+    setChartTabHistory([]);
     setPhysicalExamFindings({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
     setChargeSlipItems([]);
     setPostEncounterModalVisible(false);
   };
 
+  const materializeVisitIfNeeded = async (
+    initialStatus: QueueStatus = 'InConsultation'
+  ): Promise<PatientQueueItem | null> => {
+    if (!selectedPatient) return null;
+    if (!selectedPatient.id.startsWith('ephemeral-')) {
+      return selectedPatient;
+    }
+
+    if (materializingVisitPromiseRef.current) {
+      return materializingVisitPromiseRef.current;
+    }
+
+    const targetEphemeral = selectedPatient;
+    const promise = (async (): Promise<PatientQueueItem | null> => {
+      const doctor = requireSigner();
+      const doctorId = doctor?.id || current?.id;
+      const doctorName = doctor?.name || (current ? formatStaffName(current) : undefined);
+      const isYakap =
+        visitWorkflowMode === 'YakapAvailment' ||
+        targetEphemeral.visitType === 'YakapAvailment' ||
+        targetEphemeral.visitWorkflowMode === 'YakapAvailment' ||
+        isYakapEligible;
+
+      const [directVisit, err] = await clinicService.ensureDirectVisit({
+        patientId: targetEphemeral.patientId,
+        patientName: targetEphemeral.patientName,
+        doctorId,
+        doctorName,
+        visitType: 'RoutineCheckup',
+        visitWorkflowMode: isYakap ? 'YakapAvailment' : 'Regular',
+        initialStatus,
+        chiefComplaint: targetEphemeral.chiefComplaint,
+        allowDuplicateActive: isFollowUpEncounter,
+      });
+
+      if (err || !directVisit) {
+        notify.error(err?.message || 'Could not materialize direct visit record.');
+        return null;
+      }
+
+      const materialized: PatientQueueItem = {
+        ...targetEphemeral,
+        ...directVisit,
+        isDirectVisit: true,
+      };
+
+      if (activePatientId.current === targetEphemeral.id) {
+        activePatientId.current = materialized.id;
+        setSelectedPatient(materialized);
+        const currentRouteParams = route.params as Record<string, any> | undefined;
+        appliedRouteKey.current = `${materialized.id}|${materialized.patientId}|std|${currentRouteParams?.directVisitMode ?? ''}`;
+        (navigation as any).setParams?.({
+          queueId: materialized.id,
+          queueItemId: materialized.id,
+          patientId: materialized.patientId,
+          forceSeparateVisit: undefined,
+        });
+      }
+      setPatients((prev) =>
+        (prev || []).map((p) => (p.id === targetEphemeral.id ? materialized : p))
+      );
+      return materialized;
+    })().finally(() => {
+      materializingVisitPromiseRef.current = null;
+    });
+
+    materializingVisitPromiseRef.current = promise;
+    return promise;
+  };
+
   const handleStartFollowUpEncounter = () => {
     if (!selectedPatient) return;
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    const outgoing = latestUnsavedSnapshotRef.current;
+    if (outgoing) {
+      latestUnsavedSnapshotRef.current = null;
+      void flushOutgoingDraftSnapshot(outgoing);
+    }
+    draftSaveEpochRef.current += 1;
+    inFlightFingerprintRef.current = '';
+    queuedDraftSnapshotRef.current = null;
+    needsBaselineCaptureRef.current = true;
+    consultationIdRef.current = null;
+    setDraftSaveStatus('idle');
+    setLastDraftSavedAt(null);
+    setServerReadiness(null);
+
+    const ephemeralPatient: PatientQueueItem = {
+      ...selectedPatient,
+      id: `ephemeral-${selectedPatient.patientId}-${Date.now()}`,
+      queueNumber: 'DIRECT',
+      sequenceNumber: 0,
+      isDirectVisit: true,
+      status: 'InConsultation',
+      checkInTime: new Date().toISOString(),
+    };
+    activePatientId.current = ephemeralPatient.id;
+    setSelectedPatient(ephemeralPatient);
+    setPatients((prev) => [ephemeralPatient, ...(prev || []).filter((p) => p.id !== ephemeralPatient.id)]);
     setIsSigned(false);
     setSignedAt(null);
     setSignedConsultationId(null);
@@ -1332,6 +2966,7 @@ export default function ConsultationsScreen() {
     setBanner(null);
     setSubjective(selectedPatient.chiefComplaint ? `Follow-up: ${selectedPatient.chiefComplaint}.` : '');
     setObjective('');
+    setImportedProcedureIds([]);
     setAssessment('');
     setPlan('');
     setHomeInstructions('');
@@ -1339,31 +2974,183 @@ export default function ConsultationsScreen() {
     setPrescriptions([]);
     setOrderedLabs([]);
     setOrderedProcedures([]);
+    setDentalChart({});
+    setOrderInitialToothNumber(undefined);
+    setOrderInitialToothSurface(undefined);
     setSelectedSymptomCodes([]);
+    setRosCategory('EssentiallyNormal');
+    setShowAddRx(false);
+    setNewRxGeneric('');
+    setNewRxDosage('');
+    setNewRxForm('Tablet');
+    setNewRxSig('');
+    setNewRxQuantity('30');
+    setNewRxClinicDispensedQty('');
+    setNewRxDangerous(false);
+    setNewRxDrugCode('');
+    setSelectedCatalogMedId('');
+    setRxCatalogQuery('');
+    setCdsAlerts([]);
+    setCdsUsedLocalRules(false);
+    setCdsOverrideReason('');
+    setShowOverrideInput(false);
+    setOverrideConfirmed(false);
+    setPhysicalExamFindings({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
+    setRosItems([]);
+    setObGyneExam(null);
+    setPediatricMilestones([]);
+    setAdolescentAssessment(null);
+    setHeadsssAssessments([]);
+    setBpMonitoringLogs([]);
+    setPlanManagement({ ...DEFAULT_YAKAP_PLAN_MANAGEMENT });
+    setPhilHealthAtc((prev) => prev.trim() || 'WALKEDIN');
     setSymptomOtherDesc('');
     setSymptomPainSite('');
+    setMedCertFitness('FitToWork');
+    setMedCertRestDays('');
+    setMedCertPurpose('');
+    setMedCertRemarks('');
+    setRefFacility('');
+    setRefDepartment('');
+    setRefUrgency('Routine');
+    setRefReason('');
+    setRefSummary('');
+    setRefDiagnosis('');
+    setRefValidationAttempted(false);
     setPrescriptionSlip(null);
+    setIssuedMedCert(null);
+    setIssuedReferral(null);
   };
 
-  const handleSelectPatient = (p: PatientQueueItem) => {
-    if (p.id === selectedPatient?.id) return;
+  const handleSelectPatient = (p: PatientQueueItem, explicitTab?: ChartReviewTab) => {
+    if (p.id === selectedPatient?.id && !explicitTab) return;
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    const outgoing = latestUnsavedSnapshotRef.current;
+    if (outgoing && p.id !== selectedPatient?.id) {
+      latestUnsavedSnapshotRef.current = null;
+      void flushOutgoingDraftSnapshot(outgoing);
+    }
+    draftSaveEpochRef.current += 1;
+    inFlightFingerprintRef.current = '';
+    queuedDraftSnapshotRef.current = null;
     setSelectedPatient(p);
+    if (explicitTab) {
+      setActiveChartTab(explicitTab);
+    } else if (p.status === 'PendingProcedure') {
+      setActiveChartTab('procedures');
+    }
     resetEncounter(p);
     loadPatientContext(p);
   };
 
   useEffect(() => {
-    const params = route.params as { queueId?: string; queueItemId?: string; patientId?: string } | undefined;
+    const params = route.params as
+      | {
+          queueId?: string;
+          queueItemId?: string;
+          patientId?: string;
+          patientName?: string;
+          directVisitMode?: 'regular' | 'yakap';
+          forceSeparateVisit?: boolean;
+          initialChartTab?: ChartReviewTab;
+        }
+      | undefined;
     const targetQueueId = params?.queueId ?? params?.queueItemId;
-    const key = `${targetQueueId ?? ''}|${params?.patientId ?? ''}`;
-    if (key === '|' || appliedRouteKey.current === key) return;
+    const forceSeparate = parseBooleanRouteParam(params?.forceSeparateVisit);
+    const key = `${targetQueueId ?? ''}|${params?.patientId ?? ''}|${forceSeparate ? 'sep' : 'std'}|${params?.directVisitMode ?? ''}`;
+    if (key === '|||' || (!targetQueueId && !params?.patientId) || appliedRouteKey.current === key) return;
+
+    const terminalStatuses: QueueStatus[] = [
+      'Completed',
+      'Cancelled',
+      'NoShow',
+      'DischargedNonDoctor',
+      'Diverted',
+    ];
     const target = targetQueueId
       ? patients.find((x) => x.id === targetQueueId)
-      : patients.find((x) => x.patientId === params?.patientId);
+      : !forceSeparate
+        ? patients.find(
+            (x) => x.patientId === params?.patientId && !terminalStatuses.includes(x.status)
+          )
+        : undefined;
+
     if (target) {
       appliedRouteKey.current = key;
-      handleSelectPatient(target);
+      if (params?.directVisitMode === 'yakap') {
+        setPhilHealthAtc('WALKEDIN');
+      }
+      handleSelectPatient(target, params?.initialChartTab);
+      return;
     }
+
+    appliedRouteKey.current = key;
+    (async () => {
+      if (targetQueueId || (params?.patientId && !forceSeparate)) {
+        const [allQueue] = await clinicService.getQueue({
+          date: getManilaTodayStr(),
+          view: 'All',
+        });
+        const fetchedTarget = targetQueueId
+          ? (allQueue || []).find((x) => x.id === targetQueueId)
+          : (allQueue || []).find(
+              (x) => x.patientId === params?.patientId && !terminalStatuses.includes(x.status),
+            );
+        if (fetchedTarget) {
+          if (params?.directVisitMode === 'yakap') {
+            setPhilHealthAtc('WALKEDIN');
+          }
+          setPatients((prev) => [
+            fetchedTarget,
+            ...(prev || []).filter((p) => p.id !== fetchedTarget.id),
+          ]);
+          handleSelectPatient(fetchedTarget, params?.initialChartTab);
+          return;
+        }
+      }
+
+      if (params?.patientId) {
+        const [pat] = await clinicService.getPatientById(params.patientId);
+        if (pat) {
+          const ephemeralId = forceSeparate
+            ? `ephemeral-${pat.id}-${Date.now()}`
+            : `ephemeral-${pat.id}`;
+          const ephemeralPatient: PatientQueueItem = {
+            id: ephemeralId,
+            tenantId: pat.tenantId || '',
+            clinicId: pat.clinicId || '',
+            queueNumber: 'DIRECT',
+            sequenceNumber: 0,
+            queueDate: getManilaTodayStr(),
+            patientId: pat.id,
+            patientName: pat.fullName,
+            priority: 'Routine',
+            status: 'InConsultation',
+            checkInTime: new Date().toISOString(),
+            hasVitals: false,
+            visitType: 'RoutineCheckup',
+            visitWorkflowMode: params.directVisitMode === 'yakap' ? 'YakapAvailment' : 'Regular',
+            isDirectVisit: true,
+          };
+          setPatients((prev) => [
+            ephemeralPatient,
+            ...(prev || []).filter((p) => p.id !== ephemeralPatient.id),
+          ]);
+          handleSelectPatient(ephemeralPatient, params?.initialChartTab);
+          if (forceSeparate) {
+            setIsFollowUpEncounter(true);
+          }
+          if (params.directVisitMode === 'yakap') {
+            setPhilHealthAtc('WALKEDIN');
+            setIsYakapEligible(true);
+            setVisitWorkflowMode('YakapAvailment');
+          }
+        }
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params, patients]);
 
@@ -1423,8 +3210,17 @@ export default function ConsultationsScreen() {
     handleSelectPatient(calledItem);
   }, [callModalItem, current, selectedCallRoom, selectedCallRoomId, activeRooms, loadQueue, handleSelectPatient]);
 
-  const runCdsScreening = async (currentPrescriptions: LocalPrescription[]) => {
-    if (!selectedPatient) return;
+  const runCdsScreening = async (
+    currentPrescriptions: LocalPrescription[],
+    contextOverride?: {
+      patientId?: string;
+      allergies?: string;
+      labOrdersList?: ClinicLabOrderRecord[];
+      preserveOverrideState?: boolean;
+    },
+  ) => {
+    const patId = contextOverride?.patientId ?? selectedPatient?.patientId;
+    if (!patId) return;
     if (currentPrescriptions.length === 0) {
       setCdsAlerts([]);
       setCdsUsedLocalRules(false);
@@ -1432,15 +3228,15 @@ export default function ConsultationsScreen() {
       setOverrideConfirmed(false);
       return;
     }
-    const patId = selectedPatient.patientId;
-    const allergies = patientRecord?.allergies ?? '';
+    const allergies = contextOverride?.allergies ?? patientRecord?.allergies ?? '';
+    const sourceLabOrders = contextOverride?.labOrdersList ?? labOrders;
 
     // Extract latest renal & electrolyte lab values from recent orders if available
     let latestCreatinine: number | undefined;
     let latestEgfr: number | undefined;
     let latestPotassium: number | undefined;
 
-    for (const ord of labOrders) {
+    for (const ord of sourceLabOrders) {
       if (ord.observationsJson) {
         try {
           const obs = JSON.parse(ord.observationsJson);
@@ -1474,7 +3270,7 @@ export default function ConsultationsScreen() {
         setCdsUsedLocalRules(false);
         if (res.hasCriticalAlerts) {
           setShowOverrideInput(true);
-        } else {
+        } else if (!contextOverride?.preserveOverrideState) {
           setShowOverrideInput(false);
           setOverrideConfirmed(false);
         }
@@ -1600,7 +3396,7 @@ export default function ConsultationsScreen() {
     setCdsAlerts(localAlerts);
     if (localAlerts.some((a) => a.requiresOverrideReason)) {
       setShowOverrideInput(true);
-    } else {
+    } else if (!contextOverride?.preserveOverrideState) {
       setShowOverrideInput(false);
       setOverrideConfirmed(false);
     }
@@ -1627,24 +3423,58 @@ export default function ConsultationsScreen() {
     notify.success('Critical value readback recorded in the patient record.');
   };
 
+  const handleOpenLabSlip = async (orderOrId: ClinicLabOrderRecord | string) => {
+    const orderId = typeof orderOrId === 'string' ? orderOrId : orderOrId.id;
+    const url = clinicService.getLabOrderSlipPdfUrl(orderId);
+    try {
+      if (!(await openDocument(url))) {
+        throw new Error('Could not open the requisition slip');
+      }
+    } catch (e: any) {
+      notify.error(e?.message || 'Unable to open laboratory requisition slip.');
+    }
+  };
+
   const handleOpenLabPdf = (orderOrId: ClinicLabOrderRecord | string) => {
     const orderId = typeof orderOrId === 'string' ? orderOrId : orderOrId.id;
     const found = typeof orderOrId === 'string' ? labOrders.find((o) => o.id === orderOrId) : orderOrId;
-    const url = clinicService.getLabReportPdfUrl(orderId);
-    openDocument(url).then((opened) => {
-      if (!opened) throw new Error('Could not open the document');
-    }).catch(() => {
+    const isCompleted = found?.status === 'Completed' || found?.status === 'CompletedWithExternalReport';
+
+    if (found && !isCompleted) {
       Alert.alert(
-        'Could not open the PDF report',
+        'Official Lab Report Pending',
+        `The official signed laboratory report is not yet available for Accession #${found.orderNumber ?? orderId.slice(0, 8)}.\n\nStatus: ${humanize(found.status)}.\nResults have not yet been released by the laboratory.\n\nWould you like to open the official Requisition Slip instead?`,
         [
-          `Accession #${found?.orderNumber ?? orderId.slice(0, 8)}`,
-          found?.verifiedByPathologist ? `Verified by: ${found.verifiedByPathologist}` : null,
-          found?.pathologistImpression ? `Pathologist impression:\n${found.pathologistImpression}` : null,
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'View Requisition Slip',
+            onPress: () => {
+              handleOpenLabSlip(orderId);
+            },
+          },
         ]
-          .filter(Boolean)
-          .join('\n'),
       );
-    });
+      return;
+    }
+
+    const url = clinicService.getLabReportPdfUrl(orderId);
+    openDocument(url)
+      .then((opened) => {
+        if (!opened) throw new Error('Could not open the document');
+      })
+      .catch((err: any) => {
+        Alert.alert(
+          'Could not open the PDF report',
+          [
+            `Accession #${found?.orderNumber ?? orderId.slice(0, 8)}`,
+            found?.verifiedByPathologist ? `Verified by: ${found.verifiedByPathologist}` : null,
+            found?.pathologistImpression ? `Pathologist impression:\n${found.pathologistImpression}` : null,
+            err?.message ? `Details: ${err.message}` : 'Please verify that the lab report has been finalized and uploaded.',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+        );
+      });
   };
 
   // Search ICD-10 codes
@@ -1878,8 +3708,35 @@ export default function ConsultationsScreen() {
     });
   };
 
-  const handleRemoveProcedure = (procName: string, toothNumber?: number) => {
+  const handleRemoveProcedure = async (procName: string, toothNumber?: number) => {
     if (isSigned) return;
+    const target = orderedProcedures.find((p) => {
+      if (p.name.toLowerCase() !== procName.toLowerCase()) return false;
+      if (toothNumber !== undefined && p.toothNumber !== toothNumber) return false;
+      if (toothNumber === undefined && p.toothNumber !== undefined) return false;
+      return true;
+    });
+
+    if (target?.status === 'sent_to_room' && target.procedureId) {
+      const shouldCancel = typeof window !== 'undefined' && window?.confirm
+        ? window.confirm(
+            `Cancel procedure "${procName}"? This will cancel the active clinical order in ${target.targetRoomName || 'the Treatment Room'} and recall the patient if no other procedures are pending.`
+          )
+        : true;
+      if (!shouldCancel) return;
+
+      const [, cancelErr] = await clinicService.cancelProcedure(target.procedureId, 'Cancelled from Consultation workstation');
+      if (cancelErr) {
+        notify.error(cancelErr.message || `Failed to cancel ${procName}.`);
+        return;
+      }
+      notify.success(`Cancelled ${procName}.`);
+      if (selectedPatient?.patientId) {
+        await refreshPatientChart(selectedPatient.patientId).catch(() => {});
+      }
+      loadQueue();
+    }
+
     setOrderedProcedures((prev) =>
       prev.filter((p) => {
         if (p.name.toLowerCase() !== procName.toLowerCase()) return true;
@@ -1903,25 +3760,52 @@ export default function ConsultationsScreen() {
       Alert.alert('Incomplete prescription', 'Please provide the generic name, dosage and directions (sig).');
       return;
     }
+    const prescribedQty = parseInt(newRxQuantity, 10) || 30;
+    if (prescribedQty <= 0) {
+      Alert.alert('Invalid quantity', 'Prescribed quantity must be at least 1.');
+      return;
+    }
+    let clinicDispensedQty = 0;
+    if (newRxClinicDispensedQty.trim() !== '') {
+      const parsedDispensed = Number(newRxClinicDispensedQty.trim());
+      if (!Number.isInteger(parsedDispensed) || parsedDispensed < 0) {
+        Alert.alert('Invalid clinic dispensed quantity', 'Enter a whole number of pieces dispensed from clinic stock (0 or more).');
+        return;
+      }
+      if (parsedDispensed > prescribedQty) {
+        Alert.alert(
+          'Exceeds prescribed quantity',
+          `Clinic stock dispensed pieces (${parsedDispensed}) cannot exceed the prescribed quantity (${prescribedQty}).`,
+        );
+        return;
+      }
+      clinicDispensedQty = parsedDispensed;
+    }
+
     const newRx: LocalPrescription = {
       id: `rx-${Date.now()}`,
       genericName: newRxGeneric.trim(),
       dosage: newRxDosage.trim(),
       form: newRxForm.trim() || 'Tablet',
       sig: newRxSig.trim(),
-      quantity: parseInt(newRxQuantity, 10) || 30,
+      quantity: prescribedQty,
       isDangerousDrug: newRxDangerous,
       philHealthDrugCode: newRxDrugCode.trim() || undefined,
+      clinicDispensedQuantity: clinicDispensedQty > 0 ? clinicDispensedQty : undefined,
+      rosCategory,
     };
     const updated = [...prescriptions, newRx];
     setPrescriptions(updated);
     runCdsScreening(updated);
     setNewRxGeneric('');
     setNewRxDosage('');
+    setNewRxForm('Tablet');
     setNewRxSig('');
     setNewRxQuantity('30');
+    setNewRxClinicDispensedQty('');
     setNewRxDangerous(false);
     setNewRxDrugCode('');
+    setSelectedCatalogMedId('');
     setShowAddRx(false);
   };
 
@@ -1937,6 +3821,16 @@ export default function ConsultationsScreen() {
 
     const doctor = requireSigner();
     if (!doctor) return;
+
+    if (hasPendingInClinicProcedures) {
+      const msg = `Encounter signing is locked: ${pendingProcedureReason ?? 'In-clinic procedures are pending in the Procedure Bay'}. All ordered procedures must be executed or cancelled before signing.`;
+      setBanner({
+        text: msg,
+        isError: true,
+      });
+      notify.error(msg);
+      return;
+    }
 
     // Clinical Decision Support (CDS) Critical Override Gate
     const criticalAlerts = cdsAlerts.filter((a) => a.requiresOverrideReason);
@@ -1979,7 +3873,7 @@ export default function ConsultationsScreen() {
 
     const finalPan = isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined;
     if (isYakapEligible && (!finalPan || !finalPrc)) {
-      const msg = 'Doctor PhilHealth Accreditation Number (PAN) and PRC license are required for Konsulta encounters.';
+      const msg = 'Doctor PhilHealth Accreditation Number and PRC license are required for PhilHealth YAKAP visits.';
       setBanner({
         text: msg,
         isError: true,
@@ -2001,56 +3895,96 @@ export default function ConsultationsScreen() {
     }
 
     setIsSigning(true);
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    queuedDraftSnapshotRef.current = null;
+    latestUnsavedSnapshotRef.current = null;
+    inFlightFingerprintRef.current = '';
+    draftSaveEpochRef.current += 1;
+    if (inFlightDraftSavePromiseRef.current) {
+      await inFlightDraftSavePromiseRef.current.catch(() => null);
+    }
 
-    let consultationId = signedConsultationId;
+    const completedLabResultsCount = labOrders.filter(
+      (o) => o.status === 'Completed' || o.status === 'CompletedWithExternalReport'
+    ).length;
+
+    const activeVisit = await materializeVisitIfNeeded('InConsultation');
+    if (!activeVisit) {
+      setIsSigning(false);
+      return;
+    }
+
+    const signDraftPayload = buildConsultationDraftPayload({
+      patientId: activeVisit.patientId,
+      patientName: activeVisit.patientName,
+      doctorId: doctor.id,
+      doctorName: doctor.name,
+      queueItemId: activeVisit.id,
+      appointmentId: activeVisit.appointmentId,
+      hasExistingConsultation: true,
+      specialtyMode: settings?.specialtyMode,
+      isDentalEnabled,
+      visitWorkflowMode,
+      isYakapEligible,
+      philHealthAtc,
+      doctorPrc,
+      doctorPtr,
+      doctorS2,
+      doctorPan,
+      fallbackPrc: signerStaff?.prcLicenseNumber ?? undefined,
+      fallbackPtr: signerStaff?.ptrNumber ?? undefined,
+      fallbackS2: signerStaff?.s2LicenseNumber ?? undefined,
+      fallbackPan: signerStaff?.philHealthPan ?? undefined,
+      subjective,
+      objective,
+      assessment,
+      plan,
+      homeInstructions,
+      rosCategory,
+      rosCategories,
+      rosItems,
+      selectedSymptomCodes,
+      painSymptomSelected,
+      otherSymptomSelected,
+      symptomPainSite,
+      symptomOtherDesc,
+      physicalExamFindings,
+      obGyneExam,
+      pediatricMilestones,
+      adolescentAssessment,
+      headsssAssessments,
+      bpMonitoringLogs,
+      planManagement,
+      completedLabResultsCount,
+      hasIssuedReferral: Boolean(issuedReferral),
+      selectedDiagnoses,
+      prescriptions,
+      orderedLabs,
+      orderedProcedures,
+      dentalChart,
+      cdsOverrideReason,
+      overrideConfirmed,
+      medCertFitness,
+      medCertRestDays,
+      medCertPurpose,
+      medCertRemarks,
+      refFacility,
+      refDepartment,
+      refUrgency,
+      refReason,
+      refSummary,
+    });
+
+    let consultationId =
+      consultationIdRef.current ||
+      signedConsultationId ||
+      savedConsultationByVisitRef.current[activeVisit.id] ||
+      null;
     if (!consultationId) {
-      const createPayload = {
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
-        doctorId: doctor.id,
-        doctorName: doctor.name,
-        queueItemId: isFollowUpEncounter ? undefined : selectedPatient.id,
-        appointmentId: selectedPatient.appointmentId,
-        subjective,
-        objective,
-        assessment,
-        plan,
-        homeInstructions: homeInstructions.trim() || undefined,
-        isYakapEligible,
-        philHealthSignSympCode: isYakapEligible ? selectedSymptomCodes.join(',') : undefined,
-        philHealthOtherComplaint: isYakapEligible && otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
-        philHealthPainSite: isYakapEligible && painSymptomSelected ? symptomPainSite : undefined,
-        doctorPhilHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
-        philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'WALKEDIN') : undefined,
-        generalSurveyId: isYakapEligible ? (physicalExamFindings.generalSurveyId || (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2')) : undefined,
-        generalSurveyRemarks: isYakapEligible ? physicalExamFindings.generalSurveyRemarks : undefined,
-        physicalExamFindingsJson: isYakapEligible ? JSON.stringify(physicalExamFindings) : undefined,
-        diagnoses: selectedDiagnoses.map((d) => ({
-          icd10Code: d.icd10Code,
-          description: d.description,
-          isPrimary: d.isPrimary,
-        })),
-        prescriptions: prescriptions.map((p) => ({
-          genericName: p.genericName,
-          dosage: p.dosage,
-          form: p.form,
-          sig: p.sig,
-          quantity: p.quantity,
-          isDangerousDrug: p.isDangerousDrug,
-          philHealthDrugCode: p.philHealthDrugCode,
-        })),
-      };
-      let [consultation, createErr] = await clinicService.createConsultation(createPayload);
-      if (
-        createErr &&
-        (createErr.status === 409 ||
-          (createErr.message || '').toLowerCase().includes('already been signed'))
-      ) {
-        [consultation, createErr] = await clinicService.createConsultation({
-          ...createPayload,
-          queueItemId: undefined,
-        });
-      }
+      const [consultation, createErr] = await clinicService.createConsultation(signDraftPayload);
       if (createErr || !consultation?.id) {
         setIsSigning(false);
         const reason = createErr?.message || 'Unable to save consultation record';
@@ -2063,38 +3997,11 @@ export default function ConsultationsScreen() {
         return;
       }
       consultationId = consultation.id;
+      savedConsultationByVisitRef.current[activeVisit.id] = consultation.id;
+      consultationIdRef.current = consultation.id;
       setSignedConsultationId(consultation.id);
     } else {
-      const [, updateErr] = await clinicService.updateConsultation(consultationId, {
-        subjective,
-        objective,
-        assessment,
-        plan,
-        homeInstructions: homeInstructions.trim() || undefined,
-        isYakapEligible,
-        philHealthSignSympCode: isYakapEligible ? selectedSymptomCodes.join(',') : undefined,
-        philHealthOtherComplaint: isYakapEligible && otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
-        philHealthPainSite: isYakapEligible && painSymptomSelected ? symptomPainSite : undefined,
-        doctorPhilHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
-        philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'WALKEDIN') : undefined,
-        generalSurveyId: isYakapEligible ? (physicalExamFindings.generalSurveyId || (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2')) : undefined,
-        generalSurveyRemarks: isYakapEligible ? physicalExamFindings.generalSurveyRemarks : undefined,
-        physicalExamFindingsJson: isYakapEligible ? JSON.stringify(physicalExamFindings) : undefined,
-        diagnoses: selectedDiagnoses.map((d) => ({
-          icd10Code: d.icd10Code,
-          description: d.description,
-          isPrimary: d.isPrimary,
-        })),
-        prescriptions: prescriptions.map((p) => ({
-          genericName: p.genericName,
-          dosage: p.dosage,
-          form: p.form,
-          sig: p.sig,
-          quantity: p.quantity,
-          isDangerousDrug: p.isDangerousDrug,
-          philHealthDrugCode: p.philHealthDrugCode,
-        })),
-      });
+      const [, updateErr] = await clinicService.updateConsultation(consultationId, signDraftPayload);
       if (updateErr) {
         setIsSigning(false);
         const reason = updateErr.message || 'Unable to update consultation record';
@@ -2141,73 +4048,64 @@ export default function ConsultationsScreen() {
       }
     }
 
+    // Step 3: Verify that no in-clinic procedures remain pending execution or handoff BEFORE staging requisitions
+    const unhandedOffProcs = orderedProcedures.filter((p) => !p.isHandedOff && p.status !== 'sent_to_room');
+    if (unhandedOffProcs.length > 0) {
+      setIsSigning(false);
+      const msg = `Cannot sign encounter — ${unhandedOffProcs.length} in-clinic procedure(s) have not been handed off or executed in the Procedure Bay.`;
+      setBanner({
+        text: msg,
+        isError: true,
+      });
+      notify.error(msg);
+      return;
+    }
+
     // Partition orderedLabs into Outside Laboratory orders vs In-House Clinic tests
     const outsideLabs = orderedLabs.filter((l) => l.fulfillmentMode === 'outside');
     const inHouseLabs = orderedLabs.filter((l) => l.fulfillmentMode === 'in_house');
 
-    // Step 3: Auto-create Diagnostic Lab Requisitions for outside labs BEFORE signing
+    // Step 4: Auto-create Diagnostic Lab Requisitions for outside labs BEFORE signing (deduplicated on sign retry)
     if (outsideLabs.length > 0) {
-      const [, labErr] = await clinicService.createLabOrder({
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
-        consultationId,
-        orderedByDoctorId: doctor.id,
-        orderedByDoctorName: doctor.name,
-        clinicalDiagnosis: assessment,
-        items: outsideLabs.map((l) => ({
-          testName: l.name,
-          category: l.category || (diagnosticCatalog.find((d) => d.name === l.name)?.category ?? 'Diagnostic'),
-          instructions: l.instructions,
-        })),
-      });
-      if (labErr) {
-        setIsSigning(false);
-        const reason = labErr.message || 'Unable to create laboratory requisition';
-        const msg = `Cannot sign encounter — Step failed: Laboratory Requisition (${reason}). Encounter was not signed.`;
-        setBanner({
-          text: msg,
-          isError: true,
-        });
-        notify.error(msg, { traceId: labErr.traceId });
-        return;
-      }
-    }
+      const [existingLabOrders] = await clinicService.getLabOrders(
+        activeVisit.patientId,
+        undefined,
+        undefined,
+        { includeUnsigned: true },
+      );
+      const alreadyStagedForConsultation = (existingLabOrders ?? []).some(
+        (lo) =>
+          lo.consultationId === consultationId &&
+          lo.status !== 'Cancelled' &&
+          !lo.isSigned,
+      );
 
-    // Step 4: Auto-order in-clinic procedures for the nursing/treatment station BEFORE signing
-    const targetTreatmentRoom =
-      treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
-    for (const proc of orderedProcedures) {
-      if (!proc.isHandedOff) {
-        const procInfo = procedureCatalog.find(
-          (p) => p.name.toLowerCase() === proc.name.toLowerCase() || (p.code && p.code === proc.code)
-        );
-        const [, procErr] = await clinicService.orderProcedure({
-          patientId: selectedPatient.patientId,
-          patientName: selectedPatient.patientName,
-          queueItemId: selectedPatient.id,
+      if (!alreadyStagedForConsultation) {
+        const [, labErr] = await clinicService.createLabOrder({
+          patientId: activeVisit.patientId,
+          patientName: activeVisit.patientName,
+          queueItemId: activeVisit.id,
           consultationId,
-          procedureCode: proc.code || procInfo?.code,
-          procedureName: proc.name,
-          category: proc.category || procInfo?.category || 'Procedure',
           orderedByDoctorId: doctor.id,
           orderedByDoctorName: doctor.name,
-          targetRoomId: proc.targetRoomId || targetTreatmentRoom?.id,
-          targetRoomName: proc.targetRoomName || targetTreatmentRoom?.name,
-          toothNumber: proc.toothNumber,
-          toothSurface: proc.toothSurface,
-          clinicalNotes: proc.instructions
-            ? `${proc.instructions} (Assessment: ${assessment || 'Evaluation'})`
-            : `Ordered during encounter for ${assessment || 'Evaluation'}`,
+          clinicalDiagnosis: assessment,
+          items: outsideLabs.map((l) => ({
+            testName: l.name,
+            category: l.category || (diagnosticCatalog.find((d) => d.name === l.name)?.category ?? 'Diagnostic'),
+            instructions: l.instructions,
+            isDoneOutsideFacility: true,
+            testCode: l.code || undefined,
+          })),
         });
-        if (procErr) {
+        if (labErr) {
           setIsSigning(false);
-          const reason = procErr.message || `Unable to order procedure "${proc.name}"`;
-          const msg = `Cannot sign encounter — Step failed: Procedure Order (${proc.name}: ${reason}). Encounter was not signed.`;
+          const reason = labErr.message || 'Unable to create laboratory requisition';
+          const msg = `Cannot sign encounter — Step failed: Laboratory Requisition (${reason}). Encounter was not signed.`;
           setBanner({
             text: msg,
             isError: true,
           });
-          notify.error(msg, { traceId: procErr.traceId });
+          notify.error(msg, { traceId: labErr.traceId });
           return;
         }
       }
@@ -2268,18 +4166,39 @@ export default function ConsultationsScreen() {
     }
 
     // Complete queue item
-    await clinicService.completeQueueItem(selectedPatient.id);
+    await clinicService.completeQueueItem(activeVisit.id);
+    clearLocalConsultationDraft({
+      clinicId: activeVisit.clinicId || settings?.clinicId || null,
+      visitId: activeVisit.id,
+      patientId: activeVisit.patientId,
+      consultationId,
+    });
+    if (selectedPatient.id !== activeVisit.id) {
+      clearLocalConsultationDraft({
+        clinicId: selectedPatient.clinicId || settings?.clinicId || null,
+        visitId: selectedPatient.id,
+        patientId: selectedPatient.patientId,
+        consultationId,
+      });
+    }
 
-    // Update local state immediately and refetch queue & longitudinal patient chart in background
-    setSelectedPatient((prev) => (prev ? { ...prev, status: 'Completed' } : null));
+    // Update local state immediately and await full refresh of queue & longitudinal patient chart
+    setSelectedPatient((prev) => (prev ? { ...prev, id: activeVisit.id, status: 'Completed' } : null));
     setPatients((prev) =>
-      prev.map((p) => (p.id === selectedPatient.id ? { ...p, status: 'Completed' } : p))
+      prev.map((p) => (p.id === selectedPatient.id || p.id === activeVisit.id ? { ...p, id: activeVisit.id, status: 'Completed' } : p))
     );
-    loadQueue().catch(() => {});
-    refreshPatientChart(selectedPatient.patientId).catch(() => {});
+    await Promise.all([
+      loadQueue().catch(() => {}),
+      refreshPatientChart(selectedPatient.patientId).catch(() => {}),
+      refreshDiagnosticsTab().catch(() => {}),
+    ]);
 
     setIsSigning(false);
     setIsSigned(true);
+    setDraftSaveStatus('idle');
+    setLastDraftSavedAt(null);
+    setIssuedMedCert((prev) => (prev ? { ...prev, isSigned: true } : null));
+    setIssuedReferral((prev) => (prev ? { ...prev, isSigned: true } : null));
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setSignedAt(nowStr);
     const successMsg = `Encounter signed by ${doctor.name} (${finalPrc}) at ${nowStr}. Clinical charge slip posted to Cashier.`;
@@ -2289,6 +4208,68 @@ export default function ConsultationsScreen() {
     });
     notify.success(successMsg);
     setPostEncounterModalVisible(true);
+  };
+
+  const handleAbandonUnsignedEncounter = () => {
+    if (!selectedPatient || isSigned) return;
+    Alert.alert(
+      'Discard unsigned consultation draft?',
+      'Prescriptions, clinic-dispensed starter medicines, medical certificates, referrals, and laboratory requisitions created during an unsigned encounter are invalid and will be cleanly reverted with zero orphan records.',
+      [
+        { text: 'Keep editing', style: 'cancel' },
+        {
+          text: 'Discard & revert',
+          style: 'destructive',
+          onPress: async () => {
+            setIsAbandoningDraft(true);
+            if (autoSaveTimerRef.current) {
+              clearTimeout(autoSaveTimerRef.current);
+              autoSaveTimerRef.current = null;
+            }
+            queuedDraftSnapshotRef.current = null;
+            latestUnsavedSnapshotRef.current = null;
+            inFlightFingerprintRef.current = '';
+            draftSaveEpochRef.current += 1;
+            if (inFlightDraftSavePromiseRef.current) {
+              await inFlightDraftSavePromiseRef.current.catch(() => null);
+            }
+            const targetConsultationId =
+              consultationIdRef.current ||
+              signedConsultationId ||
+              (selectedPatient ? savedConsultationByVisitRef.current[selectedPatient.id] : null) ||
+              null;
+            if (targetConsultationId) {
+              const [, abandonErr] = await clinicService.abandonConsultation(targetConsultationId, {
+                reason: 'Unsigned consultation draft discarded by physician',
+                cancelVisit: false,
+              });
+              if (abandonErr) {
+                setIsAbandoningDraft(false);
+                Alert.alert('Unable to discard draft', abandonErr.message || 'Please try again.');
+                return;
+              }
+            }
+            if (selectedPatient?.id) {
+              delete savedConsultationByVisitRef.current[selectedPatient.id];
+              clearLocalConsultationDraft({
+                clinicId: selectedPatient.clinicId || settings?.clinicId || null,
+                visitId: selectedPatient.id,
+                patientId: selectedPatient.patientId,
+                consultationId: targetConsultationId,
+              });
+            }
+            const currentPatient = selectedPatient;
+            resetEncounter(currentPatient);
+            await Promise.all([
+              loadPatientContext(currentPatient).catch(() => {}),
+              loadQueue().catch(() => {}),
+            ]);
+            setIsAbandoningDraft(false);
+            notify.info('Unsigned consultation draft discarded with zero orphan records.');
+          },
+        },
+      ],
+    );
   };
 
   const buildBillableItems = (): CreateInvoiceRequest['lineItems'] => {
@@ -2370,6 +4351,16 @@ export default function ConsultationsScreen() {
 
     const doctor = requireSigner();
     if (!doctor) return;
+
+    if (hasPendingInClinicProcedures) {
+      const msg = `Encounter signing is locked: ${pendingProcedureReason ?? 'In-clinic procedures are pending in the Procedure Bay'}. All ordered procedures must be executed or cancelled before signing.`;
+      setBanner({
+        text: msg,
+        isError: true,
+      });
+      notify.error(msg);
+      return;
+    }
 
     // Clinical Decision Support (CDS) Critical Override Gate
     const criticalAlerts = cdsAlerts.filter((a) => a.requiresOverrideReason);
@@ -2507,7 +4498,7 @@ export default function ConsultationsScreen() {
     if (!panValid) missing.push('Doctor PhilHealth Accreditation Number (PAN) is missing.');
     if (!prcValid) missing.push('Doctor PRC License number is required to sign encounters.');
     if (!pinValid) missing.push('Patient PhilHealth PIN is invalid (must contain exactly 12 numeric digits).');
-    if (!atcValid) missing.push('Encounter ATC code is required.');
+    if (!atcValid) missing.push('PhilHealth visit code is required.');
     if (!hasSymptom) missing.push('At least one complaint or symptom is required.');
     if (hasPainCode && !painSiteValid) missing.push('Pain site description is required when pain is reported.');
     if (hasOtherCode && !otherValid) missing.push('Description is required when other complaint is reported.');
@@ -2582,32 +4573,78 @@ export default function ConsultationsScreen() {
     ? (serverReadiness ? serverReadiness.isReady : localEvaluation.isReady)
     : true;
 
-  const philHealthEligibility = useMemo(() => {
-    if (!patientRecord) {
-      return { canToggle: false, reason: 'Patient record loading' };
+  const pendingProcedureReason = useMemo(() => {
+    if (!selectedPatient) return null;
+
+    // 1. Unhanded-off procedures drafted in workstation
+    const unhandedOff = orderedProcedures.filter((p) => !p.isHandedOff && p.status !== 'sent_to_room');
+    if (unhandedOff.length > 0) {
+      return `${unhandedOff.length} procedure(s) pending handoff`;
     }
-    const pin = (
-      patientRecord.philHealthNumber ||
-      (patientRecord as any).pin ||
-      patientChart?.demographics?.philHealthNumber ||
-      ''
-    ).trim();
-    if (!pin) {
-      return { canToggle: false, reason: 'Missing PhilHealth PIN' };
+
+    const procsList = patientChart?.proceduresHistory || [];
+    // 2. Active procedures in chart for this patient/visit
+    const relevantProcs = procsList.filter(
+      (proc) =>
+        (selectedPatient.id && proc.queueItemId === selectedPatient.id) ||
+        (signedConsultationId && proc.consultationId === signedConsultationId) ||
+        (!proc.queueItemId && selectedPatient.patientId && proc.patientId === selectedPatient.patientId)
+    );
+
+    const hasActiveProcs = relevantProcs.some(
+      (p) => p.status === 'Ordered' || p.status === 'InProgress'
+    );
+    if (hasActiveProcs) {
+      return 'In-clinic procedures pending in Procedure Bay';
     }
-    const phProfile = extractPhilHealthProfileData(patientRecord.customFields, patientRecord);
-    if (phProfile.memberType === 'DD') {
-      if (!phProfile.principalFullName?.trim() || !phProfile.principalPin?.trim()) {
-        return { canToggle: false, reason: 'Dependent missing sponsor details' };
-      }
+
+    // If there are procedures for this visit/patient and all are Completed/Cancelled, NO procedures are pending!
+    if (relevantProcs.length > 0 && relevantProcs.every((p) => p.status === 'Completed' || p.status === 'Cancelled')) {
+      return null;
     }
-    return { canToggle: true, reason: null };
-  }, [patientRecord, patientChart?.demographics?.philHealthNumber]);
+
+    // Check if the patient chart as a whole has completed procedures and NO active ones
+    const anyActiveInChart = procsList.some((p) => p.status === 'Ordered' || p.status === 'InProgress');
+    const anyCompletedInChart = procsList.some((p) => p.status === 'Completed');
+    if (anyCompletedInChart && !anyActiveInChart) {
+      return null;
+    }
+
+    // 3. Fallback: If queue status is PendingProcedure and there are no completed procedures to contradict it
+    if (selectedPatient.status === 'PendingProcedure') {
+      return 'In Procedure Bay';
+    }
+
+    return null;
+  }, [selectedPatient, patientChart?.proceduresHistory, signedConsultationId, orderedProcedures]);
+
+  const hasPendingInClinicProcedures = Boolean(pendingProcedureReason);
 
   const latestExecutedProcedure = useMemo(() => {
     const list = patientChart?.proceduresHistory || [];
-    return list.find((p) => p.status === 'Completed') || list[0] || null;
+    return list.find((p) => p.status === 'Completed') || null;
   }, [patientChart?.proceduresHistory]);
+
+  // Automatically sync patient status to ReEvaluation when procedures are completed
+  useEffect(() => {
+    if (
+      selectedPatient?.status === 'PendingProcedure' &&
+      !hasPendingInClinicProcedures &&
+      latestExecutedProcedure?.status === 'Completed'
+    ) {
+      setSelectedPatient((prev) =>
+        prev && prev.status === 'PendingProcedure' ? { ...prev, status: 'ReEvaluation' } : prev
+      );
+      setPatients((prev) =>
+        prev.map((item) =>
+          item.id === selectedPatient?.id && item.status === 'PendingProcedure'
+            ? { ...item, status: 'ReEvaluation' }
+            : item
+        )
+      );
+      loadQueue().catch(() => {});
+    }
+  }, [selectedPatient?.id, selectedPatient?.status, hasPendingInClinicProcedures, latestExecutedProcedure?.status, loadQueue]);
 
   const formatProcedureVitals = (jsonStr?: string) => {
     if (!jsonStr) return 'Not recorded';
@@ -2625,10 +4662,28 @@ export default function ConsultationsScreen() {
     }
   };
 
+  const isPostProcedureVitalsImported = useMemo(() => {
+    if (!latestExecutedProcedure) return false;
+    if (importedProcedureIds.includes(latestExecutedProcedure.id)) return true;
+    if (!objective) return false;
+    const marker = `Post-${latestExecutedProcedure.procedureName} Vitals:`;
+    return objective.includes(marker);
+  }, [latestExecutedProcedure, importedProcedureIds, objective]);
+
   const handleImportPostProcedureVitals = (proc?: ClinicalProcedureRecord | null) => {
     if (!proc) return;
+    const marker = `Post-${proc.procedureName} Vitals:`;
+    if (objective.includes(marker) || importedProcedureIds.includes(proc.id)) {
+      notify.info('Post-procedure findings are already included in Objective notes.');
+      return;
+    }
     const postStr = `\nPost-${proc.procedureName} Vitals: ${formatProcedureVitals(proc.postProcedureVitalsJson)}. Nurse Notes: ${proc.clinicalNotes || 'Tolerated well'}. Complications: ${proc.complications || 'None'}.`;
-    setObjective((prev) => (prev ? `${prev.trim()}${postStr}` : postStr.trim()));
+    setObjective((prev) => {
+      if (!prev) return postStr.trim();
+      if (prev.includes(marker)) return prev;
+      return `${prev.trim()}${postStr}`;
+    });
+    setImportedProcedureIds((prev) => (prev.includes(proc.id) ? prev : [...prev, proc.id]));
     notify.success('Imported post-procedure findings into Objective notes.');
   };
 
@@ -2636,6 +4691,9 @@ export default function ConsultationsScreen() {
     if (!selectedPatient) return;
     const doctor = requireSigner();
     if (!doctor) return;
+
+    const activeVisit = await materializeVisitIfNeeded('PendingProcedure');
+    if (!activeVisit) return;
 
     const availableRooms = treatmentRooms.length > 0 ? treatmentRooms : activeRooms;
     const defaultTargetRoom =
@@ -2649,7 +4707,13 @@ export default function ConsultationsScreen() {
     }
 
     setIsHandoffSending(true);
+    const linkedConsultationId = await ensureDraftConsultationSaved(activeVisit, doctor);
+    if (!linkedConsultationId) {
+      setIsHandoffSending(false);
+      return;
+    }
     const errors: string[] = [];
+    const newlyCreatedProcs: ClinicalProcedureRecord[] = [];
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     for (const proc of unhandedOff) {
@@ -2663,10 +4727,10 @@ export default function ConsultationsScreen() {
       const procTargetName = proc.targetRoomName || proc.roomName || procTargetRoom?.name || defaultResolvedName;
 
       const [orderedProc, procErr] = await clinicService.orderProcedure({
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
-        queueItemId: selectedPatient.id,
-        consultationId: signedConsultationId || undefined,
+        patientId: activeVisit.patientId,
+        patientName: activeVisit.patientName,
+        queueItemId: activeVisit.id,
+        consultationId: linkedConsultationId,
         procedureCode: proc.code || procInfo?.code,
         procedureName: proc.name,
         category: proc.category || procInfo?.category || 'Procedure',
@@ -2684,6 +4748,9 @@ export default function ConsultationsScreen() {
       if (procErr) {
         errors.push(`${proc.name}: ${procErr.message || 'failed'}`);
       } else {
+        if (orderedProc) {
+          newlyCreatedProcs.push(orderedProc);
+        }
         const finalRoomId = orderedProc?.targetRoomId || procTargetId;
         const finalRoom = orderedProc?.targetRoomName || procTargetName;
         setOrderedProcedures((prev) =>
@@ -2701,6 +4768,7 @@ export default function ConsultationsScreen() {
                   targetRoomName: finalRoom,
                   roomId: finalRoomId,
                   roomName: finalRoom,
+                  procedureId: orderedProc?.id,
                 }
               : item
           )
@@ -2717,6 +4785,7 @@ export default function ConsultationsScreen() {
         prev
           ? {
               ...prev,
+              id: activeVisit.id,
               status: 'PendingProcedure',
               roomId: defaultTargetRoom?.id,
               roomOrStation: defaultResolvedName,
@@ -2726,6 +4795,21 @@ export default function ConsultationsScreen() {
       notify.success(
         `${unhandedOff.length} in-clinic procedure${unhandedOff.length > 1 ? 's' : ''} handed off to ${defaultResolvedName}.`
       );
+
+      // Immediate reflection in patient chart on the left without needing manual page refresh:
+      if (newlyCreatedProcs.length > 0) {
+        setPatientChart((prev) => {
+          if (!prev) return prev;
+          const existing = (prev.proceduresHistory || []).filter(
+            (p) => !newlyCreatedProcs.some((np) => np.id === p.id)
+          );
+          return {
+            ...prev,
+            proceduresHistory: [...newlyCreatedProcs, ...existing],
+          };
+        });
+      }
+      await refreshPatientChart(activeVisit.patientId).catch(() => {});
       loadQueue();
     }
   };
@@ -2734,6 +4818,13 @@ export default function ConsultationsScreen() {
     if (!selectedPatient) return;
     const doctor = requireSigner();
     if (!doctor) return;
+
+    const activeVisit = await materializeVisitIfNeeded('PendingProcedure');
+    if (!activeVisit) return;
+
+    const linkedConsultationId = await ensureDraftConsultationSaved(activeVisit, doctor);
+    if (!linkedConsultationId) return;
+
     const target = orderedProcedures.find(
       (p) => p.name.toLowerCase() === procedureName.toLowerCase() && (toothNumber === undefined || p.toothNumber === toothNumber)
     );
@@ -2747,10 +4838,10 @@ export default function ConsultationsScreen() {
     const targetRoomId = target?.targetRoomId || target?.roomId || targetRoom?.id;
 
     const [proc, procErr] = await clinicService.orderProcedure({
-      patientId: selectedPatient.patientId,
-      patientName: selectedPatient.patientName,
-      queueItemId: selectedPatient.id,
-      consultationId: signedConsultationId || undefined,
+      patientId: activeVisit.patientId,
+      patientName: activeVisit.patientName,
+      queueItemId: activeVisit.id,
+      consultationId: linkedConsultationId,
       procedureCode: target?.code || procInfo?.code,
       procedureName: procedureName,
       category: target?.category || procInfo?.category || 'Procedure',
@@ -2788,6 +4879,7 @@ export default function ConsultationsScreen() {
               targetRoomName: finalRoomName,
               roomId: finalRoomId,
               roomName: finalRoomName,
+              procedureId: proc?.id,
             }
           : item
       )
@@ -2796,6 +4888,7 @@ export default function ConsultationsScreen() {
       prev
         ? {
             ...prev,
+            id: activeVisit.id,
             status: 'PendingProcedure',
             roomId: finalRoomId,
             roomOrStation: finalRoomName,
@@ -2803,6 +4896,19 @@ export default function ConsultationsScreen() {
         : null,
     );
     notify.success(`${procedureName} ordered. Patient routed to ${finalRoomName}.`);
+
+    // Immediate reflection in patient chart on the left without needing manual page refresh:
+    if (proc) {
+      setPatientChart((prev) =>
+        prev
+          ? {
+              ...prev,
+              proceduresHistory: [proc, ...(prev.proceduresHistory || []).filter((p) => p.id !== proc.id)],
+            }
+          : prev
+      );
+    }
+    await refreshPatientChart(selectedPatient.patientId).catch(() => {});
     loadQueue();
   };
 
@@ -2813,7 +4919,7 @@ export default function ConsultationsScreen() {
   const patientMeta = selectedPatient
     ? [
         `Ticket ${selectedPatient.queueNumber}`,
-        patientRecord ? `${patientAgeString ? `${patientAgeString}, ` : ''}${patientRecord.gender}` : null,
+        patientRecord ? `${patientAgeString ? `${patientAgeString}, ` : ''}${patientRecord.sex}` : null,
         selectedPatient.chiefComplaint ? `Chief complaint: ${selectedPatient.chiefComplaint}` : null,
       ]
         .filter(Boolean)
@@ -2821,20 +4927,65 @@ export default function ConsultationsScreen() {
     : '';
   const allergiesText = patientRecord?.allergies?.trim();
 
+  const isMedCertDraft = Boolean(issuedMedCert && (!isSigned || issuedMedCert.isSigned === false));
+  const isReferralDraft = Boolean(issuedReferral && (!isSigned || issuedReferral.isSigned === false));
+  const isPreviewDocDraft =
+    previewType === 'MEDCERT'
+      ? isMedCertDraft
+      : previewType === 'REFERRAL'
+        ? isReferralDraft
+        : !isSigned;
+
   const docSignature =
     previewType === 'MEDCERT'
       ? {
           name: issuedMedCert?.doctorName,
           prc: issuedMedCert?.prcLicenseNumber,
           ptr: issuedMedCert?.ptrNumber,
-          signed: issuedMedCert?.isSigned,
+          signed: Boolean(isSigned && issuedMedCert?.isSigned !== false),
         }
       : {
           name: issuedReferral?.referringDoctorName,
           prc: doctorPrc || undefined,
           ptr: doctorPtr || undefined,
-          signed: issuedReferral?.isSigned,
+          signed: Boolean(isSigned && issuedReferral?.isSigned !== false),
         };
+
+  const chartMedCertsForTab = useMemo(() => {
+    const base = (patientChart?.medicalCertificates || []).map((cert) => {
+      if (
+        !isSigned &&
+        ((consultationIdRef.current && cert.consultationId === consultationIdRef.current) ||
+          (selectedPatient?.id && cert.queueItemId === selectedPatient.id) ||
+          (issuedMedCert && cert.id === issuedMedCert.id))
+      ) {
+        return { ...cert, isSigned: false };
+      }
+      return cert;
+    });
+    if (issuedMedCert && !base.some((c) => c.id === issuedMedCert.id)) {
+      return [{ ...issuedMedCert, isSigned: !isMedCertDraft }, ...base];
+    }
+    return base;
+  }, [patientChart?.medicalCertificates, isSigned, selectedPatient?.id, issuedMedCert, isMedCertDraft]);
+
+  const chartReferralsForTab = useMemo(() => {
+    const base = (patientChart?.referralLetters || []).map((letter) => {
+      if (
+        !isSigned &&
+        ((consultationIdRef.current && letter.consultationId === consultationIdRef.current) ||
+          (selectedPatient?.id && letter.queueItemId === selectedPatient.id) ||
+          (issuedReferral && letter.id === issuedReferral.id))
+      ) {
+        return { ...letter, isSigned: false };
+      }
+      return letter;
+    });
+    if (issuedReferral && !base.some((r) => r.id === issuedReferral.id)) {
+      return [{ ...issuedReferral, isSigned: !isReferralDraft }, ...base];
+    }
+    return base;
+  }, [patientChart?.referralLetters, isSigned, selectedPatient?.id, issuedReferral, isReferralDraft]);
 
   const openPanicModal = (order: ClinicLabOrderRecord) => {
     setSelectedPanicOrder(order);
@@ -2852,14 +5003,14 @@ export default function ConsultationsScreen() {
   const renderLabResults = () => (
     <Card>
       <CardHeader
-        title="Laboratory reports"
+        title="Diagnostic reports"
         icon="lab"
-        subtitle="Verified findings from the laboratory information system"
+        subtitle="Verified findings from the diagnostic and laboratory information system"
       />
       {labError ? (
         <ErrorState
           compact
-          title="Unable to load laboratory reports"
+          title="Unable to load diagnostic reports"
           message={labError}
           onRetry={() => selectedPatient && loadPatientContext(selectedPatient)}
         />
@@ -2867,7 +5018,7 @@ export default function ConsultationsScreen() {
         <SkeletonList rows={2} />
       ) : labOrders.length === 0 ? (
         <ThemedText variant="small" color={theme.colors.textMuted}>
-          No laboratory reports on file for this patient.
+          No diagnostic reports on file for this patient.
         </ThemedText>
       ) : (
         <View style={styles.stack}>
@@ -2895,7 +5046,7 @@ export default function ConsultationsScreen() {
                       <ThemedText variant="bodyBold">{testName}</ThemedText>
                       <Badge
                         label={isFinal ? 'Final, verified' : humanize(order.status)}
-                        variant={isFinal ? 'success' : 'neutral'}
+                        variant={isFinal ? 'success' : order.status === 'SpecimenCollected' ? 'info' : 'neutral'}
                       />
                       {order.hasCriticalPanicAlert ? <Badge label="Critical value" variant="emergency" /> : null}
                     </View>
@@ -2907,11 +5058,11 @@ export default function ConsultationsScreen() {
                     <LabOrderStageChip order={order} />
                   </View>
                   <Button
-                    title="PDF report"
+                    title={isFinal ? 'PDF report' : 'View Lab Slip'}
                     icon="file"
                     variant="outline"
                     size="sm"
-                    onPress={() => handleOpenLabPdf(order.id)}
+                    onPress={() => (isFinal ? handleOpenLabPdf(order.id) : handleOpenLabSlip(order.id))}
                   />
                 </View>
 
@@ -2952,10 +5103,28 @@ export default function ConsultationsScreen() {
     isApproved: boolean,
     userRejectionReason?: string
   ) => {
+    const verifierName = (
+      (current ? formatStaffName(current) : '') ||
+      signerName ||
+      authUser?.name ||
+      authUser?.email ||
+      ''
+    ).trim();
+    const rawVerifierId = current?.id || signer?.id || authUser?.id || '';
+    const verifierId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawVerifierId)
+      ? rawVerifierId
+      : undefined;
+
     const rejectionReason = !isApproved
       ? (userRejectionReason?.trim() || 'Document illegible or missing official physician signature/stamp.')
       : undefined;
-    const [, verifyErr] = await clinicService.verifyRecordAttachment(attachmentId, isApproved, rejectionReason);
+    const [, verifyErr] = await clinicService.verifyRecordAttachment(
+      attachmentId,
+      isApproved,
+      rejectionReason,
+      verifierName || undefined,
+      verifierId
+    );
     if (verifyErr) {
       notify.error(verifyErr.message || 'Could not update the document.');
       return;
@@ -2972,7 +5141,8 @@ export default function ConsultationsScreen() {
                 verificationStatus: isApproved ? 'Verified' : 'Rejected',
                 rejectionReason,
                 verifiedAt: new Date().toISOString(),
-                verifiedByStaffName: signerName || 'Attending Physician',
+                verifiedByStaffId: verifierId || att.verifiedByStaffId,
+                verifiedByStaffName: verifierName || att.verifiedByStaffName || undefined,
               }
             : att
         ),
@@ -2991,11 +5161,44 @@ export default function ConsultationsScreen() {
     }
   };
 
+  const refreshChartContextRef = useRef({
+    selectedPatientId: selectedPatient?.patientId,
+    activeQueueItemId: normalizeActiveQueueItemId(selectedPatient?.id),
+    isSigned,
+    patientRecord,
+    dentalChart,
+    signedConsultationId,
+  });
+  refreshChartContextRef.current = {
+    selectedPatientId: selectedPatient?.patientId,
+    activeQueueItemId: normalizeActiveQueueItemId(selectedPatient?.id),
+    isSigned,
+    patientRecord,
+    dentalChart,
+    signedConsultationId,
+  };
+
   // Dedicated lightweight chart refresh that does not re-initialize encounter state or trigger skeleton states
   const refreshPatientChart = useCallback(async (explicitPatientId?: string) => {
-    const patientId = explicitPatientId || selectedPatient?.patientId || patientRecord?.id;
+    const ctx = refreshChartContextRef.current;
+    const patientId = explicitPatientId || ctx.selectedPatientId || ctx.patientRecord?.id;
     if (!patientId) return;
-    const [chartData, chartErr] = await clinicService.getPatientChart(patientId);
+    const [chartRes, labRes, recordRes] = await Promise.all([
+      clinicService.getPatientChart(patientId),
+      clinicService.getLabOrders(patientId),
+      clinicService.getPatientById(patientId),
+    ]);
+    const [chartData, chartErr] = chartRes;
+    const [labData, labErr] = labRes;
+    const [freshRecord, recordErr] = recordRes;
+    const latestCtx = refreshChartContextRef.current;
+    const effectiveRecord = !recordErr && freshRecord ? freshRecord : latestCtx.patientRecord;
+    if (!recordErr && freshRecord) {
+      setPatientRecord(freshRecord);
+    }
+    if (!labErr && labData) {
+      setLabOrders(labData);
+    }
     if (!chartErr && chartData) {
       if (!chartData.dentalTeeth || chartData.dentalTeeth.length === 0) {
         const [dentalData] = await clinicService.getPatientDentalChart(patientId);
@@ -3004,17 +5207,45 @@ export default function ConsultationsScreen() {
           chartData.dentalChart = dentalData;
         }
       }
-      setPatientChart(chartData);
-      if (chartData.dentalTeeth && chartData.dentalTeeth.length > 0 && Object.keys(dentalChart).length === 0) {
+      setPatientChart(
+        effectiveRecord ? reconcileChartWithPatient(chartData, effectiveRecord) : chartData,
+      );
+      if (
+        chartData.dentalTeeth &&
+        chartData.dentalTeeth.length > 0 &&
+        Object.keys(latestCtx.dentalChart).length === 0
+      ) {
         const taggedTeeth = chartData.dentalTeeth.map((t) => ({
           ...t,
-          isCurrentEncounter: Boolean(signedConsultationId && t.consultationId === signedConsultationId),
+          isCurrentEncounter: Boolean(
+            latestCtx.signedConsultationId && t.consultationId === latestCtx.signedConsultationId
+          ),
         }));
         const multiMap = normalizeTeethToMultiRecord(taggedTeeth);
         setDentalChart(multiMap);
       }
     }
-  }, [selectedPatient?.patientId, patientRecord?.id, dentalChart, signedConsultationId]);
+    if (!latestCtx.isSigned && (latestCtx.activeQueueItemId || consultationIdRef.current)) {
+      const {
+        matchedMedCert,
+        matchedReferral,
+        medCertFetchFailed,
+        referralFetchFailed,
+      } = await fetchVisitDocumentDrafts({
+        patientId,
+        consultationId: consultationIdRef.current,
+        queueItemId: latestCtx.activeQueueItemId,
+        chartData: !chartErr ? chartData : null,
+        isEncounterSigned: false,
+      });
+      if (!medCertFetchFailed && matchedMedCert) {
+        setIssuedMedCert(matchedMedCert);
+      }
+      if (!referralFetchFailed && matchedReferral) {
+        setIssuedReferral(matchedReferral);
+      }
+    }
+  }, []);
 
   const handleVoidDentalCondition = useCallback(
     async (toothNumber: number, recordId: string, reason?: string) => {
@@ -3057,10 +5288,45 @@ export default function ConsultationsScreen() {
       clinicService.getLabOrders(patientId),
     ]);
     const [chartData] = chartRes;
-    if (chartData) setPatientChart(chartData);
+    if (chartData) {
+      setPatientChart(patientRecord ? reconcileChartWithPatient(chartData, patientRecord) : chartData);
+    }
     const [labData, labErr] = labRes;
     if (!labErr && labData) setLabOrders(labData);
-  }, [selectedPatient?.patientId, patientRecord?.id]);
+  }, [selectedPatient?.patientId, patientRecord]);
+
+  // Specialized refresh for Procedures tab that reloads chart + syncs queue and patient status
+  const refreshProceduresTab = useCallback(async () => {
+    const patientId = selectedPatient?.patientId || patientRecord?.id;
+    if (patientId) {
+      await refreshPatientChart(patientId).catch(() => {});
+    }
+    await loadQueue().catch(() => {});
+    setSelectedPatient((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        status: prev.status === 'PendingProcedure' ? 'ReEvaluation' : prev.status,
+      };
+    });
+    setPatients((prev) =>
+      prev.map((item) =>
+        item.id === selectedPatient?.id && item.status === 'PendingProcedure'
+          ? { ...item, status: 'ReEvaluation' }
+          : item
+      )
+    );
+  }, [selectedPatient?.patientId, selectedPatient?.id, patientRecord?.id, refreshPatientChart, loadQueue]);
+
+  const handleOpenOrderProcedureModal = () => {
+    setOrderSearchInitialCategory('Procedure');
+    setOrderSearchModalVisible(true);
+  };
+
+  const handleOpenOrderDiagnosticModal = () => {
+    setOrderSearchInitialCategory('Diagnostic');
+    setOrderSearchModalVisible(true);
+  };
 
   const renderLongitudinalChartContent = () => (
     <View style={styles.longitudinalChartContainer}>
@@ -3071,6 +5337,42 @@ export default function ConsultationsScreen() {
           icon="folder"
           truncateTitle
           truncateSubtitle
+          rightAction={
+            previousChartTab || isDesktopWorkstation ? (
+              <View style={styles.chartHeaderActions}>
+                {previousChartTab ? (
+                  <Button
+                    iconOnly
+                    icon="arrowLeft"
+                    variant="secondary"
+                    size="sm"
+                    onPress={handleChartTabBack}
+                    accessibilityLabel={`Back to ${CHART_TAB_LABELS[previousChartTab] || 'previous section'}`}
+                    testID="patient-chart-back-btn"
+                  />
+                ) : null}
+                {isDesktopWorkstation ? (
+                  <Button
+                    iconOnly
+                    icon={isChartExpanded ? 'layoutSplit' : 'maximize'}
+                    variant="secondary"
+                    size="sm"
+                    onPress={handleToggleChartExpand}
+                    accessibilityLabel={
+                      isChartExpanded
+                        ? 'Switch back to 2-column split pane'
+                        : 'Expand patient chart'
+                    }
+                    testID={
+                      isChartExpanded
+                        ? 'collapse-patient-chart-btn'
+                        : 'expand-patient-chart-btn'
+                    }
+                  />
+                ) : null}
+              </View>
+            ) : undefined
+          }
         />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chartTabsRow}>
           {[
@@ -3080,7 +5382,8 @@ export default function ConsultationsScreen() {
             { id: 'procedures', label: 'Procedures', icon: 'activity' },
             { id: 'immunizations', label: 'Immunizations', icon: 'shield' },
             { id: 'profiles', label: 'Profiles', icon: 'user' },
-            { id: 'vault', label: 'Vault', icon: 'folder' },
+            { id: 'vault', label: 'Doc Vault', icon: 'folder' },
+            { id: 'documents', label: 'Admin Vault', icon: 'scroll' },
             ...(isDentalEnabled ? [{ id: 'dental', label: 'Dental', icon: 'medical' }] : []),
           ].map((tab) => {
             const isActive = activeChartTab === tab.id;
@@ -3130,14 +5433,20 @@ export default function ConsultationsScreen() {
           patientId={selectedPatient?.patientId}
           labOrders={labOrders}
           onRefreshChart={refreshDiagnosticsTab}
+          onOpenLabSlip={handleOpenLabSlip}
+          onViewLabSlip={handleOpenLabSlip}
+          onOrderDiagnostic={handleOpenOrderDiagnosticModal}
         />
       )}
       {activeChartTab === 'procedures' && (
         <NursingProceduresTab
           patient={patientRecord}
           patientId={selectedPatient?.patientId}
+          patientName={selectedPatient?.patientName}
+          queueItemId={selectedPatient?.id}
           procedures={patientChart?.proceduresHistory || []}
-          onRefreshChart={refreshPatientChart}
+          onRefreshChart={refreshProceduresTab}
+          onOrderProcedure={handleOpenOrderProcedureModal}
         />
       )}
       {activeChartTab === 'immunizations' && (
@@ -3216,6 +5525,86 @@ export default function ConsultationsScreen() {
           onVerifyAttachment={handleVerifyAttachment}
           onDownloadAttachment={handleDownloadAttachment}
           onRefreshChart={refreshPatientChart}
+        />
+      )}
+      {activeChartTab === 'documents' && (
+        <AdministrativeDocumentsTab
+          patient={patientRecord}
+          patientId={selectedPatient?.patientId}
+          queueItemId={normalizeActiveQueueItemId(selectedPatient?.id)}
+          medicalCertificates={chartMedCertsForTab}
+          referralLetters={chartReferralsForTab}
+          onRefreshChart={refreshPatientChart}
+          onMedicalCertificateIssued={(cert) => {
+            const activeQueueItemId = normalizeActiveQueueItemId(selectedPatient?.id);
+            const visitCtx = {
+              isEncounterSigned: isSigned,
+              consultationId: consultationIdRef.current,
+              queueItemId: activeQueueItemId,
+            };
+            const isActiveVisitDoc =
+              belongsToActiveUnsignedVisit(cert, visitCtx) ||
+              Boolean(isSigned && matchVisitDocument([cert], visitCtx));
+
+            if (isActiveVisitDoc) {
+              setIssuedMedCert(
+                cert.isSigned === false ? { ...cert, isSigned: false } : isSigned ? cert : { ...cert, isSigned: false },
+              );
+              setMedCertFitness(cert.fitnessStatus || 'FitToWork');
+              setMedCertRestDays(cert.recommendedRestDays != null ? String(cert.recommendedRestDays) : '');
+              setMedCertPurpose(cert.purpose || '');
+              setMedCertRemarks(cert.remarks || '');
+              return;
+            }
+
+            setPatientChart((prev) => {
+              if (!prev) return prev;
+              const existing = prev.medicalCertificates || [];
+              return {
+                ...prev,
+                medicalCertificates: [cert, ...existing.filter((item) => item.id !== cert.id)],
+              };
+            });
+          }}
+          onReferralLetterIssued={(letter) => {
+            const activeQueueItemId = normalizeActiveQueueItemId(selectedPatient?.id);
+            const visitCtx = {
+              isEncounterSigned: isSigned,
+              consultationId: consultationIdRef.current,
+              queueItemId: activeQueueItemId,
+            };
+            const isActiveVisitDoc =
+              belongsToActiveUnsignedVisit(letter, visitCtx) ||
+              Boolean(isSigned && matchVisitDocument([letter], visitCtx));
+
+            if (isActiveVisitDoc) {
+              setIssuedReferral(
+                letter.isSigned === false
+                  ? { ...letter, isSigned: false }
+                  : isSigned
+                    ? letter
+                    : { ...letter, isSigned: false },
+              );
+              setRefFacility(letter.referredToFacility || '');
+              setRefDepartment(letter.referredDepartment || '');
+              setRefUrgency(letter.urgency || 'Routine');
+              setRefReason(letter.reasonForReferral || '');
+              setRefSummary(letter.clinicalSummary || '');
+              if (letter.provisionalDiagnosis) {
+                setRefDiagnosis(letter.provisionalDiagnosis);
+              }
+              return;
+            }
+
+            setPatientChart((prev) => {
+              if (!prev) return prev;
+              const existing = prev.referralLetters || [];
+              return {
+                ...prev,
+                referralLetters: [letter, ...existing.filter((item) => item.id !== letter.id)],
+              };
+            });
+          }}
         />
       )}
       {activeChartTab === 'dental' && (
@@ -3339,196 +5728,86 @@ export default function ConsultationsScreen() {
               </View>
             ) : null}
 
-            {/* Dual-Mode Consultation Workstation Header */}
-            {!isYakapEligible ? (
-              /* Standard Clinical Encounter: 100% Free of PhilHealth Bureaucracy */
-              <View onLayout={(e) => { sectionOffsets.current['atc'] = e.nativeEvent.layout.y; }}>
-                <Card>
-                  <View style={styles.dualModeSwitcher}>
-                    <View style={styles.flex}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
-                        <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                        <ThemedText variant="bodyBold">Standard Clinical Encounter</ThemedText>
-                        <Badge label="Cash / Private / HMO" variant="neutral" size="sm" />
-                      </View>
-                      <ThemedText variant="small" color={theme.colors.textMuted} style={{ marginTop: theme.spacing.xs }}>
-                        Standard clinical documentation for private, cash, or HMO consultations.
-                      </ThemedText>
-                    </View>
-                    {!isSigned ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, flexWrap: 'wrap' }}>
-                        {!philHealthEligibility.canToggle && philHealthEligibility.reason ? (
-                          <Badge label={philHealthEligibility.reason} variant="warning" size="sm" icon="alert" />
-                        ) : null}
-                        <Button
-                          title="Switch to PhilHealth Konsulta"
-                          size="sm"
-                          variant="outline"
-                          icon="shield"
-                          disabled={!philHealthEligibility.canToggle}
-                          onPress={() => {
-                            if (philHealthEligibility.canToggle) {
-                              setIsYakapEligible(true);
-                              if (!philHealthAtc.trim() || philHealthAtc === 'ATC-2026-KON01') {
-                                setPhilHealthAtc('WALKEDIN');
-                              }
-                            }
-                          }}
-                        />
-                      </View>
-                    ) : null}
-                  </View>
-                </Card>
-              </View>
-            ) : (
-              /* PhilHealth Konsulta Encounter: Guided Mode with Encounter ATC Header Banner */
-              <View onLayout={(e) => { sectionOffsets.current['atc'] = e.nativeEvent.layout.y; }}>
-                <Card style={styles.atcBannerCard}>
-                  <View style={styles.atcHeaderRow}>
-                    <View style={styles.atcTitleGroup}>
-                      <Icon name="shield" size={theme.sizes.iconMd} color={theme.colors.primary} />
-                      <View style={styles.flex}>
-                        <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-                          PhilHealth Yakap consultation
-                        </ThemedText>
-                        <ThemedText
-                          variant="small"
-                          color={theme.colors.primary}
-                          numberOfLines={1}
-                          ellipsizeMode="middle"
-                        >
-                          Encounter reference numbers are automatically generated and linked upon signing
-                        </ThemedText>
-                      </View>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
-                      {!isSigned ? (
-                        <Button
-                          title="Switch to Standard"
-                          size="sm"
-                          variant="ghost"
-                          onPress={() => setIsYakapEligible(false)}
-                        />
-                      ) : null}
-                    </View>
-                  </View>
+            {/* Clinical Workflow Mode & ATC (when Yakap Availment) */}
+            <View onLayout={(e) => { sectionOffsets.current['atc'] = e.nativeEvent.layout.y; }}>
+              <WorkflowModeSelector
+                mode={visitWorkflowMode}
+                onChange={handleWorkflowModeChange}
+                disabled={isSigned}
+                atcValue={philHealthAtc}
+                onChangeAtc={setPhilHealthAtc}
+                isExpanded={isWorkspaceExpanded}
+                onToggleExpand={isDesktopWorkstation ? handleToggleWorkspaceExpand : undefined}
+                draftSaveStatus={draftSaveStatus}
+                draftSavedAtLabel={draftSavedAtLabel}
+                onRetryDraftSave={handleRetryDraftSave}
+              />
+            </View>
 
-                  {/* Encounter ATC Header Banner Input */}
-                  <View style={{ marginTop: theme.spacing.xs }}>
-                    <Input
-                      label="Authorization Transaction Code (ATC)"
-                      placeholder="e.g. WALKEDIN or ATC-2026-99214"
-                      value={philHealthAtc}
-                      onChangeText={setPhilHealthAtc}
-                      editable={!isSigned}
-                    />
-                  </View>
-                </Card>
-              </View>
-            )}
-
-            {/* Nurse Pre-Assessment & Triage Handoff Banner */}
-            {Boolean(vitals?.preAssessmentNotes || vitals?.preAssessmentRemarks || vitals?.triageAcuityReason) ? (
-              <Card style={styles.handoffBannerCard}>
-                <View style={styles.handoffBannerHeader}>
-                  <View style={styles.handoffTitleRow}>
-                    <Icon name="consultations" size={16} color={theme.colors.primary} />
-                    <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
-                      Nurse Pre-Assessment &amp; Triage Handoff
-                    </ThemedText>
-                  </View>
-                  {vitals?.triageAcuityReason ? (
-                    <Badge
-                      label={`Triage: ${vitals.triageAcuityReason}`}
-                      variant={
-                        vitals.triageAcuityReason === 'Emergency'
-                          ? 'emergency'
-                          : vitals.triageAcuityReason === 'Urgent'
-                          ? 'warning'
-                          : 'routine'
-                      }
-                      size="sm"
-                    />
-                  ) : null}
-                </View>
-                {vitals?.preAssessmentRemarks ? (
-                  <View style={styles.handoffRow}>
-                    <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                      Observations:
-                    </ThemedText>
-                    <ThemedText variant="caption" color={theme.colors.text} style={styles.flex}>
-                      {vitals.preAssessmentRemarks}
-                    </ThemedText>
-                  </View>
-                ) : null}
-                {vitals?.preAssessmentNotes ? (
-                  <View style={styles.handoffRow}>
-                    <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                      Triage Remarks:
-                    </ThemedText>
-                    <ThemedText variant="caption" color={theme.colors.text} style={styles.flex}>
-                      {vitals.preAssessmentNotes}
-                    </ThemedText>
-                  </View>
-                ) : null}
-              </Card>
-            ) : null}
+            {/* Nurse Pre-assessment & Triage Handoff */}
+            {(() => {
+              const matchedChartVitals = vitals
+                ? patientChart?.vitalsHistory?.find(
+                    (v) =>
+                      (vitals.id && v.id === vitals.id) ||
+                      (vitals.queueItemId && v.queueItemId === vitals.queueItemId)
+                  )
+                : null;
+              const matchedNurseStaff = vitals?.nurseId
+                ? staff.find((s) => s.id === vitals.nurseId)
+                : undefined;
+              const fallbackNurseName =
+                matchedChartVitals?.recordedByNurseName?.trim() ||
+                (matchedNurseStaff ? formatStaffName(matchedNurseStaff) : null);
+              return (
+                <NursePreAssessmentCard
+                  vitals={vitals}
+                  fallbackNurseName={fallbackNurseName}
+                />
+              );
+            })()}
 
             {/* S - Subjective */}
             <View onLayout={(e) => { sectionOffsets.current['symptoms'] = e.nativeEvent.layout.y; }}>
               <Card>
                 <CardHeader
                   title="Subjective"
-                  subtitle="Chief complaint and history of present illness"
-                  rightAction={
-                    isYakapEligible ? (
-                      <Badge label="PhilHealth complaint required" variant="info" />
-                    ) : (
-                      <Badge label="Internal Clinical Chart" variant="neutral" size="sm" />
-                    )
-                  }
+                  subtitle="Chief complaint, Review of Systems categories, and history of present illness"
                 />
-                {isYakapEligible ? (
-                  <View style={styles.stack}>
-                    <ThemedText variant="small" color={theme.colors.textMuted}>
-                      Select the PhilHealth complaint(s) for this visit. Each selection is added to the narrative below.
-                    </ThemedText>
-                    {symptomLibrary.loading && symptoms.length === 0 ? (
-                      <SkeletonList rows={1} rowHeight={theme.sizes.controlMd} />
-                    ) : symptomLibrary.error && symptoms.length === 0 ? (
-                      <ErrorState compact title="Unable to load PhilHealth complaints" message={symptomLibrary.error.message} onRetry={symptomLibrary.reload} />
-                    ) : null}
-                    <View style={styles.chipsRow}>
-                      {symptoms.map((symp) => (
-                        <ToggleChip
-                          key={symp.code}
-                          label={symp.name}
-                          selected={selectedSymptomCodes.includes(symp.code)}
-                          disabled={isSigned}
-                          onPress={() => handleToggleSymptom(symp)}
-                        />
-                      ))}
-                    </View>
-                    {painSymptomSelected ? (
-                      <Input
-                        label="Pain site (required by PhilHealth)"
-                        placeholder="e.g. Epigastric area, right shoulder, lumbar spine"
-                        value={symptomPainSite}
-                        onChangeText={setSymptomPainSite}
-                        editable={!isSigned}
-                      />
-                    ) : null}
-                    {otherSymptomSelected ? (
-                      <Input
-                        label="Other complaint (required by PhilHealth)"
-                        placeholder="Describe the complaint"
-                        value={symptomOtherDesc}
-                        onChangeText={setSymptomOtherDesc}
-                        editable={!isSigned}
-                      />
-                    ) : null}
-                  </View>
+                <View style={{ marginBottom: theme.spacing.sm }}>
+                  <RosCategorySelectorSection
+                    compact
+                    multiple
+                    disabled={isSigned}
+                    value={rosCategory}
+                    values={rosCategories}
+                    onChangeMultiple={(next) => {
+                      if (!isSigned) applyRosCategories(next);
+                    }}
+                    title="Review of Systems (ROS) Category"
+                    subtitle="Select all involved body systems, or mark Essentially Normal when all systems are normal"
+                  />
+                </View>
+                {isYakapEligible && symptomLibrary.error && symptoms.length === 0 ? (
+                  <ErrorState
+                    compact
+                    title="Unable to load symptoms"
+                    message={symptomLibrary.error.message}
+                    onRetry={symptomLibrary.reload}
+                  />
                 ) : null}
+                <ReviewOfSystemsChecklist
+                  embedded
+                  items={rosItems}
+                  onChange={handleRosChange}
+                  disabled={isSigned}
+                  options={
+                    isYakapEligible && symptoms.length > 0
+                      ? symptoms.map((s) => ({ code: s.code, label: s.name }))
+                      : undefined
+                  }
+                  loading={isYakapEligible ? symptomLibrary.loading : undefined}
+                />
                 <Input
                   multiline
                   placeholder="Patient narrative, symptoms, onset and duration"
@@ -3542,30 +5821,45 @@ export default function ConsultationsScreen() {
             </View>
 
             {/* O - Objective */}
-            <View onLayout={(e) => {
-              if (!isYakapEligible) {
-                sectionOffsets.current['physical-exam'] = e.nativeEvent.layout.y;
-              }
-            }}>
+            <View onLayout={(e) => { sectionOffsets.current['physical-exam'] = e.nativeEvent.layout.y; }}>
               <Card>
                 <CardHeader
                   title="Objective"
                   subtitle="Physical findings, auscultation and examination"
                   rightAction={
-                    !isSigned ? (
-                      <Button
-                        title="Record Vitals"
-                        icon="activity"
-                        size="sm"
-                        variant="outline"
-                        onPress={() => setRecordVitalsModalVisible(true)}
-                      />
+                    latestVitalsRecordedMeta || (!isSigned && canRecordVitals) ? (
+                      <View style={styles.objectiveHeaderRight}>
+                        {latestVitalsRecordedMeta ? (
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            {latestVitalsRecordedMeta}
+                          </ThemedText>
+                        ) : null}
+                        {!isSigned && canRecordVitals ? (
+                          <Button
+                            title={latestDisplayedVitals ? 'Update Vitals' : 'Record Vitals'}
+                            icon="activity"
+                            size="sm"
+                            variant="outline"
+                            onPress={handleOpenVitalsModal}
+                          />
+                        ) : null}
+                      </View>
                     ) : undefined
                   }
                 />
+                {settings?.specialtyMode !== 'Dental' ? (
+                  <InlinePhysicalExamCard
+                    embedded
+                    collapsible
+                    defaultExpanded={false}
+                    findings={physicalExamFindings}
+                    onChange={setPhysicalExamFindings}
+                    disabled={isSigned}
+                  />
+                ) : null}
                 <Input
                   multiline
-                  placeholder="Physical examination and clinical observations"
+                  placeholder="Additional objective notes and clinical observations"
                   accessibilityLabel="Objective notes"
                   value={objective}
                   onChangeText={setObjective}
@@ -3575,15 +5869,29 @@ export default function ConsultationsScreen() {
               </Card>
             </View>
 
-            {/* Inline Physical Examination (PhilHealth Konsulta 9-System Findings) */}
-            {isYakapEligible && settings?.specialtyMode !== 'Dental' && (
-              <View onLayout={(e) => { sectionOffsets.current['physical-exam'] = e.nativeEvent.layout.y; }}>
-                <InlinePhysicalExamCard
-                  findings={physicalExamFindings}
-                  onChange={setPhysicalExamFindings}
-                  disabled={isSigned}
-                />
-              </View>
+            {/* PhilHealth YAKAP Specific Encounter Forms (Ob-Gyne, Pediatric, Adolescent, HEADSSS, BP Log) */}
+            {isYakapEligible && (
+              <SpecificEncounterFormsCard
+                obGyneExam={obGyneExam}
+                onObGyneExamChange={setObGyneExam}
+                pediatricMilestones={pediatricMilestones}
+                onPediatricMilestonesChange={setPediatricMilestones}
+                adolescentAssessment={adolescentAssessment}
+                onAdolescentAssessmentChange={setAdolescentAssessment}
+                headsssAssessments={headsssAssessments}
+                onHeadsssAssessmentsChange={setHeadsssAssessments}
+                bpMonitoringLogs={bpMonitoringLogs}
+                onBpMonitoringLogsChange={setBpMonitoringLogs}
+                patientAgeYears={patientRecord?.age ?? patientChart?.demographics?.age ?? null}
+                patientDateOfBirth={
+                  patientRecord?.dateOfBirth ??
+                  patientChart?.demographics?.dateOfBirth ??
+                  patientChart?.demographics?.dob ??
+                  null
+                }
+                patientSex={patientRecord?.sex ?? patientChart?.demographics?.sex ?? null}
+                disabled={isSigned}
+              />
             )}
 
             {/* Inline Dental Chart Card (Adult & Child Odontogram) */}
@@ -3605,7 +5913,6 @@ export default function ConsultationsScreen() {
                 <CardHeader
                   title="Assessment"
                   subtitle="Clinical impression and ICD-10 diagnoses"
-                  rightAction={isYakapEligible ? <Badge label="ICD-10 linked to PhilHealth" variant="info" /> : undefined}
                 />
 
                 <Input
@@ -3690,12 +5997,12 @@ export default function ConsultationsScreen() {
               </Card>
             </View>
 
-            {/* Laboratory orders */}
+            {/* Diagnostic orders */}
             <Card>
               <CardHeader
-                title={`Laboratory orders (${orderedLabs.length})`}
+                title={`Diagnostic orders (${orderedLabs.length})`}
                 icon="lab"
-                subtitle="Selected tests create a requisition for the laboratory when the encounter is signed"
+                subtitle="Selected diagnostic and laboratory tests create a requisition when the encounter is signed"
                 rightAction={
                   !isSigned ? (
                     <Button
@@ -3790,31 +6097,26 @@ export default function ConsultationsScreen() {
                               </ThemedText>
                             </View>
                             {!isSigned ? (
-                              <Pressable
-                                accessibilityRole="button"
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                icon="edit"
+                                title={lab.instructions ? 'Edit Notes' : '+ Add Notes'}
                                 accessibilityLabel={`Edit instructions for ${lab.name}`}
                                 onPress={() => handleOpenEditInstructions(lab, 'lab')}
-                                hitSlop={theme.spacing.xs}
-                                style={styles.editNotesInlineBtn}
-                              >
-                                <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                                <ThemedText variant="captionBold" color={theme.colors.primary}>
-                                  {lab.instructions ? 'Edit Notes' : '+ Add Notes'}
-                                </ThemedText>
-                              </Pressable>
+                              />
                             ) : null}
                           </View>
                         </View>
                         {!isSigned ? (
-                          <Pressable
-                            accessibilityRole="button"
+                          <Button
+                            variant="dangerGhost"
+                            size="xs"
+                            icon="close"
+                            iconOnly
                             accessibilityLabel={`Remove ${lab.name}`}
                             onPress={() => handleRemoveLab(lab.name)}
-                            hitSlop={theme.spacing.sm}
-                            style={styles.orderedDeleteBtn}
-                          >
-                            <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-                          </Pressable>
+                          />
                         ) : null}
                       </View>
                     );
@@ -4017,18 +6319,14 @@ export default function ConsultationsScreen() {
                                 </ThemedText>
                               </View>
                               {!isSigned ? (
-                                <Pressable
-                                  accessibilityRole="button"
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  icon="edit"
+                                  title={proc.instructions ? 'Edit Notes' : 'Add Notes'}
                                   accessibilityLabel={`Edit instructions for ${proc.name}`}
                                   onPress={() => handleOpenEditInstructions(proc, 'procedure')}
-                                  hitSlop={theme.spacing.xs}
-                                  style={styles.editNotesInlineBtn}
-                                >
-                                  <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                                  <ThemedText variant="captionBold" color={theme.colors.primary}>
-                                    {proc.instructions ? 'Edit Notes' : 'Add Notes'}
-                                  </ThemedText>
-                                </Pressable>
+                                />
                               ) : null}
                             </View>
                             {!isSigned && !isSent ? (
@@ -4045,15 +6343,14 @@ export default function ConsultationsScreen() {
                           </View>
                         </View>
                         {!isSigned ? (
-                          <Pressable
-                            accessibilityRole="button"
+                          <Button
+                            variant="dangerGhost"
+                            size="xs"
+                            icon="close"
+                            iconOnly
                             accessibilityLabel={`Remove ${proc.name}`}
                             onPress={() => handleRemoveProcedure(proc.name, proc.toothNumber)}
-                            hitSlop={theme.spacing.sm}
-                            style={styles.orderedDeleteBtn}
-                          >
-                            <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-                          </Pressable>
+                          />
                         ) : null}
                       </View>
                     );
@@ -4111,22 +6408,73 @@ export default function ConsultationsScreen() {
               ) : null}
             </Card>
 
-            {/* P - Plan */}
+            {/* P - Plan / Plan Management */}
             <Card>
               <CardHeader
-                title="Plan (Internal)"
-                subtitle="Clinical treatment, diagnostic ordering rationale, and physician notes"
-                rightAction={<Badge label="Internal Clinical Chart" variant="neutral" size="sm" />}
+                title={isYakapEligible ? 'Plan Management' : 'Plan'}
+                subtitle={
+                  isYakapEligible
+                    ? 'Counseling, routine screenings, care orders, medical advice, and follow-up schedule'
+                    : 'Clinical treatment, diagnostic ordering rationale, and physician notes'
+                }
               />
-              <Input
-                multiline
-                placeholder="Treatment plan, requested tests, dietary advice"
-                accessibilityLabel="Plan"
-                value={plan}
-                onChangeText={setPlan}
-                editable={!isSigned}
-                inputStyle={styles.textArea}
-              />
+              {isYakapEligible ? (
+                <View style={styles.planManagementStack}>
+                  <PlanManagementCard
+                    embedded
+                    value={planManagement}
+                    onChange={setPlanManagement}
+                    disabled={isSigned}
+                    patientAgeYears={patientRecord?.age ?? patientChart?.demographics?.age ?? null}
+                    patientDateOfBirth={
+                      patientRecord?.dateOfBirth ??
+                      patientChart?.demographics?.dateOfBirth ??
+                      patientChart?.demographics?.dob ??
+                      null
+                    }
+                    patientSex={patientRecord?.sex ?? patientChart?.demographics?.sex ?? null}
+                    orderedLabsCount={orderedLabs.length}
+                    completedLabResultsCount={
+                      labOrders.filter(
+                        (o) => o.status === 'Completed' || o.status === 'CompletedWithExternalReport'
+                      ).length
+                    }
+                    prescriptionsCount={prescriptions.length}
+                    hasIssuedReferral={Boolean(issuedReferral)}
+                    onOpenOrderDiagnostics={() => {
+                      setOrderSearchInitialCategory('Diagnostic');
+                      setOrderSearchModalVisible(true);
+                    }}
+                    onOpenAddMedication={() => {
+                      setShowAddRx(true);
+                      handleJumpToSection('medicines');
+                    }}
+                    onOpenIssueReferral={handleOpenIssueReferral}
+                  />
+                  <View style={styles.planNotesDivider}>
+                    <Input
+                      label="Clinical treatment notes"
+                      multiline
+                      placeholder="Treatment plan, requested tests, dietary advice"
+                      accessibilityLabel="Plan"
+                      value={plan}
+                      onChangeText={setPlan}
+                      editable={!isSigned}
+                      inputStyle={styles.textArea}
+                    />
+                  </View>
+                </View>
+              ) : (
+                <Input
+                  multiline
+                  placeholder="Treatment plan, requested tests, dietary advice"
+                  accessibilityLabel="Plan"
+                  value={plan}
+                  onChangeText={setPlan}
+                  editable={!isSigned}
+                  inputStyle={styles.textArea}
+                />
+              )}
             </Card>
 
             {/* Electronic prescriptions */}
@@ -4139,7 +6487,7 @@ export default function ConsultationsScreen() {
                   <View style={styles.rowWrap}>
                     {prescriptions.length > 0 ? (
                       <Button
-                        title={isSigned ? 'View e-prescription' : 'Preview slip'}
+                        title={isSigned ? 'View e-prescription' : 'Preview draft slip'}
                         icon="file"
                         variant="outline"
                         size="sm"
@@ -4208,6 +6556,7 @@ export default function ConsultationsScreen() {
                             tone="success"
                             label={`${item.name} (₱${item.standardPrice.toFixed(0)})`}
                             selected={
+                              selectedCatalogMedId === item.id ||
                               newRxGeneric.toLowerCase() === item.name.toLowerCase() ||
                               Boolean(item.philHealthCode && newRxDrugCode === item.philHealthCode)
                             }
@@ -4240,6 +6589,17 @@ export default function ConsultationsScreen() {
                       onChangeText={setNewRxQuantity}
                       containerStyle={styles.fieldNarrow}
                     />
+                    <Input
+                      label="Dispense (pcs)"
+                      labelTooltip="Optional starter pieces handed out directly from clinic stock during this consultation (must not exceed Quantity). Leave blank or 0 if filled externally; clinic-dispensed pieces are logged to the Clinic Dispensing Ledger upon encounter sign-off without requiring pharmacy inventory."
+                      labelTooltipAlign="right"
+                      placeholder="0"
+                      keyboardType="numeric"
+                      value={newRxClinicDispensedQty}
+                      onChangeText={setNewRxClinicDispensedQty}
+                      error={validateRxClinicDispensedQuantity(newRxQuantity, newRxClinicDispensedQty) ?? undefined}
+                      containerStyle={styles.fieldDispense}
+                    />
                   </View>
                   <Input
                     label="Directions (sig)"
@@ -4268,7 +6628,7 @@ export default function ConsultationsScreen() {
               {prescriptions.length > 0 ? (
                 <View style={styles.stack}>
                   {prescriptions.map((rx) => (
-                    <View key={rx.id} style={styles.rxCard}>
+                    <View key={rx.id} style={styles.rxCard} testID="rx-medication-item">
                       <View style={styles.flex}>
                         <ThemedText variant="bodyBold">
                           {rx.genericName}{' '}
@@ -4280,26 +6640,44 @@ export default function ConsultationsScreen() {
                           Sig: {rx.sig}
                         </ThemedText>
                         <ThemedText variant="small" color={theme.colors.textMuted}>
-                          Dispense: #{rx.quantity} {rx.form}s
+                          Dispense: #{rx.quantity} {formatDispenseFormLabel(rx.form, rx.quantity)}
                         </ThemedText>
-                        {rx.philHealthDrugCode || rx.isDangerousDrug ? (
-                          <View style={styles.rowWrap}>
-                            {rx.philHealthDrugCode ? (
-                              <Badge label="PhilHealth Formulary" variant="info" size="sm" />
-                            ) : null}
-                            {rx.isDangerousDrug ? <Badge label="PDEA S2 dangerous drug" variant="emergency" size="sm" /> : null}
-                          </View>
-                        ) : null}
+                        <View style={styles.rowWrap}>
+                          {!isSigned ? (
+                            <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+                          ) : null}
+                          <Badge
+                            label={`ROS: ${getRosShortLabel(rx.rosCategory || rosCategory)}`}
+                            variant="neutral"
+                            size="sm"
+                          />
+                          {(rx.clinicDispensedQuantity ?? 0) > 0 ? (
+                            <Badge
+                              label={
+                                isSigned
+                                  ? `Clinic stock dispensed: ${rx.clinicDispensedQuantity} of ${rx.quantity} pcs`
+                                  : `Clinic stock (on sign-off): ${rx.clinicDispensedQuantity} of ${rx.quantity} pcs`
+                              }
+                              variant={isSigned ? 'success' : 'warning'}
+                              size="sm"
+                              icon="pill"
+                            />
+                          ) : null}
+                          {rx.philHealthDrugCode ? (
+                            <Badge label="PhilHealth Formulary" variant="info" size="sm" />
+                          ) : null}
+                          {rx.isDangerousDrug ? <Badge label="PDEA S2 dangerous drug" variant="emergency" size="sm" /> : null}
+                        </View>
                       </View>
                       {!isSigned ? (
-                        <Pressable
-                          accessibilityRole="button"
+                        <Button
+                          variant="dangerGhost"
+                          size="xs"
+                          icon="close"
+                          iconOnly
                           accessibilityLabel={`Remove ${rx.genericName}`}
                           onPress={() => handleRemovePrescription(rx.id)}
-                          hitSlop={theme.spacing.sm}
-                        >
-                          <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-                        </Pressable>
+                        />
                       ) : null}
                     </View>
                   ))}
@@ -4422,27 +6800,38 @@ export default function ConsultationsScreen() {
                       Quick presets:
                     </ThemedText>
                     <View style={styles.chipsRow}>
-                      {[
-                        'Hydration & Rest (8+ glasses water daily)',
-                        'Low Salt & Low Fat Diet',
-                        'Warning Signs: Return immediately if fever > 38.5°C or acute chest pain occurs',
-                        'Strict Medication Compliance: Complete the full course as prescribed',
-                        'Wound Care: Keep area clean, dry, and change dressing daily',
-                      ].map((preset) => (
-                        <Pressable
-                          key={preset}
-                          onPress={() => {
-                            setHomeInstructions((prev) =>
-                              prev.trim() ? `${prev.trim()}\n• ${preset}` : `• ${preset}`
-                            );
-                          }}
-                          style={styles.presetChip}
-                        >
-                          <ThemedText variant="caption" color={theme.colors.primaryDark}>
-                            + {preset.split(':')[0].split('(')[0].trim()}
-                          </ThemedText>
-                        </Pressable>
-                      ))}
+                      {HOME_INSTRUCTION_PRESETS.map((preset) => {
+                        const isActive = homeInstructions.includes(preset.text);
+                        return (
+                          <Pressable
+                            key={preset.id}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: isActive }}
+                            accessibilityLabel={`${preset.label} preset`}
+                            style={({ pressed }) => [
+                              styles.presetChip,
+                              isActive && styles.presetChipActive,
+                              pressed && styles.pressed,
+                            ]}
+                            onPress={() => {
+                              setHomeInstructions((prev) => toggleHomeInstructionPreset(prev, preset.text));
+                            }}
+                          >
+                            <Icon
+                              name={isActive ? 'check' : 'plus'}
+                              size={theme.sizes.iconSm}
+                              color={isActive ? theme.colors.onPrimary : theme.colors.primaryDark}
+                            />
+                            <ThemedText
+                              variant="smallBold"
+                              color={isActive ? theme.colors.onPrimary : theme.colors.primaryDark}
+                              style={styles.presetChipText}
+                            >
+                              {preset.label}
+                            </ThemedText>
+                          </Pressable>
+                        );
+                      })}
                     </View>
                   </View>
                 ) : null}
@@ -4472,28 +6861,6 @@ export default function ConsultationsScreen() {
                 }
                 rightAction={!signerName ? <Badge label="No one selected" variant="warning" /> : undefined}
               />
-              <View style={styles.credentialBadgesRow}>
-                <Badge
-                  label={doctorPan.trim() || signerStaff?.philHealthPan?.trim() ? 'PAN [Verified]' : 'PAN [Missing]'}
-                  variant={doctorPan.trim() || signerStaff?.philHealthPan?.trim() ? 'success' : 'warning'}
-                  size="sm"
-                />
-                <Badge
-                  label={doctorPrc.trim() || signerStaff?.prcLicenseNumber?.trim() ? 'PRC [Verified]' : 'PRC [Missing]'}
-                  variant={doctorPrc.trim() || signerStaff?.prcLicenseNumber?.trim() ? 'success' : 'emergency'}
-                  size="sm"
-                />
-                <Badge
-                  label={doctorPtr.trim() || signerStaff?.ptrNumber?.trim() ? 'PTR [Recorded]' : 'PTR [Optional]'}
-                  variant="neutral"
-                  size="sm"
-                />
-                <Badge
-                  label={doctorS2.trim() || signerStaff?.s2LicenseNumber?.trim() ? 'S2 [Active]' : 'S2 [Needed for PDEA]'}
-                  variant={doctorS2.trim() || signerStaff?.s2LicenseNumber?.trim() ? 'neutral' : 'warning'}
-                  size="sm"
-                />
-              </View>
               <View style={styles.fieldRow}>
                 <Input
                   label="PRC license #"
@@ -4501,6 +6868,7 @@ export default function ConsultationsScreen() {
                   onChangeText={setDoctorPrc}
                   editable={!isSigned}
                   containerStyle={styles.fieldGrow}
+                  helperText={doctorPrc.trim() || signerStaff?.prcLicenseNumber?.trim() ? 'PRC [Verified]' : 'PRC [Missing]'}
                 />
                 <Input
                   label="PTR #"
@@ -4508,6 +6876,7 @@ export default function ConsultationsScreen() {
                   onChangeText={setDoctorPtr}
                   editable={!isSigned}
                   containerStyle={styles.fieldGrow}
+                  helperText={doctorPtr.trim() || signerStaff?.ptrNumber?.trim() ? 'PTR [Recorded]' : 'PTR [Optional]'}
                 />
                 <Input
                   label="PDEA S2 license #"
@@ -4515,6 +6884,7 @@ export default function ConsultationsScreen() {
                   onChangeText={setDoctorS2}
                   editable={!isSigned}
                   containerStyle={styles.fieldGrow}
+                  helperText={doctorS2.trim() || signerStaff?.s2LicenseNumber?.trim() ? 'S2 [Active]' : 'S2 [Needed for PDEA]'}
                 />
                 <Input
                   label="PhilHealth PAN"
@@ -4523,6 +6893,7 @@ export default function ConsultationsScreen() {
                   editable={!isSigned}
                   containerStyle={styles.fieldGrow}
                   placeholder="Doctor PAN"
+                  helperText={doctorPan.trim() || signerStaff?.philHealthPan?.trim() ? 'PAN [Verified]' : 'PAN [Missing]'}
                 />
               </View>
               {signerStaff && !isSigned && (
@@ -4563,34 +6934,62 @@ export default function ConsultationsScreen() {
               />
               <View style={styles.actionRow}>
                 <Button
-                  title="Issue medical certificate"
+                  title={
+                    !isSigned && issuedMedCert
+                      ? 'Edit draft medical certificate'
+                      : 'Issue medical certificate'
+                  }
                   icon="file"
                   variant="outline"
                   onPress={() => setMedCertModalVisible(true)}
                 />
                 <Button
-                  title="Issue referral letter"
+                  title={
+                    !isSigned && issuedReferral
+                      ? 'Edit draft referral letter'
+                      : 'Issue referral letter'
+                  }
                   icon="file"
                   variant="outline"
-                  onPress={() => setReferralModalVisible(true)}
+                  onPress={handleOpenIssueReferral}
                 />
               </View>
 
               {issuedMedCert ? (
-                <View style={[styles.issuedRow, styles.issuedRowSuccess]}>
+                <View
+                  style={[
+                    styles.issuedRow,
+                    isMedCertDraft ? styles.issuedRowDraft : styles.issuedRowSuccess,
+                  ]}
+                  testID="issued-med-cert-row"
+                >
                   <View style={styles.flex}>
-                    <ThemedText variant="bodyBold" color={theme.colors.successText}>
-                      Medical certificate {issuedMedCert.certificateNumber}
-                    </ThemedText>
+                    <View style={styles.rowWrap}>
+                      <ThemedText
+                        variant="bodyBold"
+                        color={isMedCertDraft ? theme.colors.warningText : theme.colors.successText}
+                      >
+                        Medical certificate {issuedMedCert.certificateNumber}
+                      </ThemedText>
+                      {isMedCertDraft ? (
+                        <>
+                          <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+                          <Badge label="Pending encounter sign-off" variant="neutral" size="sm" />
+                        </>
+                      ) : (
+                        <Badge label="Signed" variant="success" size="sm" icon="check" />
+                      )}
+                    </View>
                     <ThemedText variant="small" color={theme.colors.textSecondary}>
                       {humanize(issuedMedCert.fitnessStatus)}
                       {issuedMedCert.recommendedRestDays ? ` • ${issuedMedCert.recommendedRestDays} day(s) rest` : ''}
+                      {isMedCertDraft ? ' • Remains draft until encounter is signed' : ''}
                     </ThemedText>
                   </View>
                   <Button
-                    title="View / print"
-                    icon="print"
-                    variant="success"
+                    title={isMedCertDraft ? 'Preview draft' : 'View / print'}
+                    icon={isMedCertDraft ? 'file' : 'print'}
+                    variant={isMedCertDraft ? 'outline' : 'success'}
                     size="sm"
                     onPress={() => {
                       setPreviewType('MEDCERT');
@@ -4601,19 +7000,40 @@ export default function ConsultationsScreen() {
               ) : null}
 
               {issuedReferral ? (
-                <View style={[styles.issuedRow, styles.issuedRowPrimary]}>
+                <View
+                  style={[
+                    styles.issuedRow,
+                    isReferralDraft ? styles.issuedRowDraft : styles.issuedRowPrimary,
+                  ]}
+                  testID="issued-referral-row"
+                >
                   <View style={styles.flex}>
-                    <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-                      Referral {issuedReferral.referralNumber}
-                    </ThemedText>
+                    <View style={styles.rowWrap}>
+                      <ThemedText
+                        variant="bodyBold"
+                        color={isReferralDraft ? theme.colors.warningText : theme.colors.primaryDark}
+                      >
+                        Referral {issuedReferral.referralNumber}
+                      </ThemedText>
+                      {isReferralDraft ? (
+                        <>
+                          <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+                          <Badge label="Pending encounter sign-off" variant="neutral" size="sm" />
+                        </>
+                      ) : (
+                        <Badge label="Signed" variant="success" size="sm" icon="check" />
+                      )}
+                    </View>
                     <ThemedText variant="small" color={theme.colors.textSecondary}>
                       To {issuedReferral.referredToFacility} ({issuedReferral.referredDepartment}) •{' '}
                       {issuedReferral.urgency}
+                      {isReferralDraft ? ' • Remains draft until encounter is signed' : ''}
                     </ThemedText>
                   </View>
                   <Button
-                    title="View / print"
-                    icon="print"
+                    title={isReferralDraft ? 'Preview draft' : 'View / print'}
+                    icon={isReferralDraft ? 'file' : 'print'}
+                    variant={isReferralDraft ? 'outline' : 'primary'}
                     size="sm"
                     onPress={() => {
                       setPreviewType('REFERRAL');
@@ -4678,33 +7098,186 @@ export default function ConsultationsScreen() {
                 </View>
               </Card>
             ) : (
-              <Button
-                title={
-                  isYakapEligible && !isYakapReady
-                    ? `Signing locked (${(serverReadiness || localEvaluation).missingFields.length} requirements pending)`
-                    : 'Sign & sync encounter'
-                }
-                icon={isYakapEligible && !isYakapReady ? 'lock' : 'check'}
-                size="lg"
-                variant={isYakapEligible && !isYakapReady ? 'outline' : 'primary'}
-                loading={isSigning}
-                disabled={isSigning || (isYakapEligible && !isYakapReady)}
-                onPress={handleInitiateSignAndReviewChargeSlip}
-              />
+              <View style={styles.stack}>
+                {draftSaveStatus !== 'idle' ? (
+                  draftSaveStatus === 'error' ? (
+                    <Pressable
+                      onPress={handleRetryDraftSave}
+                      style={[styles.preSignDraftStatusRow, styles.preSignDraftStatusError]}
+                      testID="pre-sign-draft-status-indicator"
+                      accessibilityRole="button"
+                      accessibilityLabel="Retry saving consultation draft"
+                    >
+                      <Icon
+                        name="alertCircle"
+                        size={theme.sizes.iconSm}
+                        color={theme.colors.emergency}
+                      />
+                      <ThemedText variant="caption" color={theme.colors.emergencyText}>
+                        Draft save failed · Tap to retry
+                      </ThemedText>
+                    </Pressable>
+                  ) : (
+                    <View
+                      style={[
+                        styles.preSignDraftStatusRow,
+                        draftSaveStatus === 'saving'
+                          ? styles.preSignDraftStatusSaving
+                          : styles.preSignDraftStatusSaved,
+                      ]}
+                      testID="pre-sign-draft-status-indicator"
+                      accessibilityLiveRegion="polite"
+                    >
+                      <Icon
+                        name={draftSaveStatus === 'saving' ? 'clock' : 'checkCircle'}
+                        size={theme.sizes.iconSm}
+                        color={
+                          draftSaveStatus === 'saving'
+                            ? theme.colors.textSecondary
+                            : theme.colors.success
+                        }
+                      />
+                      <ThemedText
+                        variant="caption"
+                        color={
+                          draftSaveStatus === 'saving'
+                            ? theme.colors.textSecondary
+                            : theme.colors.successText
+                        }
+                      >
+                        {draftSaveStatus === 'saving'
+                          ? 'Saving draft...'
+                          : draftSavedAtLabel
+                            ? `Saved as draft · ${draftSavedAtLabel}`
+                            : 'Saved as draft'}
+                      </ThemedText>
+                    </View>
+                  )
+                ) : null}
+                <Button
+                  title={
+                    hasPendingInClinicProcedures
+                      ? `Signing locked (${pendingProcedureReason ?? 'In Procedure Bay'})`
+                      : isYakapEligible && !isYakapReady
+                      ? `Signing locked (${(serverReadiness || localEvaluation).missingFields.length} requirements pending)`
+                      : 'Sign & sync encounter'
+                  }
+                  icon={hasPendingInClinicProcedures || (isYakapEligible && !isYakapReady) ? 'lock' : 'check'}
+                  size="lg"
+                  variant={hasPendingInClinicProcedures || (isYakapEligible && !isYakapReady) ? 'outline' : 'primary'}
+                  loading={isSigning}
+                  disabled={isSigning || isAbandoningDraft || hasPendingInClinicProcedures || (isYakapEligible && !isYakapReady)}
+                  onPress={handleInitiateSignAndReviewChargeSlip}
+                />
+                {signedConsultationId ||
+                prescriptions.length > 0 ||
+                orderedLabs.length > 0 ||
+                orderedProcedures.length > 0 ||
+                selectedDiagnoses.length > 0 ||
+                Boolean(issuedMedCert) ||
+                Boolean(issuedReferral) ||
+                Boolean(subjective.trim()) ||
+                Boolean(assessment.trim()) ? (
+                  <Button
+                    title="Discard unsigned draft"
+                    icon="trash"
+                    size="sm"
+                    variant="dangerOutline"
+                    loading={isAbandoningDraft}
+                    disabled={isSigning || isAbandoningDraft}
+                    onPress={handleAbandonUnsignedEncounter}
+                  />
+                ) : null}
+              </View>
             )}
     </View>
   );
+
+  const activeSpineProblems = useMemo(() => {
+    const baseProblems = (patientChart?.problems || []).filter((p) => p.status === 'Active');
+    if (selectedDiagnoses.length === 0) {
+      return patientChart?.problems ?? null;
+    }
+    const seenCodes = new Set(
+      baseProblems.map((p) => (p.icd10Code || '').trim().toUpperCase()).filter(Boolean)
+    );
+    const liveAdditions = selectedDiagnoses
+      .filter((d) => {
+        const code = (d.icd10Code || '').trim().toUpperCase();
+        if (!code || seenCodes.has(code)) return false;
+        seenCodes.add(code);
+        return true;
+      })
+      .map((d, idx) => ({
+        id: `live-dx-${d.icd10Code}-${idx}`,
+        clinicId: selectedPatient?.clinicId || '',
+        patientId: selectedPatient?.patientId || '',
+        icd10Code: d.icd10Code,
+        problemTitle: d.description,
+        status: 'Active' as const,
+        severity: 'Moderate' as const,
+        isChronicNcd: false,
+        recordedByDoctorId: signer?.id || '',
+        recordedByDoctorName: signerStaff ? formatStaffName(signerStaff) : signer?.name || '',
+        createdAt: '',
+      }));
+    return [...baseProblems, ...liveAdditions];
+  }, [
+    patientChart?.problems,
+    selectedDiagnoses,
+    selectedPatient?.clinicId,
+    selectedPatient?.patientId,
+    signer?.id,
+    signer?.name,
+    signerStaff,
+  ]);
+
+  const activeSpinePrescriptions = useMemo(() => {
+    const historicalConsultations = patientChart?.consultations || [];
+    const priorEncounter = historicalConsultations.find(
+      (c) =>
+        (!signedConsultationId || c.id !== signedConsultationId) &&
+        (!selectedPatient?.id || c.queueItemId !== selectedPatient.id)
+    );
+    const historicalRx = priorEncounter?.prescriptions || [];
+    if (prescriptions.length === 0 && !signedConsultationId) {
+      return historicalConsultations[0]?.prescriptions || [];
+    }
+    const combined: any[] = [...prescriptions];
+    const seenKeys = new Set(
+      prescriptions.map(
+        (rx) => `${(rx.genericName || '').trim().toLowerCase()}|${(rx.dosage || '').trim().toLowerCase()}`
+      )
+    );
+    for (const hRx of historicalRx) {
+      const key = `${(hRx.genericName || '').trim().toLowerCase()}|${(hRx.dosage || '').trim().toLowerCase()}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        combined.push(hRx);
+      }
+    }
+    return combined;
+  }, [prescriptions, patientChart?.consultations, signedConsultationId, selectedPatient?.id]);
 
   return (
     <ResponsiveLayout headerTitle="Consultations">
       <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {/* Patient queue */}
         <View style={styles.queueSection}>
-          <View style={styles.rowBetween}>
-            <View style={styles.row}>
-              <ThemedText variant="h3">Patient queue</ThemedText>
-              <Badge label={`${displayedPatients.length}`} variant="neutral" size="sm" />
-            </View>
+          {/* Queue View Fast Filters & Actions */}
+          <View style={styles.queueToolbarRow}>
+            <SegmentedControl
+              value={queueViewFilter}
+              onChange={handleQueueViewFilterChange}
+              style={styles.queueSegmentedScroll}
+              options={[
+                { value: 'WaitingForDoctor', label: 'Waiting for Doctor' },
+                { value: 'MyRoom', label: 'My Room' },
+                { value: 'PendingProcedure', label: 'Pending Procedure' },
+                { value: 'Completed', label: 'Completed' },
+                { value: 'All', label: 'All Queue' },
+              ]}
+            />
             <View style={styles.queueHeaderActions}>
               <Button
                 title={
@@ -4720,8 +7293,9 @@ export default function ConsultationsScreen() {
                 onPress={() => handleOpenCallModal()}
               />
               <Button
-                title="Refresh"
                 icon="refresh"
+                iconOnly
+                accessibilityLabel="Refresh queue"
                 variant="ghost"
                 size="sm"
                 loading={queueLoading}
@@ -4730,59 +7304,45 @@ export default function ConsultationsScreen() {
             </View>
           </View>
 
-          {/* Queue View Fast Filters & Station Pills */}
-          <View style={{ gap: theme.spacing.sm }}>
-            <SegmentedControl
-              value={queueViewFilter}
-              onChange={handleQueueViewFilterChange}
-              options={[
-                { value: 'WaitingForDoctor', label: 'Waiting for Doctor' },
-                { value: 'MyRoom', label: 'My Room' },
-                { value: 'PendingProcedure', label: 'Pending Procedure' },
-                { value: 'Completed', label: 'Completed' },
-                { value: 'All', label: 'All Queue' },
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stationFilterScroll}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => handleStationFilterChange('ALL')}
+              style={[
+                styles.stationFilterPill,
+                selectedStationFilter === 'ALL' && styles.stationFilterPillActive,
               ]}
-            />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stationFilterScroll}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => handleStationFilterChange('ALL')}
-                style={[
-                  styles.stationFilterPill,
-                  selectedStationFilter === 'ALL' && styles.stationFilterPillActive,
-                ]}
+            >
+              <ThemedText
+                variant="captionBold"
+                color={selectedStationFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
               >
-                <ThemedText
-                  variant="captionBold"
-                  color={selectedStationFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+                {allPillLabel}
+              </ThemedText>
+            </Pressable>
+            {visibleRooms.map((room) => {
+              const isSelected = selectedStationFilter === room.name;
+              const isMyAssignedRoom = (current?.assignedRoomIds?.includes(room.id)) || current?.assignedRoomId === room.id;
+              return (
+                <Pressable
+                  key={room.id}
+                  accessibilityRole="button"
+                  onPress={() => handleStationFilterChange(room.name)}
+                  style={[
+                    styles.stationFilterPill,
+                    isSelected && styles.stationFilterPillActive,
+                  ]}
                 >
-                  {allPillLabel}
-                </ThemedText>
-              </Pressable>
-              {visibleRooms.map((room) => {
-                const isSelected = selectedStationFilter === room.name;
-                const isMyAssignedRoom = (current?.assignedRoomIds?.includes(room.id)) || current?.assignedRoomId === room.id;
-                return (
-                  <Pressable
-                    key={room.id}
-                    accessibilityRole="button"
-                    onPress={() => handleStationFilterChange(room.name)}
-                    style={[
-                      styles.stationFilterPill,
-                      isSelected && styles.stationFilterPillActive,
-                    ]}
+                  <ThemedText
+                    variant="captionBold"
+                    color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
                   >
-                    <ThemedText
-                      variant="captionBold"
-                      color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
-                    >
-                      {isMyAssignedRoom ? `${room.name} (Mine)` : room.name}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
+                    {isMyAssignedRoom ? `${room.name} (Mine)` : room.name}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
           {queueLoading && displayedPatients.length === 0 ? (
             <SkeletonList rows={2} rowHeight={theme.sizes.controlMd} />
@@ -4800,7 +7360,18 @@ export default function ConsultationsScreen() {
                 const isSelected = selectedPatient?.id === p.id;
                 const isEmergency = p.priority === 'Emergency';
                 const isUrgent = p.priority === 'Urgent';
-                const roomTag = p.roomOrStation ? ` · ${p.roomOrStation}` : '';
+                const effectiveQueueStatus: QueueStatus =
+                  p.status === 'PendingProcedure' &&
+                  p.id === selectedPatient?.id &&
+                  !hasPendingInClinicProcedures &&
+                  latestExecutedProcedure?.status === 'Completed'
+                    ? 'ReEvaluation'
+                    : p.status;
+
+                const roomTag =
+                  p.roomOrStation && !(effectiveQueueStatus === 'ReEvaluation' && p.roomOrStation === 'Treatment Room')
+                    ? ` · ${p.roomOrStation}`
+                    : '';
 
                 const getStatusInfo = (status: QueueStatus): { label: string; variant: BadgeVariant } | null => {
                   switch (status) {
@@ -4819,7 +7390,7 @@ export default function ConsultationsScreen() {
                   }
                 };
 
-                const statusInfo = getStatusInfo(p.status);
+                const statusInfo = getStatusInfo(effectiveQueueStatus);
 
                 return (
                   <Pressable
@@ -4838,7 +7409,11 @@ export default function ConsultationsScreen() {
                       variant="captionBold"
                       color={isSelected ? theme.colors.primaryDark : theme.colors.text}
                     >
-                      {p.queueNumber}
+                      {p.isDirectVisit || p.queueNumber?.startsWith('DV-') || p.queueNumber === 'DIRECT'
+                        ? p.queueNumber === 'DIRECT'
+                          ? 'Direct • Draft'
+                          : `Direct • ${p.queueNumber}`
+                        : p.queueNumber}
                     </ThemedText>
                     <ThemedText
                       variant="caption"
@@ -4861,20 +7436,17 @@ export default function ConsultationsScreen() {
                       <Badge label={statusInfo.label} variant={statusInfo.variant} size="sm" />
                     ) : null}
                     {allowChipLevelCalling && ['Triaged', 'ReEvaluation', 'Waiting'].includes(p.status) ? (
-                      <Pressable
-                        accessibilityRole="button"
+                      <Button
+                        variant="primary"
+                        size="xs"
+                        icon="bell"
+                        title="Call"
                         accessibilityLabel={`Call ${p.patientName} to room`}
                         onPress={(e) => {
                           e.stopPropagation?.();
                           handleOpenCallModal(p);
                         }}
-                        style={styles.chipCallBtn}
-                      >
-                        <Icon name="bell" size={11} color={theme.colors.onPrimary} />
-                        <ThemedText variant="captionBold" color={theme.colors.onPrimary} style={styles.chipCallBtnText}>
-                          Call
-                        </ThemedText>
-                      </Pressable>
+                      />
                     ) : null}
                   </Pressable>
                 );
@@ -4913,24 +7485,57 @@ export default function ConsultationsScreen() {
                   age: 0,
                   contactNumber: '',
                   dateOfBirth: '',
-                  gender: '',
+                  sex: '',
                   createdAt: '',
                 }}
                 chart={patientChart}
                 vitals={vitals}
+                problems={activeSpineProblems}
+                activePrescriptions={activeSpinePrescriptions}
                 queueTicket={selectedPatient.queueNumber}
                 queuePriority={selectedPatient.priority}
                 chiefComplaint={selectedPatient.chiefComplaint}
-                activeAtc={philHealthAtc}
+                activeAtc={isYakapEligible ? (philHealthAtc.trim() || null) : null}
                 loading={contextLoading}
                 onPressRefresh={() => loadPatientContext(selectedPatient)}
                 onPressEdit={() => setEditPatientModalVisible(true)}
-                onPressRecordVitals={() => setRecordVitalsModalVisible(true)}
+                onPressRecordVitals={
+                  !isSigned && canRecordVitals ? handleOpenVitalsModal : undefined
+                }
               />
             </View>
 
+            {/* Procedure Bay In-Flight Alert Banner */}
+            {hasPendingInClinicProcedures && !isSigned && (
+              <Card style={styles.procedureBayBanner}>
+                <View style={styles.rowBetween}>
+                  <View style={styles.row}>
+                    <Icon name="clock" size={theme.sizes.iconMd} color={theme.colors.warningText} />
+                    <View style={{ flex: 1 }}>
+                      <ThemedText variant="bodyBold" color={theme.colors.warningText}>
+                        Patient is in Procedure Bay (Pending Execution)
+                      </ThemedText>
+                      <ThemedText variant="small" color={theme.colors.textSecondary}>
+                        In-clinic procedures have been ordered and are pending execution at the treatment station. Encounter signing is locked until procedures are completed or cancelled.
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <Badge label="Procedure Bay" variant="warning" size="sm" />
+                </View>
+                <View style={[styles.actionRow, { marginTop: 8 }]}>
+                  <Button
+                    title="Perform In-Clinic Procedure"
+                    icon="syringe"
+                    variant="primary"
+                    size="sm"
+                    onPress={() => handleSelectChartTab('procedures')}
+                  />
+                </View>
+              </Card>
+            )}
+
             {/* Doctor Re-Evaluation Alert Banner (Closed-Loop In-Clinic Procedures Feature 20) */}
-            {(selectedPatient.status === 'ReEvaluation' || latestExecutedProcedure?.status === 'Completed') ? (
+            {(!hasPendingInClinicProcedures && (selectedPatient.status === 'ReEvaluation' || latestExecutedProcedure?.status === 'Completed')) ? (
               <Card style={styles.reEvalBanner}>
                 <View style={styles.rowBetween}>
                   <View style={styles.row}>
@@ -4987,10 +7592,15 @@ export default function ConsultationsScreen() {
 
                 <View style={styles.actionRow}>
                   <Button
-                    title="Import Post-Procedure Vitals into Objective"
-                    icon="plus"
-                    variant="primary"
+                    title={
+                      isPostProcedureVitalsImported
+                        ? 'Imported into Objective'
+                        : 'Import Post-Procedure Vitals into Objective'
+                    }
+                    icon={isPostProcedureVitalsImported ? 'check' : 'plus'}
+                    variant={isPostProcedureVitalsImported ? 'outline' : 'primary'}
                     size="sm"
+                    disabled={isPostProcedureVitalsImported}
                     onPress={() => handleImportPostProcedureVitals(latestExecutedProcedure)}
                   />
                 </View>
@@ -5005,46 +7615,60 @@ export default function ConsultationsScreen() {
                   soapPaneOffsetY.current = e.nativeEvent.layout.y;
                 }}
               >
-                <View style={styles.leftChartPane}>
-                  <ScrollView
-                    ref={chartScrollViewRef}
+                {!isWorkspaceExpanded ? (
+                  <View
                     style={[
-                      styles.splitPaneScroll,
-                      { maxHeight: desktopPaneHeight },
-                      Platform.OS === 'web' && ({ overscrollBehavior: 'contain' } as any),
+                      styles.leftChartPane,
+                      isChartExpanded && styles.leftChartPaneExpanded,
                     ]}
-                    contentContainerStyle={styles.splitPaneScrollContent}
-                    nestedScrollEnabled
-                    showsVerticalScrollIndicator
-                    keyboardShouldPersistTaps="handled"
-                    directionalLockEnabled
-                    scrollEventThrottle={16}
-                    overScrollMode="never"
-                    bounces={false}
                   >
-                    {renderLongitudinalChartContent()}
-                  </ScrollView>
-                </View>
-                <View style={styles.rightSoapPane}>
-                  <ScrollView
-                    ref={soapScrollViewRef}
+                    <ScrollView
+                      ref={chartScrollViewRef}
+                      style={[
+                        styles.splitPaneScroll,
+                        { maxHeight: desktopPaneHeight },
+                        Platform.OS === 'web' && ({ overscrollBehavior: 'contain' } as any),
+                      ]}
+                      contentContainerStyle={styles.splitPaneScrollContent}
+                      nestedScrollEnabled
+                      showsVerticalScrollIndicator
+                      keyboardShouldPersistTaps="handled"
+                      directionalLockEnabled
+                      scrollEventThrottle={16}
+                      overScrollMode="never"
+                      bounces={false}
+                    >
+                      {renderLongitudinalChartContent()}
+                    </ScrollView>
+                  </View>
+                ) : null}
+                {!isChartExpanded ? (
+                  <View
                     style={[
-                      styles.splitPaneScroll,
-                      { maxHeight: desktopPaneHeight },
-                      Platform.OS === 'web' && ({ overscrollBehavior: 'contain' } as any),
+                      styles.rightSoapPane,
+                      isWorkspaceExpanded && styles.rightSoapPaneExpanded,
                     ]}
-                    contentContainerStyle={styles.splitPaneScrollContent}
-                    nestedScrollEnabled
-                    showsVerticalScrollIndicator
-                    keyboardShouldPersistTaps="handled"
-                    directionalLockEnabled
-                    scrollEventThrottle={16}
-                    overScrollMode="never"
-                    bounces={false}
                   >
-                    {renderSoapDocumentationContent()}
-                  </ScrollView>
-                </View>
+                    <ScrollView
+                      ref={soapScrollViewRef}
+                      style={[
+                        styles.splitPaneScroll,
+                        { maxHeight: desktopPaneHeight },
+                        Platform.OS === 'web' && ({ overscrollBehavior: 'contain' } as any),
+                      ]}
+                      contentContainerStyle={styles.splitPaneScrollContent}
+                      nestedScrollEnabled
+                      showsVerticalScrollIndicator
+                      keyboardShouldPersistTaps="handled"
+                      directionalLockEnabled
+                      scrollEventThrottle={16}
+                      overScrollMode="never"
+                      bounces={false}
+                    >
+                      {renderSoapDocumentationContent()}
+                    </ScrollView>
+                  </View>
+                ) : null}
               </View>
             ) : (
               <View
@@ -5088,15 +7712,27 @@ export default function ConsultationsScreen() {
         <Modal
           visible={medCertModalVisible}
           onClose={() => setMedCertModalVisible(false)}
-          title="Issue medical certificate"
+          title={isSigned ? 'Issue medical certificate' : 'Draft medical certificate'}
           subtitle={selectedPatient ? `Patient: ${selectedPatient.patientName}` : undefined}
           footer={
             <View style={styles.modalFooter}>
               <Button title="Cancel" variant="outline" onPress={() => setMedCertModalVisible(false)} />
-              <Button title="Lock & issue certificate" loading={issuingMedCert} onPress={handleIssueMedCert} />
+              <Button
+                title={isSigned ? 'Lock & issue certificate' : 'Save draft certificate'}
+                loading={issuingMedCert}
+                onPress={handleIssueMedCert}
+              />
             </View>
           }
         >
+          {!isSigned ? (
+            <View style={styles.draftDocNoticeBox}>
+              <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+              <ThemedText variant="caption" color={theme.colors.warningText} style={styles.flex}>
+                This medical certificate will remain in draft until the consultation encounter is signed.
+              </ThemedText>
+            </View>
+          ) : null}
           <View style={styles.stack}>
             <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
               Fitness assessment
@@ -5138,21 +7774,34 @@ export default function ConsultationsScreen() {
         <Modal
           visible={referralModalVisible}
           onClose={() => setReferralModalVisible(false)}
-          title="Issue referral letter"
+          title={isSigned ? 'Issue referral letter' : 'Draft referral letter'}
           subtitle={selectedPatient ? `Patient: ${selectedPatient.patientName}` : undefined}
           footer={
             <View style={styles.modalFooter}>
               <Button title="Cancel" variant="outline" onPress={() => setReferralModalVisible(false)} />
-              <Button title="Issue & seal referral" loading={issuingReferral} onPress={handleIssueReferral} />
+              <Button
+                title={isSigned ? 'Issue & seal referral' : 'Save draft referral'}
+                loading={issuingReferral}
+                onPress={handleIssueReferral}
+              />
             </View>
           }
         >
+          {!isSigned ? (
+            <View style={styles.draftDocNoticeBox}>
+              <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+              <ThemedText variant="caption" color={theme.colors.warningText} style={styles.flex}>
+                This referral letter will remain in draft until the consultation encounter is signed.
+              </ThemedText>
+            </View>
+          ) : null}
           <Input
             label="Receiving facility"
             required
             placeholder="Hospital or clinic name"
             value={refFacility}
             onChangeText={setRefFacility}
+            error={refValidationAttempted && !refFacility.trim() ? 'Receiving facility is required' : undefined}
           />
           <Input
             label="Department / specialty"
@@ -5160,6 +7809,7 @@ export default function ConsultationsScreen() {
             placeholder="e.g. Cardiology, Surgery, Pulmonology"
             value={refDepartment}
             onChangeText={setRefDepartment}
+            error={refValidationAttempted && !refDepartment.trim() ? 'Department / specialty is required' : undefined}
           />
           <View style={styles.stack}>
             <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
@@ -5183,13 +7833,44 @@ export default function ConsultationsScreen() {
             placeholder="e.g. Specialist workup for chest pain"
             value={refReason}
             onChangeText={setRefReason}
+            error={refValidationAttempted && !refReason.trim() ? 'Reason for referral is required' : undefined}
+          />
+          <Input
+            label="Provisional Diagnosis / Assessment"
+            required
+            placeholder="e.g. Clearance for sports / Congenital murmur workup"
+            value={refDiagnosis}
+            onChangeText={setRefDiagnosis}
+            error={
+              refValidationAttempted && !refDiagnosis.trim() && !primaryDiagnosisText()
+                ? 'Provisional diagnosis is required'
+                : undefined
+            }
+            helperText={
+              primaryDiagnosisText() && refDiagnosis === primaryDiagnosisText()
+                ? 'Pre-populated from consultation assessment. You can edit this for the referral.'
+                : undefined
+            }
           />
           <Input
             label="Clinical summary"
-            placeholder="Summary of examination, diagnostics and initial medications (defaults to the subjective notes)"
+            required
+            placeholder="Summary of examination, diagnostics and clinical findings"
             value={refSummary}
             onChangeText={setRefSummary}
             multiline
+            error={
+              refValidationAttempted && !refSummary.trim() && !subjective.trim()
+                ? 'Clinical summary is required'
+                : undefined
+            }
+            helperText={
+              subjective.trim() && refSummary === subjective.trim()
+                ? 'Pre-populated from consultation subjective notes. You can edit or expand.'
+                : !subjective.trim() && !refSummary.trim()
+                ? 'Required: No subjective notes found in current consultation.'
+                : undefined
+            }
           />
         </Modal>
 
@@ -5199,55 +7880,73 @@ export default function ConsultationsScreen() {
           onClose={() => setPreviewDocModal(false)}
           title={
             previewType === 'MEDCERT'
-              ? 'Medical certificate'
+              ? isMedCertDraft
+                ? 'Medical certificate (Draft)'
+                : 'Medical certificate'
               : previewType === 'REFERRAL'
-              ? 'Referral letter'
+              ? isReferralDraft
+                ? 'Referral letter (Draft)'
+                : 'Referral letter'
+              : !isSigned
+              ? 'Electronic prescription (Draft)'
               : 'Electronic prescription'
           }
           maxWidth={640}
           footer={
             <View style={styles.modalFooter}>
               {previewType === 'MEDCERT' && issuedMedCert ? (
-                <Button
-                  title={docSigningMode === 'wet' ? 'Download official PDF (Wet)' : 'Download official PDF'}
-                  icon="download"
-                  variant="success"
-                  onPress={() =>
-                    downloadPdf(
-                      clinicService.getMedicalCertificatePdfUrl(issuedMedCert.id, { wet: docSigningMode === 'wet' }),
-                      'Could not open the medical certificate PDF. Please check your connection and try again.',
-                    )
-                  }
-                />
+                !isMedCertDraft ? (
+                  <Button
+                    title={docSigningMode === 'wet' ? 'Download official PDF (Wet)' : 'Download official PDF'}
+                    icon="download"
+                    variant="success"
+                    onPress={() =>
+                      downloadPdf(
+                        clinicService.getMedicalCertificatePdfUrl(issuedMedCert.id, { wet: docSigningMode === 'wet' }),
+                        'Could not open the medical certificate PDF. Please check your connection and try again.',
+                      )
+                    }
+                  />
+                ) : (
+                  <Badge label="Sign consultation encounter to unlock official PDF" variant="warning" />
+                )
               ) : null}
               {previewType === 'REFERRAL' && issuedReferral ? (
-                <Button
-                  title={docSigningMode === 'wet' ? 'Download official PDF (Wet)' : 'Download official PDF'}
-                  icon="download"
-                  variant="success"
-                  onPress={() =>
-                    downloadPdf(
-                      clinicService.getReferralLetterPdfUrl(issuedReferral.id, { wet: docSigningMode === 'wet' }),
-                      'Could not open the referral letter PDF. Please check your connection and try again.',
-                    )
-                  }
-                />
+                !isReferralDraft ? (
+                  <Button
+                    title={docSigningMode === 'wet' ? 'Download official PDF (Wet)' : 'Download official PDF'}
+                    icon="download"
+                    variant="success"
+                    onPress={() =>
+                      downloadPdf(
+                        clinicService.getReferralLetterPdfUrl(issuedReferral.id, { wet: docSigningMode === 'wet' }),
+                        'Could not open the referral letter PDF. Please check your connection and try again.',
+                      )
+                    }
+                  />
+                ) : (
+                  <Badge label="Sign consultation encounter to unlock official PDF" variant="warning" />
+                )
               ) : null}
               {previewType === 'PRESCRIPTION' && (signedConsultationId || prescriptionSlip?.consultationId) ? (
-                <Button
-                  title={docSigningMode === 'wet' ? 'Download official PDF (Wet)' : 'Download official PDF'}
-                  icon="download"
-                  variant="success"
-                  onPress={() =>
-                    downloadPdf(
-                      clinicService.getPrescriptionSlipPdfUrl(
-                        signedConsultationId || prescriptionSlip!.consultationId,
-                        { wet: docSigningMode === 'wet' },
-                      ),
-                      'Could not open the prescription slip PDF. Please check your connection and try again.',
-                    )
-                  }
-                />
+                isSigned ? (
+                  <Button
+                    title={docSigningMode === 'wet' ? 'Download official PDF (Wet)' : 'Download official PDF'}
+                    icon="download"
+                    variant="success"
+                    onPress={() =>
+                      downloadPdf(
+                        clinicService.getPrescriptionSlipPdfUrl(
+                          signedConsultationId || prescriptionSlip!.consultationId,
+                          { wet: docSigningMode === 'wet' },
+                        ),
+                        'Could not open the prescription slip PDF. Please check your connection and try again.',
+                      )
+                    }
+                  />
+                ) : (
+                  <Badge label="Sign consultation encounter to unlock official PDF" variant="warning" />
+                )
               ) : null}
               <Button title="Close preview" onPress={() => setPreviewDocModal(false)} />
             </View>
@@ -5259,7 +7958,9 @@ export default function ConsultationsScreen() {
               <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
                 Signature & Print Mode
               </ThemedText>
-              {docSigningMode === 'wet' ? (
+              {isPreviewDocDraft ? (
+                <Badge label="Draft — Unsigned" variant="warning" icon="clock" />
+              ) : docSigningMode === 'wet' ? (
                 <Badge label="Wet Signature (Pen)" variant="neutral" icon="pencil" />
               ) : (
                 <Badge label="E-Signed PDF" variant="success" icon="check" />
@@ -5286,6 +7987,14 @@ export default function ConsultationsScreen() {
           </View>
 
           <View style={styles.paper}>
+            {isPreviewDocDraft ? (
+              <View style={styles.draftDocNoticeBox} testID="document-draft-banner">
+                <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+                <ThemedText variant="captionBold" color={theme.colors.warningText} style={styles.flex}>
+                  Draft preview — not valid until the consultation encounter is officially signed.
+                </ThemedText>
+              </View>
+            ) : null}
             {/* Facility letterhead */}
             <View style={styles.paperHeader}>
               <ThemedText variant="h3" style={styles.center}>
@@ -5393,23 +8102,42 @@ export default function ConsultationsScreen() {
             {previewType === 'PRESCRIPTION' ? (
               <View style={styles.stack}>
                 <ThemedText variant="bodyBold">Prescribed medications:</ThemedText>
-                {prescriptions.map((p, idx) => (
-                  <View key={p.id || idx} style={styles.paperBox}>
-                    <View style={styles.rxPaperRow}>
-                      <ThemedText variant="bodyBold">{p.genericName}</ThemedText>
-                      <Badge label={`Qty: ${p.quantity}`} variant="neutral" />
+                {prescriptions.map((p, idx) => {
+                  const dispensedInClinic = Math.min(p.quantity, Math.max(0, p.clinicDispensedQuantity ?? 0));
+                  const hasClinicDispense = dispensedInClinic > 0;
+                  const remainingForPurchase = Math.max(0, p.quantity - dispensedInClinic);
+                  return (
+                    <View key={p.id || idx} style={styles.paperBox}>
+                      <View style={styles.rxPaperRow}>
+                        <ThemedText variant="bodyBold">{p.genericName}</ThemedText>
+                        <Badge label={`Qty: ${p.quantity}`} variant="neutral" />
+                      </View>
+                      <ThemedText variant="small" color={theme.colors.textSecondary}>
+                        {p.dosage} · {p.form}
+                      </ThemedText>
+                      <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                        Sig: {p.sig}
+                      </ThemedText>
+                      {hasClinicDispense ? (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
+                          <Badge label={`Clinic stock: ${dispensedInClinic} pcs`} variant="routine" size="xs" />
+                          <Badge
+                            label={
+                              remainingForPurchase > 0
+                                ? `External purchase: ${remainingForPurchase} pcs`
+                                : 'Fulfilled in clinic'
+                            }
+                            variant={remainingForPurchase > 0 ? 'info' : 'success'}
+                            size="xs"
+                          />
+                        </View>
+                      ) : null}
+                      {p.isDangerousDrug ? (
+                        <Badge label="Dangerous drug (PDEA S2)" variant="emergency" />
+                      ) : null}
                     </View>
-                    <ThemedText variant="small" color={theme.colors.textSecondary}>
-                      {p.dosage} · {p.form}
-                    </ThemedText>
-                    <ThemedText variant="captionBold" color={theme.colors.textMuted}>
-                      Sig: {p.sig}
-                    </ThemedText>
-                    {p.isDangerousDrug ? (
-                      <Badge label="Dangerous drug (PDEA S2)" variant="emergency" />
-                    ) : null}
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             ) : null}
 
@@ -5426,7 +8154,11 @@ export default function ConsultationsScreen() {
                   PTR No. {docSignature.ptr}
                 </ThemedText>
               ) : null}
-              {docSigningMode === 'wet' ? (
+              {isPreviewDocDraft ? (
+                <ThemedText variant="captionBold" color={theme.colors.warningText}>
+                  Draft — Pending physician encounter sign-off
+                </ThemedText>
+              ) : docSigningMode === 'wet' ? (
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
                   [ Clean signature line for physical pen signing ]
                 </ThemedText>
@@ -5606,9 +8338,22 @@ export default function ConsultationsScreen() {
           onClose={() => setEditPatientModalVisible(false)}
           onSaved={(updated) => {
             setPatientRecord(updated);
-            if (selectedPatient) {
-              loadPatientContext(selectedPatient);
-            }
+            setSelectedPatient((prev) =>
+              prev && prev.patientId === updated.id
+                ? { ...prev, patientName: updated.fullName || prev.patientName }
+                : prev
+            );
+            setPatients((prev) =>
+              prev.map((item) =>
+                item.patientId === updated.id
+                  ? { ...item, patientName: updated.fullName || item.patientName }
+                  : item
+              )
+            );
+            setPatientChart((prev) =>
+              prev ? reconcileChartWithPatient(prev, updated) : prev
+            );
+            refreshPatientChart(updated.id);
           }}
         />
 
@@ -5618,14 +8363,74 @@ export default function ConsultationsScreen() {
             visible={recordVitalsModalVisible}
             onClose={() => setRecordVitalsModalVisible(false)}
             patient={patientRecord}
-            queueItemId={selectedPatient.id}
+            queueItemId={selectedPatient.id.startsWith('ephemeral-') ? null : selectedPatient.id}
+            visitType={selectedPatient.visitType}
+            initialDirectVisitStatus="InConsultation"
+            allowDuplicateActive={isFollowUpEncounter}
+            onMaterializeVisit={(directVisit) => {
+              const prevId = selectedPatient.id;
+              const materialized: PatientQueueItem = {
+                ...selectedPatient,
+                ...directVisit,
+                isDirectVisit: true,
+              };
+              setSelectedPatient(materialized);
+              setPatients((prev) =>
+                (prev || []).map((p) => (p.id === prevId ? materialized : p))
+              );
+            }}
             currentStaffId={signer?.id}
             currentStaffName={signerStaff ? formatStaffName(signerStaff) : signer?.name}
-            existingVitals={vitals}
+
             onSuccess={(recordedVitals) => {
               setVitals(recordedVitals);
-              notify.success('Vitals recorded successfully.');
+              if (!signedConsultationId && recordedVitals.rosCategory && rosCategory === 'EssentiallyNormal') {
+                setRosCategory(normalizeRosCategoryCode(recordedVitals.rosCategory));
+              }
+              setPatientChart((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      vitalsHistory: [
+                        recordedVitals,
+                        ...(prev.vitalsHistory || []).filter((v) => v.id !== recordedVitals.id),
+                      ],
+                    }
+                  : prev
+              );
               setRecordVitalsModalVisible(false);
+            }}
+          />
+        )}
+
+        {/* Edit Vitals Modal */}
+        {selectedPatient && (
+          <EditVitalsModal
+            visible={editVitalsModalVisible}
+            onClose={() => setEditVitalsModalVisible(false)}
+            patient={patientRecord}
+            queueItemId={selectedPatient.id}
+            visitType={selectedPatient.visitType}
+            initialVitals={latestDisplayedVitals}
+            currentStaffId={signer?.id}
+            currentStaffName={signerStaff ? formatStaffName(signerStaff) : signer?.name}
+            onSuccess={(updatedVitals) => {
+              setVitals(updatedVitals);
+              if (!signedConsultationId && updatedVitals.rosCategory && rosCategory === 'EssentiallyNormal') {
+                setRosCategory(normalizeRosCategoryCode(updatedVitals.rosCategory));
+              }
+              setPatientChart((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      vitalsHistory: [
+                        updatedVitals,
+                        ...(prev.vitalsHistory || []).filter((v) => v.id !== updatedVitals.id),
+                      ],
+                    }
+                  : prev
+              );
+              setEditVitalsModalVisible(false);
             }}
           />
         )}
@@ -5843,7 +8648,7 @@ export default function ConsultationsScreen() {
                 </ThemedText>
               </View>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Review clinical charges and procedures rendered during this encounter. This read-only charge slip will be posted to the Cashier for compilation into the Statement of Account (SOA), statutory discount application (Senior Citizen / PWD / PhilHealth Konsulta), and payment collection.
+                Review clinical charges and procedures rendered during this encounter. This read-only charge slip will be posted to the Cashier for compilation into the Statement of Account (SOA), statutory discount application (Senior Citizen / PWD / PhilHealth YAKAP), and payment collection.
               </ThemedText>
             </View>
 
@@ -6057,13 +8862,6 @@ const styles = StyleSheet.create({
   flexOne: {
     flex: 1,
   },
-  editNotesInlineBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingVertical: 2,
-    paddingHorizontal: theme.spacing.xs,
-  },
   procedureCardActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -6093,9 +8891,6 @@ const styles = StyleSheet.create({
   roomPillActive: {
     borderColor: theme.colors.primary,
     backgroundColor: theme.colors.primaryLight,
-  },
-  orderedDeleteBtn: {
-    padding: theme.spacing.xs,
   },
   procedureHandoffCard: {
     marginTop: theme.spacing.md,
@@ -6172,9 +8967,6 @@ const styles = StyleSheet.create({
   orderedLabNotes: {
     fontStyle: 'italic',
   },
-  orderedLabDeleteBtn: {
-    padding: theme.spacing.xs,
-  },
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -6213,24 +9005,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
   },
+  queueToolbarRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  queueSegmentedScroll: {
+    maxWidth: '100%',
+  },
   queueHeaderActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-  },
-  chipCallBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: theme.radii.xs,
-    backgroundColor: theme.colors.primary,
-    marginLeft: 4,
-  },
-  chipCallBtnText: {
-    fontSize: theme.typography.caption.fontSize,
-    lineHeight: theme.typography.caption.lineHeight,
   },
   callModalContent: {
     gap: theme.spacing.md,
@@ -6433,6 +9221,9 @@ const styles = StyleSheet.create({
   fieldNarrow: {
     width: 120,
   },
+  fieldDispense: {
+    width: 150,
+  },
   rxCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -6484,6 +9275,20 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primarySubtle,
     borderColor: theme.colors.primaryBorder,
   },
+  issuedRowDraft: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+  },
+  draftDocNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.warningBorder,
+    backgroundColor: theme.colors.warningBg,
+  },
   signedCard: {
     backgroundColor: theme.colors.successBg,
     borderColor: theme.colors.successBorder,
@@ -6526,36 +9331,6 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.md,
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.border,
-  },
-  atcBannerCard: {
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.primaryBorder,
-    borderRadius: theme.radii.lg,
-    padding: theme.spacing.md,
-    gap: theme.spacing.sm,
-  },
-  atcHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.sm,
-  },
-  atcTitleGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    flex: 1,
-  },
-  dualModeSwitcher: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: theme.spacing.sm,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
   },
   stationFilterScroll: {
     flexDirection: 'row',
@@ -6614,6 +9389,14 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.urgent,
   },
+  procedureBayBanner: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
   reEvalBanner: {
     backgroundColor: theme.colors.infoBg,
     borderColor: theme.colors.infoBorder,
@@ -6641,10 +9424,31 @@ const styles = StyleSheet.create({
     minWidth: 360,
     gap: theme.spacing.md,
   },
+  leftChartPaneExpanded: {
+    flex: 1,
+    width: '100%',
+  },
+  chartHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexShrink: 0,
+  },
+  objectiveHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
   rightSoapPane: {
     flex: 0.58,
     minWidth: 440,
     gap: theme.spacing.md,
+  },
+  rightSoapPaneExpanded: {
+    flex: 1,
+    width: '100%',
   },
   splitPaneScroll: {
     flex: 1,
@@ -6688,6 +9492,7 @@ const styles = StyleSheet.create({
   chartTabButtonActive: {
     backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primary,
+    ...theme.shadows.brandSubtle,
   },
   credentialBadgesRow: {
     flexDirection: 'row',
@@ -6703,32 +9508,6 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
     alignItems: 'flex-start',
   },
-  handoffBannerCard: {
-    backgroundColor: theme.colors.primaryLight,
-    borderColor: theme.colors.primary,
-    borderWidth: theme.sizes.borderWidth,
-    borderLeftWidth: 4,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.md,
-    gap: theme.spacing.xs,
-  },
-  handoffBannerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: theme.spacing.xs,
-  },
-  handoffTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  handoffRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: theme.spacing.xs,
-    flexWrap: 'wrap',
-  },
   homeInstructionsCard: {
     borderLeftWidth: 3,
     borderLeftColor: theme.colors.primary,
@@ -6737,12 +9516,23 @@ const styles = StyleSheet.create({
     marginVertical: theme.spacing.xs,
   },
   presetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    minHeight: theme.sizes.controlSm,
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 5,
-    borderRadius: theme.radii.full,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
+    paddingVertical: theme.spacing.xs,
     backgroundColor: theme.colors.primaryLight,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primary,
+    borderRadius: theme.radii.full,
+  },
+  presetChipActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  presetChipText: {
+    fontWeight: '600',
   },
   postEncounterContainer: {
     gap: theme.spacing.md,
@@ -6909,28 +9699,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
   },
-  soaDeleteButton: {
-    width: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: theme.sizes.touchTarget,
-  },
   soaQtyStepper: {
     flex: 1.5,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-  },
-  soaStepperBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   soaQtyText: {
     minWidth: 20,
@@ -6993,5 +9767,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
+  },
+  planManagementStack: {
+    gap: theme.spacing.md,
+  },
+  planNotesDivider: {
+    paddingTop: theme.spacing.md,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
+  preSignDraftStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.full,
+    borderWidth: theme.sizes.borderWidth,
+  },
+  preSignDraftStatusSaving: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.borderLight,
+  },
+  preSignDraftStatusSaved: {
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
+  },
+  preSignDraftStatusError: {
+    backgroundColor: theme.colors.emergencySubtle,
+    borderColor: theme.colors.emergencyBorder,
   },
 });

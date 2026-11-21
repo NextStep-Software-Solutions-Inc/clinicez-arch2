@@ -59,6 +59,11 @@ public class RecordExternalDispenseCommandHandler : IRequestHandler<RecordExtern
             throw new NotFoundException($"Encounter with ID '{request.ConsultationId}' was not found.");
         }
 
+        if (!encounter.IsSigned && string.IsNullOrWhiteSpace(encounter.PrescriptionNumber))
+        {
+            throw new BadRequestException("Cannot record external dispensing for an unsigned consultation prescription.");
+        }
+
         encounter.RxDispenseStatus = PrescriptionDispenseStatus.DispensedExternally;
         encounter.RxDispensedPharmacyName = request.ExternalPharmacyName.Trim();
         encounter.RxDispensedPharmacistName = request.PharmacistName?.Trim();

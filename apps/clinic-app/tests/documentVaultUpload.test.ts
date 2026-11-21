@@ -332,5 +332,129 @@ describe('Milestone M3: Document Vault Upload & DateOnly Contract (Features 15 &
       expect(err?.status).toBe(413);
       expect(err?.message).toBe('Payload Too Large');
     });
+
+    test('normalizeAttachmentStaffAttribution replaces generic Clinic Staff placeholders with authenticated actor name', async () => {
+      const { normalizeAttachmentStaffAttribution } = await import(
+        '../components/chart/AttachExternalDocumentModal'
+      );
+      const rawAtt: any = {
+        id: 'att-attr-1',
+        patientId: 'pat-01',
+        recordType: 'OutsideChestXRay',
+        title: 'Chest X-Ray',
+        fileName: 'cxr.png',
+        contentType: 'image/png',
+        fileSizeBytes: 51200,
+        storageUri: 'tenants/t1/records/att-attr-1.cez',
+        documentDate: '2026-11-03',
+        verificationStatus: 'Verified',
+        uploadedByStaffName: 'Clinic Staff',
+        verifiedByStaffName: 'Clinic Staff',
+      };
+
+      const attributed = normalizeAttachmentStaffAttribution(
+        rawAtt,
+        'Dr. Jose Rizal',
+        '11111111-2222-3333-4444-555555555555'
+      );
+      expect(attributed.uploadedByStaffName).toBe('Dr. Jose Rizal');
+      expect(attributed.verifiedByStaffName).toBe('Dr. Jose Rizal');
+      expect(attributed.uploadedByStaffId).toBe('11111111-2222-3333-4444-555555555555');
+      expect(attributed.verifiedByStaffId).toBe('11111111-2222-3333-4444-555555555555');
+
+      const alreadyNamed = normalizeAttachmentStaffAttribution(
+        { ...rawAtt, uploadedByStaffName: 'Nurse Clara Garcia', verifiedByStaffName: 'Dr. Maria Santos' },
+        'Dr. Jose Rizal'
+      );
+      expect(alreadyNamed.uploadedByStaffName).toBe('Nurse Clara Garcia');
+      expect(alreadyNamed.verifiedByStaffName).toBe('Dr. Maria Santos');
+    });
+  });
+
+  describe('Issue #132: Doc Vault Enhancements & Bugfixes', () => {
+    test('Paper COR classification is removed from AttachExternalDocumentModal source', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const modalSource = fs.readFileSync(
+        path.resolve(__dirname, '../components/chart/AttachExternalDocumentModal.tsx'),
+        'utf-8'
+      );
+
+      // Verify Paper COR option is NOT in the classifications
+      expect(modalSource).not.toContain("'Paper COR'");
+      expect(modalSource).not.toContain('"Paper COR"');
+      expect(modalSource).not.toContain('CertificateOfRegistration');
+
+      // Verify remaining 4 classifications are present
+      expect(modalSource).toContain('OutsideChestXRay');
+      expect(modalSource).toContain('Chest X-Ray');
+      expect(modalSource).toContain('MedicalCertificate');
+      expect(modalSource).toContain('Outside MedCert');
+      expect(modalSource).toContain('LabResult');
+      expect(modalSource).toContain('Lab Sheet');
+      expect(modalSource).toContain('Other');
+    });
+
+    test('Patients.screen.tsx uses AttachExternalDocumentModal and does not contain Paper COR', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const screenSource = fs.readFileSync(
+        path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx'),
+        'utf-8'
+      );
+
+      expect(screenSource).not.toContain("'Paper COR'");
+      expect(screenSource).not.toContain('"Paper COR"');
+      expect(screenSource).toContain('<AttachExternalDocumentModal');
+    });
+
+    test('Attachment renaming correctly preserves extension and populates FileName in FormData', () => {
+      const originalFileName = 'raw_scan_001.png';
+      const lastDot = originalFileName.lastIndexOf('.');
+      const ext = originalFileName.substring(lastDot);
+      const customName = 'Chest_XRay_Nov2026';
+
+      const trimmedCustom = customName.trim();
+      const hasExt = Boolean(ext && trimmedCustom.toLowerCase().endsWith(ext.toLowerCase()));
+      const finalFileName = hasExt ? trimmedCustom : `${trimmedCustom}${ext}`;
+
+      expect(finalFileName).toBe('Chest_XRay_Nov2026.png');
+
+      const formData = new FormData();
+      formData.append('PatientId', 'pat-rename-01');
+      formData.append('Title', 'Chest X-Ray');
+      formData.append('FileName', finalFileName);
+      formData.append('File', new File(['content'], finalFileName, { type: 'image/png' }));
+
+      expect(formData.get('FileName')).toBe('Chest_XRay_Nov2026.png');
+      expect((formData.get('File') as File).name).toBe('Chest_XRay_Nov2026.png');
+    });
+
+    test('Attachment renaming safely strips duplicate extension if typed by user', () => {
+      const originalFileName = 'chest_radiograph.pdf';
+      const lastDot = originalFileName.lastIndexOf('.');
+      const ext = originalFileName.substring(lastDot);
+      const customNameWithExt = 'Chest_Radiograph_Verified.pdf';
+
+      const trimmedCustom = customNameWithExt.trim();
+      const hasExt = Boolean(ext && trimmedCustom.toLowerCase().endsWith(ext.toLowerCase()));
+      const finalFileName = hasExt ? trimmedCustom : `${trimmedCustom}${ext}`;
+
+      expect(finalFileName).toBe('Chest_Radiograph_Verified.pdf');
+      expect(finalFileName).not.toBe('Chest_Radiograph_Verified.pdf.pdf');
+    });
+
+    test('ChartTabContentView resolves patientAttachments when patientChart.attachments is empty []', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const contentViewSource = fs.readFileSync(
+        path.resolve(__dirname, '../components/chart/ChartTabContentView.tsx'),
+        'utf-8'
+      );
+
+      // Verify that the truthy array bug is fixed
+      expect(contentViewSource).not.toContain('attachments={patientChart?.attachments || patientAttachments}');
+      expect(contentViewSource).toContain('patientAttachments && patientAttachments.length > 0');
+    });
   });
 });

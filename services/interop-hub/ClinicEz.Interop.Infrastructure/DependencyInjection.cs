@@ -4,9 +4,12 @@ using ClinicEz.Interop.Infrastructure.Background;
 using ClinicEz.Interop.Infrastructure.Persistence;
 using ClinicEz.Interop.Infrastructure.Security;
 using ClinicEz.Interop.Infrastructure.Upstream;
+using ClinicEz.Shared.Persistence;
+using ClinicEz.Shared.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace ClinicEz.Interop.Infrastructure;
@@ -38,6 +41,7 @@ public static class DependencyInjection
         services.AddScoped<IOutboundStore, EfOutboundStore>();
         services.AddScoped<IClaimStore, EfClaimStore>();
         services.AddSingleton<IEnvelopeProtector, EnvelopeProtector>();
+        services.AddPersistentDataProtection<HubDbContext>(configuration, null, "ClinicEz.InteropHub");
 
         services.AddHttpClient(UpstreamHubClient.HttpClientName, (sp, client) =>
         {
@@ -58,7 +62,9 @@ public static class DependencyInjection
     public static async Task InitializeDatabaseAsync(this IServiceProvider services, CancellationToken ct = default)
     {
         using var scope = services.CreateScope();
+        var env = scope.ServiceProvider.GetService<IHostEnvironment>();
         var db = scope.ServiceProvider.GetRequiredService<HubDbContext>();
+        await db.EnsureDevelopmentDatabaseCreatedAsync(env, cancellationToken: ct);
         if (db.Database.IsNpgsql()) await db.Database.MigrateAsync(ct);
         else await db.Database.EnsureCreatedAsync(ct);
     }

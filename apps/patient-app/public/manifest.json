@@ -1,0 +1,29 @@
+{
+  "short_name": "Clinic EZ",
+  "name": "Clinic EZ Patient",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/clinic-ez_mark.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#F0FDF9",
+  "theme_color": "#0D6963",
+  "display": "standalone",
+  "orientation": "portrait"
+}

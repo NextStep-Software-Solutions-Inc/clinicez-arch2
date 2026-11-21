@@ -1,8 +1,6 @@
 import axios from "axios";
-import { stripApiPrefix } from "@shared/safe";
-
-// Public endpoints do not require Clerk authentication
-const API_BASE = typeof window !== "undefined" ? "" : stripApiPrefix(process.env.NEXT_PUBLIC_CLINIC_API_URL || "http://localhost:5245");
+import { joinApiUrl } from "@shared/safe";
+import { getPortalApiUrl } from "@/utils/domain";
 
 export interface PublicRxItem {
   itemId: string;
@@ -22,28 +20,32 @@ export interface PublicRxUploadInfo {
   prescriptionNumber: string;
   issuedAt: string;
   clinicName: string;
-  clinicAddress: string;
-  clinicContact: string;
-  doctorName: string;
-  doctorPrcLicense: string;
-  doctorPtr?: string;
-  doctorS2License?: string;
-  patientName: string;
-  patientInitials: string;
-  patientAge: number;
-  patientGender: string;
-  patientAllergies?: string;
-  clinicalDiagnosis?: string;
-  items: PublicRxItem[];
+  clinicAddress?: string | null;
+  clinicContact?: string | null;
+  doctorName?: string | null;
+  doctorPrcLicense?: string | null;
+  doctorPtr?: string | null;
+  doctorS2License?: string | null;
+  patientName?: string | null;
+  patientInitials?: string | null;
+  patientAge?: number | null;
+  patientGender?: string | null;
+  patientAllergies?: string | null;
+  clinicalDiagnosis?: string | null;
+  items?: PublicRxItem[];
   dispenseStatus: string;
   isValid: boolean;
   isAlreadyDispensed: boolean;
-  dispensedPharmacyName?: string;
-  dispensedReceiptNumber?: string;
-  dispensedAt?: string;
-  dispenseNotes?: string;
-  expiresAt?: string;
+  dispensedPharmacyName?: string | null;
+  dispensedReceiptNumber?: string | null;
+  dispensedAt?: string | null;
+  dispenseNotes?: string | null;
+  expiresAt?: string | null;
   isExpired: boolean;
+  hasDangerousDrug?: boolean;
+  itemCount?: number;
+  syncStatus?: string;
+  isOfflinePending?: boolean;
 }
 
 export interface SubmitRxDispensePayload {
@@ -60,10 +62,17 @@ export interface SubmitRxDispensePayload {
 export const dropzoneService = {
   // e-Prescription Dropzone
   getRxUploadInfo: async (token: string): Promise<PublicRxUploadInfo> => {
-    const res = await axios.get<{ data: PublicRxUploadInfo }>(
-      `${API_BASE}/api/v1/public/rx-upload/${token}/info`
+    const portalApiUrl = getPortalApiUrl();
+    const targetUrl = joinApiUrl(
+      portalApiUrl,
+      `/public/rx-upload/${encodeURIComponent(token)}/info`
     );
-    return res.data.data;
+
+    const res = await axios.get<{ succeeded?: boolean; success?: boolean; data?: PublicRxUploadInfo } & PublicRxUploadInfo>(
+      targetUrl
+    );
+    const body = res.data;
+    return (body.data || body) as PublicRxUploadInfo;
   },
 
   submitRxDispense: async (
@@ -71,6 +80,8 @@ export const dropzoneService = {
     payload: SubmitRxDispensePayload,
     onProgress?: (progress: number) => void
   ) => {
+    const portalApiUrl = getPortalApiUrl();
+
     if (payload.file) {
       const formData = new FormData();
       formData.append("externalPharmacyName", payload.externalPharmacyName);
@@ -81,8 +92,13 @@ export const dropzoneService = {
       if (payload.notes) formData.append("notes", payload.notes);
       formData.append("file", payload.file);
 
+      const targetUrl = joinApiUrl(
+        portalApiUrl,
+        `/public/rx-upload/${encodeURIComponent(token)}/multipart`
+      );
+
       const res = await axios.post(
-        `${API_BASE}/api/v1/public/rx-upload/${token}/multipart`,
+        targetUrl,
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
@@ -96,8 +112,13 @@ export const dropzoneService = {
       );
       return res.data;
     } else {
+      const targetUrl = joinApiUrl(
+        portalApiUrl,
+        `/public/rx-upload/${encodeURIComponent(token)}`
+      );
+
       const res = await axios.post(
-        `${API_BASE}/api/v1/public/rx-upload/${token}`,
+        targetUrl,
         {
           externalPharmacyName: payload.externalPharmacyName,
           externalBranchLocation: payload.externalBranchLocation,

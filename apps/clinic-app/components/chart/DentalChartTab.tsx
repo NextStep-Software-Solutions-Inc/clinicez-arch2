@@ -13,6 +13,7 @@ import {
 } from '../ui';
 import {
   clinicService,
+  formatClinicDate,
   type ClinicPatient,
   type PatientChart,
   type ClinicalProcedureRecord,
@@ -163,17 +164,7 @@ export function getToothStatusColor(status?: ToothStatus | string): {
 
 function formatRecordedDate(dateStr?: string | null): string {
   if (!dateStr) return 'Just now';
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toLocaleDateString([], {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return dateStr;
-  }
+  return formatClinicDate(dateStr, { fallback: dateStr });
 }
 
 export default function DentalChartTab({
@@ -492,6 +483,7 @@ export default function DentalChartTab({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.gridScrollViewport}
           contentContainerStyle={styles.gridScrollContent}
         >
           <View style={styles.quadrantGrid} testID="odontogram-grid">
@@ -697,18 +689,15 @@ export default function DentalChartTab({
                             ) : null}
                           </View>
                           {canVoidRecords ? (
-                            <Pressable
-                              accessibilityRole="button"
+                            <Button
+                              variant="dangerGhost"
+                              size="xs"
+                              icon="close"
+                              title="Void"
                               accessibilityLabel={`Void ${cond.status} on Tooth #${selectedToothNumber}`}
-                              onPress={() => handleVoidCondition(selectedToothNumber, cond.id || cond.status)}
                               testID={`tab-void-condition-${recKey}`}
-                              style={styles.removeConditionBtn}
-                            >
-                              <Icon name="close" size={14} color={theme.colors.warningText} />
-                              <ThemedText variant="captionBold" color={theme.colors.warningText}>
-                                Void
-                              </ThemedText>
-                            </Pressable>
+                              onPress={() => handleVoidCondition(selectedToothNumber, cond.id || cond.status)}
+                            />
                           ) : null}
                         </View>
 
@@ -767,18 +756,15 @@ export default function DentalChartTab({
                             </ThemedText>
                           </View>
                           {canVoidRecords ? (
-                            <Pressable
-                              accessibilityRole="button"
+                            <Button
+                              variant="dangerGhost"
+                              size="xs"
+                              icon="close"
+                              title="Void"
                               accessibilityLabel={`Void historical ${cond.status} on Tooth #${selectedToothNumber}`}
-                              onPress={() => handleVoidCondition(selectedToothNumber, cond.id || cond.status)}
                               testID={`tab-void-condition-${recKey}`}
-                              style={styles.removeConditionBtn}
-                            >
-                              <Icon name="close" size={14} color={theme.colors.warningText} />
-                              <ThemedText variant="captionBold" color={theme.colors.warningText}>
-                                Void
-                              </ThemedText>
-                            </Pressable>
+                              onPress={() => handleVoidCondition(selectedToothNumber, cond.id || cond.status)}
+                            />
                           ) : null}
                         </View>
 
@@ -906,11 +892,7 @@ export default function DentalChartTab({
                         </View>
                         <ThemedText variant="caption" color={theme.colors.textSecondary}>
                           {proc.performedAt || proc.scheduledAt
-                            ? new Date(proc.performedAt || proc.scheduledAt).toLocaleDateString([], {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                              })
+                            ? formatClinicDate(proc.performedAt || proc.scheduledAt)
                             : 'Date recorded'}
                           {proc.orderedByDoctorName ? ` • Provider: ${proc.orderedByDoctorName}` : ''}
                         </ThemedText>
@@ -971,8 +953,12 @@ const styles = StyleSheet.create({
   dentitionSwitcher: {
     width: 220,
   },
+  gridScrollViewport: {
+    width: '100%',
+  },
   gridScrollContent: {
     flexGrow: 1,
+    minWidth: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -980,10 +966,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceSubtle,
     borderRadius: theme.radii.md,
     padding: theme.spacing.md,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+    alignItems: 'center',
     gap: theme.spacing.md,
-    minWidth: '100%',
   },
   archContainer: {
     alignItems: 'center',
@@ -1016,6 +1002,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.full,
   },
   occlusalPlane: {
+    alignSelf: 'stretch',
     height: 1,
     backgroundColor: theme.colors.border,
     marginVertical: theme.spacing.xs,
@@ -1137,13 +1124,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-  },
-  removeConditionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2,
-    paddingHorizontal: theme.spacing.xs,
   },
   conditionNotes: {
     fontStyle: 'italic',

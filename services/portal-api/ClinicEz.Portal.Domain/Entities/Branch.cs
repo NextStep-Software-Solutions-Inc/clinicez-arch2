@@ -32,11 +32,16 @@ public class Branch : BaseEntity
     public string? PhilHealthAccreditationNumber { get; set; }
     public string? PhilHealthPmccNumber { get; set; }
     public string? PhilHealthSoftwareCertificateId { get; set; }
-    public string? PhilHealthEncryptedUsername { get; set; }
-    public string? PhilHealthEncryptedPassword { get; set; }
+    public string? PhilHealthEncryptedSecretKey { get; set; }
     public string? PhilHealthEncryptedCipherKey { get; set; }
-    public string? PhilHealthKonsultaEndpoint { get; set; } = "https://staging.philhealth.gov.ph/KONSULTA/SOAP";
+    public string? PhilHealthBaseUrl { get; set; } = "https://pcapi.philhealth.gov.ph";
     public bool IsPhilHealthAccredited { get; set; } = false;
+
+    // 10-digit Philippine Standard Geographic Code (PSGC) Hierarchy
+    public string? RegionPsgc { get; set; }
+    public string? ProvincePsgc { get; set; }
+    public string? CityMunicipalityPsgc { get; set; }
+    public string? BarangayPsgc { get; set; }
 
     // Associated facilities operating inside this physical branch
     public ICollection<Facility> Facilities { get; set; } = new List<Facility>();

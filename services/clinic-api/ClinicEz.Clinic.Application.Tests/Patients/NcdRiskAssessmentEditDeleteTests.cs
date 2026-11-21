@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Application.Features.Patients.Queries;
-using ClinicEz.Clinic.Application.Features.Patients.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Persistence;
@@ -251,10 +250,8 @@ public class NcdRiskAssessmentEditDeleteTests
         db.NcdRiskAssessments.AddRange(activeRecord, voidedRecord);
         await db.SaveChangesAsync();
 
-        var ingestionService = Substitute.For<ILegacyPatientProfileIngestionService>();
         var handler = new GetPatientNcdRiskAssessmentsQueryHandler(
-            new Repository<NcdRiskAssessment>(db, _sieveProcessor),
-            ingestionService);
+            new Repository<NcdRiskAssessment>(db, _sieveProcessor));
 
         // 1. By default: only active records returned
         var activeOnlyResult = await handler.Handle(new GetPatientNcdRiskAssessmentsQuery(patientId, IncludeVoided: false), CancellationToken.None);

@@ -4,7 +4,7 @@ import React, { useMemo } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { BillingPlan, BillingInfo } from "@/services/billing.service";
 import { salesContactHref } from "@/config/site";
-import { formatTierPricing } from "@/app/(main)/pricing/_components/PricingClient";
+import { formatTierPricing } from "@/lib/planPricing";
 
 interface PricingPlansSectionProps {
   tiers: BillingPlan[];

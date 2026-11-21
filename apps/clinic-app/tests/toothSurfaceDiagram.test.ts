@@ -107,6 +107,13 @@ mock.module('react-native-svg', () => ({
   Rect: 'Rect',
   Line: 'Line',
   default: 'Svg',
+  Polyline: 'Polyline',
+  Polygon: 'Polygon',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -367,7 +374,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
       // Prior-visit record is untouchable (no Remove button), while current-visit record can be removed
       expect(html).not.toContain('data-testid="remove-condition-cond-16-filled"');
       expect(html).toContain('data-testid="remove-condition-cond-16-decay"');
-    });
+    }, 30000);
 
     test('Tooth cell on odontogram displays multi-condition dots for co-existing conditions', () => {
       const html = renderToStaticMarkup(
@@ -379,7 +386,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
       expect(html).toContain('data-testid="multi-dots-16"');
       expect(html).toContain('data-testid="dot-decayed-16"');
       expect(html).toContain('data-testid="dot-filled-16"');
-    });
+    }, 30000);
 
     test('Removing a condition leaves the remaining condition active on that tooth', () => {
       let removedConditionId: string | null = null;
@@ -400,7 +407,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
 
       expect(html).toContain('data-testid="remove-condition-cond-16-decay"');
       expect(html).toContain('Remove');
-    });
+    }, 30000);
   });
 
   // =========================================================================

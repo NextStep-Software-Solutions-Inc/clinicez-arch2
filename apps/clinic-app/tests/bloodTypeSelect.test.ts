@@ -74,33 +74,23 @@ mock.module('../constants/fonts', () => ({
 }));
 
 const {
-  STANDARD_BLOOD_TYPES,
-  BLOOD_TYPE_METADATA,
   isStandardBloodType,
+  getBloodTypeMeta,
 } = await import('@shared/safe');
 
 const {
-  RH_POSITIVE_TYPES,
-  RH_NEGATIVE_TYPES,
-  BLOOD_TYPE_OPTIONS,
+  partitionBloodTypeOptions,
 } = await import('../constants/bloodTypes');
 
 const { default: BloodTypeSelect } = await import('../components/ui/BloodTypeSelect');
 
 describe('Blood Type Standard Selection Suite', () => {
-  test('BTS-1: STANDARD_BLOOD_TYPES defines exactly the 8 standard ABO/Rh types plus Unknown', () => {
-    expect(STANDARD_BLOOD_TYPES).toEqual([
-      'A+',
-      'A-',
-      'B+',
-      'B-',
-      'AB+',
-      'AB-',
-      'O+',
-      'O-',
-      'Unknown',
-    ]);
-    expect(STANDARD_BLOOD_TYPES.length).toBe(9);
+  test('BTS-1: isStandardBloodType validates standard ABO/Rh types and Unknown', () => {
+    const valid = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'];
+    for (const bt of valid) {
+      expect(isStandardBloodType(bt)).toBe(true);
+    }
+    expect(valid.length).toBe(9);
   });
 
   test('BTS-2: isStandardBloodType validates standard strings and rejects open-text garbage', () => {
@@ -117,20 +107,31 @@ describe('Blood Type Standard Selection Suite', () => {
     expect(isStandardBloodType(undefined)).toBe(false);
   });
 
-  test('BTS-3: BLOOD_TYPE_METADATA contains complete antigen and Rh factor details', () => {
-    expect(BLOOD_TYPE_METADATA['O+'].rhFactor).toBe('Positive');
-    expect(BLOOD_TYPE_METADATA['O+'].antigen).toBe('O');
+  test('BTS-3: getBloodTypeMeta dynamically generates antigen and Rh factor details', () => {
+    expect(getBloodTypeMeta('O+').rhFactor).toBe('Positive');
+    expect(getBloodTypeMeta('O+').antigen).toBe('O');
 
-    expect(BLOOD_TYPE_METADATA['AB-'].rhFactor).toBe('Negative');
-    expect(BLOOD_TYPE_METADATA['AB-'].antigen).toBe('AB');
+    expect(getBloodTypeMeta('AB-').rhFactor).toBe('Negative');
+    expect(getBloodTypeMeta('AB-').antigen).toBe('AB');
 
-    expect(BLOOD_TYPE_METADATA['Unknown'].rhFactor).toBe('Unknown');
+    expect(getBloodTypeMeta('Unknown').rhFactor).toBe('Unknown');
   });
 
-  test('BTS-4: RH_POSITIVE_TYPES and RH_NEGATIVE_TYPES partition ABO blood groups', () => {
-    expect(RH_POSITIVE_TYPES).toEqual(['A+', 'B+', 'AB+', 'O+']);
-    expect(RH_NEGATIVE_TYPES).toEqual(['A-', 'B-', 'AB-', 'O-']);
-    expect(BLOOD_TYPE_OPTIONS.length).toBe(9);
+  test('BTS-4: partitionBloodTypeOptions dynamically partitions ABO blood groups', () => {
+    const options = [
+      { code: 'A+', label: 'A+' },
+      { code: 'A-', label: 'A-' },
+      { code: 'B+', label: 'B+' },
+      { code: 'B-', label: 'B-' },
+      { code: 'AB+', label: 'AB+' },
+      { code: 'AB-', label: 'AB-' },
+      { code: 'O+', label: 'O+' },
+      { code: 'O-', label: 'O-' },
+      { code: 'UNKNOWN', label: 'Unknown' },
+    ];
+    const { rhPositive, rhNegative } = partitionBloodTypeOptions(options);
+    expect(rhPositive.map((o) => o.code)).toEqual(['A+', 'B+', 'AB+', 'O+']);
+    expect(rhNegative.map((o) => o.code)).toEqual(['A-', 'B-', 'AB-', 'O-']);
   });
 
   test('BTS-5: BloodTypeSelect renders with placeholder when unselected', () => {

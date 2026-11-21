@@ -28,7 +28,7 @@ internal static class UploadedFileGuard
         if (!PatientFileLimits.IsPdfOrImage(file.ContentType))
             return Problem(
                 StatusCodes.Status415UnsupportedMediaType, field, ErrorCodes.FileTypeNotAllowed,
-                "Only PDF, JPEG, PNG and HEIC files are accepted.");
+                "Only PDF, JPEG, PNG, HEIC and WEBP files are accepted.");
 
         return null;
     }

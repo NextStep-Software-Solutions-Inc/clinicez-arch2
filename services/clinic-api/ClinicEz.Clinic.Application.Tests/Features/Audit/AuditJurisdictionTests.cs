@@ -43,7 +43,7 @@ public class AuditJurisdictionTests
 
         using (seedContext)
         {
-            var entryA = new ClinicAuditEntry
+            var entryA = new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -60,7 +60,7 @@ public class AuditJurisdictionTests
                 Description = "Failed login attempt for Clinic A staff"
             };
 
-            var entryB = new ClinicAuditEntry
+            var entryB = new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -77,7 +77,7 @@ public class AuditJurisdictionTests
                 Description = "Consultation signed for Clinic B"
             };
 
-            await seedContext.ClinicAuditEntries.AddRangeAsync(entryA, entryB);
+            await seedContext.AuditEntries.AddRangeAsync(entryA, entryB);
             await seedContext.SaveChangesAsync();
         }
 
@@ -88,7 +88,7 @@ public class AuditJurisdictionTests
 
         using (var contextA = new ApplicationDbContext(options, config, clinicContextA))
         {
-            var visibleAudit = await contextA.ClinicAuditEntries.ToListAsync();
+            var visibleAudit = await contextA.AuditEntries.ToListAsync();
 
             // Assert: Clinic A only sees Clinic A's audit entry
             visibleAudit.Should().HaveCount(1);
@@ -104,7 +104,7 @@ public class AuditJurisdictionTests
 
         using (var contextB = new ApplicationDbContext(options, config, clinicContextB))
         {
-            var visibleAuditB = await contextB.ClinicAuditEntries.ToListAsync();
+            var visibleAuditB = await contextB.AuditEntries.ToListAsync();
 
             // Assert: Clinic B only sees Clinic B's audit entry
             visibleAuditB.Should().HaveCount(1);
@@ -122,7 +122,7 @@ public class AuditJurisdictionTests
 
         using (seedContext)
         {
-            await seedContext.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+            await seedContext.AuditEntries.AddAsync(new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -147,7 +147,7 @@ public class AuditJurisdictionTests
 
         using (var queryContext = new ApplicationDbContext(options, config, foreignContext))
         {
-            var results = await queryContext.ClinicAuditEntries.ToListAsync();
+            var results = await queryContext.AuditEntries.ToListAsync();
 
             // Assert
             results.Should().BeEmpty();
@@ -162,8 +162,8 @@ public class AuditJurisdictionTests
 
         using (seedContext)
         {
-            await seedContext.ClinicAuditEntries.AddRangeAsync(
-                new ClinicAuditEntry
+            await seedContext.AuditEntries.AddRangeAsync(
+                new AuditEntry
                 {
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
@@ -177,7 +177,7 @@ public class AuditJurisdictionTests
                     Outcome = "Success",
                     Description = "Invoice created"
                 },
-                new ClinicAuditEntry
+                new AuditEntry
                 {
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
@@ -200,7 +200,7 @@ public class AuditJurisdictionTests
 
         using (var queryContext = new ApplicationDbContext(options, config, clinicContextA))
         {
-            var allEntries = await queryContext.ClinicAuditEntries.IgnoreQueryFilters().ToListAsync();
+            var allEntries = await queryContext.AuditEntries.IgnoreQueryFilters().ToListAsync();
             allEntries.Should().HaveCount(2);
         }
     }

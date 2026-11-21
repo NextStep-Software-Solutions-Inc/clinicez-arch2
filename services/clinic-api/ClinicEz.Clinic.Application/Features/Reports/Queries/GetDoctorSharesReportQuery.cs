@@ -22,16 +22,16 @@ public class GetDoctorSharesReportQueryHandler : IRequestHandler<GetDoctorShares
 {
     private readonly IRepository<ConsultationEncounter> _consultationRepo;
     private readonly IRepository<Invoice> _invoiceRepo;
-    private readonly IRepository<ClinicalProcedure> _procedureRepo;
+    private readonly IRepository<Procedure> _procedureRepo;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
 
     public GetDoctorSharesReportQueryHandler(
         IRepository<ConsultationEncounter> consultationRepo,
         IRepository<Invoice> invoiceRepo,
-        IRepository<ClinicalProcedure> procedureRepo,
+        IRepository<Procedure> procedureRepo,
         IClinicContext clinicContext,
-        IRepository<ClinicSettings>? settingsRepo = null)
+        IRepository<FacilitySettings>? settingsRepo = null)
     {
         _consultationRepo = consultationRepo;
         _invoiceRepo = invoiceRepo;
@@ -49,7 +49,7 @@ public class GetDoctorSharesReportQueryHandler : IRequestHandler<GetDoctorShares
             ? request.StartDate.Value.ToStartOfDayUtc()
             : end.AddDays(-30);
 
-        ClinicSettings? settings = null;
+        FacilitySettings? settings = null;
         if (_settingsRepo != null)
         {
             settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);

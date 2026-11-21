@@ -16,7 +16,7 @@ namespace ClinicEz.Clinic.Application.Features.CustomFields.Commands;
 
 public sealed record InstallCustomFieldTemplateCommand(
     string TemplateKey,
-    string? EntityType = "ClinicPatient") : IRequest<IReadOnlyList<ClinicCustomFieldDefinitionDto>>;
+    string? EntityType = "Patient") : IRequest<IReadOnlyList<ClinicCustomFieldDefinitionDto>>;
 
 public sealed class InstallCustomFieldTemplateCommandValidator : AbstractValidator<InstallCustomFieldTemplateCommand>
 {
@@ -29,12 +29,12 @@ public sealed class InstallCustomFieldTemplateCommandValidator : AbstractValidat
 
 public sealed class InstallCustomFieldTemplateCommandHandler : IRequestHandler<InstallCustomFieldTemplateCommand, IReadOnlyList<ClinicCustomFieldDefinitionDto>>
 {
-    private readonly IRepository<ClinicCustomFieldDefinition> _repo;
+    private readonly IRepository<CustomFieldDefinition> _repo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public InstallCustomFieldTemplateCommandHandler(
-        IRepository<ClinicCustomFieldDefinition> repo,
+        IRepository<CustomFieldDefinition> repo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -59,6 +59,27 @@ public sealed class InstallCustomFieldTemplateCommandHandler : IRequestHandler<I
 
         var existingMap = existingFields.ToDictionary(f => f.FieldKey, StringComparer.OrdinalIgnoreCase);
 
+        if (string.Equals(template.Key, ClinicCustomFieldTemplatesCatalog.PatientIntakeContactsKey, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(template.Key, ClinicCustomFieldTemplatesCatalog.PatientIntakeAddressKey, StringComparison.OrdinalIgnoreCase))
+        {
+            var retiredPrimaryAddressKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "primary_address_line",
+                "primary_barangay",
+                "primary_city",
+                "primary_province",
+                "primary_postal_code",
+                "secondary_city_province"
+            };
+
+            foreach (var obsolete in existingFields.Where(f => retiredPrimaryAddressKeys.Contains(f.FieldKey) && f.IsActive))
+            {
+                obsolete.IsActive = false;
+                obsolete.UpdatedAt = DateTime.UtcNow;
+                obsolete.UpdatedBy = "ClinicAdmin";
+            }
+        }
+
         foreach (var fieldTemplate in template.Fields)
         {
             if (existingMap.TryGetValue(fieldTemplate.FieldKey, out var existing))
@@ -73,6 +94,7 @@ public sealed class InstallCustomFieldTemplateCommandHandler : IRequestHandler<I
                 existing.Placeholder = fieldTemplate.Placeholder;
                 existing.VisibilityRuleJson = fieldTemplate.VisibilityRuleJson;
                 existing.ConditionalOptionsJson = fieldTemplate.ConditionalOptionsJson;
+                existing.BoundaryMode = fieldTemplate.BoundaryMode;
                 existing.IsActive = true;
                 existing.IsDeleted = false;
                 existing.DeletedAt = null;
@@ -83,7 +105,7 @@ public sealed class InstallCustomFieldTemplateCommandHandler : IRequestHandler<I
             else
             {
                 // Create new field definition
-                var newEntity = new ClinicCustomFieldDefinition
+                var newEntity = new CustomFieldDefinition
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,
@@ -99,6 +121,7 @@ public sealed class InstallCustomFieldTemplateCommandHandler : IRequestHandler<I
                     Placeholder = fieldTemplate.Placeholder,
                     VisibilityRuleJson = fieldTemplate.VisibilityRuleJson,
                     ConditionalOptionsJson = fieldTemplate.ConditionalOptionsJson,
+                    BoundaryMode = fieldTemplate.BoundaryMode,
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = "ClinicAdmin"
@@ -134,7 +157,8 @@ public sealed class InstallCustomFieldTemplateCommandHandler : IRequestHandler<I
             f.IsActive,
             f.CreatedAt,
             f.VisibilityRuleJson,
-            f.ConditionalOptionsJson
+            f.ConditionalOptionsJson,
+            f.BoundaryMode
         )).ToList().AsReadOnly();
     }
 }

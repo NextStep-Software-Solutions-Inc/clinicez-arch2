@@ -3,17 +3,20 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Api.Authorization;
+using ClinicEz.Clinic.Application.Common.Helpers;
+using ClinicEz.Clinic.Application.Features.Settings.Commands;
 using ClinicEz.Clinic.Application.Features.Staff.Commands;
 using ClinicEz.Clinic.Application.Features.Staff.DTOs;
 using ClinicEz.Clinic.Application.Features.Staff.Queries;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Enums;
-using ClinicEz.Shared.Common;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
-
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Documents.Configuration;
+using MediatR;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace ClinicEz.Clinic.Api.Controllers;
 
@@ -65,7 +68,15 @@ public sealed class StaffController : ControllerBase
             request.Specialty,
             request.PhilHealthPan,
             SignatureSpecimen: request.SignatureSpecimen,
-            DefaultSignatureMode: request.DefaultSignatureMode);
+            DefaultSignatureMode: request.DefaultSignatureMode,
+            PreferencesJson: request.PreferencesJson,
+            IsDirectoryOptIn: request.IsDirectoryOptIn,
+            PrcExpiryDate: request.PrcExpiryDate,
+            PrcEvidenceObjectKey: request.PrcEvidenceObjectKey,
+            VerificationContact: request.VerificationContact,
+            PublicBio: request.PublicBio,
+            AvatarUrl: request.AvatarUrl,
+            SkipPendingVerificationSync: request.SkipPendingVerificationSync);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Profile updated successfully."));
@@ -133,7 +144,14 @@ public sealed class StaffController : ControllerBase
                 RequestedRole: request.Role,
                 RequestedClinicRoleId: request.ClinicRoleId,
                 SignatureSpecimen: request.SignatureSpecimen,
-                DefaultSignatureMode: request.DefaultSignatureMode);
+                DefaultSignatureMode: request.DefaultSignatureMode,
+                IsDirectoryOptIn: request.IsDirectoryOptIn,
+                PrcExpiryDate: request.PrcExpiryDate,
+                PrcEvidenceObjectKey: request.PrcEvidenceObjectKey,
+                VerificationContact: request.VerificationContact,
+                PublicBio: request.PublicBio,
+                AvatarUrl: request.AvatarUrl,
+                SkipPendingVerificationSync: request.SkipPendingVerificationSync);
 
             var myResult = await _sender.Send(myCommand, ct);
             return Ok(ApiResponse<StaffMemberDto>.Success(myResult, "Profile updated successfully."));
@@ -158,10 +176,85 @@ public sealed class StaffController : ControllerBase
             request.AssignedRoomIds,
             request.ClearAssignedRoom,
             SignatureSpecimen: request.SignatureSpecimen,
-            DefaultSignatureMode: request.DefaultSignatureMode);
+            DefaultSignatureMode: request.DefaultSignatureMode,
+            IsDirectoryOptIn: request.IsDirectoryOptIn,
+            PrcExpiryDate: request.PrcExpiryDate,
+            PrcEvidenceObjectKey: request.PrcEvidenceObjectKey,
+            VerificationContact: request.VerificationContact,
+            PublicBio: request.PublicBio,
+            AvatarUrl: request.AvatarUrl,
+            SkipPendingVerificationSync: request.SkipPendingVerificationSync);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member updated successfully."));
+    }
+
+    [HttpPost("{id:guid}/prc-proof")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<ApiResponse<EvidenceProofUploadResultDto>>> UploadPrcProof(
+        Guid id,
+        [FromForm] IFormFile? file,
+        [FromQuery] bool skipPendingVerificationSync = false,
+        [FromQuery] bool stageOnly = false,
+        CancellationToken ct = default)
+    {
+        var (fileName, contentType, length, bytes) = await VerificationEvidenceHelper.ReadValidatedFormFileAsync(file, ct);
+        var result = await _sender.Send(new UploadStaffPrcProofCommand(id, fileName, contentType, length, bytes, skipPendingVerificationSync, stageOnly), ct);
+        return Ok(ApiResponse<EvidenceProofUploadResultDto>.Success(result, "PRC proof uploaded."));
+    }
+
+    [HttpGet("{id:guid}/prc-proof")]
+    [HasPermission(ClinicPermissions.StaffRead)]
+    public async Task<IActionResult> GetPrcProof(Guid id, CancellationToken ct)
+    {
+        var file = await _sender.Send(new GetStaffPrcProofEvidenceQuery(id), ct);
+        if (file == null)
+        {
+            return NotFound(ApiResponse<object>.Fail("No PRC proof document is uploaded for this clinician."));
+        }
+
+        Response.Headers.CacheControl = "private, no-store";
+        Response.Headers.XContentTypeOptions = "nosniff";
+        Response.Headers.ContentDisposition = $"inline; filename=\"{file.FileName}\"";
+        return File(file.Bytes, file.ContentType);
+    }
+
+    [HttpPost("{id:guid}/submit-verification")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> SubmitVerification(Guid id, CancellationToken ct)
+    {
+        var result = await _sender.Send(new SubmitPractitionerVerificationCommand(id), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Practitioner verification submitted."));
+    }
+
+    [HttpPut("{id:guid}/verification/pending")]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> UpdatePendingVerification(Guid id, CancellationToken ct)
+    {
+        bool isSelf = _clinicContext.StaffId.HasValue && _clinicContext.StaffId.Value == id;
+        bool hasManage = _clinicContext.HasPermission(ClinicPermissions.StaffManage);
+
+        if (!hasManage && !isSelf)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<StaffMemberDto>.Fail(
+                $"Forbidden: Insufficient permissions. Required permission '{ClinicPermissions.StaffManage}' is not granted for this clinic role.",
+                new[] { new ApiFieldError("Permission", "FORBIDDEN", $"Missing required permission: {ClinicPermissions.StaffManage}") }));
+        }
+
+        var result = await _sender.Send(new UpdatePendingPractitionerVerificationCommand(id), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Pending practitioner verification submission updated."));
+    }
+
+    [HttpPost("{id:guid}/withdraw-verification")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> WithdrawVerification(
+        Guid id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] WithdrawPractitionerVerificationRequest? request,
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new WithdrawPractitionerVerificationCommand(id, request?.Reason, skipPendingVerificationSync), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Practitioner directory verification withdrawn."));
     }
 
     [HttpPost("{id:guid}/reset-password")]
@@ -171,29 +264,110 @@ public sealed class StaffController : ControllerBase
         [FromBody] ResetStaffPasswordRequest? request,
         CancellationToken ct)
     {
-        var result = await _sender.Send(new ResetStaffPasswordCommand(id, request?.TemporaryPassword), ct);
+        var result = await _sender.Send(
+            new ResetStaffPasswordCommand(
+                id,
+                request?.TemporaryPassword,
+                request?.SendResetEmail ?? false,
+                request?.GenerateResetLink ?? false),
+            ct);
         return Ok(ApiResponse<ResetStaffPasswordResult>.Success(result, "Staff password reset successfully."));
     }
 
     [HttpDelete("{id:guid}")]
     [HasPermission(ClinicPermissions.StaffManage)]
-    public async Task<ActionResult<ApiResponse<bool>>> DeactivateStaffMember(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<bool>>> DeactivateStaffMember(
+        Guid id,
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new DeactivateStaffMemberCommand(id), ct);
+        var result = await _sender.Send(new DeactivateStaffMemberCommand(id, skipPendingVerificationSync), ct);
         return Ok(ApiResponse<bool>.Success(result, "Staff member deactivated successfully."));
     }
 
+    [HttpPost("{id:guid}/resend-invite")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ResendInvite(
+        Guid id,
+        [FromBody] ResendStaffInviteRequest? request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new ResendStaffInvitationCommand(id, request?.SendInviteEmail ?? true), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff invitation resent successfully."));
+    }
+
+    [HttpPost("{id:guid}/revoke-invite")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<bool>>> RevokeInvite(Guid id, CancellationToken ct)
+    {
+        var result = await _sender.Send(new RevokeStaffInvitationCommand(id), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Staff invitation revoked successfully."));
+    }
+
+    [HttpPost("{id:guid}/suspend")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> SuspendStaffMember(
+        Guid id,
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new SuspendStaffMemberCommand(id, skipPendingVerificationSync), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member suspended successfully."));
+    }
+
     [HttpPost("{id:guid}/activate")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ActivateStaffMember(
+        Guid id,
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new ActivateStaffMemberCommand(id, skipPendingVerificationSync), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member activated successfully."));
+    }
+
     [HttpPost("{id:guid}/reactivate")]
     [HasPermission(ClinicPermissions.StaffManage)]
-    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ActivateStaffMember(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ReactivateStaffMember(
+        Guid id,
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new ActivateStaffMemberCommand(id), ct);
-        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member activated successfully."));
+        var result = await _sender.Send(new ReactivateStaffMemberCommand(id, skipPendingVerificationSync), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member reactivated successfully."));
+    }
+
+    [HttpPost("{id:guid}/reinvite")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ReinviteStaffMember(
+        Guid id,
+        [FromBody] ResendStaffInviteRequest? request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new ReinviteStaffMemberCommand(id, request?.SendInviteEmail ?? true), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member re-invited successfully."));
+    }
+
+    [HttpDelete("{id:guid}/permanent")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<bool>>> RemoveStaffMember(
+        Guid id,
+        [FromQuery] bool skipPendingVerificationSync = false,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new RemoveStaffMemberCommand(id, skipPendingVerificationSync), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Staff member permanently removed from facility directory."));
     }
 }
 
-public sealed record ResetStaffPasswordRequest(string? TemporaryPassword);
+public sealed record ResetStaffPasswordRequest(
+    string? TemporaryPassword = null,
+    bool SendResetEmail = false,
+    bool GenerateResetLink = false);
+
+public sealed record ResendStaffInviteRequest(bool SendInviteEmail = true);
+
+public sealed record WithdrawPractitionerVerificationRequest(string? Reason = null);
 
 public sealed record UpdateStaffMemberRequest(
     string FirstName,
@@ -213,7 +387,14 @@ public sealed record UpdateStaffMemberRequest(
     IReadOnlyList<Guid>? AssignedRoomIds = null,
     bool ClearAssignedRoom = false,
     string? SignatureSpecimen = null,
-    SignatureMode? DefaultSignatureMode = null);
+    SignatureMode? DefaultSignatureMode = null,
+    bool? IsDirectoryOptIn = null,
+    DateOnly? PrcExpiryDate = null,
+    string? PrcEvidenceObjectKey = null,
+    string? VerificationContact = null,
+    string? PublicBio = null,
+    string? AvatarUrl = null,
+    bool SkipPendingVerificationSync = false);
 
 public sealed record UpdateMyProfileRequest(
     string FirstName,
@@ -227,4 +408,12 @@ public sealed record UpdateMyProfileRequest(
     string? Specialty,
     string? PhilHealthPan = null,
     string? SignatureSpecimen = null,
-    SignatureMode? DefaultSignatureMode = null);
+    SignatureMode? DefaultSignatureMode = null,
+    string? PreferencesJson = null,
+    bool? IsDirectoryOptIn = null,
+    DateOnly? PrcExpiryDate = null,
+    string? PrcEvidenceObjectKey = null,
+    string? VerificationContact = null,
+    string? PublicBio = null,
+    string? AvatarUrl = null,
+    bool SkipPendingVerificationSync = false);

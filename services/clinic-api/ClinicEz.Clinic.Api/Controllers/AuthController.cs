@@ -3,11 +3,13 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Features.Auth.DTOs;
 using ClinicEz.Clinic.Infrastructure.Auth;
 using ClinicEz.Clinic.Infrastructure.Context;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.LocalAuth;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -22,9 +24,56 @@ namespace ClinicEz.Clinic.Api.Controllers;
 [EnableRateLimiting(FacilityLocalAuthExtensions.AuthRateLimitPolicy)]
 public sealed class AuthController : ControllerBase
 {
+    public const string RefreshCookieName = "clinicez_clinic_refresh";
+    private const string RefreshCookiePath = "/api/v1/auth";
+    private const string ClientPlatformHeader = "X-Client-Platform";
+
     private readonly IClinicAuthService _auth;
 
     public AuthController(IClinicAuthService auth) => _auth = auth;
+
+    private bool IsWebClient =>
+        Request.Headers.TryGetValue(ClientPlatformHeader, out var platform) &&
+        string.Equals(platform.ToString().Trim(), "web", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsSecureConnection =>
+        Request.IsHttps ||
+        string.Equals(Request.Headers["X-Forwarded-Proto"].ToString().Trim(), "https", StringComparison.OrdinalIgnoreCase);
+
+    private CookieOptions BuildRefreshCookieOptions()
+    {
+        var isHttps = IsSecureConnection;
+        return new()
+        {
+            HttpOnly = true,
+            // Cross-origin HTTPS clinic consoles (e.g. dev/cloud web or localhost -> API domain) need SameSite=None
+            // so HttpOnly refresh cookies are stored and sent on credentialed XHR auth requests (/refresh, /lock, /unlock-*).
+            SameSite = isHttps ? SameSiteMode.None : SameSiteMode.Lax,
+            Secure = isHttps,
+            Path = RefreshCookiePath,
+            IsEssential = true
+            // Intentionally omit Expires/MaxAge so the browser clears it when the browser session ends.
+        };
+    }
+
+    private void AppendRefreshCookie(string refreshToken) =>
+        Response.Cookies.Append(RefreshCookieName, refreshToken, BuildRefreshCookieOptions());
+
+    private void ClearRefreshCookie() =>
+        Response.Cookies.Delete(RefreshCookieName, BuildRefreshCookieOptions());
+
+    private string? ResolveRefreshToken(RefreshRequest? request)
+    {
+        if (!string.IsNullOrWhiteSpace(request?.RefreshToken))
+        {
+            return request.RefreshToken;
+        }
+        if (IsWebClient && Request.Cookies.TryGetValue(RefreshCookieName, out var cookieToken) && !string.IsNullOrWhiteSpace(cookieToken))
+        {
+            return cookieToken;
+        }
+        return null;
+    }
 
     private string? FacilityHeader =>
         Request.Headers.TryGetValue("X-Facility-Slug", out var f) && !string.IsNullOrWhiteSpace(f) ? f.ToString().Trim() : null;
@@ -56,14 +105,94 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("refresh")]
     [AllowAnonymous]
-    public async Task<IActionResult> Refresh([FromBody] RefreshRequest request, CancellationToken ct) =>
-        ToResult(await _auth.RefreshAsync(request.RefreshToken, ct));
+    public async Task<IActionResult> Refresh([FromBody] RefreshRequest? request, CancellationToken ct)
+    {
+        var outcome = await _auth.RefreshAsync(ResolveRefreshToken(request), ct);
+        if (!outcome.Ok && IsWebClient && outcome.Failure == AuthFailure.InvalidToken)
+        {
+            ClearRefreshCookie();
+        }
+        return ToResult(outcome);
+    }
+
+    [HttpPost("lock")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Lock([FromBody] RefreshRequest? request, CancellationToken ct)
+    {
+        var outcome = await _auth.LockSessionAsync(ResolveRefreshToken(request), ct);
+        if (outcome.Failure == AuthFailure.SessionLocked && outcome.LockedSession is not null)
+        {
+            return Ok(ApiResponse<LockedSessionDto>.Success(outcome.LockedSession, "Workstation locked."));
+        }
+        if (!outcome.Ok && IsWebClient && outcome.Failure == AuthFailure.InvalidToken)
+        {
+            ClearRefreshCookie();
+        }
+        return ToResult(outcome);
+    }
+
+    [HttpPost("unlock-pin")]
+    [AllowAnonymous]
+    public async Task<IActionResult> UnlockPin([FromBody] UnlockPinRequest? request, CancellationToken ct)
+    {
+        var token = ResolveRefreshToken(request is null ? null : new RefreshRequest(request.RefreshToken));
+        var outcome = await _auth.UnlockWithPinAsync(token, request?.Pin, ct);
+        if (!outcome.Ok && IsWebClient && outcome.Failure == AuthFailure.InvalidToken)
+        {
+            ClearRefreshCookie();
+        }
+        return ToResult(outcome);
+    }
+
+    [HttpPost("unlock-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> UnlockPassword([FromBody] UnlockPasswordRequest? request, CancellationToken ct)
+    {
+        var token = ResolveRefreshToken(request is null ? null : new RefreshRequest(request.RefreshToken));
+        var outcome = await _auth.UnlockWithPasswordAsync(token, request?.Password, ct);
+        if (!outcome.Ok && IsWebClient && outcome.Failure == AuthFailure.InvalidToken)
+        {
+            ClearRefreshCookie();
+        }
+        return ToResult(outcome);
+    }
+
+    [HttpPost("pin")]
+    [Authorize]
+    public async Task<IActionResult> SetQuickUnlockPin([FromBody] SetQuickUnlockPinRequest request, CancellationToken ct)
+    {
+        if (!TryGetStaffId(out var staffId)) return Unauthorized();
+        var (user, failure, message) = await _auth.SetQuickUnlockPinAsync(staffId, request, ct);
+        if (user is not null)
+        {
+            return Ok(ApiResponse<AuthUserDto>.Success(user, "Quick-unlock PIN saved."));
+        }
+        return ToFailureResult(failure, message);
+    }
+
+    [HttpDelete("pin")]
+    [Authorize]
+    public async Task<IActionResult> RemoveQuickUnlockPin([FromBody] RemoveQuickUnlockPinRequest request, CancellationToken ct)
+    {
+        if (!TryGetStaffId(out var staffId)) return Unauthorized();
+        var (user, failure, message) = await _auth.RemoveQuickUnlockPinAsync(staffId, request, ct);
+        if (user is not null)
+        {
+            return Ok(ApiResponse<AuthUserDto>.Success(user, "Quick-unlock PIN removed."));
+        }
+        return ToFailureResult(failure, message);
+    }
 
     [HttpPost("logout")]
     [AllowAnonymous]
-    public async Task<IActionResult> Logout([FromBody] RefreshRequest request, CancellationToken ct)
+    public async Task<IActionResult> Logout([FromBody] RefreshRequest? request, CancellationToken ct)
     {
-        await _auth.LogoutAsync(request.RefreshToken, ct);
+        var token = ResolveRefreshToken(request);
+        await _auth.LogoutAsync(token, ct);
+        if (IsWebClient || Request.Cookies.ContainsKey(RefreshCookieName))
+        {
+            ClearRefreshCookie();
+        }
         return Ok(ApiResponse<object>.Success(new { }, "Signed out."));
     }
 
@@ -71,6 +200,31 @@ public sealed class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Bootstrap([FromBody] BootstrapRequest request, CancellationToken ct) =>
         ToResult(await _auth.BootstrapAsync(request with { Workspace = request.Workspace ?? WorkspaceHeader }, ct));
+
+    [HttpPost("recover-admin")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RecoverAdmin([FromBody] RecoverAdminRequest request, CancellationToken ct) =>
+        ToResult(await _auth.RecoverAdminAsync(request with { Workspace = request.Workspace ?? WorkspaceHeader }, ct));
+
+    [HttpGet("invitations/{token}")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<ClinicStaffInvitationDetailsDto>>> GetInvitationDetails(string token, CancellationToken ct)
+    {
+        var details = await _auth.GetInvitationDetailsAsync(token, ct);
+        if (details == null)
+        {
+            return NotFound(ApiResponse<ClinicStaffInvitationDetailsDto>.Fail("Invitation was not found or is invalid."));
+        }
+        return Ok(ApiResponse<ClinicStaffInvitationDetailsDto>.Success(details));
+    }
+
+    [HttpPost("invitations/{token}/accept")]
+    [AllowAnonymous]
+    public async Task<IActionResult> AcceptInvitation(string token, [FromBody] AcceptClinicInvitationRequest request, CancellationToken ct)
+    {
+        var outcome = await _auth.AcceptInvitationAsync(token, request.Password, Request.Headers.UserAgent.ToString(), ct);
+        return ToResult(outcome);
+    }
 
     [HttpPost("change-password")]
     [Authorize]
@@ -102,23 +256,58 @@ public sealed class AuthController : ControllerBase
     {
         if (outcome.Ok)
         {
-            return Ok(ApiResponse<AuthTokensDto>.Success(outcome.Tokens!));
+            var tokens = outcome.Tokens!;
+            if (IsWebClient)
+            {
+                if (!string.IsNullOrWhiteSpace(tokens.RefreshToken))
+                {
+                    AppendRefreshCookie(tokens.RefreshToken);
+                }
+                tokens = tokens with { RefreshToken = null };
+            }
+            return Ok(ApiResponse<AuthTokensDto>.Success(tokens));
         }
 
-        var status = outcome.Failure switch
+        if (outcome.Failure == AuthFailure.SessionLocked && outcome.LockedSession is not null)
+        {
+            var lockedResponse = ApiResponse<LockedSessionDto>.Fail(
+                outcome.Message ?? "Workstation is locked.",
+                "SESSION_LOCKED");
+            lockedResponse.Data = outcome.LockedSession;
+            return StatusCode(StatusCodes.Status423Locked, lockedResponse);
+        }
+
+        return ToFailureResult(outcome.Failure, outcome.Message, outcome.Errors);
+    }
+
+    private IActionResult ToFailureResult(AuthFailure failure, string? message, System.Collections.Generic.IReadOnlyList<string>? errorList = null)
+    {
+        var status = failure switch
         {
             AuthFailure.InvalidCredentials => StatusCodes.Status401Unauthorized,
             AuthFailure.InvalidToken => StatusCodes.Status401Unauthorized,
             AuthFailure.AccountLocked => StatusCodes.Status423Locked,
+            AuthFailure.SessionLocked => StatusCodes.Status423Locked,
             AuthFailure.WorkspaceNotFound => StatusCodes.Status404NotFound,
             AuthFailure.NotFound => StatusCodes.Status404NotFound,
             AuthFailure.ActivationRequired => StatusCodes.Status403Forbidden,
-            AuthFailure.LicenseTampered => StatusCodes.Status403Forbidden,
+            AuthFailure.LicenseTampered => StatusCodes.Status400BadRequest,
             AuthFailure.AlreadyBootstrapped => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest
         };
 
-        var errors = outcome.Errors?.Select(e => new ApiFieldError("Password", outcome.Failure.ToString().ToUpperInvariant(), e)).ToArray();
-        return StatusCode(status, ApiResponse<object>.Fail(outcome.Message ?? "Request failed.", errors));
+        var code = failure switch
+        {
+            AuthFailure.AccountLocked => "ACCOUNT_LOCKED",
+            AuthFailure.SessionLocked => "SESSION_LOCKED",
+            _ => failure.ToString().ToUpperInvariant()
+        };
+
+        var errors = errorList?.Select(e => new ApiFieldError("Password", code, e)).ToArray();
+        var response = ApiResponse<object>.Fail(message ?? "Request failed.", errors, code);
+        return StatusCode(status, response);
     }
 }
+
+public sealed record AcceptClinicInvitationRequest(string Password);
+

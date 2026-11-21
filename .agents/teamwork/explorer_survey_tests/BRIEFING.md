@@ -1,53 +1,52 @@
-# BRIEFING — 2026-10-20T02:05:00Z
+# BRIEFING — 2026-11-06T08:09:45Z
 
 ## Mission
-Survey automated test suites and testing infrastructure across clinicez-docs-studio workspace.
+Survey design tokens, linting violations, clinical/developer jargon, and test baseline across `apps/clinic-app` and `packages/comms-sdk`.
 
 ## 🔒 My Identity
 - Archetype: explorer
-- Roles: investigation, test suite survey, synthesis
-- Working directory: /Users/macuser/projects/github/nextstep/clinicez-docs-studio/.agents/teamwork/explorer_survey_tests
-- Original parent: f15f02a3-efcd-418a-934f-74dd68d6a346
-- Milestone: automated-test-infrastructure-survey
+- Roles: read-only investigation, survey design tokens, linting, jargon, and test baseline
+- Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/triage_desk_documentation/.agents/teamwork/explorer_survey_tests/
+- Original parent: 7ef5051f-6d63-475b-9dc4-7c04936e1481
+- Milestone: M0 Exploration / Survey
 
 ## 🔒 Key Constraints
 - Read-only investigation — do NOT implement
-- Inspect test suites, runners, frameworks, fixtures, and commands
-- Identify existing vs missing tests across backend (.NET/xUnit) and frontend (Bun test, design tokens)
-- Deliver 5-component handoff report to handoff.md and send message to parent
+- Never edit production or package source code directly
+- Write all findings to handoff.md in working directory
+- Keep progress.md updated with liveness heartbeats
 
 ## Current Parent
-- Conversation ID: f15f02a3-efcd-418a-934f-74dd68d6a346
-- Updated: 2026-10-20T02:05:00Z
+- Conversation ID: 7ef5051f-6d63-475b-9dc4-7c04936e1481
+- Updated: 2026-11-06T08:09:45Z
 
 ## Investigation State
 - **Explored paths**:
-  - ORIGINAL_REQUEST.md
-  - services/clinic-api/ClinicEz.Clinic.Application.Tests/HardenedDocumentGenerationTests.cs
-  - services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj
-  - packages/design-tokens/src/tokens.test.ts & packages/design-tokens/package.json
-  - apps/clinic-app/package.json, tsconfig.json, scripts/check-tokens.mjs
-  - apps/clinic-app/tests/ (129 files, 2342 tests)
-  - services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService.cs
-  - packages/shared-dotnet/Documents/Configuration/TenantPrintoutConfig.cs
-  - services/clinic-api/ClinicEz.Clinic.Domain/Entities/StaffMember.cs & ClinicSettings.cs
-  - services/clinic-api/ClinicEz.Clinic.Api/Controllers/ (DocumentsController, PrescriptionsController, LabOrdersController, StaffController)
-  - apps/clinic-app/components/settings/ (Settings.screen.tsx, types.ts, GeneralSettingsTab.tsx)
+  - `apps/clinic-app/scripts/check-tokens.mjs` & `scripts/token-baseline.json`
+  - `apps/clinic-app/components/comms/ClinicChatDrawerHost.tsx`
+  - `apps/clinic-app/components/ui/Icon.tsx` & `components/ui/ThemedText.tsx`
+  - `apps/clinic-app/constants/theme.ts`
+  - `packages/design-tokens/src/scales.ts` & `typography.ts`
+  - `packages/comms-sdk/scripts/check-tokens.mjs`
+  - `packages/comms-sdk/src/native-ui/` (`ChatDrawer.tsx`, `MessageThread.tsx`, `TriageQueueView.tsx`)
+  - `packages/comms-sdk/src/web-ui/` (`ChatDrawer.tsx`, `MessageThread.tsx`, `TriageQueueView.tsx`, `CallWaitingRoom.tsx`, `GuestJoinPage.tsx`)
+  - `packages/comms-sdk/src/react/hooks/useTriageQueue.ts`
+  - `packages/comms-sdk/src/core/reactions.ts`
+  - Test suites: `packages/comms-sdk/tests/` & `apps/clinic-app/tests/challenger_m2*`
 - **Key findings**:
-  - .NET test suite passes 9/9 tests currently; missing 36-combination matrix (4 doc types x 3 signature modes x 3 paper sizes), logo byte tests, and ?wet= query parameter tests.
-  - Design tokens test suite passes 27/27 tests in 50ms; token guard script passes with 0 violations.
-  - Clinic app test suite passes 2342/2342 tests in 21s, provided node_modules symlink and PATH are present.
-  - Node modules symlink from clinicez-arch2 is required for worktree dependencies.
-  - PATH="$HOME/.bun/bin:$PATH" is required for tests running child process node calls.
-  - Frontend component tests for DocumentTemplatesSettingsTab, StaffSignatureSpecimen, and PDEA S2 prescription hardening do not exist yet.
-- **Unexplored areas**: None; full workspace test survey complete.
+  - `bun run lint:tokens` in `apps/clinic-app` passes cleanly with 0 violations across 537 scanned files.
+  - Comms SDK token guard also passes cleanly (0 violations across 38 files), but `packages/comms-sdk/src/web-ui` contains 15 occurrences of sub-12px text (`text-[10px]` and `text-[11px]`) in Tailwind classes that bypass regex `fontSize:\s*\d+`.
+  - Jargon audit identified exact line numbers for `STAT` (6 occurrences in UI code), `SLA Breached` (4 occurrences in UI code + 20 in tests), `Disposition` (multiple in `ClinicChatDrawerHost.tsx`, `TriageQueueView.tsx`, and `useTriageQueue.ts`), `INTERNAL NOTE` (3 UI occurrences + 2 in tests), `ACK` (2 UI occurrences + 1 in tests), and `Scope` (2 header occurrences + filter pills lacking clean titles).
+  - Test baselines: `packages/comms-sdk` runs 104 tests (100% pass rate); `apps/clinic-app` runs 44 tests across Challenger M2 & M2.2 (100% pass rate).
+  - Missing test coverage identified for R2 (thread header back icon-only, rename pencil, 3 right controls, drawer reconnect button), R3 (`NewConversationModal`), R4 (clinical productivity tools), and R5 (triage card-to-thread navigation).
+- **Unexplored areas**: None within Explorer 3 scope.
 
 ## Key Decisions Made
-- Confirmed test runners: .NET 10 xUnit + FluentAssertions for backend; Bun test 1.4.3 + react-dom/server for design tokens & clinic-app.
-- Formulated comprehensive 4-tier edge case and PDEA S2 matrix for test engineering.
+- Executed strict regex and AST verification across both native and web UI implementations.
+- Cataloged all jargon occurrences with exact file and line references for the downstream implementer.
 
 ## Artifact Index
-- DISPATCH.md — Task instructions
-- BRIEFING.md — Working memory
-- progress.md — Liveness heartbeat
-- handoff.md — Comprehensive 5-component test survey report
+- `handoff.md` — Comprehensive survey report covering tokens, jargon, and tests
+- `progress.md` — Liveness and step tracking
+- `DISPATCH.md` — Task dispatch log
+- `BRIEFING.md` — Situational awareness and state

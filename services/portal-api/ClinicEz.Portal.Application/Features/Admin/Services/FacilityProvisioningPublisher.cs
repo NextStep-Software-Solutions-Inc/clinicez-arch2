@@ -26,8 +26,8 @@ public interface IFacilityProvisioningPublisher
     Task StageProvisionedAsync(Tenant tenant, FacilityCreatedEvent facilityCreated, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Stages a licence-free <c>facility.directory.updated</c> message to <c>patient-api</c> whenever a facility's
-    /// metadata, branch address, PhilHealth accreditation, visibility, or staff roster changes.
+    /// Stages a licence-free <c>facility.directory.updated</c> message to <c>patient-api</c> (and to the facility mailbox
+    /// for Clinic facilities) whenever a facility's metadata, branch address, PhilHealth accreditation, visibility, or staff roster changes.
     /// </summary>
     Task StageDirectoryUpdateAsync(Tenant tenant, Facility facility, CancellationToken cancellationToken = default);
 }
@@ -35,36 +35,72 @@ public interface IFacilityProvisioningPublisher
 public sealed class FacilityProvisioningPublisher(IApplicationDbContext context, IInteropPublisher publisher)
     : IFacilityProvisioningPublisher
 {
-    private static readonly HashSet<string> NonClinicalRoles = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Billing",
-        "Cashier",
-        "Receptionist",
-        "Front Desk",
-        "IT Support",
-        "Encoder"
-    };
-
     public async Task StageProvisionedAsync(Tenant tenant, FacilityCreatedEvent facilityCreated, CancellationToken cancellationToken)
     {
+        // Enrich patient-api catalogue copy with facility/branch metadata and clinical providers (licence stripped).
+        var trackedFacility = context.Facilities.Local.FirstOrDefault(f => f.Id == facilityCreated.ResourceId)
+            ?? await context.Facilities
+                .AsNoTracking()
+                .Include(f => f.Branch)
+                .FirstOrDefaultAsync(f => f.Id == facilityCreated.ResourceId, cancellationToken);
+
+        Branch? branch = trackedFacility?.Branch;
+        if (trackedFacility is not null && branch is null && trackedFacility.BranchId.HasValue)
+        {
+            branch = context.Branches.Local.FirstOrDefault(b => b.Id == trackedFacility.BranchId.Value)
+                ?? await context.Branches.AsNoTracking()
+                    .FirstOrDefaultAsync(b => b.Id == trackedFacility.BranchId.Value && !b.IsDeleted, cancellationToken);
+        }
+
+        var isBranchAccredited = branch is not null && branch.IsPhilHealthAccredited && !string.IsNullOrWhiteSpace(branch.PhilHealthAccreditationNumber);
+        var platformVerificationStatus = facilityCreated.PlatformVerificationStatus ?? trackedFacility?.PlatformVerificationStatus;
+        var isPlatformVerified = facilityCreated.IsPlatformVerified
+            ?? (trackedFacility is not null
+                ? trackedFacility.PlatformVerificationStatus == PlatformVerificationStatus.Verified
+                : (bool?)null);
+
+        var licensedEvent = facilityCreated with
+        {
+            IsWorkspaceEligible = facilityCreated.IsWorkspaceEligible ?? trackedFacility?.IsPatientDiscoveryEligible,
+            PlatformVerificationStatus = platformVerificationStatus,
+            IsPlatformVerified = isPlatformVerified,
+            VerificationRejectionReason = facilityCreated.VerificationRejectionReason ?? trackedFacility?.RejectionReason,
+            BranchId = branch?.Id ?? facilityCreated.BranchId,
+            BranchName = branch?.Name ?? facilityCreated.BranchName,
+            BranchPhilHealthAccreditationNumber = branch?.PhilHealthAccreditationNumber ?? facilityCreated.BranchPhilHealthAccreditationNumber,
+            BranchPmccNumber = branch?.PhilHealthPmccNumber ?? facilityCreated.BranchPmccNumber,
+            BranchSoftwareCertificateId = branch?.PhilHealthSoftwareCertificateId ?? facilityCreated.BranchSoftwareCertificateId,
+            BranchPhilHealthBaseUrl = branch?.PhilHealthBaseUrl ?? facilityCreated.BranchPhilHealthBaseUrl,
+            IsBranchPhilHealthAccredited = isBranchAccredited || facilityCreated.IsBranchPhilHealthAccredited,
+            IsPhilHealthAccredited = facilityCreated.IsPhilHealthAccredited ?? isBranchAccredited
+        };
+
         // The correlation id is the facility id, so everything about one facility shares a workflow id.
-        var correlationId = facilityCreated.ResourceId;
-        var facility = Party.ForFacility(facilityCreated.TenantId, facilityCreated.ResourceId.ToString(), facilityCreated.FacilityType);
+        var correlationId = licensedEvent.ResourceId;
+        var facility = Party.ForFacility(licensedEvent.TenantId, licensedEvent.ResourceId.ToString(), licensedEvent.FacilityType);
 
         publisher.Enqueue(
             InteropTypes.FacilityLicenseIssued,
             Party.Portal,
             facility,
             correlationId,
-            facilityCreated);
+            licensedEvent);
 
         // The cell's billing service is licensed with the facility, so it receives the same license from its own mailbox.
         publisher.Enqueue(
             InteropTypes.FacilityLicenseIssued,
             Party.Portal,
-            Party.ForFacility(facilityCreated.TenantId, facilityCreated.ResourceId.ToString(), facilityCreated.FacilityType, InteropServices.Billing),
+            Party.ForFacility(licensedEvent.TenantId, licensedEvent.ResourceId.ToString(), licensedEvent.FacilityType, InteropServices.Billing),
             correlationId,
-            facilityCreated);
+            licensedEvent);
+
+        // The cell's comms service is licensed with the facility, so it receives the same license from its own mailbox.
+        publisher.Enqueue(
+            InteropTypes.FacilityLicenseIssued,
+            Party.Portal,
+            Party.ForFacility(licensedEvent.TenantId, licensedEvent.ResourceId.ToString(), licensedEvent.FacilityType, InteropServices.Comms),
+            correlationId,
+            licensedEvent);
 
         // The new facility starts with the workspace profile instead of having to ask for it.
         var settings = await WorkspaceSettingsStore.GetOrCreateAsync(context, tenant, cancellationToken);
@@ -75,14 +111,7 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
             correlationId,
             WorkspaceProfileMapper.ToEvent(tenant, settings));
 
-        // Enrich patient-api catalogue copy with facility/branch metadata and clinical providers (licence stripped).
-        var trackedFacility = context.Facilities.Local.FirstOrDefault(f => f.Id == facilityCreated.ResourceId)
-            ?? await context.Facilities
-                .AsNoTracking()
-                .Include(f => f.Branch)
-                .FirstOrDefaultAsync(f => f.Id == facilityCreated.ResourceId, cancellationToken);
-
-        var directoryEvent = await BuildDirectoryEventAsync(tenant, trackedFacility, facilityCreated, cancellationToken);
+        var directoryEvent = await BuildDirectoryEventAsync(tenant, trackedFacility, licensedEvent, cancellationToken);
 
         publisher.Enqueue(
             InteropTypes.FacilityDirectoryUpdated,
@@ -90,6 +119,17 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
             new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient },
             correlationId,
             directoryEvent);
+
+        var targetFacilityType = trackedFacility?.FacilityType ?? licensedEvent.FacilityType;
+        if (targetFacilityType == FacilityType.Clinic)
+        {
+            publisher.Enqueue(
+                InteropTypes.FacilityDirectoryUpdated,
+                Party.Portal,
+                Party.ForFacility(tenant.Id.ToString(), (trackedFacility?.Id ?? licensedEvent.ResourceId).ToString(), targetFacilityType),
+                correlationId,
+                directoryEvent);
+        }
     }
 
     public async Task StageDirectoryUpdateAsync(Tenant tenant, Facility facility, CancellationToken cancellationToken = default)
@@ -112,6 +152,16 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
             new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient },
             facility.Id,
             directoryEvent);
+
+        if (facility.FacilityType == FacilityType.Clinic)
+        {
+            publisher.Enqueue(
+                InteropTypes.FacilityDirectoryUpdated,
+                Party.Portal,
+                Party.ForFacility(tenant.Id.ToString(), facility.Id.ToString(), facility.FacilityType),
+                facility.Id,
+                directoryEvent);
+        }
     }
 
     private async Task<FacilityCreatedEvent> BuildDirectoryEventAsync(
@@ -138,46 +188,18 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
         var contactEmail = FirstNonEmpty(source.ContactEmail, facility?.ContactEmail, branch?.ContactEmail, tenant.Email);
         var operatingHours = FirstNonEmpty(source.OperatingHours, facility?.OperatingHours);
         var classification = FirstNonEmpty(source.Classification, facility?.Classification);
-        var isPhilHealthAccredited = source.IsPhilHealthAccredited
-            ?? (!string.IsNullOrWhiteSpace(facility?.PhilHealthAccreditationNumber) || (branch?.IsPhilHealthAccredited ?? false));
+        var isBranchAccredited = branch is not null && branch.IsPhilHealthAccredited && !string.IsNullOrWhiteSpace(branch.PhilHealthAccreditationNumber);
+        var isPhilHealthAccredited = source.IsPhilHealthAccredited ?? isBranchAccredited;
+        var platformVerificationStatus = source.PlatformVerificationStatus ?? facility?.PlatformVerificationStatus;
+        var isPlatformVerified = source.IsPlatformVerified
+            ?? (facility is not null && facility.PlatformVerificationStatus == PlatformVerificationStatus.Verified);
+        var verificationRejectionReason = source.VerificationRejectionReason ?? facility?.RejectionReason;
         var isPublic = source.IsPublic ?? (facility is not null
             && facility.IsPatientDiscoveryEligible
+            && facility.PlatformVerificationStatus == PlatformVerificationStatus.Verified
             && !facility.IsDeleted
             && facility.Status != FacilityStatus.Suspended
             && facility.Status != FacilityStatus.Failed);
-
-        IReadOnlyList<FacilityProviderDto>? providers = source.Providers;
-        if (providers is null && source.FacilityType == FacilityType.Clinic)
-        {
-            var staffRows = await context.StaffMembers
-                .AsNoTracking()
-                .Include(s => s.WorkspaceMember)
-                .Where(s => !s.IsDeleted
-                            && s.TenantId == tenant.Id
-                            && (s.FacilityId == source.ResourceId || s.FacilityId == null)
-                            && !s.WorkspaceMember.IsDeleted
-                            && s.WorkspaceMember.Status == MemberStatus.Active)
-                .OrderBy(s => s.WorkspaceMember.FullName)
-                .ToListAsync(cancellationToken);
-
-            var clinicalRows = staffRows
-                .Where(s => !NonClinicalRoles.Contains(s.Role) && !string.IsNullOrWhiteSpace(s.WorkspaceMember.FullName))
-                .Select((s, index) => new FacilityProviderDto(
-                    Id: s.Id,
-                    Name: s.WorkspaceMember.FullName,
-                    Specialty: string.IsNullOrWhiteSpace(s.Role) || string.Equals(s.Role, "Staff", StringComparison.OrdinalIgnoreCase)
-                        ? FirstNonEmpty(classification, "General Practice")!
-                        : s.Role,
-                    ProfessionalLicenseNo: null,
-                    IsActive: true,
-                    DisplayOrder: index))
-                .ToList();
-
-            if (clinicalRows.Count > 0)
-            {
-                providers = clinicalRows;
-            }
-        }
 
         return source with
         {
@@ -192,8 +214,21 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
             OperatingHours = operatingHours,
             Classification = classification,
             IsPhilHealthAccredited = isPhilHealthAccredited,
+            IsWorkspaceEligible = facility?.IsPatientDiscoveryEligible,
             IsPublic = isPublic,
-            Providers = providers
+            IsPlatformVerified = isPlatformVerified,
+            PlatformVerificationStatus = platformVerificationStatus,
+            VerificationRejectionReason = verificationRejectionReason,
+            DirectorySource = DirectorySourceKind.PortalControlPlane,
+            ReplaceProvidersSnapshot = false,
+            Providers = source.Providers,
+            BranchId = branch?.Id ?? source.BranchId,
+            BranchName = branch?.Name ?? source.BranchName,
+            BranchPhilHealthAccreditationNumber = branch?.PhilHealthAccreditationNumber ?? source.BranchPhilHealthAccreditationNumber,
+            BranchPmccNumber = branch?.PhilHealthPmccNumber ?? source.BranchPmccNumber,
+            BranchSoftwareCertificateId = branch?.PhilHealthSoftwareCertificateId ?? source.BranchSoftwareCertificateId,
+            BranchPhilHealthBaseUrl = branch?.PhilHealthBaseUrl ?? source.BranchPhilHealthBaseUrl,
+            IsBranchPhilHealthAccredited = isBranchAccredited || source.IsBranchPhilHealthAccredited
         };
     }
 

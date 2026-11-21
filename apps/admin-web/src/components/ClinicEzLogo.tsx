@@ -1,0 +1,106 @@
+import * as React from 'react';
+import { lightColors, darkColors } from '@clinicez/design-tokens';
+
+export const CLINICEZ_PRISM_PATH =
+  'm297.42,102.89L154.27,10.61c-41.58-26.8-96.78-.05-101.5,49.2l-14.92,155.7c-4.72,49.25,44.4,86,90.31,67.58l158.07-63.42c49.74-19.96,56.23-87.73,11.19-116.77Z';
+export const CLINICEZ_E_PATH =
+  'm86.16,150.56c1.13,22.55,18.28,33.42,38.83,32.79,15.06-.46,23.7-3.29,31.27-6.55l3.79,13.26c-6.55,3.04-18.41,7.46-36.95,8.03-33.02,1.01-54.18-19.14-55.09-48.98-.91-29.63,17.56-55.05,49.88-56.04,36.72-1.12,46.33,29.64,46.85,46.68.12,3.79-.05,6.55-.47,8.41l-78.11,2.39Zm60.15-15.41c-.12-8.61-4.74-29.53-29.44-28.77-21.27.65-29.55,18.26-30.87,30.62l60.31-1.85Z';
+export const CLINICEZ_Z_PATH =
+  'm178.04,183.03l48.05-59.35c4.9-5.93,9.08-10.62,14.4-16.44v-.41s-60.63,1.86-60.63,1.86l-.46-15.01,84.12-2.58.21,11.65-47.45,58.77c-4.64,5.66-8.95,10.89-13.99,16.22v.41s64.89-1.99,64.89-1.99l.46,15.01-89.27,2.73-.33-10.88Z';
+
+export interface ClinicEzMarkProps extends React.SVGProps<SVGSVGElement> {
+  /**
+   * 'bare' renders the standalone Layered Duo prism facets without a squircle container.
+   * 'squircle' renders the full app-icon squircle container with Layered Duo facets inside.
+   * 'inverted' renders the light squircle container with Teal & Mint facets.
+   */
+  variant?: 'bare' | 'squircle' | 'inverted';
+}
+
+export function ClinicEzMark({
+  variant = 'bare',
+  className = 'h-8 w-8',
+  ...props
+}: ClinicEzMarkProps) {
+  if (variant === 'squircle' || variant === 'inverted') {
+    const isInverted = variant === 'inverted';
+    const bgFill = isInverted ? lightColors.primarySubtle : lightColors.primary;
+    const frontPrism = isInverted ? lightColors.primary : lightColors.onPrimary;
+    const backPrism = darkColors.primary;
+    const monogramFill = isInverted ? lightColors.onPrimary : lightColors.primary;
+
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 380 380"
+        className={className}
+        aria-hidden="true"
+        {...props}
+      >
+        <rect width="380" height="380" rx="84" fill={bgFill} />
+        <g transform="translate(52, 62) scale(0.92) rotate(6 160 145)">
+          <path d={CLINICEZ_PRISM_PATH} fill={backPrism} />
+        </g>
+        <g transform="translate(26, 42) scale(0.92)">
+          <path d={CLINICEZ_PRISM_PATH} fill={frontPrism} />
+          <path d={CLINICEZ_E_PATH} fill={monogramFill} />
+          <path d={CLINICEZ_Z_PATH} fill={monogramFill} />
+        </g>
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 360 320"
+      className={className}
+      aria-hidden="true"
+      {...props}
+    >
+      <g transform="translate(28, 22) rotate(5.5 160 145)">
+        <path d={CLINICEZ_PRISM_PATH} fill={darkColors.primary} opacity="0.9" />
+      </g>
+      <g transform="translate(4, 6)">
+        <path d={CLINICEZ_PRISM_PATH} fill={lightColors.primary} />
+        <path d={CLINICEZ_E_PATH} fill={lightColors.onPrimary} />
+        <path d={CLINICEZ_Z_PATH} fill={lightColors.onPrimary} />
+      </g>
+    </svg>
+  );
+}
+
+export interface ClinicEzLogoProps {
+  variant?: ClinicEzMarkProps['variant'];
+  className?: string;
+  markClassName?: string;
+  textClassName?: string;
+  subtitle?: string;
+  subtitleClassName?: string;
+  showWordmark?: boolean;
+}
+
+export function ClinicEzLogo({
+  variant = 'bare',
+  className = 'inline-flex items-center gap-2.5',
+  markClassName = 'h-8 w-9 shrink-0',
+  textClassName = 'text-xl font-bold tracking-tight whitespace-nowrap text-text',
+  subtitle,
+  subtitleClassName = 'text-[10px] text-text-muted font-semibold uppercase tracking-wider leading-none mt-0.5',
+  showWordmark = true,
+}: ClinicEzLogoProps) {
+  return (
+    <span className={className}>
+      <ClinicEzMark variant={variant} className={markClassName} />
+      {showWordmark &&
+        (subtitle ? (
+          <span className="flex flex-col text-left">
+            <span className={textClassName}>Clinic EZ</span>
+            <span className={subtitleClassName}>{subtitle}</span>
+          </span>
+        ) : (
+          <span className={textClassName}>Clinic EZ</span>
+        ))}
+    </span>
+  );
+}

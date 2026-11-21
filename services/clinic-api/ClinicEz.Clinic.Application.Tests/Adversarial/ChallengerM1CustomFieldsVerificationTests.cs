@@ -46,7 +46,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var reorderHandler = new ReorderCustomFieldsCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
@@ -64,7 +64,7 @@ public class ChallengerM1CustomFieldsVerificationTests
             new(fD.Id, 5),
             new(fB.Id, 20)
         };
-        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("ClinicPatient", items), CancellationToken.None);
+        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("Patient", items), CancellationToken.None);
 
         // Assert reorder response
         reordered.Should().HaveCount(4);
@@ -78,7 +78,7 @@ public class ChallengerM1CustomFieldsVerificationTests
         reordered[3].DisplayOrder.Should().Be(100);
 
         // Assert query returns identical deterministic order
-        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
         queried.Select(f => f.FieldKey).Should().ContainInOrder("f_d", "f_b", "f_a", "f_c");
     }
 
@@ -87,7 +87,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var reorderHandler = new ReorderCustomFieldsCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
@@ -105,7 +105,7 @@ public class ChallengerM1CustomFieldsVerificationTests
             new(f1.Id, 10000),
             new(f3.Id, 999999)
         };
-        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("ClinicPatient", items), CancellationToken.None);
+        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("Patient", items), CancellationToken.None);
 
         // Assert
         reordered.Select(f => f.FieldKey).Should().ContainInOrder("gap_4", "gap_2", "gap_1", "gap_3");
@@ -114,7 +114,7 @@ public class ChallengerM1CustomFieldsVerificationTests
         reordered[2].DisplayOrder.Should().Be(10000);
         reordered[3].DisplayOrder.Should().Be(999999);
 
-        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
         queried.Select(f => f.FieldKey).Should().ContainInOrder("gap_4", "gap_2", "gap_1", "gap_3");
     }
 
@@ -123,7 +123,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var validator = new ReorderCustomFieldsCommandValidator();
-        var command = new ReorderCustomFieldsCommand("ClinicPatient", new List<CustomFieldOrderItem>
+        var command = new ReorderCustomFieldsCommand("Patient", new List<CustomFieldOrderItem>
         {
             new(Guid.NewGuid(), -1),
             new(Guid.NewGuid(), -99)
@@ -182,7 +182,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
@@ -193,7 +193,7 @@ public class ChallengerM1CustomFieldsVerificationTests
         await createHandler.Handle(new CreateCustomFieldDefinitionCommand("f_b", "Bravo Field", CustomFieldDataType.Text, DisplayOrder: 10), CancellationToken.None);
 
         // Act
-        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
 
         // Assert - Query must sort by DisplayOrder, then by Label alphabetically
         queried.Should().HaveCount(4);
@@ -208,7 +208,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var reorderHandler = new ReorderCustomFieldsCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
@@ -219,7 +219,7 @@ public class ChallengerM1CustomFieldsVerificationTests
 
         // Act - Reorder via orderedIds in reverse: f3, f1, f2
         var orderedIds = new List<Guid> { f3.Id, f1.Id, f2.Id };
-        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("ClinicPatient", orderedIds), CancellationToken.None);
+        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("Patient", orderedIds), CancellationToken.None);
 
         // Assert
         reordered[0].FieldKey.Should().Be("seq_3");
@@ -229,7 +229,7 @@ public class ChallengerM1CustomFieldsVerificationTests
         reordered[2].FieldKey.Should().Be("seq_2");
         reordered[2].DisplayOrder.Should().Be(3);
 
-        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
         queried.Select(f => f.FieldKey).Should().ContainInOrder("seq_3", "seq_1", "seq_2");
     }
 
@@ -238,7 +238,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var validator = new ReorderCustomFieldsCommandValidator();
-        var command = new ReorderCustomFieldsCommand(Items: null, OrderedIds: null, EntityType: "ClinicPatient");
+        var command = new ReorderCustomFieldsCommand(Items: null, OrderedIds: null, EntityType: "Patient");
 
         // Act
         var result = validator.Validate(command);
@@ -257,7 +257,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
 
         // Act - Run 1
@@ -294,7 +294,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
 
         // Workplace Corporate Template - 4 fields
@@ -320,17 +320,17 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
 
         // 1. Clinic already has custom scholarship and dormitory fields
         var customScholarship = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
-            "scholarship_grant", "Scholarship Grant", CustomFieldDataType.Text, "ClinicPatient", "Custom", false, 99
+            "scholarship_grant", "Scholarship Grant", CustomFieldDataType.Text, "Patient", "Custom", false, 99
         ), CancellationToken.None);
 
         var customDorm = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
-            "dormitory_room", "Dormitory Room", CustomFieldDataType.Text, "ClinicPatient", "Custom", false, 100
+            "dormitory_room", "Dormitory Room", CustomFieldDataType.Text, "Patient", "Custom", false, 100
         ), CancellationToken.None);
 
         // 2. Install University preset (8 fields) twice
@@ -349,7 +349,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
 
         // 1. Install template once
@@ -383,45 +383,61 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
+        var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
+
+        // Seed a legacy primary_address_line custom field to ensure installing intake retires it
+        await createHandler.Handle(new CreateCustomFieldDefinitionCommand("primary_address_line", "Legacy Primary Address", CustomFieldDataType.Text, Category: "Address", IsRequired: true, DisplayOrder: 1), CancellationToken.None);
 
         // Act - Run 1
         var run1 = await installHandler.Handle(new InstallCustomFieldTemplateCommand(ClinicCustomFieldTemplatesCatalog.PatientIntakeContactsKey), CancellationToken.None);
-        run1.Should().HaveCount(14);
+        run1.Should().HaveCount(13);
+        run1.Should().NotContain(f => f.FieldKey == "primary_address_line");
 
         // Act - Run 2 & 3 (Idempotency)
         var run2 = await installHandler.Handle(new InstallCustomFieldTemplateCommand(ClinicCustomFieldTemplatesCatalog.PatientIntakeContactsKey), CancellationToken.None);
-        run2.Should().HaveCount(14);
+        run2.Should().HaveCount(13);
         var run3 = await installHandler.Handle(new InstallCustomFieldTemplateCommand("intake"), CancellationToken.None); // alias
-        run3.Should().HaveCount(14);
+        run3.Should().HaveCount(13);
 
-        // Assert - Physical DB record count must remain exactly 14
+        // Assert - Active DB record count must remain 13, and retired legacy primary_address_line is inactive
         var allInDb = await repo.Query().ToListAsync();
-        allInDb.Should().HaveCount(14);
+        allInDb.Count(f => f.IsActive).Should().Be(13);
+        allInDb.First(f => f.FieldKey == "primary_address_line").IsActive.Should().BeFalse();
 
-        // Verify Address Fields
-        var primaryAddr = allInDb.First(f => f.FieldKey == "primary_address_line");
-        primaryAddr.Label.Should().Be("Primary Address (House/Unit/Street)");
-        primaryAddr.Category.Should().Be("Address");
-        primaryAddr.IsRequired.Should().BeTrue();
-        primaryAddr.DisplayOrder.Should().Be(1);
-
-        var primaryCity = allInDb.First(f => f.FieldKey == "primary_city");
-        primaryCity.Category.Should().Be("Address");
-        primaryCity.IsRequired.Should().BeTrue();
-        primaryCity.DisplayOrder.Should().Be(2);
-
+        // Verify Secondary Address Fields (Home Address is an official PatientAddress entity)
         var secondaryAddr = allInDb.First(f => f.FieldKey == "secondary_address_line");
+        secondaryAddr.Label.Should().Be("Secondary Street Address");
         secondaryAddr.Category.Should().Be("Address");
         secondaryAddr.IsRequired.Should().BeFalse();
-        secondaryAddr.DisplayOrder.Should().Be(5);
+        secondaryAddr.DisplayOrder.Should().Be(1);
+
+        var secondaryBrgy = allInDb.First(f => f.FieldKey == "secondary_barangay");
+        secondaryBrgy.Category.Should().Be("Address");
+        secondaryBrgy.IsRequired.Should().BeFalse();
+        secondaryBrgy.DisplayOrder.Should().Be(2);
+
+        var secondaryCity = allInDb.First(f => f.FieldKey == "secondary_city");
+        secondaryCity.Category.Should().Be("Address");
+        secondaryCity.IsRequired.Should().BeFalse();
+        secondaryCity.DisplayOrder.Should().Be(3);
+
+        var secondaryProvince = allInDb.First(f => f.FieldKey == "secondary_province");
+        secondaryProvince.Category.Should().Be("Address");
+        secondaryProvince.IsRequired.Should().BeFalse();
+        secondaryProvince.DisplayOrder.Should().Be(4);
+
+        var secondaryPostal = allInDb.First(f => f.FieldKey == "secondary_postal_code");
+        secondaryPostal.Category.Should().Be("Address");
+        secondaryPostal.IsRequired.Should().BeFalse();
+        secondaryPostal.DisplayOrder.Should().Be(5);
 
         // Verify Emergency Contact Fields
         var emergencyName = allInDb.First(f => f.FieldKey == "emergency_contact_name");
         emergencyName.Category.Should().Be("Emergency Contacts");
         emergencyName.IsRequired.Should().BeTrue();
-        emergencyName.DisplayOrder.Should().Be(7);
+        emergencyName.DisplayOrder.Should().Be(6);
 
         var emergencyRel = allInDb.First(f => f.FieldKey == "emergency_contact_relationship");
         emergencyRel.Category.Should().Be("Emergency Contacts");
@@ -457,7 +473,7 @@ public class ChallengerM1CustomFieldsVerificationTests
         // Verify Standalone presets
         var addrTemplate = ClinicCustomFieldTemplatesCatalog.GetTemplate(ClinicCustomFieldTemplatesCatalog.PatientIntakeAddressKey);
         addrTemplate.Should().NotBeNull();
-        addrTemplate!.FieldCount.Should().Be(6);
+        addrTemplate!.FieldCount.Should().Be(5);
 
         var emergTemplate = ClinicCustomFieldTemplatesCatalog.GetTemplate(ClinicCustomFieldTemplatesCatalog.PatientIntakeEmergencyKey);
         emergTemplate.Should().NotBeNull();

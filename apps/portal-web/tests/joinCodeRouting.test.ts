@@ -1,25 +1,29 @@
 import { describe, test, expect, mock } from "bun:test";
-import { resolveJoinRoute, isProxyPublicRoute } from "../src/lib/join";
+import { NextRequest } from "next/server";
+import { isPublicRoute } from "../src/proxy";
 import { joinService } from "../src/services/join.service";
 
 describe("Direct /join/{code} Zero-Enumeration Security & Routing", () => {
+  const checkPublic = (path: string) => isPublicRoute(new NextRequest("http://localhost" + path));
+
   test("C1.1: Root /join is recognized as a public join route", () => {
-    expect(isProxyPublicRoute("/join")).toBe(true);
-    expect(isProxyPublicRoute("/join/")).toBe(true);
-    const resolved = resolveJoinRoute("/join", new URLSearchParams());
-    expect(resolved.isJoinRoute).toBe(true);
-    expect(resolved.routeType).toBe("code-join");
+    expect(checkPublic("/join")).toBe(true);
+    expect(checkPublic("/join/")).toBe(true);
   });
 
-  test("C1.2: Direct /join/{code} is recognized as a public join route", () => {
-    expect(isProxyPublicRoute("/join/APEX2026")).toBe(true);
-    expect(isProxyPublicRoute("/join/K8P2MN9X")).toBe(true);
-    expect(isProxyPublicRoute("/api/v1/public/join/validate/APEX2026")).toBe(true);
+  test("C1.2: Direct /join subpaths, /claim, and /verify are recognized as public routes", () => {
+    expect(checkPublic("/join/APEX2026")).toBe(true);
+    expect(checkPublic("/join/tenant/facility")).toBe(true);
+    expect(checkPublic("/claim")).toBe(true);
+    expect(checkPublic("/claim?token=XYZ")).toBe(true);
+    expect(checkPublic("/verify")).toBe(true);
+    expect(checkPublic("/verify/rx/RX-123")).toBe(true);
   });
 
-  test("C1.3: Non-join private paths are strictly blocked from auth bypass", () => {
-    expect(isProxyPublicRoute("/admin/facilities")).toBe(false);
-    expect(isProxyPublicRoute("/apex/dashboard/branches")).toBe(false);
+  test("C1.3: Non-public private paths are strictly blocked from auth bypass", () => {
+    expect(checkPublic("/admin/facilities")).toBe(false);
+    expect(checkPublic("/apex/dashboard/branches")).toBe(false);
+    expect(checkPublic("/dashboard")).toBe(false);
   });
 
   test("C1.4: joinService validates active code and extracts tenant + facility metadata", async () => {

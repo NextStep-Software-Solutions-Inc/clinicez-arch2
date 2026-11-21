@@ -21,7 +21,7 @@ public sealed class ClinicIdentityProvider : IClinicIdentityProvider
     public async Task<ClinicIdentity?> GetAsync(CancellationToken cancellationToken = default)
     {
         var clinicId = _clinicContext.ClinicId;
-        return await _db.ClinicSettings
+        return await _db.Settings
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(s => !s.IsDeleted && s.ClinicId == clinicId)

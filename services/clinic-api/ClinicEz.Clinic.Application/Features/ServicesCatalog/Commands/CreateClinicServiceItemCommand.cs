@@ -1,9 +1,11 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.ServicesCatalog.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -18,23 +20,31 @@ public record CreateClinicServiceItemCommand(
     string? Description = null,
     string? PhilHealthCode = null,
     string? PhilHealthDescription = null,
-    bool IsPhilHealthFormulary = false
+    bool IsPhilHealthFormulary = false,
+    bool IsNurseOrderable = false,
+    bool SkipPendingVerificationSync = false
 ) : IRequest<ClinicServiceItemDto>;
 
 public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClinicServiceItemCommand, ClinicServiceItemDto>
 {
-    private readonly IRepository<ClinicServiceItem> _serviceRepo;
+    private readonly IRepository<ServiceItem> _serviceRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public CreateClinicServiceItemCommandHandler(
-        IRepository<ClinicServiceItem> serviceRepo,
+        IRepository<ServiceItem> serviceRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<FacilitySettings>? settingsRepo = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _serviceRepo = serviceRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _settingsRepo = settingsRepo;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<ClinicServiceItemDto> Handle(CreateClinicServiceItemCommand request, CancellationToken cancellationToken)
@@ -53,7 +63,11 @@ public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClini
             throw new ConflictException($"Service with code '{codeUpper}' already exists in this clinic.");
         }
 
-        var entity = new ClinicServiceItem
+        var philHealthCode = string.IsNullOrWhiteSpace(request.PhilHealthCode) ? null : request.PhilHealthCode.Trim();
+        var philHealthDescription = string.IsNullOrWhiteSpace(request.PhilHealthDescription) ? null : request.PhilHealthDescription.Trim();
+        var description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+
+        var entity = new ServiceItem
         {
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,
@@ -61,15 +75,30 @@ public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClini
             Name = request.Name.Trim(),
             Category = string.IsNullOrWhiteSpace(request.Category) ? "General" : request.Category.Trim(),
             StandardPrice = Math.Max(0m, request.StandardPrice),
-            Description = request.Description?.Trim(),
+            Description = description,
             IsActive = true,
-            PhilHealthCode = request.PhilHealthCode?.Trim(),
-            PhilHealthDescription = request.PhilHealthDescription?.Trim(),
-            IsPhilHealthFormulary = request.IsPhilHealthFormulary
+            PhilHealthCode = philHealthCode,
+            PhilHealthDescription = philHealthDescription,
+            IsPhilHealthFormulary = request.IsPhilHealthFormulary || philHealthCode != null,
+            IsNurseOrderable = request.IsNurseOrderable
         };
 
         await _serviceRepo.AddAsync(entity, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (!request.SkipPendingVerificationSync && _settingsRepo != null && _directorySyncService != null)
+        {
+            var settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
+            if (settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+            {
+                await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                    settings,
+                    throwOnConflict: false,
+                    _clinicContext.StaffId?.ToString(),
+                    _clinicContext.StaffName,
+                    cancellationToken);
+            }
+        }
 
         return new ClinicServiceItemDto(
             entity.Id,
@@ -83,7 +112,8 @@ public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClini
             entity.IsActive,
             entity.PhilHealthCode,
             entity.PhilHealthDescription,
-            entity.IsPhilHealthFormulary
+            entity.IsPhilHealthFormulary,
+            entity.IsNurseOrderable
         );
     }
 }

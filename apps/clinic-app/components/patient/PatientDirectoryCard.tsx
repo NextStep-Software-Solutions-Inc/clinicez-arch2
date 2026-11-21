@@ -2,8 +2,65 @@ import React from 'react';
 import { View, StyleSheet, Pressable, type StyleProp, type ViewStyle } from 'react-native';
 import { ThemedText, Badge, Button, Card, Icon, ActionMenu, type ActionMenuItem } from '@ui';
 import { theme } from '@constants/theme';
+import { formatBloodTypeLabel } from '../../constants/bloodTypes';
 import { formatLongAge } from '../../utils/age';
-import type { ClinicPatient } from '../../services/clinicService';
+import type { ClinicPatient, StaffMember, VisitType } from '../../services/clinicService';
+import { computePatientLocation } from './patientLocation';
+
+export { computePatientLocation };
+
+/**
+ * Determines whether a patient is assigned to or was seen by the current staff member (Doctor or Nurse).
+ */
+export function isMyPatient(
+  patient: ClinicPatient,
+  currentStaff: StaffMember | null | undefined
+): boolean {
+  if (!currentStaff || !currentStaff.id) return false;
+  const staffId = currentStaff.id;
+  const isDoctor = currentStaff.role === 'Doctor';
+  const isNurse = currentStaff.role === 'Nurse';
+
+  if (isDoctor) {
+    return (
+      patient.customFields?.assigned_doctor_id === staffId ||
+      patient.customFields?.doctor_id === staffId ||
+      patient.customFields?.activeQueueDoctorId === staffId ||
+      (patient as any).activeQueueDoctorId === staffId ||
+      (patient as any).doctorId === staffId ||
+      Boolean(patient.activeQueueTickets?.some((t) => t.doctorId === staffId))
+    );
+  }
+
+  if (isNurse) {
+    const nurseRooms = currentStaff.assignedRoomIds ?? (currentStaff.assignedRoomId ? [currentStaff.assignedRoomId] : []);
+    const patientRoomId = (patient as any).roomId || (patient as any).activeQueueRoomId || patient.customFields?.room_id || patient.customFields?.assigned_room_id;
+    const roomMatch = !!patientRoomId && nurseRooms.includes(patientRoomId);
+    const ticketRoomMatch = Boolean(patient.activeQueueTickets?.some((t) => !!t.roomId && nurseRooms.includes(t.roomId)));
+
+    return (
+      patient.customFields?.nurse_id === staffId ||
+      patient.customFields?.assigned_nurse_id === staffId ||
+      patient.customFields?.vitals_recorded_by_nurse_id === staffId ||
+      patient.customFields?.recorded_by_nurse_id === staffId ||
+      roomMatch ||
+      ticketRoomMatch
+    );
+  }
+
+  return (
+    patient.customFields?.assigned_doctor_id === staffId ||
+    patient.customFields?.doctor_id === staffId ||
+    patient.customFields?.nurse_id === staffId ||
+    patient.customFields?.assigned_nurse_id === staffId ||
+    patient.customFields?.staff_id === staffId ||
+    patient.customFields?.activeQueueDoctorId === staffId ||
+    (patient as any).activeQueueDoctorId === staffId ||
+    (patient as any).doctorId === staffId ||
+    Boolean(patient.activeQueueTickets?.some((t) => t.doctorId === staffId))
+  );
+}
+
 
 export type PatientDirectoryViewMode = 'cards' | 'table';
 
@@ -18,8 +75,19 @@ export interface PatientDirectoryCardProps {
   onOpenChart?: (patient: ClinicPatient) => void;
   onEditDemographics?: (patient: ClinicPatient) => void;
   onOpenPhilHealth?: (patient: ClinicPatient) => void;
+  onScheduleVisit?: (patient: ClinicPatient) => void;
   onBookAppointment?: (patient: ClinicPatient) => void;
-  onAddToQueue?: (patient: ClinicPatient) => void;
+  onAddToQueue?: (patient: ClinicPatient, visitType?: VisitType) => void;
+  onQueuePatient?: (patient: ClinicPatient, visitType?: VisitType) => void;
+  onSelectService?: (patient: ClinicPatient, visitType: VisitType) => void;
+  onStartConsultation?: (patient: ClinicPatient) => void;
+  onStartHealthScreening?: (patient: ClinicPatient) => void;
+  /** @deprecated Use onStartHealthScreening */
+  onStartProfiling?: (patient: ClinicPatient) => void;
+  onRecordVitals?: (patient: ClinicPatient) => void;
+  onPerformProcedure?: (patient: ClinicPatient) => void;
+  onIssueClearance?: (patient: ClinicPatient) => void;
+  hasPhilHealthAccreditation?: boolean;
 }
 
 /**
@@ -69,7 +137,7 @@ export function hasStatAllergy(allergies?: string | null): boolean {
  * Formats the full chronological age (`yrs, mos, wks, days`) and core demographic line.
  */
 export function formatPatientDemographicsLine(
-  patient: Pick<ClinicPatient, 'dateOfBirth' | 'age' | 'gender' | 'civilStatus' | 'bloodType'>,
+  patient: Pick<ClinicPatient, 'dateOfBirth' | 'age' | 'sex' | 'civilStatus' | 'bloodType'>,
   referenceDate?: Date
 ): string {
   const ageDisplay = patient.dateOfBirth
@@ -78,11 +146,13 @@ export function formatPatientDemographicsLine(
     ? `${patient.age} yrs`
     : null;
 
+  const bloodTypeDisplay = formatBloodTypeLabel(patient.bloodType);
+
   return [
     ageDisplay,
-    patient.gender,
+    patient.sex,
     patient.civilStatus,
-    patient.bloodType ? `Blood type ${patient.bloodType}` : null,
+    bloodTypeDisplay ? `Blood type ${bloodTypeDisplay}` : null,
   ]
     .filter(Boolean)
     .join(' • ');
@@ -97,27 +167,34 @@ export function buildPatientOverflowMenuItems(
     onEditDemographics?: (p: ClinicPatient) => void;
     onOpenPhilHealth?: (p: ClinicPatient) => void;
     onOpenChart?: (p: ClinicPatient) => void;
+    onScheduleVisit?: (p: ClinicPatient) => void;
     onBookAppointment?: (p: ClinicPatient) => void;
+    onSelectService?: (p: ClinicPatient, visitType: VisitType) => void;
+    onQueuePatient?: (p: ClinicPatient, visitType?: VisitType) => void;
+    onAddToQueue?: (p: ClinicPatient, visitType?: VisitType) => void;
+    onStartConsultation?: (p: ClinicPatient) => void;
+    onStartHealthScreening?: (p: ClinicPatient) => void;
+    onStartProfiling?: (p: ClinicPatient) => void;
+    onRecordVitals?: (p: ClinicPatient) => void;
+    onPerformProcedure?: (p: ClinicPatient) => void;
+    onIssueClearance?: (p: ClinicPatient) => void;
+    hasPhilHealthAccreditation?: boolean;
   }
 ): ActionMenuItem[] {
   const items: ActionMenuItem[] = [];
   if (handlers.onEditDemographics) {
     items.push({
       id: 'edit-demographics',
-      label: 'Edit Demographics',
+      label: 'Edit patient',
       icon: 'edit',
-      hint: 'Update personal, contact, and statutory details',
       onPress: () => handlers.onEditDemographics!(patient),
     });
   }
   if (handlers.onOpenPhilHealth) {
     items.push({
       id: 'philhealth-profile',
-      label: 'PhilHealth Profile',
-      icon: 'shield',
-      hint: patient.philHealthNumber
-        ? `PIN: ${patient.philHealthNumber}`
-        : 'Configure Konsulta PIN & membership',
+      label: 'Manage PhilHealth',
+      icon: 'shieldCheck',
       onPress: () => handlers.onOpenPhilHealth!(patient),
     });
   }
@@ -130,13 +207,103 @@ export function buildPatientOverflowMenuItems(
       onPress: () => handlers.onOpenChart!(patient),
     });
   }
-  if (handlers.onBookAppointment) {
+  const scheduleHandler = handlers.onScheduleVisit || handlers.onBookAppointment;
+  if (scheduleHandler) {
     items.push({
-      id: 'book-appointment',
-      label: 'Book appointment',
+      id: 'schedule-visit',
+      label: 'Schedule visit',
       icon: 'calendar',
-      onPress: () => handlers.onBookAppointment!(patient),
+      onPress: () => scheduleHandler(patient),
     });
+  }
+
+  const hasDirectClinicalActions = Boolean(
+    handlers.onStartConsultation ||
+    handlers.onStartHealthScreening ||
+    handlers.onStartProfiling ||
+    handlers.onRecordVitals ||
+    handlers.onPerformProcedure ||
+    handlers.onIssueClearance
+  );
+
+  if (hasDirectClinicalActions) {
+    if (handlers.onStartConsultation) {
+      items.push({
+        id: 'service-consultation',
+        label: 'Start consult',
+        icon: 'stethoscope',
+        dividerBefore: true,
+        onPress: () => handlers.onStartConsultation!(patient),
+      });
+    }
+    const healthScreeningHandler = handlers.onStartHealthScreening || handlers.onStartProfiling;
+    if (healthScreeningHandler) {
+      items.push({
+        id: 'start-profiling',
+        label: 'Start screening',
+        icon: 'heartPulse',
+        onPress: () => healthScreeningHandler(patient),
+      });
+    }
+    if (handlers.onRecordVitals) {
+      items.push({
+        id: 'service-vitals',
+        label: 'Record vitals',
+        icon: 'activity',
+        onPress: () => handlers.onRecordVitals!(patient),
+      });
+    }
+    if (handlers.onPerformProcedure) {
+      items.push({
+        id: 'service-procedure',
+        label: 'Start procedure',
+        icon: 'syringe',
+        onPress: () => handlers.onPerformProcedure!(patient),
+      });
+    }
+    if (handlers.onIssueClearance) {
+      items.push({
+        id: 'service-administrative',
+        label: 'Issue certificate',
+        icon: 'file',
+        onPress: () => handlers.onIssueClearance!(patient),
+      });
+    }
+  } else {
+    const queueHandler = handlers.onSelectService || handlers.onQueuePatient || handlers.onAddToQueue;
+    if (queueHandler) {
+      items.push({
+        id: 'visit-routine-checkup',
+        label: 'Routine Checkup',
+        icon: 'stethoscope',
+        dividerBefore: true,
+        onPress: () => queueHandler(patient, 'RoutineCheckup'),
+      });
+      items.push({
+        id: 'visit-acute-illness',
+        label: 'Acute Illness Consultation',
+        icon: 'activity',
+        onPress: () => queueHandler(patient, 'AcuteIllnessConsultation'),
+      });
+      items.push({
+        id: 'visit-chronic-followup',
+        label: 'Chronic Disease Follow-Up',
+        icon: 'refresh',
+        onPress: () => queueHandler(patient, 'ChronicDiseaseFollowUp'),
+      });
+      items.push({
+        id: 'visit-preventive-assessment',
+        label: 'Preventive Health Assessment',
+        icon: 'heartPulse',
+        onPress: () => queueHandler(patient, 'PreventiveHealthAssessment'),
+      });
+      items.push({
+        id: 'visit-urgent-care',
+        label: 'Urgent Care Visit',
+        icon: 'emergency',
+        onPress: () => queueHandler(patient, 'UrgentCareVisit'),
+      });
+    }
   }
   return items;
 }
@@ -183,21 +350,48 @@ function PatientDirectoryCard({
   onOpenChart,
   onEditDemographics,
   onOpenPhilHealth,
+  onScheduleVisit,
   onBookAppointment,
   onAddToQueue,
+  onQueuePatient,
+  onSelectService,
+  onStartConsultation,
+  onStartHealthScreening,
+  onStartProfiling,
+  onRecordVitals,
+  onPerformProcedure,
+  onIssueClearance,
+  hasPhilHealthAccreditation,
 }: PatientDirectoryCardProps) {
   const initials = getPatientInitials(patient);
   const demographics = formatPatientDemographicsLine(patient);
-  const location = patient.city ? [patient.barangay, patient.city].filter(Boolean).join(', ') : patient.barangay || '';
+  const location = computePatientLocation(patient);
   const hasAllergies = hasKnownAllergies(patient.allergies);
   const isStatAllergy = hasStatAllergy(patient.allergies);
   const isQueued = Boolean(patient.activeQueueTicket);
+  const activeTicketCount = patient.activeQueueTickets?.length ?? (isQueued ? 1 : 0);
+  const isMultiTicket = activeTicketCount > 1;
+  const queuedButtonLabel = isMultiTicket
+    ? `Queued (${patient.activeQueueTicket} +${activeTicketCount - 1})`
+    : `Queued (${patient.activeQueueTicket})`;
+
+  const handleScheduleVisit = onScheduleVisit || onBookAppointment;
+  const handleQueuePatient = onQueuePatient || onAddToQueue;
 
   const menuItems = buildPatientOverflowMenuItems(patient, {
     onEditDemographics,
     onOpenPhilHealth,
     onOpenChart,
-    onBookAppointment,
+    onScheduleVisit: handleScheduleVisit,
+    onBookAppointment: handleScheduleVisit,
+    onStartConsultation,
+    onStartHealthScreening,
+    onStartProfiling,
+    onRecordVitals,
+    onPerformProcedure,
+    onIssueClearance,
+    hasPhilHealthAccreditation,
+    onSelectService: onSelectService || (handleQueuePatient ? (p, s) => handleQueuePatient(p, s) : undefined),
   });
 
   if (mode === 'table') {
@@ -223,8 +417,8 @@ function PatientDirectoryCard({
               </Pressable>
               <View style={styles.inlineBadgesWrap}>
                 <Badge label={patient.patientCode} variant="neutral" size="sm" />
-                {isQueued ? (
-                  <Badge label={`In Queue • ${patient.activeQueueTicket}`} variant="routine" size="sm" icon="ticket" />
+                {patient.clinicEzId ? (
+                  <Badge label={patient.clinicEzId} variant="primary" size="sm" />
                 ) : null}
                 {patient.verificationStatus === 'PendingVerification' ? (
                   <Badge label="Pending" variant="warning" size="sm" icon="hourglass" />
@@ -257,11 +451,11 @@ function PatientDirectoryCard({
         {/* Column 3: Contact & Statutory IDs */}
         <View style={styles.tableColContact}>
           {patient.contactNumber || location ? (
-            <View style={styles.contactInlineRow}>
+            <View style={styles.contactStack}>
               {patient.contactNumber ? (
                 <View style={styles.iconMetaItem}>
                   <Icon name="phone" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-                  <ThemedText variant="small" color={theme.colors.textSecondary}>
+                  <ThemedText variant="small" color={theme.colors.textSecondary} numberOfLines={1}>
                     {patient.contactNumber}
                   </ThemedText>
                 </View>
@@ -301,7 +495,7 @@ function PatientDirectoryCard({
                   <ThemedText
                     variant="captionBold"
                     color={theme.colors.emergencyText}
-                    style={styles.noticeText}
+                    style={styles.tableAlertText}
                     numberOfLines={2}
                   >
                     Allergies: {patient.allergies}
@@ -314,7 +508,7 @@ function PatientDirectoryCard({
                   <ThemedText
                     variant="captionBold"
                     color={theme.colors.warningText}
-                    style={styles.noticeText}
+                    style={styles.tableAlertText}
                     numberOfLines={2}
                   >
                     {patient.alerts}
@@ -337,18 +531,36 @@ function PatientDirectoryCard({
               variant="outline"
               size="sm"
               icon="clipboard"
+              numberOfLines={1}
+              style={styles.tableActionBtn}
+              textStyle={styles.actionBtnText}
               onPress={() => onOpenChart(patient)}
             />
           ) : null}
-          {onAddToQueue ? (
+          {handleScheduleVisit ? (
             <Button
-              title={isQueued ? `Queued (${patient.activeQueueTicket})` : 'Add to queue'}
+              title="Schedule visit"
+              variant="secondary"
+              size="sm"
+              icon="calendar"
+              numberOfLines={1}
+              style={styles.tableActionBtn}
+              textStyle={styles.actionBtnText}
+              onPress={() => handleScheduleVisit(patient)}
+            />
+          ) : null}
+          {handleQueuePatient ? (
+            <Button
+              title={isQueued ? queuedButtonLabel : 'Queue Patient'}
               variant="primary"
               size="sm"
               icon={isQueued ? 'checkCircle' : 'plus'}
+              numberOfLines={1}
               loading={checkingIn}
               disabled={disableCheckIn}
-              onPress={() => onAddToQueue(patient)}
+              style={styles.tableActionBtn}
+              textStyle={styles.actionBtnText}
+              onPress={() => handleQueuePatient(patient)}
             />
           ) : null}
           <ActionMenu
@@ -390,8 +602,8 @@ function PatientDirectoryCard({
                 </ThemedText>
               </Pressable>
               <Badge label={patient.patientCode} variant="neutral" />
-              {isQueued ? (
-                <Badge label={`In Queue • ${patient.activeQueueTicket}`} variant="routine" icon="ticket" />
+              {patient.clinicEzId ? (
+                <Badge label={patient.clinicEzId} variant="primary" />
               ) : null}
               {patient.verificationStatus === 'PendingVerification' && (
                 <Badge label="Pending verification" variant="warning" icon="hourglass" />
@@ -496,7 +708,7 @@ function PatientDirectoryCard({
       </View>
 
       {/* Streamlined Action Footer: single line for action buttons, flex grow if 1 or 2 */}
-      {onOpenChart || onBookAppointment || onAddToQueue ? (
+      {onOpenChart || handleScheduleVisit || handleQueuePatient ? (
         <View style={styles.actionRow}>
           {onOpenChart ? (
             <Button
@@ -510,21 +722,21 @@ function PatientDirectoryCard({
               onPress={() => onOpenChart(patient)}
             />
           ) : null}
-          {onBookAppointment ? (
+          {handleScheduleVisit ? (
             <Button
-              title="Book appointment"
+              title="Schedule visit"
               variant="secondary"
               size="sm"
               icon="calendar"
               numberOfLines={1}
               style={styles.actionBtn}
               textStyle={styles.actionBtnText}
-              onPress={() => onBookAppointment(patient)}
+              onPress={() => handleScheduleVisit(patient)}
             />
           ) : null}
-          {onAddToQueue ? (
+          {handleQueuePatient ? (
             <Button
-              title={isQueued ? `Queued (${patient.activeQueueTicket})` : 'Add to queue'}
+              title={isQueued ? queuedButtonLabel : 'Queue Patient'}
               variant="primary"
               size="sm"
               icon={isQueued ? 'checkCircle' : 'plus'}
@@ -533,7 +745,7 @@ function PatientDirectoryCard({
               disabled={disableCheckIn}
               style={styles.actionBtn}
               textStyle={styles.actionBtnText}
-              onPress={() => onAddToQueue(patient)}
+              onPress={() => handleQueuePatient(patient)}
             />
           ) : null}
         </View>
@@ -691,37 +903,59 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   tableColIdentity: {
-    flex: 2.2,
-    minWidth: 180,
+    flexGrow: 2.2,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    overflow: 'hidden',
   },
   tableColDemographics: {
-    flex: 2.2,
-    minWidth: 180,
+    flexGrow: 2.1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    overflow: 'hidden',
     gap: theme.spacing.xs,
   },
   tableColContact: {
-    flex: 1.8,
-    minWidth: 150,
+    flexGrow: 2.0,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    overflow: 'hidden',
     gap: theme.spacing.xs,
   },
   tableColAlerts: {
-    flex: 1.8,
-    minWidth: 150,
+    flexGrow: 1.7,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    overflow: 'hidden',
   },
   tableColActions: {
+    width: 396,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 396,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: theme.spacing.xs,
-    minWidth: 240,
+  },
+  tableActionBtn: {
+    flexShrink: 0,
+    paddingHorizontal: theme.spacing.sm,
+    gap: theme.spacing.xs,
   },
   identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
+    minWidth: 0,
   },
   identityTextCol: {
     flex: 1,
+    minWidth: 0,
     gap: theme.spacing.xs,
   },
   inlineBadgesWrap: {
@@ -730,23 +964,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
-  contactInlineRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
+  contactStack: {
+    minWidth: 0,
+    gap: 2,
   },
   tableAlertsStack: {
+    alignItems: 'flex-start',
     gap: theme.spacing.xs,
   },
   compactAlertPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
     gap: theme.spacing.xs,
     borderWidth: theme.sizes.borderWidth,
     borderRadius: theme.radii.sm,
     paddingVertical: theme.spacing.xs,
     paddingHorizontal: theme.spacing.sm,
+  },
+  tableAlertText: {
+    flexShrink: 1,
   },
 });
 

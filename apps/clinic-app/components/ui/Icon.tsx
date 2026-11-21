@@ -1,5 +1,6 @@
 // token-guard:ignore-file (contains the legacy emoji -> icon lookup table)
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Platform } from 'react-native';
 import {
   Accessibility,
   Activity,
@@ -11,17 +12,21 @@ import {
   ArrowUp,
   ArrowUpRight,
   AppWindow,
+  Archive,
   Baby,
   Banknote,
   BarChart3,
   Bell,
+  BookOpen,
   Briefcase,
   BriefcaseMedical,
   Bug,
   Building2,
+  Calculator,
   Calendar,
   CalendarDays,
   Camera,
+  CameraOff,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -29,14 +34,18 @@ import {
   ChevronRight,
   ChevronUp,
   Circle,
+  CircleDot,
   ClipboardList,
   Clock,
+  Cloud,
   Copy,
   CreditCard,
   Crop,
   Download,
   Droplet,
+  ExternalLink,
   Eye,
+  EyeOff,
   FileText,
   FlaskConical,
   Folder,
@@ -44,38 +53,55 @@ import {
   GraduationCap,
   GripVertical,
   HeartPulse,
+  HelpCircle,
   Hourglass,
   Info,
   KeyRound,
   Landmark,
   LayoutDashboard,
+  LayoutGrid,
   Lightbulb,
+  List,
   Lock,
   LogOut,
   Mail,
+  MapPin,
   Maximize2,
   Menu,
+  MessageSquare,
+  Mic,
+  MicOff,
   Microscope,
   Minimize2,
   Minus,
+  Monitor,
+  MonitorOff,
+  MonitorUp,
+  Moon,
   MoreHorizontal,
   MoreVertical,
   PanelLeft,
   PanelRight,
+  PanelTop,
   Paperclip,
   Palette,
   Pencil,
   Phone,
+  PhoneOff,
   Pill,
   Plus,
   Printer,
+  QrCode,
   Radio,
   Receipt,
   RefreshCw,
+  Ruler,
   Save,
+  Scale,
   ScanLine,
   ScrollText,
   Search,
+  Send,
   Settings,
   Shield,
   ShieldCheck,
@@ -83,17 +109,26 @@ import {
   Smartphone,
   Star,
   Stethoscope,
+  Sun,
+  SwitchCamera,
   Syringe,
+  Table2,
   Tag,
   Ticket,
   Timer,
   Trash2,
+  Tv,
   Undo,
   Upload,
   User,
   UserCheck,
   Users,
+  Video,
+  VideoOff,
+  Volume2,
+  VolumeX,
   Wifi,
+  Wrench,
   X,
   Zap,
   ZoomIn,
@@ -114,12 +149,22 @@ export const ICONS = {
   patient: User,
   patientVerified: UserCheck,
   staff: Users,
+  users: Users,
   appointments: CalendarDays,
   calendar: Calendar,
   consultations: Stethoscope,
   billing: CreditCard,
   yakap: ShieldCheck,
+  tools: Wrench,
+  calculator: Calculator,
+  bookOpen: BookOpen,
+  qrCode: QrCode,
+  tv: Tv,
+  scale: Scale,
+  ruler: Ruler,
+  externalLink: ExternalLink,
   shield: Shield,
+  shieldCheck: ShieldCheck,
   settings: Settings,
   chart: BarChart3,
   clinic: Building2,
@@ -133,9 +178,11 @@ export const ICONS = {
   checkCircle: CheckCircle2,
   edit: Pencil,
   save: Save,
+  send: Send,
   copy: Copy,
   trash: Trash2,
   print: Printer,
+  printer: Printer,
   download: Download,
   upload: Upload,
   refresh: RefreshCw,
@@ -157,9 +204,14 @@ export const ICONS = {
   lock: Lock,
   key: KeyRound,
   eye: Eye,
+  eyeOff: EyeOff,
   layoutModal: AppWindow,
   layoutSplit: PanelLeft,
   layoutDrawer: PanelRight,
+  panelTop: PanelTop,
+  grid: LayoutGrid,
+  list: List,
+  table: Table2,
 
   // Direction
   arrowRight: ArrowRight,
@@ -175,6 +227,8 @@ export const ICONS = {
   // Status / feedback
   alert: AlertTriangle,
   alertCircle: AlertCircle,
+  help: HelpCircle,
+  helpCircle: HelpCircle,
   info: Info,
   emergency: Siren,
   bell: Bell,
@@ -196,6 +250,8 @@ export const ICONS = {
   microscope: Microscope,
   bug: Bug,
   scan: ScanLine,
+  stethoscope: Stethoscope,
+  mapPin: MapPin,
   medical: BriefcaseMedical,
   accessibility: Accessibility,
   baby: Baby,
@@ -210,8 +266,19 @@ export const ICONS = {
   ticket: Ticket,
   paperclip: Paperclip,
   folder: Folder,
+  archive: Archive,
   camera: Camera,
+  cameraOff: CameraOff,
+  video: Video,
+  videoOff: VideoOff,
+  mic: Mic,
+  micOff: MicOff,
   phone: Phone,
+  phoneOff: PhoneOff,
+  screenShare: MonitorUp,
+  screenShareOff: MonitorOff,
+  switchCamera: SwitchCamera,
+  recordDot: CircleDot,
   mail: Mail,
   globe: Globe,
   wifi: Wifi,
@@ -219,6 +286,14 @@ export const ICONS = {
   smartphone: Smartphone,
   graduation: GraduationCap,
   briefcase: Briefcase,
+  message: MessageSquare,
+  messageSquare: MessageSquare,
+  monitor: Monitor,
+  sun: Sun,
+  moon: Moon,
+  cloud: Cloud,
+  volume2: Volume2,
+  volumeX: VolumeX,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;
@@ -256,6 +331,7 @@ export interface IconProps {
   size?: number;
   color?: string;
   strokeWidth?: number;
+  spin?: boolean;
 }
 
 export default function Icon({
@@ -263,9 +339,120 @@ export default function Icon({
   size = theme.sizes.iconMd,
   color = theme.colors.text,
   strokeWidth = 2,
+  spin = false,
 }: IconProps) {
   const Glyph = ICONS[name] ?? Circle;
+
+  if (spin) {
+    return (
+      <SpinningIconGlyph
+        Glyph={Glyph}
+        size={size}
+        color={color}
+        strokeWidth={strokeWidth}
+      />
+    );
+  }
+
   return <Glyph size={size} color={color} strokeWidth={strokeWidth} />;
+}
+
+function SpinningIconGlyph({
+  Glyph,
+  size,
+  color,
+  strokeWidth,
+}: {
+  Glyph: any;
+  size: number;
+  color: string;
+  strokeWidth: number;
+}) {
+  const isWeb = Platform.OS === 'web';
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isWeb) return;
+    let loop: Animated.CompositeAnimation | null = null;
+    if (spinAnim && typeof spinAnim.setValue === 'function') {
+      spinAnim.setValue(0);
+    }
+    if (Animated && typeof Animated.loop === 'function' && typeof Animated.timing === 'function') {
+      loop = Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 850,
+          easing: (t) => t,
+          useNativeDriver: true,
+        })
+      );
+      loop.start();
+    }
+    return () => {
+      if (loop && typeof loop.stop === 'function') loop.stop();
+    };
+  }, [spinAnim, isWeb]);
+
+  const rotation =
+    !isWeb && spinAnim && typeof spinAnim.interpolate === 'function'
+      ? spinAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: ['0deg', '360deg'],
+        })
+      : '0deg';
+
+  useEffect(() => {
+    if (isWeb && typeof document !== 'undefined') {
+      const styleId = 'clinicez-spin-style-v2';
+      if (!document.getElementById(styleId)) {
+        const styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        styleEl.textContent = `
+          @keyframes clinicez-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          .clinicez-spin-glyph,
+          [data-clinicez-spin="true"] {
+            animation: clinicez-spin 0.85s linear infinite !important;
+            transform-origin: center center !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+          }
+        `;
+        document.head.appendChild(styleEl);
+      }
+    }
+  }, [isWeb]);
+
+  return (
+    <Animated.View
+      accessibilityRole="image"
+      // @ts-ignore React Native Web forwards dataSet to data-* DOM attributes
+      dataSet={isWeb ? { clinicezSpin: 'true' } : undefined}
+      // @ts-ignore React Native Web className fallback
+      className={isWeb ? 'clinicez-spin-glyph' : undefined}
+      style={[
+        {
+          width: size,
+          height: size,
+          alignItems: 'center',
+          justifyContent: 'center',
+          transform: isWeb ? undefined : [{ rotate: rotation }],
+        },
+        isWeb && ({
+          animationName: 'clinicez-spin',
+          animationDuration: '0.85s',
+          animationIterationCount: 'infinite',
+          animationTimingFunction: 'linear',
+          transformOrigin: 'center center',
+        } as any),
+      ]}
+    >
+      <Glyph size={size} color={color} strokeWidth={strokeWidth} />
+    </Animated.View>
+  );
 }
 
 /**
@@ -276,12 +463,14 @@ export function IconSlot({
   value,
   size = theme.sizes.iconSm,
   color,
+  spin = false,
 }: {
   value?: string | null;
   size?: number;
   color?: string;
+  spin?: boolean;
 }) {
   const name = resolveIconName(value);
   if (!name) return null;
-  return <Icon name={name} size={size} color={color} />;
+  return <Icon name={name} size={size} color={color} spin={spin} />;
 }

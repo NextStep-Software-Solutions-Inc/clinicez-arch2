@@ -61,7 +61,7 @@ public sealed class NotificationRetentionCleanupBackgroundService : BackgroundSe
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var clinics = await db.ClinicSettings
+        var clinics = await db.Settings
             .IgnoreQueryFilters()
             .Where(s => !s.IsDeleted)
             .Select(s => new { s.ClinicId, s.StaffNotificationRetentionDays })

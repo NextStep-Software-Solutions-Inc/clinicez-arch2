@@ -1,11 +1,13 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStaticNavigation, type StaticParamList } from '@react-navigation/native';
 import WorklistScreen from './screens/Worklist.screen';
+import WalkInIntakeScreen from './screens/WalkInIntake.screen';
 import SpecimenScreen from './screens/Specimen.screen';
 import ClaimSlipScreen from './screens/ClaimSlip.screen';
 import ResultsScreen from './screens/Results.screen';
 import QualityControlScreen from './screens/QualityControl.screen';
 import SettingsScreen from './screens/Settings.screen';
+import TriageScreen from './screens/Triage.screen';
 
 const Tab = createBottomTabNavigator({
   screens: {
@@ -14,6 +16,13 @@ const Tab = createBottomTabNavigator({
       options: {
         title: 'Worklist',
         headerTitle: 'Diagnostic Orders',
+      },
+    },
+    WalkInIntake: {
+      screen: WalkInIntakeScreen,
+      options: {
+        title: 'Walk-In Intake',
+        headerTitle: 'Walk-In Patient Intake & Accession',
       },
     },
     Specimen: {
@@ -35,6 +44,13 @@ const Tab = createBottomTabNavigator({
       options: {
         title: 'Results',
         headerTitle: 'Result Validation',
+      },
+    },
+    Triage: {
+      screen: TriageScreen,
+      options: {
+        title: 'Triage',
+        headerTitle: 'Specimen Inquiries & Triage',
       },
     },
     QualityControl: {

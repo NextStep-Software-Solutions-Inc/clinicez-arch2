@@ -1,10 +1,14 @@
 using ClinicEz.Portal.Application.Features.Entitlements;
+using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Features.Staff.Commands;
 using ClinicEz.Portal.Application.Features.Staff.Queries;
+using ClinicEz.Portal.Application.Features.Tenants.Queries.GetTenantByOwner;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Portal.Tests.Support;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interoperability;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using System;
@@ -48,8 +52,10 @@ public class StaffManagementTests : IDisposable
         _context.Dispose();
     }
 
-    private InviteStaffMemberCommandHandler InviteHandler() =>
-        new(_context, _guardMock.Object, TestSupport.InvitationNotifier(_context), TimeProvider.System);
+    private readonly RecordingEmailSender _emailSender = new();
+
+    private InviteStaffMemberCommandHandler InviteHandler(IEmailSender? sender = null) =>
+        new(_context, _guardMock.Object, TestSupport.InvitationNotifier(_context, emailSender: sender ?? _emailSender), TimeProvider.System);
 
     private WorkspaceMember SeedMember(
         string email,
@@ -107,7 +113,7 @@ public class StaffManagementTests : IDisposable
         Assert.NotNull(result);
         Assert.Equal("biller@metro.ph", result.Email);
         Assert.Equal("Billing", result.Role);
-        Assert.Equal("PendingInvitation", result.Status);
+        Assert.Equal("Invited", result.Status);
 
         _guardMock.Verify(g => g.EnsureCanAddMemberAsync(_tenantId, It.IsAny<CancellationToken>()), Times.Once);
 
@@ -141,7 +147,7 @@ public class StaffManagementTests : IDisposable
         Assert.Equal("Facility Administrator", result.Role);
         Assert.Equal(facility.Id, result.FacilityId);
         Assert.Equal("BGC Laboratory Branch", result.FacilityName);
-        Assert.Equal("PendingInvitation", result.Status);
+        Assert.Equal("Invited", result.Status);
 
         var member = await _context.WorkspaceMembers.SingleAsync(m => m.Email == "facadmin@metro.ph");
         Assert.Equal(WorkspaceMemberRole.Member, member.Role);
@@ -187,7 +193,9 @@ public class StaffManagementTests : IDisposable
         var result = await handler.Handle(new RevokeStaffMemberCommand(TenantSlug, member.Id), CancellationToken.None);
 
         Assert.True(result);
-        Assert.Null(await _context.WorkspaceMembers.FirstOrDefaultAsync(s => s.Id == member.Id));
+        var inDb = await _context.WorkspaceMembers.FirstOrDefaultAsync(s => s.Id == member.Id);
+        Assert.NotNull(inDb);
+        Assert.Equal(MemberStatus.Revoked, inDb.Status);
         _clerkMock.Verify(c => c.SyncAsync("clerk_fin", It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -219,6 +227,20 @@ public class StaffManagementTests : IDisposable
         Assert.Equal("Billing", result.Role);
         Assert.False(result.IsExpired);
         Assert.False(result.IsAlreadyAccepted);
+    }
+
+    [Theory]
+    [InlineData("mc-2026-0001")]
+    [InlineData("ref-2026-0001")]
+    [InlineData("rx-2026-0001")]
+    [InlineData("lab-2026-0001")]
+    [InlineData("sec-sha256-abcdef123456")]
+    public async Task GetInvitationDetails_MismatchedClinicalDocumentToken_ThrowsKeyNotFoundException(string mismatchedToken)
+    {
+        var handler = new GetInvitationDetailsQueryHandler(_context);
+        var act = async () => await handler.Handle(new GetInvitationDetailsQuery(mismatchedToken), CancellationToken.None);
+        var ex = await Assert.ThrowsAsync<KeyNotFoundException>(act);
+        Assert.Contains("clinical document", ex.Message);
     }
 
     [Fact]
@@ -275,5 +297,363 @@ public class StaffManagementTests : IDisposable
         Assert.NotNull(inDb);
         Assert.Equal(result.InvitationToken, inDb.InvitationToken);
         Assert.True(inDb.InvitationExpiresAt > DateTime.UtcNow);
+    }
+
+    [Fact]
+    public async Task InviteStaffMember_DeliveryMode_SendEmailTrue_EnqueuesEmailNotification()
+    {
+        var command = new InviteStaffMemberCommand(TenantSlug, "emailtrue@metro.ph", "Email True", "Admin", SendEmail: true);
+        var result = await InviteHandler().Handle(command, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("Invited", result.Status);
+        Assert.Contains(_emailSender.Sent, m => m.To == "emailtrue@metro.ph");
+    }
+
+    [Fact]
+    public async Task InviteStaffMember_DeliveryMode_SendEmailFalse_GeneratesTokenWithoutEmail()
+    {
+        var command = new InviteStaffMemberCommand(TenantSlug, "emailfalse@metro.ph", "Email False", "Admin", SendEmail: false);
+        var result = await InviteHandler().Handle(command, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("Invited", result.Status);
+        Assert.NotNull(result.InvitationToken);
+        Assert.Equal(64, result.InvitationToken.Length);
+
+        Assert.DoesNotContain(_emailSender.Sent, m => m.To == "emailfalse@metro.ph");
+    }
+
+    [Fact]
+    public async Task InviteStaffMember_TokenIs256BitCryptographicHex()
+    {
+        var command = new InviteStaffMemberCommand(TenantSlug, "tokenhex@metro.ph", "Token Hex", "Billing");
+        var result = await InviteHandler().Handle(command, CancellationToken.None);
+
+        Assert.NotNull(result.InvitationToken);
+        Assert.Equal(64, result.InvitationToken.Length);
+        Assert.Matches("^[a-f0-9]{64}$", result.InvitationToken);
+    }
+
+    [Fact]
+    public async Task InviteStaffMember_ReinvitingRevokedMember_ReactivatesAndResetsTokenAndExpiry()
+    {
+        var member = SeedMember("revoked@metro.ph", "Old Revoked", WorkspaceMemberRole.Member, MemberStatus.Revoked);
+
+        var command = new InviteStaffMemberCommand(TenantSlug, "revoked@metro.ph", "New Revoked Name", "Admin", SendEmail: true);
+        var result = await InviteHandler().Handle(command, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("Invited", result.Status);
+        Assert.Equal("Admin", result.Role);
+        Assert.Equal("New Revoked Name", result.FullName);
+
+        var memberInDb = await _context.WorkspaceMembers.FindAsync(member.Id);
+        Assert.NotNull(memberInDb);
+        Assert.Equal(MemberStatus.Invited, memberInDb.Status);
+        Assert.Equal("New Revoked Name", memberInDb.FullName);
+        Assert.NotNull(memberInDb.InvitationToken);
+        Assert.True(memberInDb.InvitationExpiresAt > DateTime.UtcNow);
+    }
+
+    [Fact]
+    public async Task GetTenantStaff_DynamicExpiration_ReturnsExpiredWhenPastExpiryDate()
+    {
+        TestSupport.Entitlements(_context);
+        var expiredToken = Guid.NewGuid().ToString("N");
+        SeedMember("dynexpired@metro.ph", "Dynamic Expired", WorkspaceMemberRole.Member, MemberStatus.Invited, expiredToken, DateTime.UtcNow.AddDays(-1));
+
+        var validToken = Guid.NewGuid().ToString("N");
+        SeedMember("dynvalid@metro.ph", "Dynamic Valid", WorkspaceMemberRole.Member, MemberStatus.Invited, validToken, DateTime.UtcNow.AddDays(5));
+
+        var handler = new GetTenantStaffQueryHandler(_context, TestSupport.Entitlements(_context));
+        var result = await handler.Handle(new GetTenantStaffQuery(TenantSlug), CancellationToken.None);
+
+        var expiredMember = Assert.Single(result.Members, m => m.Email == "dynexpired@metro.ph");
+        Assert.Equal("Expired", expiredMember.Status);
+
+        var validMember = Assert.Single(result.Members, m => m.Email == "dynvalid@metro.ph");
+        Assert.Equal("Invited", validMember.Status);
+    }
+
+    [Fact]
+    public async Task AcceptInvitation_RevokedToken_ThrowsInvalidOperationException()
+    {
+        var token = "revoked_token_hex_1234567890abcdef";
+        SeedMember("revoked.accept@metro.ph", "Revoked Person", WorkspaceMemberRole.Member, MemberStatus.Revoked, token, DateTime.UtcNow.AddDays(5));
+
+        var handler = new AcceptInvitationCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(new AcceptInvitationCommand(token, "clerk_user_revoked"), CancellationToken.None));
+
+        Assert.Equal("This invitation has been revoked.", ex.Message);
+    }
+
+    [Fact]
+    public async Task AcceptInvitation_SuspendedAccount_ThrowsInvalidOperationException()
+    {
+        var token = "suspended_token_hex_1234567890abcdef";
+        SeedMember("suspended.accept@metro.ph", "Suspended Person", WorkspaceMemberRole.Member, MemberStatus.Suspended, token, DateTime.UtcNow.AddDays(5));
+
+        var handler = new AcceptInvitationCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(new AcceptInvitationCommand(token, "clerk_user_suspended"), CancellationToken.None));
+
+        Assert.Equal("This account is suspended.", ex.Message);
+    }
+
+    [Fact]
+    public async Task AcceptInvitation_ActiveAccount_SameUser_ReturnsIdempotently()
+    {
+        var token = "active_token_hex_1234567890abcdef";
+        var member = SeedMember("active.accept@metro.ph", "Active Person", WorkspaceMemberRole.Member, MemberStatus.Active, token, DateTime.UtcNow.AddDays(5), userId: "clerk_user_active");
+
+        var handler = new AcceptInvitationCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
+        var result = await handler.Handle(new AcceptInvitationCommand(token, "clerk_user_active"), CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(TenantSlug, result.TenantSlug);
+    }
+
+    [Fact]
+    public async Task SuspendStaffMember_ValidActiveMember_TransitionsStatusAndSyncsClerk()
+    {
+        var member = SeedMember("active.suspend@metro.ph", "Active Guy", WorkspaceMemberRole.Admin, MemberStatus.Active, userId: "clerk_user_guy");
+
+        var handler = new SuspendStaffMemberCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
+        var result = await handler.Handle(new SuspendStaffMemberCommand(TenantSlug, member.Id), CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("Suspended", result.Status);
+
+        var memberInDb = await _context.WorkspaceMembers.FindAsync(member.Id);
+        Assert.NotNull(memberInDb);
+        Assert.Equal(MemberStatus.Suspended, memberInDb.Status);
+        _clerkMock.Verify(c => c.SyncAsync("clerk_user_guy", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SuspendStaffMember_Owner_ThrowsInvalidOperationException()
+    {
+        var owner = SeedMember("owner.suspend@metro.ph", "Owner Person", WorkspaceMemberRole.Owner, MemberStatus.Active, userId: "owner_clerk_123");
+
+        var handler = new SuspendStaffMemberCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(new SuspendStaffMemberCommand(TenantSlug, owner.Id), CancellationToken.None));
+
+        Assert.Contains("cannot be suspended", ex.Message);
+    }
+
+    [Fact]
+    public async Task ReactivateStaffMember_SuspendedMember_ChecksQuotaAndReactivates()
+    {
+        var member = SeedMember("suspended.reactivate@metro.ph", "Suspended Guy", WorkspaceMemberRole.Billing, MemberStatus.Suspended, userId: "clerk_user_reactivate");
+
+        var handler = new ReactivateStaffMemberCommandHandler(_context, _guardMock.Object, _clerkMock.Object, TimeProvider.System);
+        var result = await handler.Handle(new ReactivateStaffMemberCommand(TenantSlug, member.Id), CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("Active", result.Status);
+
+        _guardMock.Verify(g => g.EnsureCanAddMemberAsync(_tenantId, It.IsAny<CancellationToken>()), Times.Once);
+
+        var memberInDb = await _context.WorkspaceMembers.FindAsync(member.Id);
+        Assert.NotNull(memberInDb);
+        Assert.Equal(MemberStatus.Active, memberInDb.Status);
+        _clerkMock.Verify(c => c.SyncAsync("clerk_user_reactivate", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateStaffMember_ValidDetails_UpdatesRoleAndFacilityAndSyncsClerk()
+    {
+        var facility = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Name = "Makati Clinic Branch",
+            FacilityType = ClinicEz.Shared.Common.FacilityType.Clinic,
+            Status = FacilityStatus.Active
+        };
+        _context.Facilities.Add(facility);
+        await _context.SaveChangesAsync();
+
+        var member = SeedMember("update.target@metro.ph", "Initial Name", WorkspaceMemberRole.Member, MemberStatus.Active, userId: "clerk_user_update");
+
+        var handler = new UpdateStaffMemberCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
+        var result = await handler.Handle(new UpdateStaffMemberCommand(TenantSlug, member.Id, "Updated Full Name", "Facility Administrator", facility.Id), CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("Updated Full Name", result.FullName);
+        Assert.Equal("Facility Administrator", result.Role);
+        Assert.Equal(facility.Id, result.FacilityId);
+        Assert.Equal("Makati Clinic Branch", result.FacilityName);
+
+        var memberInDb = await _context.WorkspaceMembers.FindAsync(member.Id);
+        Assert.NotNull(memberInDb);
+        Assert.Equal("Updated Full Name", memberInDb.FullName);
+        _clerkMock.Verify(c => c.SyncAsync("clerk_user_update", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetInvitationDetails_RevokedAndSuspended_ReturnsCorrectFlags()
+    {
+        var revokedToken = "revoked_token_details";
+        SeedMember("revoked.details@metro.ph", "Revoked Name", WorkspaceMemberRole.Member, MemberStatus.Revoked, revokedToken, DateTime.UtcNow.AddDays(5));
+
+        var suspendedToken = "suspended_token_details";
+        SeedMember("suspended.details@metro.ph", "Suspended Name", WorkspaceMemberRole.Member, MemberStatus.Suspended, suspendedToken, DateTime.UtcNow.AddDays(5));
+
+        var handler = new GetInvitationDetailsQueryHandler(_context);
+
+        var revokedResult = await handler.Handle(new GetInvitationDetailsQuery(revokedToken), CancellationToken.None);
+        Assert.True(revokedResult.IsRevoked);
+        Assert.False(revokedResult.IsSuspended);
+
+        var suspendedResult = await handler.Handle(new GetInvitationDetailsQuery(suspendedToken), CancellationToken.None);
+        Assert.False(suspendedResult.IsRevoked);
+        Assert.True(suspendedResult.IsSuspended);
+    }
+
+    [Fact]
+    public async Task DeleteStaffMember_RevokedMember_DeletesPermanentlyAndSyncsClerk()
+    {
+        var member = SeedMember("revoked.delete@metro.ph", "Revoked Delete", WorkspaceMemberRole.Billing, MemberStatus.Revoked, userId: "clerk_revoked_del");
+
+        var handler = new DeleteStaffMemberCommandHandler(_context, _clerkMock.Object);
+        var result = await handler.Handle(new DeleteStaffMemberCommand(TenantSlug, member.Id), CancellationToken.None);
+
+        Assert.True(result);
+        var inDb = await _context.WorkspaceMembers.FindAsync(member.Id);
+        Assert.Null(inDb);
+        _clerkMock.Verify(c => c.SyncAsync("clerk_revoked_del", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteStaffMember_NonRevokedMember_ThrowsInvalidOperationException()
+    {
+        var member = SeedMember("active.delete@metro.ph", "Active Delete", WorkspaceMemberRole.Admin, MemberStatus.Active, userId: "clerk_active_del");
+
+        var handler = new DeleteStaffMemberCommandHandler(_context, _clerkMock.Object);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(new DeleteStaffMemberCommand(TenantSlug, member.Id), CancellationToken.None));
+
+        Assert.Contains("Only revoked workspace members can be permanently deleted", ex.Message);
+    }
+
+    [Fact]
+    public async Task InviteStaffMember_ExistingActiveMember_ThrowsActiveMemberMessage()
+    {
+        SeedMember("alreadyactive@metro.ph", "Already Active", WorkspaceMemberRole.Admin, MemberStatus.Active, userId: "clerk_act_1");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            InviteHandler().Handle(new InviteStaffMemberCommand(TenantSlug, "alreadyactive@metro.ph", "Already Active", "Admin"), CancellationToken.None));
+
+        Assert.Contains("active team member", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("already exists", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RevokeStaffMember_SelfRevocation_ThrowsInvalidOperationException_PreservesActiveMembershipAndPrevents404()
+    {
+        var selfAdmin = SeedMember(
+            "self.admin@metro.ph",
+            "Justine Admin",
+            WorkspaceMemberRole.Admin,
+            MemberStatus.Active,
+            userId: "clerk_self_admin_112");
+
+        var revokeHandler = new RevokeStaffMemberCommandHandler(_context, _clerkMock.Object);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            revokeHandler.Handle(
+                new RevokeStaffMemberCommand(TenantSlug, selfAdmin.Id, "clerk_self_admin_112"),
+                CancellationToken.None));
+
+        Assert.Equal("You cannot revoke your own workspace access.", ex.Message);
+
+        var memberInDb = await _context.WorkspaceMembers.FindAsync(selfAdmin.Id);
+        Assert.NotNull(memberInDb);
+        Assert.Equal(MemberStatus.Active, memberInDb.Status);
+        _clerkMock.Verify(c => c.SyncAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        // Regression check for Issue #112: refreshing the dashboard resolves workspace access instead of returning null (404)
+        var tenantResolver = new GetTenantByOwnerQueryHandler(_context);
+        var resolvedTenant = await tenantResolver.Handle(
+            new GetTenantByOwnerQuery("clerk_self_admin_112", TenantSlug),
+            CancellationToken.None);
+        Assert.NotNull(resolvedTenant);
+        Assert.Equal(TenantSlug, resolvedTenant.TenantSlug);
+        Assert.Equal("Admin", resolvedTenant.Role);
+        Assert.Equal("Active", resolvedTenant.Status);
+    }
+
+    [Fact]
+    public async Task SuspendStaffMember_SelfSuspension_ThrowsInvalidOperationException_AndPreservesActiveStatus()
+    {
+        var selfAdmin = SeedMember(
+            "self.suspend@metro.ph",
+            "Self Suspend Admin",
+            WorkspaceMemberRole.Admin,
+            MemberStatus.Active,
+            userId: "clerk_self_suspend_112");
+
+        var handler = new SuspendStaffMemberCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(
+                new SuspendStaffMemberCommand(TenantSlug, selfAdmin.Id, "clerk_self_suspend_112"),
+                CancellationToken.None));
+
+        Assert.Equal("You cannot suspend your own account.", ex.Message);
+
+        var memberInDb = await _context.WorkspaceMembers.FindAsync(selfAdmin.Id);
+        Assert.NotNull(memberInDb);
+        Assert.Equal(MemberStatus.Active, memberInDb.Status);
+        _clerkMock.Verify(c => c.SyncAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteStaffMember_SelfDeletion_ThrowsInvalidOperationException_AndPreservesMember()
+    {
+        var selfMember = SeedMember(
+            "self.delete@metro.ph",
+            "Self Delete Admin",
+            WorkspaceMemberRole.Admin,
+            MemberStatus.Revoked,
+            userId: "clerk_self_delete_112");
+
+        var handler = new DeleteStaffMemberCommandHandler(_context, _clerkMock.Object);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(
+                new DeleteStaffMemberCommand(TenantSlug, selfMember.Id, "clerk_self_delete_112"),
+                CancellationToken.None));
+
+        Assert.Equal("You cannot remove your own account from the workspace.", ex.Message);
+        Assert.NotNull(await _context.WorkspaceMembers.FindAsync(selfMember.Id));
+        _clerkMock.Verify(c => c.SyncAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RevokeAndSuspendStaffMember_AdminActingOnOtherMember_SucceedsNormally()
+    {
+        var otherMember = SeedMember(
+            "other.staff@metro.ph",
+            "Other Staff",
+            WorkspaceMemberRole.Member,
+            MemberStatus.Active,
+            userId: "clerk_other_staff_200");
+
+        var suspendHandler = new SuspendStaffMemberCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
+        var suspended = await suspendHandler.Handle(
+            new SuspendStaffMemberCommand(TenantSlug, otherMember.Id, "clerk_caller_admin_100"),
+            CancellationToken.None);
+        Assert.Equal("Suspended", suspended.Status);
+
+        var revokeHandler = new RevokeStaffMemberCommandHandler(_context, _clerkMock.Object);
+        var revoked = await revokeHandler.Handle(
+            new RevokeStaffMemberCommand(TenantSlug, otherMember.Id, "clerk_caller_admin_100"),
+            CancellationToken.None);
+        Assert.True(revoked);
+
+        var inDb = await _context.WorkspaceMembers.FindAsync(otherMember.Id);
+        Assert.Equal(MemberStatus.Revoked, inDb!.Status);
     }
 }

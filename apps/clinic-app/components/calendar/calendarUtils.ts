@@ -43,23 +43,69 @@ export function getDaysInMonth(year: number, month: number): number {
   return 31;
 }
 
+export const PAST_APPOINTMENT_GRACE_MINUTES = 5;
+
+export interface ManilaTimeParts {
+  dateStr: string;
+  timeStr: string;
+  hour: number;
+  minute: number;
+}
+
 /**
- * Returns current Manila (UTC+8) date as YYYY-MM-DD.
+ * Returns Manila (UTC+8) date and time parts for a given Date instant.
  */
-export function getManilaTodayStr(): string {
+export function getManilaTimeParts(now: Date = new Date()): ManilaTimeParts {
+  const safeNow = isNaN(now.getTime()) ? new Date() : now;
   try {
-    return new Intl.DateTimeFormat('en-CA', {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Manila',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
-    }).format(new Date());
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(safeNow);
+    const year = parts.find((p) => p.type === 'year')?.value;
+    const month = parts.find((p) => p.type === 'month')?.value;
+    const day = parts.find((p) => p.type === 'day')?.value;
+    let hourStr = parts.find((p) => p.type === 'hour')?.value || '00';
+    if (hourStr === '24') hourStr = '00';
+    const minuteStr = parts.find((p) => p.type === 'minute')?.value || '00';
+    if (year && month && day) {
+      return {
+        dateStr: `${year}-${month}-${day}`,
+        timeStr: `${hourStr}:${minuteStr}`,
+        hour: parseInt(hourStr, 10),
+        minute: parseInt(minuteStr, 10),
+      };
+    }
   } catch {
-    const d = new Date();
-    // UTC+8 offset fallback
-    const utc8 = new Date(d.getTime() + (8 * 60 + d.getTimezoneOffset()) * 60000);
-    return `${utc8.getFullYear()}-${padZero(utc8.getMonth() + 1)}-${padZero(utc8.getDate())}`;
+    // Fallback below uses deterministic UTC+8 offset arithmetic
   }
+  const utc8 = new Date(safeNow.getTime() + 8 * 60 * 60 * 1000);
+  const hour = utc8.getUTCHours();
+  const minute = utc8.getUTCMinutes();
+  const dateStr = formatDateString(
+    utc8.getUTCFullYear(),
+    utc8.getUTCMonth() + 1,
+    utc8.getUTCDate()
+  );
+  return {
+    dateStr,
+    timeStr: `${padZero(hour)}:${padZero(minute)}`,
+    hour,
+    minute,
+  };
+}
+
+/**
+ * Returns current Manila (UTC+8) date as YYYY-MM-DD.
+ */
+export function getManilaTodayStr(now: Date = new Date()): string {
+  return getManilaTimeParts(now).dateStr;
 }
 
 export function toDateString(d: Date): string {
@@ -67,6 +113,330 @@ export function toDateString(d: Date): string {
   const month = d.getMonth() + 1;
   const day = d.getDate();
   return formatDateString(year, month, day);
+}
+
+export interface AppointmentLocalDateTime {
+  dateStr: string;      // "YYYY-MM-DD" in clinic local timezone (Asia/Manila)
+  timeStr: string;      // "HH:MM" (24-hour) in clinic local timezone (Asia/Manila)
+  formattedTime: string; // "h:mm A" (e.g. "4:00 PM") in clinic local timezone
+}
+
+/**
+ * Parses an appointment scheduledAt timestamp into epoch milliseconds.
+ * Naive ISO timestamps without 'Z' or an explicit UTC offset are normalized as Asia/Manila (+08:00).
+ */
+export function parseAppointmentTimestampMs(scheduledAt?: string | null): number {
+  if (!scheduledAt) {
+    return Number.NaN;
+  }
+
+  const trimmed = scheduledAt.trim();
+  if (!trimmed) {
+    return Number.NaN;
+  }
+
+  const normalized =
+    trimmed.includes('T') &&
+    !trimmed.endsWith('Z') &&
+    !trimmed.endsWith('z') &&
+    !/[+-]\d{2}:?\d{2}$/.test(trimmed)
+      ? `${trimmed}+08:00`
+      : trimmed;
+
+  return new Date(normalized).getTime();
+}
+
+/**
+ * Resolves UTC ISO or local scheduledAt timestamp into clinic local timezone (default Asia/Manila, UTC+8).
+ */
+export function getAppointmentLocalDateTime(
+  scheduledAt: string,
+  timeZoneId: string = 'Asia/Manila'
+): AppointmentLocalDateTime {
+  if (!scheduledAt) {
+    return { dateStr: '', timeStr: '', formattedTime: '' };
+  }
+
+  const timestampMs = parseAppointmentTimestampMs(scheduledAt);
+  if (!Number.isFinite(timestampMs)) {
+    const [dPart = '', tPart = ''] = scheduledAt.split('T');
+    const timeClean = tPart.slice(0, 5);
+    return {
+      dateStr: dPart,
+      timeStr: timeClean,
+      formattedTime: timeClean ? formatTime12(timeClean) : '',
+    };
+  }
+
+  const d = new Date(timestampMs);
+
+  if (timeZoneId === 'Asia/Manila') {
+    const manilaMs = d.getTime() + 8 * 60 * 60 * 1000;
+    const md = new Date(manilaMs);
+    const dateStr = `${md.getUTCFullYear()}-${padZero(md.getUTCMonth() + 1)}-${padZero(md.getUTCDate())}`;
+    const timeStr = `${padZero(md.getUTCHours())}:${padZero(md.getUTCMinutes())}`;
+    const formattedTime = formatTime12(timeStr);
+    return { dateStr, timeStr, formattedTime };
+  }
+
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZoneId,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(d);
+    const year = parts.find((p) => p.type === 'year')?.value;
+    const month = parts.find((p) => p.type === 'month')?.value;
+    const day = parts.find((p) => p.type === 'day')?.value;
+    let hour = parts.find((p) => p.type === 'hour')?.value || '00';
+    if (hour === '24') hour = '00';
+    const minute = parts.find((p) => p.type === 'minute')?.value || '00';
+    const dateStr = `${year}-${month}-${day}`;
+    const timeStr = `${hour}:${minute}`;
+    const formattedTime = formatTime12(timeStr);
+    return { dateStr, timeStr, formattedTime };
+  } catch {
+    const manilaMs = d.getTime() + 8 * 60 * 60 * 1000;
+    const md = new Date(manilaMs);
+    const dateStr = `${md.getUTCFullYear()}-${padZero(md.getUTCMonth() + 1)}-${padZero(md.getUTCDate())}`;
+    const timeStr = `${padZero(md.getUTCHours())}:${padZero(md.getUTCMinutes())}`;
+    const formattedTime = formatTime12(timeStr);
+    return { dateStr, timeStr, formattedTime };
+  }
+}
+
+/**
+ * Converts clinic local date (YYYY-MM-DD) and time (HH:MM) in Asia/Manila (UTC+8) into standard UTC ISO string.
+ * Returns an empty string if dateStr or timeStr is missing or out of valid calendar/clock bounds.
+ */
+export function manilaDateTimeToUtcIso(dateStr: string, timeStr: string): string {
+  if (!dateStr || !timeStr) return '';
+  const trimmedDate = dateStr.trim();
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmedDate);
+  if (!dateMatch) return '';
+  const year = parseInt(dateMatch[1], 10);
+  const month = parseInt(dateMatch[2], 10);
+  const day = parseInt(dateMatch[3], 10);
+  const maxDay = getDaysInMonth(year, month);
+  if (month < 1 || month > 12 || day < 1 || day > maxDay) {
+    return '';
+  }
+
+  const parts = timeStr.trim().split(':');
+  if (parts.length < 2 || parts.length > 3) return '';
+  if (!/^\d{2}$/.test(parts[0].trim()) || !/^\d{2}$/.test(parts[1].trim())) {
+    return '';
+  }
+  let secNum = 0;
+  if (parts.length === 3) {
+    if (!/^\d{2}$/.test(parts[2].trim())) {
+      return '';
+    }
+    secNum = Number(parts[2].trim());
+    if (!Number.isInteger(secNum) || secNum < 0 || secNum > 59) {
+      return '';
+    }
+  }
+  const hourNum = Number(parts[0].trim());
+  const minNum = Number(parts[1].trim());
+  if (
+    !Number.isInteger(hourNum) ||
+    !Number.isInteger(minNum) ||
+    hourNum < 0 ||
+    hourNum > 23 ||
+    minNum < 0 ||
+    minNum > 59
+  ) {
+    return '';
+  }
+  const hh = padZero(hourNum);
+  const mm = padZero(minNum);
+  const ss = padZero(secNum);
+  const isoWithOffset = `${trimmedDate}T${hh}:${mm}:${ss}+08:00`;
+  const parsed = new Date(isoWithOffset);
+  if (isNaN(parsed.getTime())) {
+    return '';
+  }
+  return parsed.toISOString();
+}
+
+/**
+ * Checks whether a clinic-local (Asia/Manila) date + time is in the past beyond the grace buffer.
+ * Uses strict `<` comparison against `now - graceMinutes` to match backend validation.
+ */
+export function isPastManilaDateTime(
+  dateStr: string,
+  timeStr: string,
+  now: Date = new Date(),
+  graceMinutes: number = PAST_APPOINTMENT_GRACE_MINUTES
+): boolean {
+  const utcIso = manilaDateTimeToUtcIso(dateStr, timeStr);
+  if (!utcIso || isNaN(now.getTime())) {
+    return false;
+  }
+  const scheduledMs = Date.parse(utcIso);
+  const cutoffMs = now.getTime() - graceMinutes * 60_000;
+  return scheduledMs < cutoffMs;
+}
+
+export interface FutureManilaScheduleValidationResult {
+  isValid: boolean;
+  isPast: boolean;
+  utcIso?: string;
+  errorMessage?: string;
+}
+
+/**
+ * Validates that a Manila date (YYYY-MM-DD) and time (HH:MM) represent a valid calendar/clock value
+ * and have not already passed beyond the 5-minute grace window.
+ */
+export function validateFutureManilaDateTime(
+  dateStr: string,
+  timeStr: string,
+  options?: {
+    now?: Date;
+    graceMinutes?: number;
+    mode?: 'create' | 'reschedule';
+  }
+): FutureManilaScheduleValidationResult {
+  const trimmedDate = (dateStr || '').trim();
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmedDate);
+  if (!dateMatch) {
+    return {
+      isValid: false,
+      isPast: false,
+      errorMessage: 'Enter a valid appointment date (YYYY-MM-DD).',
+    };
+  }
+  const year = parseInt(dateMatch[1], 10);
+  const month = parseInt(dateMatch[2], 10);
+  const day = parseInt(dateMatch[3], 10);
+  if (
+    year < 1900 ||
+    year > 2100 ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > getDaysInMonth(year, month)
+  ) {
+    return {
+      isValid: false,
+      isPast: false,
+      errorMessage: 'Enter a valid appointment date (YYYY-MM-DD).',
+    };
+  }
+
+  const trimmedTime = (timeStr || '').trim();
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(trimmedTime);
+  if (!timeMatch) {
+    return {
+      isValid: false,
+      isPast: false,
+      errorMessage: 'Enter a valid appointment time (HH:MM).',
+    };
+  }
+  const hh = parseInt(timeMatch[1], 10);
+  const mm = parseInt(timeMatch[2], 10);
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) {
+    return {
+      isValid: false,
+      isPast: false,
+      errorMessage: 'Enter a valid appointment time (HH:MM).',
+    };
+  }
+
+  const utcIso = manilaDateTimeToUtcIso(trimmedDate, trimmedTime);
+  if (!utcIso) {
+    return {
+      isValid: false,
+      isPast: false,
+      errorMessage: 'Enter a valid appointment time (HH:MM).',
+    };
+  }
+
+  if (isPastManilaDateTime(trimmedDate, trimmedTime, options?.now, options?.graceMinutes)) {
+    return {
+      isValid: false,
+      isPast: true,
+      utcIso,
+      errorMessage:
+        options?.mode === 'reschedule'
+          ? 'Cannot reschedule an appointment to a time that has already passed.'
+          : 'Cannot schedule an appointment for a time that has already passed.',
+    };
+  }
+
+  return {
+    isValid: true,
+    isPast: false,
+    utcIso,
+  };
+}
+
+/**
+ * Extracts a human-readable validation message from backend HTTP 400 VALIDATION_ERROR responses
+ * (supporting both ApiError instances and plain mocked error objects).
+ */
+export function extractAppointmentScheduleError(
+  err: unknown,
+  preferredFields: string[] = ['NewScheduledAt', 'ScheduledAt']
+): string | null {
+  if (!err || typeof err !== 'object') return null;
+  const candidate = err as {
+    status?: number;
+    errorCode?: string;
+    message?: string;
+    getFieldError?: (field: string) => string | undefined;
+    errors?: Array<{ field?: string | null; code?: string; message?: string }>;
+  };
+
+  for (const field of preferredFields) {
+    if (typeof candidate.getFieldError === 'function') {
+      const fieldMsg = candidate.getFieldError(field);
+      if (fieldMsg) return fieldMsg;
+    }
+    if (Array.isArray(candidate.errors)) {
+      const normalizedTarget = field.toLowerCase();
+      const match = candidate.errors.find((item) => {
+        if (!item?.field) return false;
+        const normalized = item.field.replace(/^\$\.?/, '').replace(/^\/+/, '').toLowerCase();
+        return normalized === normalizedTarget;
+      });
+      if (match?.message) return match.message;
+    }
+  }
+
+  if (Array.isArray(candidate.errors)) {
+    const firstMsg = candidate.errors.find((item) => Boolean(item?.message))?.message;
+    if (firstMsg) return firstMsg;
+  }
+
+  return candidate.message || null;
+}
+
+/**
+ * Checks whether a local HH:MM time falls within a discrete slot [slotTimeStr, slotTimeStr + intervalMinutes).
+ */
+export function isTimeInSlotWindow(
+  localTimeStr: string,
+  slotTimeStr: string,
+  intervalMinutes: number = 30
+): boolean {
+  if (!localTimeStr || !slotTimeStr) return false;
+  if (localTimeStr === slotTimeStr) return true;
+  const [lh, lm] = localTimeStr.split(':').map(Number);
+  const [sh, sm] = slotTimeStr.split(':').map(Number);
+  if (Number.isNaN(lh) || Number.isNaN(lm) || Number.isNaN(sh) || Number.isNaN(sm)) {
+    return false;
+  }
+  const localTotal = lh * 60 + lm;
+  const slotTotal = sh * 60 + sm;
+  return localTotal >= slotTotal && localTotal < slotTotal + intervalMinutes;
 }
 
 /**
@@ -95,8 +465,10 @@ export function generateMonthGrid(
   for (let i = firstDayOfWeek - 1; i >= 0; i--) {
     const day = daysInPrevMonth - i;
     const dateString = formatDateString(prevYear, prevMonth, day);
-    const cellDate = new Date(Date.UTC(prevYear, prevMonth - 1, day));
-    const cellAppts = appointments.filter((a) => a.scheduledAt.startsWith(dateString));
+    const cellDate = new Date(prevYear, prevMonth - 1, day, 12, 0, 0);
+    const cellAppts = appointments.filter(
+      (a) => getAppointmentLocalDateTime(a.scheduledAt).dateStr === dateString
+    );
     cells.push({
       date: cellDate,
       dateString,
@@ -110,8 +482,10 @@ export function generateMonthGrid(
   // 2. Days of current month
   for (let day = 1; day <= daysInCurrentMonth; day++) {
     const dateString = formatDateString(year, month, day);
-    const cellDate = new Date(Date.UTC(year, month - 1, day));
-    const cellAppts = appointments.filter((a) => a.scheduledAt.startsWith(dateString));
+    const cellDate = new Date(year, month - 1, day, 12, 0, 0);
+    const cellAppts = appointments.filter(
+      (a) => getAppointmentLocalDateTime(a.scheduledAt).dateStr === dateString
+    );
     cells.push({
       date: cellDate,
       dateString,
@@ -127,8 +501,10 @@ export function generateMonthGrid(
   let nextDay = 1;
   while (cells.length < totalCellsNeeded) {
     const dateString = formatDateString(nextYear, nextMonth, nextDay);
-    const cellDate = new Date(Date.UTC(nextYear, nextMonth - 1, nextDay));
-    const cellAppts = appointments.filter((a) => a.scheduledAt.startsWith(dateString));
+    const cellDate = new Date(nextYear, nextMonth - 1, nextDay, 12, 0, 0);
+    const cellAppts = appointments.filter(
+      (a) => getAppointmentLocalDateTime(a.scheduledAt).dateStr === dateString
+    );
     cells.push({
       date: cellDate,
       dateString,
@@ -161,7 +537,9 @@ export function getWeekDays(
   for (let i = 0; i < 7; i++) {
     const d = new Date(startOfWeek.getTime() + i * 86400000);
     const dateString = toDateString(d);
-    const cellAppts = appointments.filter((a) => a.scheduledAt.startsWith(dateString));
+    const cellAppts = appointments.filter(
+      (a) => getAppointmentLocalDateTime(a.scheduledAt).dateStr === dateString
+    );
     columns.push({
       date: d,
       dateString,
@@ -299,6 +677,14 @@ export function resolveStatusTokens(status: AppointmentStatus) {
         badgeText: theme.colors.textMuted,
         borderColor: theme.colors.emergencyBorder,
         label: 'Cancelled',
+        isStrikethrough: true,
+      };
+    case 'NoShow':
+      return {
+        badgeBg: theme.colors.surfaceMuted,
+        badgeText: theme.colors.textMuted,
+        borderColor: theme.colors.border,
+        label: 'No Show',
         isStrikethrough: true,
       };
     case 'Confirmed':
@@ -449,4 +835,65 @@ export function formatDateTitle(viewMode: CalendarViewMode, currentDate: Date): 
     return `${startMonthStr} ${startDay} – ${endDay}, ${endYear}`;
   }
   return `${startMonthStr} ${startDay} – ${endMonthStr} ${endDay}, ${endYear}`;
+}
+
+export function isAppointmentTerminal(status?: AppointmentStatus | string | null): boolean {
+  return status === 'Completed' || status === 'NoShow' || status === 'Cancelled';
+}
+
+export function isAppointmentOverdue(
+  appointment: Pick<ExtendedAppointmentItem, 'scheduledAt' | 'status'> | null | undefined,
+  now: Date = new Date()
+): boolean {
+  if (!appointment) return false;
+  if (appointment.status !== 'Pending' && appointment.status !== 'Confirmed') {
+    return false;
+  }
+  const scheduledMs = parseAppointmentTimestampMs(appointment.scheduledAt);
+  return Number.isFinite(scheduledMs) && scheduledMs < now.getTime();
+}
+
+export function isAppointmentPastDateOverdue(
+  appointment: Pick<ExtendedAppointmentItem, 'scheduledAt' | 'status'> | null | undefined,
+  timeZoneId: string = 'Asia/Manila',
+  now: Date = new Date()
+): boolean {
+  if (!isAppointmentOverdue(appointment, now) || !appointment) return false;
+  const scheduledLocal = getAppointmentLocalDateTime(appointment.scheduledAt, timeZoneId);
+  const todayLocal = getAppointmentLocalDateTime(now.toISOString(), timeZoneId);
+  return (
+    Boolean(scheduledLocal.dateStr) &&
+    Boolean(todayLocal.dateStr) &&
+    scheduledLocal.dateStr < todayLocal.dateStr
+  );
+}
+
+export function formatOverdueElapsed(scheduledAt: string, now: Date = new Date()): string {
+  const scheduledMs = parseAppointmentTimestampMs(scheduledAt);
+  if (!Number.isFinite(scheduledMs)) return 'Overdue';
+  const diffMs = now.getTime() - scheduledMs;
+  if (diffMs < 60_000) return 'Just past scheduled time';
+  const totalMins = Math.floor(diffMs / 60_000);
+  if (totalMins < 60) {
+    return `${totalMins} ${totalMins === 1 ? 'min' : 'mins'} overdue`;
+  }
+  const totalHours = Math.floor(totalMins / 60);
+  const remMins = totalMins % 60;
+  if (totalHours < 24) {
+    return remMins > 0 ? `${totalHours}h ${remMins}m overdue` : `${totalHours}h overdue`;
+  }
+  const totalDays = Math.floor(totalHours / 24);
+  return `${totalDays} ${totalDays === 1 ? 'day' : 'days'} overdue`;
+}
+
+export function getNextAvailableSlotForToday(now: Date = new Date()): { date: string; time: string } {
+  const safeNow = Number.isNaN(now.getTime()) ? new Date() : now;
+  const todayStr = getManilaTodayStr(safeNow);
+  const slotStepMs = 30 * 60_000;
+  const nextHalfHourMs = Math.ceil((safeNow.getTime() + 15 * 60_000) / slotStepMs) * slotStepMs;
+  const parts = getManilaTimeParts(new Date(nextHalfHourMs));
+  if (parts.dateStr !== todayStr) {
+    return { date: parts.dateStr, time: '09:00' };
+  }
+  return { date: parts.dateStr, time: parts.timeStr };
 }

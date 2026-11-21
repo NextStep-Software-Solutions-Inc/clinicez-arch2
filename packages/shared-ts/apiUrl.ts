@@ -26,7 +26,7 @@ export const DEFAULT_API_URL_TEMPLATE = 'https://{service}-api.{baseDomain}';
 
 const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const isLocalHost = (hostname: string): boolean =>
+export const isLocalHost = (hostname: string): boolean =>
   hostname === 'localhost' ||
   hostname.endsWith('.localhost') ||
   hostname.endsWith('.lvh.me') ||

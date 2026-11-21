@@ -4,16 +4,15 @@ import ResponsiveLayout from '../../components/layout/ResponsiveLayout';
 import AuditWorkstationView from '../../components/audit/AuditWorkstationView';
 import { theme } from '../../constants/theme';
 
-export default function AuditScreen() {
+export default function AuditScreen({ navigation }: { navigation?: any } = {}) {
   return (
     <ResponsiveLayout
       headerTitle="Audit Log"
-      headerSubtitle="Clinic-wide forensic activity trail & privacy compliance"
       hideHeader={false}
       style={styles.container}
     >
       <View style={styles.content}>
-        <AuditWorkstationView />
+        <AuditWorkstationView navigation={navigation} />
       </View>
     </ResponsiveLayout>
   );

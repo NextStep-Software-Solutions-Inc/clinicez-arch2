@@ -133,7 +133,11 @@ public sealed class PatientDocumentFlowTests
         var stored = await h.WithDbAsync(db => db.LabResultReports.AsNoTracking().Include(r => r.Observations).SingleAsync());
         stored.Source.Should().Be(ResultProvenance.ClinicEzLab);
         stored.Verification.Should().Be(ResultVerification.Verified);
-        stored.FileStorageKey.Should().Be($"patients/{patientId}/lab-results/{reportId}/report.pdf");
+        stored.FileStorageKey.Should().Be($"patients/{patientId}/lab-results/{reportId}.cez");
+        stored.EncryptionAlgorithm.Should().Be("AES-256-GCM");
+        stored.EncryptionIvBase64.Should().NotBeNullOrWhiteSpace();
+        stored.EncryptionTagBase64.Should().NotBeNullOrWhiteSpace();
+        stored.WrappedKeyJson.Should().NotBeNullOrWhiteSpace();
         stored.Observations.Should().ContainSingle().Which.TestName.Should().Be("Hemoglobin");
     }
 

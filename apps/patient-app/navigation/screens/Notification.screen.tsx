@@ -1,5 +1,5 @@
-import { useCallback, useLayoutEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -12,8 +12,10 @@ import { formatDistanceToNowStrict, isToday, isYesterday, format } from 'date-fn
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ThemedText from '../../components/ui/ThemedText';
 import { AppIcon, type IconName } from '../../components/ui/Icon';
+import { FilterChipBar, type FilterChipItem } from '../../components/ui/FilterChipBar';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useNotificationContext } from '../../contexts/NotificationContext';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import { usePatientId } from '../../hooks/usePatientId';
 import {
   getNotifications,
@@ -302,14 +304,18 @@ function EmptyStateView({ filter }: { filter: NotificationFilter }) {
 // ─── Screen ────────────────────────────────────────────────────────────────────
 
 export default function NotificationScreen() {
-  const { colors, radii, spacing } = useAppTheme();
+  const { colors, spacing } = useAppTheme();
   const navigation = useNavigation();
   const patientId = usePatientId();
   const insets = useSafeAreaInsets();
   const { unreadCount, refreshNotifications, permissionStatus, requestPermissions } =
     useNotificationContext();
 
-  const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all');
+  const [activeFilter, setActiveFilter] = usePersistedTab<NotificationFilter>({
+    key: 'notifications.filter',
+    defaultValue: 'all',
+    queryParam: 'filter',
+  });
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -380,47 +386,28 @@ export default function NotificationScreen() {
     [refreshNotifications],
   );
 
+  const filterItems: ReadonlyArray<FilterChipItem<NotificationFilter>> = useMemo(
+    () =>
+      FILTERS.map((f) => ({
+        key: f.key,
+        label: f.label,
+        count: f.key === 'unread' ? unreadCount : undefined,
+      })),
+    [unreadCount],
+  );
+
   const sections = groupByDate(items);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {/* Filter chips */}
-      <View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.filterRow, { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm }]}
-        >
-          {FILTERS.map((f) => {
-            const isActive = f.key === activeFilter;
-            return (
-              <Pressable
-                key={f.key}
-                onPress={() => setActiveFilter(f.key)}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: isActive }}
-                style={[
-                  styles.filterChip,
-                  {
-                    backgroundColor: isActive ? colors.primary : colors.card,
-                    borderColor: isActive ? colors.primary : colors.border,
-                    borderRadius: radii.full,
-                    paddingHorizontal: spacing.md,
-                    paddingVertical: spacing.sm,
-                  },
-                ]}
-              >
-                <ThemedText
-                  variant="smallBold"
-                  color={isActive ? 'onPrimary' : 'textSecondary'}
-                >
-                  {f.label}
-                  {f.key === 'unread' && unreadCount > 0 ? ` (${unreadCount})` : ''}
-                </ThemedText>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+      {/* Filter chips (symmetrical top === bottom paddingVertical: spacing.md) */}
+      <View style={{ paddingVertical: spacing.md }}>
+        <FilterChipBar
+          items={filterItems}
+          selectedKey={activeFilter}
+          onSelect={setActiveFilter}
+          contentContainerStyle={{ paddingHorizontal: spacing.lg }}
+        />
       </View>
 
       {/* Main list */}
@@ -466,15 +453,6 @@ export default function NotificationScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   root: { flex: 1 },
-
-  filterRow: {
-    flexDirection: 'row',
-  },
-  filterChip: {
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   listContent: {
     gap: 8,

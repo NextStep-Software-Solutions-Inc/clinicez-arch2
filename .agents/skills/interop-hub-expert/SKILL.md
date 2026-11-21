@@ -17,13 +17,16 @@ This skill provides step-by-step instructions, design patterns, and reference ar
 
 ## Core Principles & Architecture Overview
 
-1. **No Direct HTTP / No Message Broker**:
-   - Services never talk directly to each other via HTTP/webhooks, nor through RabbitMQ/MassTransit.
-   - All cross-service and cross-cell communication uses the `ClinicEz.Shared.Interop` SDK (mailboxes in Postgres).
+1. **No Direct HTTP / No Message Broker (Sole Exception: `portal <-> patient`)**:
+   - Direct inter-service HTTP communication is strictly forbidden across all services **except `portal <-> patient`** in the cloud control plane.
+   - Direct HTTP calls between facility microservices (`clinic-api`, `laboratory-api`, `pharmacy-api`, `organization-api`, `billing-api`) are an architectural violation.
+   - Every facility service runs in outbound-only on-premise Edge Cells (`Hub:Mode=Local`, zero inbound ports) and MUST communicate exclusively via `services/interop-hub`.
+   - Next.js BFF proxy routes (`src/app/api/...`) over `portal-api` or `patient-api` are strictly forbidden in `apps/portal-web`; clients talk directly to APIs using Clerk bearer authentication.
+   - All cross-service and cross-cell facility communication uses the `ClinicEz.Shared.Interop` SDK (mailboxes in Postgres).
    - `scripts/check-no-broker.ps1` is enforced in CI to prevent broker regression.
 
-2. **Outbound-Only HTTPS**:
-   - On-premise sites require no inbound open ports. Every local service and Local Hub connects **outbound** to the Cloud Hub.
+2. **Outbound-Only HTTPS & Zero Inbound Ports**:
+   - On-premise Edge Cells require zero inbound open ports. Every local service and Local Hub connects **outbound** over HTTPS to the Cloud Hub.
 
 3. **Topology Modes (`Hub:Mode`)**:
    - **Cloud**: Central routing authority, client auth, directory snapshot master, claims manager, mailbox host.

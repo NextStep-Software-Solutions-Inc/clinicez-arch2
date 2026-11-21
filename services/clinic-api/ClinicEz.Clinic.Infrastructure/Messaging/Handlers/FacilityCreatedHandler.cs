@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Infrastructure.Messaging.Handlers;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
@@ -65,15 +66,25 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
             message.Name, message.ResourceId, message.TenantId);
 
         var tenantId = message.TenantId.ToLower();
-        var entitlementVersion = _licenseValidator.Validate(message.LicenseToken, message.ResourceId, message.TenantId).Payload?.EntitlementVersion ?? 0;
+        var licenseValidation = _licenseValidator.Validate(message.LicenseToken, message.ResourceId, message.TenantId);
+        var entitlementVersion = licenseValidation.Payload?.EntitlementVersion ?? 0;
 
         // Seed or update ClinicSettings with cryptographically rooted license token
-        var existingSettings = await _dbContext.ClinicSettings
+        var existingSettings = await _dbContext.Settings
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(s => s.ClinicId == message.ResourceId && s.TenantId.ToLower() == tenantId, ct);
 
         if (existingSettings != null)
         {
+            var hasTeleconsultEntitlement = licenseValidation.IsValid &&
+                licenseValidation.Payload?.EnabledFeatures != null &&
+                licenseValidation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+
+            if (!hasTeleconsultEntitlement)
+            {
+                existingSettings.EnableTeleconsultation = false;
+            }
+
             if (!string.IsNullOrWhiteSpace(message.LicenseToken))
             {
                 existingSettings.LicenseToken = message.LicenseToken;
@@ -85,10 +96,68 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
             existingSettings.ClinicName = message.Name;
             existingSettings.TenantSlug = message.TenantSlug ?? existingSettings.TenantSlug;
             existingSettings.FacilitySlug = message.Slug ?? existingSettings.FacilitySlug;
+            existingSettings.IsWorkspaceEligible = message.IsWorkspaceEligible ?? false;
+            ApplyPlatformVerification(existingSettings, message);
+
+            if (message.BranchId != null)
+            {
+                existingSettings.BranchId = message.BranchId;
+                existingSettings.BranchName = message.BranchName;
+                existingSettings.BranchPhilHealthAccreditationNumber = message.BranchPhilHealthAccreditationNumber;
+                existingSettings.BranchPmccNumber = message.BranchPmccNumber;
+                existingSettings.BranchSoftwareCertificateId = message.BranchSoftwareCertificateId;
+                existingSettings.BranchPhilHealthBaseUrl = message.BranchPhilHealthBaseUrl;
+                existingSettings.IsBranchPhilHealthAccredited = message.IsBranchPhilHealthAccredited;
+
+                if (!existingSettings.IsPhilHealthOverridden)
+                {
+                    if (message.IsBranchPhilHealthAccredited && !string.IsNullOrWhiteSpace(message.BranchPhilHealthAccreditationNumber))
+                    {
+                        existingSettings.AccreditationNumber = message.BranchPhilHealthAccreditationNumber;
+                        existingSettings.PmccNumber = message.BranchPmccNumber;
+                        existingSettings.SoftwareCertificateId = message.BranchSoftwareCertificateId;
+                        existingSettings.PhilHealthBaseUrl = !string.IsNullOrWhiteSpace(message.BranchPhilHealthBaseUrl) ? message.BranchPhilHealthBaseUrl : "https://pcapi.philhealth.gov.ph";
+                        existingSettings.IsPhilHealthConfigured = true;
+                    }
+                    else
+                    {
+                        existingSettings.IsPhilHealthConfigured = false;
+                    }
+                }
+            }
+            else if (existingSettings.BranchId != null)
+            {
+                existingSettings.BranchId = null;
+                existingSettings.BranchName = null;
+                existingSettings.BranchPhilHealthAccreditationNumber = null;
+                existingSettings.BranchPmccNumber = null;
+                existingSettings.BranchSoftwareCertificateId = null;
+                existingSettings.BranchPhilHealthBaseUrl = null;
+                existingSettings.IsBranchPhilHealthAccredited = false;
+
+                if (!existingSettings.IsPhilHealthOverridden)
+                {
+                    existingSettings.AccreditationNumber = null;
+                    existingSettings.PmccNumber = null;
+                    existingSettings.SoftwareCertificateId = null;
+                    existingSettings.IsPhilHealthConfigured = false;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(existingSettings.LetterheadAddress) && !string.IsNullOrWhiteSpace(message.Address))
+                existingSettings.LetterheadAddress = message.Address;
+            if (string.IsNullOrWhiteSpace(existingSettings.LetterheadContact) && !string.IsNullOrWhiteSpace(message.ContactNumber))
+                existingSettings.LetterheadContact = message.ContactNumber;
+
+            await DirectoryInteropSyncHelper.EnqueueDirectorySnapshotIfVerifiedAndPublishedAsync(
+                _dbContext,
+                _publisher,
+                existingSettings,
+                ct);
         }
         else
         {
-            var newSettings = new ClinicSettings
+            var newSettings = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 TenantId = message.TenantId,
@@ -101,10 +170,36 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                 MaxStaffLimit = message.Limits?.MaxStaff ?? 5,
                 LicenseExpiresAt = message.LicenseExpiresAt,
                 EntitlementVersion = entitlementVersion,
+                IsWorkspaceEligible = message.IsWorkspaceEligible ?? false,
+                BranchId = message.BranchId,
+                BranchName = message.BranchName,
+                BranchPhilHealthAccreditationNumber = message.BranchPhilHealthAccreditationNumber,
+                BranchPmccNumber = message.BranchPmccNumber,
+                BranchSoftwareCertificateId = message.BranchSoftwareCertificateId,
+                BranchPhilHealthBaseUrl = message.BranchPhilHealthBaseUrl,
+                IsBranchPhilHealthAccredited = message.IsBranchPhilHealthAccredited,
+                IsPhilHealthOverridden = false,
+                LetterheadAddress = message.Address,
+                LetterheadContact = message.ContactNumber,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "SystemProvisioning"
             };
-            _dbContext.ClinicSettings.Add(newSettings);
+            ApplyPlatformVerification(newSettings, message);
+
+            if (message.IsBranchPhilHealthAccredited && !string.IsNullOrWhiteSpace(message.BranchPhilHealthAccreditationNumber))
+            {
+                newSettings.AccreditationNumber = message.BranchPhilHealthAccreditationNumber;
+                newSettings.PmccNumber = message.BranchPmccNumber;
+                newSettings.SoftwareCertificateId = message.BranchSoftwareCertificateId;
+                newSettings.PhilHealthBaseUrl = !string.IsNullOrWhiteSpace(message.BranchPhilHealthBaseUrl) ? message.BranchPhilHealthBaseUrl : "https://pcapi.philhealth.gov.ph";
+                newSettings.IsPhilHealthConfigured = true;
+            }
+            else
+            {
+                newSettings.IsPhilHealthConfigured = false;
+            }
+
+            _dbContext.Settings.Add(newSettings);
         }
 
         // Confirm provisioning to the control plane in the same transaction as the settings change.
@@ -122,5 +217,30 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
             });
 
         await _dbContext.SaveChangesAsync(ct);
+    }
+
+    private static void ApplyPlatformVerification(FacilitySettings target, FacilityCreatedEvent message)
+    {
+        if (message.PlatformVerificationStatus.HasValue)
+        {
+            target.PlatformVerificationStatus = message.PlatformVerificationStatus.Value;
+        }
+        else if (message.IsPlatformVerified.HasValue)
+        {
+            target.PlatformVerificationStatus = message.IsPlatformVerified.Value
+                ? PlatformVerificationStatus.Verified
+                : PlatformVerificationStatus.Unverified;
+        }
+
+        if (target.PlatformVerificationStatus == PlatformVerificationStatus.Verified)
+        {
+            target.VerificationRejectionReason = null;
+        }
+        else if (message.VerificationRejectionReason != null)
+        {
+            target.VerificationRejectionReason = string.IsNullOrWhiteSpace(message.VerificationRejectionReason)
+                ? null
+                : message.VerificationRejectionReason.Trim();
+        }
     }
 }

@@ -35,7 +35,7 @@ public sealed class ReactivateQueueItemCommandHandler : IRequestHandler<Reactiva
     public async Task<QueueItemDto> Handle(ReactivateQueueItemCommand request, CancellationToken cancellationToken)
     {
         var item = await _queueRepository.Query(q => q.Id == request.Id && q.ClinicId == _clinicContext.ClinicId)
-            .Include(q => q.TriageVitals)
+            .Include(q => q.PatientVitals)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (item == null)
@@ -48,20 +48,28 @@ public sealed class ReactivateQueueItemCommandHandler : IRequestHandler<Reactiva
             throw new BadRequestException($"Queue item '{request.Id}' cannot be reactivated from status '{item.Status}'. Only 'OnHold' or 'NoShow' items can be reactivated.");
         }
 
-        // Determine min waiting sequence number today so reactivated ticket is at the top of the waiting line
-        var minWaitingSeq = await _queueRepository.Query(q =>
-            q.ClinicId == _clinicContext.ClinicId &&
-            q.QueueDate == item.QueueDate &&
-            q.Status == QueueStatus.Waiting)
-            .MinAsync(q => (int?)q.SequenceNumber, cancellationToken);
+        if (item.IsDirectVisit)
+        {
+            item.SequenceNumber = 0;
+        }
+        else
+        {
+            // Determine min waiting sequence number today so reactivated ticket is at the top of the waiting line
+            var minWaitingSeq = await _queueRepository.Query(q =>
+                q.ClinicId == _clinicContext.ClinicId &&
+                q.QueueDate == item.QueueDate &&
+                !q.IsDirectVisit &&
+                q.Status == QueueStatus.Waiting)
+                .MinAsync(q => (int?)q.SequenceNumber, cancellationToken);
 
-        item.SequenceNumber = minWaitingSeq.HasValue ? minWaitingSeq.Value - 1 : 1;
+            item.SequenceNumber = minWaitingSeq.HasValue ? minWaitingSeq.Value - 1 : 1;
+        }
         item.Status = QueueStatus.Waiting;
         item.CompletedTime = null;
         item.UpdatedAt = DateTime.UtcNow;
         item.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Staff";
 
-        if (_notificationDispatcher != null)
+        if (_notificationDispatcher != null && !item.IsDirectVisit)
         {
             await _notificationDispatcher.EvaluateAndDispatchApproachingAlertsAsync(item.ClinicId, item.QueueDate, cancellationToken);
         }
@@ -69,30 +77,6 @@ public sealed class ReactivateQueueItemCommandHandler : IRequestHandler<Reactiva
         _queueRepository.Update(item);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        string? vitalsSummary = item.TriageVitals != null
-            ? $"BP: {item.TriageVitals.SystolicBp}/{item.TriageVitals.DiastolicBp} • HR: {item.TriageVitals.HeartRateBpm}"
-            : null;
-
-        return new QueueItemDto(
-            item.Id,
-            item.TenantId,
-            item.ClinicId,
-            item.QueueNumber,
-            item.SequenceNumber,
-            item.QueueDate,
-            item.PatientId,
-            item.PatientName,
-            item.AppointmentId,
-            item.DoctorId,
-            item.DoctorName,
-            item.Priority,
-            item.Status,
-            item.CheckInTime,
-            item.CalledTime,
-            item.CompletedTime,
-            item.ChiefComplaint,
-            item.TriageVitals != null,
-            vitalsSummary,
-            item.RoomOrStation);
+        return item.ToDto();
     }
 }

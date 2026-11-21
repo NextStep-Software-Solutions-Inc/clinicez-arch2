@@ -27,7 +27,7 @@ public record LabResultReviewItemDto(
     bool HasPanicAlert
 )
 {
-    public static LabResultReviewItemDto From(ClinicLabResult result, ClinicLabOrder order) => new(
+    public static LabResultReviewItemDto From(LabResult result, LabOrder order) => new(
         result.Id,
         order.Id,
         order.OrderNumber,

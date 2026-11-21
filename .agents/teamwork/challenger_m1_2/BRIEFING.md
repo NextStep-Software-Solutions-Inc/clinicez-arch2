@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-20T03:12:00Z
+# BRIEFING — 2026-11-14T12:17:30Z
 
 ## Mission
-Empirically challenge the regulatory PDEA S2 safeguard and controller `?wet=` routing across all document endpoints, wet mode override behavior, and `/verify/{digest}` security digest resolution.
+Empirically and adversarially challenge TEST_INFRA.md for Clinic EZ Teleconsultation Finalization (check commands, stress-test test matrix, verify invariant guards).
 
 ## 🔒 My Identity
 - Archetype: EMPIRICAL CHALLENGER
@@ -10,55 +10,60 @@ Empirically challenge the regulatory PDEA S2 safeguard and controller `?wet=` ro
 - Original parent: f15f02a3-efcd-418a-934f-74dd68d6a346
 - Milestone: M1 (Backend Tri-Mode Engine & Entity Extension Verification)
 - Instance: challenger_m1_2
+- Current working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api
+- Current state folder: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/challenger_m1_2
+- Current parent: ad860b7a-652f-4787-96d8-f21611b84dd5
+- Current milestone: E2E-M1 Adversarial Challenge
 
 ## 🔒 Key Constraints
 - Review-only — do NOT modify implementation code unless creating test files or temporary test harnesses.
 - Must run verification code directly; do NOT trust worker claims or logs.
 - Empirical reproduction required for any reported bug.
 - Write handoff.md with explicit Verdict line: `VERDICT: APPROVE` or `VERDICT: REQUEST_CHANGES`.
+- Run commands specified in TEST_INFRA.md Section 5 to confirm syntactic and operational validity.
+- Invariant guards: zero PHI, no unapproved external hosts, token design rules, port 8081 untouched.
 
 ## Current Parent
-- Conversation ID: f15f02a3-efcd-418a-934f-74dd68d6a346
-- Updated: 2026-10-20T03:00:26Z
+- Conversation ID: ad860b7a-652f-4787-96d8-f21611b84dd5
+- Updated: 2026-11-14T12:07:57Z
 
 ## Review Scope
 - **Files to review**:
-  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Api/Controllers/DocumentsController.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Api/Controllers/PrescriptionsController.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Api/Controllers/LabOrdersController.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/HardenedDocumentGenerationTests.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/Adversarial/ChallengerM1_2RegulatoryRoutingTests.cs`
-- **Interface contracts**:
-  - `packages/shared-dotnet/Documents/Configuration/TenantPrintoutConfig.cs`
-  - `PROJECT.md`, `TEST_READY.md`, `ORIGINAL_REQUEST.md`
+  - `TEST_INFRA.md`
+  - `.agents/teamwork/ORIGINAL_REQUEST.md`
+  - `.agents/teamwork/sub_orch_e2e/SCOPE.md`
+  - `brain/9542d721-8b8b-46ea-9635-c34ef9a2bc0a/implementation_plan.md`
 - **Review criteria**:
-  - Prescription with dangerous drug + `?wet=false` vs `?wet=true` vs omitted (PDEA S2 safeguard enforcement)
-  - Clean prescription without dangerous drug + `?wet=true` vs `?wet=false` vs omitted
-  - Security digest verification resolution under `/verify/{digest}`
-  - QuestPDF wet signature line and text suppression / preservation of verification hashes
+  - Command execution and validity
+  - Negative test matrix completeness
+  - Verifiable assertions (status codes, exit codes, testIDs, domain events)
+  - Conflicts between tests
+  - Invariant guards (zero PHI, no unapproved external hosts, token rules, port 8081 untouched)
 
 ## Attack Surface
 - **Hypotheses tested**:
-  - Hypothesis 1: Can a caller bypass PDEA S2 dangerous drug wet-mode enforcement by passing `?wet=false` to controller? -> DISPROVED (Engine overrides to WetSignature unconditionally).
-  - Hypothesis 2: Does `ClinicDocumentPdfService` enforce PDEA S2 wet mode if `SignatureMode.ESignatureSpecimen` is explicitly requested in code? -> CONFIRMED (Air-tight override at line 428).
-  - Hypothesis 3: Does `?wet=false` preserve e-signature mode for clean prescriptions, and `?wet=true` force wet mode? -> CONFIRMED.
-  - Hypothesis 4: Does `/verify/{digest}` work when `digest` is passed (SHA256 hex or trimmed)? -> CONFIRMED across MedCert, Referral, Prescription, and LabOrder.
-  - Hypothesis 5: Do `LabOrdersController` and `DocumentsController` handle `?wet=` correctly? -> CONFIRMED.
-- **Vulnerabilities found**: None in regulatory routing or PDEA S2 safeguards.
-- **Untested angles**: Cross-tenant isolation on verify (handled by public route by design).
+  - Hypothesis 1: Are Section 5 .NET backend commands valid and passing? -> CONFIRMED (MediaBroker: 42 passed; Portal: 1637 passed; Clinic: 617 passed; Interop: 190 passed; Patient: 7 passed).
+  - Hypothesis 2: Does `COMMS_ICON_MAP` invariant conflict with Users button in toolbar? -> DISPROVED (Architecture uses `renderParticipantsIcon` to bypass key additions, preserving 17 keys).
+  - Hypothesis 3: Does `bun test tests` in `packages/comms-sdk` pass cleanly? -> DISPROVED (Fails with 2 errors in `call-stage.test.ts` due to legacy assertions for removed `btn-stage-copy-invite`).
+  - Hypothesis 4: Does `bun run lint:comms` pass cleanly? -> DISPROVED (Fails with 4 color violations in `OverlayTooltip.tsx` due to raw hex values).
+  - Hypothesis 5: Does port 8081 remain alive and healthy? -> CONFIRMED (HTTP 200 OK).
+- **Vulnerabilities found**:
+  - Finding 1: Obsolete assertions in `packages/comms-sdk/tests/ui/call-stage.test.ts` must be updated for R1 in M2.
+  - Finding 2: `OverlayTooltip.tsx` raw hex literals must be tokenized in M2.
+- **Untested angles**:
+  - Real-world LiveKit SFU WAN UDP routing (mocked in tests).
 
 ## Loaded Skills
-- None explicitly requested.
+- None
 
 ## Key Decisions Made
-- Authored 17 empirical unit tests in `ChallengerM1_2RegulatoryRoutingTests.cs`.
-- All 17 tests passed with 0 errors. Full test suite confirms 0 regressions.
-- Verdict: APPROVE.
+- Executed all Section 5 CLI commands empirically.
+- Authored comprehensive adversarial challenge report in `challenge.md`.
+- Authored 5-component handoff report in `handoff.md` with explicit verdict `VERDICT: APPROVE`.
 
 ## Artifact Index
 - `.agents/teamwork/challenger_m1_2/DISPATCH.md` — Incoming dispatch messages
 - `.agents/teamwork/challenger_m1_2/BRIEFING.md` — Agent briefing & working memory
 - `.agents/teamwork/challenger_m1_2/progress.md` — Liveness heartbeat & task progress
-- `.agents/teamwork/challenger_m1_2/handoff.md` — Final handoff report
-- `services/clinic-api/ClinicEz.Clinic.Application.Tests/Adversarial/ChallengerM1_2RegulatoryRoutingTests.cs` — 17 empirical test suites
+- `.agents/teamwork/challenger_m1_2/challenge.md` — Empirical challenge report
+- `.agents/teamwork/challenger_m1_2/handoff.md` — Self-contained handoff report (VERDICT: APPROVE)

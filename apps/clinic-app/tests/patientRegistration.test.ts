@@ -267,7 +267,7 @@ describe('Feature 12 & 13: Dual-Action Patient Registration & Triage Routing', (
       fullName: 'Santos, Maria',
       dateOfBirth: '1990-05-15',
       age: 36,
-      gender: 'Female',
+      sex: 'Female',
       contactNumber: '0917-123-4567',
       philHealthNumber: '12-345678901-8',
       createdAt: '2026-10-11T12:00:00Z',
@@ -279,7 +279,7 @@ describe('Feature 12 & 13: Dual-Action Patient Registration & Triage Routing', (
       firstName: 'Juan',
       lastName: 'Dela Cruz',
       dateOfBirth: '1985-04-20',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0918-987-6543',
       sendToTriage: false,
     };
@@ -294,7 +294,7 @@ describe('Feature 12 & 13: Dual-Action Patient Registration & Triage Routing', (
       fullName: 'Dela Cruz, Juan',
       dateOfBirth: '1985-04-20',
       age: 41,
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0918-987-6543',
       createdAt: '2026-10-11T12:00:00Z',
       activeQueueTicket: null,
@@ -314,7 +314,7 @@ describe('Feature 12 & 13: Dual-Action Patient Registration & Triage Routing', (
       firstName: 'Pedro',
       lastName: 'Penduko',
       dateOfBirth: '1992-08-10',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0920-555-1234',
       sendToTriage: true,
       priority: 'Routine',
@@ -331,7 +331,7 @@ describe('Feature 12 & 13: Dual-Action Patient Registration & Triage Routing', (
       fullName: 'Penduko, Pedro',
       dateOfBirth: '1992-08-10',
       age: 34,
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0920-555-1234',
       createdAt: '2026-10-11T12:00:00Z',
       activeQueueTicket: 'Q-007',
@@ -373,7 +373,7 @@ describe('Feature 12 & 13: Dual-Action Patient Registration & Triage Routing', (
       firstName: 'Clara',
       lastName: 'Reyes',
       dateOfBirth: '1995-11-03',
-      gender: 'Female',
+      sex: 'Female',
       contactNumber: '0917-888-9999',
       allergies: 'Amoxicillin (Medication - STAT), Shrimp (Food)',
       structuredAllergies,
@@ -394,7 +394,7 @@ describe('Feature 12 & 13: Dual-Action Patient Registration & Triage Routing', (
       firstName: 'Jose',
       lastName: 'Rizal',
       dateOfBirth: '1861-06-19',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0917-000-0000',
       sendToTriage: true,
       priority: 'Routine',
@@ -553,7 +553,7 @@ describe('Feature 13: Duplicate Patient Safeguard & Warning Workflow Interceptio
       lastName: 'Dela Cruz',
       dateOfBirth: '1985-05-20',
       contactNumber: '09171234567',
-      gender: 'Male',
+      sex: 'Male',
       civilStatus: 'Single',
       verificationStatus: 'Verified',
       isYakapEligible: false,
@@ -597,7 +597,7 @@ describe('Feature 13: Duplicate Patient Safeguard & Warning Workflow Interceptio
       lastName: 'Santos',
       dateOfBirth: '1990-08-15',
       contactNumber: '09181234567',
-      gender: 'Female',
+      sex: 'Female',
       civilStatus: 'Single',
       verificationStatus: 'Verified',
       isYakapEligible: false,
@@ -619,7 +619,7 @@ describe('Feature 13: Duplicate Patient Safeguard & Warning Workflow Interceptio
 });
 
 describe('Dashboard "New Patient" & Post-Registration Dialog Workflow', () => {
-  test('Dashboard "New patient" action navigates to Patients with openRegister: true and Patients.screen handles it', async () => {
+  test('Dashboard "New Patient" action navigates to Patients with openRegister: true and Patients.screen handles it', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');
     const dashboardSrc = fs.readFileSync(
@@ -631,6 +631,9 @@ describe('Dashboard "New Patient" & Post-Registration Dialog Workflow', () => {
       'utf8'
     );
 
+    expect(dashboardSrc).toContain("label: 'New Patient'");
+    expect(dashboardSrc).toContain("shortLabel: 'New Patient'");
+    expect(dashboardSrc).not.toContain("label: 'New patient'");
     expect(dashboardSrc).toContain("navigation.navigate('Patients', { openRegister: true })");
     expect(patientsSrc).toContain('openRegister?: boolean');
     expect(patientsSrc).toContain('navigation.setParams({ openRegister: undefined })');
@@ -651,7 +654,7 @@ describe('Dashboard "New Patient" & Post-Registration Dialog Workflow', () => {
       fullName: 'Reyes, Ana',
       dateOfBirth: '1994-03-12',
       age: 32,
-      gender: 'Female',
+      sex: 'Female',
       contactNumber: '0917-555-0199',
       createdAt: '2026-10-14T11:50:00Z',
       activeQueueTicket: 'Q-012',
@@ -729,5 +732,87 @@ describe('Dashboard "New Patient" & Post-Registration Dialog Workflow', () => {
     // 3. Test "Close" action
     dismissAlert(alert.id);
     expect(getFeedbackState().alerts).toHaveLength(0);
+  });
+
+  test('Issue 169: Register & Send to Triage for Senior Citizen patient transmits seriesPrefix: "SQ"', async () => {
+    const payload: RegisterPatientPayload = {
+      firstName: 'Eduardo',
+      lastName: 'Dela Cruz',
+      dateOfBirth: '1954-08-15',
+      sex: 'Male',
+      contactNumber: '0917-123-4567',
+      seniorCitizenId: 'OSCA-MNL-2014-9982',
+      sendToTriage: true,
+      seriesPrefix: 'SQ',
+      priority: 'Routine',
+      chiefComplaint: 'Routine check-up',
+    };
+
+    mockRegisteredPatient = {
+      id: 'patient-uuid-senior-1',
+      tenantId: 'tenant-demo',
+      clinicId: 'clinic-demo',
+      patientCode: 'PAT-2026-01115',
+      firstName: 'Eduardo',
+      lastName: 'Dela Cruz',
+      fullName: 'Dela Cruz, Eduardo',
+      dateOfBirth: '1954-08-15',
+      age: 72,
+      sex: 'Male',
+      contactNumber: '0917-123-4567',
+      seniorCitizenId: 'OSCA-MNL-2014-9982',
+      createdAt: '2026-10-11T12:00:00Z',
+      activeQueueTicket: 'SQ-001',
+      activeQueueItemId: 'queue-uuid-sq-001',
+    };
+
+    const [patient, err] = await clinicService.registerPatient(payload);
+
+    expect(err).toBeNull();
+    expect(patient).toBeDefined();
+    expect(lastPostPayload.sendToTriage).toBe(true);
+    expect(lastPostPayload.seriesPrefix).toBe('SQ');
+    expect(patient?.activeQueueTicket).toBe('SQ-001');
+  });
+
+  test('Issue 169: Register & Send to Triage for PWD patient transmits seriesPrefix: "SQ"', async () => {
+    const payload: RegisterPatientPayload = {
+      firstName: 'Maria',
+      lastName: 'Santos',
+      dateOfBirth: '2001-03-20',
+      sex: 'Female',
+      contactNumber: '0917-999-8888',
+      pwdId: 'PWD-NCR-2024-001',
+      sendToTriage: true,
+      seriesPrefix: 'SQ',
+      priority: 'Routine',
+      chiefComplaint: 'Consultation',
+    };
+
+    mockRegisteredPatient = {
+      id: 'patient-uuid-pwd-1',
+      tenantId: 'tenant-demo',
+      clinicId: 'clinic-demo',
+      patientCode: 'PAT-2026-01116',
+      firstName: 'Maria',
+      lastName: 'Santos',
+      fullName: 'Santos, Maria',
+      dateOfBirth: '2001-03-20',
+      age: 25,
+      sex: 'Female',
+      contactNumber: '0917-999-8888',
+      pwdId: 'PWD-NCR-2024-001',
+      createdAt: '2026-10-11T12:00:00Z',
+      activeQueueTicket: 'SQ-001',
+      activeQueueItemId: 'queue-uuid-sq-002',
+    };
+
+    const [patient, err] = await clinicService.registerPatient(payload);
+
+    expect(err).toBeNull();
+    expect(patient).toBeDefined();
+    expect(lastPostPayload.sendToTriage).toBe(true);
+    expect(lastPostPayload.seriesPrefix).toBe('SQ');
+    expect(patient?.activeQueueTicket).toBe('SQ-001');
   });
 });

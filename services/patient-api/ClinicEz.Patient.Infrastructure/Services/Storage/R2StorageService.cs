@@ -53,11 +53,79 @@ public sealed class R2StorageService : IStorageService, IAsyncDisposable
             InputStream = stream,
             ContentType = contentType,
             AutoCloseStream = false,
+            // Cloudflare R2 streaming compatibility: disable chunked trailer payload signing
+            DisablePayloadSigning = true,
+            UseChunkEncoding = false,
+            DisableDefaultChecksumValidation = true,
         };
 
         await S3Client.PutObjectAsync(request, cancellationToken);
         return key;
     }
+
+    public async Task<string> SaveEncryptedAsync(string key, byte[] ciphertext, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentNullException.ThrowIfNull(ciphertext);
+
+        using var memoryStream = new MemoryStream(ciphertext, writable: false);
+        return await SaveEncryptedStreamAsync(key, memoryStream, cancellationToken);
+    }
+
+    public async Task<string> SaveEncryptedStreamAsync(string key, Stream ciphertextStream, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentNullException.ThrowIfNull(ciphertextStream);
+
+        var normalizedKey = NormalizeKey(key);
+        var request = new PutObjectRequest
+        {
+            BucketName = _bucketName,
+            Key = normalizedKey,
+            InputStream = ciphertextStream,
+            ContentType = "application/octet-stream",
+            AutoCloseStream = false,
+            DisablePayloadSigning = true,
+            UseChunkEncoding = false,
+            DisableDefaultChecksumValidation = true
+        };
+        request.Metadata.Add("x-amz-meta-encryption", "AES-256-GCM");
+        request.Metadata.Add("x-amz-meta-key-scheme", "pmk-v1");
+
+        await S3Client.PutObjectAsync(request, cancellationToken);
+        return normalizedKey;
+    }
+
+    public async Task<byte[]> DownloadAsync(string key, CancellationToken cancellationToken = default)
+    {
+        await using var stream = await OpenReadStreamAsync(key, cancellationToken);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, cancellationToken);
+        return ms.ToArray();
+    }
+
+    public async Task<Stream> OpenReadStreamAsync(string key, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        var normalizedKey = NormalizeKey(key);
+
+        try
+        {
+            var request = new GetObjectRequest
+            {
+                BucketName = _bucketName,
+                Key = normalizedKey
+            };
+            var response = await S3Client.GetObjectAsync(request, cancellationToken);
+            return response.ResponseStream;
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            throw new FileNotFoundException($"Object not found in R2 bucket {_bucketName} at key: {normalizedKey}", normalizedKey, ex);
+        }
+    }
+
+    private static string NormalizeKey(string key) => key.Replace('\\', '/').TrimStart('/');
 
     public async Task DeleteAsync(string key, CancellationToken cancellationToken = default)
     {

@@ -204,12 +204,25 @@ public class BillingEndpoints : IEndpoint
         .WithDescription("Retrieves a list of available billing plans.")
         .WithTags("Billing");
 
+        group.MapGet("/public-config", async (
+            Microsoft.AspNetCore.Http.HttpContext httpContext,
+            ISystemSettingsService settingsService,
+            System.Threading.CancellationToken ct) =>
+        {
+            httpContext.Response.Headers.CacheControl = "no-store";
+            var config = await settingsService.GetBillingPublicConfigAsync(ct);
+            return Results.Ok(config);
+        })
+        .AllowAnonymous()
+        .WithName("GetBillingPublicConfig")
+        .WithDescription("Retrieves public platform billing settings (trial duration and default billing cadence) for landing and sign-up flows.")
+        .WithTags("Billing");
+
         group.MapGet("/payment-config", async (ISystemSettingsService settingsService, System.Threading.CancellationToken ct) =>
         {
             var config = await settingsService.GetBillingPaymentConfigAsync(ct);
             return Results.Ok(config);
         })
-        .AllowAnonymous()
         .WithName("GetBillingPaymentConfig")
         .WithDescription("Retrieves platform offline bank accounts, BIR tax exemption/percentage settings, and corporate invoicing details.")
         .WithTags("Billing");

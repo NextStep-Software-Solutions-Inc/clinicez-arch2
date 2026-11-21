@@ -22,11 +22,11 @@ public record GetProceduresQuery(
 
 public class GetProceduresQueryHandler : IRequestHandler<GetProceduresQuery, List<ClinicalProcedureDto>>
 {
-    private readonly IRepository<ClinicalProcedure> _procRepo;
+    private readonly IRepository<Procedure> _procRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetProceduresQueryHandler(
-        IRepository<ClinicalProcedure> procRepo,
+        IRepository<Procedure> procRepo,
         IClinicContext clinicContext)
     {
         _procRepo = procRepo;

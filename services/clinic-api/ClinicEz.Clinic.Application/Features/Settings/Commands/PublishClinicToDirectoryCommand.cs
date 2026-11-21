@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Audit;
+using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.Settings.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -18,25 +21,32 @@ public sealed record PublishClinicToDirectoryCommand(bool IsPublished) : IReques
 public sealed record ClinicPublishingResultDto(
     bool Success,
     bool IsPublished,
-    string Message
+    string Message,
+    PlatformVerificationStatus PlatformVerificationStatus = PlatformVerificationStatus.Unverified
 );
 
 public sealed class PublishClinicToDirectoryCommandHandler : IRequestHandler<PublishClinicToDirectoryCommand, ClinicPublishingResultDto>
 {
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IRepository<StaffMember> _staffRepo;
-    private readonly IRepository<ClinicServiceItem> _servicesRepo;
+    private readonly IRepository<ServiceItem> _servicesRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IInteropPublisher _interopPublisher;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
+    private readonly IRepository<DoctorScheduleTemplate>? _scheduleRepo;
+    private readonly IRepository<AuditEntry>? _auditRepo;
 
     public PublishClinicToDirectoryCommandHandler(
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IRepository<StaffMember> staffRepo,
-        IRepository<ClinicServiceItem> servicesRepo,
+        IRepository<ServiceItem> servicesRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork,
-        IInteropPublisher interopPublisher)
+        IInteropPublisher interopPublisher,
+        IClinicDirectorySyncService? directorySyncService = null,
+        IRepository<DoctorScheduleTemplate>? scheduleRepo = null,
+        IRepository<AuditEntry>? auditRepo = null)
     {
         _settingsRepo = settingsRepo;
         _staffRepo = staffRepo;
@@ -44,6 +54,9 @@ public sealed class PublishClinicToDirectoryCommandHandler : IRequestHandler<Pub
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
         _interopPublisher = interopPublisher;
+        _directorySyncService = directorySyncService;
+        _scheduleRepo = scheduleRepo;
+        _auditRepo = auditRepo;
     }
 
     public async Task<ClinicPublishingResultDto> Handle(PublishClinicToDirectoryCommand request, CancellationToken ct)
@@ -54,27 +67,31 @@ public sealed class PublishClinicToDirectoryCommandHandler : IRequestHandler<Pub
             throw new InvalidOperationException("Clinic settings must be initialized before publishing.");
         }
 
-        var activeDoctors = await _staffRepo.Query()
-            .Where(s => s.IsActive && s.Role == StaffRole.Doctor && !string.IsNullOrWhiteSpace(s.PrcLicenseNumber))
-            .OrderBy(s => s.LastName)
-            .ToListAsync(ct);
-
-        var activeServices = await _servicesRepo.Query()
-            .Where(s => s.IsActive)
-            .OrderBy(s => s.Name)
-            .ToListAsync(ct);
+        var syncService = _directorySyncService
+            ?? new ClinicDirectorySyncService(_staffRepo, _servicesRepo, _interopPublisher, _scheduleRepo);
 
         if (request.IsPublished)
         {
-            // Enforce pre-flight readiness checklist
+            var hasActiveDoctor = await _staffRepo.Query()
+                .AnyAsync(s => s.IsActive && s.Role == StaffRole.Doctor && !string.IsNullOrWhiteSpace(s.PrcLicenseNumber), ct);
+
+            var hasActiveService = await _servicesRepo.Query()
+                .AnyAsync(s => s.IsActive, ct);
+
             var missingChecks = new List<string>();
+            if (!settings.IsWorkspaceEligible)
+                missingChecks.Add("Facility has not been granted workspace eligibility for patient app directory publishing in Portal");
+
             if (string.IsNullOrWhiteSpace(settings.OperatingHours))
                 missingChecks.Add("Operating hours must be configured");
 
-            if (activeDoctors.Count == 0)
+            if (string.IsNullOrWhiteSpace(settings.LetterheadDohLto) && string.IsNullOrWhiteSpace(settings.LtoEvidenceObjectKey))
+                missingChecks.Add("A DOH LTO number or LTO proof document is required");
+
+            if (!hasActiveDoctor)
                 missingChecks.Add("At least one active licensed doctor with PRC license number is required");
 
-            if (activeServices.Count == 0)
+            if (!hasActiveService)
                 missingChecks.Add("At least one active clinic service must be published in the fee schedule");
 
             if (missingChecks.Count > 0)
@@ -83,75 +100,66 @@ public sealed class PublishClinicToDirectoryCommandHandler : IRequestHandler<Pub
                     $"Cannot publish clinic to directory: readiness checks failed. {string.Join("; ", missingChecks)}.");
             }
 
+            if (settings.PlatformVerificationStatus != PlatformVerificationStatus.Verified)
+            {
+                var requestKind = settings.PlatformVerificationStatus is PlatformVerificationStatus.Rejected or PlatformVerificationStatus.Suspended
+                    || settings.LastVerificationSubmittedAtUtc.HasValue
+                    ? "Resubmission"
+                    : "Initial";
+
+                var submittedAt = DateTime.UtcNow;
+                settings.IsDirectoryPublished = true;
+                settings.PlatformVerificationStatus = PlatformVerificationStatus.PendingReview;
+                settings.VerificationRejectionReason = null;
+                settings.LastVerificationSubmittedAtUtc = submittedAt;
+                settings.UpdatedAt = submittedAt;
+
+                await syncService.EnqueueVerificationRequestAsync(
+                    settings,
+                    requestKind,
+                    _clinicContext.StaffId?.ToString(),
+                    _clinicContext.StaffName,
+                    ct);
+
+                if (_auditRepo != null)
+                {
+                    await _auditRepo.AddAsync(DirectoryVerificationAuditHelper.CreateEntry(
+                        settings.TenantId,
+                        settings.ClinicId,
+                        ClinicAuditCategories.Operations,
+                        ClinicAuditSeverities.Urgent,
+                        "operations.facility_verification.submitted",
+                        "FacilitySettings",
+                        settings.ClinicId.ToString(),
+                        ClinicAuditOutcomes.Success,
+                        $"Submitted facility directory verification request ({requestKind}).",
+                        _clinicContext.StaffId,
+                        _clinicContext.StaffName,
+                        _clinicContext.StaffRole,
+                        new { settings.ClinicId, RequestKind = requestKind, settings.LetterheadDohLto, settings.LtoEvidenceObjectKey }),
+                        ct);
+                }
+
+                await _unitOfWork.SaveChangesAsync(ct);
+
+                return new ClinicPublishingResultDto(
+                    Success: true,
+                    IsPublished: settings.IsDirectoryPublished,
+                    Message: "Clinic verification request submitted for platform review.",
+                    PlatformVerificationStatus: settings.PlatformVerificationStatus
+                );
+            }
+
             settings.IsDirectoryPublished = true;
+            settings.UpdatedAt = DateTime.UtcNow;
         }
         else
         {
             settings.IsDirectoryPublished = false;
+            settings.UpdatedAt = DateTime.UtcNow;
         }
 
-        settings.UpdatedAt = DateTime.UtcNow;
-
-        // Map providers for directory payload
-        var providerDtos = activeDoctors.Select((d, idx) => new FacilityProviderDto(
-            Id: d.Id,
-            Name: $"Dr. {d.FirstName} {d.LastName}".Trim(),
-            Specialty: !string.IsNullOrWhiteSpace(d.Specialty) ? d.Specialty : "General Practice",
-            ProfessionalLicenseNo: d.PrcLicenseNumber,
-            IsActive: true,
-            DisplayOrder: idx
-        )).ToList();
-
-        // Map services for directory payload
-        var serviceDtos = activeServices.Select(s => new ClinicServiceDto(
-            ServiceId: s.Id,
-            Name: s.Name,
-            Category: s.Category,
-            StandardPrice: s.StandardPrice,
-            IsActive: s.IsActive
-        )).ToList();
-
-        // Dynamic mapping based on ClinicSettings.SpecialtyMode
-        var classification = settings.SpecialtyMode?.Trim().ToLowerInvariant() switch
-        {
-            "dental" => "Dental Clinic",
-            "multispecialty" or "multi-specialty" => "Multi-Specialty Clinic",
-            "medical" => "Ambulatory Clinic",
-            _ => "Ambulatory Clinic"
-        };
-
-        // Enqueue facility.directory.updated to patient-api via Outbox
-        var directoryEvent = new FacilityCreatedEvent
-        {
-            TenantId = settings.TenantId,
-            TenantSlug = settings.TenantSlug,
-            FacilityType = FacilityType.Clinic,
-            ResourceId = settings.ClinicId,
-            Name = settings.ClinicName,
-            Slug = settings.FacilitySlug,
-            OperatingHours = settings.OperatingHours,
-            Address = settings.LetterheadAddress,
-            ContactNumber = settings.LetterheadContact,
-            Classification = classification,
-            IsPhilHealthAccredited = settings.IsPhilHealthConfigured,
-            IsPublic = settings.IsDirectoryPublished,
-            IsBookingPaused = settings.IsOnlineBookingPaused,
-            IsJoinGated = settings.IsJoinEnabled && !string.IsNullOrWhiteSpace(settings.JoinCode),
-            JoinCode = settings.JoinCode,
-            Providers = providerDtos,
-            Services = serviceDtos
-        };
-
-        var from = Party.ForFacility(settings.TenantId, settings.ClinicId.ToString(), FacilityType.Clinic);
-        var to = new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient };
-
-        _interopPublisher.Enqueue(
-            InteropTypes.FacilityDirectoryUpdated,
-            from,
-            to,
-            settings.ClinicId,
-            directoryEvent);
-
+        await syncService.EnqueueDirectoryUpdateAsync(settings, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
         return new ClinicPublishingResultDto(
@@ -159,7 +167,8 @@ public sealed class PublishClinicToDirectoryCommandHandler : IRequestHandler<Pub
             IsPublished: settings.IsDirectoryPublished,
             Message: settings.IsDirectoryPublished
                 ? "Clinic successfully published to the consumer patient directory."
-                : "Clinic unpublished from the consumer patient directory."
+                : "Clinic unpublished from the consumer patient directory.",
+            PlatformVerificationStatus: settings.PlatformVerificationStatus
         );
     }
 }

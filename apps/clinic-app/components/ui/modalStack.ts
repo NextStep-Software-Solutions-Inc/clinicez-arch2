@@ -30,9 +30,19 @@ function notifyListeners(): void {
   });
 }
 
+function isTopLayerPortalElement(el: any): boolean {
+  if (!el || typeof el !== 'object') return false;
+  return (
+    el.dataset?.clinicezTopLayer === 'true' ||
+    el.getAttribute?.('data-clinicez-top-layer') === 'true'
+  );
+}
+
 /**
  * Locate the portal root container that is a direct child of document.body.
  * In react-native-web, ModalPortal appends a `div` directly to document.body.
+ * Top-layer floating overlays (such as the docked teleconsultation bar) opt out
+ * via data-clinicez-top-layer="true" so modalStack never downgrades their z-index.
  */
 export function findPortalContainer(node: any): any {
   if (!node || typeof document === 'undefined' || !document.body) return null;
@@ -40,7 +50,9 @@ export function findPortalContainer(node: any): any {
   while (curr && curr.parentNode && curr.parentNode !== document.body) {
     curr = curr.parentNode;
   }
-  return curr && curr.parentNode === document.body ? curr : null;
+  if (!curr || curr.parentNode !== document.body) return null;
+  if (isTopLayerPortalElement(curr)) return null;
+  return curr;
 }
 
 let isInternalDomMutation = false;
@@ -54,6 +66,31 @@ function safeAppendChildToBody(el: any): void {
   ) {
     return;
   }
+
+  const bodyChildren = Array.from(document.body.children || []);
+  const firstTopLayer = !isTopLayerPortalElement(el)
+    ? bodyChildren.find((child) => isTopLayerPortalElement(child))
+    : undefined;
+
+  if (firstTopLayer && typeof document.body.insertBefore === 'function') {
+    if (el.nextSibling === firstTopLayer) return;
+    isInternalDomMutation = true;
+    try {
+      document.body.insertBefore(el, firstTopLayer);
+    } finally {
+      if (typeof queueMicrotask === 'function') {
+        queueMicrotask(() => {
+          isInternalDomMutation = false;
+        });
+      } else {
+        setTimeout(() => {
+          isInternalDomMutation = false;
+        }, 0);
+      }
+    }
+    return;
+  }
+
   if (document.body.lastElementChild === el) return;
   isInternalDomMutation = true;
   try {
@@ -552,9 +589,11 @@ export function initModalStackObserver(): () => void {
 
     // Cleanup untracked portals that were unmounted from document.body
     const currentPortals = new Set(
-      Array.from(document.body?.children || []).filter((el) =>
-        (el as any)?.getAttribute?.('aria-modal') === 'true' ||
-        Boolean((el as any)?.querySelector?.('[aria-modal="true"]'))
+      Array.from(document.body?.children || []).filter(
+        (el) =>
+          !isTopLayerPortalElement(el) &&
+          ((el as any)?.getAttribute?.('aria-modal') === 'true' ||
+            Boolean((el as any)?.querySelector?.('[aria-modal="true"]'))),
       )
     );
 

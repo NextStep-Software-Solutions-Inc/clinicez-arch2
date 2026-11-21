@@ -369,14 +369,15 @@ export default function StructuredMedicalHistoryModal({
                         size="sm"
                       />
                     ) : null}
-                    <Pressable
+                    <Button
+                      icon="close"
+                      iconOnly
+                      variant="ghost"
+                      size="xs"
                       accessibilityLabel={`Remove ${title}`}
-                      style={styles.compactRemoveBtn}
                       onPress={() => handleRemoveCondition(index)}
-                      hitSlop={8}
-                    >
-                      <Icon name="close" size={12} color={theme.colors.primaryDark} />
-                    </Pressable>
+                      style={styles.compactRemoveBtn}
+                    />
                   </View>
                 );
               })}

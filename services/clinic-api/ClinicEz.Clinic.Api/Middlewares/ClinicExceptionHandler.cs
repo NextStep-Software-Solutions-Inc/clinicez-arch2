@@ -42,6 +42,49 @@ public sealed class ClinicExceptionHandler : IExceptionHandler
             return true;
         }
 
+        if (exception is TeleconsultPaymentRequiredException paymentEx)
+        {
+            httpContext.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            var response = new ApiResponse<object>
+            {
+                Succeeded = false,
+                Message = paymentEx.Message,
+                ErrorCode = TeleconsultPaymentRequiredException.ErrorCode,
+                Errors = [new ApiFieldError(null, TeleconsultPaymentRequiredException.ErrorCode, paymentEx.Message)]
+            };
+            await httpContext.Response.WriteAsJsonAsync(response, cancellationToken);
+            return true;
+        }
+
+        if (exception is DuplicatePatientCodeConflictException duplicateCodeEx)
+        {
+            httpContext.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            await httpContext.Response.WriteAsJsonAsync(
+                ApiResponse<object>.Fail(
+                    duplicateCodeEx.Message,
+                    [new ApiFieldError(DuplicatePatientCodeConflictException.FieldName, DuplicatePatientCodeConflictException.ErrorCode, duplicateCodeEx.Message)],
+                    DuplicatePatientCodeConflictException.ErrorCode),
+                cancellationToken);
+            return true;
+        }
+
+        if (exception is VerificationConflictException verificationConflictEx)
+        {
+            httpContext.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            var response = new ApiResponse<VerificationConflictData>
+            {
+                Succeeded = false,
+                Message = verificationConflictEx.Message,
+                ErrorCode = VerificationConflictException.ErrorCode,
+                Data = new VerificationConflictData(
+                    verificationConflictEx.CurrentStatus,
+                    verificationConflictEx.RequestId),
+                Errors = [new ApiFieldError(null, VerificationConflictException.ErrorCode, verificationConflictEx.Message)]
+            };
+            await httpContext.Response.WriteAsJsonAsync(response, cancellationToken);
+            return true;
+        }
+
         return false;
     }
 }

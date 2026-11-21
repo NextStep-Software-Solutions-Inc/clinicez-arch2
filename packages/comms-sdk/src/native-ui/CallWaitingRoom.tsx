@@ -1,0 +1,1471 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import {
+  createShadows,
+  darkColors,
+  fontSizeScale,
+  isLiveWebDom,
+  lightColors,
+  radiusScale,
+  sizes,
+  spaceScale
+} from '@clinicez/design-tokens';
+import { CallWaitingRoomProps } from './types';
+import { OverlayTooltip } from './OverlayTooltip';
+
+function resolveOnDarkSurface(c: Record<keyof typeof lightColors, string>): string {
+  return c.textInverted === darkColors.textInverted ? lightColors.textInverted : c.textInverted;
+}
+
+export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
+  callId,
+  appointmentId,
+  userRole,
+  patientName,
+  clinicianName,
+  scheduledTime,
+  paymentPolicy,
+  paymentStatus,
+  hasActiveYakapEnlistment,
+  isYakapExempt,
+  onChangePaymentPolicy,
+  onStaffPaymentOverride,
+  onEmergencyPaymentOverride,
+  isReadyToAdmit,
+  recordingConsentStatus,
+  onAdmitPatient,
+  onSubmitConsent,
+  onEnterCall,
+  onCancelCall,
+  isCameraEnabled,
+  isMicEnabled,
+  onToggleCamera,
+  onToggleMic,
+  micLevel,
+  renderVideoPreview,
+  renderIcon,
+  hideHeader = false,
+  mediaModeLabel,
+  isLoading = false,
+  error = null,
+  style,
+  videoOrientation = 'portrait',
+  onToggleOrientation,
+  patientLink,
+  onSharePatientLink,
+  videoServerUnavailable = false,
+  videoServerBannerMessage,
+  onRetryVideoServer,
+  recordingToggleHint,
+  patientPin,
+  onCopyPatientPin,
+  colors: colorsProp,
+  shadows: shadowsProp
+}) => {
+  const resolvedColors = useMemo(
+    () => ({ ...lightColors, ...(colorsProp ?? {}) }),
+    [colorsProp]
+  );
+  const onDarkSurface = resolveOnDarkSurface(resolvedColors);
+  const resolvedShadows = useMemo(
+    () => ({ ...createShadows(resolvedColors, isLiveWebDom), ...(shadowsProp ?? {}) }),
+    [resolvedColors, shadowsProp]
+  );
+  const styles = useMemo(
+    () => createStyles(resolvedColors, resolvedShadows),
+    [resolvedColors, resolvedShadows]
+  );
+
+  const [localCameraActive, setLocalCameraActive] = useState(true);
+  const [localMicActive, setLocalMicActive] = useState(true);
+  const [overrideModalVisible, setOverrideModalVisible] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
+  const [isUpdatingPolicy, setIsUpdatingPolicy] = useState(false);
+  const [isAdmitting, setIsAdmitting] = useState(false);
+  const [isRetryingVideoServer, setIsRetryingVideoServer] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedPin, setCopiedPin] = useState(false);
+  const copiedLinkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copiedPinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [roomWidth, setRoomWidth] = useState<number | null>(() =>
+    isLiveWebDom && typeof window !== 'undefined' && typeof window.innerWidth === 'number'
+      ? window.innerWidth
+      : null
+  );
+
+  useEffect(() => {
+    if (!isLiveWebDom || typeof window === 'undefined') return;
+    const handleResize = () => {
+      if (typeof window.innerWidth === 'number') {
+        setRoomWidth(window.innerWidth);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isCompactWaitingRoom = roomWidth !== null && roomWidth < 640;
+
+  useEffect(() => {
+    return () => {
+      if (copiedLinkTimerRef.current) clearTimeout(copiedLinkTimerRef.current);
+      if (copiedPinTimerRef.current) clearTimeout(copiedPinTimerRef.current);
+    };
+  }, []);
+
+  const handleCopyLinkCardPress = async () => {
+    if (!onSharePatientLink) return;
+    await onSharePatientLink();
+    setCopiedLink(true);
+    if (copiedLinkTimerRef.current) clearTimeout(copiedLinkTimerRef.current);
+    copiedLinkTimerRef.current = setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleCopyPinCardPress = async () => {
+    if (!onCopyPatientPin) return;
+    await onCopyPatientPin();
+    setCopiedPin(true);
+    if (copiedPinTimerRef.current) clearTimeout(copiedPinTimerRef.current);
+    copiedPinTimerRef.current = setTimeout(() => setCopiedPin(false), 2000);
+  };
+
+  const renderFallbackCopyGlyph = (copied: boolean, color: string) => {
+    if (copied) {
+      return (
+        <View style={{ width: 14, height: 14, justifyContent: 'center', alignItems: 'center' }}>
+          <View
+            style={{
+              width: 10,
+              height: 6,
+              borderLeftWidth: 2,
+              borderBottomWidth: 2,
+              borderColor: color,
+              backgroundColor: resolvedColors.transparent,
+              transform: [{ rotate: '-45deg' }, { translateY: -1 }]
+            }}
+          />
+        </View>
+      );
+    }
+    return (
+      <View style={{ width: 16, height: 16, position: 'relative' }}>
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: 10,
+            height: 10,
+            borderRadius: radiusScale.xs,
+            borderWidth: 1.5,
+            borderColor: color,
+            backgroundColor: resolvedColors.transparent
+          }}
+        />
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            right: 0,
+            width: 10,
+            height: 10,
+            borderRadius: radiusScale.xs,
+            borderWidth: 1.5,
+            borderColor: color,
+            backgroundColor: resolvedColors.surface
+          }}
+        />
+      </View>
+    );
+  };
+
+  const isCameraActive = isCameraEnabled ?? localCameraActive;
+  const isMicActive = isMicEnabled ?? localMicActive;
+
+  const isPrepaidBlocked = paymentPolicy === 'Prepaid' && paymentStatus === 'Unpaid';
+  const isAdmitBlocked = isPrepaidBlocked || videoServerUnavailable;
+  const isRecordingEnabled = recordingConsentStatus === 'Approved';
+  const recordingSubtitle =
+    recordingToggleHint ??
+    (isRecordingEnabled
+      ? 'Recording is on for this consultation.'
+      : recordingConsentStatus === 'Rejected'
+        ? 'Recording is off for this consultation.'
+        : 'Turn on to record this consultation for the medical chart.');
+  const isStaffOrDoctor = userRole === 'Clinician' || userRole === 'Staff';
+  const isDoctor = userRole === 'Clinician';
+
+  const clearedBannerCopy =
+    paymentPolicy === 'Exempt'
+      ? {
+          title: 'Exempt — Admission Cleared',
+          subtitle: 'This consultation is exempt from payment and ready to start.',
+        }
+      : paymentPolicy === 'Postpaid'
+        ? {
+            title: 'Postpaid — Admission Cleared',
+            subtitle: 'Charges will be settled after the visit. Ready to start.',
+          }
+        : {
+            title:
+              paymentStatus === 'Overridden'
+                ? 'Prepaid — Override Approved'
+                : 'Prepaid — Payment Cleared',
+            subtitle:
+              paymentStatus === 'Overridden'
+                ? 'Staff admission override approved. Ready to start.'
+                : 'Prepayment confirmed and ready to start.',
+          };
+
+  // Override note validation: reasonNote >= 5 chars
+  const trimmedReason = overrideReason.trim();
+  const isReasonValid = trimmedReason.length >= 5;
+  const canSubmitOverride =
+    isReasonValid &&
+    !isSubmittingOverride &&
+    (Boolean(onStaffPaymentOverride) || Boolean(onEmergencyPaymentOverride));
+
+  const handlePolicyChange = async (newPolicy: 'Prepaid' | 'Postpaid' | 'Exempt') => {
+    if (!onChangePaymentPolicy || isUpdatingPolicy || newPolicy === paymentPolicy) return;
+    setIsUpdatingPolicy(true);
+    try {
+      await onChangePaymentPolicy(newPolicy);
+    } finally {
+      setIsUpdatingPolicy(false);
+    }
+  };
+
+  const handleToggleMic = () => {
+    if (onToggleMic) {
+      void onToggleMic();
+    } else {
+      setLocalMicActive((prev) => !prev);
+    }
+  };
+
+  const handleToggleCamera = () => {
+    if (onToggleCamera) {
+      void onToggleCamera();
+    } else {
+      setLocalCameraActive((prev) => !prev);
+    }
+  };
+
+  const handleAdmitPress = async () => {
+    if (!onAdmitPatient || isAdmitBlocked || isAdmitting) return;
+    setIsAdmitting(true);
+    try {
+      await onAdmitPatient();
+    } finally {
+      setIsAdmitting(false);
+    }
+  };
+
+  const handleRetryPress = async () => {
+    if (isRetryingVideoServer) return;
+    setIsRetryingVideoServer(true);
+    try {
+      if (onRetryVideoServer) {
+        await onRetryVideoServer();
+      } else if (isDoctor && onAdmitPatient) {
+        await onAdmitPatient();
+      } else {
+        onEnterCall();
+      }
+    } finally {
+      setIsRetryingVideoServer(false);
+    }
+  };
+
+  const handleOverrideSubmit = async () => {
+    if (!canSubmitOverride) return;
+    setIsSubmittingOverride(true);
+    try {
+      if (onStaffPaymentOverride) {
+        await onStaffPaymentOverride(trimmedReason);
+      } else if (onEmergencyPaymentOverride) {
+        await onEmergencyPaymentOverride(trimmedReason);
+      }
+      setOverrideModalVisible(false);
+      setOverrideReason('');
+    } finally {
+      setIsSubmittingOverride(false);
+    }
+  };
+
+  const computedMicPercent = !isMicActive
+    ? 0
+    : typeof micLevel === 'number'
+      ? Math.max(8, Math.min(100, Math.round(micLevel)))
+      : 65;
+
+  return (
+    <View
+      style={[styles.container, style]}
+      onLayout={(event) => {
+        const nextWidth = event?.nativeEvent?.layout?.width;
+        if (typeof nextWidth === 'number' && nextWidth > 0) {
+          setRoomWidth(nextWidth);
+        }
+      }}
+    >
+      {/* Header (can be suppressed when hosted inside a workstation modal header) */}
+      {!hideHeader && (
+        <View style={[styles.header, isCompactWaitingRoom && styles.headerCompact]}>
+          <Text style={styles.headerTitle}>Teleconsultation Waiting Room</Text>
+          <Text style={styles.headerSubtitle}>
+            {userRole === 'Patient'
+              ? `Appointment: ${scheduledTime}`
+              : `Appointment: ${scheduledTime} • ID: ${appointmentId || callId}`}
+          </Text>
+        </View>
+      )}
+
+      {/* Content States */}
+      {isLoading ? (
+        <View style={styles.stateContainer}>
+          <ActivityIndicator size="small" color={resolvedColors.primary} />
+          <Text style={styles.stateText}>Preparing consultation...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.stateContainer}>
+          <Text style={styles.errorIcon}>!</Text>
+          <Text style={styles.errorTitle}>Hardware or Connection Error</Text>
+          <Text style={styles.errorSubtitle}>{error}</Text>
+        </View>
+      ) : (
+        <View style={styles.bodyWrapper}>
+          <ScrollView
+            style={styles.scrollArea}
+            contentContainerStyle={[
+              styles.bodyContent,
+              isCompactWaitingRoom && styles.bodyContentCompact
+            ]}
+          >
+            {/* Left / Top Column: Live Video Staging Box */}
+            <View
+              style={[
+                styles.previewColumn,
+                isCompactWaitingRoom && styles.previewColumnCompact
+              ]}
+            >
+              <View
+                style={[
+                  styles.previewBox,
+                  videoOrientation === 'landscape'
+                    ? styles.previewBoxLandscape
+                    : styles.previewBoxPortrait,
+                  isCompactWaitingRoom &&
+                    videoOrientation !== 'landscape' &&
+                    styles.previewBoxPortraitCompact
+                ]}
+              >
+                {renderVideoPreview ? (
+                  renderVideoPreview()
+                ) : (
+                  <View style={styles.videoPlaceholder}>
+                    {renderIcon ? (
+                      renderIcon(isCameraActive ? 'video' : 'videoOff', {
+                        size: 32,
+                        color: isCameraActive ? resolvedColors.onPrimary : resolvedColors.textLight
+                      })
+                    ) : (
+                      <Text style={styles.videoPlaceholderIcon}>
+                        {isCameraActive ? 'CAM' : 'OFF'}
+                      </Text>
+                    )}
+                    <Text style={styles.videoPlaceholderText}>
+                      {isCameraActive ? 'Camera Self-Preview Active' : 'Camera Disabled'}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Audio meter + Media mode pill */}
+                <View style={styles.topOverlayRow}>
+                  <View style={styles.audioMeterContainer}>
+                    <Text style={styles.audioMeterLabel}>Mic Level: </Text>
+                    <View style={styles.audioMeterBar}>
+                      <View
+                        style={[
+                          styles.audioMeterFill,
+                          { width: `${computedMicPercent}%` },
+                          !isMicActive && styles.audioMeterMuted
+                        ]}
+                      />
+                    </View>
+                  </View>
+                  {mediaModeLabel ? (
+                    <View style={styles.mediaModeBadge}>
+                      <Text style={styles.mediaModeBadgeText}>{mediaModeLabel}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Floating Controls Bar */}
+                <View style={styles.mediaBar}>
+                  <OverlayTooltip
+                    label={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
+                    colors={resolvedColors}
+                    shadows={resolvedShadows}
+                  >
+                    <TouchableOpacity
+                      style={[styles.mediaButton, !isMicActive && styles.mediaButtonOff]}
+                      onPress={handleToggleMic}
+                      accessibilityRole="button"
+                      accessibilityLabel={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
+                    >
+                      {renderIcon ? (
+                        renderIcon(isMicActive ? 'mic' : 'micOff', {
+                          size: 18,
+                          color: isMicActive ? resolvedColors.text : onDarkSurface
+                        })
+                      ) : (
+                        <Text style={[styles.mediaButtonText, !isMicActive && styles.mediaButtonTextOff]}>
+                          {isMicActive ? 'MIC' : 'MUTE'}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </OverlayTooltip>
+
+                  <OverlayTooltip
+                    label={isCameraActive ? 'Turn off camera' : 'Turn on camera'}
+                    colors={resolvedColors}
+                    shadows={resolvedShadows}
+                  >
+                    <TouchableOpacity
+                      style={[styles.mediaButton, !isCameraActive && styles.mediaButtonOff]}
+                      onPress={handleToggleCamera}
+                      accessibilityRole="button"
+                      accessibilityLabel={isCameraActive ? 'Stop video' : 'Start video'}
+                    >
+                      {renderIcon ? (
+                        renderIcon(isCameraActive ? 'video' : 'videoOff', {
+                          size: 18,
+                          color: isCameraActive ? resolvedColors.text : onDarkSurface
+                        })
+                      ) : (
+                        <Text style={[styles.mediaButtonText, !isCameraActive && styles.mediaButtonTextOff]}>
+                          {isCameraActive ? 'CAM' : 'OFF'}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </OverlayTooltip>
+
+                  {onToggleOrientation && (
+                    <OverlayTooltip
+                      label={
+                        videoOrientation === 'landscape'
+                          ? 'Switch to portrait view'
+                          : 'Switch to landscape view'
+                      }
+                      colors={resolvedColors}
+                      shadows={resolvedShadows}
+                    >
+                      <TouchableOpacity
+                        testID="btn-toggle-orientation"
+                        style={styles.mediaButton}
+                        onPress={onToggleOrientation}
+                        accessibilityRole="button"
+                        accessibilityLabel="Toggle video orientation"
+                      >
+                        {renderIcon ? (
+                          renderIcon('rotate', { size: 18, color: resolvedColors.text })
+                        ) : (
+                          <Text style={styles.mediaButtonText}>ROTATE</Text>
+                        )}
+                      </TouchableOpacity>
+                    </OverlayTooltip>
+                  )}
+
+                  {(!patientLink && onSharePatientLink) && (
+                    <OverlayTooltip
+                      label="Copy patient invite link"
+                      colors={resolvedColors}
+                      shadows={resolvedShadows}
+                    >
+                      <TouchableOpacity
+                        testID="btn-share-patient-link"
+                        style={styles.mediaButton}
+                        onPress={() => onSharePatientLink?.()}
+                        accessibilityRole="button"
+                        accessibilityLabel="Share patient invite link"
+                      >
+                        {renderIcon ? (
+                          renderIcon('share', { size: 18, color: resolvedColors.text })
+                        ) : (
+                          renderFallbackCopyGlyph(false, resolvedColors.text)
+                        )}
+                      </TouchableOpacity>
+                    </OverlayTooltip>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            {/* Right / Bottom Column: Details, Policy & Consent Cards */}
+            <View
+              style={[
+                styles.cardsColumn,
+                isCompactWaitingRoom && styles.cardsColumnCompact
+              ]}
+            >
+              {/* Patient Invite Link & Access PIN Card */}
+              {(patientLink || patientPin) && (
+                <View style={styles.patientLinkCard}>
+                  {patientLink && (
+                    <>
+                      <View style={styles.patientLinkHeader}>
+                        <Text style={styles.patientLinkLabel}>Patient Invite Link:</Text>
+                        {onSharePatientLink && (
+                          <OverlayTooltip
+                            label={copiedLink ? 'Copied!' : 'Copy patient invite link'}
+                            placement="bottom"
+                            colors={resolvedColors}
+                            shadows={resolvedShadows}
+                          >
+                            <TouchableOpacity
+                              testID="btn-share-patient-link-card"
+                              style={styles.shareLinkBadge}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              onPress={() => void handleCopyLinkCardPress()}
+                              accessibilityRole="button"
+                              accessibilityLabel={copiedLink ? 'Copied!' : 'Copy patient invite link'}
+                            >
+                              {copiedLink ? (
+                                renderFallbackCopyGlyph(true, resolvedColors.successText)
+                              ) : renderIcon ? (
+                                renderIcon('share', { size: 16, color: resolvedColors.primary })
+                              ) : (
+                                renderFallbackCopyGlyph(false, resolvedColors.primary)
+                              )}
+                            </TouchableOpacity>
+                          </OverlayTooltip>
+                        )}
+                      </View>
+                      <Text style={styles.patientLinkValue} numberOfLines={1} ellipsizeMode="middle">
+                        {patientLink}
+                      </Text>
+                    </>
+                  )}
+                  {patientPin && (
+                    <View style={[styles.patientLinkHeader, Boolean(patientLink) && { marginTop: 8 }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={styles.patientLinkLabel}>Access PIN: </Text>
+                        <Text testID="text-waiting-room-pin" style={[styles.patientLinkValue, { fontWeight: '700', letterSpacing: 1 }]}>
+                          {patientPin}
+                        </Text>
+                      </View>
+                      {onCopyPatientPin && (
+                        <OverlayTooltip
+                          label={copiedPin ? 'Copied!' : 'Copy access PIN'}
+                          placement="bottom"
+                          colors={resolvedColors}
+                          shadows={resolvedShadows}
+                        >
+                          <TouchableOpacity
+                            testID="btn-copy-patient-pin"
+                            style={styles.shareLinkBadge}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            onPress={() => void handleCopyPinCardPress()}
+                            accessibilityRole="button"
+                            accessibilityLabel={copiedPin ? 'Copied!' : 'Copy access PIN'}
+                          >
+                            {copiedPin ? (
+                              renderFallbackCopyGlyph(true, resolvedColors.successText)
+                            ) : renderIcon ? (
+                              renderIcon('share', { size: 16, color: resolvedColors.primary })
+                            ) : (
+                              renderFallbackCopyGlyph(false, resolvedColors.primary)
+                            )}
+                          </TouchableOpacity>
+                        </OverlayTooltip>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Appointment Details Card */}
+              <View style={styles.detailsCard}>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Patient:</Text>
+                  <Text style={styles.detailsValue}>{patientName}</Text>
+                </View>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Doctor / Clinician:</Text>
+                  <Text style={styles.detailsValue}>{clinicianName}</Text>
+                </View>
+                <View style={styles.detailsRowLast}>
+                  <Text style={styles.detailsLabel}>Scheduled:</Text>
+                  <Text style={styles.detailsValue}>{scheduledTime}</Text>
+                </View>
+              </View>
+
+              {/* Staff Payment Policy Selector */}
+              {isStaffOrDoctor && onChangePaymentPolicy && (
+                <View style={styles.policyCard}>
+                  <Text style={styles.policyCardTitle}>Facility Payment Policy</Text>
+                  <View style={styles.policySelectorRow}>
+                    {(['Prepaid', 'Postpaid', 'Exempt'] as const).map((policy) => {
+                      const isSelected = paymentPolicy === policy;
+                      return (
+                        <TouchableOpacity
+                          key={policy}
+                          style={[styles.policyOptionButton, isSelected && styles.policyOptionButtonSelected]}
+                          onPress={() => handlePolicyChange(policy)}
+                          disabled={isUpdatingPolicy || isSelected}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Set payment policy to ${policy}`}
+                        >
+                          <Text style={[styles.policyOptionText, isSelected && styles.policyOptionTextSelected]}>
+                            {policy}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* Payment Gate Banner */}
+              {isPrepaidBlocked ? (
+                <View style={styles.blockedCard}>
+                  <View style={styles.bannerIconContainer}>
+                    {renderIcon ? (
+                      renderIcon('lock', { size: 18, color: resolvedColors.warningText })
+                    ) : (
+                      <Text style={styles.blockedIcon}>LOCK</Text>
+                    )}
+                  </View>
+                  <View style={styles.gateTextContainer}>
+                    <Text style={styles.blockedTitle}>Prepaid — Payment Required Before Consultation</Text>
+                    <Text style={styles.blockedSubtitle}>
+                      Prepayment Gate: Settlement Required. Admission unlocks immediately after payment.
+                    </Text>
+                    {isStaffOrDoctor && (onStaffPaymentOverride || onEmergencyPaymentOverride) && (
+                      <TouchableOpacity
+                        style={styles.overrideButton}
+                        onPress={() => setOverrideModalVisible(true)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Staff Plain-Note Override"
+                      >
+                        <Text style={styles.overrideButtonText}>Staff Admission Override</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.clearedCard}>
+                  <View style={styles.bannerIconContainer}>
+                    {renderIcon ? (
+                      renderIcon('shieldCheck', { size: 18, color: resolvedColors.primaryDark })
+                    ) : (
+                      <Text style={styles.clearedIcon}>OK</Text>
+                    )}
+                  </View>
+                  <View style={styles.gateTextContainer}>
+                    <Text style={styles.clearedTitle}>{clearedBannerCopy.title}</Text>
+                    <Text style={styles.clearedSubtitle}>{clearedBannerCopy.subtitle}</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Informed Recording Consent (hidden cleanly when disabled at facility/workflow level or for patient) */}
+              {recordingConsentStatus !== 'Disabled' && userRole !== 'Patient' && (
+                <View style={styles.consentCard}>
+                  <View style={styles.consentCardRow}>
+                    <View style={styles.consentTextColumn}>
+                      <Text style={styles.consentTitle}>Call Recording</Text>
+                      <Text style={styles.consentSubtitle}>{recordingSubtitle}</Text>
+                    </View>
+                    <TouchableOpacity
+                      testID="switch-call-recording"
+                      style={styles.recordingSwitchHitArea}
+                      onPress={() =>
+                        onSubmitConsent &&
+                        onSubmitConsent(
+                          !isRecordingEnabled,
+                          isRecordingEnabled ? 'Patient declined recording' : undefined,
+                        )
+                      }
+                      accessibilityRole="switch"
+                      accessibilityState={{ checked: isRecordingEnabled }}
+                      accessibilityLabel={isRecordingEnabled ? 'Turn off call recording' : 'Turn on call recording'}
+                    >
+                      <View
+                        style={[
+                          styles.recordingSwitchTrack,
+                          isRecordingEnabled && styles.recordingSwitchTrackOn,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.recordingSwitchThumb,
+                            isRecordingEnabled && styles.recordingSwitchThumbOn,
+                          ]}
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+
+          {/* Pinned Main Action Buttons */}
+          <View style={[styles.bottomBar, isCompactWaitingRoom && styles.bottomBarCompact]}>
+            <TouchableOpacity style={styles.cancelButton} onPress={onCancelCall} accessibilityRole="button">
+              <Text style={styles.cancelButtonText}>Cancel / Leave</Text>
+            </TouchableOpacity>
+
+            {videoServerUnavailable ? (
+              <OverlayTooltip
+                label={
+                  videoServerBannerMessage ||
+                  'Live video server could not be reached. Click to retry.'
+                }
+                placement="top"
+                colors={resolvedColors}
+                shadows={resolvedShadows}
+                style={styles.admitSlot}
+              >
+                <TouchableOpacity
+                  testID="btn-retry-video-server"
+                  style={[
+                    styles.retryErrorButton,
+                    isRetryingVideoServer && styles.admitButtonDisabled
+                  ]}
+                  onPress={() => void handleRetryPress()}
+                  disabled={isRetryingVideoServer}
+                  accessibilityRole="button"
+                  accessibilityLabel="Video Server Unavailable — Retry"
+                >
+                  <Text style={styles.retryErrorButtonText} numberOfLines={1}>
+                    {isRetryingVideoServer
+                      ? 'Retrying Video Server...'
+                      : 'Video Server Unavailable • Retry'}
+                  </Text>
+                </TouchableOpacity>
+              </OverlayTooltip>
+            ) : (
+              <>
+                {isDoctor && onAdmitPatient && (
+                  <TouchableOpacity
+                    style={[styles.admitButton, (isAdmitBlocked || isAdmitting) && styles.admitButtonDisabled]}
+                    onPress={handleAdmitPress}
+                    disabled={isAdmitBlocked || isAdmitting}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.admitButtonText}>
+                      {isAdmitting ? 'Admitting Patient...' : 'Admit Patient to Call'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {!isDoctor && (
+                  <TouchableOpacity
+                    style={[styles.admitButton, !isReadyToAdmit && styles.admitButtonDisabled]}
+                    onPress={onEnterCall}
+                    disabled={!isReadyToAdmit}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.admitButtonText}>
+                      {isReadyToAdmit ? 'Enter Consultation Room' : 'Waiting for Clinician...'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Staff Plain-Note Override Modal (only mounted when open to avoid dormant FocusTrap interference) */}
+      {overrideModalVisible ? (
+        <Modal
+          visible={true}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setOverrideModalVisible(false)}
+        >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Staff Admission Override</Text>
+            <Text style={styles.modalDescription}>
+              Facility staff or attending clinicians may bypass the prepayment gate by submitting a plain reason note. This administrative action is permanently recorded in the facility audit log.
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              value={overrideReason}
+              onChangeText={setOverrideReason}
+              placeholder="Enter reason for admission override (min 5 characters)..."
+              placeholderTextColor={resolvedColors.textMuted}
+              multiline
+              numberOfLines={3}
+              accessibilityLabel="Override reason input"
+            />
+
+            <Text style={[styles.charCountText, !isReasonValid && trimmedReason.length > 0 && styles.charCountWarning]}>
+              {trimmedReason.length < 5
+                ? `Minimum 5 characters required (${trimmedReason.length}/5)`
+                : `Valid reason note (${trimmedReason.length} characters)`}
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setOverrideModalVisible(false)}
+                disabled={isSubmittingOverride}
+                accessibilityRole="button"
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSubmitButton, !canSubmitOverride && styles.modalSubmitButtonDisabled]}
+                onPress={handleOverrideSubmit}
+                disabled={!canSubmitOverride}
+                accessibilityRole="button"
+              >
+                <Text style={styles.modalSubmitText}>
+                  {isSubmittingOverride ? 'Overriding...' : 'Audit & Admit Patient'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+        </Modal>
+      ) : null}
+    </View>
+  );
+};
+
+function createStyles(
+  c: Record<keyof typeof lightColors, string>,
+  s: ReturnType<typeof createShadows>
+) {
+  const onDark = resolveOnDarkSurface(c);
+  return StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: c.background
+  },
+  header: {
+    padding: spaceScale.md,
+    backgroundColor: c.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: c.border,
+    ...s.sm
+  },
+  headerCompact: {
+    paddingHorizontal: spaceScale.md,
+    paddingVertical: spaceScale.sm
+  },
+  headerTitle: {
+    fontSize: fontSizeScale.xl,
+    fontWeight: '700',
+    color: c.text
+  },
+  headerSubtitle: {
+    fontSize: fontSizeScale.xs,
+    color: c.textSecondary,
+    marginTop: spaceScale.xxs
+  },
+  stateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spaceScale['2xl']
+  },
+  stateText: {
+    fontSize: fontSizeScale.sm,
+    color: c.textSecondary,
+    marginTop: spaceScale.sm
+  },
+  errorIcon: {
+    fontSize: fontSizeScale['3xl'],
+    color: c.emergency,
+    fontWeight: '700',
+    marginBottom: spaceScale.xs
+  },
+  errorTitle: {
+    fontSize: fontSizeScale.md,
+    fontWeight: '700',
+    color: c.emergencyText,
+    marginBottom: spaceScale.xxs
+  },
+  errorSubtitle: {
+    fontSize: fontSizeScale.xs,
+    color: c.textMuted,
+    textAlign: 'center'
+  },
+  bodyWrapper: {
+    flex: 1
+  },
+  scrollArea: {
+    flex: 1
+  },
+  bodyContent: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    padding: spaceScale.md,
+    paddingBottom: spaceScale.lg,
+    gap: spaceScale.lg
+  },
+  bodyContentCompact: {
+    padding: spaceScale.sm,
+    paddingBottom: spaceScale.md,
+    gap: spaceScale.sm
+  },
+  previewColumn: {
+    flexGrow: 1,
+    flexBasis: 340,
+    minWidth: 280
+  },
+  previewColumnCompact: {
+    minWidth: 0,
+    flexBasis: '100%'
+  },
+  cardsColumn: {
+    flexGrow: 1,
+    flexBasis: 300,
+    minWidth: 280
+  },
+  cardsColumnCompact: {
+    minWidth: 0,
+    flexBasis: '100%'
+  },
+  previewBox: {
+    width: '100%',
+    backgroundColor: c.surfaceInverse,
+    borderRadius: radiusScale.md,
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: spaceScale.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...s.md
+  },
+  previewBoxPortrait: {
+    aspectRatio: 3 / 4
+  },
+  previewBoxPortraitCompact: {
+    maxHeight: 280
+  },
+  previewBoxLandscape: {
+    aspectRatio: 16 / 9
+  },
+  videoPlaceholder: {
+    alignItems: 'center',
+    gap: spaceScale.xs
+  },
+  videoPlaceholderIcon: {
+    fontSize: fontSizeScale['2xl'],
+    fontWeight: '700',
+    color: c.textLight,
+    marginBottom: spaceScale.xxs
+  },
+  videoPlaceholderText: {
+    fontSize: fontSizeScale.sm,
+    color: c.textLight
+  },
+  topOverlayRow: {
+    position: 'absolute',
+    top: spaceScale.sm,
+    left: spaceScale.sm,
+    right: spaceScale.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spaceScale.xs
+  },
+  audioMeterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: c.overlay,
+    paddingHorizontal: spaceScale.sm,
+    paddingVertical: spaceScale.xxs,
+    borderRadius: radiusScale.xs
+  },
+  mediaModeBadge: {
+    backgroundColor: c.overlay,
+    paddingHorizontal: spaceScale.sm,
+    paddingVertical: spaceScale.xxs,
+    borderRadius: radiusScale.xs
+  },
+  mediaModeBadgeText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '600',
+    color: onDark
+  },
+  audioMeterLabel: {
+    fontSize: fontSizeScale.xs,
+    color: onDark,
+    marginRight: spaceScale.xs
+  },
+  audioMeterBar: {
+    width: 60,
+    height: 6,
+    backgroundColor: c.surfaceHighlight,
+    borderRadius: radiusScale.full,
+    overflow: 'hidden'
+  },
+  audioMeterFill: {
+    width: '65%',
+    height: '100%',
+    backgroundColor: c.routine
+  },
+  audioMeterMuted: {
+    width: '0%'
+  },
+  mediaBar: {
+    position: 'absolute',
+    bottom: spaceScale.sm,
+    flexDirection: 'row',
+    gap: spaceScale.sm,
+    zIndex: 25,
+    overflow: 'visible'
+  },
+  mediaButton: {
+    minWidth: sizes.touchTarget,
+    minHeight: sizes.touchTarget,
+    backgroundColor: c.surface,
+    borderRadius: radiusScale.full,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...s.brandSubtle
+  },
+  mediaButtonOff: {
+    backgroundColor: c.emergency,
+    ...s.dangerSm
+  },
+  mediaButtonText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: c.text
+  },
+  mediaButtonTextOff: {
+    color: onDark
+  },
+  patientLinkCard: {
+    backgroundColor: c.primarySubtle,
+    borderColor: c.primaryBorder,
+    borderWidth: sizes.borderWidth,
+    borderRadius: radiusScale.sm,
+    padding: spaceScale.md,
+    marginBottom: spaceScale.md,
+    gap: spaceScale.xs,
+    zIndex: 20,
+    overflow: 'visible',
+    ...s.sm
+  },
+  patientLinkHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 25,
+    overflow: 'visible'
+  },
+  patientLinkLabel: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: c.primaryDark
+  },
+  shareLinkBadge: {
+    minWidth: 36,
+    minHeight: 36,
+    padding: spaceScale.xs,
+    backgroundColor: c.transparent,
+    borderWidth: 0,
+    borderRadius: radiusScale.xs,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  shareLinkBadgeText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: c.onPrimary
+  },
+  patientLinkValue: {
+    fontSize: fontSizeScale.xs,
+    color: c.primary
+  },
+  detailsCard: {
+    backgroundColor: c.surface,
+    borderColor: c.border,
+    borderWidth: 1,
+    borderRadius: radiusScale.sm,
+    padding: spaceScale.md,
+    marginBottom: spaceScale.md,
+    ...s.sm
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spaceScale.xs
+  },
+  detailsRowLast: {
+    flexDirection: 'row',
+    justifyContent: 'space-between'
+  },
+  detailsLabel: {
+    fontSize: fontSizeScale.xs,
+    color: c.textMuted
+  },
+  detailsValue: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '600',
+    color: c.text
+  },
+  policyCard: {
+    backgroundColor: c.surface,
+    borderColor: c.border,
+    borderWidth: 1,
+    borderRadius: radiusScale.sm,
+    padding: spaceScale.md,
+    marginBottom: spaceScale.md,
+    ...s.sm
+  },
+  policyCardTitle: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: c.textSecondary,
+    marginBottom: spaceScale.sm
+  },
+  policySelectorRow: {
+    flexDirection: 'row',
+    gap: spaceScale.xs,
+    backgroundColor: c.surfaceSubtle,
+    borderRadius: radiusScale.md,
+    borderWidth: 1,
+    borderColor: c.borderLight,
+    padding: spaceScale.xs
+  },
+  policyOptionButton: {
+    flex: 1,
+    minHeight: sizes.touchTarget,
+    borderRadius: radiusScale.sm,
+    backgroundColor: c.transparent,
+    borderColor: c.transparent,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...s.none
+  },
+  policyOptionButtonSelected: {
+    backgroundColor: c.primary,
+    borderColor: c.primaryDark,
+    ...s.brandSm
+  },
+  policyOptionText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '600',
+    color: c.textSecondary
+  },
+  policyOptionTextSelected: {
+    color: c.onPrimary,
+    fontWeight: '700'
+  },
+  blockedCard: {
+    backgroundColor: c.warningBg,
+    borderColor: c.warningBorder,
+    borderWidth: 1,
+    borderRadius: radiusScale.sm,
+    padding: spaceScale.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spaceScale.md,
+    marginBottom: spaceScale.md,
+    ...s.sm
+  },
+  bannerIconContainer: {
+    padding: spaceScale.xs,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  blockedIcon: {
+    fontSize: fontSizeScale.lg,
+    fontWeight: '700',
+    color: c.warningText
+  },
+  gateTextContainer: {
+    flex: 1
+  },
+  blockedTitle: {
+    fontSize: fontSizeScale.sm,
+    fontWeight: '700',
+    color: c.warningText
+  },
+  blockedSubtitle: {
+    fontSize: fontSizeScale.xs,
+    color: c.warningText,
+    marginTop: spaceScale.xxs
+  },
+  overrideButton: {
+    marginTop: spaceScale.sm,
+    alignSelf: 'flex-start',
+    backgroundColor: c.emergencyBg,
+    borderColor: c.emergencyBorder,
+    borderWidth: 1,
+    paddingHorizontal: spaceScale.sm,
+    minHeight: sizes.touchTarget,
+    justifyContent: 'center',
+    borderRadius: radiusScale.xs,
+    ...s.dangerSm
+  },
+  overrideButtonText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: c.emergencyText
+  },
+  clearedCard: {
+    backgroundColor: c.primarySubtle,
+    borderColor: c.primaryBorder,
+    borderWidth: 1,
+    borderRadius: radiusScale.sm,
+    padding: spaceScale.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spaceScale.md,
+    marginBottom: spaceScale.md,
+    ...s.brandSubtle
+  },
+  clearedIcon: {
+    fontSize: fontSizeScale.lg,
+    fontWeight: '700',
+    color: c.primaryDark
+  },
+  clearedTitle: {
+    fontSize: fontSizeScale.sm,
+    fontWeight: '700',
+    color: c.primaryDark
+  },
+  clearedSubtitle: {
+    fontSize: fontSizeScale.xs,
+    color: c.primaryDark,
+    marginTop: spaceScale.xxs
+  },
+  consentCard: {
+    backgroundColor: c.surface,
+    borderColor: c.border,
+    borderWidth: 1,
+    borderRadius: radiusScale.sm,
+    padding: spaceScale.md,
+    marginBottom: spaceScale.md,
+    ...s.sm
+  },
+  consentCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spaceScale.md
+  },
+  consentTextColumn: {
+    flex: 1
+  },
+  consentTitle: {
+    fontSize: fontSizeScale.sm,
+    fontWeight: '700',
+    color: c.text,
+    marginBottom: spaceScale.xxs
+  },
+  consentSubtitle: {
+    fontSize: fontSizeScale.xs,
+    color: c.textSecondary
+  },
+  recordingSwitchHitArea: {
+    minWidth: sizes.touchTarget,
+    minHeight: sizes.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  recordingSwitchTrack: {
+    width: 48,
+    height: 28,
+    borderRadius: radiusScale.full,
+    backgroundColor: c.border,
+    padding: 2,
+    justifyContent: 'center'
+  },
+  recordingSwitchTrackOn: {
+    backgroundColor: c.primary,
+    ...s.brandSubtle
+  },
+  recordingSwitchThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: radiusScale.full,
+    backgroundColor: onDark,
+    alignSelf: 'flex-start',
+    ...s.sm
+  },
+  recordingSwitchThumbOn: {
+    alignSelf: 'flex-end'
+  },
+  bottomBar: {
+    flexDirection: 'row',
+    gap: spaceScale.sm,
+    paddingHorizontal: spaceScale.md,
+    paddingVertical: spaceScale.sm,
+    borderTopWidth: 1,
+    borderTopColor: c.border,
+    backgroundColor: c.surface
+  },
+  bottomBarCompact: {
+    gap: spaceScale.xs,
+    paddingHorizontal: spaceScale.sm,
+    paddingVertical: spaceScale.sm
+  },
+  cancelButton: {
+    flex: 1,
+    minHeight: sizes.touchTarget,
+    borderRadius: radiusScale.sm,
+    backgroundColor: c.primarySubtle,
+    borderWidth: 1,
+    borderColor: c.primaryBorder,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...s.brandSubtle
+  },
+  cancelButtonText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '600',
+    color: c.primaryDark
+  },
+  admitButton: {
+    flex: 2,
+    minHeight: sizes.touchTarget,
+    borderRadius: radiusScale.sm,
+    backgroundColor: c.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...s.brandSm
+  },
+  admitSlot: {
+    flex: 2
+  },
+  retryErrorButton: {
+    width: '100%',
+    minHeight: sizes.touchTarget,
+    paddingHorizontal: spaceScale.md,
+    borderRadius: radiusScale.sm,
+    backgroundColor: c.emergency,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...s.dangerSm
+  },
+  retryErrorButtonText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: onDark
+  },
+  admitButtonDisabled: {
+    opacity: 0.5,
+    ...s.none
+  },
+  admitButtonText: {
+    fontSize: fontSizeScale.sm,
+    fontWeight: '700',
+    color: c.onPrimary
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: c.overlay,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spaceScale.md
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 480,
+    backgroundColor: c.surface,
+    borderRadius: radiusScale.md,
+    padding: spaceScale.lg,
+    borderWidth: 1,
+    borderColor: c.border,
+    ...s.lg
+  },
+  modalTitle: {
+    fontSize: fontSizeScale.lg,
+    fontWeight: '700',
+    color: c.text,
+    marginBottom: spaceScale.xs
+  },
+  modalDescription: {
+    fontSize: fontSizeScale.xs,
+    color: c.textSecondary,
+    marginBottom: spaceScale.md,
+    lineHeight: 18
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: radiusScale.sm,
+    padding: spaceScale.sm,
+    fontSize: fontSizeScale.xs,
+    color: c.text,
+    minHeight: sizes.touchTarget * 1.8,
+    textAlignVertical: 'top'
+  },
+  charCountText: {
+    fontSize: fontSizeScale.xs,
+    color: c.textMuted,
+    marginTop: spaceScale.xs,
+    marginBottom: spaceScale.md
+  },
+  charCountWarning: {
+    color: c.warningText,
+    fontWeight: '600'
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spaceScale.sm
+  },
+  modalCancelButton: {
+    minHeight: sizes.touchTarget,
+    paddingHorizontal: spaceScale.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: radiusScale.sm,
+    backgroundColor: c.primarySubtle,
+    borderWidth: 1,
+    borderColor: c.primaryBorder,
+    ...s.brandSubtle
+  },
+  modalCancelText: {
+    fontSize: fontSizeScale.xs,
+    color: c.primaryDark,
+    fontWeight: '600'
+  },
+  modalSubmitButton: {
+    minHeight: sizes.touchTarget,
+    paddingHorizontal: spaceScale.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: radiusScale.sm,
+    backgroundColor: c.emergency,
+    ...s.dangerSm
+  },
+  modalSubmitButtonDisabled: {
+    opacity: 0.5,
+    ...s.none
+  },
+  modalSubmitText: {
+    fontSize: fontSizeScale.xs,
+    color: onDark,
+    fontWeight: '700'
+  }
+  });
+}

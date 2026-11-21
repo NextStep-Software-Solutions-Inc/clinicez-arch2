@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, ScrollView, StyleSheet, Pressable } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
 import {
   DndContext,
   closestCenter,
@@ -18,6 +18,7 @@ import {
 } from '@dnd-kit/sortable';
 import { restrictToHorizontalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
+import Button from '../ui/Button';
 import Icon from '../ui/Icon';
 import ThemedText from '../ui/ThemedText';
 import { theme } from '../../constants/theme';
@@ -119,34 +120,26 @@ function SortableRoomCardItem({
         </ThemedText>
       </div>
       <View style={styles.arrowPair}>
-        <Pressable
+        <Button
+          variant="subtle"
+          size="xs"
+          icon="arrowLeft"
+          iconOnly
           onPress={() => onMoveEarlier(room.id)}
           disabled={isFirst || isReordering}
-          accessibilityRole="button"
           accessibilityLabel={`Move ${room.name} left`}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          style={[styles.arrowBtn, (isFirst || isReordering) && styles.arrowBtnDisabled]}
-        >
-          <Icon
-            name="arrowLeft"
-            size={12}
-            color={isFirst || isReordering ? theme.colors.textLight : theme.colors.textMuted}
-          />
-        </Pressable>
-        <Pressable
+          style={styles.arrowBtn}
+        />
+        <Button
+          variant="subtle"
+          size="xs"
+          icon="arrowRight"
+          iconOnly
           onPress={() => onMoveLater(room.id)}
           disabled={isLast || isReordering}
-          accessibilityRole="button"
           accessibilityLabel={`Move ${room.name} right`}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          style={[styles.arrowBtn, (isLast || isReordering) && styles.arrowBtnDisabled]}
-        >
-          <Icon
-            name="arrowRight"
-            size={12}
-            color={isLast || isReordering ? theme.colors.textLight : theme.colors.textMuted}
-          />
-        </Pressable>
+          style={styles.arrowBtn}
+        />
       </View>
     </View>
   );
@@ -244,16 +237,8 @@ const styles = StyleSheet.create({
   },
   arrowBtn: {
     width: 22,
+    minHeight: 22,
     height: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
     borderRadius: theme.radii.xs,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-    backgroundColor: theme.colors.surface,
-  },
-  arrowBtnDisabled: {
-    opacity: 0.25,
-    borderColor: theme.colors.transparent,
   },
 });

@@ -26,6 +26,8 @@ export interface ScreenProps extends Omit<ScrollViewProps, 'contentContainerStyl
   padded?: boolean;
   /** Extra bottom space (e.g. tab bar / save bar height). */
   bottomInset?: number;
+  /** Whether to add top safe area inset (useful for screens with no native navigation stack header). */
+  safeAreaTop?: boolean;
   contentContainerStyle?: StyleProp<ViewStyle>;
   onRefresh?: () => void;
   refreshing?: boolean;
@@ -51,6 +53,7 @@ export default function Screen({
   background = 'background',
   padded = true,
   bottomInset = 0,
+  safeAreaTop = false,
   contentContainerStyle,
   onRefresh,
   refreshing = false,
@@ -71,12 +74,14 @@ export default function Screen({
     width === 'form' ? sizes.formMaxWidth : width === 'content' ? sizes.contentMaxWidth : undefined;
   const pad = padded ? spacing.lg : 0;
   const calculatedOffset = keyboardOffset ?? (Platform.OS === 'ios' ? headerHeight : 0);
+  const topPad = pad + (safeAreaTop ? insets.top : 0);
 
   const column: ViewStyle = {
     width: '100%',
     maxWidth,
     alignSelf: 'center',
     padding: pad,
+    paddingTop: topPad,
     paddingBottom: pad + bottomInset + (scroll && !footer ? insets.bottom : 0),
   };
 

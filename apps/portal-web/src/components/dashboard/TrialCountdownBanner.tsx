@@ -68,8 +68,10 @@ export default function TrialCountdownBanner({ tenantSlug }: TrialCountdownBanne
     const isTrialing = subscriptionStatus === "TRIALING";
     const isExpired = subscriptionStatus === "EXPIRED";
 
-    // Only render for active trials or expired states
-    if ((!isTrialing && !isExpired) || dismissed) {
+    const trialDays = billingInfo?.trialDays ?? billingInfo?.paymentConfig?.trialDays;
+
+    // Only render for active trials or expired states with a valid trial duration
+    if ((!isTrialing && !isExpired) || dismissed || !trialDays || trialDays <= 0) {
         return null;
     }
 
@@ -80,7 +82,6 @@ export default function TrialCountdownBanner({ tenantSlug }: TrialCountdownBanne
     const now = new Date();
     const diffTime = expiresAt ? expiresAt.getTime() - now.getTime() : 0;
     const diffDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-    const trialDays = billingInfo?.trialDays || billingInfo?.paymentConfig?.trialDays || 14;
     const planName = billingInfo?.planLimits?.planTitle || "Starter";
 
     // State 1: Trial has expired

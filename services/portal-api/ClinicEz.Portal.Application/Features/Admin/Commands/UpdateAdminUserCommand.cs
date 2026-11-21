@@ -14,7 +14,8 @@ public record UpdateAdminUserCommand(
     string FullName,
     Guid RoleId,
     bool IsActive,
-    string UpdatedBy
+    string UpdatedBy,
+    string? CurrentClerkUserId = null
 ) : IRequest<AdminUser?>;
 
 public class UpdateAdminUserCommandHandler(IApplicationDbContext context) : IRequestHandler<UpdateAdminUserCommand, AdminUser?>
@@ -23,6 +24,14 @@ public class UpdateAdminUserCommandHandler(IApplicationDbContext context) : IReq
     {
         var user = await context.AdminUsers.FirstOrDefaultAsync(u => u.Id == request.Id, cancellationToken);
         if (user == null) return null;
+
+        if (!string.IsNullOrWhiteSpace(request.CurrentClerkUserId) &&
+            !string.IsNullOrWhiteSpace(user.ClerkUserId) &&
+            string.Equals(user.ClerkUserId.Trim(), request.CurrentClerkUserId.Trim(), StringComparison.Ordinal) &&
+            !request.IsActive)
+        {
+            throw new InvalidOperationException("You cannot suspend your own account.");
+        }
 
         if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.FullName)) return null;
 

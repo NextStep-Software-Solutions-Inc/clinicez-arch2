@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Features.Queue.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Workspace;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,23 +27,30 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
 {
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IClinicContext _clinicContext;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<FacilitySettings>? _settingsRepository;
 
     public GetQueueQueryHandler(
         IRepository<QueueItem> queueRepository,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<FacilitySettings>? settingsRepository = null)
     {
         _queueRepository = queueRepository;
         _clinicContext = clinicContext;
+        _workspaceProfiles = workspaceProfiles;
+        _settingsRepository = settingsRepository;
     }
 
     public async Task<IReadOnlyList<QueueItemDto>> Handle(GetQueueQuery request, CancellationToken cancellationToken)
     {
-        var targetDate = request.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var targetDate = request.Date
+            ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, cancellationToken, _settingsRepository);
 
         var query = _queueRepository.Query(q => 
             q.ClinicId == _clinicContext.ClinicId && 
             q.QueueDate == targetDate)
-            .Include(q => q.TriageVitals)
+            .Include(q => q.PatientVitals)
             .AsQueryable();
 
         // Specific Doctor Filter
@@ -71,20 +80,31 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
         // Explicit Status or View Filter
         if (request.Status.HasValue)
         {
-            query = query.Where(q => q.Status == request.Status.Value);
+            if (request.Status.Value == QueueStatus.Completed)
+            {
+                query = query.Where(q => q.Status == QueueStatus.Completed || q.Status == QueueStatus.DischargedNonDoctor);
+            }
+            else
+            {
+                query = query.Where(q => q.Status == request.Status.Value);
+            }
         }
         else if (!string.IsNullOrWhiteSpace(request.View))
         {
             var view = request.View.Trim();
             if (view.Equals("MyRoom", StringComparison.OrdinalIgnoreCase))
             {
-                // Items assigned to the clinician or room that are actively in workflow (exclude cancelled, no-show, and completed)
-                query = query.Where(q => q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow && q.Status != QueueStatus.Completed);
+                // Items assigned to the clinician or room that are actively in workflow (exclude cancelled, no-show, completed, discharged non-doctor, and diverted)
+                query = query.Where(q => q.Status != QueueStatus.Cancelled &&
+                                         q.Status != QueueStatus.NoShow &&
+                                         q.Status != QueueStatus.Completed &&
+                                         q.Status != QueueStatus.DischargedNonDoctor &&
+                                         q.Status != QueueStatus.Diverted);
             }
             else if (view.Equals("WaitingForDoctor", StringComparison.OrdinalIgnoreCase))
             {
                 // Triaged patients ready for first consult OR patients returned from procedures for re-evaluation
-                query = query.Where(q => q.Status == QueueStatus.Triaged || q.Status == QueueStatus.ReEvaluation);
+                query = query.Where(q => (q.Status == QueueStatus.Triaged || q.Status == QueueStatus.ReEvaluation) && !q.IsDirectVisit);
             }
             else if (view.Equals("Triage", StringComparison.OrdinalIgnoreCase))
             {
@@ -98,8 +118,8 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
             }
             else if (view.Equals("Completed", StringComparison.OrdinalIgnoreCase))
             {
-                // Patients whose encounters are completed
-                query = query.Where(q => q.Status == QueueStatus.Completed);
+                // Patients whose encounters are completed (including non-doctor discharges)
+                query = query.Where(q => q.Status == QueueStatus.Completed || q.Status == QueueStatus.DischargedNonDoctor);
             }
             else if (view.Equals("All", StringComparison.OrdinalIgnoreCase))
             {
@@ -108,8 +128,12 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
         }
         else
         {
-            // Default: show active queue (not cancelled, no-show, or completed)
-            query = query.Where(q => q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow && q.Status != QueueStatus.Completed);
+            // Default: show active queue (not cancelled, no-show, completed, discharged non-doctor, or diverted)
+            query = query.Where(q => q.Status != QueueStatus.Cancelled &&
+                                     q.Status != QueueStatus.NoShow &&
+                                     q.Status != QueueStatus.Completed &&
+                                     q.Status != QueueStatus.DischargedNonDoctor &&
+                                     q.Status != QueueStatus.Diverted);
         }
 
         var items = await query
@@ -117,35 +141,7 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
             .ThenBy(q => q.SequenceNumber)
             .ToListAsync(cancellationToken);
 
-        return items.Select(item =>
-        {
-            string? vitalsSummary = item.TriageVitals != null
-                ? $"BP: {item.TriageVitals.SystolicBp}/{item.TriageVitals.DiastolicBp} • HR: {item.TriageVitals.HeartRateBpm}"
-                : null;
-
-            return new QueueItemDto(
-                item.Id,
-                item.TenantId,
-                item.ClinicId,
-                item.QueueNumber,
-                item.SequenceNumber,
-                item.QueueDate,
-                item.PatientId,
-                item.PatientName,
-                item.AppointmentId,
-                item.DoctorId,
-                item.DoctorName,
-                item.Priority,
-                item.Status,
-                item.CheckInTime,
-                item.CalledTime,
-                item.CompletedTime,
-                item.ChiefComplaint,
-                item.TriageVitals != null,
-                vitalsSummary,
-                item.RoomOrStation,
-                item.RoomId);
-        }).ToList();
+        return items.Select(item => item.ToDto()).ToList();
     }
 }
 
@@ -162,18 +158,25 @@ public sealed class GetQueueMetricsQueryHandler : IRequestHandler<GetQueueMetric
 {
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IClinicContext _clinicContext;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<FacilitySettings>? _settingsRepository;
 
     public GetQueueMetricsQueryHandler(
         IRepository<QueueItem> queueRepository,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<FacilitySettings>? settingsRepository = null)
     {
         _queueRepository = queueRepository;
         _clinicContext = clinicContext;
+        _workspaceProfiles = workspaceProfiles;
+        _settingsRepository = settingsRepository;
     }
 
     public async Task<QueueMetricsDto> Handle(GetQueueMetricsQuery request, CancellationToken cancellationToken)
     {
-        var targetDate = request.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var targetDate = request.Date
+            ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, cancellationToken, _settingsRepository);
 
         var items = await _queueRepository.Query(q => 
             q.ClinicId == _clinicContext.ClinicId && 

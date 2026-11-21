@@ -10,14 +10,16 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interoperability;
+using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.Billing.Commands;
 
+[method: JsonConstructor]
 public record CreateInvoiceCommand(
-    Guid PatientId,
-    string PatientName,
+    Guid? PatientId = null,
+    string? PatientName = null,
     Guid? QueueItemId = null,
     Guid? AppointmentId = null,
     Guid? ConsultationId = null,
@@ -27,22 +29,58 @@ public record CreateInvoiceCommand(
     decimal? CustomDiscountPercentage = null,
     string? Notes = null,
     List<CreateInvoiceLineItemRequest>? LineItems = null,
-    bool AllowDuplicate = false
-) : IRequest<InvoiceDto>;
+    bool AllowDuplicate = false,
+    bool IsWalkInRetail = false,
+    string? WalkInCustomerName = null,
+    VisitType? VisitType = null
+) : IRequest<InvoiceDto>
+{
+    public CreateInvoiceCommand(
+        Guid patientId,
+        string patientName,
+        Guid? queueItemId = null,
+        Guid? appointmentId = null,
+        Guid? consultationId = null,
+        Guid? attendingDoctorId = null,
+        DiscountType discountType = DiscountType.None,
+        string? discountIdNumber = null,
+        decimal? customDiscountPercentage = null,
+        string? notes = null,
+        List<CreateInvoiceLineItemRequest>? lineItems = null,
+        bool allowDuplicate = false)
+        : this(
+            patientId,
+            patientName,
+            queueItemId,
+            appointmentId,
+            consultationId,
+            attendingDoctorId,
+            discountType,
+            discountIdNumber,
+            customDiscountPercentage,
+            notes,
+            lineItems,
+            allowDuplicate,
+            false,
+            null,
+            null)
+    {
+    }
+};
 
 public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand, InvoiceDto>
 {
     private readonly IRepository<Invoice> _invoiceRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<ConsultationEncounter> _encounterRepo;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IBillingRequestPublisher _billingPublisher;
 
     public CreateInvoiceCommandHandler(
         IRepository<Invoice> invoiceRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<ConsultationEncounter> encounterRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
@@ -53,9 +91,9 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
 
     public CreateInvoiceCommandHandler(
         IRepository<Invoice> invoiceRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<ConsultationEncounter> encounterRepo,
-        IRepository<ClinicSettings>? settingsRepo,
+        IRepository<FacilitySettings>? settingsRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IBillingRequestPublisher billingPublisher)
@@ -71,10 +109,29 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
 
     public async Task<InvoiceDto> Handle(CreateInvoiceCommand request, CancellationToken cancellationToken)
     {
-        if (request.PatientId == Guid.Empty || string.IsNullOrWhiteSpace(request.PatientName))
+        if (request.IsWalkInRetail)
+        {
+            var customerName = !string.IsNullOrWhiteSpace(request.WalkInCustomerName)
+                ? request.WalkInCustomerName.Trim()
+                : (!string.IsNullOrWhiteSpace(request.PatientName) ? request.PatientName.Trim() : null);
+
+            if (string.IsNullOrWhiteSpace(customerName))
+            {
+                throw new BadRequestException("Customer name is required for Walk-In Retail POS invoices.");
+            }
+        }
+        else if (!request.PatientId.HasValue || request.PatientId.Value == Guid.Empty || string.IsNullOrWhiteSpace(request.PatientName))
         {
             throw new BadRequestException("PatientId and PatientName are required to generate an invoice.");
         }
+
+        var effectivePatientId = request.PatientId.HasValue && request.PatientId.Value != Guid.Empty
+            ? request.PatientId.Value
+            : (request.IsWalkInRetail ? Guid.Empty : (Guid?)null);
+
+        var effectivePatientName = !string.IsNullOrWhiteSpace(request.WalkInCustomerName)
+            ? request.WalkInCustomerName.Trim()
+            : request.PatientName!.Trim();
 
         // Active invoice lookup for Draft SOA merging & Paid duplicate prevention
         Invoice? existingInvoice = null;
@@ -250,7 +307,7 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
                     }
                 }
 
-                if (isCashierCounterMerge)
+                if (isCashierCounterMerge && existingInvoice.PatientId != Guid.Empty && !request.IsWalkInRetail)
                 {
                     await PublishInvoiceRequestAsync(existingInvoice, cancellationToken);
                 }
@@ -358,6 +415,14 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
         decimal discountAmountNew = 0m;
         if (request.DiscountType == DiscountType.SeniorCitizen || request.DiscountType == DiscountType.Pwd)
         {
+            if (string.IsNullOrWhiteSpace(request.DiscountIdNumber))
+            {
+                throw new BadRequestException("Discount ID number is required for Senior Citizen and PWD discounts.");
+            }
+            if (request.DiscountIdNumber.Trim().Length < 3)
+            {
+                throw new BadRequestException("Invalid Senior Citizen / PWD ID number format.");
+            }
             discountPercentageNew = 20.00m;
             discountAmountNew = Math.Round(grossAmountNew * (discountPercentageNew / 100m), 2);
         }
@@ -381,8 +446,9 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
             ClinicId = _clinicContext.ClinicId,
             InvoiceNumber = invoiceNumber,
             InvoiceDate = DateTime.UtcNow,
-            PatientId = request.PatientId,
-            PatientName = request.PatientName.Trim(),
+            PatientId = effectivePatientId,
+            PatientName = effectivePatientName,
+            IsWalkInRetail = request.IsWalkInRetail,
             QueueItemId = request.QueueItemId,
             AppointmentId = request.AppointmentId,
             ConsultationId = request.ConsultationId,
@@ -419,7 +485,11 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
             }
         }
 
-        if (isCashierCounter)
+        var shouldForwardToCashierCounter = isCashierCounter &&
+            invoice.PatientId != Guid.Empty &&
+            !request.IsWalkInRetail;
+
+        if (shouldForwardToCashierCounter)
         {
             await PublishInvoiceRequestAsync(invoice, cancellationToken);
         }
@@ -435,25 +505,25 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
     /// </summary>
     private async Task PublishInvoiceRequestAsync(Invoice invoice, CancellationToken ct)
     {
-        if (invoice.NetAmount <= 0m)
+        if (invoice.PatientId == Guid.Empty || invoice.NetAmount <= 0m)
         {
             return;
         }
 
-        var visitKey = invoice.ConsultationId;
-        if (visitKey is null && invoice.QueueItemId.HasValue)
+        Guid? resolvedQueueItemId = invoice.QueueItemId;
+        if (!resolvedQueueItemId.HasValue && invoice.ConsultationId.HasValue && _encounterRepo != null)
         {
-            var queueItemId = invoice.QueueItemId.Value;
-            var encounterId = await _encounterRepo
-                .Query(e => e.ClinicId == _clinicContext.ClinicId && e.QueueItemId == queueItemId)
-                .Select(e => (Guid?)e.Id)
+            var consultationId = invoice.ConsultationId.Value;
+            resolvedQueueItemId = await _encounterRepo
+                .Query(e => e.ClinicId == _clinicContext.ClinicId && e.Id == consultationId)
+                .Select(e => e.QueueItemId)
                 .FirstOrDefaultAsync(ct);
-            visitKey = encounterId ?? queueItemId;
         }
+        var visitKey = resolvedQueueItemId ?? invoice.ConsultationId;
 
         var syncPatientId = await _patientRepo
             .Query(p => p.ClinicId == _clinicContext.ClinicId && p.Id == invoice.PatientId)
-            .Select(p => p.SyncPatientId)
+            .Select(p => p.CloudPatientId)
             .FirstOrDefaultAsync(ct);
 
         var lines = invoice.LineItems

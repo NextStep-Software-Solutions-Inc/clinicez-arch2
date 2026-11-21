@@ -202,9 +202,9 @@ describe('upload rules', () => {
     expect(validateUploadFile({ mimeType: undefined, size: 10 })).toContain('Unsupported file type');
   });
 
-  test('rejects files over 10 MB and states the size', () => {
+  test('rejects files over 25 MB and states the size', () => {
     const message = validateUploadFile({ mimeType: 'application/pdf', size: UPLOAD_MAX_BYTES + 1 });
-    expect(message).toContain('10.0 MB');
+    expect(message).toContain('25.0 MB');
   });
 
   test('formatBytes picks a readable unit', () => {

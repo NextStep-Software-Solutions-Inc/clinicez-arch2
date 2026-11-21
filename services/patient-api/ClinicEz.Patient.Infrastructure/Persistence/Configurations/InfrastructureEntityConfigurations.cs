@@ -9,6 +9,9 @@ public sealed class FileRecordConfiguration : IEntityTypeConfiguration<FileRecor
     public void Configure(EntityTypeBuilder<FileRecord> builder)
     {
         builder.HasKey(f => f.Id);
+        builder.Property(f => f.Title).HasMaxLength(200).IsRequired();
+        builder.Property(f => f.FacilityName).HasMaxLength(200);
+        builder.Property(f => f.Notes).HasMaxLength(1000);
         builder.Property(f => f.FileName).HasMaxLength(255).IsRequired();
         builder.Property(f => f.MimeType).HasMaxLength(100);
         builder.Property(f => f.Extension).HasMaxLength(20);
@@ -30,12 +33,10 @@ public sealed class FileRecordConfiguration : IEntityTypeConfiguration<FileRecor
             .HasForeignKey(f => f.PatientId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne(f => f.Folder)
-            .WithMany(ff => ff.Files)
-            .HasForeignKey(f => f.FolderId)
-            .OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(f => new { f.PatientId, f.DocumentDate });
     }
 }
+
 
 public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
 {

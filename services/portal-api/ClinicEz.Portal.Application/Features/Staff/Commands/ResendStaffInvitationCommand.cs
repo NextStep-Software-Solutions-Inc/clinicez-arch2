@@ -1,3 +1,4 @@
+using ClinicEz.Portal.Application.Common;
 using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Features.Staff.Queries;
 using ClinicEz.Portal.Application.Interfaces;
@@ -41,25 +42,32 @@ public class ResendStaffInvitationCommandHandler(
             .FirstOrDefaultAsync(m => m.Id == request.StaffMemberId && m.TenantId == tenant.Id, cancellationToken)
             ?? throw new KeyNotFoundException("Staff member was not found in this workspace.");
 
-        if (member.Status == MemberStatus.Active)
+        if (member.Status != MemberStatus.Invited)
         {
-            throw new InvalidOperationException("This team member is already an active member of this workspace.");
+            throw new InvalidOperationException(member.Status switch
+            {
+                MemberStatus.Active => "This team member is already an active member of this workspace.",
+                MemberStatus.Suspended => "Suspended accounts cannot be resent an invitation. Please reactivate the account.",
+                MemberStatus.Revoked => "Revoked invitations cannot be resent. Please send a new invitation.",
+                _ => "This member does not have a pending invitation."
+            });
         }
 
         var profile = await context.StaffMembers
             .Include(s => s.Facility)
             .FirstOrDefaultAsync(s => s.WorkspaceMemberId == member.Id, cancellationToken);
 
-        // Generate a new secure cryptographic token and reset expiry for 7 days
-        member.InvitationToken = Guid.NewGuid().ToString("N");
-        member.InvitationExpiresAt = timeProvider.GetUtcNow().UtcDateTime.AddDays(7);
-        member.Status = MemberStatus.Invited;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
 
-        // Commits atomically with the new token; delivery happens later and is retried.
-        invitationNotifier.RequestInvitation(tenant, member, StaffMemberMapping.RoleName(member, profile), profile?.Facility?.Name);
+        // Generate a new secure cryptographic token and reset expiry for 7 days
+        member.InvitationToken = TokenGenerator.GenerateSecureToken();
+        member.InvitationExpiresAt = now.AddDays(7);
+        member.Status = MemberStatus.Invited;
 
         await context.SaveChangesAsync(cancellationToken);
 
-        return StaffMemberMapping.ToDto(member, profile, profile?.Facility?.Name);
+        invitationNotifier.RequestInvitation(tenant, member, StaffMemberMapping.RoleName(member, profile), profile?.Facility?.Name);
+
+        return StaffMemberMapping.ToDto(member, profile, profile?.Facility?.Name, now);
     }
 }

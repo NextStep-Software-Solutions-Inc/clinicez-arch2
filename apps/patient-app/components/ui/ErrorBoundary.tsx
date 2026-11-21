@@ -1,5 +1,6 @@
-import React, { ErrorInfo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { ErrorInfo, useState } from 'react';
+import { View, StyleSheet, Platform } from 'react-native';
+import * as Updates from 'expo-updates';
 import ThemedText from './ThemedText';
 import ThemedView from './ThemedView';
 import { AppIcon } from './Icon';
@@ -17,6 +18,31 @@ interface ErrorBoundaryState {
 
 function ErrorFallback({ error, onReset }: { error: Error | null; onReset: () => void }) {
   const { spacing, sizes } = useAppTheme();
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+
+  const canCheckUpdates = Platform.OS !== 'web' && Boolean(Updates?.isEnabled);
+
+  const handleCheckUpdate = async () => {
+    if (!canCheckUpdates) return;
+    try {
+      setIsUpdating(true);
+      setUpdateStatus('Checking for updates...');
+      const check = await Updates.checkForUpdateAsync();
+      if (check.isAvailable) {
+        setUpdateStatus('Downloading update...');
+        await Updates.fetchUpdateAsync();
+        setUpdateStatus('Restarting app...');
+        await Updates.reloadAsync();
+      } else {
+        setUpdateStatus('App is up to date.');
+      }
+    } catch {
+      setUpdateStatus('Update check failed. Check your connection.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   return (
     <ThemedView style={[styles.container, { padding: spacing['2xl'] }]}>
@@ -30,11 +56,29 @@ function ErrorFallback({ error, onReset }: { error: Error | null; onReset: () =>
         <ThemedText
           variant="body"
           color="textSecondary"
-          style={[styles.message, { marginBottom: spacing['3xl'] }]}
+          style={[styles.message, { marginBottom: spacing.lg }]}
         >
           {error?.message || 'An unexpected error occurred.'}
         </ThemedText>
+        {updateStatus ? (
+          <ThemedText
+            variant="caption"
+            color="primary"
+            style={[styles.statusText, { marginBottom: spacing.md }]}
+          >
+            {updateStatus}
+          </ThemedText>
+        ) : null}
         <Button label="Try Again" onPress={onReset} variant="primary" style={styles.button} />
+        {canCheckUpdates ? (
+          <Button
+            label={isUpdating ? (updateStatus ?? 'Updating...') : 'Check for Updates'}
+            onPress={handleCheckUpdate}
+            variant="secondary"
+            disabled={isUpdating}
+            style={[styles.button, { marginTop: spacing.md }]}
+          />
+        ) : null}
       </View>
     </ThemedView>
   );
@@ -86,5 +130,8 @@ const styles = StyleSheet.create({
   },
   button: {
     alignSelf: 'center',
+  },
+  statusText: {
+    textAlign: 'center',
   },
 });

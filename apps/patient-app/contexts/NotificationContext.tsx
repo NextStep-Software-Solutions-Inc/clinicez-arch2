@@ -64,7 +64,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
 
-  const [unreadCount, setUnreadCount] = useState(3);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [pushToken, setPushToken] = useState<string | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<
     ExpoNotifications.PermissionStatus | 'undetermined'
@@ -163,11 +163,57 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     });
 
     const responseSub = ExpoNotifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data;
-      if (data?.route === 'SettingsScreen') {
-        if (navigationRef.isReady()) {
-          navigationRef.navigate('Main', { screen: 'SettingsScreen' });
+      const data = (response.notification.request.content.data ?? {}) as Record<string, any>;
+      if (!navigationRef.isReady()) return;
+
+      const route = String(data.route ?? '');
+      const sourceId = String(data.sourceId ?? data.id ?? '');
+
+      if (route === 'SettingsScreen') {
+        navigationRef.navigate('Main', { screen: 'SettingsScreen' });
+      } else if (route === 'AppointmentDetailScreen' || (data.appointmentId && !route)) {
+        const appointmentId = String(data.appointmentId ?? sourceId);
+        if (appointmentId) {
+          navigationRef.navigate('Main', {
+            screen: 'AppointmentDetailScreen',
+            params: { appointmentId, id: appointmentId } as any,
+          });
         }
+      } else if (route === 'PrescriptionDetailScreen' || data.category === 'prescription') {
+        const id = String(data.prescriptionId ?? sourceId);
+        if (id) {
+          navigationRef.navigate('Main', { screen: 'PrescriptionDetailScreen', params: { id } });
+        }
+      } else if (route === 'LabResultDetailScreen' || data.category === 'lab_result') {
+        const id = String(data.labResultId ?? sourceId);
+        if (id) {
+          navigationRef.navigate('Main', { screen: 'LabResultDetailScreen', params: { id } });
+        }
+      } else if (route === 'LabRequestDetailScreen' || data.category === 'lab_request') {
+        const id = String(data.labRequestId ?? sourceId);
+        if (id) {
+          navigationRef.navigate('Main', { screen: 'LabRequestDetailScreen', params: { id } });
+        }
+      } else if (route === 'MedicalCertificateDetailScreen' || data.category === 'certificate') {
+        const id = String(data.certificateId ?? sourceId);
+        if (id) {
+          navigationRef.navigate('Main', { screen: 'MedicalCertificateDetailScreen', params: { id } });
+        }
+      } else if (route === 'ConversationThreadScreen' || data.conversationId) {
+        const conversationId = String(data.conversationId ?? sourceId);
+        if (conversationId) {
+          navigationRef.navigate('Main', {
+            screen: 'ConversationThreadScreen',
+            params: { conversationId } as any,
+          });
+        }
+      } else if (sourceId) {
+        navigationRef.navigate('Main', {
+          screen: 'NotificationDetailScreen',
+          params: { id: sourceId } as any,
+        });
+      } else {
+        navigationRef.navigate('Main', { screen: 'NotificationScreen' });
       }
     });
 

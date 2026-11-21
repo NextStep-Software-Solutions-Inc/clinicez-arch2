@@ -60,6 +60,7 @@ flowchart LR
 | Edge host, always | `postgres`, `backup`, `billing-api`, `clinic-api`, `clinic-web` | `billing-api` serves the single cashier counter of the cell (decision D5). |
 | Edge host, profile `local-hub` | `interop-hub` (same image as the cloud hub, `Hub:Mode=Local`) | On by default. Mailboxes live in the cell's postgres (`CLINICEZ_INTEROP_HUB_LOCAL_DB`), no broker anywhere. |
 | Edge host, profiles `laboratory` / `pharmacy` / `organization` / `cashier` | the matching API and web app | Switched on per facility the tenant owns. |
+| Edge host, profile `comms` | `comms-api` (`CLINICEZ_COMMS_DB`, SignalR `/hubs/chat` and `/hubs/calls`) | Self-hosted workspace chat, P2C triage engine, and call signaling for every facility and branch in the cell. |
 | Cloud | cloud hub, portal-api (facility registry, licenses, credentials), patient-api, GHCR | The cell never needs an inbound connection from any of them. |
 | Devices | Native clinic/lab/pharmacy apps and browsers | They use the web port of their facility: nginx proxies `/api/` to the API, so APIs publish no host port. |
 
@@ -137,9 +138,9 @@ Two kinds of credentials exist and they must not be confused: the ones the **por
 | Local hub (default) | **Local client signing key pairs**, one per service | **Installer**, generated on the host | Each service signs its envelopes; the local hub verifies them (`Hub__Signing__Required`) | `.env`: `<SERVICE>_HUB_SIGNING_KEY` (private -> `Messaging__SigningKey`) and `<SERVICE>_HUB_PUBLIC_KEY`; the public half also in `hub-bootstrap.env` -> `Hub__Bootstrap__Clients__N__PublicKey` |
 | No local hub (`--no-local-hub`) | **Per-service clients** for clinic and billing, plus the cloud hub URL | **Portal** (ids as returned; no `site-` prefix, never generated or defaulted by the installer) | `clinic-api` / `billing-api` authenticating to the cloud hub | `.env`: `HUB_URL`, `CLINIC_HUB_CLIENT_ID/SECRET`, `BILLING_HUB_CLIENT_ID/SECRET` -> `Messaging__*`, plus the portal-issued signing keys `CLINIC_HUB_SIGNING_KEY` / `BILLING_HUB_SIGNING_KEY` -> `Messaging__SigningKey`. No `UPSTREAM_*`; `hub-bootstrap.env` is comment-only |
 
-Also in `.env`: `TENANT_ID`, `EDGE_CELL_ID`, the facility ids, `CLINIC_PUBLIC_UPLOAD_BASE_URL`, the license (activation step), and generated `POSTGRES_PASSWORD`, per-service `*_JWT_SIGNING_KEY` (required, no generated-on-disk fallback), `CLINIC_DOCUMENT_SIGNING_KEY` / `LABORATORY_DOCUMENT_SIGNING_KEY` (verification QR codes), `GAMOT_UPSC_SECRET_KEY`, `CLINIC_ENCRYPTION_MASTER_SECRET` (wraps the per-file keys of the clinical records: required, never replace it without moving the old value to `CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0`, keep a copy of `.env`), `HANGFIRE_DASHBOARD_PASSWORD`, `HUB_PAYLOAD_ENCRYPTION_KEY`. Rotation procedures: [deploy/edge/README.md](../../deploy/edge/README.md#keys-and-rotation).
+Also in `.env`: `TENANT_ID`, `EDGE_CELL_ID`, the facility ids, `PORTAL_BASE_URL`, the license (activation step), and generated `POSTGRES_PASSWORD`, per-service `*_JWT_SIGNING_KEY` (required, no generated-on-disk fallback), `CLINIC_DOCUMENT_SIGNING_KEY` / `LABORATORY_DOCUMENT_SIGNING_KEY` (verification QR codes), `GAMOT_UPSC_SECRET_KEY`, `CLINIC_ENCRYPTION_MASTER_SECRET` (wraps the per-file keys of the clinical records: required, never replace it without moving the old value to `CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0`, keep a copy of `.env`), `HANGFIRE_DASHBOARD_PASSWORD`, `HUB_PAYLOAD_ENCRYPTION_KEY`. Rotation procedures: [deploy/edge/README.md](../../deploy/edge/README.md#keys-and-rotation).
 
-`CLINIC_PUBLIC_UPLOAD_BASE_URL` (`--public-upload-url`) is the public URL of the lab-result upload page printed on lab slips (`Clinic__PublicUploadBaseUrl`, `{base}/{token}`). That page is a cloud page: the site only needs outbound access, and uploaded results are relayed back to the clinic through the hub. Lab orders cannot be issued without it, so the installer asks for it (it may stay empty only on an air-gapped site, with a warning).
+`PORTAL_BASE_URL` (`--portal-base-url`) is the public base URL of the portal web app; lab orders link to `{PORTAL_BASE_URL}/upload/lab/{token}` (`Clinic__PortalBaseUrl`). That page is a cloud page: the site only needs outbound access, and uploaded results are relayed back to the clinic through the hub. Lab orders cannot be issued without it, so the installer asks for it (it may stay empty only on an air-gapped site, with a warning).
 
 The hub applies `Hub:Bootstrap` at every start (idempotent): the cell, one `EdgeCell` client per enabled service and the site's facilities, so it can route before its first directory sync.
 
@@ -177,6 +178,15 @@ No cloud link at all (decision D6): `--air-gapped` / `-AirGapped` sets `UPSTREAM
 - It cannot be combined with `--no-local-hub` (without a hub the services call the cloud hub directly): the installer refuses it.
 
 To connect the site later: `UPSTREAM_ENABLED=true`, the portal's `HubEdgeCredentials` as `UPSTREAM_*`, then `./install.sh apply`.
+
+## Workspace communications, video calls, and Cloud <-> Edge migration
+
+When the `comms` profile is enabled on an edge cell (`deploy/edge/docker-compose.yml`):
+
+1. **LAN-sovereign staff chat (`is_local_only`)**: Staff 1:1 messages, group chats, branch channels, and internal clinical notes across all facilities in the cell (`clinic`, `pharmacy`, `laboratory`, `cashier`/`billing`, `organization`) run directly against the local `comms-api` container and `CLINICEZ_COMMS_DB` on the hospital LAN. They remain 100% operational during internet outages (`is_local_only` threads never depend on cloud connectivity).
+2. **Truthful delivery receipts**: Messages remain `Waiting` on the server until the recipient workstation or patient device actively confirms receipt (`Received`). If a message remains unreceived past the 7-day retention window (`UnreceivedMessageSweeper`), it transitions to `NotReceived` and notifies the sender.
+3. **Outbound-only video & teleconsultation calls for on-premise facilities**: On-premise edge facilities make full 1:1 and multi-party E2EE video/audio calls and teleconsultations with **zero inbound ports**. `comms-api` requests short-lived zero-PHI room tokens from `media-broker` over the outbound Interop Hub (`media.room.requested` -> `media.room.responded`), and browser/workstation clients connect outbound via WebRTC Encoded Transform E2EE (UDP `7882`, TCP `7881`, or TURN TLS `443` through hospital firewalls) — or to a tenant-configured self-hosted LiveKit SFU. Sovereign `.cez` call recordings are encrypted with AES-256-GCM and stored directly in the clinic's own storage vault.
+4. **Zero-friction bidirectional Cloud <-> On-Premise migration (`ClinicEz.Comms.MigrationTool`)**: A tenant moving from Cloud Shared Cell to an On-Premise Edge Cell (or back) runs `ClinicEz.Comms.MigrationTool` (`export` -> `import` -> `verify` -> `cutover`). Conversation states transition cleanly (`Normal` -> `Draining` -> `Migrated`) with SHA-256 manifest verification, dual-read history continuity, and atomic `home_cell_id` cutover without breaking patient copies in `patient-api`.
 
 ## Limits and open points
 

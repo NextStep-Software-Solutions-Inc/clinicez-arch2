@@ -21,13 +21,13 @@ public sealed record GetPatientDentalChartQuery(
 public sealed class GetPatientDentalChartQueryHandler : IRequestHandler<GetPatientDentalChartQuery, DentalChartDto>
 {
     private readonly IRepository<DentalToothRecord> _toothRepo;
-    private readonly IRepository<ClinicalProcedure> _procRepo;
-    private readonly IRepository<ClinicPatient>? _patientRepo;
+    private readonly IRepository<Procedure> _procRepo;
+    private readonly IRepository<Patient>? _patientRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetPatientDentalChartQueryHandler(
         IRepository<DentalToothRecord> toothRepo,
-        IRepository<ClinicalProcedure> procRepo,
+        IRepository<Procedure> procRepo,
         IClinicContext clinicContext)
         : this(toothRepo, procRepo, null, clinicContext)
     {
@@ -35,8 +35,8 @@ public sealed class GetPatientDentalChartQueryHandler : IRequestHandler<GetPatie
 
     public GetPatientDentalChartQueryHandler(
         IRepository<DentalToothRecord> toothRepo,
-        IRepository<ClinicalProcedure> procRepo,
-        IRepository<ClinicPatient>? patientRepo,
+        IRepository<Procedure> procRepo,
+        IRepository<Patient>? patientRepo,
         IClinicContext clinicContext)
     {
         _toothRepo = toothRepo ?? throw new ArgumentNullException(nameof(toothRepo));

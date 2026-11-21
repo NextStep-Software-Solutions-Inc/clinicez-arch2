@@ -9,9 +9,14 @@ import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
 import {
   ClinicCustomFieldDefinition,
+  BoundaryMode,
   VisibilityRule,
   ConditionalOptionsConfig,
 } from '../../services/clinicService';
+import {
+  resolveCustomFieldPlaceholderPresentation,
+  LONG_PLACEHOLDER_CHAR_LIMIT,
+} from '../custom-fields/DynamicCustomFieldsRenderer';
 import { Chip, FieldGroup } from './common';
 
 export interface ToggleSwitchProps {
@@ -50,22 +55,64 @@ export function ToggleSwitch({
   );
 }
 
+export const MACHINE_KEY_REGEX = /^[a-z0-9_]+$/;
+
+export function slugifyMachineKey(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+export function normalizeMachineKeyOnBlur(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+}
+
+export function validateMachineKey(
+  rawKey: string,
+  existingFields: Array<Pick<ClinicCustomFieldDefinition, 'id' | 'fieldKey'>>,
+  editingFieldId?: string | null
+): string | null {
+  if (!rawKey) {
+    return 'Machine key is required.';
+  }
+  if (rawKey !== rawKey.trim() || !MACHINE_KEY_REGEX.test(rawKey)) {
+    return 'Machine key must contain only lowercase alphanumeric characters and underscores (e.g. student_id).';
+  }
+  if (rawKey.length > 100) {
+    return 'Machine key cannot exceed 100 characters.';
+  }
+  const normalized = rawKey.toLowerCase();
+  const isDuplicate = existingFields.some(
+    (f) => f.id !== editingFieldId && f.fieldKey.toLowerCase() === normalized
+  );
+  if (isDuplicate) {
+    return 'A custom field with this machine key already exists.';
+  }
+  return null;
+}
+
 export interface AddEditFieldModalProps {
   visible: boolean;
   onClose: () => void;
   fieldToEdit?: ClinicCustomFieldDefinition | null;
   existingFields: ClinicCustomFieldDefinition[];
   onSave: (fieldData: Partial<ClinicCustomFieldDefinition>) => Promise<boolean>;
+  saveError?: string | null;
 }
 
 const STATIC_FIELD_OPTIONS = [
-  { key: 'gender', label: 'Gender / Biological Sex' },
+  { key: 'sex', label: 'Sex' },
   { key: 'civilStatus', label: 'Civil Status (Single, Married, etc.)' },
   { key: 'affiliation', label: 'Institutional Affiliation' },
   { key: 'age', label: 'Patient Age' },
 ];
 
-const OPERATORS = [
+export const OPERATORS = [
   { key: 'equals', label: 'Equals (==)' },
   { key: 'not_equals', label: 'Not Equals (!=)' },
   { key: 'in', label: 'In List (comma separated)' },
@@ -73,23 +120,111 @@ const OPERATORS = [
   { key: 'not_empty', label: 'Has Any Value (Not Empty)' },
 ] as const;
 
+export const BOOLEAN_OPERATORS = [
+  { key: 'equals', label: 'Equals (==)' },
+  { key: 'not_equals', label: 'Not Equals (!=)' },
+  { key: 'not_empty', label: 'Has Any Value (Not Empty)' },
+] as const;
+
+export function normalizeBooleanRuleValue(rawVal: any): 'true' | 'false' {
+  if (rawVal === true) return 'true';
+  if (rawVal === false) return 'false';
+  const str = String(rawVal ?? '').trim().toLowerCase();
+  if (str === 'true' || str === 'yes') return 'true';
+  if (str === 'false' || str === 'no') return 'false';
+  return 'true';
+}
+
+export function isValidBooleanRuleValue(rawVal: any): boolean {
+  if (rawVal === true || rawVal === false) return true;
+  const str = String(rawVal ?? '').trim().toLowerCase();
+  return str === 'true' || str === 'false' || str === 'yes' || str === 'no';
+}
+
+export function isBooleanTriggerField(
+  fieldKey: string,
+  existingFields: Array<Pick<ClinicCustomFieldDefinition, 'fieldKey' | 'dataType'>>,
+  source: 'custom_field' | 'static' = 'custom_field'
+): boolean {
+  if (source !== 'custom_field') return false;
+  const match = existingFields.find((f) => f.fieldKey === fieldKey);
+  return match?.dataType === 'Boolean';
+}
+
+export function formatLiveRulePreview(
+  ruleField: string,
+  ruleOperator: VisibilityRule['operator'],
+  ruleValue: string,
+  isParentBoolean: boolean
+): string {
+  if (!ruleField) return '';
+  if (ruleOperator === 'not_empty') {
+    return `If ${ruleField} is not empty`;
+  }
+  if (isParentBoolean) {
+    let displayVal = '...';
+    const s = ruleValue?.trim().toLowerCase();
+    if (s === 'true' || s === 'yes') {
+      displayVal = 'Yes';
+    } else if (s === 'false' || s === 'no') {
+      displayVal = 'No';
+    } else if (ruleValue) {
+      displayVal = ruleValue;
+    }
+    return `Visible when [${ruleField}] ${ruleOperator} '${displayVal}'`;
+  }
+  return `Visible when [${ruleField}] ${ruleOperator} '${ruleValue || '...'}'`;
+}
+
+export function isDateBoundaryModeChanged(
+  fieldToEdit: Pick<ClinicCustomFieldDefinition, 'boundaryMode' | 'category' | 'dataType'> | null | undefined,
+  currentBoundaryMode: BoundaryMode,
+  currentDataType: string
+): boolean {
+  if (!fieldToEdit || currentDataType !== 'Date') return false;
+  const historicalBoundaryMode =
+    fieldToEdit.boundaryMode ||
+    ((fieldToEdit.category || '').trim().toLowerCase() === 'clinical' ? 'pastOrToday' : 'any');
+  return Boolean(historicalBoundaryMode && currentBoundaryMode !== historicalBoundaryMode);
+}
+
 export default function AddEditFieldModal({
   visible,
   onClose,
   fieldToEdit,
   existingFields,
   onSave,
+  saveError,
 }: AddEditFieldModalProps) {
   const isEditing = Boolean(fieldToEdit);
 
   // Core metadata state
-  const [label, setLabel] = useState('');
-  const [fieldKey, setFieldKey] = useState('');
-  const [dataType, setDataType] = useState<ClinicCustomFieldDefinition['dataType']>('Text');
-  const [category, setCategory] = useState('Demographics');
-  const [placeholder, setPlaceholder] = useState('');
-  const [isRequired, setIsRequired] = useState(false);
+  const [label, setLabel] = useState(() => (visible && fieldToEdit ? fieldToEdit.label || '' : ''));
+  const [fieldKey, setFieldKey] = useState(() => (visible && fieldToEdit ? fieldToEdit.fieldKey || '' : ''));
+  const [isFieldKeyManuallyEdited, setIsFieldKeyManuallyEdited] = useState(() => Boolean(visible && fieldToEdit));
+  const [fieldKeyError, setFieldKeyError] = useState<string | null>(null);
+  const [dataType, setDataType] = useState<ClinicCustomFieldDefinition['dataType']>(() =>
+    visible && fieldToEdit ? fieldToEdit.dataType || 'Text' : 'Text'
+  );
+  const [category, setCategory] = useState(() =>
+    visible && fieldToEdit ? fieldToEdit.category || 'Demographics' : 'Demographics'
+  );
+  const [placeholder, setPlaceholder] = useState(() =>
+    visible && fieldToEdit ? fieldToEdit.placeholder || '' : ''
+  );
+  const [isRequired, setIsRequired] = useState(() => Boolean(visible && fieldToEdit?.isRequired));
   const [options, setOptions] = useState('');
+  const [boundaryMode, setBoundaryMode] = useState<BoundaryMode>(() => {
+    if (visible && fieldToEdit) {
+      if (fieldToEdit.boundaryMode) return fieldToEdit.boundaryMode;
+      const isClinical = (fieldToEdit.category || '').trim().toLowerCase() === 'clinical';
+      return isClinical ? 'pastOrToday' : 'any';
+    }
+    return 'any';
+  });
+  const [isBoundaryModeManuallySet, setIsBoundaryModeManuallySet] = useState(() =>
+    Boolean(visible && fieldToEdit?.boundaryMode)
+  );
 
   // Live Rule Builder state
   const [hasVisibilityRule, setHasVisibilityRule] = useState(false);
@@ -109,6 +244,19 @@ export default function AddEditFieldModal({
   // UI state
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dismissedSaveError, setDismissedSaveError] = useState(false);
+
+  // Preceding fields candidate list for visibility/cascading
+  const candidateParentFields = existingFields.filter(
+    (f) => !fieldToEdit || f.id !== fieldToEdit.id
+  );
+
+  const selectedParentField = ruleSource === 'custom_field'
+    ? candidateParentFields.find((f) => f.fieldKey === ruleField)
+    : undefined;
+  const isParentBoolean = selectedParentField?.dataType === 'Boolean';
+
+  const isBoundaryModeChanged = isDateBoundaryModeChanged(fieldToEdit, boundaryMode, dataType);
 
   // Initialize form when fieldToEdit changes or modal opens
   useEffect(() => {
@@ -117,10 +265,21 @@ export default function AddEditFieldModal({
     if (fieldToEdit) {
       setLabel(fieldToEdit.label || '');
       setFieldKey(fieldToEdit.fieldKey || '');
+      setIsFieldKeyManuallyEdited(true);
+      setFieldKeyError(null);
       setDataType(fieldToEdit.dataType || 'Text');
       setCategory(fieldToEdit.category || 'Demographics');
       setPlaceholder(fieldToEdit.placeholder || '');
       setIsRequired(Boolean(fieldToEdit.isRequired));
+
+      if (fieldToEdit.boundaryMode) {
+        setBoundaryMode(fieldToEdit.boundaryMode);
+        setIsBoundaryModeManuallySet(true);
+      } else {
+        const isClinical = (fieldToEdit.category || '').trim().toLowerCase() === 'clinical';
+        setBoundaryMode(isClinical ? 'pastOrToday' : 'any');
+        setIsBoundaryModeManuallySet(false);
+      }
 
       // Parse flat options
       if (fieldToEdit.optionsJson) {
@@ -139,10 +298,26 @@ export default function AddEditFieldModal({
         try {
           const rule = JSON.parse(fieldToEdit.visibilityRuleJson);
           setHasVisibilityRule(true);
-          setRuleSource(rule.source || 'custom_field');
-          setRuleField(rule.field || rule.parentFieldKey || '');
-          setRuleOperator(rule.operator || 'equals');
-          if (Array.isArray(rule.value)) {
+          const src = rule.source || 'custom_field';
+          setRuleSource(src);
+          const parentKey = rule.field || rule.parentFieldKey || '';
+          setRuleField(parentKey);
+
+          const parentDef = src === 'custom_field'
+            ? existingFields.find((f) => (!fieldToEdit || f.id !== fieldToEdit.id) && f.fieldKey === parentKey)
+            : undefined;
+          const isBooleanParent = parentDef?.dataType === 'Boolean';
+
+          let op: VisibilityRule['operator'] = rule.operator || 'equals';
+          if (isBooleanParent && (op === 'in' || op === 'contains')) {
+            op = 'equals';
+          }
+          setRuleOperator(op);
+
+          if (isBooleanParent) {
+            const raw = rule.value !== undefined ? rule.value : (rule.expectedValue !== undefined ? rule.expectedValue : '');
+            setRuleValue(normalizeBooleanRuleValue(raw));
+          } else if (Array.isArray(rule.value)) {
             setRuleValue(rule.value.join(', '));
           } else {
             setRuleValue(rule.value !== undefined ? String(rule.value) : (rule.expectedValue !== undefined ? String(rule.expectedValue) : ''));
@@ -198,11 +373,15 @@ export default function AddEditFieldModal({
       // Create mode defaults
       setLabel('');
       setFieldKey('');
+      setIsFieldKeyManuallyEdited(false);
+      setFieldKeyError(null);
       setDataType('Text');
       setCategory('Demographics');
       setPlaceholder('');
       setIsRequired(false);
       setOptions('');
+      setBoundaryMode('any');
+      setIsBoundaryModeManuallySet(false);
       setHasVisibilityRule(false);
       setRuleSource('custom_field');
       setRuleField('');
@@ -214,19 +393,75 @@ export default function AddEditFieldModal({
       setDefaultOptions('');
     }
     setError(null);
+    setDismissedSaveError(false);
     setSaving(false);
   }, [visible, fieldToEdit]);
+
+  const handleCategoryChange = (newCat: string) => {
+    setCategory(newCat);
+    if (!isBoundaryModeManuallySet) {
+      if (newCat.trim().toLowerCase() === 'clinical') {
+        setBoundaryMode('pastOrToday');
+      } else {
+        setBoundaryMode('any');
+      }
+    }
+  };
 
   // Handle label change and auto-generate key in Create mode
   const handleLabelChange = (text: string) => {
     setLabel(text);
-    if (!isEditing && !fieldKey) {
-      const generated = text
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '');
+    setDismissedSaveError(true);
+    if (!isEditing && !isFieldKeyManuallyEdited) {
+      const generated = slugifyMachineKey(text);
       setFieldKey(generated);
+      if (fieldKeyError) {
+        setFieldKeyError(
+          generated ? validateMachineKey(generated, existingFields, fieldToEdit?.id) : null
+        );
+      }
+    }
+  };
+
+  const handleFieldKeyChange = (text: string) => {
+    setFieldKey(text);
+    setIsFieldKeyManuallyEdited(true);
+    setDismissedSaveError(true);
+    if (fieldKeyError) {
+      setFieldKeyError(validateMachineKey(text, existingFields, fieldToEdit?.id));
+    }
+    if (error) {
+      setError(null);
+    }
+  };
+
+  const handleFieldKeyBlur = () => {
+    if (!fieldKey.trim() && label.trim() && !isEditing && !isFieldKeyManuallyEdited) {
+      const generated = slugifyMachineKey(label);
+      setFieldKey(generated);
+      setFieldKeyError(
+        generated ? validateMachineKey(generated, existingFields, fieldToEdit?.id) : null
+      );
+      return;
+    }
+    if (fieldKey || isEditing || isFieldKeyManuallyEdited) {
+      const normalized = normalizeMachineKeyOnBlur(fieldKey);
+      setFieldKey(normalized);
+      setFieldKeyError(validateMachineKey(normalized, existingFields, fieldToEdit?.id));
+    }
+  };
+
+  const handleAutoSlugify = () => {
+    const source = label.trim() || fieldKey.trim();
+    const slugified = slugifyMachineKey(source);
+    setFieldKey(slugified);
+    setIsFieldKeyManuallyEdited(false);
+    setDismissedSaveError(true);
+    setFieldKeyError(
+      slugified ? validateMachineKey(slugified, existingFields, fieldToEdit?.id) : null
+    );
+    if (error) {
+      setError(null);
     }
   };
 
@@ -251,6 +486,42 @@ export default function AddEditFieldModal({
     );
   };
 
+  const handleSelectRuleField = (key: string) => {
+    const target = candidateParentFields.find((f) => f.fieldKey === key);
+    const isTargetBoolean = target?.dataType === 'Boolean';
+
+    if (isTargetBoolean) {
+      if (ruleOperator === 'in' || ruleOperator === 'contains') {
+        setRuleOperator('equals');
+      }
+      if (!isValidBooleanRuleValue(ruleValue)) {
+        setRuleValue('true');
+      } else {
+        setRuleValue(normalizeBooleanRuleValue(ruleValue));
+      }
+    } else {
+      if (ruleValue === 'true' || ruleValue === 'false') {
+        setRuleValue('');
+      }
+    }
+    setRuleField(key);
+  };
+
+  const handleSelectStaticField = (key: string) => {
+    if (ruleValue === 'true' || ruleValue === 'false') {
+      setRuleValue('');
+    }
+    setRuleField(key);
+  };
+
+  const handleRuleSourceChange = (src: 'custom_field' | 'static') => {
+    setRuleSource(src);
+    setRuleField('');
+    if (ruleValue === 'true' || ruleValue === 'false') {
+      setRuleValue('');
+    }
+  };
+
   const handleSave = async () => {
     const trimmedLabel = label.trim();
     if (!trimmedLabel) {
@@ -258,15 +529,21 @@ export default function AddEditFieldModal({
       return;
     }
 
+    const candidateKey =
+      !isEditing && !isFieldKeyManuallyEdited && fieldKey.length === 0
+        ? slugifyMachineKey(trimmedLabel)
+        : fieldKey;
+    const keyValidationError = validateMachineKey(candidateKey, existingFields, fieldToEdit?.id);
+    if (keyValidationError) {
+      setFieldKeyError(keyValidationError);
+      setError(keyValidationError);
+      return;
+    }
+
     setSaving(true);
     setError(null);
-
-    const generatedKey =
-      fieldKey.trim() ||
-      trimmedLabel
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '');
+    setDismissedSaveError(false);
+    setFieldKeyError(null);
 
     // 1. Flat options serialization
     let optionsJson: string | undefined = undefined;
@@ -291,14 +568,38 @@ export default function AddEditFieldModal({
         return;
       }
 
-      let val: any = ruleValue.trim();
-      if (ruleOperator === 'in') {
+      if (isParentBoolean) {
+        if (ruleOperator === 'in' || ruleOperator === 'contains') {
+          const errorMsg = 'Comparison operator for Boolean fields must be Equals, Not Equals, or Has Any Value.';
+          setError(errorMsg);
+          Alert.alert('Validation Error', errorMsg);
+          setSaving(false);
+          return;
+        }
+
+        if (ruleOperator !== 'not_empty') {
+          if (!isValidBooleanRuleValue(ruleValue)) {
+            const errorMsg = 'Please select Yes or No for the expected Boolean condition.';
+            setError(errorMsg);
+            Alert.alert('Validation Error', errorMsg);
+            setSaving(false);
+            return;
+          }
+        }
+      }
+
+      let val: any;
+      if (isParentBoolean && ruleOperator !== 'not_empty') {
+        val = normalizeBooleanRuleValue(ruleValue);
+      } else if (ruleOperator === 'in') {
         val = ruleValue
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean);
       } else if (ruleOperator === 'not_empty') {
         val = undefined;
+      } else {
+        val = ruleValue.trim();
       }
 
       const ruleObj: VisibilityRule = {
@@ -343,11 +644,12 @@ export default function AddEditFieldModal({
 
     const payload: Partial<ClinicCustomFieldDefinition> = {
       label: trimmedLabel,
-      fieldKey: generatedKey || `field_${Date.now()}`,
+      fieldKey: candidateKey,
       dataType,
       category,
       placeholder: placeholder.trim() || undefined,
       isRequired,
+      boundaryMode: dataType === 'Date' ? boundaryMode : null,
       optionsJson,
       visibilityRuleJson,
       conditionalOptionsJson,
@@ -360,20 +662,22 @@ export default function AddEditFieldModal({
     }
   };
 
-  // Preceding fields candidate list for visibility/cascading
-  const candidateParentFields = existingFields.filter(
-    (f) => !fieldToEdit || f.id !== fieldToEdit.id
-  );
+  const displayedError = error || (!dismissedSaveError ? saveError : null);
+  const isSingleLineFieldType =
+    dataType === 'Text' || dataType === 'Number' || dataType === 'Date';
+  const placeholderPresentation = isSingleLineFieldType
+    ? resolveCustomFieldPlaceholderPresentation(placeholder, dataType)
+    : { inputPlaceholder: placeholder, helperHint: undefined, isExpandedHint: false };
 
   return (
     <Modal
       visible={visible}
       onClose={onClose}
-      title={isEditing ? 'Edit patient intake field' : 'Add patient intake field'}
+      title={isEditing ? 'Edit Registration Question' : 'Add Registration Question'}
       subtitle={
         isEditing
-          ? 'Modify field rules, mandatory constraints, or cascading choices.'
-          : 'Define custom intake prompt, data validation, and visibility rules.'
+          ? 'Update the question wording, answer type, or when this question is shown.'
+          : 'Create an extra question asked when registering a patient.'
       }
       maxWidth={580}
       footer={
@@ -385,7 +689,7 @@ export default function AddEditFieldModal({
             disabled={saving}
           />
           <Button
-            title={isEditing ? 'Update field' : 'Save field'}
+            title={isEditing ? 'Save Changes' : 'Add Question'}
             onPress={handleSave}
             loading={saving}
           />
@@ -393,34 +697,54 @@ export default function AddEditFieldModal({
       }
     >
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {error ? (
+        {displayedError ? (
           <View style={styles.errorBox}>
             <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
             <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex1}>
-              {error}
+              {displayedError}
             </ThemedText>
           </View>
         ) : null}
 
-        {/* Display Label */}
+        {/* Question Label */}
         <Input
-          label="Field display label"
+          label="Question label"
           required
           value={label}
           onChangeText={handleLabelChange}
-          placeholder="e.g. Student ID, College, Religion, Spouse Full Name"
+          placeholder="Enter question label"
         />
 
-        {/* Machine Key */}
-        <Input
-          label="Machine Key (System Identifier)"
-          value={fieldKey}
-          onChangeText={setFieldKey}
-          placeholder="e.g. student_id, college, spouse_name"
-        />
+        {/* Field ID */}
+        <View style={styles.machineKeyFieldBlock}>
+          <View style={styles.rowBetween}>
+            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+              Field ID
+              <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText>
+            </ThemedText>
+            <Button
+              title="Generate from label"
+              icon="refresh"
+              variant="ghost"
+              size="xs"
+              accessibilityLabel="Generate field ID from question label"
+              onPress={handleAutoSlugify}
+            />
+          </View>
+          <Input
+            value={fieldKey}
+            onChangeText={handleFieldKeyChange}
+            onBlur={handleFieldKeyBlur}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="Enter field ID"
+            error={fieldKeyError || undefined}
+            helperText="Lowercase letters, numbers, and underscores only."
+          />
+        </View>
 
-        {/* Data Type */}
-        <FieldGroup label="Data Format / Field Type">
+        {/* Answer Type */}
+        <FieldGroup label="Answer Type">
           <View style={styles.chipRow}>
             {(['Text', 'Number', 'Date', 'Boolean', 'Select'] as const).map((type) => (
               <Chip
@@ -433,25 +757,67 @@ export default function AddEditFieldModal({
           </View>
         </FieldGroup>
 
-        {/* Category */}
-        <FieldGroup label="Category">
+        {/* Question Group */}
+        <FieldGroup label="Question Group">
           <View style={styles.chipRow}>
             {['Demographics', 'Academic', 'Employment', 'Clinical', 'Insurance'].map((cat) => (
               <Chip
                 key={cat}
                 label={cat}
                 active={category === cat}
-                onPress={() => setCategory(cat)}
+                onPress={() => handleCategoryChange(cat)}
               />
             ))}
           </View>
         </FieldGroup>
 
-        {/* Mandatory / Required Toggle */}
+        {/* Allowed Dates */}
+        {dataType === 'Date' && (
+          <FieldGroup label="Allowed Dates">
+            <View style={styles.chipRow}>
+              {([
+                { key: 'pastOrToday', label: 'Past or Today' },
+                { key: 'futureOrToday', label: 'Today or Future' },
+                { key: 'futureOnly', label: 'Future Only' },
+                { key: 'any', label: 'Any Date' },
+              ] as const).map((mode) => (
+                <Chip
+                  key={mode.key}
+                  label={mode.label}
+                  active={boundaryMode === mode.key}
+                  onPress={() => {
+                    setBoundaryMode(mode.key);
+                    setIsBoundaryModeManuallySet(true);
+                  }}
+                />
+              ))}
+            </View>
+            <ThemedText variant="caption" color={theme.colors.textMuted}>
+              {boundaryMode === 'pastOrToday'
+                ? 'Allows past dates or today (good for medical history, past exams, or symptom start dates).'
+                : boundaryMode === 'futureOrToday'
+                ? 'Allows today or future dates (good for ID expiry dates or follow-up dates).'
+                : boundaryMode === 'futureOnly'
+                ? 'Allows future dates only.'
+                : 'Allows any calendar date.'}
+            </ThemedText>
+
+            {isBoundaryModeChanged && (
+              <View style={styles.boundaryChangeWarningBox}>
+                <Icon name="alert" size={16} color={theme.colors.warningText} />
+                <ThemedText variant="caption" color={theme.colors.warningText} style={styles.boundaryWarningText}>
+                  Note: Updating date rules will only apply to new entries or edits. Existing historical patient records remain preserved and will not be locked out.
+                </ThemedText>
+              </View>
+            )}
+          </FieldGroup>
+        )}
+
+        {/* Required Answer Toggle */}
         <View style={styles.toggleRowContainer}>
           <View style={styles.toggleTextCol}>
             <View style={styles.rowAlign}>
-              <ThemedText variant="bodyBold">Mark field as mandatory / required</ThemedText>
+              <ThemedText variant="bodyBold">Require an answer</ThemedText>
               <Badge
                 label={isRequired ? 'Required' : 'Optional'}
                 variant={isRequired ? 'emergency' : 'neutral'}
@@ -459,23 +825,53 @@ export default function AddEditFieldModal({
               />
             </View>
             <ThemedText variant="caption" color={theme.colors.textMuted}>
-              Enforces validation during patient registration when visible on intake form.
+              Patients and staff must fill in this question when it is shown during registration.
             </ThemedText>
           </View>
           <ToggleSwitch
             value={isRequired}
             onValueChange={setIsRequired}
-            accessibilityLabel="Mark field as mandatory / required"
+            accessibilityLabel="Require an answer"
           />
         </View>
 
-        {/* Placeholder hint */}
+        {/* Help text / example */}
         <Input
-          label="Placeholder hint (optional)"
+          label="Help text or example (optional)"
           value={placeholder}
           onChangeText={setPlaceholder}
-          placeholder="e.g. Enter student registration number"
+          placeholder="Optional guidance shown to patients or staff"
+          helperText="Recommended: under 50 characters. Hints longer than 75 characters automatically wrap beneath the field during intake so staff can read them."
         />
+        {isSingleLineFieldType &&
+        placeholderPresentation.isExpandedHint &&
+        placeholderPresentation.helperHint ? (
+          <View style={styles.longPlaceholderPreviewCard}>
+            <View style={styles.rowBetween}>
+              <View style={styles.rowAlign}>
+                <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.infoText} />
+                <ThemedText variant="captionBold" color={theme.colors.infoText}>
+                  Full Help Text Preview ({placeholder.trim().length} characters)
+                </ThemedText>
+              </View>
+              <Badge label="Wraps Below Field" variant="primary" size="sm" />
+            </View>
+            <ThemedText variant="caption" color={theme.colors.textSecondary}>
+              Long help text is shown underneath single-line {dataType.toLowerCase()} fields so the entire instruction is easy to read without getting cut off:
+            </ThemedText>
+            <View style={styles.simulatedInputPreview}>
+              <ThemedText variant="caption" color={theme.colors.textLight}>
+                {placeholderPresentation.inputPlaceholder}
+              </ThemedText>
+            </View>
+            <View style={styles.simulatedExpandedHintBox}>
+              <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+              <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flex1}>
+                {placeholderPresentation.helperHint}
+              </ThemedText>
+            </View>
+          </View>
+        ) : null}
 
         {/* Select Choices (Flat options when not cascading) */}
         {dataType === 'Select' && !isCascading && (
@@ -483,7 +879,7 @@ export default function AddEditFieldModal({
             label="Dropdown choices (comma separated)"
             value={options}
             onChangeText={setOptions}
-            placeholder="e.g. 1st Year, 2nd Year, 3rd Year, 4th Year"
+            placeholder="Enter choices separated by commas"
           />
         )}
 
@@ -494,39 +890,39 @@ export default function AddEditFieldModal({
           <View style={styles.sectionHeaderRow}>
             <View style={styles.rowAlign}>
               <Icon name="eye" size={theme.sizes.iconSm} color={theme.colors.primary} />
-              <ThemedText variant="bodyBold">Conditional Visibility Rule</ThemedText>
+              <ThemedText variant="bodyBold">Show Only For Specific Answers</ThemedText>
             </View>
             <ToggleSwitch
               value={hasVisibilityRule}
               onValueChange={setHasVisibilityRule}
-              accessibilityLabel="Conditional Visibility Rule"
+              accessibilityLabel="Show Only For Specific Answers"
             />
           </View>
 
           {hasVisibilityRule && (
             <View style={styles.ruleBuilderBody}>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Determine when this field appears on the intake form based on parent answers.
+                Only show this question when an earlier answer matches your condition.
               </ThemedText>
 
               {/* Source Selector */}
-              <FieldGroup label="Rule Source">
+              <FieldGroup label="Check Answer From">
                 <View style={styles.chipRow}>
                   <Chip
-                    label="Custom Intake Field"
+                    label="Another Registration Question"
                     active={ruleSource === 'custom_field'}
-                    onPress={() => setRuleSource('custom_field')}
+                    onPress={() => handleRuleSourceChange('custom_field')}
                   />
                   <Chip
-                    label="Static Patient Demographic"
+                    label="Basic Patient Info"
                     active={ruleSource === 'static'}
-                    onPress={() => setRuleSource('static')}
+                    onPress={() => handleRuleSourceChange('static')}
                   />
                 </View>
               </FieldGroup>
 
               {/* Field Selector */}
-              <FieldGroup label="Parent Trigger Field">
+              <FieldGroup label="Question to Check">
                 {ruleSource === 'static' ? (
                   <View style={styles.chipRow}>
                     {STATIC_FIELD_OPTIONS.map((opt) => (
@@ -534,7 +930,7 @@ export default function AddEditFieldModal({
                         key={opt.key}
                         label={opt.label}
                         active={ruleField === opt.key}
-                        onPress={() => setRuleField(opt.key)}
+                        onPress={() => handleSelectStaticField(opt.key)}
                       />
                     ))}
                   </View>
@@ -542,7 +938,7 @@ export default function AddEditFieldModal({
                   <View style={styles.chipRow}>
                     {candidateParentFields.length === 0 ? (
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        No other custom fields created yet.
+                        No other registration questions created yet.
                       </ThemedText>
                     ) : (
                       candidateParentFields.map((f) => (
@@ -550,7 +946,7 @@ export default function AddEditFieldModal({
                           key={f.fieldKey}
                           label={`${f.label} (${f.fieldKey})`}
                           active={ruleField === f.fieldKey}
-                          onPress={() => setRuleField(f.fieldKey)}
+                          onPress={() => handleSelectRuleField(f.fieldKey)}
                         />
                       ))
                     )}
@@ -559,9 +955,9 @@ export default function AddEditFieldModal({
               </FieldGroup>
 
               {/* Operator Selector */}
-              <FieldGroup label="Comparison Operator">
+              <FieldGroup label="Condition">
                 <View style={styles.chipRow}>
-                  {OPERATORS.map((op) => (
+                  {(isParentBoolean ? BOOLEAN_OPERATORS : OPERATORS).map((op) => (
                     <Chip
                       key={op.key}
                       label={op.label}
@@ -574,36 +970,49 @@ export default function AddEditFieldModal({
 
               {/* Expected Value Input */}
               {ruleOperator !== 'not_empty' && (
-                <Input
-                  label="Expected Value to Trigger Visibility"
-                  value={ruleValue}
-                  onChangeText={setRuleValue}
-                  placeholder={
-                    ruleOperator === 'in'
-                      ? 'e.g. 4th Year, 5th Year / Grad (comma separated)'
-                      : 'e.g. Student, Married, Female'
-                  }
-                />
+                isParentBoolean ? (
+                  <FieldGroup label="Answer That Shows This Question">
+                    <View style={styles.chipRow}>
+                      <Chip
+                        label="Yes"
+                        active={ruleValue === 'true'}
+                        onPress={() => setRuleValue('true')}
+                      />
+                      <Chip
+                        label="No"
+                        active={ruleValue === 'false'}
+                        onPress={() => setRuleValue('false')}
+                      />
+                    </View>
+                  </FieldGroup>
+                ) : (
+                  <Input
+                    label="Answer That Shows This Question"
+                    value={ruleValue}
+                    onChangeText={setRuleValue}
+                    placeholder={
+                      ruleOperator === 'in'
+                        ? 'Enter matching answers separated by commas'
+                        : 'Enter matching answer'
+                    }
+                  />
+                )
               )}
 
               {/* Live Preview Badge */}
               <View style={styles.previewBox}>
                 <ThemedText variant="captionBold" color={theme.colors.warningText}>
-                  LIVE RULE PREVIEW:
+                  RULE PREVIEW:
                 </ThemedText>
                 {ruleField ? (
                   <Badge
-                    label={
-                      ruleOperator === 'not_empty'
-                        ? `If ${ruleField} is not empty`
-                        : `Visible when [${ruleField}] ${ruleOperator} '${ruleValue || '...'}'`
-                    }
+                    label={formatLiveRulePreview(ruleField, ruleOperator, ruleValue, isParentBoolean)}
                     variant="warning"
                     size="md"
                   />
                 ) : (
                   <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    Select a trigger field above to preview live rule.
+                    Choose a question above to preview when this will appear.
                   </ThemedText>
                 )}
               </View>
@@ -612,30 +1021,30 @@ export default function AddEditFieldModal({
         </View>
 
         {/* =========================================================================
-            CASCADING DROPDOWN OPTIONS MAPPER (FOR SELECT FIELDS)
+            DEPENDENT DROPDOWN OPTIONS MAPPER (FOR SELECT FIELDS)
            ========================================================================= */}
         {dataType === 'Select' && (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeaderRow}>
               <View style={styles.rowAlign}>
                 <Icon name="tag" size={theme.sizes.iconSm} color={theme.colors.purple} />
-                <ThemedText variant="bodyBold">Cascading / Dependent Dropdown Choices</ThemedText>
+                <ThemedText variant="bodyBold">Filter Choices by Earlier Answer</ThemedText>
               </View>
               <ToggleSwitch
                 value={isCascading}
                 onValueChange={setIsCascading}
-                accessibilityLabel="Cascading / Dependent Dropdown Choices"
+                accessibilityLabel="Filter Choices by Earlier Answer"
               />
             </View>
 
             {isCascading && (
               <View style={styles.ruleBuilderBody}>
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Available choices change dynamically based on the value chosen in a parent field (e.g. College -&gt; Program).
+                  Show different dropdown choices depending on what was picked in an earlier dropdown question.
                 </ThemedText>
 
                 {/* Parent Select Field Selector */}
-                <FieldGroup label="Parent Dropdown Field">
+                <FieldGroup label="Earlier Dropdown Question">
                   <View style={styles.chipRow}>
                     {candidateParentFields
                       .filter((f) => f.dataType === 'Select')
@@ -654,10 +1063,10 @@ export default function AddEditFieldModal({
                 <View style={styles.mappingList}>
                   <View style={styles.rowBetween}>
                     <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                      Parent Value to Child Choices Mapping:
+                      Choices for Each Earlier Answer:
                     </ThemedText>
                     <Button
-                      title="+ Add Mapping"
+                      title="+ Add Answer Group"
                       variant="outline"
                       size="sm"
                       onPress={handleAddMappingEntry}
@@ -668,26 +1077,27 @@ export default function AddEditFieldModal({
                     <View key={entry.id} style={styles.mappingEntryCard}>
                       <View style={styles.rowBetween}>
                         <ThemedText variant="captionBold" color={theme.colors.primary}>
-                          Mapping #{index + 1}
+                          Answer Group {index + 1}
                         </ThemedText>
                         <Button
                           title="Remove"
-                          variant="ghost"
-                          size="sm"
+                          icon="trash"
+                          variant="dangerGhost"
+                          size="xs"
                           onPress={() => handleRemoveMappingEntry(entry.id)}
                         />
                       </View>
                       <Input
-                        label="Parent Option Value"
+                        label="Earlier Answer"
                         value={entry.parentVal}
                         onChangeText={(v) => handleUpdateMappingEntry(entry.id, 'parentVal', v)}
-                        placeholder="e.g. College of Science"
+                        placeholder="Enter earlier answer"
                       />
                       <Input
-                        label="Resulting Child Choices (comma separated)"
+                        label="Dropdown Choices (comma separated)"
                         value={entry.childOptions}
                         onChangeText={(v) => handleUpdateMappingEntry(entry.id, 'childOptions', v)}
-                        placeholder="e.g. BS Applied Physics, BS Chemistry, BS Biology"
+                        placeholder="Enter choices separated by commas"
                       />
                     </View>
                   ))}
@@ -695,16 +1105,16 @@ export default function AddEditFieldModal({
 
                 {/* Default Fallback Options */}
                 <Input
-                  label="Default / Fallback Choices (when parent is unselected)"
+                  label="Default Choices (when no earlier answer is picked)"
                   value={defaultOptions}
                   onChangeText={setDefaultOptions}
-                  placeholder="e.g. General Choice 1, General Choice 2"
+                  placeholder="Enter default choices separated by commas"
                 />
 
                 {parentField ? (
                   <View style={styles.previewBox}>
                     <Badge
-                      label={`Cascades on ${parentField} (${mappingEntries.length} mapped parents)`}
+                      label={`Depends on ${parentField} (${mappingEntries.length} answer groups)`}
                       variant="purple"
                       size="md"
                     />
@@ -837,5 +1247,56 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderLight,
     backgroundColor: theme.colors.surfaceMuted,
     gap: theme.spacing.xs,
+  },
+  machineKeyFieldBlock: {
+    gap: theme.spacing.xs,
+  },
+  slugifyActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: 2,
+    paddingHorizontal: theme.spacing.xs,
+  },
+  longPlaceholderPreviewCard: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.infoBorder,
+    backgroundColor: theme.colors.infoBg,
+    gap: theme.spacing.xs,
+  },
+  simulatedInputPreview: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  simulatedExpandedHintBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    backgroundColor: theme.colors.surfaceSubtle,
+  },
+  boundaryChangeWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+  },
+  boundaryWarningText: {
+    flex: 1,
   },
 });

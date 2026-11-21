@@ -20,7 +20,8 @@ public sealed record ClinicCustomFieldDefinitionDto(
     bool IsActive,
     DateTime CreatedAt,
     string? VisibilityRuleJson = null,
-    string? ConditionalOptionsJson = null);
+    string? ConditionalOptionsJson = null,
+    string? BoundaryMode = null);
 
 public sealed record CustomFieldTemplateDto(
     string Key,
@@ -40,4 +41,5 @@ public sealed record CustomFieldTemplateFieldDto(
     string? OptionsJson,
     string? Placeholder,
     string? VisibilityRuleJson,
-    string? ConditionalOptionsJson);
+    string? ConditionalOptionsJson,
+    string? BoundaryMode = null);

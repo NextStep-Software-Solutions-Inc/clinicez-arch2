@@ -1,6 +1,7 @@
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Common;
 using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Persistence;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -44,6 +45,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SystemSetting> SystemSettings { get; set; }
     public DbSet<PortalNotification> PortalNotifications { get; set; }
     public DbSet<NewsletterSubscriber> NewsletterSubscribers { get; set; }
+    public DbSet<DocumentAttestation> DocumentAttestations { get; set; }
+    public DbSet<FacilityQueueBoard> FacilityQueueBoards { get; set; }
+    public DbSet<Practitioner> Practitioners { get; set; }
+    public DbSet<PractitionerAffiliation> PractitionerAffiliations { get; set; }
+    public DbSet<FacilityVerificationRequest> FacilityVerificationRequests { get; set; }
+    public DbSet<PractitionerVerificationRequest> PractitionerVerificationRequests { get; set; }
+    public DbSet<WorkspaceTeleconsultBilling> WorkspaceTeleconsultBillings { get; set; }
+    public DbSet<TeleconsultUsageRecord> TeleconsultUsageRecords { get; set; }
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
     public DbSet<InteropInboxMessage> InteropInbox { get; set; }
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
@@ -138,6 +147,23 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
                 c => c.ToList()));
 
+        modelBuilder.Entity<AdminUser>(entity =>
+        {
+            entity.Property(e => e.ClerkUserId).IsRequired(false);
+            entity.Property(e => e.Email).IsRequired().HasMaxLength(254);
+            entity.Property(e => e.FullName).IsRequired().HasMaxLength(256);
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(64);
+            entity.Property(e => e.InvitationToken).HasMaxLength(128);
+
+            entity.HasIndex(e => e.InvitationToken)
+                .HasFilter("\"IsDeleted\" = false AND \"InvitationToken\" IS NOT NULL")
+                .IsUnique();
+
+            entity.HasIndex(e => e.Email)
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+        });
+
         modelBuilder.Entity<BillingInvoice>()
             .HasOne(i => i.Tenant)
             .WithMany()
@@ -173,6 +199,17 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(e => new { e.TenantId, e.Code })
                 .HasFilter("\"IsDeleted\" = false AND \"Code\" IS NOT NULL")
                 .IsUnique();
+
+            entity.Property(e => e.PhilHealthAccreditationNumber).HasMaxLength(32);
+            entity.Property(e => e.PhilHealthPmccNumber).HasMaxLength(32);
+            entity.Property(e => e.PhilHealthSoftwareCertificateId).HasMaxLength(64);
+            entity.Property(e => e.PhilHealthEncryptedSecretKey).HasMaxLength(512);
+            entity.Property(e => e.PhilHealthEncryptedCipherKey).HasMaxLength(512);
+            entity.Property(e => e.PhilHealthBaseUrl).HasMaxLength(2048);
+            entity.Property(e => e.RegionPsgc).HasMaxLength(10);
+            entity.Property(e => e.ProvincePsgc).HasMaxLength(10);
+            entity.Property(e => e.CityMunicipalityPsgc).HasMaxLength(10);
+            entity.Property(e => e.BarangayPsgc).HasMaxLength(10);
         });
 
         modelBuilder.Entity<Facility>(entity =>
@@ -185,6 +222,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.IsPatientDiscoveryEligible).HasDefaultValue(false);
             entity.Property(e => e.CellId).HasMaxLength(80).HasDefaultValue(string.Empty);
             entity.Property(e => e.HubClientId).HasMaxLength(128);
+            entity.Property(e => e.RegionPsgc).HasMaxLength(10);
+            entity.Property(e => e.ProvincePsgc).HasMaxLength(10);
+            entity.Property(e => e.CityMunicipalityPsgc).HasMaxLength(10);
+            entity.Property(e => e.BarangayPsgc).HasMaxLength(10);
             entity.HasOne(e => e.Tenant)
                 .WithMany()
                 .HasForeignKey(e => e.TenantId)
@@ -203,9 +244,96 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasFilter("\"IsDeleted\" = false")
                 .IsUnique();
 
+            entity.Property(e => e.IsJoinEnabled).HasDefaultValue(true);
+            entity.Property(e => e.JoinCode).HasMaxLength(64);
+            entity.HasIndex(e => e.JoinCode)
+                .HasFilter("\"IsDeleted\" = false AND \"JoinCode\" IS NOT NULL");
+
             entity.HasIndex(e => new { e.BranchId, e.FacilityType })
                 .HasFilter("\"IsDeleted\" = false AND \"BranchId\" IS NOT NULL")
                 .IsUnique();
+
+            entity.Property(e => e.PlatformVerificationStatus)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .HasDefaultValue(PlatformVerificationStatus.Unverified);
+            entity.Property(e => e.LtoEvidenceObjectKey).HasMaxLength(512);
+            entity.Property(e => e.VerifiedByAdminUserId).HasMaxLength(128);
+            entity.Property(e => e.RejectionReason).HasMaxLength(2000);
+            entity.HasIndex(e => e.PlatformVerificationStatus);
+        });
+
+        modelBuilder.Entity<DocumentAttestation>(entity =>
+        {
+            entity.ToTable("DocumentAttestations");
+
+            entity.Property(e => e.DocumentKind).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.DocumentNumber).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.SecurityDigest).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.VerificationTokenHash).HasMaxLength(128);
+            entity.Property(e => e.ClinicName).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.ClinicAddress).HasMaxLength(512);
+            entity.Property(e => e.ClinicContact).HasMaxLength(128);
+            entity.Property(e => e.DoctorName).HasMaxLength(256);
+            entity.Property(e => e.DoctorPrcLicense).HasMaxLength(64);
+            entity.Property(e => e.DoctorPtr).HasMaxLength(64);
+            entity.Property(e => e.DoctorS2License).HasMaxLength(64);
+            entity.Property(e => e.Status).HasMaxLength(32).IsRequired().HasDefaultValue("VALID");
+            entity.Property(e => e.DispenseStatus).HasMaxLength(64);
+            entity.Property(e => e.DispensedPharmacyName).HasMaxLength(256);
+            entity.Property(e => e.DispensedReceiptFileName).HasMaxLength(256);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Facility)
+                .WithMany()
+                .HasForeignKey(e => e.FacilityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Composite unique index for idempotent outbox upserts
+            entity.HasIndex(e => new { e.TenantId, e.FacilityId, e.DocumentKind, e.SourceDocumentId })
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            // Fast lookup for prescription verification and dispense
+            entity.HasIndex(e => new { e.DocumentKind, e.VerificationTokenHash })
+                .HasFilter("\"IsDeleted\" = false AND \"VerificationTokenHash\" IS NOT NULL");
+
+            // Fast lookup for cryptographic signature verification
+            entity.HasIndex(e => new { e.DocumentKind, e.SecurityDigest })
+                .HasFilter("\"IsDeleted\" = false");
+
+            // Fast lookup for document number searches
+            entity.HasIndex(e => new { e.DocumentKind, e.DocumentNumber })
+                .HasFilter("\"IsDeleted\" = false");
+        });
+
+        modelBuilder.Entity<FacilityQueueBoard>(entity =>
+        {
+            entity.ToTable("FacilityQueueBoards");
+            entity.HasKey(e => new { e.TenantId, e.FacilityId });
+
+            entity.Property(e => e.NowServingJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.UpNextJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.EmergencyJson).HasColumnType("jsonb");
+            entity.Property(e => e.IsAcceptingWalkIns).HasDefaultValue(true);
+            entity.Property(e => e.PatientsWaitingCount).HasDefaultValue(0);
+            entity.Property(e => e.TvDisplayPin).HasMaxLength(50);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Facility)
+                .WithMany()
+                .HasForeignKey(e => e.FacilityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.FacilityId, e.QueueDate });
         });
 
         modelBuilder.Entity<WorkspaceMember>(entity =>
@@ -248,7 +376,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(e => e.FacilityId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasIndex(e => e.WorkspaceMemberId)
+            entity.HasIndex(e => new { e.WorkspaceMemberId, e.FacilityId })
                 .HasFilter("\"IsDeleted\" = false")
                 .IsUnique();
         });
@@ -532,6 +660,188 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(e => e.Email)
                 .HasFilter("\"IsDeleted\" = false")
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<Practitioner>(entity =>
+        {
+            entity.Property(e => e.ProfessionKind).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.NormalizedPrcLicenseNo).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.DisplayPrcLicenseNo).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.FirstName).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.LastName).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Title).HasMaxLength(64);
+            entity.Property(e => e.PrimarySpecialty).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.PublicBio).HasMaxLength(4000);
+            entity.Property(e => e.AvatarUrl).HasMaxLength(2048);
+            entity.Property(e => e.CredentialsJson).HasColumnType("jsonb");
+            entity.Property(e => e.VerificationContact).HasMaxLength(254);
+            entity.Property(e => e.VerificationStatus)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .HasDefaultValue(PractitionerVerificationLevel.Unverified);
+            entity.Property(e => e.VerifiedByAdminUserId).HasMaxLength(128);
+
+            entity.HasIndex(e => new { e.ProfessionKind, e.NormalizedPrcLicenseNo })
+                .HasFilter("\"MergedIntoPractitionerId\" IS NULL AND \"IsDeleted\" = false")
+                .IsUnique();
+
+            entity.HasIndex(e => e.MergedIntoPractitionerId);
+            entity.HasIndex(e => e.VerificationStatus);
+        });
+
+        modelBuilder.Entity<PractitionerAffiliation>(entity =>
+        {
+            entity.Property(e => e.Role).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.LocalDisplayName).HasMaxLength(256);
+            entity.Property(e => e.LocalSpecialty).HasMaxLength(256);
+            entity.Property(e => e.AvailabilitiesJson).HasColumnType("jsonb");
+            entity.Property(e => e.AffiliationStatus).HasMaxLength(32).IsRequired().HasDefaultValue("Active");
+
+            entity.HasOne(e => e.Practitioner)
+                .WithMany(p => p.Affiliations)
+                .HasForeignKey(e => e.PractitionerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Facility)
+                .WithMany()
+                .HasForeignKey(e => e.FacilityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.FacilityId, e.ClinicStaffMemberId })
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            entity.HasIndex(e => e.PractitionerId);
+            entity.HasIndex(e => e.TenantId);
+            entity.HasIndex(e => e.AffiliationStatus);
+        });
+
+        modelBuilder.Entity<FacilityVerificationRequest>(entity =>
+        {
+            entity.Property(e => e.CorrelationId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.RequestKind).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.SubmittedByClinicUserId).HasMaxLength(128);
+            entity.Property(e => e.SubmittedByDisplayName).HasMaxLength(256);
+            entity.Property(e => e.SubmittedSnapshotJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.LtoEvidenceObjectKey).HasMaxLength(512);
+            entity.Property(e => e.Status).HasMaxLength(32).IsRequired().HasDefaultValue("PendingReview");
+            entity.Property(e => e.WithdrawnByActor).HasMaxLength(256);
+            entity.Property(e => e.WithdrawalReason).HasMaxLength(2000);
+            entity.Property(e => e.ReviewedByAdminUserId).HasMaxLength(128);
+            entity.Property(e => e.ReviewedByDisplayName).HasMaxLength(256);
+            entity.Property(e => e.ReviewedByEmail).HasMaxLength(254);
+            entity.Property(e => e.ReviewerNotes).HasMaxLength(2000);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Facility)
+                .WithMany()
+                .HasForeignKey(e => e.FacilityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.FacilityId, e.Status });
+            entity.HasIndex(e => new { e.TenantId, e.SubmittedAtUtc });
+            entity.HasIndex(e => e.CorrelationId);
+        });
+
+        modelBuilder.Entity<PractitionerVerificationRequest>(entity =>
+        {
+            entity.Property(e => e.CorrelationId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.RequestKind).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.ProfessionKind).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.SubmittedPrcLicenseNo).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.NormalizedPrcLicenseNo).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.SubmittedSnapshotJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.PrcEvidenceObjectKey).HasMaxLength(512);
+            entity.Property(e => e.VerificationContact).HasMaxLength(254);
+            entity.Property(e => e.SubmittedByClinicUserId).HasMaxLength(128);
+            entity.Property(e => e.SubmittedByDisplayName).HasMaxLength(256);
+            entity.Property(e => e.OtpTokenHash).HasMaxLength(128);
+            entity.Property(e => e.Status).HasMaxLength(32).IsRequired().HasDefaultValue("PendingReview");
+            entity.Property(e => e.WithdrawnByActor).HasMaxLength(256);
+            entity.Property(e => e.WithdrawalReason).HasMaxLength(2000);
+            entity.Property(e => e.ReviewedByAdminUserId).HasMaxLength(128);
+            entity.Property(e => e.ReviewedByDisplayName).HasMaxLength(256);
+            entity.Property(e => e.ReviewedByEmail).HasMaxLength(254);
+            entity.Property(e => e.ReviewerNotes).HasMaxLength(2000);
+
+            entity.HasOne(e => e.FacilityVerificationRequest)
+                .WithMany(f => f.PractitionerRequests)
+                .HasForeignKey(e => e.FacilityVerificationRequestId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Facility)
+                .WithMany()
+                .HasForeignKey(e => e.FacilityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Practitioner)
+                .WithMany()
+                .HasForeignKey(e => e.PractitionerId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.Affiliation)
+                .WithMany()
+                .HasForeignKey(e => e.AffiliationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.FacilityId, e.ClinicStaffMemberId });
+            entity.HasIndex(e => new { e.ProfessionKind, e.NormalizedPrcLicenseNo });
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.OtpTokenHash);
+            entity.HasIndex(e => e.FacilityVerificationRequestId);
+        });
+
+        modelBuilder.Entity<WorkspaceTeleconsultBilling>(entity =>
+        {
+            entity.ToTable("WorkspaceTeleconsultBillings");
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TenantId)
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            entity.Property(e => e.BillingMode).HasMaxLength(16).IsRequired().HasDefaultValue(WorkspaceTeleconsultBilling.ModePostpaid);
+            entity.Property(e => e.RatePerMinutePhp).HasPrecision(18, 2).HasDefaultValue(WorkspaceTeleconsultBilling.DefaultRatePerMinutePhp);
+            entity.Property(e => e.AllocatedBudgetPhp).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(e => e.PrepaidBalancePhp).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(e => e.AllowOverageBeyondAllocation).HasDefaultValue(true);
+            entity.Property(e => e.CurrentPeriodYearMonth).HasMaxLength(7).IsRequired();
+            entity.Property(e => e.CurrentPeriodBilledPhp).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(e => e.CurrentPeriodOveragePhp).HasPrecision(18, 2).HasDefaultValue(0m);
+        });
+
+        modelBuilder.Entity<TeleconsultUsageRecord>(entity =>
+        {
+            entity.ToTable("TeleconsultUsageRecords");
+
+            entity.HasIndex(e => e.CallId)
+                .IsUnique();
+
+            entity.HasIndex(e => new { e.TenantId, e.CallEndedAtUtc });
+
+            entity.Property(e => e.TenantId).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.RatePerMinutePhp).HasPrecision(18, 2);
+            entity.Property(e => e.TotalCostPhp).HasPrecision(18, 2);
+            entity.Property(e => e.PrepaidDeductedPhp).HasPrecision(18, 2);
+            entity.Property(e => e.PostpaidOveragePhp).HasPrecision(18, 2);
         });
 
         base.OnModelCreating(modelBuilder);

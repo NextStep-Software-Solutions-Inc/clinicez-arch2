@@ -3,7 +3,7 @@ using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class EncounterDiagnosis : BaseEntity
+public sealed class EncounterDiagnosis : ClinicScopedEntity
 {
     public Guid ConsultationEncounterId { get; set; }
     public ConsultationEncounter? ConsultationEncounter { get; set; }

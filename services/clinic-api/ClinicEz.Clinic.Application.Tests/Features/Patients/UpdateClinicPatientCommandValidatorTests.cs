@@ -16,7 +16,7 @@ public class UpdateClinicPatientCommandValidatorTests
         string? middleName = "Cruz",
         string? suffix = null,
         DateOnly? dateOfBirth = null,
-        string gender = "Female",
+        string sex = "Female",
         string? civilStatus = "Single",
         string contactNumber = "09171234567",
         string? email = "maria.santos@example.com",
@@ -28,7 +28,7 @@ public class UpdateClinicPatientCommandValidatorTests
             MiddleName: middleName,
             Suffix: suffix,
             DateOfBirth: dateOfBirth ?? new DateOnly(1995, 5, 15),
-            Gender: gender,
+            Sex: sex,
             CivilStatus: civilStatus,
             ContactNumber: contactNumber,
             Email: email,
@@ -228,53 +228,50 @@ public class UpdateClinicPatientCommandValidatorTests
     }
 
     // =========================================================================
-    // 4. Gender (Male, Female, Other vs Non-standard)
+    // 4. Biological Sex (PhilHealth lib_sex: Male, Female / M, F only)
     // =========================================================================
 
     [Theory]
     [InlineData("Male")]
     [InlineData("Female")]
-    [InlineData("Other")]
-    public void Validate_StandardGender_PassesValidation(string validGender)
+    [InlineData("M")]
+    [InlineData("F")]
+    public void Validate_StandardBiologicalSex_PassesValidation(string validSex)
     {
-        var command = CreateValidCommand(gender: validGender);
+        var command = CreateValidCommand(sex: validSex);
         var result = _validator.Validate(command);
 
         result.IsValid.Should().BeTrue();
     }
 
     [Theory]
-    [InlineData("male")]       // lowercase
-    [InlineData("female")]     // lowercase
-    [InlineData("other")]      // lowercase
-    [InlineData("MALE")]       // uppercase
-    [InlineData("FEMALE")]     // uppercase
-    [InlineData("Non-Binary")] // non-standard
-    [InlineData("Transgender")]// non-standard
-    [InlineData("M")]          // abbreviation
-    [InlineData("F")]          // abbreviation
-    [InlineData("Unknown")]    // non-standard
-    public void Validate_NonStandardGender_FailsValidation(string invalidGender)
+    [InlineData("Intersex")]    // belongs in GenderIdentity per PhilHealth lib_sex
+    [InlineData("Unknown")]     // not valid in PhilHealth lib_sex (M/F only)
+    [InlineData("Non-Binary")]  // gender identity belongs in GenderIdentity, not Sex
+    [InlineData("Transgender")] // gender identity belongs in GenderIdentity, not Sex
+    [InlineData("Other")]       // legacy value removed
+    [InlineData("InvalidSex")]
+    public void Validate_NonStandardBiologicalSex_FailsValidation(string invalidSex)
     {
-        var command = CreateValidCommand(gender: invalidGender);
+        var command = CreateValidCommand(sex: invalidSex);
         var result = _validator.Validate(command);
 
         result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.PropertyName == nameof(UpdateClinicPatientCommand.Gender)
-            && e.ErrorMessage.Contains("Gender must be 'Male', 'Female', or 'Other'"));
+        result.Errors.Should().Contain(e => e.PropertyName == nameof(UpdateClinicPatientCommand.Sex)
+            && e.ErrorMessage.Contains("Sex must be 'Male' or 'Female'"));
     }
 
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
     [InlineData("   ")]
-    public void Validate_EmptyOrWhitespaceGender_FailsValidation(string emptyGender)
+    public void Validate_EmptyOrWhitespaceSex_FailsValidation(string emptySex)
     {
-        var command = CreateValidCommand(gender: emptyGender);
+        var command = CreateValidCommand(sex: emptySex);
         var result = _validator.Validate(command);
 
         result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.PropertyName == nameof(UpdateClinicPatientCommand.Gender));
+        result.Errors.Should().Contain(e => e.PropertyName == nameof(UpdateClinicPatientCommand.Sex));
     }
 
     // =========================================================================
@@ -357,5 +354,32 @@ public class UpdateClinicPatientCommandValidatorTests
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(UpdateClinicPatientCommand.Email)
             && e.ErrorMessage.Contains("must not exceed 255 characters"));
+    }
+
+    [Theory]
+    [InlineData("Male", "MAN")]
+    [InlineData("Female", "WOMAN")]
+    [InlineData("Male", "NON_BINARY")]
+    [InlineData("Female", "INTERSEX_IDENTITY")]
+    [InlineData("Female", "PREFER_NOT_TO_ANSWER")]
+    public void Validate_ValidBiologicalSexAndGenderIdentity_Passes(string sex, string genderIdentity)
+    {
+        var command = CreateValidCommand(sex: sex) with
+        {
+            GenderIdentity = genderIdentity
+        };
+        var result = _validator.Validate(command);
+
+        result.IsValid.Should().BeTrue();
+        RegisterClinicPatientCommandHandler.ParseBiologicalSex(command.Sex).ToString().Should().Be(sex);
+    }
+
+    [Fact]
+    public void ParseCivilStatus_MapsCohabitingAndOtherLabelsCleanly()
+    {
+        RegisterClinicPatientCommandHandler.ParseCivilStatus("Cohabiting / Common-Law")
+            .Should().Be(ClinicEz.Clinic.Domain.Enums.CivilStatus.Cohabiting);
+        RegisterClinicPatientCommandHandler.ParseCivilStatus("Other Civil Status")
+            .Should().Be(ClinicEz.Clinic.Domain.Enums.CivilStatus.Other);
     }
 }

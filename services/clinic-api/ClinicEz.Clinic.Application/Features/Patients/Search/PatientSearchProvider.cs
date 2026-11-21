@@ -16,13 +16,13 @@ namespace ClinicEz.Clinic.Application.Features.Patients.Search;
 /// </summary>
 public sealed class PatientSearchProvider : ISearchProvider
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
 
     public string Category => "Patients";
     public int Priority => 10;
     public string? RequiredPermission => ClinicPermissions.PatientsRead;
 
-    public PatientSearchProvider(IRepository<ClinicPatient> patientRepo)
+    public PatientSearchProvider(IRepository<Patient> patientRepo)
     {
         _patientRepo = patientRepo ?? throw new ArgumentNullException(nameof(patientRepo));
     }
@@ -36,20 +36,12 @@ public sealed class PatientSearchProvider : ISearchProvider
         if (string.IsNullOrWhiteSpace(query))
             return Array.Empty<SearchResultItemDto>();
 
-        var term = query.Trim().ToLowerInvariant();
         var boundedLimit = limit <= 0 ? 10 : Math.Min(limit, 50);
 
         var patients = await _patientRepo.Query(e => !e.IsDeleted && e.ClinicId == tenantId, ignoreQueryFilters: true)
+            .Include(p => p.Alerts)
             .AsNoTracking()
-            .Where(p =>
-                p.FirstName.ToLower().Contains(term) ||
-                p.LastName.ToLower().Contains(term) ||
-                (p.MiddleName != null && p.MiddleName.ToLower().Contains(term)) ||
-                p.PatientCode.ToLower().Contains(term) ||
-                p.ContactNumber.Contains(term) ||
-                (p.PhilHealthNumber != null && p.PhilHealthNumber.Contains(term)) ||
-                (p.SeniorCitizenId != null && p.SeniorCitizenId.Contains(term)) ||
-                (p.PwdId != null && p.PwdId.Contains(term)))
+            .WhereMatchesSearchTerm(query)
             .OrderBy(p => p.LastName)
             .ThenBy(p => p.FirstName)
             .Take(boundedLimit)
@@ -58,15 +50,19 @@ public sealed class PatientSearchProvider : ISearchProvider
         return patients.Select(p =>
         {
             var (badgeText, badgeVariant) = ResolveBadge(p);
-            var fullName = string.IsNullOrWhiteSpace(p.MiddleName)
-                ? $"{p.LastName}, {p.FirstName}"
-                : $"{p.LastName}, {p.FirstName} {p.MiddleName}";
+            var middle = !string.IsNullOrWhiteSpace(p.MiddleName) ? $" {p.MiddleName.Trim()}" : "";
+            var suffix = !string.IsNullOrWhiteSpace(p.Suffix) ? $" {p.Suffix.Trim()}" : "";
+            var title = $"{p.LastName}, {p.FirstName}{middle}{suffix}";
+
+            var subtitle = string.IsNullOrWhiteSpace(p.ClinicEzId)
+                ? $"{p.PatientCode} • DOB: {p.DateOfBirth:yyyy-MM-dd} • {p.ContactNumber}"
+                : $"{p.PatientCode} • {p.ClinicEzId} • DOB: {p.DateOfBirth:yyyy-MM-dd} • {p.ContactNumber}";
 
             return new SearchResultItemDto(
                 id: p.Id.ToString(),
                 category: Category,
-                title: fullName,
-                subtitle: $"{p.PatientCode} • DOB: {p.DateOfBirth:yyyy-MM-dd} • {p.ContactNumber}",
+                title: title,
+                subtitle: subtitle,
                 badgeText: badgeText,
                 badgeVariant: badgeVariant,
                 targetRoute: "Patients",
@@ -78,9 +74,9 @@ public sealed class PatientSearchProvider : ISearchProvider
         }).ToList();
     }
 
-    private static (string text, string variant) ResolveBadge(ClinicPatient patient)
+    private static (string text, string variant) ResolveBadge(Patient patient)
     {
-        if (!string.IsNullOrWhiteSpace(patient.Alerts))
+        if (patient.Alerts.Any(a => a.IsActive))
             return ("Alert", SearchBadgeVariant.Emergency);
 
         if (!string.IsNullOrWhiteSpace(patient.SeniorCitizenId))
@@ -89,6 +85,6 @@ public sealed class PatientSearchProvider : ISearchProvider
         if (!string.IsNullOrWhiteSpace(patient.PwdId))
             return ("PWD", SearchBadgeVariant.Neutral);
 
-        return (patient.Gender ?? "Routine", SearchBadgeVariant.Routine);
+        return (patient.Sex.ToString(), SearchBadgeVariant.Routine);
     }
 }

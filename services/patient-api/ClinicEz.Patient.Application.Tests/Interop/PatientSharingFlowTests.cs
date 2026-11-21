@@ -82,6 +82,10 @@ public sealed class PatientSharingFlowTests
         snapshot.ClinicEzId.Should().MatchRegex("^CE-");
         snapshot.Scopes.Should().Be(SharingScopes.Demographics | SharingScopes.Allergies);
         snapshot.Demographics!.FullName.Should().Be("Juan Dela Cruz");
+        snapshot.Demographics.FirstName.Should().Be("Juan");
+        snapshot.Demographics.LastName.Should().Be("Dela Cruz");
+        snapshot.Demographics.MiddleName.Should().BeNull();
+        snapshot.Demographics.Suffix.Should().BeNull();
         snapshot.Demographics.PhilHealthPin.Should().Be("123456789012");
         snapshot.Items.Should().ContainSingle().Which.Should().Match<ShareItemDto>(i => i.Kind == "allergy" && i.Name == "Penicillin");
 
@@ -322,5 +326,45 @@ public sealed class PatientSharingFlowTests
 
         grants.Should().ContainSingle().Which.Should().Match<AccessGrantDto>(g =>
             g.FacilityName == "City Health" && g.Status == "Active" && g.Scopes.Count == 1 && g.Scopes[0] == "Allergies");
+    }
+
+    [Fact]
+    public async Task Redeeming_a_token_for_patient_with_compound_given_name_and_suffix_populates_discrete_demographics()
+    {
+        using var h = new PatientInteropHarness();
+        var patientId = Guid.NewGuid();
+        await h.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Patient
+            {
+                Id = patientId,
+                ClerkUserId = "clerk_ely",
+                FirstName = "Ely An",
+                MiddleName = "Dela",
+                LastName = "Maureal",
+                Suffix = "Jr.",
+                Mobile = "+639171234567",
+                Email = "ely@example.test",
+                DateOfBirth = new DateOnly(1994, 8, 20),
+                Sex = SexType.Male,
+                GovernmentIds = [new PatientGovernmentId { IdType = GovernmentIdType.PhilHealth, IdNumber = "123456789012" }]
+            });
+            await db.SaveChangesAsync();
+        });
+
+        var clinicId = Guid.NewGuid();
+        var request = Redeem(PatientInteropHarness.Clinic(clinicId), patientId, IssueToken(h, patientId, SharingScopes.Demographics));
+        await h.DeliverAsync(request);
+        var snapshot = await SingleSnapshotAsync(h, request);
+
+        snapshot.Granted.Should().BeTrue();
+        snapshot.Demographics.Should().NotBeNull();
+        snapshot.Demographics!.FirstName.Should().Be("Ely An");
+        snapshot.Demographics.MiddleName.Should().Be("Dela");
+        snapshot.Demographics.LastName.Should().Be("Maureal");
+        snapshot.Demographics.Suffix.Should().Be("Jr.");
+        snapshot.Demographics.FullName.Should().Be("Ely An Dela Maureal Jr.");
+        snapshot.Demographics.DateOfBirth.Should().Be("1994-08-20");
+        snapshot.Demographics.Sex.Should().Be("Male");
     }
 }

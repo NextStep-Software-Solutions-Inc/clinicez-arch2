@@ -7,3 +7,4 @@ export * from './appointmentsApi';
 export * from './useApi';
 export * from './syncService';
 export * from './filesApi';
+export * from './teleconsultApi';

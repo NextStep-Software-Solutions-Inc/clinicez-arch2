@@ -114,102 +114,110 @@ export default class ErrorBoundary extends React.Component<
           style={styles.scrollView}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header Badge & Title */}
-          <View style={styles.headerBlock}>
-            <Badge label="Application Error" variant="emergency" icon="alertCircle" />
-            <ThemedText variant="h1" style={styles.titleText}>
-              Something went wrong
-            </ThemedText>
-            <ThemedText variant="body" color={theme.colors.textSecondary} style={styles.messageText}>
-              Clinic EZ encountered an unexpected error. A full diagnostic report has been
-              recorded on this device to help developers and technical support pin down and patch the cause quickly.
-            </ThemedText>
-          </View>
-
-          {/* Primary Error Summary Card */}
-          <View style={styles.summaryCard}>
-            <View style={styles.errorBannerHeader}>
-              <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
-              <ThemedText variant="bodyBold" color={theme.colors.emergencyText} style={styles.errorTitle}>
-                {error?.name || report?.name || 'Runtime Error'}: {error?.message || report?.message || 'Unknown failure'}
+          <View style={styles.contentColumn}>
+            {/* Header Badge & Title */}
+            <View style={styles.headerBlock}>
+              <Badge
+                label="Application Error"
+                variant="emergency"
+                icon="alertCircle"
+                style={styles.errorBadge}
+              />
+              <ThemedText variant="h1" style={styles.titleText}>
+                Something went wrong
+              </ThemedText>
+              <ThemedText variant="body" color={theme.colors.textSecondary} style={styles.messageText}>
+                Clinic EZ encountered an unexpected error. A full diagnostic report has been
+                recorded on this device to help developers and technical support pin down and patch the cause quickly.
               </ThemedText>
             </View>
 
-            {report && (
-              <View style={styles.metadataGrid}>
-                <View style={styles.metaItem}>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>Platform:</ThemedText>
-                  <ThemedText variant="captionBold">{report.platform} (OS {report.osVersion})</ThemedText>
-                </View>
-                <View style={styles.metaItem}>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>Workspace:</ThemedText>
-                  <ThemedText variant="captionBold">{report.workspace || '(none)'}</ThemedText>
-                </View>
-                <View style={styles.metaItem}>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>Screen Size:</ThemedText>
-                  <ThemedText variant="captionBold">{report.windowDimensions.width}x{report.windowDimensions.height}</ThemedText>
-                </View>
-                <View style={styles.metaItem}>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>Time:</ThemedText>
-                  <ThemedText variant="captionBold">{report.formattedTime}</ThemedText>
-                </View>
+            {/* Primary Error Summary Card */}
+            <View style={styles.summaryCard}>
+              <View style={styles.errorBannerHeader}>
+                <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
+                <ThemedText variant="bodyBold" color={theme.colors.emergencyText} style={styles.errorTitle}>
+                  {error?.name || report?.name || 'Runtime Error'}: {error?.message || report?.message || 'Unknown failure'}
+                </ThemedText>
               </View>
-            )}
-          </View>
 
-          {/* Collapsible / Expandable Diagnostic Log */}
-          <View style={styles.logSection}>
-            <Button
-              title={expandedDetails ? 'Hide diagnostic details' : 'View full technical diagnostics (stack trace)'}
-              variant="secondary"
-              icon={expandedDetails ? 'chevronUp' : 'chevronDown'}
-              onPress={this.toggleDetails}
-            />
-
-            {expandedDetails && (
-              <View style={styles.logWrapper}>
-                <View style={styles.logHeader}>
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                    Error Diagnostic Log
-                  </ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    Select all and copyable
-                  </ThemedText>
+              {report && (
+                <View style={styles.metadataGrid}>
+                  <View style={styles.metaItem}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>Platform:</ThemedText>
+                    <ThemedText variant="captionBold">{report.platform} (OS {report.osVersion})</ThemedText>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>Workspace:</ThemedText>
+                    <ThemedText variant="captionBold">{report.workspace || '(none)'}</ThemedText>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>Screen Size:</ThemedText>
+                    <ThemedText variant="captionBold">{report.windowDimensions.width}x{report.windowDimensions.height}</ThemedText>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>Time:</ThemedText>
+                    <ThemedText variant="captionBold">{report.formattedTime}</ThemedText>
+                  </View>
                 </View>
-                <TextInput
-                  style={styles.logInput}
-                  multiline
-                  editable={false}
-                  value={formattedLog}
-                  selectTextOnFocus
-                  scrollEnabled
-                />
-              </View>
-            )}
-          </View>
+              )}
+            </View>
 
-          {/* Action Buttons */}
-          <View style={styles.actions}>
-            <Button
-              title={copied ? 'Report copied to clipboard!' : 'Copy / Share Error Report'}
-              icon="copy"
-              size="lg"
-              variant="primary"
-              onPress={this.handleShare}
-            />
-            <Button
-              title="Try again"
-              icon="refresh"
-              size="lg"
-              variant="secondary"
-              onPress={this.reset}
-            />
-            <Button
-              title="Switch workspace / Reconnect"
-              icon="clinic"
-              variant="ghost"
-              onPress={this.handleSwitchWorkspace}
-            />
+            {/* Collapsible / Expandable Diagnostic Log */}
+            <View style={styles.logSection}>
+              <Button
+                title={expandedDetails ? 'Hide diagnostic details' : 'View full technical diagnostics (stack trace)'}
+                variant="secondary"
+                icon={expandedDetails ? 'chevronUp' : 'chevronDown'}
+                onPress={this.toggleDetails}
+              />
+
+              {expandedDetails && (
+                <View style={styles.logWrapper}>
+                  <View style={styles.logHeader}>
+                    <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                      Error Diagnostic Log
+                    </ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      Select all and copyable
+                    </ThemedText>
+                  </View>
+                  <TextInput
+                    style={styles.logInput}
+                    multiline
+                    editable={false}
+                    value={formattedLog}
+                    selectTextOnFocus
+                    scrollEnabled
+                  />
+                </View>
+              )}
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.actions}>
+              <Button
+                title={copied ? 'Report copied to clipboard!' : 'Copy / Share Error Report'}
+                icon="copy"
+                size="lg"
+                variant="primary"
+                onPress={this.handleShare}
+              />
+              <Button
+                title="Try again"
+                icon="refresh"
+                size="lg"
+                variant="secondary"
+                onPress={this.reset}
+              />
+              <Button
+                title="Switch workspace / Reconnect"
+                icon="clinic"
+                variant="ghost"
+                style={styles.reconnectButton}
+                onPress={this.handleSwitchWorkspace}
+              />
+            </View>
           </View>
         </ScrollView>
       </View>
@@ -220,23 +228,33 @@ export default class ErrorBoundary extends React.Component<
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
     backgroundColor: theme.colors.background,
   },
   scrollView: {
     flex: 1,
+    width: '100%',
   },
   scrollContent: {
+    flexGrow: 1,
+    width: '100%',
     padding: theme.spacing['2xl'],
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '100%',
+  },
+  contentColumn: {
+    width: '100%',
+    maxWidth: 600,
+    alignSelf: 'center',
     gap: theme.spacing.lg,
   },
   headerBlock: {
     alignItems: 'center',
     width: '100%',
-    maxWidth: 600,
     gap: theme.spacing.sm,
+  },
+  errorBadge: {
+    alignSelf: 'center',
   },
   titleText: {
     textAlign: 'center',
@@ -247,7 +265,6 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     width: '100%',
-    maxWidth: 600,
     backgroundColor: theme.colors.emergencyBg,
     borderColor: theme.colors.emergencyBorder,
     borderWidth: theme.sizes.borderWidth,
@@ -257,7 +274,7 @@ const styles = StyleSheet.create({
   },
   errorBannerHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: theme.spacing.sm,
   },
   errorTitle: {
@@ -267,6 +284,7 @@ const styles = StyleSheet.create({
   metadataGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignItems: 'flex-start',
     gap: theme.spacing.md,
     paddingTop: theme.spacing.sm,
     borderTopWidth: theme.sizes.borderWidth,
@@ -275,11 +293,10 @@ const styles = StyleSheet.create({
   metaItem: {
     flex: 1,
     minWidth: 120,
-    gap: theme.spacing.xs / 2,
+    gap: theme.spacing.xs,
   },
   logSection: {
     width: '100%',
-    maxWidth: 600,
     gap: theme.spacing.sm,
   },
   logWrapper: {
@@ -302,8 +319,9 @@ const styles = StyleSheet.create({
   },
   actions: {
     width: '100%',
-    maxWidth: 600,
     gap: theme.spacing.sm,
-    marginTop: theme.spacing.sm,
+  },
+  reconnectButton: {
+    alignSelf: 'center',
   },
 });

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
@@ -14,7 +13,6 @@ namespace ClinicEz.Clinic.Application.Tests;
 
 public sealed class YakapSimulationTests
 {
-    /// <summary>The proxy writes enums as strings, like every platform API.</summary>
     private static readonly JsonSerializerOptions ProxyJson = new JsonSerializerOptions().UseStrictStringEnums();
 
     private static (PhilHealthProxyClient Client, StubInteropRequestClient Hub) CreateClient(PhilHealthResponsePayload reply)
@@ -32,100 +30,71 @@ public sealed class YakapSimulationTests
         ((PhilHealthRequestPayload)hub.Calls.Single().Payload).Operation;
 
     [Fact]
-    public async Task RunSoapSimulationAsync_WhenSuccessful_Deserializes7StepsReport()
+    public async Task GetSandboxStatusAsync_ReturnsPcapiSandboxStatus()
     {
-        var sampleReport = new SoapSimulationReportDto(
-            Scenario: SoapSimulationScenarioDto.HappyPath,
-            Passed: true,
-            TotalSteps: 7,
-            PassedSteps: 7,
-            FailedSteps: 0,
-            TotalDurationMs: 145,
-            Steps: new List<SoapSimulationStepResultDto>
-            {
-                new(1, "getToken", SoapSimulationStepStatusDto.Passed, 25, "Token issued"),
-                new(2, "isMemberDependentRegistered", SoapSimulationStepStatusDto.Passed, 15, "PIN valid"),
-                new(3, "isATCValid", SoapSimulationStepStatusDto.Passed, 12, "ATC valid"),
-                new(4, "extractRegistrationList", SoapSimulationStepStatusDto.Passed, 18, "Masterlist extracted"),
-                new(5, "validateReport", SoapSimulationStepStatusDto.Passed, 20, "Tranche 1 DTD verified"),
-                new(6, "submitReport", SoapSimulationStepStatusDto.Passed, 16, "Tranche 2 Transmitted"),
-                new(7, "checkUploadStatus", SoapSimulationStepStatusDto.Passed, 14, "PROCESSED")
-            },
-            Timestamp: DateTime.UtcNow);
-        var (client, hub) = CreateClient(Ok(sampleReport));
-
-        var result = await client.RunSoapSimulationAsync(new RunSoapSimulationProxyRequest("HCI-NCR-00921"));
-
-        result.Succeeded.Should().BeTrue();
-        result.Data.Should().NotBeNull();
-        result.Data!.Passed.Should().BeTrue();
-        result.Data.TotalSteps.Should().Be(7);
-        result.Data.Steps.Should().HaveCount(7);
-        result.Data.Steps[4].ActionName.Should().Be("validateReport");
-        OperationOf(hub).Should().Be(PhilHealthOperations.SoapSandboxRun);
-        ((PhilHealthRequestPayload)hub.Calls.Single().Payload).Body.Should().Contain("HCI-NCR-00921");
-    }
-
-    [Fact]
-    public async Task GetSoapSandboxStatusAsync_ReturnsStatusAndScenarios()
-    {
-        var sampleStatus = new SoapSandboxStatusDto(
-            IsActive: true,
-            ActiveScenario: SoapSimulationScenarioDto.HappyPath,
-            EndpointUrl: "/soap/konsulta",
-            TotalSimulatedCalls: 42,
-            AvailableScenarios: new[] { "HappyPath", "SoapFault500" });
+        var sampleStatus = new SandboxStatus("HappyPath", 3, 1, 1, 2, 1);
         var (client, hub) = CreateClient(Ok(sampleStatus));
 
-        var result = await client.GetSoapSandboxStatusAsync();
+        var result = await client.GetSandboxStatusAsync();
 
         result.Succeeded.Should().BeTrue();
-        result.Data!.ActiveScenario.Should().Be(SoapSimulationScenarioDto.HappyPath);
-        result.Data.TotalSimulatedCalls.Should().Be(42);
-        result.Data.AvailableScenarios.Should().Contain("HappyPath");
-        OperationOf(hub).Should().Be(PhilHealthOperations.SoapSandboxStatus);
+        result.Data!.CurrentScenario.Should().Be("HappyPath");
+        result.Data.BeneficiariesCount.Should().Be(3);
+        OperationOf(hub).Should().Be(PhilHealthOperations.PcapiSandboxStatus);
     }
 
     [Fact]
-    public async Task SetSoapSandboxScenarioAsync_SendsScenarioPayload()
+    public async Task SetSandboxScenarioAsync_SendsScenarioPayload()
     {
-        var updatedStatus = new SoapSandboxStatusDto(
-            IsActive: true,
-            ActiveScenario: SoapSimulationScenarioDto.SoapFault500,
-            EndpointUrl: "/soap/konsulta",
-            TotalSimulatedCalls: 43,
-            AvailableScenarios: new[] { "HappyPath", "SoapFault500" });
+        var updatedStatus = new SandboxStatus("BeneficiaryNotFound", 3, 0, 0, 0, 0);
         var (client, hub) = CreateClient(Ok(updatedStatus));
 
-        var result = await client.SetSoapSandboxScenarioAsync(new SetSimulationScenarioRequest(SoapSimulationScenarioDto.SoapFault500));
+        var result = await client.SetSandboxScenarioAsync(new SetSandboxScenarioRequest("BeneficiaryNotFound"));
 
         result.Succeeded.Should().BeTrue();
-        result.Data!.ActiveScenario.Should().Be(SoapSimulationScenarioDto.SoapFault500);
-        OperationOf(hub).Should().Be(PhilHealthOperations.SoapSandboxScenario);
-        ((PhilHealthRequestPayload)hub.Calls.Single().Payload).Body.Should().Contain("SoapFault500", "enums travel as strings");
+        result.Data!.CurrentScenario.Should().Be("BeneficiaryNotFound");
+        OperationOf(hub).Should().Be(PhilHealthOperations.PcapiSandboxScenario);
+        ((PhilHealthRequestPayload)hub.Calls.Single().Payload).Body.Should().Contain("BeneficiaryNotFound");
     }
 
     [Fact]
-    public async Task ResetSoapSandboxAsync_SendsResetRequest()
+    public async Task ResetSandboxAsync_SendsResetRequest()
     {
-        var resetStatus = new SoapSandboxStatusDto(
-            IsActive: true,
-            ActiveScenario: SoapSimulationScenarioDto.HappyPath,
-            EndpointUrl: "/soap/konsulta",
-            TotalSimulatedCalls: 0,
-            AvailableScenarios: new[] { "HappyPath" });
+        var resetStatus = new SandboxStatus("HappyPath", 3, 1, 1, 0, 0);
         var (client, hub) = CreateClient(Ok(resetStatus));
 
-        var result = await client.ResetSoapSandboxAsync();
+        var result = await client.ResetSandboxAsync();
 
         result.Succeeded.Should().BeTrue();
-        result.Data!.TotalSimulatedCalls.Should().Be(0);
-        result.Data.ActiveScenario.Should().Be(SoapSimulationScenarioDto.HappyPath);
-        OperationOf(hub).Should().Be(PhilHealthOperations.SoapSandboxReset);
+        result.Data!.CurrentScenario.Should().Be("HappyPath");
+        OperationOf(hub).Should().Be(PhilHealthOperations.PcapiSandboxReset);
     }
 
     [Fact]
-    public async Task ValidatePinAsync_PassesThePinAsTheArgument()
+    public async Task ValidateStandingAsync_DispatchesService02OverInteropHub()
+    {
+        var standing = new YakapValidatorResponse(
+            "123456789012",
+            "DELA CRUZ",
+            "JUAN",
+            "SANTOS",
+            null,
+            new PcuStatusInfo("UNVERIFIED"),
+            new SelectionStatusInfo("NOT_ASSIGNED"),
+            new EmpanelmentStatusInfo("N"),
+            new FpeStatusInfo("N"),
+            new ConsultationStatusInfo("N"));
+        var (client, hub) = CreateClient(Ok(standing));
+
+        var result = await client.ValidateStandingAsync(new YakapValidateStandingRequest("123456789012", "2026"));
+
+        result.Succeeded.Should().BeTrue();
+        result.Data!.Selection!.Status.Should().Be("NOT_ASSIGNED");
+        OperationOf(hub).Should().Be(PhilHealthOperations.YakapValidateStanding);
+    }
+
+    [Fact]
+    public async Task ValidatePinAsync_ValidatesFormatLocallyWithoutSoapCall()
     {
         var (client, hub) = CreateClient(Ok(true));
 
@@ -133,20 +102,19 @@ public sealed class YakapSimulationTests
 
         result.Succeeded.Should().BeTrue();
         result.Data.Should().BeTrue();
-        var payload = (PhilHealthRequestPayload)hub.Calls.Single().Payload;
-        payload.Operation.Should().Be(PhilHealthOperations.YakapPinValidate);
-        payload.Argument.Should().Be("12-345678901-2");
-        payload.Body.Should().BeNull();
+        hub.Calls.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task RunSoapSimulationAsync_WhenTheServiceErrors_ReturnsFailure()
+    public async Task UploadPlainJsonAsync_SendsRawJsonToPcapiDataUploadOperation()
     {
-        var (client, _) = CreateClient(new PhilHealthResponsePayload { StatusCode = 500, Body = "Server Error" });
+        var (client, hub) = CreateClient(Ok(new DataUploadResponse("UH100000012026112000001", "fpe", "queued", "CH100000012026112000001", DateTime.UtcNow)));
 
-        var result = await client.RunSoapSimulationAsync(new RunSoapSimulationProxyRequest());
+        var result = await client.UploadPlainJsonAsync("fpe", "{\"pPatientPin\":\"123456789012\"}");
 
-        result.Succeeded.Should().BeFalse();
-        result.Message.Should().NotBeNullOrEmpty();
+        result.Succeeded.Should().BeTrue();
+        var payload = (PhilHealthRequestPayload)hub.Calls.Single().Payload;
+        payload.Operation.Should().Be(PhilHealthOperations.DataUploadFpe);
+        payload.Body.Should().Be("{\"pPatientPin\":\"123456789012\"}");
     }
 }

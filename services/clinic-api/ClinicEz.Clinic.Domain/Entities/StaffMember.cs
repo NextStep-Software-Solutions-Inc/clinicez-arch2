@@ -4,17 +4,15 @@ using System.Linq;
 using System.Text.Json;
 using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Documents.Configuration;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class StaffMember : BaseEntity
+public sealed class StaffMember : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
-
     public Guid? ClinicRoleId { get; set; }
-    public ClinicRole? ClinicRole { get; set; }
+    public Role? ClinicRole { get; set; }
 
     /// <summary>
     /// Backing JSON array of room GUIDs assigned to this Doctor or Nurse (e.g. ["guid-1", "guid-2"]).
@@ -87,11 +85,32 @@ public sealed class StaffMember : BaseEntity
     public string? Specialty { get; set; }
     public string? PhilHealthPan { get; set; }
 
+    // Public directory verification & opt-in profile (Doctor and Nurse only)
+    public bool IsDirectoryOptIn { get; set; } = false;
+    public DateOnly? PrcExpiryDate { get; set; }
+    public string? PrcEvidenceObjectKey { get; set; }
+    public string? VerificationContact { get; set; }
+    public Guid? CanonicalProviderId { get; set; }
+    public string? PublicBio { get; set; }
+    public string? AvatarUrl { get; set; }
+    public PractitionerVerificationLevel PublicVerificationStatus { get; set; } = PractitionerVerificationLevel.Unverified;
+    public string? PublicVerificationReason { get; set; }
+    public int AffiliatedVerifiedClinicCount { get; set; } = 0;
+
     // E-Signature Specimen & Tri-Mode Signing
     public string? SignatureSpecimen { get; set; }
     public SignatureMode DefaultSignatureMode { get; set; } = SignatureMode.ESignatureSpecimen;
 
+    /// <summary>
+    /// Flexible JSON payload storing individual staff member preferences (e.g. notification sound theme, custom audio data, UI chart layout override).
+    /// </summary>
+    public string? PreferencesJson { get; set; }
+
     public bool IsActive { get; set; } = true;
+    public StaffAccountStatus Status { get; set; } = StaffAccountStatus.Active;
+    public string? InvitationToken { get; set; }
+    public DateTime? InvitationExpiresAt { get; set; }
+    public DateTime? InviteAcceptedAt { get; set; }
 
     // Facility-local credentials (no external identity provider; works fully offline on a LAN)
     public string? PasswordHash { get; set; }
@@ -99,6 +118,11 @@ public sealed class StaffMember : BaseEntity
     public int FailedLoginCount { get; set; }
     public DateTime? LockoutEnd { get; set; }
     public DateTime? LastLoginAt { get; set; }
+
+    /// <summary>PBKDF2 hash of the staff member's 6-digit workstation quick-unlock PIN (null if unset).</summary>
+    public string? QuickUnlockPinHash { get; set; }
+    public DateTime? QuickUnlockPinSetAtUtc { get; set; }
+    public int FailedPinAttempts { get; set; }
 
     /// <summary>Incremented to revoke all issued access tokens and refresh tokens for this staff member.</summary>
     public int TokenVersion { get; set; }

@@ -29,11 +29,31 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
             .NotEmpty().WithMessage("Contact number is required.")
             .MaximumLength(30).WithMessage("Contact number must not exceed 30 characters.");
 
+        RuleFor(x => x.Sex)
+            .NotEmpty().WithMessage("Sex is required.")
+            .Must(BeValidPhilHealthSex)
+            .WithMessage("Sex must be 'Male' or 'Female'.");
+
+        When(x => !string.IsNullOrWhiteSpace(x.PatientCode), () =>
+        {
+            RuleFor(x => x.PatientCode!)
+                .Must(code => code.Trim().Length <= 30)
+                .WithMessage("Patient code must not exceed 30 characters.");
+        });
+
+        When(x => !string.IsNullOrWhiteSpace(x.GenderIdentity), () =>
+        {
+            RuleFor(x => x.GenderIdentity!)
+                .MaximumLength(50).WithMessage("Gender identity must not exceed 50 characters.");
+        });
+
         When(x => !string.IsNullOrWhiteSpace(x.PhilHealthNumber), () =>
         {
             RuleFor(x => x.PhilHealthNumber!)
                 .Must(pin => PinRegex.IsMatch(pin.Trim()))
                 .WithMessage("PhilHealth Identification Number must follow the 12-digit format 'XX-XXXXXXXXX-X' per RA 11223.")
+                .Must(pin => !pin.Replace("-", "").Replace(" ", "").Trim().All(c => c == '0'))
+                .WithMessage("PhilHealth Identification Number cannot be all zeros (unassigned placeholder).")
                 .Must(BeValidPhilHealthMod11)
                 .WithMessage("PhilHealth Identification Number check digit is invalid (Mod-11 verification failed).");
         });
@@ -47,6 +67,30 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
                     .MaximumLength(150).WithMessage("Allergen name cannot exceed 150 characters.");
             });
         });
+
+        When(x => !string.IsNullOrEmpty(x.SeriesPrefix), () =>
+        {
+            RuleFor(x => x.SeriesPrefix!)
+                .MaximumLength(10)
+                .WithMessage("Series prefix must not exceed 10 characters.");
+        });
+
+        When(x => !string.IsNullOrWhiteSpace(x.BloodType), () =>
+        {
+            RuleFor(x => x.BloodType!)
+                .Must(s => BloodTypeParser.TryParse(s, out _))
+                .WithMessage("Blood type must be a valid ABO/Rh blood group (e.g., A+, A-, B+, B-, AB+, AB-, O+, O-, Unknown).");
+        });
+    }
+
+    public static bool BeValidPhilHealthSex(string? sex)
+    {
+        if (string.IsNullOrWhiteSpace(sex)) return false;
+        var trimmed = sex.Trim();
+        return trimmed.Equals("Male", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("Female", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("M", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("F", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool BeValidPhilHealthMod11(string pin)
@@ -54,7 +98,7 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
         if (string.IsNullOrWhiteSpace(pin)) return false;
 
         var cleaned = pin.Replace("-", "").Replace(" ", "").Trim();
-        if (cleaned.Length != 12 || !cleaned.All(char.IsAsciiDigit)) return false;
+        if (cleaned.Length != 12 || !cleaned.All(char.IsAsciiDigit) || cleaned.All(c => c == '0')) return false;
 
         int sum = 0;
         for (int i = 0; i < 11; i++)

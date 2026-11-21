@@ -4,15 +4,53 @@ import { inferStaffRole, isSelfStaffMember, canModifyStaffRole } from '../servic
 describe('inferStaffRole', () => {
   test('correctly identifies system standard roles', () => {
     expect(inferStaffRole({ name: 'Attending Physician / Doctor', isSystem: true })).toBe('Doctor');
+    expect(
+      inferStaffRole({
+        name: 'Attending Physician / Doctor',
+        isSystem: true,
+        permissions: ['triage:read', 'triage:write', 'patients:write', 'procedures:write', 'consultations:write', 'consultations:sign'],
+      }),
+    ).toBe('Doctor');
     expect(inferStaffRole({ name: 'Triage Nurse', isSystem: true })).toBe('Nurse');
     expect(inferStaffRole({ name: 'Front Desk Receptionist', isSystem: true })).toBe('Receptionist');
+    expect(
+      inferStaffRole({
+        name: 'Front Desk Receptionist',
+        isSystem: true,
+        permissions: [
+          'appointments:read',
+          'appointments:manage',
+          'queue:read',
+          'queue:check-in',
+          'queue:call',
+          'queue:complete-non-doctor',
+          'patients:read',
+          'patients:write',
+          'documents:read',
+          'records:read',
+          'records:upload',
+          'staff:read',
+          'billing:read',
+          'billing:write',
+          'services:read',
+          'reports:read',
+        ],
+      }),
+    ).toBe('Receptionist');
     expect(inferStaffRole({ name: 'Clinic Cashier / Billing Officer', isSystem: true })).toBe('Cashier');
     expect(inferStaffRole({ name: 'Clinic Administrator', isSystem: true })).toBe('Admin');
     expect(inferStaffRole({ name: 'Data Protection Officer / Compliance Officer', isSystem: true })).toBe('Admin');
   });
 
-  test('correctly infers doctor custom roles by name or signing permission', () => {
+  test('correctly infers doctor custom roles by name or signing permission even with triage:write and patients:write', () => {
     expect(inferStaffRole({ name: 'Pediatric Specialist', isSystem: false, permissions: ['consultations:sign'] })).toBe('Doctor');
+    expect(
+      inferStaffRole({
+        name: 'Pediatric Specialist',
+        isSystem: false,
+        permissions: ['consultations:write', 'consultations:sign', 'patients:write', 'triage:write'],
+      }),
+    ).toBe('Doctor');
     expect(inferStaffRole({ name: 'Visiting Physician', isSystem: false })).toBe('Doctor');
     expect(inferStaffRole({ name: 'Resident Medical Officer', isSystem: false, permissions: ['consultations:write', 'consultations:sign'] })).toBe('Doctor');
   });
@@ -66,4 +104,3 @@ describe('self-role modification guards (isSelfStaffMember & canModifyStaffRole)
     expect(canModifyStaffRole(null, { id: 'staff-111' })).toBe(false);
   });
 });
-

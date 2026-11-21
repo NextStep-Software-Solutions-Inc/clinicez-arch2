@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.CustomFields.Validation;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -19,7 +20,7 @@ public sealed record BulkPatientItemDto(
     string? MiddleName,
     string? Suffix,
     DateOnly DateOfBirth,
-    string Gender,
+    string Sex,
     string? CivilStatus,
     string ContactNumber,
     string? Email,
@@ -54,25 +55,28 @@ public sealed record BulkRegisterClinicPatientsCommand(
 public sealed class BulkRegisterClinicPatientsCommandHandler
     : IRequestHandler<BulkRegisterClinicPatientsCommand, BulkRegisterPatientsResultDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IPatientCodeGenerator _codeGenerator;
+    private readonly IRepository<CustomFieldDefinition>? _customFieldRepo;
 
     public BulkRegisterClinicPatientsCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IPatientCodeGenerator? codeGenerator = null)
+        IPatientCodeGenerator? codeGenerator = null,
+        IRepository<CustomFieldDefinition>? customFieldRepo = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _codeGenerator = codeGenerator ?? ResolveFallbackCodeGenerator(patientRepo, unitOfWork);
+        _customFieldRepo = customFieldRepo;
     }
 
     private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IUnitOfWork unitOfWork)
     {
         var dbContext = (patientRepo.GetType().GetProperty("DbContext")?.GetValue(patientRepo)
@@ -113,15 +117,58 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
             year,
             ct);
 
-        var createdEntities = new List<ClinicPatient>();
+        var createdEntities = new List<Patient>();
         var resultDtos = new List<ClinicPatientDto>();
+
+        List<CustomFieldDefinition>? activeDefs = null;
+        if (_customFieldRepo != null)
+        {
+            activeDefs = await _customFieldRepo.Query()
+                .Where(f => f.IsActive && (f.EntityType == "Patient" || f.EntityType == "ClinicPatient"))
+                .ToListAsync(ct);
+        }
 
         for (int i = 0; i < request.Patients.Count; i++)
         {
             var item = request.Patients[i];
             var patientCode = patientCodes[i];
 
-            var patient = new ClinicPatient
+            var customFields = item.CustomFields != null
+                ? new Dictionary<string, object?>(item.CustomFields)
+                : new Dictionary<string, object?>();
+
+            if (activeDefs != null && activeDefs.Count > 0)
+            {
+                var staticContext = new PatientStaticContext(
+                    Sex: item.Sex,
+                    CivilStatus: item.CivilStatus,
+                    DateOfBirth: item.DateOfBirth);
+
+                CustomFieldValueValidator.ValidateAndNormalize(customFields, activeDefs, "Patient", staticContext);
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.AddressLine) && !customFields.ContainsKey("primary_address_line"))
+                customFields["primary_address_line"] = item.AddressLine.Trim();
+
+            if (!string.IsNullOrWhiteSpace(item.Barangay) && !customFields.ContainsKey("primary_barangay"))
+                customFields["primary_barangay"] = item.Barangay.Trim();
+
+            if (!string.IsNullOrWhiteSpace(item.City) && !customFields.ContainsKey("primary_city"))
+                customFields["primary_city"] = item.City.Trim();
+
+            if (!string.IsNullOrWhiteSpace(item.Province) && !customFields.ContainsKey("primary_province"))
+                customFields["primary_province"] = item.Province.Trim();
+
+            if (!string.IsNullOrWhiteSpace(item.EmergencyContactName) && !customFields.ContainsKey("emergency_contact_name"))
+                customFields["emergency_contact_name"] = item.EmergencyContactName.Trim();
+
+            if (!string.IsNullOrWhiteSpace(item.EmergencyContactPhone) && !customFields.ContainsKey("emergency_contact_phone"))
+                customFields["emergency_contact_phone"] = item.EmergencyContactPhone.Trim();
+
+            if (!string.IsNullOrWhiteSpace(item.EmergencyContactRelationship) && !customFields.ContainsKey("emergency_contact_relationship"))
+                customFields["emergency_contact_relationship"] = item.EmergencyContactRelationship.Trim();
+
+            var patient = new Patient
             {
                 Id = Guid.NewGuid(),
                 TenantId = _clinicContext.TenantId,
@@ -132,29 +179,53 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
                 MiddleName = item.MiddleName?.Trim(),
                 Suffix = item.Suffix?.Trim(),
                 DateOfBirth = item.DateOfBirth,
-                Gender = string.IsNullOrWhiteSpace(item.Gender) ? "Male" : item.Gender,
-                CivilStatus = item.CivilStatus,
+                Sex = RegisterClinicPatientCommandHandler.ParseBiologicalSex(item.Sex),
+                CivilStatus = Enum.TryParse<CivilStatus>(item.CivilStatus, true, out var cs) ? cs : null,
                 ContactNumber = item.ContactNumber.Trim(),
                 Email = item.Email?.Trim(),
-                AddressLine = item.AddressLine?.Trim(),
-                Barangay = item.Barangay?.Trim(),
-                City = item.City?.Trim(),
-                Province = item.Province?.Trim(),
-                EmergencyContactName = item.EmergencyContactName?.Trim(),
-                EmergencyContactPhone = item.EmergencyContactPhone?.Trim(),
-                EmergencyContactRelationship = item.EmergencyContactRelationship?.Trim(),
                 PhilHealthNumber = item.PhilHealthNumber?.Trim(),
                 SeniorCitizenId = item.SeniorCitizenId?.Trim(),
                 PwdId = item.PwdId?.Trim(),
-                BloodType = item.BloodType?.Trim(),
-                Allergies = item.Allergies?.Trim(),
-                ChronicConditions = item.ChronicConditions?.Trim(),
-                Alerts = item.Alerts?.Trim(),
-                CustomFields = item.CustomFields ?? new Dictionary<string, object?>(),
-                VerificationStatus = string.IsNullOrWhiteSpace(item.VerificationStatus) ? "PendingVerification" : item.VerificationStatus,
+                BloodType = BloodTypeParser.TryParse(item.BloodType, out var bt) ? bt : null,
+                CustomFields = customFields,
+                VerificationStatus = Enum.TryParse<PatientVerificationStatus>(item.VerificationStatus, true, out var vs) ? vs : PatientVerificationStatus.PendingVerification,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "BulkRegistrarImport"
             };
+
+            if (!string.IsNullOrWhiteSpace(item.Allergies))
+            {
+                (patient.Allergies ??= new List<PatientAllergy>()).Add(new PatientAllergy
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = patient.Id,
+                    Allergen = item.Allergies.Trim(),
+                    Category = AllergyCategory.Other,
+                    Severity = AllergySeverity.Moderate,
+                    Status = AllergyStatus.Active,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "BulkRegistrarImport"
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.Alerts))
+            {
+                patient.Alerts.Add(new PatientAlert
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = patient.Id,
+                    Title = item.Alerts.Trim(),
+                    Category = PatientAlertCategory.ClinicalSafety,
+                    Severity = PatientAlertSeverity.Warning,
+                    Status = PatientAlertStatus.Active,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "BulkRegistrarImport"
+                });
+            }
 
             await _patientRepo.AddAsync(patient, ct);
             createdEntities.Add(patient);
@@ -173,6 +244,8 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
                 {
                     throw new InvalidOperationException("Failed to bulk register patients after multiple sequence allocation attempts.", ex);
                 }
+
+                await _codeGenerator.SynchronizeTrackerWithMaxExistingAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
 
                 var newCodes = await _codeGenerator.ReserveBatchCodesAsync(
                     _clinicContext.TenantId,

@@ -12,7 +12,9 @@ on:
         default: 'staging'
         type: choice
         options:
+          - development-standalone
           - development
+          - development-device
           - preview
           - staging
           - production
@@ -53,7 +55,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: '24.22.1'
 
       - name: Install dependencies
         run: bun install
@@ -72,6 +74,8 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Build with EAS
+        env:
+          APP_VARIANT: ${{ inputs.profile == 'development-device' && 'development' || inputs.profile }}
         run: |
           eas build \
             --profile ${{ inputs.profile }} \

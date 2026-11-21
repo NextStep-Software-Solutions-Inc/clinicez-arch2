@@ -38,3 +38,7 @@ export async function authenticateBiometric(): Promise<boolean> {
 export async function clearUnlock(): Promise<void> {
   // nothing stored on web
 }
+
+export function subscribeUnlockConfigChange(_listener: () => void): () => void {
+  return () => {};
+}

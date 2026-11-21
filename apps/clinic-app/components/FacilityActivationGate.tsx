@@ -21,10 +21,13 @@ import { CLINIC_LOGO_STORAGE_KEY } from '../context/ClinicContext';
 import {
   resolveTenantContext,
   setActiveTenantContext,
+  setActiveFacilityContext,
   setActiveClinicId,
   clearActiveTenantContext,
   isValidTenantSlug,
+  isRootHostname,
   getStoredTenantSlug,
+  getStoredFacilitySlug,
   parseServiceHost,
   buildServiceHostRegex,
 } from '@shared/safe';
@@ -99,9 +102,9 @@ interface FacilityActivationGateProps {
 export function FacilityActivationGate({ children }: FacilityActivationGateProps) {
   const workspaceRequired = isWorkspaceRequired();
   const initialContext = resolveTenantContext();
-  const initialWorkspace = initialContext.facilitySlug || initialContext.tenantSlug;
+  const initialWorkspace = initialContext.facilitySlug || initialContext.tenantSlug || getStoredFacilitySlug() || getStoredTenantSlug();
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(() => initialWorkspace);
-  const [workspaceInput, setWorkspaceInput] = useState(() => getStoredTenantSlug() || '');
+  const [workspaceInput, setWorkspaceInput] = useState(() => getStoredFacilitySlug() || getStoredTenantSlug() || '');
   const [license, setLicense] = useState<FacilityLicenseStatus | null>(null);
   const [isLoading, setIsLoading] = useState(() => !workspaceRequired || !!initialWorkspace);
   const [isNotFound, setIsNotFound] = useState(false);
@@ -110,6 +113,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [isResolvingWorkspace, setIsResolvingWorkspace] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     const currentCtx = resolveTenantContext();
@@ -124,7 +128,9 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     setError(null);
     setIsNotFound(false);
     try {
-      const [res, err] = await clinicService.getLicenseStatus();
+      const [res, err] = currentWorkspace
+        ? await clinicService.resolveWorkspace(currentWorkspace)
+        : await clinicService.getLicenseStatus();
       if (err) {
         if (err.status === 404) {
           setIsNotFound(true);
@@ -136,10 +142,36 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
           setError(err.message || 'Unable to communicate with clinic service.');
         }
       } else if (res) {
-        const resolvedSlug = res.tenantSlug || res.facilitySlug;
-        if (resolvedSlug && !currentWorkspace) {
-          setActiveTenantContext(resolvedSlug, String(res.clinicId));
-          setActiveWorkspace(resolvedSlug);
+        // Source of truth: once the facility is identified, promote facilitySlug as the true operational workspace
+        const operationalFacilitySlug = res.facilitySlug || res.tenantSlug;
+        if (operationalFacilitySlug) {
+          setActiveFacilityContext(operationalFacilitySlug, String(res.clinicId));
+          if (activeWorkspace !== operationalFacilitySlug) {
+            setActiveWorkspace(operationalFacilitySlug);
+          }
+
+          // On localhost/custom host where query param is used, upgrade URL from ?tenant=... to ?facilitySlug=...
+          if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
+            const host = window.location.hostname.toLowerCase();
+            const rootParts = parseServiceHost(host, getServiceSubdomain());
+            const isLocalOrRoot = !rootParts || !rootParts.facility || isRootHostname(host);
+            if (isLocalOrRoot) {
+              const newUrl = new URL(window.location.href);
+              if (
+                newUrl.searchParams.has('tenant') ||
+                newUrl.searchParams.has('tenantSlug') ||
+                newUrl.searchParams.get('facilitySlug') !== operationalFacilitySlug
+              ) {
+                newUrl.searchParams.delete('tenant');
+                newUrl.searchParams.delete('tenantSlug');
+                newUrl.searchParams.set('facilitySlug', operationalFacilitySlug);
+                window.history.replaceState({}, '', newUrl.toString());
+              }
+            } else if (rootParts && rootParts.facility && rootParts.facility !== operationalFacilitySlug) {
+              window.location.href = buildHostUrl(`${operationalFacilitySlug}.${getServiceSubdomain()}.${rootParts.baseDomain}`);
+              return;
+            }
+          }
         } else if (res.clinicId) {
           setActiveClinicId(String(res.clinicId), currentWorkspace ?? undefined);
         }
@@ -148,7 +180,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         } else if (res.primaryLogoUrl === null) {
           setDeviceItem(CLINIC_LOGO_STORAGE_KEY, null);
         }
-        cacheLicense(res, currentWorkspace || resolvedSlug);
+        cacheLicense(res, operationalFacilitySlug || currentWorkspace);
         setLicense(res);
       }
     } catch (e: any) {
@@ -164,32 +196,81 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     }
   }, [activeWorkspace, workspaceRequired, fetchStatus]);
 
-  const handleSelectWorkspace = () => {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleUrlChange = () => {
+      const currentCtx = resolveTenantContext();
+      const current = currentCtx.facilitySlug || currentCtx.tenantSlug;
+      if (current && current !== activeWorkspace) {
+        setActiveWorkspace(current);
+        setLicense(null);
+        setError(null);
+        setIsNotFound(false);
+      }
+    };
+    window.addEventListener('popstate', handleUrlChange);
+    return () => window.removeEventListener('popstate', handleUrlChange);
+  }, [activeWorkspace]);
+
+  const handleSelectWorkspace = async () => {
     const trimmed = workspaceInput.trim().toLowerCase();
     if (!trimmed || !isValidTenantSlug(trimmed)) {
       setError('Please enter a valid workspace slug (e.g. metro-health).');
       return;
     }
-    setActiveTenantContext(trimmed);
-    setActiveWorkspace(trimmed);
+
+    setIsResolvingWorkspace(true);
     setError(null);
     setSubmitError(null);
-    setLicense(null);
     setIsNotFound(false);
 
-    // If on web and on wildcard root domain, navigate to dedicated tenant subdomain
-    if (typeof window !== 'undefined' && window.location) {
-      const host = window.location.hostname.toLowerCase();
-      const rootParts = parseServiceHost(host, getServiceSubdomain());
-      if (rootParts && !rootParts.facility) {
-        window.location.href = buildHostUrl(`${trimmed}.${getServiceSubdomain()}.${rootParts.baseDomain}`);
+    try {
+      // Resolve facility slug before navigating or changing screen
+      const [res, err] = await clinicService.resolveWorkspace(trimmed);
+      if (err || !res) {
+        setError(err?.message || `Workspace "${trimmed}" was not found or has no active facilities registered.`);
+        setIsResolvingWorkspace(false);
         return;
       }
+
+      const operationalFacilitySlug = res.facilitySlug || res.tenantSlug || trimmed;
+      setActiveFacilityContext(operationalFacilitySlug, String(res.clinicId));
+      setActiveWorkspace(operationalFacilitySlug);
+
+      if (res.primaryLogoUrl) {
+        setDeviceItem(CLINIC_LOGO_STORAGE_KEY, res.primaryLogoUrl);
+      } else if (res.primaryLogoUrl === null) {
+        setDeviceItem(CLINIC_LOGO_STORAGE_KEY, null);
+      }
+      cacheLicense(res, operationalFacilitySlug);
+      setLicense(res);
+
+      // On web, update to the true resolved facility slug
+      if (typeof window !== 'undefined' && window.location) {
+        const host = window.location.hostname.toLowerCase();
+        const rootParts = parseServiceHost(host, getServiceSubdomain());
+        if (rootParts && !rootParts.facility) {
+          window.location.href = buildHostUrl(`${operationalFacilitySlug}.${getServiceSubdomain()}.${rootParts.baseDomain}`);
+          return;
+        }
+        if (window.history?.pushState) {
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.set('facilitySlug', operationalFacilitySlug);
+          newUrl.searchParams.delete('tenant');
+          newUrl.searchParams.delete('tenantSlug');
+          window.history.pushState({}, '', newUrl.toString());
+        }
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Failed to resolve workspace.');
+    } finally {
+      setIsResolvingWorkspace(false);
     }
   };
 
   const handleSwitchWorkspace = () => {
     clearActiveTenantContext();
+    setDeviceItem(CLINIC_LOGO_STORAGE_KEY, null);
     setActiveWorkspace(null);
     setLicense(null);
     setError(null);
@@ -204,6 +285,16 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
       if (tenantParts && tenantParts.facility) {
         window.location.href = buildHostUrl(`${getServiceSubdomain()}.${tenantParts.baseDomain}`);
         return;
+      }
+      if (window.history?.pushState) {
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete('tenant');
+        newUrl.searchParams.delete('tenantSlug');
+        newUrl.searchParams.delete('facility');
+        newUrl.searchParams.delete('facilitySlug');
+        newUrl.searchParams.delete('clinicId');
+        newUrl.searchParams.delete('facilityId');
+        window.history.pushState({}, '', newUrl.toString());
       }
     }
   };
@@ -223,10 +314,10 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
       if (err) {
         setSubmitError(err.message || 'License verification failed.');
       } else if (res) {
-        const resolvedSlug = res.tenantSlug || res.facilitySlug;
-        if (resolvedSlug) {
-          setActiveTenantContext(resolvedSlug, String(res.clinicId));
-          setActiveWorkspace(resolvedSlug);
+        const operationalFacilitySlug = res.facilitySlug || res.tenantSlug;
+        if (operationalFacilitySlug) {
+          setActiveFacilityContext(operationalFacilitySlug, String(res.clinicId));
+          setActiveWorkspace(operationalFacilitySlug);
         } else if (res.clinicId) {
           setActiveClinicId(String(res.clinicId), activeWorkspace || undefined);
         }
@@ -235,7 +326,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         } else if (res.primaryLogoUrl === null) {
           setDeviceItem(CLINIC_LOGO_STORAGE_KEY, null);
         }
-        cacheLicense(res, activeWorkspace || resolvedSlug);
+        cacheLicense(res, operationalFacilitySlug || activeWorkspace);
         setLicense(res);
         setTokenInput('');
         setModalVisible(false);
@@ -266,7 +357,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     return (
       <View style={styles.centerContainer}>
         <View style={[styles.card, styles.loadingCard]}>
-          <BrandMark />
+          <BrandMark activeWorkspace={activeWorkspace} />
           <ThemedText variant="h2" style={styles.centerText}>
             Clinic EZ
           </ThemedText>
@@ -291,7 +382,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.card}>
-            <BrandMark />
+            <ClinicEzMark size={theme.sizes.controlLg} variant="squircle" />
 
             <View style={styles.headerGroup}>
               <ThemedText variant="h1">Choose your workspace</ThemedText>
@@ -312,7 +403,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
               helperText="You can find this in your Portal address, for example metro-health or your clinic slug (e.g. clinic-b)."
             />
 
-            <Button title="Continue" size="lg" onPress={handleSelectWorkspace} />
+            <Button title="Continue" size="lg" loading={isResolvingWorkspace} onPress={handleSelectWorkspace} />
           </View>
         </ScrollView>
       </FacilityLicenseContext.Provider>
@@ -347,7 +438,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.card}>
-            <BrandMark />
+            <ClinicEzMark size={theme.sizes.controlLg} variant="squircle" />
             <Badge label="Workspace not found" variant="emergency" icon="alertCircle" />
 
             <View style={styles.headerGroup}>
@@ -419,7 +510,11 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         >
           <View style={styles.card}>
             <View style={styles.topRow}>
-              <BrandMark />
+              <BrandMark
+                clinicLogo={license?.primaryLogoUrl}
+                clinicName={license?.clinicName}
+                activeWorkspace={activeWorkspace}
+              />
               {workspaceRequired ? (
                 <Button
                   title="Change workspace"
@@ -548,13 +643,27 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
 }
 
 /** Brand mark with optional co-branding support. */
-function BrandMark({
+export function ActivationBrandMark({
   clinicLogo,
   clinicName,
-}: { clinicLogo?: string | null; clinicName?: string | null } = {}) {
-  const cached = readCachedLicense();
-  const effectiveLogo = clinicLogo ?? cached?.primaryLogoUrl ?? getDeviceItem(CLINIC_LOGO_STORAGE_KEY);
-  const effectiveName = clinicName ?? cached?.clinicName;
+  activeWorkspace,
+}: {
+  clinicLogo?: string | null;
+  clinicName?: string | null;
+  activeWorkspace?: string | null;
+} = {}) {
+  // If no workspace is active/resolved and neither clinic logo nor name was explicitly passed,
+  // display only the pure Clinic EZ mark rather than falling back to stale browser cache.
+  if (!activeWorkspace && clinicLogo === undefined && clinicName === undefined) {
+    return <ClinicEzMark size={theme.sizes.controlLg} variant="squircle" />;
+  }
+
+  const cached = activeWorkspace ? readCachedLicense(activeWorkspace) : null;
+  const effectiveLogo =
+    clinicLogo !== undefined
+      ? clinicLogo
+      : (cached?.primaryLogoUrl ?? (activeWorkspace ? getDeviceItem(CLINIC_LOGO_STORAGE_KEY) : null));
+  const effectiveName = clinicName !== undefined ? clinicName : cached?.clinicName;
   return (
     <CoBrandedLogo
       clinicLogo={effectiveLogo}
@@ -564,6 +673,8 @@ function BrandMark({
     />
   );
 }
+
+const BrandMark = ActivationBrandMark;
 
 /** Inline error message in the shared emergency colors. */
 function ErrorNotice({ message }: { message: string }) {

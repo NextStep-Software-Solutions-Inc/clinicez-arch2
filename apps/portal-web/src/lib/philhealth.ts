@@ -73,34 +73,5 @@ export function validatePhilHealthPinMod11(rawPin: string): PhilHealthValidation
 export type MemberType = "MM" | "DD";
 export type PrincipalRelationship = "C" | "S" | "P" | "D";
 
-export interface PhilHealthRelationshipOption {
-  label: string;
-  code: PrincipalRelationship;
-  description: string;
-}
-
-export const PHILHEALTH_RELATIONSHIPS: PhilHealthRelationshipOption[] = [
-  {
-    label: "Child (C)",
-    code: "C",
-    description: "Unmarried and unemployed dependent child under 21 years old",
-  },
-  {
-    label: "Spouse (S)",
-    code: "S",
-    description: "Legitimate spouse who is not currently an active contributing member",
-  },
-  {
-    label: "Parent (P)",
-    code: "P",
-    description: "Parent 60+ years old or permanently disabled dependent upon member",
-  },
-  {
-    label: "Disabled Dependent (D)",
-    code: "D",
-    description: "Child 21+ years old with physical/mental disability dependent upon member",
-  },
-];
-
 // Alias for parity
 export const validatePhilHealthPin = validatePhilHealthPinMod11;

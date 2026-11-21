@@ -36,19 +36,19 @@ public record EvaluateClinicalDecisionSupportQuery(EvaluateCdsRequest Request) :
 
 public class EvaluateClinicalDecisionSupportQueryHandler : IRequestHandler<EvaluateClinicalDecisionSupportQuery, EvaluateCdsResponse>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<ClinicLabOrder> _labOrderRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<LabObservation> _observationRepo;
     private readonly IRepository<PatientAllergy> _allergyRepo;
-    private readonly IRepository<PatientProblem> _problemRepo;
+    private readonly IRepository<PatientMedicalHistory> _problemRepo;
 
     public EvaluateClinicalDecisionSupportQueryHandler(
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<ClinicLabOrder> labOrderRepo,
+        IRepository<Patient> patientRepo,
+        IRepository<LabObservation> observationRepo,
         IRepository<PatientAllergy> allergyRepo,
-        IRepository<PatientProblem> problemRepo)
+        IRepository<PatientMedicalHistory> problemRepo)
     {
         _patientRepo = patientRepo;
-        _labOrderRepo = labOrderRepo;
+        _observationRepo = observationRepo;
         _allergyRepo = allergyRepo;
         _problemRepo = problemRepo;
     }
@@ -67,61 +67,34 @@ public class EvaluateClinicalDecisionSupportQueryHandler : IRequestHandler<Evalu
                 .AsNoTracking()
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (patient != null && string.IsNullOrWhiteSpace(allergies))
-            {
-                allergies = patient.Allergies;
-            }
-
             // Ingest latest clinical lab results if not manually provided
             if (!creatinine.HasValue || !egfr.HasValue || !potassium.HasValue)
             {
-                var recentOrders = await _labOrderRepo.Query(l => l.PatientId == req.PatientId.Value && !string.IsNullOrEmpty(l.ObservationsJson))
-                    .OrderByDescending(l => l.OrderDate)
-                    .Take(5)
+                var recentObservations = await _observationRepo.Query(o => o.LabOrder.PatientId == req.PatientId.Value)
+                    .OrderByDescending(o => o.CreatedAt)
+                    .Take(20)
                     .AsNoTracking()
                     .ToListAsync(cancellationToken);
 
-                foreach (var order in recentOrders)
+                foreach (var obs in recentObservations)
                 {
-                    try
+                    var code = obs.AnalyteCode?.ToUpperInvariant();
+                    var val = obs.NumericValue.HasValue ? (double)obs.NumericValue.Value : (double.TryParse(obs.ValueText, out var v) ? v : (double?)null);
+                    if (val.HasValue)
                     {
-                        var json = order.ObservationsJson!;
-                        using var doc = JsonDocument.Parse(json);
-                        if (doc.RootElement.ValueKind == JsonValueKind.Array)
-                        {
-                            foreach (var element in doc.RootElement.EnumerateArray())
-                            {
-                                var code = element.TryGetProperty("analyteCode", out var c) ? c.GetString() : null;
-                                var valStr = element.TryGetProperty("value", out var v) ? v.GetString() : null;
-
-                                if (double.TryParse(valStr, out var parsedVal))
-                                {
-                                    if (!creatinine.HasValue && (code == "CREA" || code == "CREATININE"))
-                                    {
-                                        creatinine = parsedVal;
-                                    }
-                                    if (!egfr.HasValue && (code == "EGFR" || code == "E-GFR"))
-                                    {
-                                        egfr = parsedVal;
-                                    }
-                                    if (!potassium.HasValue && (code == "K" || code == "POTASSIUM"))
-                                    {
-                                        potassium = parsedVal;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch
-                    {
-                        // Ignore malformed observation json
+                        if (!creatinine.HasValue && (code == "CREA" || code == "CREATININE"))
+                            creatinine = val.Value;
+                        if (!egfr.HasValue && (code == "EGFR" || code == "E-GFR"))
+                            egfr = val.Value;
+                        if (!potassium.HasValue && (code == "K" || code == "POTASSIUM"))
+                            potassium = val.Value;
                     }
                 }
             }
         }
 
         List<PatientAllergy>? structuredAllergies = null;
-        List<PatientProblem>? activeProblems = null;
+        List<PatientMedicalHistory>? activeProblems = null;
 
         if (req.PatientId.HasValue && req.PatientId.Value != Guid.Empty)
         {

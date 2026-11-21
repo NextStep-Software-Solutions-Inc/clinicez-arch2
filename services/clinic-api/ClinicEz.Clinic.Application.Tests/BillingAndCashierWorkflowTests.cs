@@ -152,7 +152,7 @@ public class BillingAndCashierWorkflowTests
         // R1 Requirement: Doctor 1 charges + Doctor 2 charges for same queue encounter merge cleanly
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -224,7 +224,7 @@ public class BillingAndCashierWorkflowTests
         // Line Item Consolidation: Same item (price, doctor, item code) must be consolidated rather than a new row
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -271,7 +271,7 @@ public class BillingAndCashierWorkflowTests
         // R1 Requirement: Strict duplicate blocking applies if existing invoice is Paid and AllowDuplicate is false
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -315,7 +315,7 @@ public class BillingAndCashierWorkflowTests
         // R1 Requirement: AllowDuplicate = true allows subsequent billing
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -435,7 +435,7 @@ public class BillingAndCashierWorkflowTests
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(db, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
 
         var docAId = Guid.NewGuid();
         var docAName = "Dr. Wave Ambray";
@@ -503,7 +503,7 @@ public class BillingAndCashierWorkflowTests
         // R3 Requirement: Clear separation between SOA (INV-...) and Official Receipt (OR-...)
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -539,7 +539,7 @@ public class BillingAndCashierWorkflowTests
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -577,7 +577,7 @@ public class BillingAndCashierWorkflowTests
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -625,7 +625,7 @@ public class BillingAndCashierWorkflowTests
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -671,7 +671,7 @@ public class BillingAndCashierWorkflowTests
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -800,7 +800,7 @@ public class BillingAndCashierWorkflowTests
         // Full lifecycle covering features R1, R2, R3, R4, R5
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -913,7 +913,7 @@ public class BillingAndCashierWorkflowTests
         // gets PWD 20% discount, and completes checkout via split payment.
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 

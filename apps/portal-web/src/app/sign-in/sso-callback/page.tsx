@@ -9,7 +9,12 @@ export default function SSOCallbackPage() {
           Authenticating with Clinic EZ...
         </p>
       </div>
-      <AuthenticateWithRedirectCallback signInForceRedirectUrl="/sync-auth" />
+      <AuthenticateWithRedirectCallback
+        signInForceRedirectUrl="/sync-auth"
+        signUpForceRedirectUrl="/sync-auth"
+        secondFactorUrl="/sign-in"
+        continueSignUpUrl="/sign-up"
+      />
     </div>
   );
 }

@@ -1,49 +1,49 @@
-# Sentinel Handoff — Final Completion & Victory Audit Sign-Off
+# Sentinel Final Handoff Report — Teleconsultation Finalization
 
-## 1. Observation
-- Received user request to implement multi-doctor clinic encounter signing, Statement of Account (SOA) drafting, official receipt issuance, and cashier workstation workflows in ClinicEZ adhering strictly to real clinic practice and `@clinicez/design-tokens` standards.
-- User request recorded verbatim in `/Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/ORIGINAL_REQUEST.md` under `## 2026-10-21T00:05:08Z`.
-- Routed execution to General Path (`teamwork_preview_orchestrator`). Dispatched Project Orchestrator `ad6bd746-c457-48e8-bebc-182ea31b181b` with dedicated workspace `.agents/teamwork/orchestrator_billing_workflow`.
-- Maintained active background monitoring via Progress Reporting Cron (`task-30`) and Liveness Check Cron (`task-32`).
-- Orchestrator directed execution across 5 milestones with parallel E2E test authoring, peer reviews, adversarial challenges, and forensic auditing:
-  - **Milestone 1**: Line-item clinician attribution (`DoctorId`, `DoctorName` on `InvoiceLineItem`), clean removal of `AttendingDoctorName` on `Invoice`, automated EF Core migration `20261021003544_AddDoctorToInvoiceLineItem.cs`, and Draft SOA charge merging in `CreateInvoiceCommand.cs`.
-  - **Milestone 2**: Doctor shares report clinician line-item discovery and revenue calculation, cross-date draft retrieval in `GetInvoicesQuery`.
-  - **Milestone 3 & 4**: Consultations encounter signing UX alignment with Draft SOA posting to cashier; Cashier workstation with 3-way queue tabs (`Active Queue`, `Unsettled / Promissory`, `Billed & Paid Today`), defensive cashiering (quantity steppers, deletions, custom items with doctor attribution), promissory note deferral with receivable tracking, and separate Official Receipt (`OR-...`) generation with Thermal POS, Professional A4, and SOA PDF print options.
-  - **Milestone 5**: 2-iteration adversarial gate review and forensic audit.
-- Upon orchestrator completion claim, Sentinel intercepted the claim and spawned an independent post-victory auditor (`teamwork_preview_victory_auditor`, conversation ID: `d8ed5215-5b05-4463-895f-804d6bd472b8`) with zero shared context from the implementation swarm.
-- Independent auditor completed a 3-phase audit and reported:
-  - **Phase A (Timeline & Provenance)**: PASS (Anomalies: none).
-  - **Phase B (Integrity & Anti-Cheating)**: PASS (Zero facades, genuine domain logic, clean EF Core migration, strict token adherence with 0 raw hex literals).
-  - **Phase C (Independent Test Execution)**: 100% match.
-    - Backend Invoice tests: 59 Passed, 0 Failed
-    - Backend Workflow tests: 16 Passed, 0 Failed
-    - Backend Challenger tests: 9 Passed, 0 Failed
-    - Backend Full Application.Tests: 3,270 Passed, 0 Failed
-    - Frontend Billing targeted tests: 63 Passed, 0 Failed across 3 files
-    - Frontend Full apps/clinic-app suite: 3,489 Passed, 0 Failed across 164 files
-    - TypeScript compile check: 0 errors (`bun x tsc --noEmit`)
-    - Design tokens check: 0 violations
-  - **Final Verdict**: `VICTORY CONFIRMED`.
-- Mandatory cleanup completed: all crons cancelled via `manage_task(action="kill")` and all subagents terminated via `manage_subagents(action="kill_all")`.
+## Observation
+The Teamwork Project Sentinel oversaw the execution of the Teleconsultation Finalization Plan covering requirements R1 through R6 and live user feedback remediation R7.1 through R7.4 across the full stack (`packages/comms-sdk`, `packages/shared-dotnet`, `services/portal-api`, `services/media-broker`, `services/clinic-api`, `services/interop-hub`, `apps/clinic-app`, `apps/portal-web`, and `apps/admin-web`).
 
-## 2. Logic Chain
-1. *Multi-Doctor Visits*: In outpatient clinics, patients frequently consult a general doctor and receive specialized procedures (e.g. dental, diagnostics) during a single queue encounter. Storing a single `AttendingDoctorName` on the invoice entity created false concurrency conflicts (409 Conflict) when the second doctor posted charges.
-2. *Clinician Attribution on Line Items*: Placing `DoctorId` and `DoctorName` directly on `InvoiceLineItem` correctly bounds the financial document to the clinic facility while attributing individual clinical charges to attending practitioners.
-3. *Automated EF Core Migrations*: In compliance with core engineering principles, migration `20261021003544_AddDoctorToInvoiceLineItem.cs` was generated directly using `dotnet ef migrations add` CLI tooling, cleanly dropping `AttendingDoctorName` and adding `DoctorId` / `DoctorName` to `InvoiceLineItems`.
-4. *Document Separation*: Statements of Account (`INV-...`) represent clinical charges and start in `Draft`, while Official Receipts (`OR-...`) are issued strictly upon payment settlement with payment method breakdowns, change/tender details, and BIR compliance notices.
-5. *Defensive Cashiering & Promissory Notes*: Cashiers can flexibly manage line items, apply statutory Senior/PWD discounts, add clinic supplies with doctor attribution, or defer payments via promissory notes without hitting dead-end error alerts.
+An independent post-victory audit was conducted by `teamwork_victory_auditor` (`772bd5f2-63a6-45f2-b52d-3df2bee9a55e`) in `.agents/teamwork/victory_auditor_2` with the authoritative request in `.agents/teamwork/ORIGINAL_REQUEST.md`.
 
-## 3. Caveats
-- Production deployment requires running `dotnet ef database update` to apply migration `20261021003544_AddDoctorToInvoiceLineItem` to PostgreSQL instances.
-- Cashier workstation thermal print rendering targets standard ESC/POS 58mm or 80mm roll printers; professional receipts render in vector A4 format.
+Audit Verdict: **VICTORY CONFIRMED**
+- Phase A (Timeline & Provenance): PASS
+- Phase B (Integrity, Cheating Detection & Guardrails): PASS (all 8 hard invariants certified)
+- Phase C (Independent Test Execution): PASS (3,544 independent tests passed, 0 failed, 100% pass rate)
 
-## 4. Conclusion
-The multi-doctor clinic encounter signing, Statement of Account drafting, official receipt issuance, and cashier workstation workflows in ClinicEZ are 100% implemented, fully verified, independently audited, and confirmed production-ready.
+## Logic Chain
+1. **Interview & Routing**: Task interview completed; approved task prompt recorded in `.agents/teamwork/ORIGINAL_REQUEST.md`; routed to General execution path (`teamwork_orchestrator`).
+2. **Orchestration Execution**: Project Orchestrator executed parallel milestones:
+   - **M12 (Control Plane Metered Licensing & Broker Sync)**: Opt-in PAYG billing entities (`WorkspaceTeleconsultBilling`, `TeleconsultUsageRecord`), EF Core migrations, media overdraft protection (`AllowOverdraft`), abandoned session cleanup.
+   - **M13 (Portal Web & Admin Web PAYG Billing UI)**: `TeleconsultPaygCard.tsx`, `teleconsultBilling.service.ts`, and SuperAdmin rate/credit controls in `TenantEntitlementsCard.tsx`.
+   - **M14 (Clinic Governance & Session Termination)**: `FacilitySettings.EnableTeleconsultation`, EF migrations, `ForbiddenException` enforcement on un-entitled toggle, license cascade, modality gating in appointments/schedule modals, and atomic interop revocation.
+   - **M15 (CallStage Participants Roster, PIN & Screen Sharing)**: Right-hand docked roster panel (`btn-toggle-participants`), visible 6-digit access PIN and cached invite state (no OTP rotation on copy), decoupled local camera/screen share tracks, contain aspect ratio promotion, landscape PiP, and 5-min solo warning with 2-min auto-leave countdown.
+   - **M17 (Live User Feedback Remediation R7.1–R7.4)**:
+     * R7.1: Tailwind v4 `@source` directive in `globals.css` resolving collapsed waiting room and floating toolbar layouts; real browser `getUserMedia` camera/mic preview and volume meter in waiting room.
+     * R7.2: Zero Unicode emojis and zero uppercase text fallbacks in teleconsultation UI; 22 inline Lucide SVGs; exact 17-key invariant on `COMMS_ICON_MAP`.
+     * R7.3: Complete purge of PhilHealth YAKAP cards, badges, and prepayment bypass logic from teleconsultation.
+     * R7.4: Zero-PHI metadata hydration via AES-256-GCM encrypted guest context; real clinic, clinician, and schedule display; participant roster deduplication so toolbar badge count strictly matches rows under `IN ROOM`.
+   - **E2E Testing Track (E2E-M1..M4) & M16 (Final Integration)**: Published `TEST_READY.md` (v3.0.0) certifying full-ecosystem automated verification.
+3. **Independent Victory Audit**: Spawned `teamwork_victory_auditor`. Verified 3,544 automated tests independently with 0 failures, confirmed zero cheating patterns, zero token/host violations, port 8081 health, and zero git commits.
 
-## 5. Verification Method
-- Independent Victory Auditor handoff: `/Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/victory_auditor_billing_workflow/handoff.md`
-- Solution Build: `dotnet build CLINICEZ.sln` -> 0 warnings, 0 errors
-- Backend Tests: `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj` -> 3,270 passed, 0 failed
-- Frontend Tests: `bun test apps/clinic-app/tests/billingReceiptAndSoaReview.test.ts apps/clinic-app/tests/billing_and_cashier_mode.test.ts apps/clinic-app/tests/challenger_frontend_billing_adversarial.test.ts` -> 63 passed, 0 failed
-- Frontend Typecheck: `cd apps/clinic-app && bun x tsc --noEmit` -> 0 errors
-- Token Guard: `bun apps/clinic-app/scripts/check-tokens.mjs --strict` -> 0 violations
+## Caveats
+- No git commits or pushes were performed in the worktree (`git log -1` remains `b58f6e3b84b996aaad4475f80cadf899791ba8ef`). All changes are staged/unstaged in the working directory ready for version control by the operator.
+- The live Expo dev server on port 8081 remains running continuously on PID 29562 untouched.
+
+## Conclusion
+The ClinicEZ teleconsultation finalization capability is 100% complete, fully implemented, peer-reviewed, adversarial-tested, and independently verified against all specifications in `implementation_plan.md` and user feedback mandates.
+
+## Verification Method
+Independently executed:
+- Media Broker: `dotnet test services/media-broker/ClinicEz.MediaBroker.Tests` (90 passed)
+- Portal API: `dotnet test services/portal-api/ClinicEz.Portal.Tests` (1,710 passed)
+- Interop Hub: `dotnet test services/interop-hub/ClinicEz.Interop.Tests` (190 passed)
+- Clinic API: `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests --filter "FullyQualifiedName~Teleconsult|FullyQualifiedName~License|FullyQualifiedName~Entitlements"` (660 passed)
+- Patient API: `dotnet test services/patient-api/ClinicEz.Patient.Application.Tests --filter "FullyQualifiedName~CallStateChanged"` (7 passed)
+- Comms SDK: `bun test tests && bun run typecheck` (592 passed, 0 TS errors)
+- Clinic App: `bun test tests/commsBrandTheming.test.ts ... && bun test tests/comms_issue139_resilience_and_polish.test.ts && bun run typecheck` (204 passed, 0 TS errors)
+- Portal Web: `bun test tests/guestTeleconsultJoin.test.tsx ... && bunx tsc --noEmit` (86 passed, 0 TS errors)
+- Admin Web: `bun test tests/teleconsultSuperAdminOverrides.test.ts ... && bunx tsc --noEmit` (48 passed, 0 TS errors)
+- Patient App: `bun test tests/clinical-safety-records.test.ts ... && bun run typecheck` (47 passed, 0 TS errors)
+- Token Linter: `bun run lint:tokens` (0 violations)
+- Host Linter: `check-no-external-hosts.mjs` across clinic-app and comms-sdk (0 violations)
+- Total independent tests: 3,544 passed, 0 failed (100% PASS).

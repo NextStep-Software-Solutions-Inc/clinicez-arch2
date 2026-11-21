@@ -5,7 +5,6 @@ import type { StaticScreenProps } from '@react-navigation/native';
 import { format } from 'date-fns';
 import { and, isNull, eq } from 'drizzle-orm';
 import ThemedText from '../../../components/ui/ThemedText';
-import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import { AppIcon } from '../../../components/ui/Icon';
 import { Skeleton } from '../../../components/ui/Skeleton';
@@ -25,6 +24,8 @@ type Props = StaticScreenProps<
   | {
       /** Pre-selected file IDs (e.g. when editing an existing draft) */
       preselectedIds?: string[];
+      appointmentId?: string;
+      id?: string;
     }
   | undefined
 >;
@@ -119,10 +120,12 @@ function FileRow({
 }
 
 export default function AttachFilesScreen({ route }: Props) {
-  const { colors, spacing, radii } = useAppTheme();
+  const { spacing, radii } = useAppTheme();
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
-  const preselectedIds = route.params?.preselectedIds ?? peekAttachedFileSelection();
+  const rawParams = (route?.params ?? {}) as any;
+  const appointmentId = rawParams?.appointmentId ?? rawParams?.id;
+  const preselectedIds = rawParams?.preselectedIds ?? peekAttachedFileSelection();
 
   const [files, setFiles] = useState<FileMetadata[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -166,20 +169,17 @@ export default function AttachFilesScreen({ route }: Props) {
     navigation.navigate('Main', {
       screen: 'BottomTabs',
       params: {
-        screen: 'FilesScreen',
-        params: { screen: 'FilesUploadScreen', params: { folderId: null } },
+        screen: 'RecordsScreen',
+        params: { screen: 'FilesUploadScreen' },
       },
     });
   };
 
   return (
     <Screen width="form" contentContainerStyle={{ gap: spacing.lg }}>
-      <View style={styles.header}>
-        <ThemedText variant="h2">Attach Files</ThemedText>
-        <ThemedText variant="body" color="textSecondary">
-          Select files from your storage to share with the clinic.
-        </ThemedText>
-      </View>
+      <ThemedText variant="small" color="textSecondary">
+        Select files from your health records storage to share with the clinic.
+      </ThemedText>
 
       {isLoading ? (
         <View style={{ gap: spacing.sm }}>
@@ -188,14 +188,13 @@ export default function AttachFilesScreen({ route }: Props) {
           <Skeleton height={64} radius={radii.lg} />
         </View>
       ) : files.length === 0 ? (
-        <Card padding="lg" style={styles.emptyCard}>
-          <EmptyState
-            title="No files yet"
-            message="Upload files to your Clinic EZ storage first, then you can attach them to appointments."
-            actionLabel="Upload a File"
-            onActionPress={handleUploadNew}
-          />
-        </Card>
+        <EmptyState
+          icon="files"
+          title="No files yet"
+          message="Upload files to your Clinic EZ storage first, then you can attach them to appointments."
+          actionLabel="Upload a File"
+          onActionPress={handleUploadNew}
+        />
       ) : (
         <View style={{ gap: spacing.sm }}>
           {files.map((file) => (
@@ -243,13 +242,6 @@ export default function AttachFilesScreen({ route }: Props) {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-  },
-  header: {
-    gap: 4,
-  },
-  emptyCard: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   fileRow: {
     flexDirection: 'row',

@@ -2,6 +2,8 @@ import React from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, Button, SkeletonList, ErrorState, Input } from '../ui';
+import { useClinic } from '../../context/ClinicContext';
+import { formatClinicDateTime } from '../../services/clinicService';
 import { usePhilHealthCatalog } from '../../utils/usePhilHealthCatalog';
 import type { PhilHealthLibraryName } from '../../services/philHealthCatalogService';
 
@@ -182,6 +184,7 @@ export interface OrganSystemsExamSectionProps {
   title?: string;
   helperText?: string;
   savingStatus?: 'idle' | 'saving' | 'saved' | 'error';
+  lastSavedAt?: string | null;
 }
 
 /** Complete Organ Systems Examination section with horizontally scrollable options. */
@@ -195,7 +198,12 @@ export default function OrganSystemsExamSection({
   title = 'Organ systems examination',
   helperText = 'Select examination findings for each system. Scroll horizontally across findings to review all clinical options.',
   savingStatus = 'idle',
+  lastSavedAt = null,
 }: OrganSystemsExamSectionProps) {
+  const { dateFormat, timeFormat, timeZoneId } = useClinic();
+  const formattedLastSaved = lastSavedAt
+    ? formatClinicDateTime(lastSavedAt, { dateFormat, timeFormat, timeZoneId, fallback: '' })
+    : '';
   const abnormalCount = ORGAN_SYSTEMS.filter((sys) => {
     const val = values[sys.key];
     return val && val !== sys.defaultNormalCode;
@@ -213,16 +221,21 @@ export default function OrganSystemsExamSection({
           />
           {savingStatus === 'saving' ? (
             <Badge label="Saving findings..." variant="warning" size="sm" icon="clock" />
-          ) : savingStatus === 'saved' ? (
-            <Badge label="Saved to clinical record" variant="routine" size="sm" icon="check" />
           ) : savingStatus === 'error' ? (
             <Badge label="Autosave error" variant="emergency" size="sm" icon="alertCircle" />
+          ) : savingStatus === 'saved' || Boolean(formattedLastSaved) ? (
+            <Badge
+              label={formattedLastSaved ? `Last saved ${formattedLastSaved}` : 'Last saved just now'}
+              variant="routine"
+              size="sm"
+              icon="check"
+            />
           ) : null}
         </View>
 
-        {onSetAllNormal ? (
+        {onSetAllNormal && abnormalCount > 0 ? (
           <Button
-            title="All Essentially Normal"
+            title="Set All Normal"
             variant="outline"
             size="sm"
             icon="check"

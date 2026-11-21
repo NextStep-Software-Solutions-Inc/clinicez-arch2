@@ -1,16 +1,17 @@
-/** Upload limits mirrored from patient-api (`<= 10 MB, pdf/jpeg/png/heic`). */
+/** Upload limits mirrored from patient-api (`<= 25 MB, pdf/jpeg/png/webp/heic`). */
 
-export const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+export const UPLOAD_MAX_BYTES = 25 * 1024 * 1024; // 25 MB
 
 export const UPLOAD_ALLOWED_MIME_TYPES: readonly string[] = [
   'application/pdf',
   'image/jpeg',
   'image/png',
+  'image/webp',
   'image/heic',
   'image/heif',
 ];
 
-export const UPLOAD_LIMITS_HINT = 'PDF, JPEG, PNG or HEIC, up to 10 MB.';
+export const UPLOAD_LIMITS_HINT = 'PDF, JPEG, PNG, WEBP or HEIC, up to 25 MB.';
 
 export interface UploadCandidate {
   mimeType: string | null | undefined;

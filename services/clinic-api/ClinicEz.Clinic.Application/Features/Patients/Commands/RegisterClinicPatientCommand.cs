@@ -3,13 +3,17 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Exceptions;
 using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
+using ClinicEz.Clinic.Application.Features.CustomFields.Validation;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Workspace;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,7 +25,7 @@ public sealed record RegisterClinicPatientCommand(
     string? MiddleName,
     string? Suffix,
     DateOnly DateOfBirth,
-    string Gender,
+    string Sex,
     string? CivilStatus,
     string ContactNumber,
     string? Email,
@@ -39,7 +43,7 @@ public sealed record RegisterClinicPatientCommand(
     string? Allergies,
     string? ChronicConditions,
     string? Alerts,
-    Guid? SyncPatientId = null,
+    Guid? CloudPatientId = null,
     System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
     string VerificationStatus = "Verified",
     List<CreateAllergyRequest>? StructuredAllergies = null,
@@ -50,30 +54,48 @@ public sealed record RegisterClinicPatientCommand(
     Guid? DoctorId = null,
     string? DoctorName = null,
     Guid? RoomId = null,
-    string? RoomOrStation = null) : IRequest<ClinicPatientDto>;
+    string? RoomOrStation = null,
+    DateOnly? QueueDate = null,
+    string? LandlineNumber = null,
+    string? MaidenLastName = null,
+    string? PreferredName = null,
+    string? Nationality = null,
+    string? Religion = null,
+    Guid? SyncPatientId = null,
+    string? GenderIdentity = null,
+    List<PatientAddressDto>? Addresses = null,
+    List<PatientGuardianDto>? Guardians = null,
+    string? PatientCode = null,
+    string? SeriesPrefix = null) : IRequest<ClinicPatientDto>;
 
 public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<RegisterClinicPatientCommand, ClinicPatientDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IRepository<PatientAllergy>? _allergyRepo;
     private readonly IRepository<QueueItem>? _queueRepo;
-    private readonly IRepository<PatientPastMedicalHistory>? _medicalRepo;
+    private readonly IRepository<PatientMedicalHistory>? _medicalRepo;
     private readonly IPatientCodeGenerator _codeGenerator;
     private readonly IRepository<StaffMember>? _staffRepo;
-    private readonly IRepository<ClinicRoom>? _roomRepo;
+    private readonly IRepository<Room>? _roomRepo;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
+    private readonly IRepository<CustomFieldDefinition>? _customFieldRepo;
 
     public RegisterClinicPatientCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IRepository<PatientAllergy>? allergyRepo = null,
         IRepository<QueueItem>? queueRepo = null,
-        IRepository<PatientPastMedicalHistory>? medicalRepo = null,
+        IRepository<PatientMedicalHistory>? medicalRepo = null,
         IPatientCodeGenerator? codeGenerator = null,
         IRepository<StaffMember>? staffRepo = null,
-        IRepository<ClinicRoom>? roomRepo = null)
+        IRepository<Room>? roomRepo = null,
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<FacilitySettings>? settingsRepo = null,
+        IRepository<CustomFieldDefinition>? customFieldRepo = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
@@ -84,10 +106,13 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         _codeGenerator = codeGenerator ?? ResolveFallbackCodeGenerator(patientRepo, unitOfWork);
         _staffRepo = staffRepo;
         _roomRepo = roomRepo;
+        _workspaceProfiles = workspaceProfiles;
+        _settingsRepo = settingsRepo;
+        _customFieldRepo = customFieldRepo;
     }
 
     private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IUnitOfWork unitOfWork)
     {
         var dbContext = (patientRepo.GetType().GetProperty("DbContext")?.GetValue(patientRepo)
@@ -112,9 +137,67 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
     public async Task<ClinicPatientDto> Handle(RegisterClinicPatientCommand request, CancellationToken ct)
     {
         var year = DateTime.UtcNow.Year;
-        var patientCode = await _codeGenerator.GenerateNextCodeAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
+        var hasExplicitPatientCode = !string.IsNullOrWhiteSpace(request.PatientCode);
+        string patientCode;
+        if (hasExplicitPatientCode)
+        {
+            patientCode = request.PatientCode!.Trim();
+            var existingDuplicateCode = await _patientRepo
+                .Query(p => p.ClinicId == _clinicContext.ClinicId && p.PatientCode == patientCode)
+                .AnyAsync(ct);
 
-        var patient = new ClinicPatient
+            if (existingDuplicateCode)
+            {
+                throw new DuplicatePatientCodeConflictException(patientCode);
+            }
+        }
+        else
+        {
+            patientCode = await _codeGenerator.GenerateNextCodeAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
+        }
+
+        // Prepare custom fields dictionary and map intake address / emergency contact
+        var customFields = request.CustomFields != null
+            ? new System.Collections.Generic.Dictionary<string, object?>(request.CustomFields)
+            : new System.Collections.Generic.Dictionary<string, object?>();
+
+        if (_customFieldRepo != null)
+        {
+            var staticContext = new PatientStaticContext(
+                Sex: request.Sex,
+                CivilStatus: request.CivilStatus,
+                DateOfBirth: request.DateOfBirth);
+
+            await CustomFieldValueValidator.ValidateAndNormalizeAsync(
+                customFields,
+                _customFieldRepo,
+                "Patient",
+                staticContext,
+                ct);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.AddressLine) && !customFields.ContainsKey("primary_address_line"))
+            customFields["primary_address_line"] = request.AddressLine.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.Barangay) && !customFields.ContainsKey("primary_barangay"))
+            customFields["primary_barangay"] = request.Barangay.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.City) && !customFields.ContainsKey("primary_city"))
+            customFields["primary_city"] = request.City.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.Province) && !customFields.ContainsKey("primary_province"))
+            customFields["primary_province"] = request.Province.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.EmergencyContactName) && !customFields.ContainsKey("emergency_contact_name"))
+            customFields["emergency_contact_name"] = request.EmergencyContactName.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.EmergencyContactPhone) && !customFields.ContainsKey("emergency_contact_phone"))
+            customFields["emergency_contact_phone"] = request.EmergencyContactPhone.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.EmergencyContactRelationship) && !customFields.ContainsKey("emergency_contact_relationship"))
+            customFields["emergency_contact_relationship"] = request.EmergencyContactRelationship.Trim();
+
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,
@@ -125,38 +208,111 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             MiddleName = request.MiddleName?.Trim(),
             Suffix = request.Suffix?.Trim(),
             DateOfBirth = request.DateOfBirth,
-            Gender = string.IsNullOrWhiteSpace(request.Gender) ? "Male" : request.Gender,
-            CivilStatus = request.CivilStatus,
+            Sex = ParseBiologicalSex(request.Sex),
+            GenderIdentity = NormalizeGenderIdentity(request.GenderIdentity),
+            CivilStatus = ParseCivilStatus(request.CivilStatus),
             ContactNumber = request.ContactNumber.Trim(),
             Email = request.Email?.Trim(),
-            AddressLine = request.AddressLine?.Trim(),
-            Barangay = request.Barangay?.Trim(),
-            City = request.City?.Trim(),
-            Province = request.Province?.Trim(),
-            EmergencyContactName = request.EmergencyContactName?.Trim(),
-            EmergencyContactPhone = request.EmergencyContactPhone?.Trim(),
-            EmergencyContactRelationship = request.EmergencyContactRelationship?.Trim(),
             PhilHealthNumber = request.PhilHealthNumber?.Trim(),
             SeniorCitizenId = request.SeniorCitizenId?.Trim(),
             PwdId = request.PwdId?.Trim(),
-            BloodType = request.BloodType?.Trim(),
-            Allergies = request.Allergies?.Trim(),
-            ChronicConditions = request.ChronicConditions?.Trim(),
-            Alerts = request.Alerts?.Trim(),
-            SyncPatientId = request.SyncPatientId,
-            CustomFields = request.CustomFields ?? new System.Collections.Generic.Dictionary<string, object?>(),
-            VerificationStatus = string.IsNullOrWhiteSpace(request.VerificationStatus) ? "Verified" : request.VerificationStatus,
+            BloodType = BloodTypeParser.TryParse(request.BloodType, out var bt) ? bt : null,
+            LandlineNumber = request.LandlineNumber?.Trim(),
+            MaidenLastName = request.MaidenLastName?.Trim(),
+            PreferredName = request.PreferredName?.Trim(),
+            Nationality = request.Nationality?.Trim(),
+            Religion = request.Religion?.Trim(),
+            EmergencyContactName = NullIfWhiteSpace(request.EmergencyContactName),
+            EmergencyContactNumber = NullIfWhiteSpace(request.EmergencyContactPhone),
+            EmergencyContactRelationship = NullIfWhiteSpace(request.EmergencyContactRelationship),
+            CustomFields = customFields,
+            VerificationStatus = Enum.TryParse<PatientVerificationStatus>(request.VerificationStatus, true, out var vs) ? vs : PatientVerificationStatus.Verified,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicStaff"
         };
+        var effectiveCloudPatientId = request.CloudPatientId ?? request.SyncPatientId;
+        if (effectiveCloudPatientId.HasValue && effectiveCloudPatientId.Value != Guid.Empty)
+        {
+            patient.LinkCloudAccount(effectiveCloudPatientId.Value, null);
+        }
+
+        var actor = _clinicContext.StaffId?.ToString() ?? "ClinicStaff";
+
+        if (request.Addresses != null && request.Addresses.Count > 0)
+        {
+            var deduplicatedAddresses = request.Addresses
+                .Where(HasAddressContent)
+                .GroupBy(a => ParseAddressType(a.AddressType))
+                .Select(g => (AddressType: g.Key, Dto: g.Last()));
+
+            foreach (var (addressType, addr) in deduplicatedAddresses)
+            {
+                patient.Addresses.Add(new PatientAddress
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = patient.Id,
+                    AddressType = addressType,
+                    IsSameAsPermanent = addr.IsSameAsPermanent,
+                    RegionPsgc = NullIfWhiteSpace(addr.RegionPsgc),
+                    ProvincePsgc = NullIfWhiteSpace(addr.ProvincePsgc),
+                    CityMunicipalityPsgc = NullIfWhiteSpace(addr.CityMunicipalityPsgc),
+                    BarangayPsgc = NullIfWhiteSpace(addr.BarangayPsgc),
+                    RegionName = NullIfWhiteSpace(addr.RegionName),
+                    ProvinceName = NullIfWhiteSpace(addr.ProvinceName),
+                    CityMunicipalityName = NullIfWhiteSpace(addr.CityMunicipalityName),
+                    BarangayName = NullIfWhiteSpace(addr.BarangayName),
+                    StreetAddress = addr.StreetAddress?.Trim() ?? string.Empty,
+                    ZipCode = NullIfWhiteSpace(addr.ZipCode),
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = actor
+                });
+            }
+        }
+
+        if (request.Guardians != null && request.Guardians.Count > 0)
+        {
+            foreach (var g in request.Guardians.Where(HasGuardianContent))
+            {
+                var relCode = NormalizeGuardianRelationshipCode(g.RelationshipCode);
+                var guardian = new PatientGuardian
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = patient.Id,
+                    FirstName = g.FirstName.Trim(),
+                    LastName = g.LastName.Trim(),
+                    MiddleName = NullIfWhiteSpace(g.MiddleName),
+                    Suffix = NullIfWhiteSpace(g.Suffix),
+                    BirthDate = g.BirthDate,
+                    Sex = string.IsNullOrWhiteSpace(g.Sex) ? null : ParseBiologicalSex(g.Sex),
+                    ContactNumber = g.ContactNumber?.Trim() ?? string.Empty,
+                    RelationshipCode = relCode,
+                    RelationshipOtherSpecify = NullIfWhiteSpace(g.RelationshipOtherSpecify),
+                    PhilHealthPin = NormalizeGuardianPin(g.PhilHealthPin),
+                    IsPrimaryGuardian = g.IsPrimaryGuardian,
+                    IsEmergencyContact = g.IsEmergencyContact,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = actor
+                };
+                patient.Guardians.Add(guardian);
+
+                if (guardian.IsEmergencyContact && string.IsNullOrWhiteSpace(patient.EmergencyContactName))
+                {
+                    patient.EmergencyContactName = $"{guardian.FirstName} {guardian.LastName}".Trim();
+                    patient.EmergencyContactNumber = NullIfWhiteSpace(guardian.ContactNumber);
+                    patient.EmergencyContactRelationship = guardian.RelationshipOtherSpecify ?? guardian.RelationshipCode;
+                }
+            }
+        }
 
         await _patientRepo.AddAsync(patient, ct);
 
-        // 1. Ingest Structured Allergies
-        if (request.StructuredAllergies != null && request.StructuredAllergies.Count > 0 && _allergyRepo != null)
+        // 1. Ingest Structured or Legacy String Allergies
+        if (request.StructuredAllergies != null && request.StructuredAllergies.Count > 0)
         {
-            var recordedAllergens = new List<string>();
-
             foreach (var allergyReq in request.StructuredAllergies)
             {
                 if (string.IsNullOrWhiteSpace(allergyReq.Allergen)) continue;
@@ -171,7 +327,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
 
                 var allergy = new PatientAllergy
                 {
-                    Id = Guid.NewGuid(),
+                    Id = _allergyRepo != null ? Guid.NewGuid() : Guid.Empty,
                     TenantId = _clinicContext.TenantId,
                     ClinicId = _clinicContext.ClinicId,
                     PatientId = patient.Id,
@@ -188,21 +344,83 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                     CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicStaff"
                 };
 
-                await _allergyRepo.AddAsync(allergy, ct);
-                recordedAllergens.Add(allergy.Allergen);
-            }
-
-            // Keep patient.Allergies summary string updated in sync
-            if (recordedAllergens.Count > 0)
-            {
-                var summary = string.Join(", ", recordedAllergens);
-                if (string.IsNullOrWhiteSpace(patient.Allergies))
+                (patient.Allergies ??= new List<PatientAllergy>()).Add(allergy);
+                if (_allergyRepo != null)
                 {
-                    patient.Allergies = summary;
+                    await _allergyRepo.AddAsync(allergy, ct);
                 }
-                else
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(request.Allergies))
+        {
+            var allergens = request.Allergies.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var a in allergens)
+            {
+                var allergy = new PatientAllergy
                 {
-                    patient.Allergies = $"{patient.Allergies}, {summary}";
+                    Id = _allergyRepo != null ? Guid.NewGuid() : Guid.Empty,
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = patient.Id,
+                    Category = AllergyCategory.Other,
+                    Allergen = a,
+                    Severity = AllergySeverity.Moderate,
+                    Status = AllergyStatus.Active,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicStaff"
+                };
+                (patient.Allergies ??= new List<PatientAllergy>()).Add(allergy);
+                if (_allergyRepo != null)
+                {
+                    await _allergyRepo.AddAsync(allergy, ct);
+                }
+            }
+        }
+
+        // 1b. Ingest Alerts
+        if (!string.IsNullOrWhiteSpace(request.Alerts))
+        {
+            var alertTitles = request.Alerts.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var title in alertTitles)
+            {
+                var alert = new PatientAlert
+                {
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = patient.Id,
+                    Title = title,
+                    Category = PatientAlertCategory.ClinicalSafety,
+                    Status = PatientAlertStatus.Active,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicStaff"
+                };
+                patient.Alerts.Add(alert);
+            }
+            patient.HasActiveSafetyAlert = alertTitles.Length > 0;
+        }
+
+        if ((request.MedicalHistories == null || request.MedicalHistories.Count == 0) && !string.IsNullOrWhiteSpace(request.ChronicConditions))
+        {
+            var split = request.ChronicConditions.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var cond in split)
+            {
+                if (!patient.MedicalHistories.Any(m => string.Equals(m.ConditionTitle, cond, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var hist = new PatientMedicalHistory
+                    {
+                        Id = _medicalRepo != null ? Guid.NewGuid() : Guid.Empty,
+                        TenantId = _clinicContext.TenantId,
+                        ClinicId = _clinicContext.ClinicId,
+                        PatientId = patient.Id,
+                        Category = MedicalHistoryCategory.MedicalHistory,
+                        ConditionTitle = cond,
+                        IsChronicNcd = true,
+                        Status = ProblemStatus.Active,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicStaff"
+                    };
+                    if (_medicalRepo != null) await _medicalRepo.AddAsync(hist, ct);
+                    patient.MedicalHistories.Add(hist);
                 }
             }
         }
@@ -210,45 +428,33 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         // 2. Ingest Structured Medical Histories
         if (request.MedicalHistories != null && request.MedicalHistories.Count > 0 && _medicalRepo != null)
         {
-            var recordedConditions = new List<string>();
-
             foreach (var medReq in request.MedicalHistories)
             {
                 if (string.IsNullOrWhiteSpace(medReq.ConditionTitle)) continue;
 
-                var history = new PatientPastMedicalHistory
+                var history = new PatientMedicalHistory
                 {
                     Id = medReq.Id.HasValue && medReq.Id.Value != Guid.Empty ? medReq.Id.Value : Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,
                     ClinicId = _clinicContext.ClinicId,
                     PatientId = patient.Id,
+                    Category = MedicalHistoryCategory.MedicalHistory,
                     ConditionTitle = medReq.ConditionTitle.Trim(),
                     PhilHealthMdiseaseCode = medReq.PhilHealthMdiseaseCode?.Trim(),
                     Icd10Code = medReq.Icd10Code?.Trim(),
                     SpecificDescription = medReq.SpecificDescription?.Trim(),
                     OnsetDate = medReq.OnsetDate,
-                    IsResolved = medReq.IsResolved,
+                    Status = medReq.IsResolved ? ProblemStatus.Resolved : ProblemStatus.Active,
                     ClinicalNotes = medReq.ClinicalNotes?.Trim(),
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicStaff"
                 };
 
                 await _medicalRepo.AddAsync(history, ct);
-                if (!patient.PastMedicalHistories.Any(x => x.Id == history.Id))
+                if (!patient.MedicalHistories.Any(x => x.Id == history.Id))
                 {
-                    patient.PastMedicalHistories.Add(history);
+                    patient.MedicalHistories.Add(history);
                 }
-
-                var desc = !string.IsNullOrWhiteSpace(history.SpecificDescription)
-                    ? history.SpecificDescription
-                    : history.ConditionTitle;
-                recordedConditions.Add(desc);
-            }
-
-            if (recordedConditions.Count > 0)
-            {
-                var summary = string.Join(", ", recordedConditions);
-                patient.ChronicConditions = summary;
             }
         }
 
@@ -256,14 +462,20 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         QueueItem? queueItem = null;
         if (request.SendToTriage && _queueRepo != null)
         {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var lastSequence = await _queueRepo.Query(q =>
-                q.ClinicId == _clinicContext.ClinicId &&
-                q.QueueDate == today)
-                .MaxAsync(q => (int?)q.SequenceNumber, ct) ?? 0;
+            var today = request.QueueDate
+                ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, ct, _settingsRepo);
+            var isSeniorOrPwd = PatientPriorityHelper.IsSeniorOrPwd(patient, today);
+            var seriesPrefix = PatientPriorityHelper.ResolveSeriesPrefix(
+                VisitType.RoutineCheckup,
+                isSeniorOrPwd,
+                request.SeriesPrefix);
 
-            var nextSequence = lastSequence + 1;
-            var queueNumber = $"Q-{nextSequence:D3}";
+            var (nextSequence, queueNumber) = await QueueSeriesHelper.GetNextQueueSequenceAsync(
+                _queueRepo,
+                _clinicContext.ClinicId,
+                today,
+                seriesPrefix,
+                ct);
 
             var priority = QueuePriority.Routine;
             if (!string.IsNullOrWhiteSpace(request.Priority))
@@ -356,13 +568,31 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             await _queueRepo.AddAsync(queueItem, ct);
         }
 
+        string? allergiesSummary = null;
+        if (!string.IsNullOrWhiteSpace(request.Allergies) && request.StructuredAllergies != null && request.StructuredAllergies.Count > 0)
+        {
+            var existingItems = request.Allergies.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var structuredItems = patient.Allergies?.Select(a => a.Allergen).Where(a => !existingItems.Contains(a, StringComparer.OrdinalIgnoreCase)) ?? Enumerable.Empty<string>();
+            allergiesSummary = string.Join(", ", existingItems.Concat(structuredItems));
+        }
+
+        if (hasExplicitPatientCode)
+        {
+            await _unitOfWork.SaveChangesAsync(ct);
+            if (patient.PatientCode.StartsWith($"PAT-{year}-", StringComparison.OrdinalIgnoreCase))
+            {
+                await _codeGenerator.SynchronizeTrackerWithMaxExistingAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
+            }
+            return MapToDto(patient, queueItem?.QueueNumber, queueItem?.Id, allergiesSummary);
+        }
+
         const int maxAttempts = 3;
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
             try
             {
                 await _unitOfWork.SaveChangesAsync(ct);
-                return MapToDto(patient, queueItem?.QueueNumber, queueItem?.Id);
+                return MapToDto(patient, queueItem?.QueueNumber, queueItem?.Id, allergiesSummary);
             }
             catch (DbUpdateException ex) when (PatientCodeCollisionDetector.IsPatientCodeCollision(ex))
             {
@@ -371,6 +601,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                     throw new InvalidOperationException("Failed to register patient after multiple sequence allocation attempts.", ex);
                 }
 
+                await _codeGenerator.SynchronizeTrackerWithMaxExistingAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
                 var nextCode = await _codeGenerator.GenerateNextCodeAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
                 patient.PatientCode = nextCode;
             }
@@ -379,9 +610,11 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         throw new InvalidOperationException("Failed to register patient after multiple sequence allocation attempts.");
     }
 
-    public static ClinicPatientDto MapToDto(ClinicPatient p) => MapToDto(p, null, null);
+    public static ClinicPatientDto MapToDto(Patient p) => MapToDto(p, null, null, null);
 
-    public static ClinicPatientDto MapToDto(ClinicPatient p, string? activeQueueTicket, Guid? activeQueueItemId)
+    public static ClinicPatientDto MapToDto(Patient p, string? activeQueueTicket, Guid? activeQueueItemId) => MapToDto(p, activeQueueTicket, activeQueueItemId, null);
+
+    public static ClinicPatientDto MapToDto(Patient p, string? activeQueueTicket, Guid? activeQueueItemId, string? allergiesOverride)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var age = today.Year - p.DateOfBirth.Year;
@@ -391,8 +624,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         var suffix = !string.IsNullOrWhiteSpace(p.Suffix) ? $" {p.Suffix}" : "";
         var fullName = $"{p.LastName}, {p.FirstName}{middleInitial}{suffix}";
 
-        var pastMedicalHistories = p.PastMedicalHistories?
-            .Where(m => !m.IsDeleted)
+        var pastMedicalHistories = p.MedicalHistories?
+            .Where(m => !m.IsDeleted && m.Category == MedicalHistoryCategory.MedicalHistory)
             .DistinctBy(m => m.Id)
             .Select(m => new PatientPastMedicalHistoryDto(
                 m.Id,
@@ -402,9 +635,47 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                 m.Icd10Code,
                 m.SpecificDescription,
                 m.OnsetDate,
-                m.IsResolved,
+                m.Status == ProblemStatus.Resolved,
                 m.ClinicalNotes,
                 m.CreatedAt)).ToList();
+
+        var structuredAllergiesDto = p.Allergies?
+            .Where(a => !a.IsDeleted && a.Status == AllergyStatus.Active)
+            .OrderByDescending(a => a.IsAnaphylactic)
+            .ThenBy(a => a.Allergen)
+            .Select(a => new PatientAllergyDto(
+                a.Id,
+                a.ClinicId,
+                a.PatientId,
+                a.Category.ToString(),
+                a.Allergen,
+                a.AllergenDrugCode,
+                a.Severity.ToString(),
+                a.ReactionManifestation,
+                a.IsAnaphylactic,
+                a.Status.ToString(),
+                a.OnsetDate,
+                a.Notes,
+                a.CreatedAt))
+            .ToList();
+
+        var allergiesText = allergiesOverride ?? (p.Allergies != null && p.Allergies.Count > 0
+            ? string.Join(", ", p.Allergies.Where(a => !a.IsDeleted && a.Status == AllergyStatus.Active).Select(a => a.Allergen))
+            : null);
+        if (string.IsNullOrWhiteSpace(allergiesText)) allergiesText = null;
+
+        var chronicConditions = p.MedicalHistories != null && p.MedicalHistories.Count > 0
+            ? string.Join(", ", p.MedicalHistories.Where(m => !m.IsDeleted).Select(m => (!string.IsNullOrWhiteSpace(m.SpecificDescription) && (string.Equals(m.ConditionTitle, "Others", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(m.ConditionTitle))) ? m.SpecificDescription.Trim() : m.ConditionTitle.Trim()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase))
+            : null;
+        if (string.IsNullOrWhiteSpace(chronicConditions)) chronicConditions = null;
+
+        var alertsText = p.Alerts != null && p.Alerts.Count > 0
+            ? string.Join(", ", p.Alerts.Where(a => !a.IsDeleted && a.Status == PatientAlertStatus.Active).Select(a => a.Title))
+            : null;
+        if (string.IsNullOrWhiteSpace(alertsText)) alertsText = null;
+
+        var addressesDto = MapAddresses(p.Addresses);
+        var guardiansDto = MapGuardians(p.Guardians);
 
         return new ClinicPatientDto(
             p.Id,
@@ -418,30 +689,191 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             fullName,
             p.DateOfBirth,
             age,
-            p.Gender,
-            p.CivilStatus,
+            p.Sex.ToString(),
+            p.CivilStatus?.ToString(),
             p.ContactNumber,
             p.Email,
-            p.AddressLine,
-            p.Barangay,
-            p.City,
-            p.Province,
-            p.EmergencyContactName,
-            p.EmergencyContactPhone,
-            p.EmergencyContactRelationship,
             p.PhilHealthNumber,
             p.SeniorCitizenId,
             p.PwdId,
-            p.BloodType,
-            p.Allergies,
-            p.ChronicConditions,
-            p.Alerts,
-            p.SyncPatientId,
+            BloodTypeParser.Format(p.BloodType),
             p.CreatedAt,
             p.CustomFields,
-            p.VerificationStatus,
+            p.VerificationStatus.ToString(),
             activeQueueTicket,
             activeQueueItemId,
-            pastMedicalHistories);
+            pastMedicalHistories,
+            p.ClinicEzId,
+            p.LandlineNumber,
+            p.MaidenLastName,
+            p.PreferredName,
+            p.Nationality,
+            p.Religion,
+            p.IsDeceased,
+            p.DeceasedAt,
+            Allergies: allergiesText,
+            ChronicConditions: chronicConditions,
+            Alerts: alertsText,
+            SyncPatientId: p.CloudPatientId,
+            GenderIdentity: p.GenderIdentity,
+            Addresses: addressesDto,
+            Guardians: guardiansDto,
+            StructuredAllergies: structuredAllergiesDto);
+    }
+
+    public static List<PatientAddressDto>? MapAddresses(IEnumerable<PatientAddress>? addresses)
+    {
+        if (addresses == null) return null;
+        var list = addresses
+            .Where(a => !a.IsDeleted)
+            .OrderBy(a => a.AddressType == PatientAddressType.Permanent ? 0 : 1)
+            .Select(a => new PatientAddressDto(
+                AddressType: a.AddressType.ToString(),
+                IsSameAsPermanent: a.IsSameAsPermanent,
+                RegionPsgc: a.RegionPsgc,
+                ProvincePsgc: a.ProvincePsgc,
+                CityMunicipalityPsgc: a.CityMunicipalityPsgc,
+                BarangayPsgc: a.BarangayPsgc,
+                RegionName: a.RegionName,
+                ProvinceName: a.ProvinceName,
+                CityMunicipalityName: a.CityMunicipalityName,
+                BarangayName: a.BarangayName,
+                StreetAddress: a.StreetAddress,
+                ZipCode: a.ZipCode,
+                Id: a.Id))
+            .ToList();
+        return list.Count > 0 ? list : null;
+    }
+
+    public static List<PatientGuardianDto>? MapGuardians(IEnumerable<PatientGuardian>? guardians)
+    {
+        if (guardians == null) return null;
+        var list = guardians
+            .Where(g => !g.IsDeleted)
+            .OrderByDescending(g => g.IsPrimaryGuardian)
+            .ThenBy(g => g.CreatedAt)
+            .Select(g => new PatientGuardianDto(
+                FirstName: g.FirstName,
+                LastName: g.LastName,
+                RelationshipCode: g.RelationshipCode,
+                ContactNumber: g.ContactNumber,
+                MiddleName: g.MiddleName,
+                Suffix: g.Suffix,
+                BirthDate: g.BirthDate,
+                Sex: g.Sex?.ToString(),
+                RelationshipOtherSpecify: g.RelationshipOtherSpecify,
+                PhilHealthPin: g.PhilHealthPin,
+                IsPrimaryGuardian: g.IsPrimaryGuardian,
+                IsEmergencyContact: g.IsEmergencyContact,
+                Id: g.Id))
+            .ToList();
+        return list.Count > 0 ? list : null;
+    }
+
+    public static PatientAddressType ParseAddressType(string? addressType)
+    {
+        if (!string.IsNullOrWhiteSpace(addressType) &&
+            Enum.TryParse<PatientAddressType>(addressType.Trim(), true, out var parsed))
+        {
+            return parsed;
+        }
+        return PatientAddressType.Permanent;
+    }
+
+    public static bool HasAddressContent(PatientAddressDto? addr)
+    {
+        if (addr == null) return false;
+        return !string.IsNullOrWhiteSpace(addr.RegionPsgc)
+            || !string.IsNullOrWhiteSpace(addr.ProvincePsgc)
+            || !string.IsNullOrWhiteSpace(addr.CityMunicipalityPsgc)
+            || !string.IsNullOrWhiteSpace(addr.BarangayPsgc)
+            || !string.IsNullOrWhiteSpace(addr.RegionName)
+            || !string.IsNullOrWhiteSpace(addr.ProvinceName)
+            || !string.IsNullOrWhiteSpace(addr.CityMunicipalityName)
+            || !string.IsNullOrWhiteSpace(addr.BarangayName)
+            || !string.IsNullOrWhiteSpace(addr.StreetAddress)
+            || !string.IsNullOrWhiteSpace(addr.ZipCode);
+    }
+
+    public static bool HasGuardianContent(PatientGuardianDto? g)
+    {
+        if (g == null) return false;
+        return !string.IsNullOrWhiteSpace(g.FirstName) || !string.IsNullOrWhiteSpace(g.LastName);
+    }
+
+    public static string NormalizeGuardianRelationshipCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return "LEGAL_GUARDIAN";
+        var trimmed = code.Trim();
+        return trimmed.Length <= 50 ? trimmed : trimmed[..50];
+    }
+
+    public static string? NormalizeGuardianPin(string? pin)
+    {
+        if (string.IsNullOrWhiteSpace(pin)) return null;
+        var digits = new string(pin.Where(char.IsDigit).ToArray());
+        if (string.IsNullOrWhiteSpace(digits)) return null;
+        return digits.Length <= 12 ? digits : digits[..12];
+    }
+
+    public static string? NullIfWhiteSpace(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    public static BiologicalSex ParseBiologicalSex(string? sex)
+    {
+        if (string.IsNullOrWhiteSpace(sex))
+        {
+            return BiologicalSex.Male;
+        }
+
+        var candidate = sex.Trim();
+        if (Enum.TryParse<BiologicalSex>(candidate, true, out var parsedSex))
+        {
+            return parsedSex;
+        }
+
+        return candidate.ToUpperInvariant() switch
+        {
+            "M" => BiologicalSex.Male,
+            "F" => BiologicalSex.Female,
+            "I" => BiologicalSex.Intersex,
+            "U" or "OTHER" => BiologicalSex.Unknown,
+            _ => BiologicalSex.Male
+        };
+    }
+
+    public static CivilStatus? ParseCivilStatus(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        if (Enum.TryParse<CivilStatus>(trimmed, true, out var parsed))
+        {
+            return parsed;
+        }
+
+        return trimmed.ToUpperInvariant() switch
+        {
+            "COHABITING / COMMON-LAW" or "COHABITING" => CivilStatus.Cohabiting,
+            "COMMON-LAW" or "COMMON LAW" => CivilStatus.CommonLaw,
+            "OTHER CIVIL STATUS" or "OTHER_CIVIL_STATUS" => CivilStatus.Other,
+            _ => null
+        };
+    }
+
+    public static string? NormalizeGenderIdentity(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= 50 ? trimmed : trimmed[..50];
     }
 }

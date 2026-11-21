@@ -59,12 +59,12 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
 
-        var roomA = new ClinicRoom
+        var roomA = new Room
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -75,7 +75,7 @@ public class Milestone1QueueRoutingStressTests
             DisplayOrder = 1,
             IsActive = true
         };
-        var roomB = new ClinicRoom
+        var roomB = new Room
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -86,7 +86,7 @@ public class Milestone1QueueRoutingStressTests
             DisplayOrder = 2,
             IsActive = true
         };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB);
+        await context.Rooms.AddRangeAsync(roomA, roomB);
 
         var doctor = new StaffMember
         {
@@ -135,12 +135,12 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor JSON has [Room B, Room A], but Room A has lower DisplayOrder
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
 
-        var roomA = new ClinicRoom
+        var roomA = new Room
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -151,7 +151,7 @@ public class Milestone1QueueRoutingStressTests
             DisplayOrder = 10,
             IsActive = true
         };
-        var roomB = new ClinicRoom
+        var roomB = new Room
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -162,7 +162,7 @@ public class Milestone1QueueRoutingStressTests
             DisplayOrder = 20,
             IsActive = true
         };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB);
+        await context.Rooms.AddRangeAsync(roomA, roomB);
 
         var doctor = new StaffMember
         {
@@ -205,14 +205,14 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB);
 
         var doctor = new StaffMember
         {
@@ -254,14 +254,14 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Maria", LastName = "Reyes", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id, roomB.Id });
@@ -298,13 +298,13 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor is assigned [Room A, Room B]. Ticket was checked in to Room B.
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB);
 
         var doctor = new StaffMember
         {
@@ -361,13 +361,13 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Ticket has RoomId = Room B.Id, but RoomOrStation is empty
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Elena", LastName = "Cruz", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id, roomB.Id });
@@ -412,14 +412,14 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor assigned to [Room A, Room B]. Ticket is at Room C (Triage).
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
-        var roomC = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Triage Station", DisplayOrder = 3, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB, roomC);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
+        var roomC = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Triage Station", DisplayOrder = 3, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB, roomC);
 
         var doctor = new StaffMember
         {
@@ -474,13 +474,13 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Ticket has RoomId = null
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Rodrigo", LastName = "Duterte", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id, roomB.Id });
@@ -522,13 +522,13 @@ public class Milestone1QueueRoutingStressTests
         // Call command explicitly specifies Room B.
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Rodrigo", LastName = "Duterte", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id, roomB.Id });
@@ -573,14 +573,14 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor assigned to [Room A, Room B], but Room A has IsActive = false
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = false }; // INACTIVE
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = false }; // INACTIVE
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Clara", LastName = "Bautista", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id, roomB.Id });
@@ -613,13 +613,13 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor assigned to [Room A, Room B], Room A is inactive
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = false }; // INACTIVE
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = false }; // INACTIVE
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Clara", LastName = "Bautista", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id, roomB.Id });
@@ -662,13 +662,13 @@ public class Milestone1QueueRoutingStressTests
         // Subsequently, Room A is deactivated (IsActive = false).
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = false }; // Deactivated
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = false }; // Deactivated
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Clara", LastName = "Bautista", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id, roomB.Id });
@@ -708,14 +708,14 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor assigned to [Room A, Room B], but BOTH are inactive
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = false };
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = false };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = false };
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = false };
+        await context.Rooms.AddRangeAsync(roomA, roomB);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Clara", LastName = "Bautista", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id, roomB.Id });
@@ -757,7 +757,7 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor with null AssignedRoomIdsJson
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
@@ -798,7 +798,7 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor with empty list "[]"
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
@@ -851,7 +851,7 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor with malformed JSON string
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
@@ -900,15 +900,15 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor assigned to [Room A, Room B]. Patient is sent to Treatment Room for procedure.
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
-        var treatmentRoom = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Treatment Bay", DisplayOrder = 5, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB, treatmentRoom);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
+        var treatmentRoom = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Treatment Bay", DisplayOrder = 5, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB, treatmentRoom);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Gabriel", LastName = "Reyes", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id, roomB.Id });
@@ -932,7 +932,7 @@ public class Milestone1QueueRoutingStressTests
         };
         await context.QueueItems.AddAsync(queueItem);
 
-        var proc = new ClinicalProcedure
+        var proc = new Procedure
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -949,7 +949,7 @@ public class Milestone1QueueRoutingStressTests
             TargetRoomId = treatmentRoom.Id,
             TargetRoomName = treatmentRoom.Name
         };
-        await context.Set<ClinicalProcedure>().AddAsync(proc);
+        await context.Set<Procedure>().AddAsync(proc);
         await context.SaveChangesAsync();
 
         var recordHandler = new RecordProcedureExecutionCommandHandler(procRepo, uow, clinicContext, queueRepo, staffRepo, roomRepo);
@@ -979,15 +979,15 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor assigned to [Room A, Room B], but Room A is inactive
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = false }; // INACTIVE
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
-        var treatmentRoom = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Treatment Bay", DisplayOrder = 5, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB, treatmentRoom);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = false }; // INACTIVE
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = true };
+        var treatmentRoom = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Treatment Bay", DisplayOrder = 5, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB, treatmentRoom);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Gabriel", LastName = "Reyes", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id, roomB.Id });
@@ -1011,7 +1011,7 @@ public class Milestone1QueueRoutingStressTests
         };
         await context.QueueItems.AddAsync(queueItem);
 
-        var proc = new ClinicalProcedure
+        var proc = new Procedure
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -1026,7 +1026,7 @@ public class Milestone1QueueRoutingStressTests
             TargetRoomId = treatmentRoom.Id,
             TargetRoomName = treatmentRoom.Name
         };
-        await context.Set<ClinicalProcedure>().AddAsync(proc);
+        await context.Set<Procedure>().AddAsync(proc);
         await context.SaveChangesAsync();
 
         var recordHandler = new RecordProcedureExecutionCommandHandler(procRepo, uow, clinicContext, queueRepo, staffRepo, roomRepo);
@@ -1047,13 +1047,13 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor has 0 assigned rooms
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
-        var treatmentRoom = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Treatment Bay", DisplayOrder = 5, IsActive = true };
-        await context.ClinicRooms.AddAsync(treatmentRoom);
+        var treatmentRoom = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Treatment Bay", DisplayOrder = 5, IsActive = true };
+        await context.Rooms.AddAsync(treatmentRoom);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Floating", LastName = "Doctor", Role = StaffRole.Doctor, IsActive = true, AssignedRoomIdsJson = null };
         await context.StaffMembers.AddAsync(doctor);
@@ -1076,7 +1076,7 @@ public class Milestone1QueueRoutingStressTests
         };
         await context.QueueItems.AddAsync(queueItem);
 
-        var proc = new ClinicalProcedure
+        var proc = new Procedure
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -1091,7 +1091,7 @@ public class Milestone1QueueRoutingStressTests
             TargetRoomId = treatmentRoom.Id,
             TargetRoomName = treatmentRoom.Name
         };
-        await context.Set<ClinicalProcedure>().AddAsync(proc);
+        await context.Set<Procedure>().AddAsync(proc);
         await context.SaveChangesAsync();
 
         var recordHandler = new RecordProcedureExecutionCommandHandler(procRepo, uow, clinicContext, queueRepo, staffRepo, roomRepo);
@@ -1112,15 +1112,15 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Doctor has 2 rooms, but both are inactive
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = false };
-        var roomB = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = false };
-        var treatmentRoom = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Treatment Bay", DisplayOrder = 5, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, roomB, treatmentRoom);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = false };
+        var roomB = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room B", DisplayOrder = 2, IsActive = false };
+        var treatmentRoom = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Treatment Bay", DisplayOrder = 5, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, roomB, treatmentRoom);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Gabriel", LastName = "Reyes", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id, roomB.Id });
@@ -1144,7 +1144,7 @@ public class Milestone1QueueRoutingStressTests
         };
         await context.QueueItems.AddAsync(queueItem);
 
-        var proc = new ClinicalProcedure
+        var proc = new Procedure
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -1159,7 +1159,7 @@ public class Milestone1QueueRoutingStressTests
             TargetRoomId = treatmentRoom.Id,
             TargetRoomName = treatmentRoom.Name
         };
-        await context.Set<ClinicalProcedure>().AddAsync(proc);
+        await context.Set<Procedure>().AddAsync(proc);
         await context.SaveChangesAsync();
 
         var recordHandler = new RecordProcedureExecutionCommandHandler(procRepo, uow, clinicContext, queueRepo, staffRepo, roomRepo);
@@ -1180,14 +1180,14 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: QueueItem has DoctorId = null, but Procedure has OrderedByDoctorId
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
-        var treatmentRoom = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Treatment Bay", DisplayOrder = 5, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, treatmentRoom);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
+        var treatmentRoom = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Treatment Bay", DisplayOrder = 5, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, treatmentRoom);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Antonio", LastName = "Luna", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id });
@@ -1211,7 +1211,7 @@ public class Milestone1QueueRoutingStressTests
         };
         await context.QueueItems.AddAsync(queueItem);
 
-        var proc = new ClinicalProcedure
+        var proc = new Procedure
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -1226,7 +1226,7 @@ public class Milestone1QueueRoutingStressTests
             TargetRoomId = treatmentRoom.Id,
             TargetRoomName = treatmentRoom.Name
         };
-        await context.Set<ClinicalProcedure>().AddAsync(proc);
+        await context.Set<Procedure>().AddAsync(proc);
         await context.SaveChangesAsync();
 
         var recordHandler = new RecordProcedureExecutionCommandHandler(procRepo, uow, clinicContext, queueRepo, staffRepo, roomRepo);
@@ -1247,14 +1247,14 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Queue item is in Waiting status, NOT PendingProcedure
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
-        var treatmentRoom = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Treatment Bay", DisplayOrder = 5, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(roomA, treatmentRoom);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
+        var treatmentRoom = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Treatment Bay", DisplayOrder = 5, IsActive = true };
+        await context.Rooms.AddRangeAsync(roomA, treatmentRoom);
 
         var doctor = new StaffMember { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, FirstName = "Antonio", LastName = "Luna", Role = StaffRole.Doctor, IsActive = true };
         doctor.SetAssignedRoomIds(new[] { roomA.Id });
@@ -1278,7 +1278,7 @@ public class Milestone1QueueRoutingStressTests
         };
         await context.QueueItems.AddAsync(queueItem);
 
-        var proc = new ClinicalProcedure
+        var proc = new Procedure
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -1293,7 +1293,7 @@ public class Milestone1QueueRoutingStressTests
             TargetRoomId = treatmentRoom.Id,
             TargetRoomName = treatmentRoom.Name
         };
-        await context.Set<ClinicalProcedure>().AddAsync(proc);
+        await context.Set<Procedure>().AddAsync(proc);
         await context.SaveChangesAsync();
 
         var recordHandler = new RecordProcedureExecutionCommandHandler(procRepo, uow, clinicContext, queueRepo, staffRepo, roomRepo);
@@ -1313,7 +1313,7 @@ public class Milestone1QueueRoutingStressTests
     #region 7. Cross-Tenant & Clinic Isolation
 
     [Fact]
-    public async Task MultiTenant_CrossClinicRoomIsolation_NeverAssignsRoomFromDifferentClinic()
+    public async Task MultiTenant_CrossRoomIsolation_NeverAssignsRoomFromDifferentClinic()
     {
         // ARRANGE: Doctor in Clinic 1 is assigned a room from Clinic 2
         var clinic1Id = Guid.NewGuid();
@@ -1325,15 +1325,15 @@ public class Milestone1QueueRoutingStressTests
         clinicContext.TenantId.Returns(tenantId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
 
         // Room 1 belongs to Clinic 1, Room 2 belongs to Clinic 2
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinic1Id, TenantId = tenantId, Name = "Clinic 1 Room", DisplayOrder = 1, IsActive = true };
-        var room2 = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinic2Id, TenantId = tenantId, Name = "Clinic 2 Room", DisplayOrder = 1, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, room2);
+        var room1 = new Room { Id = Guid.NewGuid(), ClinicId = clinic1Id, TenantId = tenantId, Name = "Clinic 1 Room", DisplayOrder = 1, IsActive = true };
+        var room2 = new Room { Id = Guid.NewGuid(), ClinicId = clinic2Id, TenantId = tenantId, Name = "Clinic 2 Room", DisplayOrder = 1, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, room2);
 
         var doctor = new StaffMember
         {
@@ -1372,12 +1372,12 @@ public class Milestone1QueueRoutingStressTests
         // ARRANGE: Neither queue item nor call command has DoctorId, but ClinicContext has StaffId
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
-        var roomA = new ClinicRoom { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
-        await context.ClinicRooms.AddAsync(roomA);
+        var roomA = new Room { Id = Guid.NewGuid(), ClinicId = clinicId, TenantId = tenantId, Name = "Room A", DisplayOrder = 1, IsActive = true };
+        await context.Rooms.AddAsync(roomA);
 
         var doctor = new StaffMember
         {

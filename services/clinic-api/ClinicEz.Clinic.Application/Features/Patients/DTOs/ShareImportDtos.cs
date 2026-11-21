@@ -44,7 +44,7 @@ public sealed record ShareImportStatusDto(
         import.Status.ToString(),
         import.DenialReason,
         import.DenialCode?.ToString(),
-        import.ClinicPatientId,
+        import.PatientId,
         import.PatientName,
         import.ClinicEzId,
         SharingScopeNames.Of(import.Scopes),

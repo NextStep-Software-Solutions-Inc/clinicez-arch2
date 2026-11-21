@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Shared.Interoperability;
 
@@ -50,4 +51,14 @@ public record FacilityHeartbeatPayload
     public string AppVersion { get; init; } = string.Empty;
     public DateTime? LicenseExpiresAt { get; init; }
     public DateTime ClockUtc { get; init; } = DateTime.UtcNow;
+    public bool? IsWorkspaceEligible { get; init; }
+    public PlatformVerificationStatus? PlatformVerificationStatus { get; init; }
+
+    // Startup self-healing extensions (Milestone 1)
+    public bool? IsJoinEnabled { get; init; }
+    public string? JoinCode { get; init; }
+    public DateTime? JoinCodeExpiresAtUtc { get; init; }
+    public string? FacilityAddress { get; init; }
+    public string? OperatingHours { get; init; }
+    public DateTime? UpdatedAtUtc { get; init; }
 }

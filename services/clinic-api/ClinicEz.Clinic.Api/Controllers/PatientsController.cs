@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Api.Authorization;
+using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
 using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Application.Features.Patients.Queries;
@@ -33,11 +34,32 @@ public sealed class PatientsController : ControllerBase
         [FromQuery] string? filterMode,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
+        [FromQuery] Guid? staffId = null,
+        [FromQuery] Guid? doctorId = null,
+        [FromQuery] DateOnly? queueDate = null,
+        [FromQuery] Guid[]? roomIds = null,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetClinicPatientsQuery(search, hasAlerts, verificationStatus, filterMode, page, pageSize), ct);
+        var result = await _sender.Send(new GetClinicPatientsQuery(
+            search, hasAlerts, verificationStatus, filterMode, page, pageSize,
+            StaffId: staffId, DoctorId: doctorId, RoomIds: roomIds, QueueDate: queueDate), ct);
         return Ok(ApiResponse<IReadOnlyList<ClinicPatientDto>>.Success(result));
     }
+
+    [HttpGet("counts")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<PatientDirectoryCountsDto>>> GetPatientCounts(
+        [FromQuery] string? search,
+        [FromQuery] Guid? staffId = null,
+        [FromQuery] Guid? doctorId = null,
+        [FromQuery] Guid[]? roomIds = null,
+        [FromQuery] DateOnly? queueDate = null,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new GetClinicPatientCountsQuery(search, staffId, doctorId, roomIds, queueDate), ct);
+        return Ok(ApiResponse<PatientDirectoryCountsDto>.Success(result));
+    }
+
 
     [HttpGet("check-duplicates")]
     [HasPermission(ClinicPermissions.PatientsRead)]
@@ -121,7 +143,7 @@ public sealed class PatientsController : ControllerBase
             request.MiddleName,
             request.Suffix,
             request.DateOfBirth,
-            request.Gender,
+            request.Sex,
             request.CivilStatus,
             request.ContactNumber,
             request.Email,
@@ -141,7 +163,11 @@ public sealed class PatientsController : ControllerBase
             request.Alerts,
             request.CustomFields,
             request.VerificationStatus,
-            request.MedicalHistories);
+            request.MedicalHistories,
+            request.GenderIdentity,
+            request.Addresses,
+            request.Guardians,
+            request.StructuredAllergies);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicPatientDto>.Success(result, "Patient profile updated successfully."));
@@ -168,7 +194,7 @@ public sealed class PatientsController : ControllerBase
     }
 
     [HttpPost("public/student-intake")]
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [Microsoft.AspNetCore.Authorization.Authorize(Policy = ClinicPolicies.KioskIntake)]
     public async Task<ActionResult<ApiResponse<PublicStudentSelfEnrollResultDto>>> PublicStudentSelfEnroll(
         [FromBody] PublicStudentSelfEnrollCommand command,
         CancellationToken ct)
@@ -520,7 +546,7 @@ public sealed class PatientsController : ControllerBase
     {
         var query = new CalculatePediatricZScoreQuery(
             request.DateOfBirth,
-            request.Gender,
+            request.Sex,
             request.LengthOrHeightCm,
             request.WeightKg,
             request.IsMeasuredRecumbent,
@@ -572,7 +598,72 @@ public sealed class PatientsController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<PatientPhysicalExamProfileDto>.Success(result, "Physical examination findings updated successfully."));
     }
+
+    // --- PhilHealth Coverage & Annual YAKAP Enlistment Endpoints ---
+
+    [HttpGet("{patientId:guid}/philhealth")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<PatientPhilHealthCoverageDto>>> GetPhilHealthCoverage(
+        Guid patientId,
+        [FromQuery] int? year = null,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new GetPatientPhilHealthCoverageQuery(patientId, year), ct);
+        return Ok(ApiResponse<PatientPhilHealthCoverageDto>.Success(result));
+    }
+
+    [HttpPut("{patientId:guid}/philhealth/membership")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientPhilHealthMembershipDto>>> UpsertPhilHealthMembership(
+        Guid patientId,
+        [FromBody] UpsertPhilHealthMembershipRequest request,
+        CancellationToken ct = default)
+    {
+        var command = new UpsertPatientPhilHealthMembershipCommand(
+            patientId,
+            request.MemberType,
+            request.DependentRelationship,
+            request.PhilHealthPin,
+            request.PrincipalMemberPin,
+            request.PrincipalLastName,
+            request.PrincipalFirstName,
+            request.PrincipalMiddleName,
+            request.PrincipalSuffix,
+            request.PrincipalDateOfBirth,
+            request.PrincipalSex,
+            request.MembershipCategoryCode,
+            request.MembershipCategoryDesc,
+            request.EmployerPin,
+            request.EmployerName,
+            request.DefaultWalkInAtc,
+            request.PrincipalMemberLandlineNumber,
+            request.PrincipalMemberMobileNumber,
+            request.PrincipalMemberEmail);
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<PatientPhilHealthMembershipDto>.Success(result, "PhilHealth membership details updated successfully."));
+    }
 }
+
+public sealed record UpsertPhilHealthMembershipRequest(
+    string MemberType,
+    string? DependentRelationship = null,
+    string? PhilHealthPin = null,
+    string? PrincipalMemberPin = null,
+    string? PrincipalLastName = null,
+    string? PrincipalFirstName = null,
+    string? PrincipalMiddleName = null,
+    string? PrincipalSuffix = null,
+    DateOnly? PrincipalDateOfBirth = null,
+    string? PrincipalSex = null,
+    string? MembershipCategoryCode = null,
+    string? MembershipCategoryDesc = null,
+    string? EmployerPin = null,
+    string? EmployerName = null,
+    string? DefaultWalkInAtc = null,
+    string? PrincipalMemberLandlineNumber = null,
+    string? PrincipalMemberMobileNumber = null,
+    string? PrincipalMemberEmail = null);
 
 public sealed record UpdatePatientRequest(
     string FirstName,
@@ -580,7 +671,7 @@ public sealed record UpdatePatientRequest(
     string? MiddleName,
     string? Suffix,
     DateOnly DateOfBirth,
-    string Gender,
+    string Sex,
     string? CivilStatus,
     string ContactNumber,
     string? Email,
@@ -600,4 +691,8 @@ public sealed record UpdatePatientRequest(
     string? Alerts,
     System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
     string? VerificationStatus = null,
-    List<MedicalHistoryEntryDto>? MedicalHistories = null);
+    List<MedicalHistoryEntryDto>? MedicalHistories = null,
+    string? GenderIdentity = null,
+    List<PatientAddressDto>? Addresses = null,
+    List<PatientGuardianDto>? Guardians = null,
+    List<CreateAllergyRequest>? StructuredAllergies = null);

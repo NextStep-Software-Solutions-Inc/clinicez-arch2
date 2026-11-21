@@ -17,15 +17,26 @@ public sealed class PatientRepository : BaseRepository<Patient>, IPatientReposit
 
     public Task<Patient?> GetByClerkUserIdWithDetailsAsync(string clerkUserId, CancellationToken cancellationToken = default)
         => Context.Patients
+            .Include(p => p.Addresses)
             .Include(p => p.GovernmentIds)
             .Include(p => p.Allergies)
             .Include(p => p.ClinicMemberships)
+            .Include(p => p.ManagedDependents)
+                .ThenInclude(d => d.Addresses)
             .Include(p => p.ManagedDependents)
                 .ThenInclude(d => d.GovernmentIds)
             .Include(p => p.ManagedDependents)
                 .ThenInclude(d => d.Allergies)
             .Include(p => p.ManagedDependents)
                 .ThenInclude(d => d.ClinicMemberships)
+            .FirstOrDefaultAsync(p => p.ClerkUserId == clerkUserId, cancellationToken);
+
+    public Task<Patient?> GetForMeByClerkUserIdAsync(string clerkUserId, CancellationToken cancellationToken = default)
+        => Context.Patients
+            .AsNoTracking()
+            .Include(p => p.Addresses)
+            .Include(p => p.GovernmentIds)
+            .Include(p => p.Allergies)
             .FirstOrDefaultAsync(p => p.ClerkUserId == clerkUserId, cancellationToken);
 
     public Task<Patient?> GetByClinicEzIdAsync(string clinicEzId, CancellationToken cancellationToken = default)

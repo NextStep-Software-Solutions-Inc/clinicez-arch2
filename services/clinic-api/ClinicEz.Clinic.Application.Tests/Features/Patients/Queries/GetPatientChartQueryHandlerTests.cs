@@ -33,18 +33,18 @@ public class GetPatientChartQueryHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var problemRepo = TestDbHelper.CreateRepository<PatientProblem>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var problemRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
         var allergyRepo = TestDbHelper.CreateRepository<PatientAllergy>(context, sieve);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
-        var attachRepo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var attachRepo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -55,33 +55,44 @@ public class GetPatientChartQueryHandlerTests
             MiddleName = "Mercado",
             Suffix = "Jr.",
             DateOfBirth = new DateOnly(1985, 8, 20),
-            Gender = "Male",
-            CivilStatus = "Married",
+            Sex = BiologicalSex.Male,
+            CivilStatus = CivilStatus.Married,
             ContactNumber = "09171234567",
             Email = "juan@example.com",
             PhilHealthNumber = "12-345678901-8",
             SeniorCitizenId = null,
             PwdId = "PWD-12345",
-            BloodType = "O+",
-            PhilHealthCaseNo = "CASE-99999"
+            BloodType = BloodType.OPositive,
+            CustomFields = new Dictionary<string, object?>
+            {
+                ["yakap_enlistments"] = new List<Dictionary<string, object?>>
+                {
+                    new()
+                    {
+                        ["status"] = "Active",
+                        ["case_no"] = "CASE-99999",
+                        ["enlistment_no"] = "ENLIST-99999"
+                    }
+                }
+            }
         };
         await patientRepo.AddAsync(patient, CancellationToken.None);
 
         // Problem
-        var problem = new PatientProblem
+        var problem = new PatientMedicalHistory
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
             PatientId = patientId,
             Icd10Code = "I10",
-            ProblemTitle = "Essential (primary) hypertension",
+            ConditionTitle = "Essential (primary) hypertension",
             Status = ProblemStatus.Active,
             Severity = ProblemSeverity.Moderate,
             IsChronicNcd = true,
             OnsetDate = new DateOnly(2020, 1, 15),
-            RecordedByDoctorId = Guid.NewGuid(),
-            RecordedByDoctorName = "Dr. Jose Santos"
+            RecordedByStaffId = Guid.NewGuid(),
+            RecordedByStaffName = "Dr. Jose Santos"
         };
         await problemRepo.AddAsync(problem, CancellationToken.None);
 
@@ -134,7 +145,7 @@ public class GetPatientChartQueryHandlerTests
         await immRepo.AddAsync(imm, CancellationToken.None);
 
         // Attachment
-        var attach = new ClinicRecordAttachment
+        var attach = new RecordAttachment
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -172,7 +183,7 @@ public class GetPatientChartQueryHandlerTests
         // Demographics
         chart.Demographics.Should().NotBeNull();
         chart.Demographics!.Dob.Should().Be(new DateOnly(1985, 8, 20));
-        chart.Demographics.Gender.Should().Be("Male");
+        chart.Demographics.Sex.Should().Be("Male");
         chart.Demographics.ContactNumber.Should().Be("09171234567");
         chart.Demographics.PhilHealthNumber.Should().Be("12-345678901-8");
         chart.Demographics.BloodType.Should().Be("O+");
@@ -207,11 +218,11 @@ public class GetPatientChartQueryHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var handler = new GetPatientChartQueryHandler(
             consultRepo, triageRepo, procRepo, labRepo, invoiceRepo, _clinicContext,
@@ -235,9 +246,9 @@ public class GetPatientChartQueryHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
 
         var handler = new GetPatientChartQueryHandler(consultRepo, triageRepo, procRepo, labRepo, invoiceRepo, _clinicContext);
@@ -253,15 +264,15 @@ public class GetPatientChartQueryHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -367,7 +378,7 @@ public class GetPatientChartQueryHandlerTests
         }, CancellationToken.None);
 
         // Dental procedure with tooth tagging
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -383,7 +394,7 @@ public class GetPatientChartQueryHandlerTests
         }, CancellationToken.None);
 
         // Non-dental procedure
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -423,7 +434,7 @@ public class GetPatientChartQueryHandlerTests
         tooth16Decay.Surface.Should().Be("MD");
         tooth16Decay.RecordedBy.Should().Be("Dr. Santos"); // CreatedBy fallback
 
-        // 2. ClinicalProcedureDto retains ToothNumber and ToothSurface
+        // 2. ProcedureDto retains ToothNumber and ToothSurface
         chart.ProceduresHistory.Should().HaveCount(2);
         var dentalProc = chart.ProceduresHistory.First(p => p.ToothNumber == 16);
         dentalProc.ToothNumber.Should().Be(16);
@@ -448,5 +459,110 @@ public class GetPatientChartQueryHandlerTests
         encounter2.DentalFindings!.Should().HaveCount(2);
         encounter2.DentalFindings.Should().Contain(d => d.ToothNumber == 21 && d.Status == ToothStatus.Healthy);
         encounter2.DentalFindings.Should().Contain(d => d.ToothNumber == 36 && d.Status == ToothStatus.Missing);
+    }
+
+    [Fact]
+    public async Task Handle_PopulatesPastMedicalHistoriesFamilyHistoriesAndNotes()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var medHistoryRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
+        var famHistoryRepo = TestDbHelper.CreateRepository<PatientFamilyHistory>(context, sieve);
+
+        var patientId = Guid.NewGuid();
+        await patientRepo.AddAsync(new Patient
+        {
+            Id = patientId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-2026-00501",
+            FirstName = "Bea",
+            LastName = "Abellana",
+            DateOfBirth = new DateOnly(1985, 11, 18),
+            Sex = BiologicalSex.Female,
+            ContactNumber = "09194319725",
+            CustomFields = new Dictionary<string, object?>
+            {
+                ["personal_medical_history_notes"] = "Controlled hypertension since 2022",
+                ["family_medical_history_notes"] = "Maternal diabetes mellitus"
+            }
+        }, CancellationToken.None);
+
+        await medHistoryRepo.AddAsync(new PatientMedicalHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            Category = MedicalHistoryCategory.MedicalHistory,
+            ConditionTitle = "Hypertension",
+            PhilHealthMdiseaseCode = "011",
+            Status = ProblemStatus.Active,
+            RecordedByStaffId = Guid.NewGuid(),
+            RecordedByStaffName = "RN Myshin Amper"
+        }, CancellationToken.None);
+
+        await medHistoryRepo.AddAsync(new PatientMedicalHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            Category = MedicalHistoryCategory.ProblemListItem,
+            ConditionTitle = "Peptic Ulcer",
+            PhilHealthMdiseaseCode = "012",
+            Icd10Code = "K27",
+            Status = ProblemStatus.Active,
+            RecordedByStaffId = Guid.NewGuid(),
+            RecordedByStaffName = "Dr. Andre Amamio"
+        }, CancellationToken.None);
+
+        await famHistoryRepo.AddAsync(new PatientFamilyHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ConditionTitle = "Diabetes Mellitus",
+            PhilHealthMdiseaseCode = "006",
+            Relationship = FamilyRelationship.Mother,
+            ClinicalNotes = "Mother"
+        }, CancellationToken.None);
+
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new GetPatientChartQueryHandler(
+            consultRepo, triageRepo, procRepo, labRepo, invoiceRepo, _clinicContext,
+            patientRepo: patientRepo,
+            medicalHistoryRepo: medHistoryRepo,
+            familyHistoryRepo: famHistoryRepo);
+
+        // Act
+        var chart = await handler.Handle(new GetPatientChartQuery(patientId), CancellationToken.None);
+
+        // Assert
+        chart.PastMedicalHistories.Should().NotBeNull();
+        chart.PastMedicalHistories!.Should().HaveCount(1);
+        chart.PastMedicalHistories![0].ConditionTitle.Should().Be("Hypertension");
+        chart.PastMedicalHistories![0].PhilHealthMdiseaseCode.Should().Be("011");
+
+        chart.Problems.Should().NotBeNull();
+        chart.Problems!.Should().HaveCount(1);
+        chart.Problems![0].ProblemTitle.Should().Be("Peptic Ulcer");
+
+        chart.FamilyHistories.Should().NotBeNull();
+        chart.FamilyHistories!.Should().HaveCount(1);
+        chart.FamilyHistories![0].ConditionTitle.Should().Be("Diabetes Mellitus");
+        chart.FamilyHistories![0].PhilHealthMdiseaseCode.Should().Be("006");
+        chart.FamilyHistories![0].Relationship.Should().Be("Mother");
+
+        chart.PersonalMedicalHistoryNotes.Should().Be("Controlled hypertension since 2022");
+        chart.FamilyMedicalHistoryNotes.Should().Be("Maternal diabetes mellitus");
     }
 }

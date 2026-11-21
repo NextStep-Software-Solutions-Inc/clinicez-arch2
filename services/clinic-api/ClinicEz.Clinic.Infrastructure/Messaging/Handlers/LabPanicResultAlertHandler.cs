@@ -64,10 +64,35 @@ public sealed class LabPanicResultAlertHandler : IInteropHandler<LabPanicResultA
         }
 
         order.HasCriticalPanicAlert = true;
-        order.CriticalFindingsJson = JsonSerializer.Serialize(message.CriticalFindings);
         order.PanicAlertTriggeredAt = message.TriggeredAt;
+        if (message.CriticalFindings != null)
+        {
+            foreach (var finding in message.CriticalFindings)
+            {
+                var labObs = new LabObservation
+                {
+                    TenantId = order.TenantId ?? clinic.TenantId.ToString(),
+                    ClinicId = clinic.ClinicId,
+                    LabOrderId = order.Id,
+                    AnalyteCode = !string.IsNullOrWhiteSpace(finding.AnalyteCode) ? finding.AnalyteCode : "PANIC",
+                    AnalyteName = !string.IsNullOrWhiteSpace(finding.AnalyteName) ? finding.AnalyteName : "Critical Finding",
+                    ValueText = finding.ObservedValue ?? string.Empty,
+                    Unit = finding.Unit,
+                    ReferenceRangeText = finding.ReferenceInterval,
+                    AbnormalFlag = "Critical",
+                    IsCriticalPanic = true,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "LabPanicResultAlert"
+                };
+                if (decimal.TryParse(finding.ObservedValue, out var numVal))
+                {
+                    labObs.NumericValue = numVal;
+                }
+                _dbContext.LabObservations.Add(labObs);
+            }
+        }
 
-        var staffNotification = new ClinicStaffNotification
+        var staffNotification = new StaffNotification
         {
             Id = Guid.NewGuid(),
             TenantId = order.TenantId ?? clinic.TenantId.ToString(),

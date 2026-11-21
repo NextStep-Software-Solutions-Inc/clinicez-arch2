@@ -83,7 +83,7 @@ public sealed class DiagnosticReportFinalizedHandler : IInteropHandler<Diagnosti
         }
 
         var now = DateTime.UtcNow;
-        var result = new ClinicLabResult
+        var result = new LabResult
         {
             Id = Guid.NewGuid(),
             TenantId = clinic.TenantId,
@@ -110,9 +110,35 @@ public sealed class DiagnosticReportFinalizedHandler : IInteropHandler<Diagnosti
 
         _dbContext.LabResults.Add(result);
 
+        if (message.Observations != null)
+        {
+            foreach (var obs in message.Observations)
+            {
+                var labObs = new LabObservation
+                {
+                    TenantId = clinic.TenantId,
+                    ClinicId = clinic.ClinicId,
+                    LabOrderId = order.Id,
+                    AnalyteCode = !string.IsNullOrWhiteSpace(obs.AnalyteCode) ? obs.AnalyteCode : "ANALYTE",
+                    AnalyteName = !string.IsNullOrWhiteSpace(obs.AnalyteName) ? obs.AnalyteName : "Observation",
+                    ValueText = obs.Value ?? string.Empty,
+                    Unit = obs.Unit,
+                    ReferenceRangeText = obs.ReferenceInterval,
+                    AbnormalFlag = obs.Flag,
+                    IsCriticalPanic = string.Equals(obs.Flag, "Critical", StringComparison.OrdinalIgnoreCase) || message.IsCriticalResult,
+                    CreatedAt = now,
+                    CreatedBy = "DiagnosticReportFinalized"
+                };
+                if (decimal.TryParse(obs.Value, out var numVal))
+                {
+                    labObs.NumericValue = numVal;
+                }
+                _dbContext.LabObservations.Add(labObs);
+            }
+        }
+
         order.ExternalLabName = message.LaboratoryName;
         order.ExternalReportType = "DigitalDiagnosticReport";
-        order.ObservationsJson = JsonSerializer.Serialize(message.Observations);
         order.PathologistImpression = message.PathologistImpression;
         order.VerifiedByPathologist = message.PathologistName;
         order.PathologistPrcLicense = message.PathologistPrcLicense;

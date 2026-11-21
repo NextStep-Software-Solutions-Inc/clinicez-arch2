@@ -5,6 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="4.0.25" />
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="EFCore.BulkExtensions" Version="10.0.1" />
     <PackageReference Include="Hangfire.AspNetCore" Version="1.8.21" />
@@ -30,7 +31,3 @@
   </PropertyGroup>
 
 </Project>
-
-
-
-

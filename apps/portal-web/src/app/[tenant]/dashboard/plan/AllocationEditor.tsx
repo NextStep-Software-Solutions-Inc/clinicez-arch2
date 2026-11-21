@@ -20,9 +20,9 @@ import { describeApiError } from "@/lib/apiError";
 import { toastApiError } from "@/lib/apiToast";
 import { UsageBar } from "./UsageBar";
 
-type PoolKey = keyof WorkspacePools;
+export type PoolKey = keyof WorkspacePools;
 
-interface PoolField {
+export interface PoolField {
   pool: PoolKey;
   label: string;
   unit: string;
@@ -30,26 +30,106 @@ interface PoolField {
   effective: (f: FacilityAllocation) => number;
 }
 
-const POOL_FIELDS: PoolField[] = [
+export const POOL_FIELDS: PoolField[] = [
   { pool: "staff", label: "Staff seats", unit: "seats", explicit: (f) => f.explicitMaxStaff, effective: (f) => f.maxStaff },
   { pool: "terminals", label: "Concurrent terminals", unit: "terminals", explicit: (f) => f.explicitConcurrentTerminals, effective: (f) => f.concurrentTerminals },
   { pool: "storageMb", label: "Storage", unit: "MB", explicit: (f) => f.explicitMaxStorageMb, effective: (f) => f.maxStorageMb },
 ];
 
-type Draft = Record<PoolKey, string>;
+export type Draft = Record<PoolKey, string>;
 
-function toDraft(f: FacilityAllocation): Draft {
+export function toDraft(f: FacilityAllocation): Draft {
   const fmt = (v: number | null) => (v === null ? "" : String(v));
   return { staff: fmt(f.explicitMaxStaff), terminals: fmt(f.explicitConcurrentTerminals), storageMb: fmt(f.explicitMaxStorageMb) };
 }
 
 /** Blank is "automatic" (null); anything else must be a whole number of 0 or more, otherwise undefined. */
-function parseShare(text: string): number | null | undefined {
+export function parseShare(text: string): number | null | undefined {
   const trimmed = text.trim();
   if (trimmed === "") return null;
   if (!/^\d+$/.test(trimmed)) return undefined;
   const value = Number(trimmed);
   return Number.isSafeInteger(value) ? value : undefined;
+}
+
+export interface PoolDistribution {
+  pool: number;
+  unlimited: boolean;
+  /** Sum of explicit (fixed) shares across all facilities (including unsaved draft edits). */
+  fixed: number;
+  /** Sum of saved explicit (fixed) shares across all facilities. */
+  savedFixed: number;
+  /** Number of facilities using automatic share (blank input) for this pool. */
+  automaticFacilityCount: number;
+  /** Pool capacity automatically distributed across facilities with blank shares. */
+  automatic: number;
+  /** Total effectively distributed capacity (fixed + automatic). */
+  effectiveTotal: number;
+  /** Remaining unallocated pool capacity when no automatic facilities claim the remainder. */
+  remaining: number;
+  /** True when fixed shares alone exceed a finite pool ceiling. */
+  over: boolean;
+}
+
+export function computePoolDistribution(
+  field: PoolField,
+  facilities: FacilityAllocation[],
+  drafts: Record<string, Draft>,
+  poolLimit: number,
+): PoolDistribution {
+  const unlimited = isUnlimited(poolLimit);
+  let fixed = 0;
+  let savedFixed = 0;
+  let automaticFacilityCount = 0;
+
+  for (const f of facilities) {
+    const savedVal = field.explicit(f);
+    if (typeof savedVal === "number") savedFixed += savedVal;
+
+    const d = drafts[f.facilityId] ?? toDraft(f);
+    const parsedVal = parseShare(d[field.pool]);
+    if (typeof parsedVal === "number") {
+      fixed += parsedVal;
+    } else if (parsedVal === null) {
+      automaticFacilityCount += 1;
+    } else if (typeof savedVal === "number") {
+      fixed += savedVal;
+    } else {
+      automaticFacilityCount += 1;
+    }
+  }
+
+  if (unlimited) {
+    return {
+      pool: poolLimit,
+      unlimited: true,
+      fixed,
+      savedFixed,
+      automaticFacilityCount,
+      automatic: 0,
+      effectiveTotal: fixed,
+      remaining: 0,
+      over: false,
+    };
+  }
+
+  const over = fixed > poolLimit;
+  const unreserved = Math.max(0, poolLimit - fixed);
+  const automatic = automaticFacilityCount > 0 ? unreserved : 0;
+  const remaining = automaticFacilityCount > 0 ? 0 : unreserved;
+  const effectiveTotal = fixed + automatic;
+
+  return {
+    pool: poolLimit,
+    unlimited: false,
+    fixed,
+    savedFixed,
+    automaticFacilityCount,
+    automatic,
+    effectiveTotal,
+    remaining,
+    over,
+  };
 }
 
 function formatWhen(value: string | null): string {
@@ -208,25 +288,14 @@ export function AllocationEditor({ tenantSlug, entitlements, onChanged }: Alloca
 
   const draftFor = (f: FacilityAllocation): Draft => drafts[f.facilityId] ?? toDraft(f);
 
-  const totals = useMemo(() => {
-    const sum: WorkspacePools = { staff: 0, terminals: 0, storageMb: 0 };
-    for (const f of facilities) {
-      const d = drafts[f.facilityId] ?? toDraft(f);
-      for (const field of POOL_FIELDS) {
-        const value = parseShare(d[field.pool]);
-        if (typeof value === "number") sum[field.pool] += value;
-      }
-    }
-    return sum;
-  }, [drafts, facilities]);
-
-  const savedTotals = useMemo(() => {
-    const sum: WorkspacePools = { staff: 0, terminals: 0, storageMb: 0 };
-    for (const f of facilities) {
-      for (const field of POOL_FIELDS) sum[field.pool] += field.explicit(f) ?? 0;
-    }
-    return sum;
-  }, [facilities]);
+  const distributions = useMemo(() => {
+    return Object.fromEntries(
+      POOL_FIELDS.map((field) => [
+        field.pool,
+        computePoolDistribution(field, facilities, drafts, pools[field.pool]),
+      ]),
+    ) as Record<PoolKey, PoolDistribution>;
+  }, [drafts, facilities, pools]);
 
   const automaticCount = facilities.filter((f) => POOL_FIELDS.some((field) => field.explicit(f) === null)).length;
 
@@ -246,19 +315,49 @@ export function AllocationEditor({ tenantSlug, entitlements, onChanged }: Alloca
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-5 p-6 pt-3 sm:grid-cols-3">
           {POOL_FIELDS.map((field) => {
-            const pool = pools[field.pool];
-            const over = !isUnlimited(pool) && totals[field.pool] > pool;
+            const dist = distributions[field.pool];
             return (
               <div key={field.pool} className="space-y-2">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-xs font-bold">{field.label}</span>
-                  <span className={`text-xs font-semibold ${over ? "text-rose-600" : "text-slate-500"}`}>
-                    {totals[field.pool].toLocaleString()} / {formatLimit(pool)}
+                  <span className={`text-xs font-semibold ${dist.over ? "text-rose-600" : "text-slate-600 dark:text-slate-400"}`}>
+                    Fixed shares reserved: {dist.fixed.toLocaleString()} / {formatLimit(dist.pool)}
                   </span>
                 </div>
-                <UsageBar used={totals[field.pool]} limit={pool} label={`${field.label} fixed shares`} />
+                <UsageBar
+                  used={dist.fixed}
+                  secondaryUsed={dist.automatic}
+                  limit={dist.pool}
+                  label={`${field.label} pool distribution`}
+                  allowFullPool
+                />
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-primary inline-block shrink-0" />
+                    Fixed: <strong className="font-semibold text-foreground">{dist.fixed.toLocaleString()}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-primary/35 dark:bg-primary/45 inline-block shrink-0" />
+                    Automatic:{" "}
+                    <strong className="font-semibold text-foreground">
+                      {dist.unlimited ? (dist.automaticFacilityCount > 0 ? "Unlimited" : "0") : dist.automatic.toLocaleString()}
+                    </strong>
+                  </span>
+                  {!dist.unlimited && (
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-slate-200 dark:bg-slate-700 inline-block shrink-0" />
+                      Remaining: <strong className="font-semibold text-foreground">{dist.remaining.toLocaleString()}</strong>
+                    </span>
+                  )}
+                </div>
                 <p className="text-[11px] text-slate-500">
-                  Fixed shares including your edits. Saved: {savedTotals[field.pool].toLocaleString()}.
+                  {dist.over
+                    ? `Over pool by ${(dist.fixed - dist.pool).toLocaleString()} ${field.unit}. Saved fixed: ${dist.savedFixed.toLocaleString()}.`
+                    : `Effective distributed: ${
+                        dist.unlimited && dist.automaticFacilityCount > 0
+                          ? "Unlimited"
+                          : `${dist.effectiveTotal.toLocaleString()} / ${formatLimit(dist.pool)}`
+                      } ${field.unit}. Saved fixed: ${dist.savedFixed.toLocaleString()}.`}
                 </p>
               </div>
             );

@@ -90,6 +90,11 @@ mock.module('react-native-svg', () => ({
   Polygon: 'Polygon',
   G: 'G',
   default: 'Svg',
+  Polyline: 'Polyline',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  Text: ({ children }: any) => children,
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -174,7 +179,7 @@ const mockPatient: ClinicPatient = {
   fullName: 'Jose Rizal',
   firstName: 'Jose',
   lastName: 'Rizal',
-  gender: 'Male',
+  sex: 'Male',
   dateOfBirth: '1990-06-19',
   bloodType: 'O+',
   isVerified: true,

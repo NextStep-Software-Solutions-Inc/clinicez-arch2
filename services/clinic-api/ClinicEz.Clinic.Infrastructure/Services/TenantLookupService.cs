@@ -45,7 +45,7 @@ public class TenantLookupService : ITenantLookupService
         var settings = await Clinics().FirstOrDefaultAsync(
             s => s.TenantId.ToLower() == clean || (s.TenantSlug != null && s.TenantSlug.ToLower() == clean), ct);
 
-        return settings == null ? null : ToDto(settings, includeFacility: false);
+        return settings == null ? null : ToDto(settings, includeFacility: true);
     }
 
     public async Task<TenantLookupDto?> LookupAsync(string identifier, CancellationToken ct = default)
@@ -53,14 +53,14 @@ public class TenantLookupService : ITenantLookupService
         return await LookupFacilityAsync(identifier, ct) ?? await LookupTenantAsync(identifier, ct);
     }
 
-    private IQueryable<ClinicSettings> Clinics() =>
-        _dbContext.ClinicSettings
+    private IQueryable<FacilitySettings> Clinics() =>
+        _dbContext.Settings
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(s => !s.IsDeleted)
             .OrderBy(s => s.CreatedAt);
 
-    private static TenantLookupDto ToDto(ClinicSettings settings, bool includeFacility)
+    private static TenantLookupDto ToDto(FacilitySettings settings, bool includeFacility)
     {
         var tenantId = Guid.TryParse(settings.TenantId, out var parsed) ? parsed : Guid.Empty;
         var tenantSlug = settings.TenantSlug ?? settings.TenantId;

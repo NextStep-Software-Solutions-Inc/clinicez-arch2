@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Api.Authorization;
+using ClinicEz.Clinic.Application.Features.Dispensing.DTOs;
 using ClinicEz.Clinic.Application.Features.Queue.Commands;
 using ClinicEz.Clinic.Application.Features.Queue.DTOs;
 using ClinicEz.Clinic.Application.Features.Queue.Queries;
@@ -37,6 +38,16 @@ public sealed class QueueController : ControllerBase
     {
         var result = await _sender.Send(command, ct);
         return CreatedAtAction(nameof(GetQueue), new { id = result.Id }, ApiResponse<QueueItemDto>.Success(result, "Patient checked in successfully."));
+    }
+
+    [HttpPost("direct-visit")]
+    [HasPermission(ClinicPermissions.QueueRead)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> EnsureDirectVisit(
+        [FromBody] EnsureDirectVisitCommand command,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<QueueItemDto>.Success(result, "Direct visit ensured successfully."));
     }
 
     [HttpGet]
@@ -104,10 +115,100 @@ public sealed class QueueController : ControllerBase
             request.LimbsCircumferenceCm,
             request.PreAssessmentNotes,
             request.PreAssessmentRemarks,
-            request.TriageAcuityReason);
+            request.TriageAcuityReason,
+            request.Priority,
+            request.HomeInstructions,
+            request.RosCategory,
+            request.ChiefComplaint,
+            request.DispensedItems);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<TriageVitalsDto>.Success(result, "Triage vitals recorded successfully."));
+    }
+
+    [HttpPut("{id:guid}/triage")]
+    [HasPermission(ClinicPermissions.TriageWrite)]
+    public async Task<ActionResult<ApiResponse<TriageVitalsDto>>> UpdateTriage(
+        Guid id,
+        [FromBody] UpdateTriageRequest request,
+        CancellationToken ct)
+    {
+        var command = new UpdateTriageVitalsCommand(
+            id,
+            request.NurseId,
+            request.RecordedByNurseName,
+            request.SystolicBp,
+            request.DiastolicBp,
+            request.HeartRateBpm,
+            request.TemperatureCelsius,
+            request.RespiratoryRateBreathsPerMin,
+            request.OxygenSaturationPercent,
+            request.HeightCm,
+            request.WeightKg,
+            request.PainScore,
+            request.Notes,
+            request.VisualAcuityLeft,
+            request.VisualAcuityRight,
+            request.HeadCircumferenceCm,
+            request.MidUpperArmCircumferenceCm,
+            request.IsMeasuredRecumbent,
+            request.ZScoreWeightForAge,
+            request.ZScoreLengthForAge,
+            request.ZScoreWeightForLength,
+            request.GrowthZScoreCategory ?? request.PhilHealthZScoreCategory,
+            request.GrowthZScoreCode ?? request.PhilHealthZScoreCode,
+            request.PhilHealthZScoreCategory,
+            request.PhilHealthZScoreCode,
+            request.WaistCircumferenceCm,
+            request.HipCircumferenceCm,
+            request.BodyLengthCm,
+            request.SkinfoldThicknessMm,
+            request.LimbsCircumferenceCm,
+            request.PreAssessmentNotes,
+            request.PreAssessmentRemarks,
+            request.TriageAcuityReason,
+            request.Priority,
+            request.ClearHeight,
+            request.ClearWeight,
+            request.HomeInstructions,
+            request.RosCategory,
+            request.ChiefComplaint,
+            request.DispensedItems);
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<TriageVitalsDto>.Success(result, "Triage vitals updated successfully."));
+    }
+
+    [HttpPost("{id:guid}/escalate-to-consultation")]
+    [HasPermission(ClinicPermissions.TriageWrite)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> EscalateToConsultation(
+        Guid id,
+        [FromBody] EscalateToConsultationRequest? request,
+        CancellationToken ct)
+    {
+        var command = new EscalateVitalsToConsultationCommand(
+            id,
+            request?.Priority ?? QueuePriority.Emergency,
+            request?.EscalationReason,
+            request?.DoctorId,
+            request?.DoctorName,
+            request?.RoomId,
+            request?.RoomOrStation);
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<QueueItemDto>.Success(result, "Visit escalated to physician consultation."));
+    }
+
+    [HttpPost("{id:guid}/escalate-priority")]
+    [HasPermission(ClinicPermissions.TriageWrite)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> EscalatePriority(
+        Guid id,
+        [FromBody] EscalatePriorityRequest request,
+        CancellationToken ct)
+    {
+        var command = new EscalateQueueItemPriorityCommand(id, request.NewPriority, request.EscalationReason ?? "Clinical acuity escalation");
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<QueueItemDto>.Success(result, "Queue ticket priority escalated successfully."));
     }
 
     [HttpGet("{id:guid}/triage")]
@@ -143,6 +244,17 @@ public sealed class QueueController : ControllerBase
     {
         var result = await _sender.Send(new CompleteQueueItemCommand(id), ct);
         return Ok(ApiResponse<bool>.Success(result, "Queue item completed."));
+    }
+
+    [HttpPost("{id:guid}/discharge-non-doctor")]
+    [HasPermission(ClinicPermissions.QueueCompleteNonDoctor)]
+    public async Task<ActionResult<ApiResponse<bool>>> DischargeNonDoctorVisit(
+        Guid id,
+        [FromBody] DischargeNonDoctorRequest? request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new CompleteNonDoctorVisitCommand(id, request?.DischargeRemarks), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Non-doctor visit discharged successfully."));
     }
 
     [HttpPost("{id:guid}/no-show")]
@@ -197,6 +309,24 @@ public sealed class QueueController : ControllerBase
         return Ok(ApiResponse<QueueItemDto>.Success(result, "Queue ticket reassigned successfully."));
     }
 
+    [HttpPost("{id:guid}/divert")]
+    [HasPermission(ClinicPermissions.TriageWrite)]
+    public async Task<ActionResult<ApiResponse<bool>>> DivertEmergencyPatient(
+        Guid id,
+        [FromBody] DivertEmergencyPatientRequest request,
+        CancellationToken ct)
+    {
+        var command = new DivertEmergencyPatientCommand(
+            id,
+            request.DestinationHospital,
+            request.TransportMode,
+            request.ParamedicOrEscortName,
+            request.ClinicalHandoverSummary);
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<bool>.Success(result, "Emergency patient diverted successfully."));
+    }
+
     [HttpPost("reconcile-eod")]
     [HasPermission(ClinicPermissions.QueueComplete)]
     public async Task<ActionResult<ApiResponse<ReconcileEodResultDto>>> ReconcileEod(
@@ -245,8 +375,74 @@ public sealed record RecordTriageRequest(
     decimal? LimbsCircumferenceCm = null,
     string? PreAssessmentNotes = null,
     string? PreAssessmentRemarks = null,
-    string? TriageAcuityReason = null);
+    string? TriageAcuityReason = null,
+    QueuePriority? Priority = null,
+    string? HomeInstructions = null,
+    string? RosCategory = null,
+    string? ChiefComplaint = null,
+    List<TriageDispensedItemInput>? DispensedItems = null);
+
+public sealed record UpdateTriageRequest(
+    Guid? NurseId = null,
+    string? RecordedByNurseName = null,
+    int? SystolicBp = null,
+    int? DiastolicBp = null,
+    int? HeartRateBpm = null,
+    decimal? TemperatureCelsius = null,
+    int? RespiratoryRateBreathsPerMin = null,
+    decimal? OxygenSaturationPercent = null,
+    decimal? HeightCm = null,
+    decimal? WeightKg = null,
+    int? PainScore = null,
+    string? Notes = null,
+    string? VisualAcuityLeft = null,
+    string? VisualAcuityRight = null,
+    decimal? HeadCircumferenceCm = null,
+    decimal? MidUpperArmCircumferenceCm = null,
+    bool? IsMeasuredRecumbent = null,
+    decimal? ZScoreWeightForAge = null,
+    decimal? ZScoreLengthForAge = null,
+    decimal? ZScoreWeightForLength = null,
+    string? GrowthZScoreCategory = null,
+    string? GrowthZScoreCode = null,
+    string? PhilHealthZScoreCategory = null,
+    string? PhilHealthZScoreCode = null,
+    decimal? WaistCircumferenceCm = null,
+    decimal? HipCircumferenceCm = null,
+    decimal? BodyLengthCm = null,
+    decimal? SkinfoldThicknessMm = null,
+    decimal? LimbsCircumferenceCm = null,
+    string? PreAssessmentNotes = null,
+    string? PreAssessmentRemarks = null,
+    string? TriageAcuityReason = null,
+    QueuePriority? Priority = null,
+    bool ClearHeight = false,
+    bool ClearWeight = false,
+    string? HomeInstructions = null,
+    string? RosCategory = null,
+    string? ChiefComplaint = null,
+    List<TriageDispensedItemInput>? DispensedItems = null);
+
+public sealed record EscalateToConsultationRequest(
+    QueuePriority Priority = QueuePriority.Emergency,
+    string? EscalationReason = null,
+    Guid? DoctorId = null,
+    string? DoctorName = null,
+    Guid? RoomId = null,
+    string? RoomOrStation = null);
+
+public sealed record EscalatePriorityRequest(
+    QueuePriority NewPriority,
+    string? EscalationReason = null);
 
 public sealed record CallQueueRequest(Guid? DoctorId, string? DoctorName, string? RoomOrStation = null, Guid? RoomId = null);
 
 public sealed record ReassignQueueRequest(Guid? DoctorId, string? DoctorName, string? RoomOrStation = null, Guid? RoomId = null);
+ 
+public sealed record DischargeNonDoctorRequest(string? DischargeRemarks = null);
+
+public sealed record DivertEmergencyPatientRequest(
+    string DestinationHospital,
+    string TransportMode,
+    string ParamedicOrEscortName,
+    string ClinicalHandoverSummary);

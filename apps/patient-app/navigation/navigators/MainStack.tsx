@@ -27,6 +27,8 @@ import RescheduleScreen from '../screens/appointments/Reschedule.screen';
 import AttachFilesScreen from '../screens/appointments/AttachFiles.screen';
 
 // Profile Part A
+import ProfileScreen from '../screens/profile/Profile.screen';
+import DirectorySearchScreen from '../screens/Search.screen';
 import PersonalDemographicsScreen from '../screens/profile/PersonalDemographics.screen';
 import GovernmentIdsScreen from '../screens/profile/GovernmentIds.screen';
 import ContactInfoScreen from '../screens/profile/ContactInfo.screen';
@@ -76,6 +78,14 @@ import ExternalDispenseScreen from '../screens/documents/ExternalDispense.screen
 import LabResultDetailScreen from '../screens/documents/LabResultDetail.screen';
 import MedicalCertificateDetailScreen from '../screens/documents/MedicalCertificateDetail.screen';
 
+// Communications & Teleconsultation
+import MessagesInboxScreen from '../screens/messages/MessagesInbox.screen';
+import ConversationThreadScreen from '../screens/messages/ConversationThread.screen';
+import NewMessageInquiryScreen from '../screens/messages/NewMessageInquiry.screen';
+import TeleconsultWaitingRoomScreen from '../screens/teleconsult/TeleconsultWaitingRoom.screen';
+import TeleconsultCallScreen from '../screens/teleconsult/TeleconsultCall.screen';
+import PrivacySettingsScreen from '../screens/settings/PrivacySettings.screen';
+
 const MainStack = createNativeStackNavigator({
   screenOptions: {
     headerStyle: {
@@ -84,6 +94,12 @@ const MainStack = createNativeStackNavigator({
   },
   screens: {
     BottomTabs: createNativeStackScreen({
+      screen: MainBottomTabs,
+      options: {
+        headerShown: false,
+      },
+    }),
+    MainBottomTabs: createNativeStackScreen({
       screen: MainBottomTabs,
       options: {
         headerShown: false,
@@ -152,11 +168,11 @@ const MainStack = createNativeStackNavigator({
     }),
     OrganizationDetailsScreen: createNativeStackScreen({
       screen: OrganizationDetailsScreen,
-      options: { title: 'Organization Details', headerLargeTitleEnabled: true },
+      options: { title: 'Organization Details', headerLargeTitleEnabled: false },
     }),
     ClinicDetailsScreen: createNativeStackScreen({
       screen: ClinicDetailsScreen,
-      options: { title: 'Clinic Details', headerLargeTitleEnabled: true },
+      options: { title: 'Clinic Details', headerLargeTitleEnabled: false },
     }),
     YakapDetailsScreen: createNativeStackScreen({
       screen: YakapDetailsScreen,
@@ -166,16 +182,12 @@ const MainStack = createNativeStackNavigator({
       screen: BookingDraftScreen,
       options: {
         title: 'Book Appointment',
-        presentation: 'formSheet',
-        sheetAllowedDetents: [0.92],
-        sheetGrabberVisible: true,
-        sheetCornerRadius: radiusScale.xl,
-        headerShown: true,
+        headerShown: false,
       },
     }),
     AppointmentDetailScreen: createNativeStackScreen({
       screen: AppointmentDetailScreen,
-      options: { title: 'Appointment Details', headerBackTitle: '' },
+      options: { headerShown: false },
     }),
     ProviderProfileScreen: createNativeStackScreen({
       screen: ProviderProfileScreen,
@@ -208,6 +220,14 @@ const MainStack = createNativeStackNavigator({
       },
     }),
     // ── Profile Part A ────────────────────────────────────────────────────────
+    ProfileScreen: createNativeStackScreen({
+      screen: ProfileScreen,
+      options: { title: 'My Profile', headerLargeTitleEnabled: true },
+    }),
+    DirectorySearchScreen: createNativeStackScreen({
+      screen: DirectorySearchScreen,
+      options: { headerShown: false },
+    }),
     PersonalDemographicsScreen: createNativeStackScreen({
       screen: PersonalDemographicsScreen,
       options: { title: 'Personal Demographics', headerLargeTitleEnabled: true },
@@ -379,6 +399,31 @@ const MainStack = createNativeStackNavigator({
     MedicalCertificateDetailScreen: createNativeStackScreen({
       screen: MedicalCertificateDetailScreen,
       options: { title: 'Medical certificate' },
+    }),
+    // ── Communications & Teleconsultation ────────────────────────────────────
+    MessagesInboxScreen: createNativeStackScreen({
+      screen: MessagesInboxScreen,
+      options: { title: 'Messages', headerLargeTitleEnabled: true },
+    }),
+    ConversationThreadScreen: createNativeStackScreen({
+      screen: ConversationThreadScreen,
+      options: { title: 'Conversation', headerShown: false },
+    }),
+    NewMessageInquiryScreen: createNativeStackScreen({
+      screen: NewMessageInquiryScreen,
+      options: { title: 'New Message', headerLargeTitleEnabled: true },
+    }),
+    TeleconsultWaitingRoomScreen: createNativeStackScreen({
+      screen: TeleconsultWaitingRoomScreen,
+      options: { title: 'Waiting Room', headerShown: false },
+    }),
+    TeleconsultCallScreen: createNativeStackScreen({
+      screen: TeleconsultCallScreen,
+      options: { title: 'Teleconsultation', headerShown: false },
+    }),
+    PrivacySettingsScreen: createNativeStackScreen({
+      screen: PrivacySettingsScreen,
+      options: { title: 'Privacy & Communications', headerLargeTitleEnabled: true },
     }),
   },
 });

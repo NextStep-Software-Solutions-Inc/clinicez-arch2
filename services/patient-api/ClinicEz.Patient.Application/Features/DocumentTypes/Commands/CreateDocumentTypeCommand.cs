@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using MediatR;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Interfaces;
@@ -28,6 +32,7 @@ public class CreateDocumentTypeCommandHandler : IRequestHandler<CreateDocumentTy
 
     public async Task<Guid> Handle(CreateDocumentTypeCommand request, CancellationToken cancellationToken)
     {
+        var now = DateTime.UtcNow;
         var entity = new DocumentType
         {
             Id = Guid.NewGuid(),
@@ -38,7 +43,10 @@ public class CreateDocumentTypeCommandHandler : IRequestHandler<CreateDocumentTy
             SupportedMimeTypesJson = JsonSerializer.Serialize(request.SupportedMimeTypes),
             NativePreviewKind = request.NativePreviewKind,
             SortOrder = request.SortOrder,
-            IsActive = request.IsActive
+            IsActive = request.IsActive,
+            CreatedAt = now,
+            CreatedBy = "system",
+            UpdatedAt = now
         };
 
         await _repository.AddAsync(entity, cancellationToken);

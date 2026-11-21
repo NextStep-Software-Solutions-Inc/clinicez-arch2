@@ -12,9 +12,7 @@ export const patientMentalHealthProfile = sqliteTable('patient_mental_health_pro
   providerName: text('provider_name'),
   providerSpecialty: text('provider_specialty'),
   providerClinic: text('provider_clinic'),
-  psychotherapyStatus: text('psychotherapy_status', {
-    enum: ['Active', 'Inactive', 'None'],
-  }),
+  psychotherapyStatus: text('psychotherapy_status'),
   // Timestamps
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),

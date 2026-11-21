@@ -10,10 +10,11 @@ import {
 } from 'react-native';
 import type { SearchItem, CategoryOption } from '@shared/safe';
 import ThemedText from '../ui/ThemedText';
+import Button from '../ui/Button';
 import Icon from '../ui/Icon';
 import SearchResultItemRow from './SearchResultItemRow';
 import SearchCategoryTabs from './SearchCategoryTabs';
-import { theme } from '../../constants/theme';
+import { theme, subscribeActiveTheme } from '../../constants/theme';
 
 export interface ModalKeyNavigationState {
   activeIndex: number;
@@ -96,6 +97,14 @@ export default function GlobalSearchModal({
   const inputRef = useRef<TextInput | null>(null);
   const previousActiveElement = useRef<any>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const [, setThemeVersion] = useState(0);
+
+  useEffect(() => {
+    return subscribeActiveTheme(() => {
+      setThemeVersion((v) => v + 1);
+    });
+  }, []);
 
   const pulseAnim = useRef(new Animated.Value(0.4)).current;
 
@@ -261,10 +270,27 @@ export default function GlobalSearchModal({
           accessibilityLabel="Close search modal backdrop"
         />
 
-        <View style={styles.dialogContainer}>
+        <View
+          style={[
+            styles.dialogContainer,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.primaryBorder,
+              ...theme.shadows.lg,
+            },
+          ]}
+        >
           {/* 1. Combobox Search Input Bar */}
-          <View style={styles.inputHeader}>
-            <Icon name="search" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
+          <View
+            style={[
+              styles.inputHeader,
+              {
+                backgroundColor: isInputFocused ? theme.colors.primarySubtle : theme.colors.surface,
+                borderBottomColor: isInputFocused ? theme.colors.focusRing : theme.colors.primaryBorder,
+              },
+            ]}
+          >
+            <Icon name="search" size={theme.sizes.iconLg} color={theme.colors.primary} />
             <TextInput
               ref={inputRef}
               role="combobox"
@@ -282,8 +308,10 @@ export default function GlobalSearchModal({
               placeholderTextColor={theme.colors.textMuted}
               value={safeQuery}
               onChangeText={onChangeQuery}
+              onFocus={() => setIsInputFocused(true)}
+              onBlur={() => setIsInputFocused(false)}
               autoFocus={true}
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: theme.colors.text }]}
             />
 
             {safeQuery.length > 0 ? (
@@ -298,8 +326,16 @@ export default function GlobalSearchModal({
               </Pressable>
             ) : null}
 
-            <View style={styles.escBadge}>
-              <ThemedText variant="code" color={theme.colors.textSecondary}>
+            <View
+              style={[
+                styles.escBadge,
+                {
+                  backgroundColor: theme.colors.primarySubtle,
+                  borderColor: theme.colors.primaryBorder,
+                },
+              ]}
+            >
+              <ThemedText variant="code" color={theme.colors.primaryDark}>
                 ESC
               </ThemedText>
             </View>
@@ -349,6 +385,7 @@ export default function GlobalSearchModal({
                   {...({ role: 'listbox' } as any)}
                   aria-label="Quick Actions"
                   style={styles.resultsList}
+                  contentContainerStyle={styles.resultsListContent}
                   keyboardShouldPersistTaps="handled"
                 >
                   {quickActions.map((item, index) => (
@@ -370,6 +407,7 @@ export default function GlobalSearchModal({
                 {...({ role: 'listbox' } as any)}
                 aria-label="Search results"
                 style={styles.resultsList}
+                contentContainerStyle={styles.activeResultsListContent}
                 keyboardShouldPersistTaps="handled"
               >
                 {displayedItems.map((item, index) => (
@@ -385,8 +423,16 @@ export default function GlobalSearchModal({
             ) : (
               // UX State 4: Empty Results Card
               <View style={styles.emptyCard}>
-                <View style={styles.emptyIconCircle}>
-                  <Icon name="search" size={theme.sizes.iconLg} color={theme.colors.textMuted} />
+                <View
+                  style={[
+                    styles.emptyIconCircle,
+                    {
+                      backgroundColor: theme.colors.primarySubtle,
+                      borderColor: theme.colors.primaryBorder,
+                    },
+                  ]}
+                >
+                  <Icon name="search" size={theme.sizes.iconLg} color={theme.colors.primary} />
                 </View>
                 <ThemedText variant="bodyBold" color={theme.colors.text} style={styles.emptyTitle}>
                   {`No results found for "${safeQuery}"`}
@@ -395,45 +441,72 @@ export default function GlobalSearchModal({
                   Check spelling or try searching across all categories.
                 </ThemedText>
                 {safeCategory.toLowerCase() !== 'all' ? (
-                  <Pressable
+                  <Button
+                    title="Search in All Categories"
+                    variant="outline"
+                    size="sm"
                     onPress={() => onSelectCategory('all')}
-                    style={({ pressed }) => [
-                      styles.resetCategoryButton,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    accessibilityRole="button"
                     accessibilityLabel="Search in All Categories"
-                  >
-                    <ThemedText variant="smallBold" color={theme.colors.primary}>
-                      Search in All Categories
-                    </ThemedText>
-                  </Pressable>
+                    style={styles.resetCategoryButton}
+                  />
                 ) : null}
               </View>
             )}
           </View>
 
           {/* 4. Footer keyboard legend and counter */}
-          <View style={styles.footer}>
+          <View
+            style={[
+              styles.footer,
+              {
+                borderTopColor: theme.colors.primaryBorder,
+                backgroundColor: theme.colors.surfaceSubtle,
+              },
+            ]}
+          >
             <View style={styles.keyboardLegend}>
-              <View style={styles.legendKey}>
-                <ThemedText variant="code" color={theme.colors.textSecondary}>
+              <View
+                style={[
+                  styles.legendKey,
+                  {
+                    backgroundColor: theme.colors.primarySubtle,
+                    borderColor: theme.colors.primaryBorder,
+                  },
+                ]}
+              >
+                <ThemedText variant="code" color={theme.colors.primaryDark}>
                   ↑↓
                 </ThemedText>
               </View>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
                 Navigate
               </ThemedText>
-              <View style={styles.legendKey}>
-                <ThemedText variant="code" color={theme.colors.textSecondary}>
+              <View
+                style={[
+                  styles.legendKey,
+                  {
+                    backgroundColor: theme.colors.primarySubtle,
+                    borderColor: theme.colors.primaryBorder,
+                  },
+                ]}
+              >
+                <ThemedText variant="code" color={theme.colors.primaryDark}>
                   ↵
                 </ThemedText>
               </View>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
                 Select
               </ThemedText>
-              <View style={styles.legendKey}>
-                <ThemedText variant="code" color={theme.colors.textSecondary}>
+              <View
+                style={[
+                  styles.legendKey,
+                  {
+                    backgroundColor: theme.colors.primarySubtle,
+                    borderColor: theme.colors.primaryBorder,
+                  },
+                ]}
+              >
+                <ThemedText variant="code" color={theme.colors.primaryDark}>
                   ESC
                 </ThemedText>
               </View>
@@ -458,18 +531,18 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.overlay,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: theme.spacing['3xl'],
-    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing['4xl'] + theme.spacing.xl,
+    paddingHorizontal: theme.spacing['2xl'],
   },
   backdropPressable: {
     ...StyleSheet.absoluteFill,
   },
   dialogContainer: {
     width: '100%',
-    maxWidth: 680,
+    maxWidth: 760,
     maxHeight: '85%',
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.xl,
+    borderRadius: theme.radii['2xl'],
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
     overflow: 'hidden',
@@ -479,9 +552,9 @@ const styles = StyleSheet.create({
   inputHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    gap: theme.spacing.lg,
+    paddingHorizontal: theme.spacing['2xl'],
+    paddingVertical: theme.spacing.xl,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.border,
     backgroundColor: theme.colors.surface,
@@ -489,23 +562,24 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: theme.colors.text,
-    fontSize: theme.fontSizes.md,
-    paddingVertical: 0,
+    fontSize: theme.fontSizes.lg,
+    minHeight: theme.sizes.controlSm,
+    paddingVertical: theme.spacing.xs,
   },
   clearButton: {
     padding: theme.spacing.xs,
   },
   escBadge: {
-    paddingHorizontal: theme.spacing.xs + 2,
-    paddingVertical: 2,
-    borderRadius: theme.radii.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surfaceMuted,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
   },
   bodyContainer: {
-    maxHeight: 460,
-    minHeight: 120,
+    maxHeight: 540,
+    minHeight: 160,
     flexShrink: 1,
   },
   resultsWrapper: {
@@ -514,29 +588,41 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.sm,
-    paddingBottom: theme.spacing.xs,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing['2xl'],
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.sm,
   },
   resultsList: {
     flex: 1,
   },
+  resultsListContent: {
+    paddingHorizontal: theme.spacing.md,
+    paddingBottom: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  activeResultsListContent: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
   skeletonContainer: {
-    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    gap: theme.spacing.xs,
   },
   skeletonRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.lg,
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
     borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.borderLight,
   },
   skeletonIcon: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
+    width: theme.sizes.controlMd,
+    height: theme.sizes.controlMd,
     borderRadius: theme.radii.md,
     backgroundColor: theme.colors.surfaceMuted,
   },
@@ -557,23 +643,25 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceSubtle,
   },
   skeletonBadge: {
-    width: 50,
-    height: 18,
+    width: 56,
+    height: 20,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surfaceMuted,
   },
   emptyCard: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: theme.spacing['2xl'],
-    paddingHorizontal: theme.spacing.xl,
-    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing['4xl'],
+    paddingHorizontal: theme.spacing['2xl'],
+    gap: theme.spacing.md,
   },
   emptyIconCircle: {
     width: theme.sizes.controlLg,
     height: theme.sizes.controlLg,
     borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: theme.spacing.xs,
@@ -586,22 +674,15 @@ const styles = StyleSheet.create({
   },
   resetCategoryButton: {
     marginTop: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs + 2,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primarySubtle,
-  },
-  buttonPressed: {
-    opacity: 0.8,
   },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing['2xl'],
+    paddingVertical: theme.spacing.md,
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceSubtle,
@@ -609,12 +690,12 @@ const styles = StyleSheet.create({
   keyboardLegend: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs + 2,
+    gap: theme.spacing.sm,
   },
   legendKey: {
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 1,
-    borderRadius: theme.radii.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
+    borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surface,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,

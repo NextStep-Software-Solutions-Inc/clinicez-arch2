@@ -328,7 +328,7 @@ UPSTREAM_HUB_URL=https://hub.clinicez.com
 UPSTREAM_CLIENT_ID=edge-st-jude-hospital-cell-client
 UPSTREAM_CLIENT_SECRET=k9M2vR7xL4pQ1wS8tY0zB3aC6dE9fG2h3j4k5l6m
 EDGE_HUB_SIGNING_KEY=-----BEGIN EC PRIVATE KEY-----\nMHcCAQEE...\n-----END EC PRIVATE KEY-----
-CLINIC_PUBLIC_UPLOAD_BASE_URL=https://portal.clinicez.com/upload/lab
+PORTAL_BASE_URL=https://portal.clinicez.com
 
 HUB_URL=http://interop-hub:8080
 

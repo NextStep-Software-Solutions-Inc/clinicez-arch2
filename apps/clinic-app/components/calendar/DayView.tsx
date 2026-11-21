@@ -17,7 +17,18 @@ import {
   generateDayTimeSlots,
   toDateString,
   formatTime12,
+  getAppointmentLocalDateTime,
 } from './calendarUtils';
+
+export const UNASSIGNED_DOCTOR_ID = 'unassigned';
+export const UNASSIGNED_OVERLAY: DoctorShiftOverlay = {
+  doctorId: UNASSIGNED_DOCTOR_ID,
+  doctorName: 'Unassigned / Any Provider',
+  isOnDuty: true,
+  shiftStart: '07:00',
+  shiftEnd: '19:00',
+  breaks: [],
+};
 
 export function DayView({
   currentDate,
@@ -38,25 +49,16 @@ export function DayView({
 
   // Derive doctors to display
   const effectiveDoctors: DoctorShiftOverlay[] = useMemo(() => {
-    if (doctorOverlays && doctorOverlays.length > 0) {
-      if (activeDoctorId) {
+    if (activeDoctorId) {
+      if (activeDoctorId === UNASSIGNED_DOCTOR_ID) {
+        return [UNASSIGNED_OVERLAY];
+      }
+      if (doctorOverlays && doctorOverlays.length > 0) {
         return doctorOverlays.filter((d) => d.doctorId === activeDoctorId);
       }
-      return doctorOverlays;
-    }
-
-    // Fallback: extract distinct doctors from appointments
-    const docMap = new Map<string, string>();
-    for (const a of appointments) {
-      if (a.doctorId) {
-        docMap.set(a.doctorId, a.doctorName || 'Attending Physician');
-      }
-    }
-
-    if (docMap.size === 0) {
       return [
         {
-          doctorId: activeDoctorId || 'doc-primary',
+          doctorId: activeDoctorId,
           doctorName: 'Attending Physician',
           isOnDuty: true,
           shiftStart: '08:00',
@@ -66,20 +68,44 @@ export function DayView({
       ];
     }
 
-    const list: DoctorShiftOverlay[] = [];
-    docMap.forEach((name, id) => {
-      if (!activeDoctorId || activeDoctorId === id) {
-        list.push({
-          doctorId: id,
-          doctorName: name,
+    if (doctorOverlays && doctorOverlays.length > 0) {
+      return [...doctorOverlays, UNASSIGNED_OVERLAY];
+    }
+
+    // Fallback: extract distinct doctors from appointments
+    const docMap = new Map<string, string>();
+    for (const a of appointments) {
+      if (a.doctorId && a.doctorId !== UNASSIGNED_DOCTOR_ID) {
+        docMap.set(a.doctorId, a.doctorName || 'Attending Physician');
+      }
+    }
+
+    if (docMap.size === 0) {
+      return [
+        {
+          doctorId: 'doc-primary',
+          doctorName: 'Attending Physician',
           isOnDuty: true,
           shiftStart: '08:00',
           shiftEnd: '17:00',
           breaks: [{ start: '12:00', end: '13:00', description: 'Lunch Break' }],
-        });
-      }
+        },
+        UNASSIGNED_OVERLAY,
+      ];
+    }
+
+    const list: DoctorShiftOverlay[] = [];
+    docMap.forEach((name, id) => {
+      list.push({
+        doctorId: id,
+        doctorName: name,
+        isOnDuty: true,
+        shiftStart: '08:00',
+        shiftEnd: '17:00',
+        breaks: [{ start: '12:00', end: '13:00', description: 'Lunch Break' }],
+      });
     });
-    return list;
+    return [...list, UNASSIGNED_OVERLAY];
   }, [doctorOverlays, appointments, activeDoctorId]);
 
   if (isLoading) {
@@ -100,9 +126,16 @@ export function DayView({
 
   // Mobile layout (< 768px): Agenda timeline paired with DateCarousel
   if (isCompact && !isDesktop) {
-    const dayAppointments = appointments.filter((a) =>
-      a.scheduledAt.startsWith(dateString)
-    );
+    const dayAppointments = appointments.filter((a) => {
+      const matchesDate =
+        getAppointmentLocalDateTime(a.scheduledAt).dateStr === dateString;
+      if (!matchesDate) return false;
+      if (!activeDoctorId) return true;
+      if (activeDoctorId === UNASSIGNED_DOCTOR_ID) {
+        return !a.doctorId || a.doctorId === UNASSIGNED_DOCTOR_ID;
+      }
+      return a.doctorId === activeDoctorId;
+    });
 
     return (
       <View style={styles.mobileContainer}>

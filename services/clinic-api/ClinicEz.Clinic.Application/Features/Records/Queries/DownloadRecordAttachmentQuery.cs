@@ -19,13 +19,13 @@ public sealed record DownloadRecordAttachmentQuery(Guid AttachmentId) : IRequest
 
 public sealed class DownloadRecordAttachmentQueryHandler : IRequestHandler<DownloadRecordAttachmentQuery, DownloadRecordAttachmentResult?>
 {
-    private readonly IRepository<ClinicRecordAttachment> _attachmentRepo;
+    private readonly IRepository<RecordAttachment> _attachmentRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IClinicEncryptionService _encryptionService;
     private readonly IClinicStorageService _storageService;
 
     public DownloadRecordAttachmentQueryHandler(
-        IRepository<ClinicRecordAttachment> attachmentRepo,
+        IRepository<RecordAttachment> attachmentRepo,
         IClinicContext clinicContext,
         IClinicEncryptionService encryptionService,
         IClinicStorageService storageService)

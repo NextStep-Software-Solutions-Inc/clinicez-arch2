@@ -11,8 +11,8 @@ using Microsoft.Extensions.Logging;
 namespace ClinicEz.Patient.Infrastructure.Interop;
 
 /// <summary>
-/// Handles <c>facility.directory.updated</c> from the portal: keeps the patient-facing clinic and
-/// organization catalogue in step with the facility directory. Only the portal may publish it.
+/// Handles <c>facility.directory.updated</c> from the portal or an authorized clinic:
+/// keeps the patient-facing clinic and organization catalogue in sync under 3-gate governance.
 /// </summary>
 public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<FacilityCreatedEvent>
 {
@@ -82,6 +82,7 @@ public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<Fac
             var resolvedAddress = BuildAddress(message);
             var resolvedDescription = BuildClinicDescription(message);
             var specialtiesJson = BuildSpecialtiesJson(message);
+            var resolvedPlatformVerified = ResolvePlatformVerification(message);
 
             if (existingClinic is null)
             {
@@ -109,6 +110,8 @@ public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<Fac
                 {
                     var eligible = message.IsWorkspaceEligible ?? message.IsPublic ?? false;
                     newClinic.SetWorkspaceEligibility(eligible);
+                    if (resolvedPlatformVerified.HasValue)
+                        newClinic.SetPlatformVerified(resolvedPlatformVerified.Value);
                 }
                 else if (isClinicSender)
                 {
@@ -134,6 +137,9 @@ public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<Fac
                         existingClinic.SetWorkspaceEligibility(message.IsWorkspaceEligible.Value);
                     else if (message.IsPublic.HasValue)
                         existingClinic.SetWorkspaceEligibility(message.IsPublic.Value);
+
+                    if (resolvedPlatformVerified.HasValue)
+                        existingClinic.SetPlatformVerified(resolvedPlatformVerified.Value);
                 }
                 else if (isClinicSender)
                 {
@@ -165,103 +171,12 @@ public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<Fac
 
             if (message.Providers is not null)
             {
-                var existingProviders = await _dbContext.ClinicHealthcareProviders
-                    .Where(p => p.ClinicId == message.ResourceId)
-                    .ToListAsync(ct);
-
-                var incomingIds = new HashSet<Guid>();
-                for (var i = 0; i < message.Providers.Count; i++)
-                {
-                    var dto = message.Providers[i];
-                    var providerId = dto.Id != Guid.Empty ? dto.Id : Guid.NewGuid();
-                    incomingIds.Add(providerId);
-
-                    var existingProvider = existingProviders.FirstOrDefault(p => p.Id == providerId)
-                        ?? existingProviders.FirstOrDefault(p => string.Equals(p.Name, dto.Name, StringComparison.OrdinalIgnoreCase));
-
-                    if (existingProvider is null)
-                    {
-                        await _dbContext.ClinicHealthcareProviders.AddAsync(new ClinicHealthcareProvider
-                        {
-                            Id = providerId,
-                            ClinicId = message.ResourceId,
-                            Name = dto.Name,
-                            Specialty = string.IsNullOrWhiteSpace(dto.Specialty) ? "General Practice" : dto.Specialty,
-                            ProfessionalLicenseNo = dto.ProfessionalLicenseNo,
-                            IsActive = dto.IsActive,
-                            DisplayOrder = dto.DisplayOrder > 0 ? dto.DisplayOrder : i,
-                            CreatedAt = DateTime.UtcNow,
-                            UpdatedAt = DateTime.UtcNow
-                        }, ct);
-                    }
-                    else
-                    {
-                        incomingIds.Add(existingProvider.Id);
-                        existingProvider.Name = dto.Name;
-                        existingProvider.Specialty = string.IsNullOrWhiteSpace(dto.Specialty) ? existingProvider.Specialty : dto.Specialty;
-                        existingProvider.ProfessionalLicenseNo = dto.ProfessionalLicenseNo ?? existingProvider.ProfessionalLicenseNo;
-                        existingProvider.IsActive = dto.IsActive;
-                        existingProvider.DisplayOrder = dto.DisplayOrder > 0 ? dto.DisplayOrder : i;
-                        existingProvider.UpdatedAt = DateTime.UtcNow;
-                    }
-                }
-
-                foreach (var stale in existingProviders.Where(p => !incomingIds.Contains(p.Id)))
-                {
-                    stale.IsActive = false;
-                    stale.UpdatedAt = DateTime.UtcNow;
-                }
+                await SyncProvidersAsync(message, isClinicSender, ct);
             }
 
             if (message.Services is not null)
             {
-                var existingServices = await _dbContext.ClinicServices
-                    .Where(s => s.ClinicId == message.ResourceId)
-                    .ToListAsync(ct);
-
-                var incomingServiceIds = new HashSet<Guid>();
-                for (var i = 0; i < message.Services.Count; i++)
-                {
-                    var dto = message.Services[i];
-                    var serviceId = dto.ServiceId != Guid.Empty ? dto.ServiceId : Guid.NewGuid();
-                    incomingServiceIds.Add(serviceId);
-
-                    var existingService = existingServices.FirstOrDefault(s => s.Id == serviceId)
-                        ?? existingServices.FirstOrDefault(s => string.Equals(s.Name, dto.Name, StringComparison.OrdinalIgnoreCase));
-
-                    if (existingService is null)
-                    {
-                        await _dbContext.ClinicServices.AddAsync(new ClinicService
-                        {
-                            Id = serviceId,
-                            ClinicId = message.ResourceId,
-                            Name = dto.Name,
-                            Description = !string.IsNullOrWhiteSpace(dto.Category) ? dto.Category : null,
-                            Price = dto.StandardPrice,
-                            IsActive = dto.IsActive,
-                            DisplayOrder = i,
-                            CreatedAt = DateTime.UtcNow,
-                            UpdatedAt = DateTime.UtcNow
-                        }, ct);
-                    }
-                    else
-                    {
-                        incomingServiceIds.Add(existingService.Id);
-                        existingService.Name = dto.Name;
-                        if (!string.IsNullOrWhiteSpace(dto.Category))
-                            existingService.Description = dto.Category;
-                        existingService.Price = dto.StandardPrice;
-                        existingService.IsActive = dto.IsActive;
-                        existingService.DisplayOrder = i;
-                        existingService.UpdatedAt = DateTime.UtcNow;
-                    }
-                }
-
-                foreach (var stale in existingServices.Where(s => !incomingServiceIds.Contains(s.Id)))
-                {
-                    stale.IsActive = false;
-                    stale.UpdatedAt = DateTime.UtcNow;
-                }
+                await SyncServicesAsync(message, ct);
             }
 
             await _dbContext.SaveChangesAsync(ct);
@@ -315,6 +230,203 @@ public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<Fac
         }
     }
 
+    private async Task SyncProvidersAsync(FacilityCreatedEvent message, bool isClinicSender, CancellationToken ct)
+    {
+        var providersDto = message.Providers!;
+        var existingProviders = await _dbContext.ClinicHealthcareProviders
+            .Include(p => p.ProviderAvailabilities)
+            .Where(p => p.ClinicId == message.ResourceId)
+            .ToListAsync(ct);
+
+        var utcNow = DateTime.UtcNow;
+        var incomingIds = new HashSet<Guid>();
+
+        for (var i = 0; i < providersDto.Count; i++)
+        {
+            var dto = providersDto[i];
+
+            string? normalizedRole;
+            if (!string.IsNullOrWhiteSpace(dto.Role))
+            {
+                normalizedRole = PractitionerIdentity.NormalizeProfessionKind(dto.Role);
+                if (isClinicSender && normalizedRole is null)
+                    continue; // Strictly filter clinic-published providers to Doctor or Nurse when Role is specified.
+            }
+            else
+            {
+                normalizedRole = null;
+            }
+
+            var effectiveRole = normalizedRole ?? "Doctor";
+            var providerId = dto.Id != Guid.Empty ? dto.Id : Guid.NewGuid();
+            var resolvedPractitionerId = await ResolveCanonicalPractitionerIdAsync(dto.CanonicalProviderId, ct);
+            var normalizedLicense = ResolveNormalizedLicense(dto);
+
+            var existingProvider = existingProviders.FirstOrDefault(p => p.Id == providerId)
+                ?? (resolvedPractitionerId.HasValue
+                    ? existingProviders.FirstOrDefault(p => p.PractitionerId == resolvedPractitionerId.Value)
+                    : null)
+                ?? existingProviders.FirstOrDefault(p => string.Equals(p.Name, dto.Name, StringComparison.OrdinalIgnoreCase));
+
+            if (existingProvider is null)
+            {
+                var newProvider = new ClinicHealthcareProvider
+                {
+                    Id = providerId,
+                    ClinicId = message.ResourceId,
+                    PractitionerId = resolvedPractitionerId,
+                    Name = dto.Name,
+                    Specialty = string.IsNullOrWhiteSpace(dto.Specialty) ? "General Practice" : dto.Specialty,
+                    Role = effectiveRole,
+                    AvatarUrl = dto.AvatarUrl,
+                    ProfessionalLicenseNo = dto.ProfessionalLicenseNo,
+                    NormalizedLicenseNo = normalizedLicense,
+                    IsDirectoryOptIn = dto.IsDirectoryOptIn,
+                    AffiliationStatus = "Active",
+                    IsActive = dto.IsActive,
+                    DisplayOrder = dto.DisplayOrder > 0 ? dto.DisplayOrder : i,
+                    CreatedAt = utcNow,
+                    UpdatedAt = utcNow
+                };
+
+                newProvider.ProviderAvailabilities =
+                    PractitionerAvailabilitySyncHelper.BuildNewProviderAvailabilities(newProvider.Id, dto.Availabilities);
+
+                incomingIds.Add(newProvider.Id);
+                await _dbContext.ClinicHealthcareProviders.AddAsync(newProvider, ct);
+            }
+            else
+            {
+                incomingIds.Add(existingProvider.Id);
+                existingProvider.Name = dto.Name;
+                existingProvider.Specialty = string.IsNullOrWhiteSpace(dto.Specialty) ? existingProvider.Specialty : dto.Specialty;
+                existingProvider.Role = normalizedRole ?? (string.IsNullOrWhiteSpace(existingProvider.Role) ? "Doctor" : existingProvider.Role);
+                if (resolvedPractitionerId.HasValue)
+                    existingProvider.PractitionerId = resolvedPractitionerId.Value;
+                existingProvider.ProfessionalLicenseNo = dto.ProfessionalLicenseNo ?? existingProvider.ProfessionalLicenseNo;
+                existingProvider.NormalizedLicenseNo = normalizedLicense ?? existingProvider.NormalizedLicenseNo;
+                existingProvider.AvatarUrl = dto.AvatarUrl ?? existingProvider.AvatarUrl;
+                existingProvider.IsDirectoryOptIn = dto.IsDirectoryOptIn;
+                existingProvider.IsActive = dto.IsActive;
+                existingProvider.DisplayOrder = dto.DisplayOrder > 0 ? dto.DisplayOrder : i;
+                existingProvider.UpdatedAt = utcNow;
+
+                await PractitionerAvailabilitySyncHelper.SyncExistingProviderAvailabilitiesAsync(
+                    _dbContext, existingProvider, dto.Availabilities, ct);
+            }
+        }
+
+        if (message.ReplaceProvidersSnapshot)
+        {
+            foreach (var stale in existingProviders.Where(p => !incomingIds.Contains(p.Id)))
+            {
+                stale.IsActive = false;
+                stale.UpdatedAt = utcNow;
+            }
+        }
+    }
+
+    private async Task SyncServicesAsync(FacilityCreatedEvent message, CancellationToken ct)
+    {
+        var existingServices = await _dbContext.ClinicServices
+            .Where(s => s.ClinicId == message.ResourceId)
+            .ToListAsync(ct);
+
+        var incomingServiceIds = new HashSet<Guid>();
+        for (var i = 0; i < message.Services!.Count; i++)
+        {
+            var dto = message.Services[i];
+            var serviceId = dto.ServiceId != Guid.Empty ? dto.ServiceId : Guid.NewGuid();
+            incomingServiceIds.Add(serviceId);
+
+            var existingService = existingServices.FirstOrDefault(s => s.Id == serviceId)
+                ?? existingServices.FirstOrDefault(s => string.Equals(s.Name, dto.Name, StringComparison.OrdinalIgnoreCase));
+
+            if (existingService is null)
+            {
+                await _dbContext.ClinicServices.AddAsync(new ClinicService
+                {
+                    Id = serviceId,
+                    ClinicId = message.ResourceId,
+                    Name = dto.Name,
+                    Description = !string.IsNullOrWhiteSpace(dto.Category) ? dto.Category : null,
+                    Price = dto.StandardPrice,
+                    IsActive = dto.IsActive,
+                    DisplayOrder = i,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                }, ct);
+            }
+            else
+            {
+                incomingServiceIds.Add(existingService.Id);
+                existingService.Name = dto.Name;
+                if (!string.IsNullOrWhiteSpace(dto.Category))
+                    existingService.Description = dto.Category;
+                existingService.Price = dto.StandardPrice;
+                existingService.IsActive = dto.IsActive;
+                existingService.DisplayOrder = i;
+                existingService.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        foreach (var stale in existingServices.Where(s => !incomingServiceIds.Contains(s.Id)))
+        {
+            stale.IsActive = false;
+            stale.UpdatedAt = DateTime.UtcNow;
+        }
+    }
+
+    private async Task<Guid?> ResolveCanonicalPractitionerIdAsync(Guid? canonicalProviderId, CancellationToken ct)
+    {
+        if (canonicalProviderId is not { } id || id == Guid.Empty)
+            return null;
+
+        var currentId = id;
+        var visited = new HashSet<Guid>();
+        while (visited.Add(currentId))
+        {
+            var practitioner = await _dbContext.Practitioners
+                .AsNoTracking()
+                .Where(p => p.Id == currentId)
+                .Select(p => new { p.Id, p.MergedIntoPractitionerId })
+                .FirstOrDefaultAsync(ct);
+
+            if (practitioner is null)
+                return null;
+
+            if (practitioner.MergedIntoPractitionerId is not { } mergedId || mergedId == Guid.Empty)
+                return practitioner.Id;
+
+            currentId = mergedId;
+        }
+
+        return null;
+    }
+
+    private static bool? ResolvePlatformVerification(FacilityCreatedEvent message)
+    {
+        if (message.IsPlatformVerified.HasValue)
+            return message.IsPlatformVerified.Value;
+
+        return message.PlatformVerificationStatus switch
+        {
+            PlatformVerificationStatus.Verified => true,
+            PlatformVerificationStatus.Rejected
+                or PlatformVerificationStatus.Suspended
+                or PlatformVerificationStatus.Unverified => false,
+            _ => null
+        };
+    }
+
+    private static string? ResolveNormalizedLicense(FacilityProviderDto dto)
+    {
+        if (!string.IsNullOrWhiteSpace(dto.NormalizedLicenseNo))
+            return PractitionerIdentity.NormalizePrc(dto.NormalizedLicenseNo) ?? dto.NormalizedLicenseNo.Trim().ToUpperInvariant();
+
+        return PractitionerIdentity.NormalizePrc(dto.ProfessionalLicenseNo);
+    }
+
     private static string? BuildAddress(FacilityCreatedEvent message)
     {
         if (!string.IsNullOrWhiteSpace(message.Address))
@@ -351,6 +463,9 @@ public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<Fac
         {
             foreach (var p in message.Providers)
             {
+                if (!string.IsNullOrWhiteSpace(p.Role) && PractitionerIdentity.NormalizeProfessionKind(p.Role) is null)
+                    continue;
+
                 if (!string.IsNullOrWhiteSpace(p.Specialty) &&
                     !specialties.Contains(p.Specialty.Trim(), StringComparer.OrdinalIgnoreCase))
                 {

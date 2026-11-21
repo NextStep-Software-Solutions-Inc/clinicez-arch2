@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
+  Pressable,
   StyleSheet,
   ScrollView,
   RefreshControl,
-  Pressable,
 } from 'react-native';
 import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
 import { notify } from '@utils/feedback';
@@ -22,17 +22,20 @@ import {
   ValidatedDateInput,
   validateDateString,
   TimeInput,
+  validateTimeString,
   ServiceSelect,
 } from '@ui';
 import type { BadgeVariant } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useClinic } from '../../context/ClinicContext';
+import { useClinicComms } from '../../context/ClinicCommsContext';
 import PatientSearchResultRow, {
   parseConfiguredSearchFields,
 } from '../../components/patient/PatientSearchResultRow';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
+import { isSeniorOrPwdEligible, resolveTicketPrefix, type VisitType } from '../../components/patient/ServiceCheckInModal';
 import {
   clinicService,
   AppointmentItem,
@@ -40,10 +43,14 @@ import {
   ClinicPatient,
   ClinicCustomFieldDefinition,
   GetAppointmentsOptions,
+  type TeleconsultPaymentPolicy,
+  formatClinicDate,
+  formatClinicTime,
 } from '../../services/clinicService';
 import { SlotPicker } from '../../components/roster/SlotPicker';
 import { DoctorRosterCalendarModal } from '../../components/roster/DoctorRosterCalendarModal';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   CalendarHeader,
   CalendarSkeleton,
@@ -54,10 +61,15 @@ import {
   AppointmentInspectionModal,
   AppointmentRescheduleModal,
   getManilaTodayStr,
+  getManilaTimeParts,
+  getAppointmentLocalDateTime,
+  isAppointmentOverdue,
   toDateString,
   parseDateOnly,
   formatDateString,
   getDaysInMonth,
+  validateFutureManilaDateTime,
+  extractAppointmentScheduleError,
   type CalendarViewMode,
   type ExtendedAppointmentItem,
   type DoctorShiftOverlay,
@@ -70,7 +82,9 @@ export type AppointmentsRouteParams = {
   date?: string;
   view?: CalendarViewMode;
   tab?: string;
+  status?: string;
   appointmentId?: string;
+  doctorId?: string;
 };
 
 export type AppointmentsScreenProps = StaticScreenProps<AppointmentsRouteParams | undefined>;
@@ -91,7 +105,7 @@ export function buildPreselectedPatientFromRoute(
     fullName,
     dateOfBirth: '',
     age: 0,
-    gender: '',
+    sex: '',
     contactNumber: '',
     verificationStatus: 'Verified',
     createdAt: '',
@@ -109,26 +123,27 @@ export function formatTime(isoString?: string): string {
   if (!isoString) return '--';
   const d = new Date(isoString);
   if (isNaN(d.getTime())) return '--';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  return formatClinicTime(d, { fallback: '--' });
 }
 
 export function formatDay(isoString?: string): string {
   if (!isoString) return '';
   const d = new Date(isoString);
   if (isNaN(d.getTime())) return '';
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return formatClinicDate(d, { fallback: '' });
 }
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-/** Two hours from now, as editable form values. */
-export function defaultSlot(): { date: string; time: string } {
-  const d = new Date(Date.now() + 2 * 60 * 60 * 1000);
+/** Two hours from now in Asia/Manila, as editable form values. */
+export function defaultSlot(now: Date = new Date()): { date: string; time: string } {
+  const d = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  const { dateStr, hour } = getManilaTimeParts(d);
   return {
-    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-    time: `${pad(d.getHours())}:00`,
+    date: dateStr,
+    time: `${pad(hour)}:00`,
   };
 }
 
@@ -144,6 +159,8 @@ function getStatusBadge(status: AppointmentStatus): { variant: BadgeVariant; lab
       return { variant: 'warning', label: 'Pending' };
     case 'Cancelled':
       return { variant: 'emergency', label: 'Cancelled' };
+    case 'NoShow':
+      return { variant: 'neutral', label: 'No Show' };
     case 'Confirmed':
     default:
       return { variant: 'primary', label: 'Confirmed' };
@@ -184,6 +201,18 @@ export function AppointmentBookedSuccessView({ appointment }: AppointmentBookedS
             {[formatDay(appointment.scheduledAt), formatTime(appointment.scheduledAt)]
               .filter(Boolean)
               .join(' · ')}
+          </ThemedText>
+        </View>
+        <View style={styles.successSummaryRow}>
+          <ThemedText variant="caption" color={theme.colors.textSecondary}>
+            Visit modality
+          </ThemedText>
+          <ThemedText variant="bodyBold">
+            {appointment.appointmentType === 'Teleconsult' ||
+            appointment.isTeleconsult ||
+            /^teleconsult(ation)?$/i.test((appointment.serviceType || '').trim())
+              ? `Teleconsultation${appointment.paymentPolicy ? ` (${appointment.paymentPolicy})` : ''}`
+              : 'In-Person'}
           </ThemedText>
         </View>
         <View style={styles.successSummaryRow}>
@@ -237,13 +266,15 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   );
 
   const isCheckingInRef = useRef(false);
+  const isBookingRef = useRef(false);
   const [conflictModal, setConflictModal] = useState<{
     visible: boolean;
     error?: any;
     patientName?: string;
   } | null>(null);
-  const { staff } = useStaff();
-  const { settings, rooms } = useClinic();
+  const { staff, reload: reloadStaff } = useStaff();
+  const { settings, rooms, refresh: refreshClinic } = useClinic();
+  const { lastTeleconsultEndedAt = 0 } = useClinicComms() ?? {};
   const doctors = staff.filter((s) => s.role === 'Doctor');
   const activeDoctors = useMemo(() => staff.filter((s) => s.role === 'Doctor' && s.isActive), [staff]);
   const activeRooms = useMemo(() => (rooms || []).filter((r) => r.isActive), [rooms]);
@@ -272,16 +303,46 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const [checkInAppointment, setCheckInAppointment] = useState<AppointmentItem | null>(null);
   const [checkInDoctorId, setCheckInDoctorId] = useState<string>('');
   const [checkInRoomId, setCheckInRoomId] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = usePersistedTab<string>({
+    storageKey: 'clinicez_appointments_status_filter',
+    allowedValues: ['ALL', 'Scheduled', 'CheckedIn', 'Completed', 'Cancelled', 'NoShow'],
+    defaultValue: 'ALL',
+    routeParam: route?.params?.status,
+    queryParam: 'status',
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
 
   // Calendar View & Navigation State
-  const [viewMode, setViewMode] = useState<CalendarViewMode>(() =>
-    (route?.params?.view as CalendarViewMode) || 'month'
-  );
-  const [currentDate, setCurrentDate] = useState<string>(() =>
-    route?.params?.date || getManilaTodayStr()
-  );
-  const [calendarDoctorId, setCalendarDoctorId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = usePersistedTab<CalendarViewMode>({
+    storageKey: 'clinicez_appointments_view_mode',
+    allowedValues: ['month', 'week', 'day', 'agenda'],
+    defaultValue: 'month',
+    routeParam: (route?.params?.view as CalendarViewMode) || null,
+    queryParam: 'view',
+    queryParamAliases: ['viewMode'],
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
+  const [currentDate, setCurrentDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_appointments_selected_date',
+    defaultValue: getManilaTodayStr(),
+    routeParam: route?.params?.date,
+    queryParam: 'date',
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
+  const [calendarDoctorId, setCalendarDoctorId] = usePersistedTab<string>({
+    storageKey: 'clinicez_appointments_doctor_id',
+    defaultValue: 'ALL',
+    routeParam: route?.params?.doctorId,
+    queryParam: 'doctorId',
+    queryParamAliases: ['doctor'],
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
   const [inspectedAppointment, setInspectedAppointment] = useState<ExtendedAppointmentItem | null>(
     () => {
       const apt = (route?.params as any)?.appointment;
@@ -335,13 +396,39 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const [formDate, setFormDate] = useState<string>(() => (initialPreselected ? defaultSlot().date : ''));
   const [formTime, setFormTime] = useState<string>(() => (initialPreselected ? defaultSlot().time : ''));
   const [formServiceTypes, setFormServiceTypes] = useState<string[]>(['Consultation']);
+  const [formModality, setFormModality] = useState<'InPerson' | 'Teleconsult'>('InPerson');
+  const [formPaymentPolicy, setFormPaymentPolicy] = useState<TeleconsultPaymentPolicy>('Prepaid');
   const [formReason, setFormReason] = useState('');
   const [formNotes, setFormNotes] = useState('');
+  const [bookingError, setBookingError] = useState<string | null>(null);
+
+  const bookDateValidation = useMemo(
+    () => validateDateString(formDate, { boundaryMode: 'futureOrToday' }),
+    [formDate]
+  );
+  const bookTimeSyntax = useMemo(() => validateTimeString(formTime), [formTime]);
+  const bookingTimeError = useMemo(() => {
+    if (!bookDateValidation.isValid || formTime.trim().length !== 5 || !bookTimeSyntax.isValid) {
+      return undefined;
+    }
+    const res = validateFutureManilaDateTime(formDate, formTime, { mode: 'create' });
+    return res.isValid ? undefined : res.errorMessage;
+  }, [bookDateValidation.isValid, formDate, formTime, bookTimeSyntax.isValid]);
+
+  const isEffectiveTeleconsultEnabled = Boolean(
+    settings?.isWorkspaceTeleconsultEntitled && settings?.enableTeleconsultation
+  );
+
+  useEffect(() => {
+    if (!isEffectiveTeleconsultEnabled && formModality === 'Teleconsult') {
+      setFormModality('InPerson');
+    }
+  }, [isEffectiveTeleconsultEnabled, formModality]);
 
   const fetchAppointments = useCallback(async () => {
     const options: GetAppointmentsOptions = {};
 
-    if (calendarDoctorId) {
+    if (calendarDoctorId && calendarDoctorId !== 'ALL') {
       options.doctorId = calendarDoctorId;
     }
 
@@ -374,7 +461,13 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       setLoadError(err.message || 'Unable to load appointments.');
       return;
     }
-    setAppointments(data ?? []);
+    const nextAppointments = data ?? [];
+    setAppointments(nextAppointments);
+    setInspectedAppointment((prev) => {
+      if (!prev) return prev;
+      const updated = nextAppointments.find((a) => a.id === prev.id);
+      return updated ? { ...prev, ...updated } : prev;
+    });
     setLoadError(null);
   }, [viewMode, currentDate, calendarDoctorId, statusFilter]);
 
@@ -382,6 +475,14 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     setLoading(true);
     fetchAppointments().finally(() => setLoading(false));
   }, [fetchAppointments]);
+
+  const prevTeleconsultEndedAtRef = useRef<number>(lastTeleconsultEndedAt);
+  useEffect(() => {
+    if (lastTeleconsultEndedAt && lastTeleconsultEndedAt !== prevTeleconsultEndedAtRef.current) {
+      prevTeleconsultEndedAtRef.current = lastTeleconsultEndedAt;
+      void fetchAppointments();
+    }
+  }, [lastTeleconsultEndedAt, fetchAppointments]);
 
   // Debounced patient lookup for the booking form.
   useEffect(() => {
@@ -421,8 +522,11 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     setFormPatient(null);
     setFormDoctorId(null);
     setFormServiceTypes(['Consultation']);
+    setFormModality('InPerson');
+    setFormPaymentPolicy('Prepaid');
     setFormReason('');
     setFormNotes('');
+    setBookingError(null);
   }, []);
 
   const openBookModal = useCallback((preselectedPatient?: ClinicPatient | null) => {
@@ -436,6 +540,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         : null;
 
     setBookedAppointment(null);
+    setBookingError(null);
     setPatientSearch('');
     setPatientResults([]);
     setFormPatient(validPatient);
@@ -443,6 +548,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     setFormDate(slot.date);
     setFormTime(slot.time);
     setFormServiceTypes(['Consultation']);
+    setFormModality('InPerson');
+    setFormPaymentPolicy('Prepaid');
     setFormReason('');
     setFormNotes('');
     setBookModalVisible(true);
@@ -503,38 +610,60 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     }
   }, [route?.params?.tab, navigation]);
 
-  // Deep-link from Global Search Provider: appointmentId
+  // Deep-link from Global Search Provider or Staff Notification Center: appointmentId
   useEffect(() => {
     const aptId = route?.params?.appointmentId;
     if (!aptId) return;
+    let cancelled = false;
+    const tzId = settings?.timeZoneId ?? 'Asia/Manila';
+
+    const openResolvedAppointment = (found: AppointmentItem) => {
+      if (cancelled) return;
+      if (!route?.params?.date) {
+        const { dateStr } = getAppointmentLocalDateTime(found.scheduledAt, tzId);
+        if (dateStr) {
+          setCurrentDate(dateStr);
+        }
+      }
+      setInspectedAppointment(found);
+      navigation.setParams?.({ appointmentId: undefined });
+    };
+
     const match = appointments.find((a) => a.id === aptId);
     if (match) {
-      setInspectedAppointment(match);
-      navigation.setParams?.({ appointmentId: undefined });
+      openResolvedAppointment(match);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (typeof clinicService?.getAppointment === 'function') {
+      clinicService
+        .getAppointment(aptId)
+        .then(([found]) => {
+          if (found) {
+            openResolvedAppointment(found);
+          } else if (!loading && typeof clinicService?.getAppointments === 'function') {
+            clinicService.getAppointments().then(([allApts]) => {
+              const fallback = allApts?.find((a) => a.id === aptId);
+              if (fallback) openResolvedAppointment(fallback);
+            });
+          }
+        })
+        .catch(() => {});
     } else if (!loading) {
       clinicService.getAppointments().then(([allApts]) => {
         const found = allApts?.find((a) => a.id === aptId);
-        if (found) {
-          setInspectedAppointment(found);
-          navigation.setParams?.({ appointmentId: undefined });
-        }
+        if (found) openResolvedAppointment(found);
       });
     }
-  }, [route?.params?.appointmentId, appointments, loading, navigation]);
 
-  // Deep-link / route param: date
-  useEffect(() => {
-    if (route?.params?.date && route.params.date !== currentDate) {
-      setCurrentDate(route.params.date);
-    }
-  }, [route?.params?.date]);
+    return () => {
+      cancelled = true;
+    };
+  }, [route?.params?.appointmentId, route?.params?.date, appointments, loading, navigation, settings?.timeZoneId, setCurrentDate]);
 
-  // Deep-link / route param: view
-  useEffect(() => {
-    if (route?.params?.view && route.params.view !== viewMode) {
-      setViewMode(route.params.view as CalendarViewMode);
-    }
-  }, [route?.params?.view]);
+
 
   const handlePrev = useCallback(() => {
     const { year, month, day } = parseDateOnly(currentDate);
@@ -583,13 +712,16 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     (date: Date, timeStr: string, doctorId?: string) => {
       const dateStr = toDateString(date);
       setBookedAppointment(null);
+      setBookingError(null);
       setPatientSearch('');
       setPatientResults([]);
       setFormPatient(null);
-      setFormDoctorId(doctorId || null);
+      setFormDoctorId(!doctorId || doctorId === 'unassigned' ? null : doctorId);
       setFormDate(dateStr);
       setFormTime(timeStr);
       setFormServiceTypes(['Consultation']);
+      setFormModality('InPerson');
+      setFormPaymentPolicy('Prepaid');
       setFormReason('');
       setFormNotes('');
       setBookModalVisible(true);
@@ -598,47 +730,90 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   );
 
   const handleBookAppointment = async () => {
+    if (isBookingRef.current || booking || bookedAppointment) return;
+
+    setBookingError(null);
+
     if (!formPatient) {
       notify.error('Select a patient for this appointment.');
       return;
     }
     const dateCheck = validateDateString(formDate, { boundaryMode: 'futureOrToday' });
     if (!dateCheck.isValid) {
-      notify.error(dateCheck.errorMessage || 'Enter a valid appointment date (today or in the future).');
+      const msg = dateCheck.errorMessage || 'Enter a valid appointment date (today or in the future).';
+      setBookingError(msg);
+      notify.error(msg);
       return;
     }
-    const scheduled = new Date(`${formDate}T${formTime}`);
-    if (isNaN(scheduled.getTime())) {
-      notify.error('Enter a valid date (YYYY-MM-DD) and time (HH:MM).');
+    const timeCheck = validateFutureManilaDateTime(formDate, formTime, { mode: 'create' });
+    if (!timeCheck.isValid || !timeCheck.utcIso) {
+      const msg = timeCheck.errorMessage || 'Enter a valid date (YYYY-MM-DD) and time (HH:MM).';
+      setBookingError(msg);
+      notify.error(msg);
+      return;
+    }
+    const scheduledAt = timeCheck.utcIso;
+    if (formModality === 'Teleconsult' && !isEffectiveTeleconsultEnabled) {
+      notify.error('Teleconsultation is not enabled for this clinic.');
       return;
     }
     const doctor = doctors.find((d) => d.id === formDoctorId);
+    const selectedServices = formServiceTypes.join(', ').trim();
 
-    setBooking(true);
-    const [newApt, err] = await clinicService.createAppointment({
-      patientId: formPatient.id,
-      patientName: formPatient.fullName,
-      doctorId: doctor?.id,
-      doctorName: doctor ? formatStaffName(doctor) : undefined,
-      scheduledAt: scheduled.toISOString(),
-      serviceType: formServiceTypes.join(', ').trim() || undefined,
-      reason: formReason.trim() || 'General Consultation',
-      notes: formNotes.trim() || undefined,
-    });
-    setBooking(false);
+    try {
+      isBookingRef.current = true;
+      setBooking(true);
+      const [newApt, err] = await clinicService.createAppointment({
+        patientId: formPatient.id,
+        patientName: formPatient.fullName,
+        doctorId: doctor?.id,
+        doctorName: doctor ? formatStaffName(doctor) : undefined,
+        scheduledAt,
+        serviceType: formModality === 'Teleconsult' ? 'Teleconsult' : selectedServices || undefined,
+        reason: formReason.trim() || selectedServices || 'General Consultation',
+        notes: formNotes.trim() || undefined,
+        appointmentType: formModality === 'Teleconsult' ? 'Teleconsult' : 'InPerson',
+        paymentPolicy: formModality === 'Teleconsult' ? formPaymentPolicy : undefined,
+      });
 
-    if (err || !newApt) {
-      notify.error(err?.message || 'The appointment could not be booked. Please try again.');
-      return;
+      if (err || !newApt) {
+        const msg =
+          err?.status === 400 || err?.errorCode === 'VALIDATION_ERROR'
+            ? extractAppointmentScheduleError(err, ['ScheduledAt', 'NewScheduledAt']) ||
+              err?.message ||
+              'The appointment could not be booked. Please try again.'
+            : err?.message || 'The appointment could not be booked. Please try again.';
+        setBookingError(msg);
+        notify.error(msg);
+        return;
+      }
+
+      const createdApt: AppointmentItem =
+        formModality === 'Teleconsult'
+          ? {
+              ...newApt,
+              appointmentType: newApt.appointmentType ?? 'Teleconsult',
+              isTeleconsult: true,
+              paymentPolicy:
+                (newApt.paymentPolicy as TeleconsultPaymentPolicy | undefined) ?? formPaymentPolicy,
+              paymentStatus:
+                newApt.paymentStatus ?? (formPaymentPolicy === 'Exempt' ? 'Exempt' : 'Pending'),
+            }
+          : newApt;
+
+      setAppointments((prev) => [createdApt, ...prev]);
+      setBookedAppointment(createdApt);
+      notify.success(`Appointment booked for ${formPatient.fullName}.`);
+    } finally {
+      setBooking(false);
+      isBookingRef.current = false;
     }
-
-    setAppointments((prev) => [newApt, ...prev]);
-    setBookedAppointment(newApt);
-    notify.success(`Appointment booked for ${formPatient.fullName}.`);
-    resetForm();
   };
 
-  const handleCancelAppointment = async (item: AppointmentItem) => {
+  const [cancelingAppointment, setCancelingAppointment] = useState<AppointmentItem | null>(null);
+  const [cancelingInProgress, setCancelingInProgress] = useState<boolean>(false);
+
+  const executeCancelAppointment = async (item: AppointmentItem) => {
     const [, err] = await clinicService.cancelAppointment(item.id, 'Cancelled by clinic desk');
     if (err) {
       notify.error(err.message || 'The appointment could not be cancelled.');
@@ -648,6 +823,56 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       prev.map((a) => (a.id === item.id ? { ...a, status: 'Cancelled' as AppointmentStatus } : a))
     );
     notify.success(`Appointment for ${item.patientName} was cancelled.`);
+  };
+
+  const executeMarkNoShow = async (item: AppointmentItem, reason?: string): Promise<boolean> => {
+    const [updated, err] = await clinicService.markAppointmentNoShow(item.id, reason);
+    if (err) {
+      notify.error(err.message || 'The appointment could not be marked as no-show.');
+      return false;
+    }
+    const nextItem: AppointmentItem = {
+      ...item,
+      ...(updated ?? {}),
+      status: (updated?.status ?? 'NoShow') as AppointmentStatus,
+    };
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === item.id ? { ...a, ...nextItem } : a))
+    );
+    setInspectedAppointment((prev) =>
+      prev && prev.id === item.id ? { ...prev, ...nextItem } : prev
+    );
+    notify.success(`Appointment for ${item.patientName} was marked as No-Show.`);
+    return true;
+  };
+
+  const handleBookFollowUp = useCallback(
+    async (item: AppointmentItem) => {
+      setInspectedAppointment(null);
+      const preselected = buildPreselectedPatientFromRoute({
+        patientId: item.patientId,
+        patientName: item.patientName,
+      });
+      if (preselected) {
+        openBookModal(preselected);
+        return;
+      }
+      const [patient] = await clinicService.getPatientById(item.patientId);
+      openBookModal(patient ?? null);
+    },
+    [openBookModal],
+  );
+
+  const handleCancelAppointment = (item: AppointmentItem) => {
+    setCancelingAppointment(item);
+  };
+
+  const handleConfirmCancelAppointment = async () => {
+    if (!cancelingAppointment) return;
+    setCancelingInProgress(true);
+    await executeCancelAppointment(cancelingAppointment);
+    setCancelingInProgress(false);
+    setCancelingAppointment(null);
   };
 
   const handleOpenCheckInModal = (item: AppointmentItem) => {
@@ -673,6 +898,14 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     const chosenRoom = checkInRoomId ? activeRooms.find((r) => r.id === checkInRoomId) : undefined;
 
     try {
+      let seriesPrefix: string | undefined = undefined;
+      const [patient] = await clinicService.getPatientById(item.patientId);
+      if (patient) {
+        const isPriority = isSeniorOrPwdEligible(patient);
+        const visitType = (item.serviceType as VisitType) || 'RoutineCheckup';
+        seriesPrefix = resolveTicketPrefix(visitType, isPriority);
+      }
+
       const isUrgent = item.reason?.toLowerCase().includes('chest') || item.reason?.toLowerCase().includes('pain');
       const [queueItem, err] = await clinicService.checkInPatient({
         patientId: item.patientId,
@@ -684,6 +917,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         roomOrStation: chosenRoom?.name,
         priority: isUrgent ? 'Urgent' : 'Routine',
         chiefComplaint: item.reason ?? 'General Consultation',
+        queueDate: getManilaTodayStr(),
+        seriesPrefix,
       });
 
       if (err) {
@@ -770,7 +1005,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
             onSelectDate={handleSelectDate}
             onSelectSlot={handleSelectSlot}
             onSelectAppointment={(appt) => setInspectedAppointment(appt)}
-            activeDoctorId={calendarDoctorId || undefined}
+            activeDoctorId={calendarDoctorId === 'ALL' ? undefined : calendarDoctorId}
             doctorOverlays={doctorOverlays}
           />
         );
@@ -830,8 +1065,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
           onNext={handleNext}
           onToday={handleToday}
           onSelectDate={handleSelectDate}
-          activeDoctorId={calendarDoctorId || undefined}
-          onDoctorChange={(docId) => setCalendarDoctorId(docId || null)}
+          activeDoctorId={calendarDoctorId === 'ALL' ? undefined : calendarDoctorId}
+          onDoctorChange={(docId) => setCalendarDoctorId(docId || 'ALL')}
           doctors={activeDoctors.map((d) => ({ id: d.id, name: formatStaffName(d) }))}
         />
 
@@ -857,8 +1092,17 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
             </View>
           ) : (
             <View style={styles.modalFooter}>
-              <Button title="Cancel" variant="secondary" onPress={closeBookModal} />
-              <Button title="Confirm and schedule" loading={booking} onPress={handleBookAppointment} />
+              <Button title="Cancel" variant="secondary" disabled={booking} onPress={closeBookModal} />
+              <Button
+                title="Confirm and schedule"
+                loading={booking}
+                disabled={
+                  booking ||
+                  Boolean(bookingTimeError) ||
+                  (bookDateValidation.isComplete && !bookDateValidation.isValid)
+                }
+                onPress={handleBookAppointment}
+              />
             </View>
           )
         }
@@ -867,6 +1111,19 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
           <AppointmentBookedSuccessView appointment={bookedAppointment} />
         ) : (
           <>
+            {bookingError ? (
+              <View
+                testID="book-appointment-error-alert"
+                role="alert"
+                style={styles.bookingErrorAlert}
+              >
+                <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+                <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flexFill}>
+                  {bookingError}
+                </ThemedText>
+              </View>
+            ) : null}
+
             {formPatient ? (
               <View style={styles.selectedPatient} testID="selected-patient-summary">
                 <View style={styles.flexFill}>
@@ -925,6 +1182,125 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
               </View>
             )}
 
+            <View style={styles.fieldGroup}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                Visit modality
+              </ThemedText>
+              <View style={styles.modalityToggleGroup} testID="book-modality-toggle-group">
+                <Pressable
+                  testID="book-modality-in-person"
+                  accessibilityRole="button"
+                  accessibilityLabel="In-Person Consultation"
+                  onPress={() => setFormModality('InPerson')}
+                  style={[
+                    styles.modalityOptionBtn,
+                    formModality === 'InPerson'
+                      ? styles.modalityChipSelected
+                      : styles.modalityChipUnselected,
+                  ]}
+                >
+                  <Icon
+                    name="patient"
+                    size={theme.sizes.iconSm}
+                    color={
+                      formModality === 'InPerson'
+                        ? theme.colors.routineText
+                        : theme.colors.textMuted
+                    }
+                  />
+                  <ThemedText
+                    variant="smallBold"
+                    color={
+                      formModality === 'InPerson' ? theme.colors.routineText : theme.colors.text
+                    }
+                  >
+                    In-Person
+                  </ThemedText>
+                </Pressable>
+
+                <Pressable
+                  testID="book-modality-teleconsult"
+                  accessibilityRole="button"
+                  accessibilityLabel="Virtual Teleconsultation"
+                  accessibilityState={{ disabled: !isEffectiveTeleconsultEnabled }}
+                  disabled={!isEffectiveTeleconsultEnabled}
+                  onPress={() => {
+                    if (isEffectiveTeleconsultEnabled) {
+                      setFormModality('Teleconsult');
+                    } else {
+                      notify.warning('Teleconsultation is disabled for this clinic.');
+                    }
+                  }}
+                  style={[
+                    styles.modalityOptionBtn,
+                    formModality === 'Teleconsult'
+                      ? styles.modalityChipSelected
+                      : styles.modalityChipUnselected,
+                    !isEffectiveTeleconsultEnabled && styles.modalityChipDisabled,
+                  ]}
+                >
+                  <Icon
+                    name={!isEffectiveTeleconsultEnabled ? 'lock' : 'consultations'}
+                    size={theme.sizes.iconSm}
+                    color={
+                      !isEffectiveTeleconsultEnabled
+                        ? theme.colors.textMuted
+                        : formModality === 'Teleconsult'
+                        ? theme.colors.routineText
+                        : theme.colors.textMuted
+                    }
+                  />
+                  <ThemedText
+                    variant="smallBold"
+                    color={
+                      !isEffectiveTeleconsultEnabled
+                        ? theme.colors.textMuted
+                        : formModality === 'Teleconsult'
+                        ? theme.colors.routineText
+                        : theme.colors.text
+                    }
+                  >
+                    {!isEffectiveTeleconsultEnabled ? 'Teleconsult (Disabled)' : 'Teleconsultation'}
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+
+            {formModality === 'Teleconsult' ? (
+              <View style={styles.fieldGroup}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  Payment policy
+                </ThemedText>
+                <View style={styles.chipRow} testID="book-teleconsult-policy-picker">
+                  {(['Prepaid', 'Postpaid', 'Exempt'] as const).map((pol) => {
+                    const isSelected = formPaymentPolicy === pol;
+                    return (
+                      <Pressable
+                        key={pol}
+                        testID={`book-policy-option-${pol.toLowerCase()}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${pol} Policy`}
+                        onPress={() => setFormPaymentPolicy(pol)}
+                        style={[
+                          styles.policyOptionBtn,
+                          isSelected
+                            ? styles.modalityChipSelected
+                            : styles.modalityChipUnselected,
+                        ]}
+                      >
+                        <ThemedText
+                          variant="smallBold"
+                          color={isSelected ? theme.colors.routineText : theme.colors.text}
+                        >
+                          {pol}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
             {doctors.length > 0 ? (
               <View style={styles.fieldGroup}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
@@ -956,12 +1332,24 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
                   label="Appointment Date"
                   placeholder="YYYY-MM-DD"
                   value={formDate}
-                  onChangeText={setFormDate}
+                  onChangeText={(val) => {
+                    setFormDate(val);
+                    if (bookingError) setBookingError(null);
+                  }}
                   boundaryMode="futureOrToday"
                 />
               </View>
               <View style={styles.flexFill}>
-                <TimeInput label="Selected Time" placeholder="HH:MM" value={formTime} onChangeText={setFormTime} />
+                <TimeInput
+                  label="Selected Time"
+                  placeholder="HH:MM"
+                  value={formTime}
+                  onChangeText={(val) => {
+                    setFormTime(val);
+                    if (bookingError) setBookingError(null);
+                  }}
+                  error={bookingTimeError}
+                />
               </View>
             </View>
 
@@ -974,6 +1362,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
                   const parts = slot.startTime.split(':');
                   const hhmm = parts.length >= 2 ? `${parts[0]}:${parts[1]}` : slot.startTime;
                   setFormTime(hhmm);
+                  if (bookingError) setBookingError(null);
                 }}
               />
             ) : null}
@@ -1008,6 +1397,10 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         onClose={() => setRosterModalVisible(false)}
         doctors={doctors}
         initialDoctorId={formDoctorId || doctors[0]?.id}
+        platformVerificationStatus={settings?.platformVerificationStatus}
+        onRefreshVerificationState={async () => {
+          await Promise.all([reloadStaff?.(), refreshClinic?.()]);
+        }}
         onAddStaff={() => {
           setRosterModalVisible(false);
           navigation.navigate('Settings', { tab: 'staff', openAddStaff: true });
@@ -1072,6 +1465,22 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         visible={!!inspectedAppointment}
         appointment={inspectedAppointment}
         onClose={() => setInspectedAppointment(null)}
+        onReminderSent={(updated) => {
+          setAppointments((prev) =>
+            prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a))
+          );
+          setInspectedAppointment((prev) =>
+            prev && prev.id === updated.id ? { ...prev, ...updated } : prev
+          );
+        }}
+        onAppointmentSynced={(updated) => {
+          setAppointments((prev) =>
+            prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a))
+          );
+          setInspectedAppointment((prev) =>
+            prev && prev.id === updated.id ? { ...prev, ...updated } : prev
+          );
+        }}
         onCheckIn={(appt) => {
           setInspectedAppointment(null);
           handleOpenCheckInModal(appt);
@@ -1082,14 +1491,18 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         }}
         onCancel={(appt) => {
           setInspectedAppointment(null);
-          handleCancelAppointment(appt);
+          executeCancelAppointment(appt);
         }}
+        onMarkNoShow={executeMarkNoShow}
+        onBookFollowUp={handleBookFollowUp}
       />
 
       {/* Appointment Reschedule Modal */}
       <AppointmentRescheduleModal
         visible={!!rescheduleAppointment}
         appointment={rescheduleAppointment}
+        defaultToToday={isAppointmentOverdue(rescheduleAppointment)}
+        doctors={activeDoctors.map((d) => ({ id: d.id, name: formatStaffName(d) }))}
         onClose={() => setRescheduleAppointment(null)}
         onSuccess={(updated) => {
           setAppointments((prev) =>
@@ -1099,6 +1512,43 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
           fetchAppointments();
         }}
       />
+
+      {/* Cancel Appointment Confirmation Modal */}
+      <Modal
+        visible={!!cancelingAppointment}
+        onClose={() => !cancelingInProgress && setCancelingAppointment(null)}
+        title="Cancel Appointment?"
+        maxWidth={440}
+        testID="appointments-cancel-confirmation-modal"
+        footer={
+          <>
+            <Button
+              title="Keep Appointment"
+              variant="ghost"
+              testID="btn-abort-cancel-modal"
+              onPress={() => setCancelingAppointment(null)}
+              disabled={cancelingInProgress}
+            />
+            <Button
+              title="Yes, Cancel Appointment"
+              variant="danger"
+              testID="btn-confirm-cancel-modal"
+              onPress={handleConfirmCancelAppointment}
+              loading={cancelingInProgress}
+            />
+          </>
+        }
+      >
+        <View style={{ gap: theme.spacing.sm }}>
+          <ThemedText variant="body" color={theme.colors.text}>
+            Are you sure you want to cancel the appointment for{' '}
+            <ThemedText variant="bodyBold">{cancelingAppointment?.patientName}</ThemedText>?
+          </ThemedText>
+          <ThemedText variant="small" color={theme.colors.textMuted}>
+            This action cannot be undone. The appointment will be marked as Cancelled.
+          </ThemedText>
+        </View>
+      </Modal>
     </ResponsiveLayout>
   );
 }
@@ -1151,16 +1601,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  cancelBtn: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.emergencyBg,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.emergencyBorder,
-    borderRadius: theme.radii.sm,
-  },
   modalFooter: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -1199,6 +1639,47 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
   },
+  modalityToggleGroup: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  modalityOptionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+  },
+  policyOptionBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+  },
+  modalityChipSelected: {
+    backgroundColor: theme.colors.routineBg,
+    borderColor: theme.colors.routineBorder,
+  },
+  modalityChipUnselected: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+  },
+  modalityChipDisabled: {
+    opacity: 0.5,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.borderLight,
+  },
   successContainer: {
     gap: theme.spacing.md,
   },
@@ -1222,5 +1703,15 @@ const styles = StyleSheet.create({
   },
   successSummaryRow: {
     gap: theme.spacing.xs,
+  },
+  bookingErrorAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.emergencyBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergencyBorder,
   },
 });

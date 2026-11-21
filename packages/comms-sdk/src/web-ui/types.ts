@@ -1,0 +1,215 @@
+import {
+  CallStageParticipant,
+  ChatDrawerItem,
+  CommsCallIconName,
+  CommsThemeColors,
+  CommsThemeShadows,
+  ConversationScopeFilter,
+  ThreadAttachment,
+  ThreadMessage,
+  TriageDispositionPayload,
+  TriageQueueItem
+} from '../native-ui/types';
+
+export type {
+  CallStageParticipant,
+  ChatDrawerItem,
+  CommsCallIconName,
+  CommsThemeColors,
+  CommsThemeShadows,
+  ConversationScopeFilter,
+  ThreadAttachment,
+  ThreadMessage,
+  TriageDispositionPayload,
+  TriageQueueItem
+};
+
+export interface WebChatDrawerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  items: ChatDrawerItem[];
+  activeConversationId?: string;
+  onSelectConversation: (id: string) => void;
+  selectedScope: ConversationScopeFilter;
+  onSelectScope: (scope: ConversationScopeFilter) => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  onNewConversation?: () => void;
+  connectionState?: 'Connected' | 'Reconnecting' | 'Connecting' | 'Disconnected';
+  loading?: boolean;
+  error?: string | null;
+  className?: string;
+}
+
+export interface WebMessageThreadProps {
+  conversationId: string;
+  conversationTitle: string;
+  conversationScope: string;
+  messages: ThreadMessage[];
+  currentUserId: string;
+  onSendMessage: (text: string, isInternal: boolean, files?: File[]) => Promise<void>;
+  onResendMessage: (messageId: string) => Promise<void>;
+  onAcknowledgeMessage?: (messageId: string) => Promise<void>;
+  onFileToChart?: (messageId: string, fileKey: string) => Promise<void>;
+  privacyBlurEnabled: boolean;
+  onTogglePrivacyBlur: () => void;
+  renderPrivacyIcon?: (privacyBlurEnabled: boolean) => React.ReactNode;
+  showHeader?: boolean;
+  canWriteInternalNotes?: boolean;
+  isLoading?: boolean;
+  error?: string | null;
+  isArchived?: boolean;
+  archivedBannerText?: string;
+  isReadOnly?: boolean;
+  readOnlyBanner?: React.ReactNode;
+  className?: string;
+}
+
+export interface WebTriageQueueViewProps {
+  items: TriageQueueItem[];
+  facilityName: string;
+  onExecuteDisposition: (payload: TriageDispositionPayload) => Promise<void>;
+  onRefresh: () => void;
+  onSelectCard?: (conversationId: string) => void;
+  isLoading?: boolean;
+  error?: string | null;
+  activeFilter?: 'All' | 'Emergency' | 'Urgent' | 'Routine';
+  onFilterChange?: (filter: 'All' | 'Emergency' | 'Urgent' | 'Routine') => void;
+  className?: string;
+}
+
+export interface WebCallWaitingRoomProps {
+  callId: string;
+  appointmentId?: string;
+  userRole: 'Clinician' | 'Patient' | 'Staff';
+  patientName: string;
+  clinicianName: string;
+  scheduledTime: string;
+  paymentPolicy: 'Prepaid' | 'Postpaid' | 'Exempt';
+  paymentStatus: 'Unpaid' | 'Paid' | 'Exempt' | 'Overridden';
+  hasActiveYakapEnlistment?: boolean;
+  isYakapExempt?: boolean;
+  onChangePaymentPolicy?: (policy: 'Prepaid' | 'Postpaid' | 'Exempt') => Promise<void>;
+  onStaffPaymentOverride?: (reasonNote: string) => Promise<void>;
+  onEmergencyPaymentOverride?: (reason: string) => Promise<void>;
+  isReadyToAdmit: boolean;
+  recordingConsentStatus: 'Pending' | 'Approved' | 'Rejected' | 'Disabled';
+  onAdmitPatient?: () => Promise<void>;
+  onSubmitConsent?: (approved: boolean, reason?: string) => Promise<void>;
+  onEnterCall: () => void;
+  onCancelCall: () => void;
+  isCameraEnabled?: boolean;
+  isMicEnabled?: boolean;
+  onToggleCamera?: () => void | Promise<void>;
+  onToggleMic?: () => void | Promise<void>;
+  micLevel?: number;
+  renderVideoPreview?: () => React.ReactNode;
+  renderIcon?: (name: CommsCallIconName, props?: { color?: string; size?: number }) => React.ReactNode;
+  hideHeader?: boolean;
+  mediaModeLabel?: string;
+  isLoading?: boolean;
+  error?: string | null;
+  className?: string;
+  videoOrientation?: 'portrait' | 'landscape';
+  onToggleOrientation?: () => void;
+  patientLink?: string;
+  onSharePatientLink?: () => void | Promise<void>;
+  videoServerUnavailable?: boolean;
+  videoServerBannerMessage?: string;
+  onRetryVideoServer?: () => void | Promise<void>;
+  recordingToggleHint?: string;
+  patientPin?: string;
+  onCopyPatientPin?: () => void | Promise<void>;
+  colors?: CommsThemeColors;
+  shadows?: CommsThemeShadows;
+}
+
+export interface WebCallStageProps {
+  callId: string;
+  roomName: string;
+  userRole?: 'Clinician' | 'Patient' | 'Staff' | 'Guest';
+  participantName: string;
+  selfName?: string;
+  isMicEnabled: boolean;
+  isCameraEnabled: boolean;
+  isScreenSharing?: boolean;
+  onToggleMic: () => void | Promise<void>;
+  onToggleCamera: () => void | Promise<void>;
+  onToggleScreenShare?: () => void | Promise<void>;
+  isScreenShareSupported?: boolean;
+  onSwitchCamera?: () => void | Promise<void>;
+  isSwitchCameraSupported?: boolean;
+  isRecording?: boolean;
+  recordingDurationSeconds?: number;
+  onStartRecording?: () => void | Promise<void>;
+  canStartRecording?: boolean;
+  recordingConsentStatus?: 'none' | 'requested' | 'approved' | 'declined' | 'revoked';
+  onApproveConsentPreview?: () => void | Promise<void>;
+  onStopRecording?: () => void | Promise<void>;
+  canStopRecording?: boolean;
+  isChatOpen?: boolean;
+  unreadChatCount?: number;
+  onToggleChat?: () => void;
+  renderChatDrawer?: () => React.ReactNode;
+  renderWorkstationAction?: () => React.ReactNode;
+  renderCustomVideoSurface?: (trackType: 'remote' | 'local') => React.ReactNode;
+  renderIcon?: (name: CommsCallIconName, props?: { color?: string; size?: number }) => React.ReactNode;
+  renderParticipantsIcon?: (props?: { color?: string; size?: number }) => React.ReactNode;
+  isParticipantsOpen?: boolean;
+  onToggleParticipants?: () => void;
+  patientPin?: string;
+  onCopyPatientPin?: () => void | Promise<void>;
+  soloWarningThresholdMs?: number;
+  soloAutoLeaveGraceMs?: number;
+  onSoloLeave?: () => void | Promise<void>;
+  participants?: CallStageParticipant[];
+  hasRemoteParticipant?: boolean;
+  hideHeader?: boolean;
+  /** Optional custom header rendered as a top overlay inside the video canvas; offsets PiP and stage banners below it. */
+  headerOverlay?: React.ReactNode;
+  remoteStatusLabel?: string;
+  onEndCall: () => void | Promise<void>;
+  isE2eeActive?: boolean;
+  networkQuality?: 'excellent' | 'good' | 'poor' | 'reconnecting';
+  isLoading?: boolean;
+  error?: string | null;
+  className?: string;
+  videoOrientation?: 'portrait' | 'landscape';
+  onToggleOrientation?: () => void;
+  patientLink?: string;
+  onSharePatientLink?: () => void | Promise<void>;
+  onDockCall?: () => void | Promise<void>;
+  onTogglePip?: () => void | Promise<void>;
+  isPipSupported?: boolean;
+  isPipActive?: boolean;
+  onMessagePatient?: () => void | Promise<void>;
+  isRecordDisabled?: boolean;
+  recordButtonTooltip?: string;
+  colors?: CommsThemeColors;
+  shadows?: CommsThemeShadows;
+}
+
+export interface GuestVerificationResult {
+  callId: string;
+  roomName: string;
+  relayUrl: string;
+  guestToken: string;
+  expiresAtUtc?: string;
+  clinicName?: string;
+  clinicSupportPhone?: string;
+  clinicianName?: string;
+  guestDisplayName?: string;
+  scheduledAtUtc?: string;
+}
+
+export interface GuestJoinPageProps {
+  inviteToken: string;
+  apiBaseUrl: string;
+  clinicName?: string;
+  clinicLogoUrl?: string;
+  clinicSupportPhone?: string;
+  onSessionVerified?: (result: GuestVerificationResult) => void;
+  onSessionEnded?: () => void;
+  mockVerificationHandler?: (dob: string, otp: string) => Promise<GuestVerificationResult>;
+  className?: string;
+}

@@ -63,8 +63,7 @@ transaction as the business change, and are relayed to the hub.
 | `Hub:CloudCellId` | Cell that hosts every shared-cloud facility (default `cloud`). On-premise tenants get the cell `edge-{tenantId}`. |
 | `Hub:PublicUrl` | Hub address handed to on-premise sites together with their one-time credentials. |
 | `Smtp:Mode` | `Smtp` (send) or `Log` (write the email to the log; Development only). |
-| `Smtp:Host` / `Port` / `Security` / `User` / `Password` / `FromEmail` / `FromName` / `ReplyTo` | Unified mail server. Provide the password through secrets or environment (`Smtp__Password`). |
-| `Notifications:ContactInbox` | Recipient of the public contact form (`POST /api/v1/contact`). Unset means the endpoint answers 503. |
+| `Smtp:User` / `Password` | Mail server credentials. Provide the user and password/apikey through secrets or environment (`Smtp__Password`, `Smtp__User`). Non-secret parameters (`Host`, `Port`, `Security`, `FromEmail`, `FromName`, `ReplyTo`, `ContactInbox`) are managed via Platform Settings in the database (`/admin/settings`). |
 | `FrontendBaseUrl` | Portal website address used for links in emails (staff invitations). Falls back to the request's `Origin`/`Referer`. |
 
 - Facility and branch changes are fed to the hub directory (`directory.cell.upserted`, `directory.facility.upserted`,

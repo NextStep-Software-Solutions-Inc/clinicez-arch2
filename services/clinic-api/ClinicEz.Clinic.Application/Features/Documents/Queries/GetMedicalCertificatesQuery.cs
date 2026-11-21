@@ -14,7 +14,8 @@ namespace ClinicEz.Clinic.Application.Features.Documents.Queries;
 
 public sealed record GetMedicalCertificatesQuery(
     Guid? PatientId = null,
-    Guid? DoctorId = null) : IRequest<IReadOnlyList<MedicalCertificateDto>>;
+    Guid? DoctorId = null,
+    bool IncludeUnsigned = false) : IRequest<IReadOnlyList<MedicalCertificateDto>>;
 
 public sealed class GetMedicalCertificatesQueryHandler : IRequestHandler<GetMedicalCertificatesQuery, IReadOnlyList<MedicalCertificateDto>>
 {
@@ -28,6 +29,11 @@ public sealed class GetMedicalCertificatesQueryHandler : IRequestHandler<GetMedi
     public async Task<IReadOnlyList<MedicalCertificateDto>> Handle(GetMedicalCertificatesQuery request, CancellationToken ct)
     {
         var query = _medCertRepo.Query().AsNoTracking();
+
+        if (!request.IncludeUnsigned)
+        {
+            query = query.Where(m => m.IsSigned);
+        }
 
         if (request.PatientId.HasValue)
         {
@@ -66,6 +72,8 @@ public sealed class GetMedicalCertificatesQueryHandler : IRequestHandler<GetMedi
             cert.Remarks,
             cert.IsSigned,
             cert.SignedAt,
-            cert.CreatedAt)).ToList().AsReadOnly();
+            cert.CreatedAt,
+            cert.SecurityDigest,
+            cert.QueueItemId)).ToList().AsReadOnly();
     }
 }

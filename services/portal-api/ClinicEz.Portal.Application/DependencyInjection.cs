@@ -1,6 +1,8 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sieve.Services;
+using System;
 using System.Reflection;
 namespace ClinicEz.Portal.Application;
 
@@ -8,14 +10,18 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<ISieveProcessor, SieveProcessor>();
         services.AddScoped<Features.Workspace.IWorkspaceAccessService, Features.Workspace.WorkspaceAccessService>();
         services.AddScoped<Features.Integrations.IWebhookDispatcher, Features.Integrations.WebhookDispatcher>();
         services.AddScoped<Features.Integrations.IApiKeyValidator, Features.Integrations.ApiKeyValidator>();
         services.AddScoped<Features.Billing.Services.IDocumentNumberGenerator, Features.Billing.Services.DocumentNumberGenerator>();
+        services.AddScoped<Interfaces.IGuestVerificationService, Features.Guest.GuestVerificationService>();
+        services.AddScoped<Features.DirectoryVerification.IDirectoryVerificationPendingUpdater, Features.DirectoryVerification.DirectoryVerificationPendingUpdater>();
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
         services.AddMediatR(config =>
         {
+            config.LicenseKey = ClinicEz.Shared.Common.MediatRLicense.Resolve();
             config.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
             config.AddBehavior(typeof(MediatR.IPipelineBehavior<,>), typeof(Common.Behaviors.ValidationBehavior<,>));
         });

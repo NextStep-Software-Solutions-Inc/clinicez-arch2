@@ -24,4 +24,14 @@ public interface ISyncNotificationService
         string reason,
         string? deviceId = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Broadcasts a communications event (message received, delivery state change, thread update)
+    /// to the patient's connected clients via SignalR.
+    /// </summary>
+    Task NotifyCommsEventAsync(
+        Guid patientId,
+        string eventType,
+        object? payload,
+        CancellationToken cancellationToken = default);
 }

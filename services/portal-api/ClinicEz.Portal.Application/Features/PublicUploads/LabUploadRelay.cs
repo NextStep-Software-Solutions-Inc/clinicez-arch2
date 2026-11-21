@@ -162,14 +162,33 @@ public class RelayExternalLabUploadCommandHandler(
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Token format: <c>{facilityId:N}.{random}</c>.</summary>
-    private static Guid? ParseFacilityId(string token)
+    /// <summary>Token format: <c>{facilityId:N}.{random}</c>. Rejects Rx tokens, document prefixes, and malformed strings.</summary>
+    public static Guid? ParseFacilityId(string? token)
     {
         if (string.IsNullOrWhiteSpace(token) || token.Length > 200) return null;
 
-        var dot = token.IndexOf('.');
-        if (dot != 32 || dot == token.Length - 1) return null;
+        var clean = token.Trim();
+        // Reject non-lab document prefixes
+        if (clean.StartsWith("rx-", StringComparison.OrdinalIgnoreCase) ||
+            clean.StartsWith("mc-", StringComparison.OrdinalIgnoreCase) ||
+            clean.StartsWith("ref-", StringComparison.OrdinalIgnoreCase) ||
+            clean.StartsWith("sec-sha256-", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
 
-        return Guid.TryParseExact(token[..dot], "N", out var id) ? id : null;
+        var dot = clean.IndexOf('.');
+        if (dot != 32 || dot >= clean.Length - 1) return null;
+
+        var secretPart = clean[(dot + 1)..];
+        if (secretPart.Length < 8 || secretPart.Length > 64) return null;
+
+        // Rx verification tokens are formatted as {clinicId:N}.{secretGuid:N} (65 characters, 32 hex chars secret)
+        if (clean.Length == 65 && Guid.TryParseExact(secretPart, "N", out _))
+        {
+            return null;
+        }
+
+        return Guid.TryParseExact(clean[..dot], "N", out var id) ? id : null;
     }
 }

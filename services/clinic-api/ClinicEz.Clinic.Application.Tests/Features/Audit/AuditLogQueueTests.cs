@@ -201,7 +201,7 @@ public class AuditLogQueueTests
         // Assert: Query ApplicationDbContext to verify persistence and PHI redaction
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var savedEntries = await db.ClinicAuditEntries.IgnoreQueryFilters().ToListAsync();
+        var savedEntries = await db.AuditEntries.IgnoreQueryFilters().ToListAsync();
 
         savedEntries.Should().HaveCount(2);
 

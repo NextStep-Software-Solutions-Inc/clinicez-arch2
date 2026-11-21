@@ -35,12 +35,13 @@ public static class ClinicRoleSeeder
                 ClinicPermissions.AuditExport,
                 ClinicPermissions.ReportsRead,
                 ClinicPermissions.SettingsRead,
-                ClinicPermissions.PatientsRead
+                ClinicPermissions.PatientsRead,
+                ClinicPermissions.StaffRead
             }
         ),
         new(
             DoctorRoleName,
-            "Consultation documentation, vitals review, prescription issuing, lab/procedure ordering, and encounter signing",
+            "Consultation documentation, vitals recording & review, prescription issuing, lab/procedure ordering, and encounter signing",
             new List<string>
             {
                 ClinicPermissions.AppointmentsRead,
@@ -48,10 +49,12 @@ public static class ClinicRoleSeeder
                 ClinicPermissions.QueueCall,
                 ClinicPermissions.QueueComplete,
                 ClinicPermissions.TriageRead,
+                ClinicPermissions.TriageWrite,
                 ClinicPermissions.ConsultationsRead,
                 ClinicPermissions.ConsultationsWrite,
                 ClinicPermissions.ConsultationsSign,
                 ClinicPermissions.PatientsRead,
+                ClinicPermissions.PatientsWrite,
                 ClinicPermissions.DocumentsRead,
                 ClinicPermissions.DocumentsIssue,
                 ClinicPermissions.RecordsRead,
@@ -61,7 +64,8 @@ public static class ClinicRoleSeeder
                 ClinicPermissions.LabOrdersRead,
                 ClinicPermissions.LabOrdersWrite,
                 ClinicPermissions.LabResultsReview,
-                ClinicPermissions.ServicesRead
+                ClinicPermissions.ServicesRead,
+                ClinicPermissions.StaffRead
             }
         ),
         new(
@@ -72,15 +76,21 @@ public static class ClinicRoleSeeder
                 ClinicPermissions.AppointmentsRead,
                 ClinicPermissions.QueueRead,
                 ClinicPermissions.QueueCall,
+                ClinicPermissions.QueueCompleteNonDoctor,
                 ClinicPermissions.TriageRead,
                 ClinicPermissions.TriageWrite,
                 ClinicPermissions.PatientsRead,
+                ClinicPermissions.PatientsWrite,
+                ClinicPermissions.DocumentsRead,
                 ClinicPermissions.RecordsRead,
                 ClinicPermissions.RecordsUpload,
                 ClinicPermissions.ConsultationsRead,
                 ClinicPermissions.ProceduresRead,
                 ClinicPermissions.ProceduresWrite,
-                ClinicPermissions.ServicesRead
+                ClinicPermissions.LabOrdersRead,
+                ClinicPermissions.LabOrdersWrite,
+                ClinicPermissions.ServicesRead,
+                ClinicPermissions.StaffRead
             }
         ),
         new(
@@ -93,10 +103,12 @@ public static class ClinicRoleSeeder
                 ClinicPermissions.QueueRead,
                 ClinicPermissions.QueueCheckIn,
                 ClinicPermissions.QueueCall,
+                ClinicPermissions.QueueCompleteNonDoctor,
                 ClinicPermissions.PatientsRead,
                 ClinicPermissions.PatientsWrite,
                 ClinicPermissions.DocumentsRead,
                 ClinicPermissions.RecordsRead,
+                ClinicPermissions.RecordsUpload,
                 ClinicPermissions.StaffRead,
                 ClinicPermissions.BillingRead,
                 ClinicPermissions.BillingWrite,
@@ -110,11 +122,15 @@ public static class ClinicRoleSeeder
             new List<string>
             {
                 ClinicPermissions.QueueRead,
+                ClinicPermissions.QueueComplete,
+                ClinicPermissions.QueueCompleteNonDoctor,
+                ClinicPermissions.PatientsRead,
                 ClinicPermissions.BillingRead,
                 ClinicPermissions.BillingWrite,
                 ClinicPermissions.BillingVoid,
                 ClinicPermissions.ServicesRead,
-                ClinicPermissions.ReportsRead
+                ClinicPermissions.ReportsRead,
+                ClinicPermissions.StaffRead
             }
         )
     };
@@ -142,7 +158,7 @@ public static class ClinicRoleSeeder
         ILogger? logger = null,
         CancellationToken ct = default)
     {
-        var clinicIdentities = await dbContext.ClinicRoles
+        var clinicIdentities = await dbContext.Roles
             .IgnoreQueryFilters()
             .Select(r => new { r.ClinicId, r.TenantId })
             .Distinct()
@@ -150,7 +166,7 @@ public static class ClinicRoleSeeder
 
         if (clinicIdentities.Count == 0)
         {
-            clinicIdentities = await dbContext.ClinicSettings
+            clinicIdentities = await dbContext.Settings
                 .IgnoreQueryFilters()
                 .Select(s => new { s.ClinicId, s.TenantId })
                 .Distinct()
@@ -180,7 +196,7 @@ public static class ClinicRoleSeeder
         CancellationToken ct)
     {
         var templates = GetCanonicalSystemRoleTemplates();
-        var existingSystemRoles = await dbContext.ClinicRoles
+        var existingSystemRoles = await dbContext.Roles
             .IgnoreQueryFilters()
             .Where(r => r.ClinicId == clinicId && r.IsSystem)
             .ToListAsync(ct);
@@ -193,7 +209,7 @@ public static class ClinicRoleSeeder
             if (!existingMap.TryGetValue(template.Name, out var existingRole))
             {
                 // Create missing system role
-                var newRole = new ClinicRole
+                var newRole = new Role
                 {
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
@@ -206,35 +222,25 @@ public static class ClinicRoleSeeder
                     CreatedBy = "System:Seeder"
                 };
 
-                await dbContext.ClinicRoles.AddAsync(newRole, ct);
+                await dbContext.Roles.AddAsync(newRole, ct);
                 hasChanges = true;
             }
             else
             {
-                // Synchronize system permissions (e.g. AuditRead, AuditExport for Clinic Administrator or DPO)
-                if (template.Name.Equals(SystemAdminRoleName, StringComparison.OrdinalIgnoreCase))
-                {
-                    var missingAdminPerms = ClinicPermissions.All
-                        .Where(p => !existingRole.Permissions.Contains(p))
-                        .ToList();
+                // Synchronize canonical system permissions across all built-in system roles
+                // (e.g. AuditRead/AuditExport for Admin & DPO, PatientsWrite & TriageWrite for Attending Physician / Doctor)
+                var expectedPermissions = template.Name.Equals(SystemAdminRoleName, StringComparison.OrdinalIgnoreCase)
+                    ? ClinicPermissions.All
+                    : template.Permissions;
 
-                    if (missingAdminPerms.Count > 0)
-                    {
-                        existingRole.Permissions.AddRange(missingAdminPerms);
-                        hasChanges = true;
-                    }
-                }
-                else if (template.Name.Equals(DpoRoleName, StringComparison.OrdinalIgnoreCase))
-                {
-                    var missingDpoPerms = template.Permissions
-                        .Where(p => !existingRole.Permissions.Contains(p))
-                        .ToList();
+                var missingPerms = expectedPermissions
+                    .Where(p => !existingRole.Permissions.Contains(p, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
 
-                    if (missingDpoPerms.Count > 0)
-                    {
-                        existingRole.Permissions.AddRange(missingDpoPerms);
-                        hasChanges = true;
-                    }
+                if (missingPerms.Count > 0)
+                {
+                    existingRole.Permissions.AddRange(missingPerms);
+                    hasChanges = true;
                 }
             }
         }

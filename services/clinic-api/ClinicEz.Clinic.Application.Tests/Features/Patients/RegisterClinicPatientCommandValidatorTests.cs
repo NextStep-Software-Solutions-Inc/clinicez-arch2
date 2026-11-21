@@ -18,7 +18,7 @@ public class RegisterClinicPatientCommandValidatorTests
             MiddleName: "Mendoza",
             Suffix: "Jr.",
             DateOfBirth: new DateOnly(1990, 1, 1),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: "Single",
             ContactNumber: "09171234567",
             Email: "juan@example.com",
@@ -95,7 +95,7 @@ public class RegisterClinicPatientCommandValidatorTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: default,
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "",
             Email: null,
@@ -157,5 +157,30 @@ public class RegisterClinicPatientCommandValidatorTests
         var command = CreateValidCommand(allergies: allergies);
         var result = _validator.Validate(command);
         result.IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("Male")]
+    [InlineData("Female")]
+    [InlineData("M")]
+    [InlineData("F")]
+    public void Validate_PhilHealthBiologicalSex_PassesValidation(string validSex)
+    {
+        var command = CreateValidCommand() with { Sex = validSex };
+        var result = _validator.Validate(command);
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("Intersex")]
+    [InlineData("Unknown")]
+    [InlineData("Non-Binary")]
+    public void Validate_NonPhilHealthSex_FailsValidation(string invalidSex)
+    {
+        var command = CreateValidCommand() with { Sex = invalidSex };
+        var result = _validator.Validate(command);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == nameof(RegisterClinicPatientCommand.Sex)
+            && e.ErrorMessage.Contains("Sex must be 'Male' or 'Female'"));
     }
 }

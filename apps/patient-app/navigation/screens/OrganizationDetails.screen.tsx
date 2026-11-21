@@ -66,7 +66,7 @@ export default function OrganizationDetailsScreen() {
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
   const { showOfflineAlert } = useOfflineAlert();
-  const organizationId = String(route.params?.organizationId ?? '');
+  const organizationId = String(route.params?.organizationId ?? route.params?.id ?? '');
 
   const [organization, setOrganization] = useState<OrganizationDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);

@@ -39,8 +39,8 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
-    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Patient App API"));
+    app.MapOpenApi().AllowAnonymous();
+    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Patient App API")).AllowAnonymous();
 }
 
 app.UseForwardedHeaders();
@@ -68,11 +68,6 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
     Authorization = [hangfireAuth],
     IsReadOnlyFunc = _ => !app.Environment.IsDevelopment(),
 });
-
-RecurringJob.AddOrUpdate<ClinicEz.Patient.Infrastructure.Services.Jobs.IFileUploadReconciliationJob>(
-    "reconcile-file-uploads",
-    job => job.ReconcilePendingUploadsAsync(CancellationToken.None),
-    "*/15 * * * *"); // Run every 15 minutes
 
 // Auto-maps all IEndpoint implementations under /api/v1
 app.MapApiEndpoints();

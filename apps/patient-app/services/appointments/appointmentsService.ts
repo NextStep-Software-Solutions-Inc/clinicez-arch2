@@ -448,8 +448,145 @@ export async function rescheduleAppointment(
     return updated;
 }
 
-import { fetchAvailableSlotsLive, rescheduleAppointmentLive } from '../api/appointmentsApi';
+import {
+    fetchAvailableSlotsLive,
+    rescheduleAppointmentLive,
+    cancelAppointmentLive,
+    checkInAppointmentLive,
+} from '../api/appointmentsApi';
 import { safeRun } from '@shared/safe';
+
+/**
+ * Cancels an appointment online and updates local SQLite cache.
+ */
+export async function cancelAppointment(
+    appointmentId: string,
+    reason: string,
+    db: ExpoSQLiteDatabase<any>,
+    getToken?: () => Promise<string | null>,
+    patientId?: string,
+): Promise<AppointmentItem | null> {
+    const existing = await getAppointmentDetail(appointmentId, db);
+    if (!existing) return null;
+
+    let resolvedPatientId = patientId || existing.patientId;
+    if (!resolvedPatientId) {
+        const rows = await db
+            .select({ patientId: appointments.patientId })
+            .from(appointments)
+            .where(eq(appointments.id, appointmentId));
+        if (rows.length > 0 && rows[0].patientId) {
+            resolvedPatientId = String(rows[0].patientId);
+        }
+    }
+
+    const netInfo = await NetInfo.fetch();
+    const isOnline = netInfo.isConnected && netInfo.isInternetReachable;
+
+    if (isOnline && getToken && resolvedPatientId) {
+        try {
+            await cancelAppointmentLive(getToken, resolvedPatientId, appointmentId, reason.trim());
+        } catch (err) {
+            console.warn('[appointmentsService] Live cancel failed, falling back to local cancellation', err);
+        }
+    }
+
+    const now = new Date().toISOString();
+    const cancelNote = reason.trim()
+        ? `Cancellation reason: ${reason.trim()}`
+        : 'Cancelled by patient';
+    const updatedNotes = existing.notes ? `${existing.notes}\n\n${cancelNote}` : cancelNote;
+
+    const updated: AppointmentItem = {
+        ...existing,
+        status: 'canceled',
+        notes: updatedNotes,
+        cachedAt: now,
+    };
+
+    // 1. Update in appointments cache
+    await db
+        .update(appointments)
+        .set({
+            status: 'canceled',
+            notes: updatedNotes,
+            cachedAt: now,
+            rawJson: JSON.stringify(updated),
+        })
+        .where(eq(appointments.id, appointmentId));
+
+    // 2. Also remove from local bookingDrafts if it was a draft
+    await db
+        .delete(bookingDrafts)
+        .where(eq(bookingDrafts.id, appointmentId));
+
+    return updated;
+}
+
+/**
+ * Initiates check-in for an appointment online and reflects status in SQLite.
+ */
+export async function checkInAppointment(
+    appointmentId: string,
+    db: ExpoSQLiteDatabase<any>,
+    getToken?: () => Promise<string | null>,
+    patientId?: string,
+): Promise<{ success: boolean; checkedInAt?: string }> {
+    const existing = await getAppointmentDetail(appointmentId, db);
+    let resolvedPatientId = patientId || existing?.patientId;
+    if (!resolvedPatientId) {
+        const rows = await db
+            .select({ patientId: appointments.patientId })
+            .from(appointments)
+            .where(eq(appointments.id, appointmentId));
+        if (rows.length > 0 && rows[0].patientId) {
+            resolvedPatientId = String(rows[0].patientId);
+        }
+    }
+
+    const netInfo = await NetInfo.fetch();
+    const isOnline = netInfo.isConnected && netInfo.isInternetReachable;
+    const now = new Date().toISOString();
+
+    if (isOnline && getToken && resolvedPatientId) {
+        try {
+            const res = await checkInAppointmentLive(getToken, resolvedPatientId, appointmentId);
+            if (existing) {
+                const updated: AppointmentItem = {
+                    ...existing,
+                    status: 'confirmed',
+                    cachedAt: now,
+                };
+                await db
+                    .update(appointments)
+                    .set({
+                        cachedAt: now,
+                        rawJson: JSON.stringify(updated),
+                    })
+                    .where(eq(appointments.id, appointmentId));
+            }
+            return { success: true, checkedInAt: res.checkedInAt };
+        } catch (err) {
+            console.warn('[appointmentsService] Live check-in failed', err);
+        }
+    }
+
+    if (existing) {
+        const updated: AppointmentItem = {
+            ...existing,
+            cachedAt: now,
+        };
+        await db
+            .update(appointments)
+            .set({
+                cachedAt: now,
+                rawJson: JSON.stringify(updated),
+            })
+            .where(eq(appointments.id, appointmentId));
+    }
+    return { success: true, checkedInAt: now };
+}
+
 
 /**
  * Fetches available time slots for a clinic on a given date.

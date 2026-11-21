@@ -3,9 +3,9 @@ import { createBottomTabNavigator, createBottomTabScreen } from '@react-navigati
 import WebNavBar from '../../components/ui/WebNavBar.web';
 
 import HomeStack from './HomeStack';
-import AppointmentsStack from './AppointmentsStack';
 import FilesStack from './FilesStack';
-import ProfileStack from './ProfileStack';
+import AppointmentsStack from './AppointmentsStack';
+import MessagesStack from './MessagesStack';
 
 const MainBottomTabsWeb = createBottomTabNavigator({
   tabBar: (props) => <WebNavBar {...props} />,
@@ -19,22 +19,22 @@ const MainBottomTabsWeb = createBottomTabNavigator({
         title: 'Home',
       },
     }),
+    RecordsScreen: createBottomTabScreen({
+      screen: FilesStack,
+      options: {
+        title: 'Records',
+      },
+    }),
     AppointmentsScreen: createBottomTabScreen({
       screen: AppointmentsStack,
       options: {
-        title: 'My Appointments',
+        title: 'Appointments',
       },
     }),
-    FilesScreen: createBottomTabScreen({
-      screen: FilesStack,
+    MessagesScreen: createBottomTabScreen({
+      screen: MessagesStack,
       options: {
-        title: 'My Files',
-      },
-    }),
-    ProfileScreen: createBottomTabScreen({
-      screen: ProfileStack,
-      options: {
-        title: 'My Profile',
+        title: 'Messages',
       },
     }),
   },

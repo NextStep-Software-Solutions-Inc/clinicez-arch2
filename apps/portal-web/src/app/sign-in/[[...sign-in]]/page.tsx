@@ -1,9 +1,19 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Stethoscope, Sparkles, CheckCircle2, ShieldCheck } from "lucide-react";
+import { headers } from "next/headers";
+import { Sparkles, CheckCircle2, ShieldCheck } from "lucide-react";
+import { ClinicEzLogo } from "@/components/ClinicEzLogo";
+import { getMarketingSiteUrl } from "@/utils/domain";
 import { CustomSignInForm } from "../_components/CustomSignInForm";
 
-export default function SignInPage() {
+export default async function SignInPage() {
+  const headerList = await headers();
+  const host =
+    headerList.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    headerList.get("host") ||
+    "";
+  const marketingHomeUrl = getMarketingSiteUrl("/", host);
+
   return (
     <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
       {/* Decorative background glows */}
@@ -12,13 +22,8 @@ export default function SignInPage() {
 
       {/* Top Header Logo */}
       <header className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between z-10">
-        <Link href="/" className="flex items-center gap-2.5 group shrink-0">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all group-hover:bg-primary group-hover:text-primary-foreground shadow-sm shrink-0">
-            <Stethoscope className="h-5 w-5" />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
-            Clinic EZ
-          </span>
+        <Link href={marketingHomeUrl} className="inline-flex items-center gap-2.5 group shrink-0">
+          <ClinicEzLogo markClassName="h-8 w-8" textClassName="text-xl font-bold tracking-tight text-foreground" />
         </Link>
         <Link 
           href="/sign-up" 

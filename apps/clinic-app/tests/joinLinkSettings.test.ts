@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 // Mock React Native modules for Bun environment
 const createMockComponent = (name: string) => {
-  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, onPress, testID }: any) =>
+  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, onPress, testID, disabled, accessibilityState }: any) =>
     React.createElement(
       'div',
       {
@@ -16,6 +16,8 @@ const createMockComponent = (name: string) => {
         ...(accessibilityRole ? { role: accessibilityRole } : {}),
         ...(placeholder ? { 'data-placeholder': placeholder } : {}),
         ...(testID ? { 'data-testid': testID } : {}),
+        ...(disabled !== undefined ? { 'data-disabled': String(disabled) } : {}),
+        ...(accessibilityState ? { 'data-accessibility-state': JSON.stringify(accessibilityState) } : {}),
       },
       placeholder,
       children
@@ -88,12 +90,27 @@ mock.module('expo-print', () => ({
   printToFileAsync: async () => ({ uri: 'file://mock/placard.pdf' }),
 }));
 
+mock.module('../constants/fonts', () => ({
+  applyFontFamily: (s: any) => s,
+  fontAssets: {},
+}));
+mock.module('@expo-google-fonts/geist', () => ({
+  useFonts: () => [true],
+}));
+mock.module('@expo-google-fonts/geist-mono', () => ({
+  useFonts: () => [true],
+}));
+
 // Import production domain utilities from components/settings/joinLinkUtils
 export {
   generateRandomJoinCode,
   computeJoinCodeExpiration,
   isJoinCodeActive,
+  formatReceptionCodeUrl,
   formatReceptionQrUrl,
+  resolvePublicJoinSlugs,
+  resolveEffectiveExpirationWindow,
+  BLANK_PASSCODE_EXPIRATION_HELPER,
   reviewDocument,
 } from '../components/settings/joinLinkUtils';
 
@@ -101,7 +118,13 @@ import {
   generateRandomJoinCode,
   computeJoinCodeExpiration,
   isJoinCodeActive,
+  formatReceptionCodeUrl,
   formatReceptionQrUrl,
+  resolvePublicJoinSlugs,
+  resolveEffectiveExpirationWindow,
+  deriveJoinLinkFormBaseline,
+  isJoinLinkSettingsDirty,
+  BLANK_PASSCODE_EXPIRATION_HELPER,
   reviewDocument,
 } from '../components/settings/joinLinkUtils';
 
@@ -189,7 +212,7 @@ describe('Feature 10: Printable Reception QR Placard', () => {
     const { buildReceptionPlacardPdfBytes } = await import('../components/settings/receptionPlacardPdf');
     const pdfBytes = buildReceptionPlacardPdfBytes({
       facilityName: 'NextStep OPD',
-      qrUrl: 'https://dev.clinicez.net/join/E2FW28KT',
+      qrUrl: 'https://dev.clinicez.net/join?code=E2FW28KT',
       joinCode: 'E2FW28KT',
       expiresAtFormatted: 'Oct 15, 2026, 08:49 AM GMT+8 (in 23h)',
       letterhead: {
@@ -211,7 +234,8 @@ describe('Feature 10: Printable Reception QR Placard', () => {
     expect(pdfText).toContain('WALK-IN PATIENT SELF-ENLISTMENT');
     expect(pdfText).toContain('ACCESS PASSCODE');
     expect(pdfText).toContain('E2FW28KT');
-    expect(pdfText).toContain('https://dev.clinicez.net/join/E2FW28KT');
+    expect(pdfText).toContain('https://dev.clinicez.net/join?code=E2FW28KT');
+    expect(formatReceptionCodeUrl('https://dev.clinicez.net/', 'E2FW28KT')).toBe('https://dev.clinicez.net/join?code=E2FW28KT');
     expect(pdfText.endsWith('%%EOF\n')).toBe(true);
   });
 });
@@ -264,5 +288,374 @@ describe('Feature 12: External Document Vault Quarantine Review Workflow', () =>
 
     const pendingCount = docs.filter((d) => d.verificationStatus === 'PendingVerification').length;
     expect(pendingCount).toBe(2);
+  });
+});
+
+describe('GitHub #168: resolvePublicJoinSlugs prevents raw GUID leakage on multi-level subdomains', () => {
+  const RAW_TENANT_UUID = '476a9086-9012-4abc-8def-1234567890ab';
+
+  test('maps single nested service subdomain (ctx.tenantSlug=null, ctx.facilitySlug="nextstep") to nextstep/main instead of raw UUID', () => {
+    const resolved = resolvePublicJoinSlugs(
+      { tenantSlug: null, facilitySlug: 'nextstep' },
+      { tenantId: RAW_TENANT_UUID }
+    );
+    expect(resolved).toEqual({ tenantSlug: 'nextstep', facilitySlug: 'main' });
+
+    const qrUrl = formatReceptionQrUrl('https://dev.clinicez.net', resolved.tenantSlug, resolved.facilitySlug);
+    expect(qrUrl).toBe('https://dev.clinicez.net/join/nextstep/main');
+    expect(qrUrl).not.toContain(RAW_TENANT_UUID);
+  });
+
+  test('uses non-UUID settings.tenantSlug and settings.facilitySlug / clinicSlug when provided on nested subdomain', () => {
+    expect(
+      resolvePublicJoinSlugs(
+        { tenantSlug: null, facilitySlug: 'nextstep' },
+        { tenantId: RAW_TENANT_UUID, tenantSlug: 'nextstep-health', facilitySlug: 'downtown' }
+      )
+    ).toEqual({ tenantSlug: 'nextstep-health', facilitySlug: 'downtown' });
+
+    expect(
+      resolvePublicJoinSlugs(
+        { tenantSlug: null, facilitySlug: 'nextstep' },
+        { tenantId: RAW_TENANT_UUID, clinicSlug: 'uptown-opd' }
+      )
+    ).toEqual({ tenantSlug: 'nextstep', facilitySlug: 'uptown-opd' });
+  });
+
+  test('preserves explicit ctx.tenantSlug and ctx.facilitySlug when both are valid non-UUID slugs', () => {
+    expect(
+      resolvePublicJoinSlugs(
+        { tenantSlug: 'ustp', facilitySlug: 'cdo-clinic' },
+        { tenantId: RAW_TENANT_UUID }
+      )
+    ).toEqual({ tenantSlug: 'ustp', facilitySlug: 'cdo-clinic' });
+  });
+
+  test('strictly rejects UUID values in ctx or settings and falls back safely to clinic/main', () => {
+    expect(
+      resolvePublicJoinSlugs(
+        { tenantSlug: RAW_TENANT_UUID, facilitySlug: 'nextstep' },
+        { tenantId: RAW_TENANT_UUID, tenantSlug: RAW_TENANT_UUID, facilitySlug: RAW_TENANT_UUID }
+      )
+    ).toEqual({ tenantSlug: 'nextstep', facilitySlug: 'main' });
+
+    expect(
+      resolvePublicJoinSlugs(
+        { tenantSlug: null, facilitySlug: null },
+        { tenantId: RAW_TENANT_UUID, tenantSlug: '476A9086-AAAA-4BBB-8CCC-000000000000' }
+      )
+    ).toEqual({ tenantSlug: 'clinic', facilitySlug: 'main' });
+  });
+
+  test('resolves fallback tenantSlug and facilitySlug from workspaceProfile and license when settings are empty', () => {
+    expect(
+      resolvePublicJoinSlugs(
+        { tenantSlug: null, facilitySlug: 'nextstep' },
+        { tenantId: RAW_TENANT_UUID },
+        { tenantSlug: 'nextstep-group', facilitySlug: 'downtown-opd' }
+      )
+    ).toEqual({ tenantSlug: 'nextstep-group', facilitySlug: 'downtown-opd' });
+
+    expect(
+      resolvePublicJoinSlugs(
+        { tenantSlug: null, facilitySlug: null },
+        { tenantId: RAW_TENANT_UUID },
+        { tenantSlug: 'apex-health' }
+      )
+    ).toEqual({ tenantSlug: 'apex-health', facilitySlug: 'main' });
+  });
+});
+
+describe('GitHub #160 & Split Specimen Card: Blank passcode locks expiration to Never', () => {
+  test('resolveEffectiveExpirationWindow forces "never" when joinCode is empty or whitespace', () => {
+    expect(resolveEffectiveExpirationWindow('', '24h')).toBe('never');
+    expect(resolveEffectiveExpirationWindow('   ', '7d')).toBe('never');
+    expect(resolveEffectiveExpirationWindow(null, '30d')).toBe('never');
+    expect(resolveEffectiveExpirationWindow(undefined, 'custom')).toBe('never');
+    expect(resolveEffectiveExpirationWindow('CDO2026', '24h')).toBe('24h');
+    expect(resolveEffectiveExpirationWindow('CDO2026', '30d')).toBe('30d');
+  });
+
+  test('JoinLinkSettingsCard renders split specimen preview, strips raw GUID from URL, and guards expiration when passcode is blank', async () => {
+    const prevWindow = (globalThis as any).window;
+    (globalThis as any).window = {
+      location: {
+        hostname: 'nextstep.clinic.dev.clinicez.net',
+        protocol: 'https:',
+        origin: 'https://nextstep.clinic.dev.clinicez.net',
+        search: '',
+      },
+    };
+    (globalThis as any).__mockClinicContext = {
+      facilityName: 'NextStep Family Clinic',
+      letterhead: { header: 'NextStep Family Clinic', subHeader: '', address: '', contact: '', footer: '' },
+      refresh: async () => {},
+    };
+
+    try {
+      const JoinLinkSettingsCard = (await import('../components/settings/JoinLinkSettingsCard')).default;
+      const staleFuture = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+      const markup = renderToStaticMarkup(
+        React.createElement(JoinLinkSettingsCard, {
+          settings: {
+            id: 'set-1',
+            tenantId: '476a9086-9012-4abc-8def-1234567890ab',
+            clinicId: '99112233-4455-4666-8777-8899aabbccdd',
+            clinicName: 'NextStep Family Clinic',
+            operatingHours: '08:00-17:00',
+            defaultSlotDurationMinutes: 15,
+            queuePrefix: 'A',
+            invoicePrefix: 'INV',
+            defaultConsultationFee: 500,
+            vatRate: 0,
+            isJoinEnabled: true,
+            joinCode: '',
+            joinCodeExpiresAt: staleFuture,
+          },
+        })
+      );
+
+      expect(markup).toContain('Patient QR Check-In &amp; Link');
+      expect(markup).toContain('QR Poster Preview');
+      expect(markup).toContain('Join Passcode');
+      expect(markup).toContain('aria-label="Copy Link"');
+      expect(markup).toContain('data-testid="copy-join-link-btn"');
+      expect(markup).not.toContain('>Copy Link<');
+      expect(markup).toContain('Print QR Poster');
+      expect(markup).not.toContain('Save QR &amp; Link Settings');
+      expect(markup).toContain('/join/nextstep/main');
+      expect(markup).not.toContain('476a9086-9012-4abc-8def-1234567890ab');
+      expect(markup).not.toContain('Clinic EZ Facility');
+      expect(markup).not.toContain('CDO2026');
+      expect(markup).toContain(BLANK_PASSCODE_EXPIRATION_HELPER);
+      expect(markup).toContain('Never expires (Permanent link)');
+    } finally {
+      (globalThis as any).window = prevWindow;
+      delete (globalThis as any).__mockClinicContext;
+    }
+  });
+
+  test('JoinLinkSettingsCard renders SkeletonList while loading and never falls back to hardcoded Clinic EZ Facility', async () => {
+    const JoinLinkSettingsCard = (await import('../components/settings/JoinLinkSettingsCard')).default;
+
+    (globalThis as any).__mockClinicContext = {
+      facilityName: '',
+      letterhead: { header: '', subHeader: '', address: '', contact: '', footer: '' },
+      loading: true,
+      refresh: async () => {},
+    };
+
+    try {
+      const loadingMarkup = renderToStaticMarkup(
+        React.createElement(JoinLinkSettingsCard, {
+          settings: null,
+        })
+      );
+
+      expect(loadingMarkup).toContain('Loading');
+      expect(loadingMarkup).not.toContain('>Active<');
+      expect(loadingMarkup).not.toContain('>Disabled<');
+      expect(loadingMarkup).not.toContain('QR Poster Preview');
+      expect(loadingMarkup).not.toContain('Clinic EZ Facility');
+
+      (globalThis as any).__mockClinicContext = {
+        facilityName: '',
+        letterhead: { header: '', subHeader: '', address: '', contact: '', footer: '' },
+        loading: false,
+        refresh: async () => {},
+      };
+
+      const emptyNameMarkup = renderToStaticMarkup(
+        React.createElement(JoinLinkSettingsCard, {
+          settings: {
+            id: 'set-2',
+            tenantId: 'tenant-main',
+            clinicId: 'clinic-main',
+            clinicName: '',
+            operatingHours: '',
+            defaultSlotDurationMinutes: 15,
+            queuePrefix: 'A',
+            invoicePrefix: 'INV',
+            defaultConsultationFee: 0,
+            vatRate: 0,
+            isJoinEnabled: true,
+            joinCode: '',
+            joinCodeExpiresAt: null,
+          },
+        })
+      );
+
+      expect(emptyNameMarkup).not.toContain('Clinic EZ Facility');
+      expect(emptyNameMarkup).toContain('No clinic name set');
+      expect(emptyNameMarkup).not.toContain('Save QR &amp; Link Settings');
+    } finally {
+      delete (globalThis as any).__mockClinicContext;
+    }
+  });
+
+  test('isJoinLinkSettingsDirty returns false when unchanged and true as soon as toggle, passcode, or expiration changes', () => {
+    const nowMs = Date.now();
+    const in7dIso = new Date(nowMs + 7 * 24 * 3600 * 1000).toISOString();
+    const saved = {
+      isJoinEnabled: true,
+      joinCode: 'CARE2026',
+      joinCodeExpiresAt: in7dIso,
+    };
+
+    const baseline = deriveJoinLinkFormBaseline(saved, nowMs);
+    expect(baseline.expirationWindow).toBe('7d');
+
+    // Unchanged -> not dirty
+    expect(
+      isJoinLinkSettingsDirty(
+        {
+          isEnabled: true,
+          joinCode: ' care2026 ',
+          effectiveExpirationWindow: '7d',
+          customDateStr: baseline.customDateStr,
+        },
+        saved,
+        nowMs
+      )
+    ).toBe(false);
+
+    // Toggled off -> dirty
+    expect(
+      isJoinLinkSettingsDirty(
+        {
+          isEnabled: false,
+          joinCode: 'CARE2026',
+          effectiveExpirationWindow: '7d',
+          customDateStr: baseline.customDateStr,
+        },
+        saved,
+        nowMs
+      )
+    ).toBe(true);
+
+    // Changed passcode -> dirty
+    expect(
+      isJoinLinkSettingsDirty(
+        {
+          isEnabled: true,
+          joinCode: 'NEXT8899',
+          effectiveExpirationWindow: '7d',
+          customDateStr: baseline.customDateStr,
+        },
+        saved,
+        nowMs
+      )
+    ).toBe(true);
+
+    // Changed expiration window -> dirty
+    expect(
+      isJoinLinkSettingsDirty(
+        {
+          isEnabled: true,
+          joinCode: 'CARE2026',
+          effectiveExpirationWindow: '30d',
+          customDateStr: baseline.customDateStr,
+        },
+        saved,
+        nowMs
+      )
+    ).toBe(true);
+  });
+
+  test('JoinLinkSettingsCard renders SegmentedControl with data-disabled="true" when passcode is blank', async () => {
+    const prevWindow = (globalThis as any).window;
+    (globalThis as any).window = {
+      location: {
+        hostname: 'nextstep.clinic.dev.clinicez.net',
+        protocol: 'https:',
+        origin: 'https://nextstep.clinic.dev.clinicez.net',
+        search: '',
+      },
+    };
+    (globalThis as any).__mockClinicContext = {
+      facilityName: 'NextStep Family Clinic',
+      letterhead: { header: 'NextStep Family Clinic', subHeader: '', address: '', contact: '', footer: '' },
+      refresh: async () => {},
+    };
+
+    try {
+      const JoinLinkSettingsCard = (await import('../components/settings/JoinLinkSettingsCard')).default;
+      const markup = renderToStaticMarkup(
+        React.createElement(JoinLinkSettingsCard, {
+          settings: {
+            id: 'set-blank',
+            tenantId: 'tenant-1',
+            clinicId: 'clinic-1',
+            clinicName: 'NextStep Family Clinic',
+            operatingHours: '08:00-17:00',
+            defaultSlotDurationMinutes: 15,
+            queuePrefix: 'A',
+            invoicePrefix: 'INV',
+            defaultConsultationFee: 500,
+            vatRate: 0,
+            isJoinEnabled: true,
+            joinCode: '',
+            joinCodeExpiresAt: null,
+          },
+        })
+      );
+
+      // Verify disabled state on SegmentedControl pressables when passcode is blank
+      expect(markup).toContain('data-disabled="true"');
+      expect(markup).toContain('&quot;disabled&quot;:true');
+      expect(markup).toContain(BLANK_PASSCODE_EXPIRATION_HELPER);
+    } finally {
+      (globalThis as any).window = prevWindow;
+      delete (globalThis as any).__mockClinicContext;
+    }
+  });
+
+  test('Save payload contract accurately flags clearJoinCodeExpiresAt when switching active code to Never', () => {
+    // When code is set and window is 'never' (computedExpiresAt is null)
+    const codeWithNever = 'CARE2026';
+    const computedExpiresAtNever: Date | null = null;
+    const payloadNever = {
+      isJoinEnabled: true,
+      joinCode: codeWithNever,
+      joinCodeExpiresAt: codeWithNever && computedExpiresAtNever ? (computedExpiresAtNever as Date).toISOString() : null,
+      clearJoinCode: !codeWithNever,
+      clearJoinCodeExpiresAt: Boolean(codeWithNever && !computedExpiresAtNever),
+    };
+
+    expect(payloadNever.joinCode).toBe('CARE2026');
+    expect(payloadNever.joinCodeExpiresAt).toBeNull();
+    expect(payloadNever.clearJoinCode).toBe(false);
+    expect(payloadNever.clearJoinCodeExpiresAt).toBe(true);
+
+    // When code is set and window is '24h' (computedExpiresAt is a Date)
+    const codeWith24h = 'CARE2026';
+    const computedExpiresAt24h = new Date(Date.now() + 24 * 3600 * 1000);
+    const payload24h = {
+      isJoinEnabled: true,
+      joinCode: codeWith24h,
+      joinCodeExpiresAt: codeWith24h && computedExpiresAt24h ? computedExpiresAt24h.toISOString() : null,
+      clearJoinCode: !codeWith24h,
+      clearJoinCodeExpiresAt: Boolean(codeWith24h && !computedExpiresAt24h),
+    };
+
+    expect(payload24h.joinCode).toBe('CARE2026');
+    expect(payload24h.joinCodeExpiresAt).toBe(computedExpiresAt24h.toISOString());
+    expect(payload24h.clearJoinCode).toBe(false);
+    expect(payload24h.clearJoinCodeExpiresAt).toBe(false);
+
+    // When code is cleared/empty
+    const blankCode = '';
+    const payloadBlank = {
+      isJoinEnabled: true,
+      joinCode: blankCode ? blankCode : null,
+      joinCodeExpiresAt: null,
+      clearJoinCode: !blankCode,
+      clearJoinCodeExpiresAt: Boolean(blankCode && !computedExpiresAtNever),
+    };
+
+    expect(payloadBlank.joinCode).toBeNull();
+    expect(payloadBlank.joinCodeExpiresAt).toBeNull();
+    expect(payloadBlank.clearJoinCode).toBe(true);
+    expect(payloadBlank.clearJoinCodeExpiresAt).toBe(false);
   });
 });

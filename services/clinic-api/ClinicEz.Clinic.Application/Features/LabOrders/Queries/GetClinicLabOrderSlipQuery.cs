@@ -40,7 +40,8 @@ public record LabOrderSlipDto(
     string PublicUploadUrl,
     string QrPayload,
     string? ClaimToken = null,
-    DateOnly? PatientDateOfBirth = null
+    DateOnly? PatientDateOfBirth = null,
+    Guid? DoctorId = null
 );
 
 /// <summary>
@@ -51,17 +52,17 @@ public record GetClinicLabOrderSlipQuery(Guid OrderId) : IRequest<LabOrderSlipDt
 
 public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrderSlipQuery, LabOrderSlipDto>
 {
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IRepository<StaffMember> _staffRepo;
     private readonly IUploadGrantService _uploadGrants;
     private readonly IUnitOfWork _unitOfWork;
 
     public GetClinicLabOrderSlipQueryHandler(
-        IRepository<ClinicLabOrder> orderRepo,
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<LabOrder> orderRepo,
+        IRepository<Patient> patientRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IRepository<StaffMember> staffRepo,
         IUploadGrantService uploadGrants,
         IUnitOfWork unitOfWork)
@@ -83,6 +84,11 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
         if (order == null)
         {
             throw new NotFoundException($"Clinic lab order with ID '{request.OrderId}' was not found.");
+        }
+
+        if (!order.IsSigned)
+        {
+            throw new BadRequestException("Laboratory requisition is pending consultation sign-off and is not valid until the consultation encounter is signed.");
         }
 
         var patient = await _patientRepo.GetByIdAsync(order.PatientId, cancellationToken);
@@ -112,7 +118,7 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
             order.PatientId,
             order.PatientName,
             patientAge,
-            patient?.Gender.ToString() ?? "Unknown",
+            patient?.Sex.ToString() ?? "Unknown",
             patient?.PhilHealthNumber,
             order.ClinicalDiagnosis,
             order.Notes,
@@ -120,7 +126,8 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
             upload.Url,
             qrPayload,
             order.ClaimToken,
-            patient?.DateOfBirth
+            patient?.DateOfBirth,
+            order.OrderedByDoctorId
         );
     }
 }

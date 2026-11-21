@@ -31,7 +31,7 @@ namespace ClinicEz.Clinic.Application.Tests.Adversarial;
 /// 1. BatchSaveDentalChartCommand:
 ///    - Atomic pre-validation rollback (if tooth #4 in a batch of 10 is invalid, zero teeth saved).
 ///    - Deduplication of duplicate tooth updates in the same batch (latest state preserved).
-/// 2. ClinicalProcedure Tooth Tagging & Surface Normalization:
+/// 2. Procedure Tooth Tagging & Surface Normalization:
 ///    - Order procedure with and without tooth number.
 ///    - Uppercase surface normalization (e.g. "mod" -> "MOD", "  bL  " -> "BL", whitespace -> null).
 /// 3. PublishClinicToDirectoryCommand:
@@ -60,12 +60,12 @@ public class ChallengerMaEmpiricalTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var sender = Substitute.For<ISender>();
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -114,11 +114,11 @@ public class ChallengerMaEmpiricalTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var sender = Substitute.For<ISender>();
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -167,11 +167,11 @@ public class ChallengerMaEmpiricalTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var sender = Substitute.For<ISender>();
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -245,11 +245,11 @@ public class ChallengerMaEmpiricalTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -310,11 +310,11 @@ public class ChallengerMaEmpiricalTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -362,11 +362,11 @@ public class ChallengerMaEmpiricalTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -423,14 +423,14 @@ public class ChallengerMaEmpiricalTests
 
     #endregion
 
-    #region 2. ClinicalProcedure Tooth Tagging & Surface Normalization Tests
+    #region 2. Procedure Tooth Tagging & Surface Normalization Tests
 
     [Fact]
     public async Task OrderProcedure_WithToothNumberAndLowercaseSurface_NormalizesSurfaceToUppercase()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var handler = new OrderProcedureCommandHandler(procRepo, uow, _clinicContext);
 
         var patientId = Guid.NewGuid();
@@ -472,7 +472,7 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var handler = new OrderProcedureCommandHandler(procRepo, uow, _clinicContext);
 
         var patientId = Guid.NewGuid();
@@ -511,7 +511,7 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var handler = new OrderProcedureCommandHandler(procRepo, uow, _clinicContext);
 
         var patientId = Guid.NewGuid();
@@ -550,7 +550,7 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var handler = new OrderProcedureCommandHandler(procRepo, uow, _clinicContext);
 
         var patientId = Guid.NewGuid();
@@ -590,7 +590,7 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var handler = new OrderProcedureCommandHandler(procRepo, uow, _clinicContext);
 
         var patientId = Guid.NewGuid();
@@ -650,9 +650,9 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         // Active doctor with PRC license
@@ -668,7 +668,7 @@ public class ChallengerMaEmpiricalTests
         }, CancellationToken.None);
 
         // Active service item
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _clinicId,
             Code = "SRV-TEST",
@@ -678,13 +678,16 @@ public class ChallengerMaEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
             ClinicName = "Test Healthcare Hub",
             OperatingHours = "8:00 AM - 5:00 PM Mon-Fri",
+            LetterheadDohLto = "DOH-LTO-2026-030",
             SpecialtyMode = specialtyMode!,
+            IsWorkspaceEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
@@ -716,9 +719,9 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         await staffRepo.AddAsync(new StaffMember
@@ -732,7 +735,7 @@ public class ChallengerMaEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _clinicId,
             Code = "SRV-TEST",
@@ -742,7 +745,7 @@ public class ChallengerMaEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -775,14 +778,14 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         // Zero staff members added
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _clinicId,
             Code = "SRV-TEST",
@@ -792,7 +795,7 @@ public class ChallengerMaEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -822,9 +825,9 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         // Doctor exists, but PrcLicenseNumber is empty
@@ -839,7 +842,7 @@ public class ChallengerMaEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _clinicId,
             Code = "SRV-TEST",
@@ -849,7 +852,7 @@ public class ChallengerMaEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -877,9 +880,9 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         // Doctor has PRC, but IsActive = false
@@ -894,7 +897,7 @@ public class ChallengerMaEmpiricalTests
             IsActive = false // Inactive
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _clinicId,
             Code = "SRV-TEST",
@@ -904,7 +907,7 @@ public class ChallengerMaEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -932,9 +935,9 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         // Staff member has PRC and IsActive=true, but Role = Nurse
@@ -949,7 +952,7 @@ public class ChallengerMaEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _clinicId,
             Code = "SRV-TEST",
@@ -959,7 +962,7 @@ public class ChallengerMaEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -987,9 +990,9 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         await staffRepo.AddAsync(new StaffMember
@@ -1005,7 +1008,7 @@ public class ChallengerMaEmpiricalTests
 
         // Zero service items
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -1033,9 +1036,9 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         await staffRepo.AddAsync(new StaffMember
@@ -1050,7 +1053,7 @@ public class ChallengerMaEmpiricalTests
         }, CancellationToken.None);
 
         // Service exists, but IsActive = false
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _clinicId,
             Code = "SRV-TEST",
@@ -1060,7 +1063,7 @@ public class ChallengerMaEmpiricalTests
             IsActive = false
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -1088,13 +1091,13 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         // Missing OperatingHours, Doctor, and Services
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -1124,12 +1127,12 @@ public class ChallengerMaEmpiricalTests
     {
         // Arrange: clinic is currently published, but has NO doctors, NO operating hours, NO services
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,

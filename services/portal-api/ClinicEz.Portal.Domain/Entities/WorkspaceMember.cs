@@ -20,7 +20,8 @@ public enum MemberStatus
 {
     Invited,
     Active,
-    Suspended
+    Suspended,
+    Revoked
 }
 
 /// <summary>

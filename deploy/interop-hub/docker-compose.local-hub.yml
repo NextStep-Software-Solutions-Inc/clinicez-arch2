@@ -36,6 +36,7 @@ services:
       - DbSchema=${DB_SCHEMA:-public}
       - Hub__Mode=Local
       - Hub__Database__AutoMigrate=true
+      - Hub__MaxEnvelopeBytes=${HUB_MAX_ENVELOPE_BYTES:-8388608}
       - Hub__LocalCellId=${LOCAL_CELL_ID:?LOCAL_CELL_ID must be set}
       # UPSTREAM_ENABLED=false runs the hub air-gapped (same-cell traffic only; the three values below are then not needed).
       # With the default (true) the hub refuses to start when any of them is empty.

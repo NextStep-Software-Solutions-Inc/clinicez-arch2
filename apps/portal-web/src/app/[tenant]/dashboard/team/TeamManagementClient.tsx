@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useUser } from "@clerk/nextjs";
 import { 
     IconUsers, 
     IconUserPlus, 
@@ -20,19 +21,183 @@ import {
     IconUser,
     IconCopy,
     IconLink,
-    IconRefresh
+    IconRefresh,
+    IconPencil,
+    IconPlayerPause,
+    IconPlayerPlay,
+    IconBan,
+    IconKey,
+    IconDotsVertical
 } from "@tabler/icons-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { staffService, TenantStaffResultDto, StaffMemberDto } from "@/services/staff.service";
 import { apiClient } from "@/transport/apiClient";
 import { apiErrorMessage } from "@/lib/apiError";
 import { toastApiError } from "@/lib/apiToast";
+import {
+    getWorkspaceMemberActionRestriction,
+    isSelfWorkspaceMember,
+    SELF_ACTION_MESSAGES,
+} from "@/lib/selfActionGuard";
 import { toast } from "sonner";
+
+type WorkspaceMemberActionRestriction = ReturnType<typeof getWorkspaceMemberActionRestriction>;
+
+export interface WorkspaceMemberMenuActionSpec {
+    key: string;
+    label: string;
+    disabled: boolean;
+    tooltip?: string;
+    variant?: "default" | "warning" | "destructive";
+    separatorBefore?: boolean;
+}
+
+export function getWorkspaceMemberMenuActions(
+    member: Pick<StaffMemberDto, "id" | "role" | "status" | "invitationToken">,
+    restriction: WorkspaceMemberActionRestriction,
+    options: {
+        isQuotaFull?: boolean;
+        isActionLoading?: boolean;
+        isResending?: boolean;
+    } = {}
+): WorkspaceMemberMenuActionSpec[] {
+    if (member.role === "Owner") {
+        return [];
+    }
+
+    const { isQuotaFull = false, isActionLoading = false, isResending = false } = options;
+
+    switch (member.status) {
+        case "Invited": {
+            const items: WorkspaceMemberMenuActionSpec[] = [];
+            if (member.invitationToken) {
+                items.push({
+                    key: "copy-invite",
+                    label: "Copy Invite Link",
+                    disabled: false,
+                    tooltip: "Copy direct invitation link",
+                });
+            }
+            items.push({
+                key: "resend-invite",
+                label: "Resend Invitation",
+                disabled: isResending,
+                tooltip: "Resend invitation email",
+            });
+            items.push({
+                key: "revoke",
+                label: "Revoke Invitation",
+                disabled: !restriction.canRevoke,
+                tooltip: restriction.revokeTooltip,
+                variant: "destructive",
+                separatorBefore: true,
+            });
+            return items;
+        }
+        case "Expired":
+            return [
+                {
+                    key: "resend-invite",
+                    label: "Resend Invitation",
+                    disabled: isResending,
+                    tooltip: "Resend fresh invitation email",
+                },
+                {
+                    key: "revoke",
+                    label: "Revoke Invitation",
+                    disabled: !restriction.canRevoke,
+                    tooltip: restriction.revokeTooltip,
+                    variant: "destructive",
+                    separatorBefore: true,
+                },
+            ];
+        case "Active":
+            return [
+                {
+                    key: "edit",
+                    label: "Edit Details",
+                    disabled: false,
+                },
+                {
+                    key: "reset-password",
+                    label: "Reset Password",
+                    disabled: false,
+                },
+                {
+                    key: "suspend",
+                    label: "Suspend Access",
+                    disabled: isActionLoading || !restriction.canSuspend,
+                    tooltip: restriction.suspendTooltip,
+                    variant: "warning",
+                    separatorBefore: true,
+                },
+                {
+                    key: "revoke",
+                    label: "Revoke Access",
+                    disabled: !restriction.canRevoke,
+                    tooltip: restriction.revokeTooltip,
+                    variant: "destructive",
+                },
+            ];
+        case "Suspended":
+            return [
+                {
+                    key: "reactivate",
+                    label: "Reactivate Access",
+                    disabled: isActionLoading,
+                },
+                {
+                    key: "revoke",
+                    label: "Revoke Access",
+                    disabled: !restriction.canRevoke,
+                    tooltip: restriction.revokeTooltip,
+                    variant: "destructive",
+                    separatorBefore: true,
+                },
+                {
+                    key: "delete",
+                    label: "Delete Permanently",
+                    disabled: !restriction.canDelete,
+                    tooltip: restriction.deleteTooltip,
+                    variant: "destructive",
+                },
+            ];
+        case "Revoked":
+            return [
+                {
+                    key: "reinvite",
+                    label: "Re-invite",
+                    disabled: isResending || isQuotaFull,
+                    tooltip: isQuotaFull
+                        ? "Workspace seat limit reached for your current plan"
+                        : "Send a fresh 7-day invitation",
+                },
+                {
+                    key: "delete",
+                    label: "Delete Permanently",
+                    disabled: !restriction.canDelete,
+                    tooltip: restriction.deleteTooltip,
+                    variant: "destructive",
+                    separatorBefore: true,
+                },
+            ];
+        default:
+            return [];
+    }
+}
 
 interface FacilityOption {
     id: string;
@@ -79,7 +244,7 @@ const ROLE_DETAILS: Record<string, { label: string; badgeClass: string; descript
     "Cashier/Billing Staff": {
         label: "Cashier / Billing Staff",
         badgeClass: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800",
-        description: "Handles patient payment reconciliation, PhilHealth Konsulta co-pays, and official BIR receipts."
+        description: "Handles patient payment reconciliation, PhilHealth YAKAP co-pays, and official BIR receipts."
     },
     Biller: {
         label: "Biller / Finance",
@@ -104,6 +269,16 @@ const ROLE_DETAILS: Record<string, { label: string; badgeClass: string; descript
 };
 
 export default function TeamManagementClient({ tenantSlug }: { tenantSlug: string }) {
+    const { user } = useUser();
+    const currentIdentity = React.useMemo(
+        () => ({
+            userId: user?.id ?? null,
+            email: user?.primaryEmailAddress?.emailAddress ?? null,
+            emails: user?.emailAddresses?.map((e) => e.emailAddress) ?? [],
+        }),
+        [user]
+    );
+
     const [staffData, setStaffData] = useState<TenantStaffResultDto | null>(null);
     const [facilities, setFacilities] = useState<FacilityOption[]>([]);
     const [loading, setLoading] = useState(true);
@@ -115,8 +290,20 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
     const [email, setEmail] = useState("");
     const [role, setRole] = useState("Admin");
     const [facilityId, setFacilityId] = useState("");
+    const [sendEmail, setSendEmail] = useState(true);
     const [inviteError, setInviteError] = useState<string | null>(null);
     const [submittingInvite, setSubmittingInvite] = useState(false);
+
+    // Edit Staff Modal state
+    const [editTarget, setEditTarget] = useState<StaffMemberDto | null>(null);
+    const [editFullName, setEditFullName] = useState("");
+    const [editRole, setEditRole] = useState("Admin");
+    const [editFacilityId, setEditFacilityId] = useState("");
+    const [editError, setEditError] = useState<string | null>(null);
+    const [submittingEdit, setSubmittingEdit] = useState(false);
+
+    // Action loading indicator for suspend / reactivate
+    const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
     // Created Invite Success Modal
     const [createdInviteModal, setCreatedInviteModal] = useState<{
@@ -125,6 +312,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
         email: string;
         role: string;
         inviteUrl: string;
+        sentEmail: boolean;
     } | null>(null);
 
     // Resending state
@@ -133,6 +321,25 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
     // Revoke Modal state
     const [revokeTarget, setRevokeTarget] = useState<StaffMemberDto | null>(null);
     const [submittingRevoke, setSubmittingRevoke] = useState(false);
+
+    // Permanent Remove Modal state (from Revoked state)
+    const [deleteTarget, setDeleteTarget] = useState<StaffMemberDto | null>(null);
+    const [submittingDelete, setSubmittingDelete] = useState(false);
+
+    // Reset Password Modal state
+    const [resetTarget, setResetTarget] = useState<StaffMemberDto | null>(null);
+    const [resetMode, setResetMode] = useState<"email" | "link" | "password">("email");
+    const [resetTempPassword, setResetTempPassword] = useState("");
+    const [resetError, setResetError] = useState<string | null>(null);
+    const [submittingReset, setSubmittingReset] = useState(false);
+    const [resetResultModal, setResetResultModal] = useState<{
+        open: boolean;
+        fullName: string;
+        email: string;
+        deliveryMode: "email" | "link" | "password";
+        resetUrl?: string;
+        temporaryPassword?: string;
+    } | null>(null);
 
     const loadData = async () => {
         try {
@@ -215,6 +422,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                 email: email.trim(),
                 role,
                 facilityId: facilityId || undefined,
+                sendEmail,
             });
 
             const inviteUrl = created.invitationToken
@@ -226,6 +434,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             setEmail("");
             setRole("Admin");
             setFacilityId("");
+            setSendEmail(true);
 
             if (inviteUrl) {
                 setCreatedInviteModal({
@@ -233,7 +442,8 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                     fullName: created.fullName,
                     email: created.email,
                     role: created.role,
-                    inviteUrl
+                    inviteUrl,
+                    sentEmail: sendEmail,
                 });
             } else {
                 toast.success(`Invitation sent successfully to ${email}`);
@@ -247,12 +457,100 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
         }
     };
 
+    const handleOpenEdit = (member: StaffMemberDto) => {
+        setEditTarget(member);
+        setEditFullName(member.fullName);
+        setEditRole(member.role);
+        setEditFacilityId(member.facilityId || "");
+        setEditError(null);
+    };
+
+    const handleEditSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editTarget) return;
+        setEditError(null);
+
+        if (!editFullName.trim()) {
+            setEditError("Please enter the full name.");
+            return;
+        }
+
+        if (editRole === "Facility Administrator" && !editFacilityId) {
+            setEditError("Please select a branch / facility for the Facility Administrator.");
+            return;
+        }
+
+        setSubmittingEdit(true);
+        try {
+            await staffService.updateStaffMember(editTarget.id, tenantSlug, {
+                fullName: editFullName.trim(),
+                role: editRole,
+                facilityId: editFacilityId || null,
+            });
+
+            toast.success(`Updated details for ${editFullName}`);
+            setEditTarget(null);
+            await loadData();
+        } catch (err: unknown) {
+            setEditError(apiErrorMessage(err, "Failed to update staff member."));
+        } finally {
+            setSubmittingEdit(false);
+        }
+    };
+
+    const handleSuspend = async (member: StaffMemberDto) => {
+        if (isSelfWorkspaceMember(member, currentIdentity)) {
+            toast.error(SELF_ACTION_MESSAGES.workspaceSuspend);
+            return;
+        }
+        try {
+            setActionLoadingId(member.id);
+            await staffService.suspendStaffMember(member.id, tenantSlug);
+            toast.success(`Suspended access for ${member.fullName}`);
+            await loadData();
+        } catch (err: unknown) {
+            toastApiError(err, "Failed to suspend staff member", tenantSlug);
+        } finally {
+            setActionLoadingId(null);
+        }
+    };
+
+    const handleReactivate = async (member: StaffMemberDto) => {
+        try {
+            setActionLoadingId(member.id);
+            await staffService.reactivateStaffMember(member.id, tenantSlug);
+            toast.success(`Reactivated access for ${member.fullName}`);
+            await loadData();
+        } catch (err: unknown) {
+            toastApiError(err, "Failed to reactivate staff member", tenantSlug);
+        } finally {
+            setActionLoadingId(null);
+        }
+    };
+
+    const handleOpenRevoke = (member: StaffMemberDto) => {
+        if (isSelfWorkspaceMember(member, currentIdentity)) {
+            toast.error(SELF_ACTION_MESSAGES.workspaceRevoke);
+            return;
+        }
+        setRevokeTarget(member);
+    };
+
     const handleRevokeConfirm = async () => {
         if (!revokeTarget) return;
+        if (isSelfWorkspaceMember(revokeTarget, currentIdentity)) {
+            toast.error(SELF_ACTION_MESSAGES.workspaceRevoke);
+            setRevokeTarget(null);
+            return;
+        }
         setSubmittingRevoke(true);
         try {
             await staffService.revokeStaffMember(revokeTarget.id, tenantSlug);
-            toast.success(`Removed ${revokeTarget.fullName} from workspace`);
+            toast.success(
+                revokeTarget.status === "Invited" || revokeTarget.status === "Expired"
+                    ? `Revoked invitation for ${revokeTarget.fullName}`
+                    : `Revoked workspace access for ${revokeTarget.fullName}`
+            );
             setRevokeTarget(null);
             await loadData();
         } catch (err: unknown) {
@@ -261,6 +559,139 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             setSubmittingRevoke(false);
         }
     };
+
+    const handleReinvite = async (member: StaffMemberDto) => {
+        setResendingId(member.id);
+        try {
+            const reinvited = await staffService.inviteStaffMember({
+                tenantSlug,
+                fullName: member.fullName,
+                email: member.email,
+                role: member.role,
+                facilityId: member.facilityId || undefined,
+                sendEmail: true,
+            });
+            const inviteUrl = reinvited.invitationToken
+                ? `${window.location.origin}/invitations/${reinvited.invitationToken}`
+                : "";
+            if (inviteUrl) {
+                navigator.clipboard.writeText(inviteUrl);
+                setCreatedInviteModal({
+                    open: true,
+                    fullName: reinvited.fullName,
+                    email: reinvited.email,
+                    role: reinvited.role,
+                    inviteUrl,
+                    sentEmail: true,
+                });
+            } else {
+                toast.success(`Re-invited ${member.fullName} and sent a new invitation email.`);
+            }
+            await loadData();
+        } catch (err: unknown) {
+            toastApiError(err, "Failed to re-invite member", tenantSlug);
+        } finally {
+            setResendingId(null);
+        }
+    };
+
+    const handleOpenDelete = (member: StaffMemberDto) => {
+        if (isSelfWorkspaceMember(member, currentIdentity)) {
+            toast.error(SELF_ACTION_MESSAGES.workspaceDelete);
+            return;
+        }
+        setDeleteTarget(member);
+    };
+
+    const handlePermanentDeleteConfirm = async () => {
+        if (!deleteTarget) return;
+        if (isSelfWorkspaceMember(deleteTarget, currentIdentity)) {
+            toast.error(SELF_ACTION_MESSAGES.workspaceDelete);
+            setDeleteTarget(null);
+            return;
+        }
+        setSubmittingDelete(true);
+        try {
+            await staffService.deleteStaffMemberPermanently(deleteTarget.id, tenantSlug);
+            toast.success(`Permanently removed ${deleteTarget.fullName} from workspace`);
+            setDeleteTarget(null);
+            await loadData();
+        } catch (err: unknown) {
+            toastApiError(err, "Failed to permanently remove member", tenantSlug);
+        } finally {
+            setSubmittingDelete(false);
+        }
+    };
+
+    const handleOpenResetPassword = (member: StaffMemberDto) => {
+        setResetTarget(member);
+        setResetMode("email");
+        setResetTempPassword("");
+        setResetError(null);
+    };
+
+    const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!resetTarget) return;
+        setResetError(null);
+
+        if (resetMode === "password" && resetTempPassword.trim().length < 8) {
+            setResetError("Temporary password must be at least 8 characters.");
+            return;
+        }
+
+        setSubmittingReset(true);
+        try {
+            const res = await staffService.resetStaffMemberPassword(resetTarget.id, tenantSlug, {
+                deliveryMode: resetMode,
+                temporaryPassword: resetMode === "password" ? resetTempPassword : undefined,
+            });
+
+            const origin = typeof window !== "undefined" ? window.location.origin : "";
+            const fullResetUrl = res.resetToken
+                ? `${origin}/reset-password/${res.resetToken}`
+                : res.resetUrl || undefined;
+
+            if (fullResetUrl) {
+                navigator.clipboard.writeText(fullResetUrl);
+            }
+
+            const targetSnapshot = resetTarget;
+            const tempPwdSnapshot = resetTempPassword;
+            setResetTarget(null);
+
+            setResetResultModal({
+                open: true,
+                fullName: targetSnapshot.fullName,
+                email: targetSnapshot.email,
+                deliveryMode: resetMode,
+                resetUrl: fullResetUrl,
+                temporaryPassword: resetMode === "password" ? tempPwdSnapshot : undefined,
+            });
+
+            if (resetMode === "email") {
+                toast.success(`Password reset email sent to ${targetSnapshot.email}`);
+            } else if (resetMode === "link") {
+                toast.success("Password reset link generated and copied!");
+            } else {
+                toast.success(`Temporary password set for ${targetSnapshot.fullName}`);
+            }
+
+            await loadData();
+        } catch (err: unknown) {
+            setResetError(apiErrorMessage(err, "Failed to reset password."));
+        } finally {
+            setSubmittingReset(false);
+        }
+    };
+
+    const existingEmailMember = React.useMemo(() => {
+        const normalized = email.trim().toLowerCase();
+        if (!normalized) return null;
+        return (staffData?.members || []).find(
+            (m) => m.email.trim().toLowerCase() === normalized
+        ) || null;
+    }, [email, staffData?.members]);
 
     const quota = staffData?.quota;
     const currentSeats = quota?.currentCount ?? 1;
@@ -424,19 +855,103 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                             <table className="w-full text-left text-xs border-collapse">
                                 <thead>
                                     <tr className="border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-900/20 text-slate-500 font-semibold">
-                                        <th className="py-3 px-4 sm:px-6">Team Member</th>
-                                        <th className="py-3 px-4">Workspace Role</th>
-                                        <th className="py-3 px-4">Access Scope</th>
-                                        <th className="py-3 px-4">Status</th>
-                                        <th className="py-3 px-4 hidden md:table-cell">Added On</th>
-                                        <th className="py-3 px-4 sm:px-6 text-right">Actions</th>
+                                        <th className="py-3 px-4 sm:px-6 min-w-[220px]">Team Member</th>
+                                        <th className="py-3 px-4 whitespace-nowrap">Workspace Role</th>
+                                        <th className="py-3 px-4 whitespace-nowrap">Access Scope</th>
+                                        <th className="py-3 px-4 whitespace-nowrap">Status</th>
+                                        <th className="py-3 px-4 hidden md:table-cell whitespace-nowrap">Added On</th>
+                                        <th className="py-3 px-4 sm:px-6 text-right w-16">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                                     {members.map((member) => {
                                         const roleMeta = ROLE_DETAILS[member.role] || ROLE_DETAILS.Viewer;
                                         const isOwner = member.role === "Owner";
-                                        const isPending = member.status === "PendingInvitation";
+                                        const isPending = member.status === "Invited";
+                                        const isExpired = member.status === "Expired";
+                                        const isSuspended = member.status === "Suspended";
+                                        const isRevoked = member.status === "Revoked";
+                                        const isActive = member.status === "Active";
+                                        const restriction = getWorkspaceMemberActionRestriction(member, currentIdentity);
+                                        const canQuickEdit = !isOwner && isActive;
+                                        const isRowBusy = actionLoadingId === member.id || resendingId === member.id;
+                                        const menuActions = getWorkspaceMemberMenuActions(member, restriction, {
+                                            isQuotaFull,
+                                            isActionLoading: actionLoadingId === member.id,
+                                            isResending: resendingId === member.id,
+                                        });
+
+                                        const handleMenuAction = (actionKey: string) => {
+                                            switch (actionKey) {
+                                                case "copy-invite":
+                                                    handleCopyInviteLink(member.invitationToken);
+                                                    break;
+                                                case "resend-invite":
+                                                    void handleResendInvite(member);
+                                                    break;
+                                                case "edit":
+                                                    handleOpenEdit(member);
+                                                    break;
+                                                case "reset-password":
+                                                    handleOpenResetPassword(member);
+                                                    break;
+                                                case "suspend":
+                                                    void handleSuspend(member);
+                                                    break;
+                                                case "reactivate":
+                                                    void handleReactivate(member);
+                                                    break;
+                                                case "reinvite":
+                                                    void handleReinvite(member);
+                                                    break;
+                                                case "revoke":
+                                                    handleOpenRevoke(member);
+                                                    break;
+                                                case "delete":
+                                                    handleOpenDelete(member);
+                                                    break;
+                                            }
+                                        };
+
+                                        const renderActionIcon = (actionKey: string) => {
+                                            switch (actionKey) {
+                                                case "copy-invite":
+                                                    return <IconCopy className="h-3.5 w-3.5 text-slate-500" />;
+                                                case "resend-invite":
+                                                case "reinvite":
+                                                    return resendingId === member.id ? (
+                                                        <IconLoader className="h-3.5 w-3.5 animate-spin text-primary" />
+                                                    ) : (
+                                                        <IconRefresh className="h-3.5 w-3.5 text-slate-500" />
+                                                    );
+                                                case "edit":
+                                                    return <IconPencil className="h-3.5 w-3.5 text-slate-500" />;
+                                                case "reset-password":
+                                                    return <IconKey className="h-3.5 w-3.5 text-slate-500" />;
+                                                case "suspend":
+                                                    return actionLoadingId === member.id ? (
+                                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                        <IconPlayerPause className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                                    );
+                                                case "reactivate":
+                                                    return actionLoadingId === member.id ? (
+                                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                        <IconPlayerPlay className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                                    );
+                                                case "revoke":
+                                                    return isPending || isExpired ? (
+                                                        <IconTrash className="h-3.5 w-3.5" />
+                                                    ) : (
+                                                        <IconBan className="h-3.5 w-3.5" />
+                                                    );
+                                                case "delete":
+                                                    return <IconTrash className="h-3.5 w-3.5" />;
+                                                default:
+                                                    return null;
+                                            }
+                                        };
 
                                         // Initials for avatar
                                         const initials = member.fullName
@@ -448,8 +963,24 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                             .toUpperCase() || "U";
 
                                         return (
-                                            <tr key={member.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/40 transition-colors">
-                                                <td className="py-3.5 px-4 sm:px-6">
+                                            <tr
+                                                key={member.id}
+                                                onClick={
+                                                    canQuickEdit
+                                                        ? () => {
+                                                              if (typeof window !== "undefined" && window.getSelection()?.toString()) {
+                                                                  return;
+                                                              }
+                                                              handleOpenEdit(member);
+                                                          }
+                                                        : undefined
+                                                }
+                                                title={canQuickEdit ? `Click to edit details for ${member.fullName}` : undefined}
+                                                className={`hover:bg-slate-50/60 dark:hover:bg-slate-900/40 transition-colors ${
+                                                    canQuickEdit ? "cursor-pointer" : ""
+                                                }`}
+                                            >
+                                                <td className="py-3.5 px-4 sm:px-6 min-w-[220px]">
                                                     <div className="flex items-center gap-3">
                                                         <div className={`size-8 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0 ${
                                                             isOwner 
@@ -459,17 +990,22 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                             {initials}
                                                         </div>
                                                         <div className="min-w-0">
-                                                            <div className="font-bold text-slate-900 dark:text-slate-100 truncate">
-                                                                {member.fullName}
+                                                            <div className="font-bold text-slate-900 dark:text-slate-100 truncate flex items-center gap-1.5">
+                                                                <span className="truncate">{member.fullName}</span>
+                                                                {restriction.isSelf && (
+                                                                    <Badge variant="secondary" className="text-[10px] py-0 px-1.5 h-4 font-medium shrink-0">
+                                                                        You
+                                                                    </Badge>
+                                                                )}
                                                             </div>
                                                             <div className="text-[11px] text-slate-400 truncate flex items-center gap-1">
                                                                 <IconMail className="h-3 w-3 inline shrink-0" />
-                                                                {member.email}
+                                                                <span className="truncate">{member.email}</span>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="py-3.5 px-4">
+                                                <td className="py-3.5 px-4 whitespace-nowrap">
                                                     <Badge 
                                                         variant="outline" 
                                                         className={`text-[10px] font-bold px-2 py-0.5 border ${roleMeta.badgeClass}`}
@@ -477,7 +1013,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                         {roleMeta.label}
                                                     </Badge>
                                                 </td>
-                                                <td className="py-3.5 px-4">
+                                                <td className="py-3.5 px-4 whitespace-nowrap">
                                                     {member.facilityName ? (
                                                         <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-medium">
                                                             <IconBuildingHospital className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -487,12 +1023,12 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                         <span className="text-slate-500 font-medium">Entire Workspace</span>
                                                     )}
                                                 </td>
-                                                <td className="py-3.5 px-4">
-                                                    {isPending ? (
+                                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                                    {isPending && (
                                                         <div className="flex flex-col gap-0.5">
-                                                            <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200 dark:border-amber-800 w-fit">
+                                                            <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border-blue-200 dark:border-blue-800 w-fit">
                                                                 <IconClock className="h-3 w-3" />
-                                                                Pending Invite
+                                                                Invited
                                                             </Badge>
                                                             {member.invitationExpiresAt && (
                                                                 <span className="text-[10px] text-slate-400">
@@ -502,66 +1038,96 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                                 </span>
                                                             )}
                                                         </div>
-                                                    ) : (
-                                                        <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
+                                                    )}
+                                                    {isExpired && (
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200 dark:border-amber-800 w-fit">
+                                                                <IconAlertCircle className="h-3 w-3" />
+                                                                Expired
+                                                            </Badge>
+                                                            <span className="text-[10px] text-slate-400">Token Expired</span>
+                                                        </div>
+                                                    )}
+                                                    {isSuspended && (
+                                                        <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700 w-fit">
+                                                            <IconPlayerPause className="h-3 w-3" />
+                                                            Suspended
+                                                        </Badge>
+                                                    )}
+                                                    {isRevoked && (
+                                                        <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200 dark:border-rose-800 w-fit">
+                                                            <IconTrash className="h-3 w-3" />
+                                                            Revoked
+                                                        </Badge>
+                                                    )}
+                                                    {isActive && (
+                                                        <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 w-fit">
                                                             <IconCheck className="h-3 w-3" />
                                                             Active
                                                         </Badge>
                                                     )}
                                                 </td>
-                                                <td className="py-3.5 px-4 hidden md:table-cell text-slate-400 text-[11px]">
+                                                <td className="py-3.5 px-4 hidden md:table-cell whitespace-nowrap text-slate-400 text-[11px]">
                                                     {new Date(member.createdAt).toLocaleDateString("en-US", {
                                                         month: "short",
                                                         day: "numeric",
                                                         year: "numeric"
                                                     })}
                                                 </td>
-                                                <td className="py-3.5 px-4 sm:px-6 text-right">
+                                                <td
+                                                    className="py-3.5 px-4 sm:px-6 text-right w-16"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
                                                     {isOwner ? (
                                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                                                             Owner
                                                         </span>
                                                     ) : (
-                                                        <div className="flex items-center justify-end gap-1.5">
-                                                            {isPending && member.invitationToken && (
-                                                                <>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        onClick={() => handleCopyInviteLink(member.invitationToken)}
-                                                                        title="Copy direct invitation link"
-                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
-                                                                    >
-                                                                        <IconCopy className="h-3.5 w-3.5" />
-                                                                        <span className="hidden lg:inline">Copy Link</span>
-                                                                    </Button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        disabled={resendingId === member.id}
-                                                                        onClick={() => handleResendInvite(member)}
-                                                                        title="Refresh token and extend validity"
-                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
-                                                                    >
-                                                                        {resendingId === member.id ? (
-                                                                            <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                                                                        ) : (
-                                                                            <IconRefresh className="h-3.5 w-3.5" />
-                                                                        )}
-                                                                        <span className="hidden lg:inline">Resend</span>
-                                                                    </Button>
-                                                                </>
-                                                            )}
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                onClick={() => setRevokeTarget(member)}
-                                                                className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
-                                                            >
-                                                                <IconTrash className="h-3.5 w-3.5" />
-                                                                <span className="hidden sm:inline">Revoke</span>
-                                                            </Button>
-                                                        </div>
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    disabled={isRowBusy}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    aria-label={`Actions for ${member.fullName}`}
+                                                                    title={`Manage ${member.fullName}`}
+                                                                    className="h-8 w-8 p-0 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
+                                                                >
+                                                                    {isRowBusy ? (
+                                                                        <IconLoader className="h-4 w-4 animate-spin text-primary" />
+                                                                    ) : (
+                                                                        <IconDotsVertical className="h-4 w-4" />
+                                                                    )}
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end" className="w-52 rounded-xl shadow-lg border">
+                                                                {menuActions.map((spec) => (
+                                                                    <React.Fragment key={spec.key}>
+                                                                        {spec.separatorBefore && <DropdownMenuSeparator />}
+                                                                        <span
+                                                                            title={spec.tooltip}
+                                                                            className={spec.disabled ? "block cursor-not-allowed" : "block"}
+                                                                        >
+                                                                            <DropdownMenuItem
+                                                                                disabled={spec.disabled}
+                                                                                variant={spec.variant === "destructive" ? "destructive" : "default"}
+                                                                                onClick={() => handleMenuAction(spec.key)}
+                                                                                className={`cursor-pointer text-xs font-medium gap-2 py-2 ${
+                                                                                    spec.variant === "warning"
+                                                                                        ? "text-amber-600 dark:text-amber-400 focus:text-amber-700 focus:bg-amber-50 dark:focus:bg-amber-950/40"
+                                                                                        : ""
+                                                                                }`}
+                                                                            >
+                                                                                {renderActionIcon(spec.key)}
+                                                                                <span>{spec.label}</span>
+                                                                            </DropdownMenuItem>
+                                                                        </span>
+                                                                    </React.Fragment>
+                                                                ))}
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
                                                     )}
                                                 </td>
                                             </tr>
@@ -622,29 +1188,108 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                 className="h-9 text-xs rounded-xl"
                                 required
                             />
+                            {existingEmailMember && existingEmailMember.status === "Active" && (
+                                <div className="mt-1.5 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2">
+                                    <IconAlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                                    <div>
+                                        <strong>Existing Active Member:</strong> {existingEmailMember.fullName} ({existingEmailMember.email}) is already an active member of this workspace ({ROLE_DETAILS[existingEmailMember.role]?.label || existingEmailMember.role}).
+                                    </div>
+                                </div>
+                            )}
+                            {existingEmailMember && (existingEmailMember.status === "Invited" || existingEmailMember.status === "Expired") && (
+                                <div className="mt-1.5 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs space-y-2">
+                                    <div className="flex items-start gap-2">
+                                        <IconClock className="h-4 w-4 shrink-0 mt-0.5" />
+                                        <div>
+                                            <strong>{existingEmailMember.status === "Expired" ? "Expired" : "Pending"} Invitation Detected:</strong> {existingEmailMember.fullName} ({existingEmailMember.email}) already has {existingEmailMember.status === "Expired" ? "an expired" : "a pending"} invitation as {ROLE_DETAILS[existingEmailMember.role]?.label || existingEmailMember.role}.
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 pl-6">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={resendingId === existingEmailMember.id}
+                                            onClick={async () => {
+                                                await handleResendInvite(existingEmailMember);
+                                                setInviteOpen(false);
+                                            }}
+                                            className="h-7 px-2.5 text-[11px] font-semibold rounded-lg gap-1 bg-white dark:bg-slate-900"
+                                        >
+                                            <IconRefresh className="h-3 w-3" />
+                                            <span>Resend Invitation Instead</span>
+                                        </Button>
+                                        {existingEmailMember.status === "Invited" && existingEmailMember.invitationToken && (
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => handleCopyInviteLink(existingEmailMember.invitationToken)}
+                                                className="h-7 px-2.5 text-[11px] font-semibold rounded-lg gap-1 bg-white dark:bg-slate-900"
+                                            >
+                                                <IconCopy className="h-3 w-3" />
+                                                <span>Copy Link</span>
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            {existingEmailMember && existingEmailMember.status === "Suspended" && (
+                                <div className="mt-1.5 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs space-y-2">
+                                    <div className="flex items-start gap-2">
+                                        <IconAlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                                        <div>
+                                            <strong>Suspended Account Detected:</strong> {existingEmailMember.fullName} ({existingEmailMember.email}) is currently suspended in this workspace.
+                                        </div>
+                                    </div>
+                                    <div className="pl-6">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={actionLoadingId === existingEmailMember.id}
+                                            onClick={async () => {
+                                                await handleReactivate(existingEmailMember);
+                                                setInviteOpen(false);
+                                            }}
+                                            className="h-7 px-2.5 text-[11px] font-semibold rounded-lg gap-1 bg-white dark:bg-slate-900"
+                                        >
+                                            <IconPlayerPlay className="h-3 w-3" />
+                                            <span>Reactivate Account Instead</span>
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                            {existingEmailMember && existingEmailMember.status === "Revoked" && (
+                                <div className="mt-1.5 p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs flex items-start gap-2">
+                                    <IconRefresh className="h-4 w-4 shrink-0 mt-0.5" />
+                                    <div>
+                                        <strong>Previously Revoked Member:</strong> {existingEmailMember.fullName} ({existingEmailMember.email}) was previously revoked. Submitting this form will re-invite them with a fresh 7-day invitation token.
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="space-y-1.5">
                             <Label htmlFor="role" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                                 Workspace Role <span className="text-rose-500">*</span>
                             </Label>
-                            <select
+                            <SelectField
                                 id="role"
                                 value={role}
-                                onChange={(e) => {
-                                    const newRole = e.target.value;
+                                onValueChange={(newRole) => {
                                     setRole(newRole);
                                     if (newRole !== "Facility Administrator") {
                                         setFacilityId("");
                                     }
                                 }}
-                                className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            >
-                                <option value="Admin">Tenant Administrator (Manage branches, invites, &amp; tenancy settings)</option>
-                                <option value="Facility Administrator">Facility Administrator (Branch clinical operations &amp; local settings)</option>
-                                <option value="Biller">Biller / Finance (Manage subscriptions, checkout sessions, &amp; invoices)</option>
-                                <option value="Viewer">Viewer / Analyst (Read-only access to tenancy health &amp; branch stats)</option>
-                            </select>
+                                options={[
+                                    { value: "Admin", label: "Tenant Administrator (Manage branches, invites, & tenancy settings)" },
+                                    { value: "Facility Administrator", label: "Facility Administrator (Branch clinical operations & local settings)" },
+                                    { value: "Biller", label: "Biller / Finance (Manage subscriptions, checkout sessions, & invoices)" },
+                                    { value: "Viewer", label: "Viewer / Analyst (Read-only access to tenancy health & branch stats)" },
+                                ]}
+                            />
                             <p className="text-[11px] text-slate-400">
                                 {ROLE_DETAILS[role]?.description}
                             </p>
@@ -655,25 +1300,66 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                 <Label htmlFor="facilityId" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                                     Assigned Branch / Facility <span className="text-rose-500">*</span>
                                 </Label>
-                                <select
+                                <SelectField
                                     id="facilityId"
                                     value={facilityId}
-                                    onChange={(e) => setFacilityId(e.target.value)}
-                                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                    onValueChange={setFacilityId}
+                                    placeholder="Select a branch / facility..."
                                     required
-                                >
-                                    <option value="">Select a branch / facility...</option>
-                                    {facilities.map((fac) => (
-                                        <option key={fac.id} value={fac.id}>
-                                            {fac.name} ({fac.facilityType})
-                                        </option>
-                                    ))}
-                                </select>
+                                    options={facilities.map((fac) => ({
+                                        value: fac.id,
+                                        label: `${fac.name} (${fac.facilityType})`,
+                                    }))}
+                                />
                                 <p className="text-[11px] text-slate-400">
                                     Designate which branch facility this administrator manages in the portal.
                                 </p>
                             </div>
                         )}
+
+                        {/* Delivery Method Choice */}
+                        <div className="space-y-1.5">
+                            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                Delivery Method
+                            </Label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setSendEmail(true)}
+                                    className={`p-3 rounded-xl border text-left transition-all ${
+                                        sendEmail
+                                            ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                                            : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-1.5 mb-1 font-semibold text-xs">
+                                        <IconMail className="h-4 w-4" />
+                                        <span>Send Invitation Email</span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 font-normal">
+                                        Dispatches invitation email automatically.
+                                    </p>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setSendEmail(false)}
+                                    className={`p-3 rounded-xl border text-left transition-all ${
+                                        !sendEmail
+                                            ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                                            : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-1.5 mb-1 font-semibold text-xs">
+                                        <IconCopy className="h-4 w-4" />
+                                        <span>Copy Invite Link Only</span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 font-normal">
+                                        Generates secure link for manual sharing.
+                                    </p>
+                                </button>
+                            </div>
+                        </div>
 
                         <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2.5">
                             <IconAlertCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
@@ -694,7 +1380,11 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                             </Button>
                             <Button
                                 type="submit"
-                                disabled={submittingInvite || isQuotaFull}
+                                disabled={
+                                    submittingInvite ||
+                                    isQuotaFull ||
+                                    (!!existingEmailMember && existingEmailMember.status !== "Revoked")
+                                }
                                 className="rounded-xl text-xs font-semibold gap-1.5"
                             >
                                 {submittingInvite ? (
@@ -714,21 +1404,141 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                 </DialogContent>
             </Dialog>
 
-            {/* 5. Revoke Staff Confirmation Dialog */}
+            {/* 5. Edit Staff Member Dialog */}
+            <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
+                <DialogContent className="sm:max-w-md rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                            <IconPencil className="h-5 w-5 text-primary" />
+                            Edit Staff Member
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-500">
+                            Update workspace details and clinical branch assignment for {editTarget?.fullName}.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {editError && (
+                        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2">
+                            <IconAlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                            <span>{editError}</span>
+                        </div>
+                    )}
+
+                    <form onSubmit={handleEditSubmit} className="space-y-4 pt-1">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="editFullName" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                Full Name <span className="text-rose-500">*</span>
+                            </Label>
+                            <Input
+                                id="editFullName"
+                                placeholder="e.g. Alex Morgan"
+                                value={editFullName}
+                                onChange={(e) => setEditFullName(e.target.value)}
+                                className="h-9 text-xs rounded-xl"
+                                required
+                            />
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label htmlFor="editRole" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                Workspace Role <span className="text-rose-500">*</span>
+                            </Label>
+                            <SelectField
+                                id="editRole"
+                                value={editRole}
+                                onValueChange={(newRole) => {
+                                    setEditRole(newRole);
+                                    if (newRole !== "Facility Administrator") {
+                                        setEditFacilityId("");
+                                    }
+                                }}
+                                options={[
+                                    { value: "Admin", label: "Tenant Administrator (Manage branches, invites, & tenancy settings)" },
+                                    { value: "Facility Administrator", label: "Facility Administrator (Branch clinical operations & local settings)" },
+                                    { value: "Biller", label: "Biller / Finance (Manage subscriptions, checkout sessions, & invoices)" },
+                                    { value: "Viewer", label: "Viewer / Analyst (Read-only access to tenancy health & branch stats)" },
+                                ]}
+                            />
+                        </div>
+
+                        {editRole === "Facility Administrator" && (
+                            <div className="space-y-1.5">
+                                <Label htmlFor="editFacilityId" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                    Assigned Branch / Facility <span className="text-rose-500">*</span>
+                                </Label>
+                                <SelectField
+                                    id="editFacilityId"
+                                    value={editFacilityId}
+                                    onValueChange={setEditFacilityId}
+                                    placeholder="Select a branch / facility..."
+                                    required
+                                    options={facilities.map((fac) => ({
+                                        value: fac.id,
+                                        label: `${fac.name} (${fac.facilityType})`,
+                                    }))}
+                                />
+                            </div>
+                        )}
+
+                        <DialogFooter className="gap-2 pt-2 sm:justify-end">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setEditTarget(null)}
+                                disabled={submittingEdit}
+                                className="rounded-xl text-xs"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={submittingEdit}
+                                className="rounded-xl text-xs font-semibold gap-1.5"
+                            >
+                                {submittingEdit ? (
+                                    <>
+                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                        <span>Saving Changes...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <IconCheck className="h-3.5 w-3.5" />
+                                        <span>Save Changes</span>
+                                    </>
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* 6. Revoke Staff Confirmation Dialog */}
             <Dialog open={!!revokeTarget} onOpenChange={(open) => !open && setRevokeTarget(null)}>
                 <DialogContent className="sm:max-w-md rounded-2xl">
                     <DialogHeader>
                         <DialogTitle className="text-lg font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
-                            <IconTrash className="h-5 w-5" />
-                            Revoke Staff Member
+                            <IconBan className="h-5 w-5" />
+                            {revokeTarget?.status === "Invited" || revokeTarget?.status === "Expired"
+                                ? "Revoke Invitation"
+                                : "Revoke Workspace Access"}
                         </DialogTitle>
                         <DialogDescription className="text-xs text-slate-500">
-                            Are you sure you want to remove <strong>{revokeTarget?.fullName}</strong> ({revokeTarget?.email}) from this workspace?
+                            {revokeTarget?.status === "Invited" || revokeTarget?.status === "Expired" ? (
+                                <>
+                                    Are you sure you want to revoke the pending invitation for <strong>{revokeTarget?.fullName}</strong> ({revokeTarget?.email})?
+                                </>
+                            ) : (
+                                <>
+                                    Are you sure you want to revoke workspace access for <strong>{revokeTarget?.fullName}</strong> ({revokeTarget?.email})?
+                                </>
+                            )}
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300">
-                        This action will immediately terminate their clinical console access and free up 1 staff seat in your subscription quota.
+                        {revokeTarget?.status === "Invited" || revokeTarget?.status === "Expired"
+                            ? "This will invalidate their invitation link, free up 1 seat in your subscription quota, and mark the record as Revoked. You can re-invite or permanently remove them afterwards."
+                            : "This will immediately terminate their workspace access, free up 1 seat in your subscription quota, and keep the record in Revoked state for audit history. You can re-invite or permanently remove them afterwards."}
                     </div>
 
                     <DialogFooter className="gap-2 pt-2 sm:justify-end">
@@ -755,8 +1565,58 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                 </>
                             ) : (
                                 <>
-                                    <IconTrash className="h-3.5 w-3.5" />
+                                    <IconBan className="h-3.5 w-3.5" />
                                     <span>Confirm Revoke</span>
+                                </>
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 6b. Permanently Remove Member Dialog (from Revoked state) */}
+            <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+                <DialogContent className="sm:max-w-md rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                            <IconTrash className="h-5 w-5" />
+                            Remove from Workspace
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-500">
+                            Are you sure you want to permanently remove <strong>{deleteTarget?.fullName}</strong> ({deleteTarget?.email}) from this workspace directory?
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300">
+                        This will permanently delete the revoked member record from your workspace directory.
+                    </div>
+
+                    <DialogFooter className="gap-2 pt-2 sm:justify-end">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setDeleteTarget(null)}
+                            disabled={submittingDelete}
+                            className="rounded-xl text-xs"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={handlePermanentDeleteConfirm}
+                            disabled={submittingDelete}
+                            className="rounded-xl text-xs font-semibold gap-1.5"
+                        >
+                            {submittingDelete ? (
+                                <>
+                                    <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                    <span>Removing...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <IconTrash className="h-3.5 w-3.5" />
+                                    <span>Permanently Remove</span>
                                 </>
                             )}
                         </Button>
@@ -781,7 +1641,9 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
 
                     <div className="space-y-3 py-2">
                         <p className="text-xs text-slate-600 dark:text-slate-400">
-                            An invitation email has been sent. You can also directly copy and share this link via WhatsApp, Slack, or SMS:
+                            {createdInviteModal?.sentEmail
+                                ? "An invitation email has been sent. You can also directly copy and share this link via WhatsApp, Slack, or SMS:"
+                                : "Invitation link generated (no email was sent). You can directly copy and share this link via WhatsApp, Slack, or SMS:"}
                         </p>
 
                         <div className="flex items-center gap-2">
@@ -815,6 +1677,245 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                         <Button
                             type="button"
                             onClick={() => setCreatedInviteModal(null)}
+                            className="w-full sm:w-auto rounded-xl text-xs font-semibold"
+                        >
+                            Done
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 7. Reset Password Dialog */}
+            <Dialog open={!!resetTarget} onOpenChange={(open) => !open && setResetTarget(null)}>
+                <DialogContent className="sm:max-w-md rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                            <IconKey className="h-5 w-5 text-primary" />
+                            Reset Member Password
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-500">
+                            Choose how to reset the password for <strong>{resetTarget?.fullName}</strong> ({resetTarget?.email}).
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {resetError && (
+                        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2">
+                            <IconAlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                            <span>{resetError}</span>
+                        </div>
+                    )}
+
+                    <form onSubmit={handleResetPasswordSubmit} className="space-y-4 pt-1">
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                Reset Method
+                            </Label>
+                            <div className="grid grid-cols-1 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setResetMode("email")}
+                                    className={`p-3 rounded-xl border text-left transition-all ${
+                                        resetMode === "email"
+                                            ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                                            : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-1.5 mb-0.5 font-semibold text-xs">
+                                        <IconMail className="h-4 w-4" />
+                                        <span>Email Reset Link (Recommended)</span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 font-normal">
+                                        Emails a secure 7-day self-service password reset link to {resetTarget?.email}.
+                                    </p>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setResetMode("link")}
+                                    className={`p-3 rounded-xl border text-left transition-all ${
+                                        resetMode === "link"
+                                            ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                                            : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-1.5 mb-0.5 font-semibold text-xs">
+                                        <IconLink className="h-4 w-4" />
+                                        <span>Copy Reset Link Only</span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 font-normal">
+                                        Generates a 7-day reset link to copy and share manually (no email sent).
+                                    </p>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setResetMode("password")}
+                                    className={`p-3 rounded-xl border text-left transition-all ${
+                                        resetMode === "password"
+                                            ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                                            : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-1.5 mb-0.5 font-semibold text-xs">
+                                        <IconKey className="h-4 w-4" />
+                                        <span>Set Temporary Password Directly</span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 font-normal">
+                                        Immediately updates their password and signs out active sessions.
+                                    </p>
+                                </button>
+                            </div>
+                        </div>
+
+                        {resetMode === "password" && (
+                            <div className="space-y-1.5">
+                                <Label htmlFor="resetTempPassword" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                    New Temporary Password <span className="text-rose-500">*</span>
+                                </Label>
+                                <Input
+                                    id="resetTempPassword"
+                                    type="text"
+                                    placeholder="Minimum 8 characters"
+                                    value={resetTempPassword}
+                                    onChange={(e) => setResetTempPassword(e.target.value)}
+                                    className="h-9 text-xs font-mono rounded-xl"
+                                    required
+                                />
+                                <p className="text-[11px] text-slate-400">
+                                    Share this temporary password with the member over a secure channel.
+                                </p>
+                            </div>
+                        )}
+
+                        <DialogFooter className="gap-2 pt-2 sm:justify-end">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setResetTarget(null)}
+                                disabled={submittingReset}
+                                className="rounded-xl text-xs"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={submittingReset}
+                                className="rounded-xl text-xs font-semibold gap-1.5"
+                            >
+                                {submittingReset ? (
+                                    <>
+                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                        <span>Processing...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <IconKey className="h-3.5 w-3.5" />
+                                        <span>
+                                            {resetMode === "email"
+                                                ? "Send Reset Email"
+                                                : resetMode === "link"
+                                                  ? "Generate Reset Link"
+                                                  : "Set Temporary Password"}
+                                        </span>
+                                    </>
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* 8. Reset Password Result Dialog */}
+            <Dialog open={!!resetResultModal?.open} onOpenChange={(open) => !open && setResetResultModal(null)}>
+                <DialogContent className="sm:max-w-lg rounded-2xl">
+                    <DialogHeader className="flex flex-col items-center text-center sm:items-center sm:text-center">
+                        <div className="size-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-1">
+                            <IconCheck className="h-6 w-6" />
+                        </div>
+                        <DialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 text-center">
+                            {resetResultModal?.deliveryMode === "password"
+                                ? "Temporary Password Set"
+                                : "Password Reset Link Ready"}
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-500 text-center max-w-sm">
+                            {resetResultModal?.deliveryMode === "email" ? (
+                                <>
+                                    A password reset email has been queued for <strong>{resetResultModal?.fullName}</strong> ({resetResultModal?.email}).
+                                </>
+                            ) : resetResultModal?.deliveryMode === "link" ? (
+                                <>
+                                    A self-service password reset link was generated for <strong>{resetResultModal?.fullName}</strong> (no email sent).
+                                </>
+                            ) : (
+                                <>
+                                    The password for <strong>{resetResultModal?.fullName}</strong> ({resetResultModal?.email}) has been updated immediately.
+                                </>
+                            )}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-3 py-2">
+                        {resetResultModal?.resetUrl && (
+                            <>
+                                <p className="text-xs text-slate-600 dark:text-slate-400">
+                                    You can also copy and share this 7-day password reset link directly:
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        readOnly
+                                        value={resetResultModal.resetUrl}
+                                        className="h-9 text-xs font-mono rounded-xl bg-slate-50 dark:bg-slate-900 select-all"
+                                    />
+                                    <Button
+                                        size="sm"
+                                        onClick={() => {
+                                            if (resetResultModal?.resetUrl) {
+                                                navigator.clipboard.writeText(resetResultModal.resetUrl);
+                                                toast.success("Reset link copied to clipboard!");
+                                            }
+                                        }}
+                                        className="h-9 px-3 text-xs font-semibold rounded-xl gap-1.5 shrink-0"
+                                    >
+                                        <IconCopy className="h-3.5 w-3.5" />
+                                        <span>Copy</span>
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+
+                        {resetResultModal?.temporaryPassword && (
+                            <>
+                                <p className="text-xs text-slate-600 dark:text-slate-400">
+                                    Copy the temporary credentials below and share them securely with the member:
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        readOnly
+                                        value={resetResultModal.temporaryPassword}
+                                        className="h-9 text-xs font-mono rounded-xl bg-slate-50 dark:bg-slate-900 select-all"
+                                    />
+                                    <Button
+                                        size="sm"
+                                        onClick={() => {
+                                            if (resetResultModal?.temporaryPassword) {
+                                                navigator.clipboard.writeText(resetResultModal.temporaryPassword);
+                                                toast.success("Temporary password copied!");
+                                            }
+                                        }}
+                                        className="h-9 px-3 text-xs font-semibold rounded-xl gap-1.5 shrink-0"
+                                    >
+                                        <IconCopy className="h-3.5 w-3.5" />
+                                        <span>Copy</span>
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    <DialogFooter className="pt-2 sm:justify-end">
+                        <Button
+                            type="button"
+                            onClick={() => setResetResultModal(null)}
                             className="w-full sm:w-auto rounded-xl text-xs font-semibold"
                         >
                             Done

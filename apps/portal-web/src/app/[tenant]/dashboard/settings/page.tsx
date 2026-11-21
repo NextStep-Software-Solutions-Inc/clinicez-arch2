@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { IconAlertTriangle, IconBuildingHospital, IconHistory, IconPalette, IconPlugConnected, IconSettings, IconShieldLock, IconShieldCheck } from "@tabler/icons-react";
+import { IconAlertTriangle, IconHistory, IconPalette, IconPlugConnected, IconSettings, IconShieldLock, IconShieldCheck } from "@tabler/icons-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
@@ -9,7 +9,6 @@ import { GeneralTab } from "./_components/GeneralTab";
 import { BrandingTab } from "./_components/BrandingTab";
 import { SecurityTab } from "./_components/SecurityTab";
 import { ComplianceTab } from "./_components/ComplianceTab";
-import { FacilitiesTab } from "./_components/FacilitiesTab";
 import { IntegrationsTab } from "./_components/IntegrationsTab";
 import { AuditLogTab } from "./_components/AuditLogTab";
 import { DangerZoneTab } from "./_components/DangerZoneTab";
@@ -59,10 +58,6 @@ export default function SettingsPage() {
                                 <IconPalette className="h-3.5 w-3.5 shrink-0" />
                                 Branding
                             </TabsTrigger>
-                            <TabsTrigger value="facilities" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
-                                <IconBuildingHospital className="h-3.5 w-3.5 shrink-0" />
-                                Facilities
-                            </TabsTrigger>
                             <TabsTrigger value="security" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
                                 <IconShieldLock className="h-3.5 w-3.5 shrink-0" />
                                 Security
@@ -98,10 +93,6 @@ export default function SettingsPage() {
                             branding={settings.branding}
                             onSaved={() => mutate()}
                         />
-                    </TabsContent>
-
-                    <TabsContent value="facilities" className="outline-none">
-                        <FacilitiesTab tenantSlug={tenantSlug} />
                     </TabsContent>
 
                     <TabsContent value="security" className="outline-none">

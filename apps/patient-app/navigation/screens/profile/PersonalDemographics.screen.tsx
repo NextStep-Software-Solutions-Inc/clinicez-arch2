@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
 import { db, flushDatabaseSnapshot } from '@db/index';
 import { patients } from '@db/schema/patients';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
@@ -25,63 +25,41 @@ import {
   type PatientSummary,
 } from 'services/api/patientApi';
 import { upsertPatientSummary } from '@db/hydrate';
+import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
 import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
+import { useEhrOptions } from 'hooks/useEhrOptions';
 
 type FormValues = {
   firstName: string;
   middleName: string;
   lastName: string;
   suffix: string;
-  sex: 'Male' | 'Female' | 'Other' | '';
+  sex: string;
   dob: string;
   placeOfBirth: string;
-  civilStatus: 'Single' | 'Married' | 'Widowed' | 'Separated' | 'Divorced' | '';
-  bloodType: 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-' | 'Unknown' | '';
+  civilStatus: string;
+  bloodType: string;
   nationality: string;
   ethnicity: string;
   religion: string;
   primaryLanguage: string;
-  educationLevel: 'None' | 'Elementary' | 'HighSchool' | 'Vocational' | 'College' | 'Graduate' | 'PostGraduate' | '';
+  educationLevel: string;
 };
-
-const SEX_OPTIONS = [
-  { label: 'Male', value: 'Male' },
-  { label: 'Female', value: 'Female' },
-  { label: 'Other', value: 'Other' },
-];
-
-const CIVIL_STATUS_OPTIONS = [
-  { label: 'Single', value: 'Single' },
-  { label: 'Married', value: 'Married' },
-  { label: 'Widowed', value: 'Widowed' },
-  { label: 'Separated', value: 'Separated' },
-  { label: 'Divorced', value: 'Divorced' },
-];
-
-const BLOOD_TYPE_OPTIONS = [
-  { label: 'A+', value: 'A+' }, { label: 'A-', value: 'A-' },
-  { label: 'B+', value: 'B+' }, { label: 'B-', value: 'B-' },
-  { label: 'AB+', value: 'AB+' }, { label: 'AB-', value: 'AB-' },
-  { label: 'O+', value: 'O+' }, { label: 'O-', value: 'O-' },
-  { label: 'Unknown', value: 'Unknown' },
-];
-
-const EDUCATION_OPTIONS = [
-  { label: 'None', value: 'None' },
-  { label: 'Elementary', value: 'Elementary' },
-  { label: 'High School', value: 'HighSchool' },
-  { label: 'Vocational', value: 'Vocational' },
-  { label: 'College', value: 'College' },
-  { label: 'Graduate', value: 'Graduate' },
-  { label: 'Post Graduate', value: 'PostGraduate' },
-];
 
 function selectedLabel(
   options: { label: string; value: string }[],
   value: string,
 ): string {
-  return options.find((option) => option.value === value)?.label ?? '';
+  if (!value) return '';
+  const match = options.find(
+    (option) =>
+      option.value === value ||
+      option.label === value ||
+      option.value.toLowerCase() === value.toLowerCase() ||
+      option.label.toLowerCase() === value.toLowerCase(),
+  );
+  return match?.label ?? value;
 }
 
 export default function PersonalDemographicsScreen() {
@@ -93,6 +71,11 @@ export default function PersonalDemographicsScreen() {
   const headerHeight = useSafeHeaderHeight();
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState<'sex' | 'civil' | 'blood' | 'education' | null>(null);
+
+  const { selectOptions: sexOptions } = useEhrOptions('sex');
+  const { selectOptions: civilStatusOptions } = useEhrOptions('civil_status');
+  const { selectOptions: bloodTypeOptions } = useEhrOptions('blood_type');
+  const { selectOptions: educationOptions } = useEhrOptions('education_level');
 
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<FormValues>({
     defaultValues: {
@@ -269,6 +252,12 @@ export default function PersonalDemographicsScreen() {
 
       // 2. Save to local SQLite
       const now = new Date();
+      if (user?.id) {
+        await db
+          .delete(patients)
+          .where(and(eq(patients.clerkUserId, user.id), ne(patients.id, patientId)));
+      }
+
       await db.insert(patients).values({
         id: patientId,
         clerkUserId: user?.id || patientId,
@@ -320,6 +309,7 @@ export default function PersonalDemographicsScreen() {
         if (serverDemo) {
           await upsertPatientSummary({
             ...serverDemo,
+            id: patientId,
             firstName: payload.firstName,
             middleName: payload.middleName,
             lastName: payload.lastName,
@@ -336,6 +326,10 @@ export default function PersonalDemographicsScreen() {
             educationLevel: payload.educationLevel,
           }, user?.id);
         }
+
+        await flushAndSyncProfile(patientId, getToken).catch((syncErr) =>
+          console.warn('[PersonalDemographics] Background sync after save failed:', syncErr)
+        );
 
         reset(data);
         DeviceEventEmitter.emit('profile-synced');
@@ -400,7 +394,7 @@ export default function PersonalDemographicsScreen() {
             <Controller control={control} name="sex" render={({ field }) => (
               <ProfileFormField
                 label="Sex"
-                value={selectedLabel(SEX_OPTIONS, field.value)}
+                value={selectedLabel(sexOptions, field.value)}
                 onPressIn={() => setModal('sex')}
                 placeholder="Select sex"
                 picker
@@ -417,7 +411,7 @@ export default function PersonalDemographicsScreen() {
             <Controller control={control} name="civilStatus" render={({ field }) => (
               <ProfileFormField
                 label="Civil Status"
-                value={selectedLabel(CIVIL_STATUS_OPTIONS, field.value)}
+                value={selectedLabel(civilStatusOptions, field.value)}
                 onPressIn={() => setModal('civil')}
                 placeholder="Select civil status"
                 picker
@@ -427,7 +421,7 @@ export default function PersonalDemographicsScreen() {
           <Controller control={control} name="bloodType" render={({ field }) => (
             <ProfileFormField
               label="Blood Type"
-              value={selectedLabel(BLOOD_TYPE_OPTIONS, field.value)}
+              value={selectedLabel(bloodTypeOptions, field.value)}
               onPressIn={() => setModal('blood')}
               placeholder="Select blood type"
               picker
@@ -454,7 +448,7 @@ export default function PersonalDemographicsScreen() {
           <Controller control={control} name="educationLevel" render={({ field }) => (
             <ProfileFormField
               label="Education Level"
-              value={selectedLabel(EDUCATION_OPTIONS, field.value)}
+              value={selectedLabel(educationOptions, field.value)}
               onPressIn={() => setModal('education')}
               placeholder="Select education level"
               picker
@@ -467,25 +461,25 @@ export default function PersonalDemographicsScreen() {
         {/* Modals */}
         <Controller control={control} name="sex" render={({ field }) => (
           <ProfileSelectModal
-            visible={modal === 'sex'} title="Sex" options={SEX_OPTIONS}
+            visible={modal === 'sex'} title="Sex" options={sexOptions}
             selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)}
           />
         )} />
         <Controller control={control} name="civilStatus" render={({ field }) => (
           <ProfileSelectModal
-            visible={modal === 'civil'} title="Civil Status" options={CIVIL_STATUS_OPTIONS}
+            visible={modal === 'civil'} title="Civil Status" options={civilStatusOptions}
             selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)}
           />
         )} />
         <Controller control={control} name="bloodType" render={({ field }) => (
           <ProfileSelectModal
-            visible={modal === 'blood'} title="Blood Type" options={BLOOD_TYPE_OPTIONS}
+            visible={modal === 'blood'} title="Blood Type" options={bloodTypeOptions}
             selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)}
           />
         )} />
         <Controller control={control} name="educationLevel" render={({ field }) => (
           <ProfileSelectModal
-            visible={modal === 'education'} title="Education Level" options={EDUCATION_OPTIONS}
+            visible={modal === 'education'} title="Education Level" options={educationOptions}
             selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)}
           />
         )} />

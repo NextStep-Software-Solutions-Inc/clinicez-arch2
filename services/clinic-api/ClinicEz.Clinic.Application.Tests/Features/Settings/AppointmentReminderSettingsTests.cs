@@ -28,10 +28,10 @@ public class AppointmentReminderSettingsTests
     }
 
     [Fact]
-    public void ClinicSettings_DirectInstantiation_HasAllFourReminderFlagsDefaultedToTrue()
+    public void FacilitySettings_DirectInstantiation_HasAllFourReminderFlagsDefaultedToTrue()
     {
         // Arrange & Act
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicName = "Test Clinic"
@@ -83,11 +83,11 @@ public class AppointmentReminderSettingsTests
     }
 
     [Fact]
-    public async Task GetClinicSettings_WhenNoSettingsExist_AutoProvisionsWithAllReminderFlagsTrue()
+    public async Task GetFacilitySettings_WhenNoSettingsExist_AutoProvisionsWithAllReminderFlagsTrue()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var handler = new GetClinicSettingsQueryHandler(settingsRepo, _clinicContext, uow);
 
         // Act
@@ -101,7 +101,7 @@ public class AppointmentReminderSettingsTests
         result.EnableStaffAppointmentNotifications.Should().BeTrue();
 
         // Assert persisted entity in DB
-        var persisted = await context.ClinicSettings.FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
+        var persisted = await context.Settings.FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
         persisted.Should().NotBeNull();
         persisted!.EnableAppointmentReminders.Should().BeTrue();
         persisted.AppointmentReminder24hEnabled.Should().BeTrue();
@@ -110,11 +110,11 @@ public class AppointmentReminderSettingsTests
     }
 
     [Fact]
-    public async Task UpdateClinicSettings_UpdatingOnlyEnableAppointmentReminders_LeavesOtherFlagsUnchanged()
+    public async Task UpdateFacilitySettings_UpdatingOnlyEnableAppointmentReminders_LeavesOtherFlagsUnchanged()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var updateHandler = new UpdateClinicSettingsCommandHandler(settingsRepo, _clinicContext, uow);
         var getHandler = new GetClinicSettingsQueryHandler(settingsRepo, _clinicContext, uow);
 
@@ -134,7 +134,7 @@ public class AppointmentReminderSettingsTests
         result.EnableStaffAppointmentNotifications.Should().BeTrue("Staff notifications should remain untouched");
 
         // Verify direct DB query
-        var persisted = await context.ClinicSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
+        var persisted = await context.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
         persisted!.EnableAppointmentReminders.Should().BeFalse();
         persisted.AppointmentReminder24hEnabled.Should().BeTrue();
         persisted.AppointmentReminder2hEnabled.Should().BeTrue();
@@ -142,11 +142,11 @@ public class AppointmentReminderSettingsTests
     }
 
     [Fact]
-    public async Task UpdateClinicSettings_UpdatingOnlyAppointmentReminder24hEnabled_LeavesOtherFlagsUnchanged()
+    public async Task UpdateFacilitySettings_UpdatingOnlyAppointmentReminder24hEnabled_LeavesOtherFlagsUnchanged()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var updateHandler = new UpdateClinicSettingsCommandHandler(settingsRepo, _clinicContext, uow);
         var getHandler = new GetClinicSettingsQueryHandler(settingsRepo, _clinicContext, uow);
 
@@ -164,7 +164,7 @@ public class AppointmentReminderSettingsTests
         result.AppointmentReminder2hEnabled.Should().BeTrue("2h reminder should remain untouched");
         result.EnableStaffAppointmentNotifications.Should().BeTrue("Staff notifications should remain untouched");
 
-        var persisted = await context.ClinicSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
+        var persisted = await context.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
         persisted!.EnableAppointmentReminders.Should().BeTrue();
         persisted.AppointmentReminder24hEnabled.Should().BeFalse();
         persisted.AppointmentReminder2hEnabled.Should().BeTrue();
@@ -172,11 +172,11 @@ public class AppointmentReminderSettingsTests
     }
 
     [Fact]
-    public async Task UpdateClinicSettings_UpdatingOnlyAppointmentReminder2hEnabled_LeavesOtherFlagsUnchanged()
+    public async Task UpdateFacilitySettings_UpdatingOnlyAppointmentReminder2hEnabled_LeavesOtherFlagsUnchanged()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var updateHandler = new UpdateClinicSettingsCommandHandler(settingsRepo, _clinicContext, uow);
         var getHandler = new GetClinicSettingsQueryHandler(settingsRepo, _clinicContext, uow);
 
@@ -194,7 +194,7 @@ public class AppointmentReminderSettingsTests
         result.AppointmentReminder2hEnabled.Should().BeFalse();
         result.EnableStaffAppointmentNotifications.Should().BeTrue("Staff notifications should remain untouched");
 
-        var persisted = await context.ClinicSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
+        var persisted = await context.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
         persisted!.EnableAppointmentReminders.Should().BeTrue();
         persisted.AppointmentReminder24hEnabled.Should().BeTrue();
         persisted.AppointmentReminder2hEnabled.Should().BeFalse();
@@ -202,11 +202,11 @@ public class AppointmentReminderSettingsTests
     }
 
     [Fact]
-    public async Task UpdateClinicSettings_UpdatingOnlyEnableStaffAppointmentNotifications_LeavesOtherFlagsUnchanged()
+    public async Task UpdateFacilitySettings_UpdatingOnlyEnableStaffAppointmentNotifications_LeavesOtherFlagsUnchanged()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var updateHandler = new UpdateClinicSettingsCommandHandler(settingsRepo, _clinicContext, uow);
         var getHandler = new GetClinicSettingsQueryHandler(settingsRepo, _clinicContext, uow);
 
@@ -224,7 +224,7 @@ public class AppointmentReminderSettingsTests
         result.AppointmentReminder2hEnabled.Should().BeTrue("2h reminder should remain untouched");
         result.EnableStaffAppointmentNotifications.Should().BeFalse();
 
-        var persisted = await context.ClinicSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
+        var persisted = await context.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
         persisted!.EnableAppointmentReminders.Should().BeTrue();
         persisted.AppointmentReminder24hEnabled.Should().BeTrue();
         persisted.AppointmentReminder2hEnabled.Should().BeTrue();
@@ -232,11 +232,11 @@ public class AppointmentReminderSettingsTests
     }
 
     [Fact]
-    public async Task UpdateClinicSettings_UpdatingAllFourFlagsSimultaneously_PersistsCorrectly()
+    public async Task UpdateFacilitySettings_UpdatingAllFourFlagsSimultaneously_PersistsCorrectly()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var updateHandler = new UpdateClinicSettingsCommandHandler(settingsRepo, _clinicContext, uow);
         var getHandler = new GetClinicSettingsQueryHandler(settingsRepo, _clinicContext, uow);
 
@@ -257,7 +257,7 @@ public class AppointmentReminderSettingsTests
         resAllFalse.AppointmentReminder2hEnabled.Should().BeFalse();
         resAllFalse.EnableStaffAppointmentNotifications.Should().BeFalse();
 
-        var persistedAllFalse = await context.ClinicSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
+        var persistedAllFalse = await context.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
         persistedAllFalse!.EnableAppointmentReminders.Should().BeFalse();
         persistedAllFalse.AppointmentReminder24hEnabled.Should().BeFalse();
         persistedAllFalse.AppointmentReminder2hEnabled.Should().BeFalse();
@@ -278,7 +278,7 @@ public class AppointmentReminderSettingsTests
         resAlternating.AppointmentReminder2hEnabled.Should().BeTrue();
         resAlternating.EnableStaffAppointmentNotifications.Should().BeFalse();
 
-        var persistedAlternating = await context.ClinicSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
+        var persistedAlternating = await context.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
         persistedAlternating!.EnableAppointmentReminders.Should().BeTrue();
         persistedAlternating.AppointmentReminder24hEnabled.Should().BeFalse();
         persistedAlternating.AppointmentReminder2hEnabled.Should().BeTrue();
@@ -299,7 +299,7 @@ public class AppointmentReminderSettingsTests
         resAllTrue.AppointmentReminder2hEnabled.Should().BeTrue();
         resAllTrue.EnableStaffAppointmentNotifications.Should().BeTrue();
 
-        var persistedAllTrue = await context.ClinicSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
+        var persistedAllTrue = await context.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
         persistedAllTrue!.EnableAppointmentReminders.Should().BeTrue();
         persistedAllTrue.AppointmentReminder24hEnabled.Should().BeTrue();
         persistedAllTrue.AppointmentReminder2hEnabled.Should().BeTrue();
@@ -307,11 +307,11 @@ public class AppointmentReminderSettingsTests
     }
 
     [Fact]
-    public async Task UpdateClinicSettings_WhenReminderFlagsAreNull_PreservesExistingCustomValues()
+    public async Task UpdateFacilitySettings_WhenReminderFlagsAreNull_PreservesExistingCustomValues()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var updateHandler = new UpdateClinicSettingsCommandHandler(settingsRepo, _clinicContext, uow);
 
         // Set up custom configuration: (false, true, false, true)
@@ -334,7 +334,7 @@ public class AppointmentReminderSettingsTests
         result.AppointmentReminder2hEnabled.Should().BeFalse();
         result.EnableStaffAppointmentNotifications.Should().BeTrue();
 
-        var persisted = await context.ClinicSettings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
+        var persisted = await context.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.ClinicId == _testClinicId);
         persisted!.ClinicName.Should().Be("Renamed Clinic Medical Center");
         persisted.EnableAppointmentReminders.Should().BeFalse();
         persisted.AppointmentReminder24hEnabled.Should().BeTrue();
@@ -343,7 +343,7 @@ public class AppointmentReminderSettingsTests
     }
 
     [Fact]
-    public async Task ClinicSettings_MultiClinicIsolation_MaintainsIndependentSettings()
+    public async Task FacilitySettings_MultiClinicIsolation_MaintainsIndependentSettings()
     {
         // Arrange
         var dbName = $"ClinicEz_MultiClinic_Settings_{Guid.NewGuid()}";
@@ -355,7 +355,7 @@ public class AppointmentReminderSettingsTests
         context1.TenantId.Returns(_testTenantId);
 
         var (db1, uow1, sieve1) = TestDbHelper.CreateSharedTestContext(dbName, context1);
-        var repo1 = TestDbHelper.CreateRepository<ClinicSettings>(db1, sieve1);
+        var repo1 = TestDbHelper.CreateRepository<FacilitySettings>(db1, sieve1);
         var updateHandler1 = new UpdateClinicSettingsCommandHandler(repo1, context1, uow1);
         var getHandler1 = new GetClinicSettingsQueryHandler(repo1, context1, uow1);
 
@@ -366,7 +366,7 @@ public class AppointmentReminderSettingsTests
         context2.TenantId.Returns(_testTenantId);
 
         var (db2, uow2, sieve2) = TestDbHelper.CreateSharedTestContext(dbName, context2);
-        var repo2 = TestDbHelper.CreateRepository<ClinicSettings>(db2, sieve2);
+        var repo2 = TestDbHelper.CreateRepository<FacilitySettings>(db2, sieve2);
         var getHandler2 = new GetClinicSettingsQueryHandler(repo2, context2, uow2);
         var updateHandler2 = new UpdateClinicSettingsCommandHandler(repo2, context2, uow2);
 
@@ -405,23 +405,23 @@ public class AppointmentReminderSettingsTests
         var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
         var model = context.Model;
 
-        // 1. Verify ClinicSettings entity defaults
-        var clinicSettingsEntity = model.FindEntityType(typeof(ClinicSettings));
+        // 1. Verify FacilitySettings entity defaults
+        var clinicSettingsEntity = model.FindEntityType(typeof(FacilitySettings));
         clinicSettingsEntity.Should().NotBeNull();
 
-        var enableRemindersProp = clinicSettingsEntity!.FindProperty(nameof(ClinicSettings.EnableAppointmentReminders));
+        var enableRemindersProp = clinicSettingsEntity!.FindProperty(nameof(FacilitySettings.EnableAppointmentReminders));
         enableRemindersProp.Should().NotBeNull();
         enableRemindersProp!.GetDefaultValue().Should().Be(true);
 
-        var rem24hProp = clinicSettingsEntity.FindProperty(nameof(ClinicSettings.AppointmentReminder24hEnabled));
+        var rem24hProp = clinicSettingsEntity.FindProperty(nameof(FacilitySettings.AppointmentReminder24hEnabled));
         rem24hProp.Should().NotBeNull();
         rem24hProp!.GetDefaultValue().Should().Be(true);
 
-        var rem2hProp = clinicSettingsEntity.FindProperty(nameof(ClinicSettings.AppointmentReminder2hEnabled));
+        var rem2hProp = clinicSettingsEntity.FindProperty(nameof(FacilitySettings.AppointmentReminder2hEnabled));
         rem2hProp.Should().NotBeNull();
         rem2hProp!.GetDefaultValue().Should().Be(true);
 
-        var staffNotifProp = clinicSettingsEntity.FindProperty(nameof(ClinicSettings.EnableStaffAppointmentNotifications));
+        var staffNotifProp = clinicSettingsEntity.FindProperty(nameof(FacilitySettings.EnableStaffAppointmentNotifications));
         staffNotifProp.Should().NotBeNull();
         staffNotifProp!.GetDefaultValue().Should().Be(true);
 

@@ -24,6 +24,8 @@ import AppointmentDetailScreen from '../screens/appointments/AppointmentDetail.s
 import ProviderProfileScreen from '../screens/appointments/ProviderProfile.screen';
 import RescheduleScreen from '../screens/appointments/Reschedule.screen';
 import AttachFilesScreen from '../screens/appointments/AttachFiles.screen';
+import ProfileScreen from '../screens/profile/Profile.screen';
+import DirectorySearchScreen from '../screens/Search.screen';
 import PersonalDemographicsScreen from '../screens/profile/PersonalDemographics.screen';
 import GovernmentIdsScreen from '../screens/profile/GovernmentIds.screen';
 import ContactInfoScreen from '../screens/profile/ContactInfo.screen';
@@ -66,6 +68,12 @@ import PrescriptionDetailScreen from '../screens/documents/PrescriptionDetail.sc
 import ExternalDispenseScreen from '../screens/documents/ExternalDispense.screen';
 import LabResultDetailScreen from '../screens/documents/LabResultDetail.screen';
 import MedicalCertificateDetailScreen from '../screens/documents/MedicalCertificateDetail.screen';
+import MessagesInboxScreen from '../screens/messages/MessagesInbox.screen';
+import ConversationThreadScreen from '../screens/messages/ConversationThread.screen';
+import NewMessageInquiryScreen from '../screens/messages/NewMessageInquiry.screen';
+import TeleconsultWaitingRoomScreen from '../screens/teleconsult/TeleconsultWaitingRoom.screen';
+import TeleconsultCallScreen from '../screens/teleconsult/TeleconsultCall.screen';
+import PrivacySettingsScreen from '../screens/settings/PrivacySettings.screen';
 
 /**
  * Web Main stack.
@@ -96,6 +104,8 @@ const SCREENS: [name: string, component: ComponentType<any>, title: string][] = 
   ['ProviderProfileScreen', ProviderProfileScreen, 'Provider Profile'],
   ['RescheduleScreen', RescheduleScreen, 'Reschedule'],
   ['AttachFilesScreen', AttachFilesScreen, 'Attach Files'],
+  ['ProfileScreen', ProfileScreen, 'My Profile'],
+  ['DirectorySearchScreen', DirectorySearchScreen, 'Search'],
   ['PersonalDemographicsScreen', PersonalDemographicsScreen, 'Personal Demographics'],
   ['GovernmentIdsScreen', GovernmentIdsScreen, 'Government IDs'],
   ['ContactInfoScreen', ContactInfoScreen, 'Contact Information'],
@@ -138,10 +148,20 @@ const SCREENS: [name: string, component: ComponentType<any>, title: string][] = 
   ['ExternalDispenseScreen', ExternalDispenseScreen, 'Dispensed elsewhere'],
   ['LabResultDetailScreen', LabResultDetailScreen, 'Lab result'],
   ['MedicalCertificateDetailScreen', MedicalCertificateDetailScreen, 'Medical certificate'],
+  ['MessagesInboxScreen', MessagesInboxScreen, 'Messages'],
+  ['ConversationThreadScreen', ConversationThreadScreen, 'Conversation'],
+  ['NewMessageInquiryScreen', NewMessageInquiryScreen, 'New Message'],
+  ['TeleconsultWaitingRoomScreen', TeleconsultWaitingRoomScreen, 'Waiting Room'],
+  ['TeleconsultCallScreen', TeleconsultCallScreen, 'Teleconsultation'],
+  ['PrivacySettingsScreen', PrivacySettingsScreen, 'Privacy & Communications'],
 ];
 
 const screens: Record<string, any> = {
   BottomTabs: createNativeStackScreen({
+    screen: MainBottomTabs,
+    options: { headerShown: false },
+  }),
+  MainBottomTabs: createNativeStackScreen({
     screen: MainBottomTabs,
     options: { headerShown: false },
   }),

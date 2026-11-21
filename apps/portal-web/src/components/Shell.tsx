@@ -38,13 +38,18 @@ interface ShellProps {
   type: "clinics" | "organizations" | "hp";
 }
 
+const getPatientAppBookingUrl = (facilitySlug: string) => {
+  const patientAppBase = (process.env.NEXT_PUBLIC_PATIENT_APP_URL?.trim() || "https://patient.clinicez.ph").replace(/\/+$/, "");
+  return `${patientAppBase}/booking?clinic=${encodeURIComponent(facilitySlug)}`;
+};
+
 const getButtonConfig = (type: "clinics" | "organizations" | "hp", item: ShellItem) => {
   switch (type) {
     case "clinics": {
       const targetSlug = item.slug || item.id;
       return {
-        href: `/join?facility=${encodeURIComponent(targetSlug)}`,
-        text: "Join Clinic",
+        href: getPatientAppBookingUrl(targetSlug),
+        text: "Book Appointment",
       };
     }
     case "organizations": {
@@ -57,9 +62,9 @@ const getButtonConfig = (type: "clinics" | "organizations" | "hp", item: ShellIt
       const targetFacility = item.facilitySlug || item.slug;
       return {
         href: targetFacility
-          ? `/join?facility=${encodeURIComponent(targetFacility)}`
+          ? getPatientAppBookingUrl(targetFacility)
           : "/clinics",
-        text: "Visit Clinic",
+        text: targetFacility ? "Book Appointment" : "Visit Clinic",
       };
     }
     default:

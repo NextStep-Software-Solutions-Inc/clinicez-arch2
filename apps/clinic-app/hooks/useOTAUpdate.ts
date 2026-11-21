@@ -11,6 +11,8 @@ function getUpdatesModule(): typeof import('expo-updates') | null {
   }
 }
 
+let attemptedUpdateId: string | null = null;
+
 /**
  * Checks for and automatically downloads over-the-air (OTA) updates on standalone native apps.
  * In development builds (__DEV__), expo-updates does not query the remote channel.
@@ -19,7 +21,15 @@ export function useOTAUpdate() {
   useEffect(() => {
     async function onFetchUpdateAsync() {
       const Updates = getUpdatesModule();
-      if (!Updates) return;
+      if (!Updates || !Updates.isEnabled) return;
+
+      if ((Updates as any).isEmergencyLaunch) {
+        console.warn(
+          '[useOTAUpdate] Emergency fallback launch detected. Suppressing auto-update to prevent restart loop:',
+          (Updates as any).emergencyLaunchReason
+        );
+        return;
+      }
 
       const [update, error] = await safeAwait(Updates.checkForUpdateAsync());
 
@@ -29,10 +39,27 @@ export function useOTAUpdate() {
       }
 
       if (update?.isAvailable) {
-        const [, fetchError] = await safeAwait(Updates.fetchUpdateAsync());
+        const candidateId = update.manifest?.id;
+        if (candidateId && candidateId === Updates.updateId) {
+          return;
+        }
+        if (candidateId && candidateId === attemptedUpdateId) {
+          console.warn(
+            `[useOTAUpdate] Update ${candidateId} was already attempted and did not take effect. Skipping repeated prompt.`
+          );
+          return;
+        }
+
+        const [fetchResult, fetchError] = await safeAwait(Updates.fetchUpdateAsync());
         if (fetchError) {
           return;
         }
+
+        if (fetchResult && !(fetchResult as any).isNew) {
+          return;
+        }
+
+        const updateToActivate = fetchResult?.manifest?.id ?? candidateId;
 
         Alert.alert(
           'Update Available',
@@ -41,8 +68,15 @@ export function useOTAUpdate() {
             { text: 'Later', style: 'cancel' },
             {
               text: 'Restart',
-              onPress: () => {
-                Updates.reloadAsync();
+              onPress: async () => {
+                if (updateToActivate) {
+                  attemptedUpdateId = updateToActivate;
+                }
+                try {
+                  await Updates.reloadAsync();
+                } catch (reloadErr) {
+                  console.warn('[useOTAUpdate] reloadAsync failed:', reloadErr);
+                }
               },
             },
           ],

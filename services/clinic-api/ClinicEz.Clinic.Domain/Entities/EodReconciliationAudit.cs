@@ -3,10 +3,8 @@ using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class EodReconciliationAudit : BaseEntity
+public sealed class EodReconciliationAudit : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
     public DateOnly ReconciliationDate { get; set; }
     public DateTime ReconciledAt { get; set; } = DateTime.UtcNow;
 

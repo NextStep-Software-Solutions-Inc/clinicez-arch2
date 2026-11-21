@@ -1,19 +1,18 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
-import Link from "next/navigation";
-import { branchService, BranchDto } from "@/services/branch.service";
+import { resolveDashboardNavHref } from "@/components/dashboard/nav-main";
+import { branchService, type BranchDto } from "@/services/branch.service";
 import {
   yakapService,
-  PortalEligibleYakapEncounter,
-  PortalYakapTransmittal,
-  PortalValidationResult,
-  PortalSubmissionResult,
+  type PortalYakapBranchSummaryDto,
+  type PortalYakapSubmissionDto,
 } from "@/services/yakap.service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -27,26 +26,96 @@ import {
 import {
   IconFileCertificate,
   IconBuilding,
-  IconMapPin,
   IconShieldCheck,
   IconAlertTriangle,
+  IconArrowRight,
   IconCheck,
   IconLoader,
   IconRefresh,
-  IconSend,
-  IconCode,
-  IconCopy,
-  IconDownload,
   IconSearch,
-  IconCalendar,
-  IconChecklist,
-  IconStethoscope,
-  IconPill,
-  IconTestPipe,
-  IconCircleCheck,
-  IconCircleX,
+  IconAlertCircle,
+  IconClock,
+  IconCloudCheck,
+  IconX,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
+
+export type YakapStatusFilter =
+  | "all"
+  | "pending_polling"
+  | "pending"
+  | "submitted"
+  | "accepted"
+  | "rejected_failed"
+  | "rejected"
+  | "failed";
+
+export function resolvePcapiEnvironmentLabel(baseUrl?: string | null): {
+  label: "Staging" | "Production";
+  url: string;
+} {
+  const url = baseUrl?.trim() || "https://pcapi.philhealth.gov.ph";
+  const isStaging = /(staging|sandbox|uat|test|dev|localhost|127\.0\.0\.1|mock)/i.test(url);
+  return {
+    label: isStaging ? "Staging" : "Production",
+    url,
+  };
+}
+
+export function buildBranchPhilHealthSetupHref(
+  tenantSlug: string,
+  branchId: string,
+  onSubdomain?: boolean,
+): string {
+  return resolveDashboardNavHref(
+    tenantSlug,
+    `/dashboard/branches/${branchId}?tab=philhealth`,
+    onSubdomain,
+  );
+}
+
+export function filterYakapSubmissions(
+  submissions: ReadonlyArray<PortalYakapSubmissionDto>,
+  filters: {
+    status: YakapStatusFilter | string;
+    type: string;
+    query: string;
+  },
+): PortalYakapSubmissionDto[] {
+  return submissions.filter((item) => {
+    const statusLower = (filters.status || "all").toLowerCase();
+    const itemStatusLower = item.processingStatus.toLowerCase();
+
+    if (statusLower === "pending_polling") {
+      if (itemStatusLower !== "pending" && itemStatusLower !== "submitted") {
+        return false;
+      }
+    } else if (statusLower === "rejected_failed") {
+      if (itemStatusLower !== "rejected" && itemStatusLower !== "failed") {
+        return false;
+      }
+    } else if (statusLower !== "all" && itemStatusLower !== statusLower) {
+      return false;
+    }
+
+    if (filters.type !== "all" && item.submissionType.toLowerCase() !== filters.type.toLowerCase()) {
+      return false;
+    }
+
+    const q = filters.query.trim().toLowerCase();
+    if (q) {
+      const matchCode = item.patientCode.toLowerCase().includes(q);
+      const matchLocal = item.localTransactionNo?.toLowerCase().includes(q);
+      const matchUpload = item.uploadTransactionNo?.toLowerCase().includes(q);
+      const matchRef = item.yesReferenceNo?.toLowerCase().includes(q);
+      const matchCase = item.caseNo?.toLowerCase().includes(q);
+      if (!matchCode && !matchLocal && !matchUpload && !matchRef && !matchCase) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
 
 export default function YakapTransmittalClient() {
   const params = useParams();
@@ -57,814 +126,907 @@ export default function YakapTransmittalClient() {
   const [selectedBranchId, setSelectedBranchId] = useState<string>("");
   const [loadingBranches, setLoadingBranches] = useState(true);
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState<"worklist" | "wizard">("worklist");
+  // Summary Telemetry state
+  const [summary, setSummary] = useState<PortalYakapBranchSummaryDto | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [isSyncingMasterlist, setIsSyncingMasterlist] = useState(false);
 
-  // Transmittals Worklist state
-  const [transmittals, setTransmittals] = useState<PortalYakapTransmittal[]>([]);
-  const [loadingTransmittals, setLoadingTransmittals] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterTagging, setFilterTagging] = useState<string>("all");
+  // Submissions Ledger state
+  const [submissions, setSubmissions] = useState<PortalYakapSubmissionDto[]>([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<YakapStatusFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
 
-  // Batch compilation wizard state
-  const [wizardTagging, setWizardTagging] = useState<"1" | "2">("2");
-  const [wizardYear, setWizardYear] = useState<string>(new Date().getFullYear().toString());
-  const [startDate, setStartDate] = useState<string>(
-    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0]
+  // In-flight Action state
+  const [pollingId, setPollingId] = useState<string | null>(null);
+  const [isPollingAll, setIsPollingAll] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  // Non-PHI Error Inspector Modal state
+  const [inspectedSubmission, setInspectedSubmission] = useState<PortalYakapSubmissionDto | null>(null);
+
+  const activeBranch = useMemo(
+    () => branches.find((b) => b.id === selectedBranchId),
+    [branches, selectedBranchId],
   );
-  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split("T")[0]);
-  const [eligibleEncounters, setEligibleEncounters] = useState<PortalEligibleYakapEncounter[]>([]);
-  const [selectedEncounterIds, setSelectedEncounterIds] = useState<string[]>([]);
-  const [loadingEncounters, setLoadingEncounters] = useState(false);
-  const [isCompiling, setIsCompiling] = useState(false);
 
-  // XML Inspector Modal state
-  const [isXmlModalOpen, setIsXmlModalOpen] = useState(false);
-  const [selectedXml, setSelectedXml] = useState<string>("");
-  const [selectedTransmittalNo, setSelectedTransmittalNo] = useState<string>("");
-  const [loadingXml, setLoadingXml] = useState(false);
-
-  // Submission / Action state
-  const [isSubmittingId, setIsSubmittingId] = useState<string | null>(null);
-  const [isValidatingId, setIsValidatingId] = useState<string | null>(null);
-
-  // Selected branch
-  const activeBranch = branches.find((b) => b.id === selectedBranchId);
-  const isBranchAccredited =
-    activeBranch?.isPhilHealthAccredited && Boolean(activeBranch?.philHealthPmccNumber);
-
-  // Load branches
+  // 1. Load branches on mount
   useEffect(() => {
     async function loadBranches() {
       setLoadingBranches(true);
       try {
         const list = await branchService.getBranches(tenantSlug);
         setBranches(list);
-        if (list.length > 0) {
-          // Default to accredited branch or first branch
-          const accredited = list.find((b) => b.isPhilHealthAccredited) || list[0];
-          setSelectedBranchId(accredited.id);
+        if (list.length > 0 && !selectedBranchId) {
+          const firstAccredited = list.find((b) => b.isPhilHealthAccredited && b.philHealthAccreditationNumber);
+          setSelectedBranchId(firstAccredited ? firstAccredited.id : list[0].id);
         }
-      } catch (err: any) {
-        toast.error("Failed to load branches", { description: err.message });
+      } catch (err: unknown) {
+        console.error("Failed to load branches", err);
+        toast.error("Could not load branches.");
       } finally {
         setLoadingBranches(false);
       }
     }
-    loadBranches();
+    void loadBranches();
   }, [tenantSlug]);
 
-  // Load transmittals when active branch changes
+  // 2. Load Telemetry Summary & Submissions whenever selectedBranchId changes
+  const loadBranchData = async (branchId: string) => {
+    if (!branchId) return;
+    setLoadingSummary(true);
+    setLoadingSubmissions(true);
+
+    try {
+      const [sum, subs] = await Promise.all([
+        yakapService.getBranchSummary(branchId).catch((err) => {
+          console.warn("Summary fetch error", err);
+          return null;
+        }),
+        yakapService.getSubmissions(branchId).catch((err) => {
+          console.warn("Submissions fetch error", err);
+          return [];
+        }),
+      ]);
+
+      setSummary(sum);
+      setSubmissions(subs || []);
+    } catch (err: unknown) {
+      console.error("Failed to load YAKAP branch data", err);
+      toast.error("Failed to load YAKAP telemetry data.");
+    } finally {
+      setLoadingSummary(false);
+      setLoadingSubmissions(false);
+    }
+  };
+
   useEffect(() => {
-    if (!selectedBranchId) return;
-    loadTransmittals();
-  }, [selectedBranchId, filterStatus, filterTagging]);
-
-  async function loadTransmittals() {
-    if (!selectedBranchId) return;
-    setLoadingTransmittals(true);
-    try {
-      const list = await yakapService.getTransmittals(
-        selectedBranchId,
-        filterStatus,
-        filterTagging
-      );
-      setTransmittals(list);
-    } catch (err: any) {
-      toast.error("Failed to load transmittals", { description: err.message });
-    } finally {
-      setLoadingTransmittals(false);
+    if (selectedBranchId) {
+      void loadBranchData(selectedBranchId);
     }
-  }
+  }, [selectedBranchId]);
 
-  // Load eligible encounters
-  async function handleFetchEncounters() {
-    if (!selectedBranchId) {
-      toast.error("Please select a branch first");
-      return;
-    }
-    setLoadingEncounters(true);
-    setSelectedEncounterIds([]);
+  // 3. Action Handlers
+  const handleSyncMasterlist = async () => {
+    if (!selectedBranchId) return;
+    setIsSyncingMasterlist(true);
     try {
-      const list = await yakapService.getEligibleEncounters(
-        selectedBranchId,
-        wizardTagging,
-        startDate,
-        endDate
-      );
-      setEligibleEncounters(list);
-      // Auto-select all by default
-      setSelectedEncounterIds(list.map((e) => e.encounterId));
-      if (list.length === 0) {
-        toast.info("No un-transmitted encounters found for this date range.");
+      const res = await yakapService.syncMasterlist(selectedBranchId);
+      if (res.success) {
+        toast.success(
+          res.message ||
+            `Masterlist synchronized: ${res.recordsAdded} added, ${res.recordsUpdated} updated (${res.totalActiveCount} total).`,
+        );
+        const updatedSummary = await yakapService.getBranchSummary(selectedBranchId);
+        setSummary(updatedSummary);
       } else {
-        toast.success(`Found ${list.length} eligible encounters`);
+        toast.error(res.message || "Masterlist sync completed with warnings.");
       }
-    } catch (err: any) {
-      toast.error("Failed to fetch encounters", { description: err.message });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Sync failed";
+      toast.error("Masterlist sync failed: " + msg);
     } finally {
-      setLoadingEncounters(false);
+      setIsSyncingMasterlist(false);
     }
-  }
+  };
 
-  // Toggle selection
-  function toggleEncounterSelection(id: string) {
-    setSelectedEncounterIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  }
-
-  function toggleSelectAll() {
-    if (selectedEncounterIds.length === eligibleEncounters.length) {
-      setSelectedEncounterIds([]);
-    } else {
-      setSelectedEncounterIds(eligibleEncounters.map((e) => e.encounterId));
-    }
-  }
-
-  // Compile batch
-  async function handleCompileBatch() {
+  const handlePollStatus = async (id: string) => {
     if (!selectedBranchId) return;
-    if (selectedEncounterIds.length === 0) {
-      toast.error("Please select at least one encounter to include in this batch.");
+    setPollingId(id);
+    try {
+      const updated = await yakapService.pollSubmissionStatus(selectedBranchId, id);
+      toast.success(`Polled status: ${updated.processingStatus}`);
+      setSubmissions((prev) => prev.map((s) => (s.id === id ? updated : s)));
+      const updatedSummary = await yakapService.getBranchSummary(selectedBranchId);
+      setSummary(updatedSummary);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Poll failed";
+      toast.error("Status poll failed: " + msg);
+    } finally {
+      setPollingId(null);
+    }
+  };
+
+  const pendingSubmissions = useMemo(
+    () =>
+      submissions.filter(
+        (s) => s.processingStatus === "Pending" || s.processingStatus === "Submitted",
+      ),
+    [submissions],
+  );
+
+  const handlePollAllPending = async () => {
+    if (!selectedBranchId) return;
+    if (pendingSubmissions.length === 0) {
+      await loadBranchData(selectedBranchId);
       return;
     }
 
-    setIsCompiling(true);
+    setIsPollingAll(true);
+    let succeeded = 0;
+    let failed = 0;
     try {
-      const result = await yakapService.createTransmittal(selectedBranchId, {
-        consultationEncounterIds: selectedEncounterIds,
-        reportTagging: wizardTagging,
-        effectiveYear: wizardYear,
+      const results = await Promise.allSettled(
+        pendingSubmissions.map((sub) => yakapService.pollSubmissionStatus(selectedBranchId, sub.id)),
+      );
+      const updatedById = new Map<string, PortalYakapSubmissionDto>();
+      results.forEach((result) => {
+        if (result.status === "fulfilled") {
+          succeeded++;
+          updatedById.set(result.value.id, result.value);
+        } else {
+          failed++;
+        }
       });
 
-      toast.success("Batch Transmittal Compiled Successfully!", {
-        description: `Transmittal No: ${result.transmittalNumber} with ${result.totalItemsCount} line items.`,
-      });
-
-      // Reset and switch to worklist
-      setSelectedEncounterIds([]);
-      setEligibleEncounters([]);
-      setActiveTab("worklist");
-      loadTransmittals();
-    } catch (err: any) {
-      toast.error("Failed to compile batch transmittal", { description: err.message });
-    } finally {
-      setIsCompiling(false);
-    }
-  }
-
-  // Inspect XML
-  async function handleInspectXml(transmittal: PortalYakapTransmittal) {
-    setSelectedTransmittalNo(transmittal.transmittalNumber);
-    setIsXmlModalOpen(true);
-    setLoadingXml(true);
-    try {
-      const xml = await yakapService.getTransmittalXml(transmittal.id);
-      setSelectedXml(xml || "<error>No raw XML payload found for this transmittal</error>");
-    } catch (err: any) {
-      toast.error("Failed to fetch XML payload", { description: err.message });
-      setSelectedXml(`<error>${err.message}</error>`);
-    } finally {
-      setLoadingXml(false);
-    }
-  }
-
-  // Validate transmittal
-  async function handleValidateTransmittal(transmittalId: string) {
-    setIsValidatingId(transmittalId);
-    try {
-      const result = await yakapService.validateTransmittal(transmittalId);
-      if (result.isValid) {
-        toast.success("Transmittal XML Passed PhilHealth DTD Schema Validation!");
-      } else {
-        toast.warning("Validation Warnings Found", {
-          description: result.validationErrors?.join("; ") || "Schema deviations detected.",
-        });
+      if (updatedById.size > 0) {
+        setSubmissions((prev) => prev.map((s) => updatedById.get(s.id) ?? s));
       }
-      loadTransmittals();
-    } catch (err: any) {
-      toast.error("Validation failed", { description: err.message });
-    } finally {
-      setIsValidatingId(null);
-    }
-  }
+      const updatedSummary = await yakapService.getBranchSummary(selectedBranchId);
+      setSummary(updatedSummary);
 
-  // Submit transmittal live
-  async function handleSubmitTransmittal(transmittal: PortalYakapTransmittal) {
+      if (failed === 0) {
+        toast.success(`Polled ${succeeded} pending submission${succeeded === 1 ? "" : "s"}.`);
+      } else {
+        toast.warning(
+          `Polled ${succeeded} submission${succeeded === 1 ? "" : "s"}; ${failed} failed to refresh.`,
+        );
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Batch poll failed";
+      toast.error("Failed to poll pending submissions: " + msg);
+    } finally {
+      setIsPollingAll(false);
+    }
+  };
+
+  const handleRetrySubmission = async (id: string) => {
     if (!selectedBranchId) return;
-    setIsSubmittingId(transmittal.id);
+    setRetryingId(id);
     try {
-      const result = await yakapService.submitTransmittal(selectedBranchId, transmittal.id);
-      if (result.isSuccess) {
-        toast.success("Batch Transmitted Successfully to PhilHealth!", {
-          description: `Transaction Receipt: ${result.transactionNumber || "Confirmed"}`,
-        });
-      } else {
-        toast.error("PhilHealth Proxy Rejected Transmittal", {
-          description: result.validationErrors?.join(", ") || "Statutory submission error.",
-        });
-      }
-      loadTransmittals();
-    } catch (err: any) {
-      toast.error("Submission failed", { description: err.message });
+      const updated = await yakapService.retrySubmission(selectedBranchId, id);
+      toast.success(`Submission queued for retry: ${updated.processingStatus}`);
+      setSubmissions((prev) => prev.map((s) => (s.id === id ? updated : s)));
+      const updatedSummary = await yakapService.getBranchSummary(selectedBranchId);
+      setSummary(updatedSummary);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Retry failed";
+      toast.error("Submission retry failed: " + msg);
     } finally {
-      setIsSubmittingId(null);
+      setRetryingId(null);
     }
-  }
+  };
 
-  // Copy XML to clipboard
-  function handleCopyXml() {
-    navigator.clipboard.writeText(selectedXml);
-    toast.success("XML payload copied to clipboard");
-  }
+  // 4. Filtered Submissions (Filtered strictly by non-PHI codes)
+  const filteredSubmissions = useMemo(
+    () =>
+      filterYakapSubmissions(submissions, {
+        status: statusFilter,
+        type: typeFilter,
+        query: searchQuery,
+      }),
+    [submissions, statusFilter, typeFilter, searchQuery],
+  );
 
-  // Download XML file
-  function handleDownloadXml() {
-    const blob = new Blob([selectedXml], { type: "application/xml" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${selectedTransmittalNo || "yakap_transmittal"}.xml`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success("XML file downloaded");
-  }
+  const hasActiveFilters = Boolean(searchQuery.trim() || statusFilter !== "all" || typeFilter !== "all");
+  const clearFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setTypeFilter("all");
+  };
 
-  // Metrics
-  const totalTransmittals = transmittals.length;
-  const submittedTransmittals = transmittals.filter(
-    (t) => t.status === "Submitted" || t.status === "Approved"
-  ).length;
-  const draftTransmittals = transmittals.filter((t) => t.status === "Draft").length;
-  const totalBilledItems = transmittals.reduce((acc, t) => acc + (t.totalItemsCount || 0), 0);
+  const philHealthSetupHref = selectedBranchId
+    ? buildBranchPhilHealthSetupHref(tenantSlug, selectedBranchId)
+    : resolveDashboardNavHref(tenantSlug, "/dashboard/branches");
+  const envInfo = resolvePcapiEnvironmentLabel(activeBranch?.philHealthBaseUrl);
+  const pendingPollingCount = summary?.pendingPollingCount ?? pendingSubmissions.length;
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="w-full flex-1 flex flex-col gap-6 sm:gap-8 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto animate-in fade-in-50 duration-300">
+      {/* ── HEADER & BRANCH SELECTOR ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-6">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">PhilHealth YAKAP Transmittals</h1>
-            <Badge variant="outline" className="text-primary border-primary">
-              Multi-Branch Console
-            </Badge>
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-primary/10 text-primary shrink-0">
+              <IconFileCertificate className="h-5 w-5" />
+            </span>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+              PhilHealth YAKAP Submissions Overview
+            </h1>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            Aggregate clinical encounters into statutory Tranche 1 & Tranche 2 PhilHealth XML batches,
-            validate against Konsulta schemas, and submit via branch PMCC accreditation.
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+            De-identified submission tracking, status updates, and PhilHealth patient list sync.
           </p>
         </div>
 
-        {/* Branch Selector Header */}
-        <div className="flex items-center gap-3 bg-card border rounded-lg p-2 shadow-sm">
-          <IconBuilding className="size-5 text-muted-foreground ml-1" />
-          <div className="flex flex-col">
-            <span className="text-xs text-muted-foreground font-medium">Active Branch Location:</span>
-            {loadingBranches ? (
-              <span className="text-sm">Loading branches...</span>
-            ) : branches.length === 0 ? (
-              <span className="text-sm text-destructive font-medium">No branches configured</span>
-            ) : (
-              <select
-                value={selectedBranchId}
-                onChange={(e) => setSelectedBranchId(e.target.value)}
-                className="bg-transparent text-sm font-semibold focus:outline-none cursor-pointer pr-4"
-              >
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} {b.isPhilHealthAccredited ? "✓ (PMCC)" : "⚠️"}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <SelectField
+            ariaLabel="Select accredited branch"
+            placeholder="Select a branch..."
+            value={selectedBranchId}
+            onValueChange={setSelectedBranchId}
+            disabled={loadingBranches}
+            className="w-fit min-w-52 font-medium"
+            options={branches.map((b) => ({
+              value: b.id,
+              label: `${b.name} ${b.philHealthAccreditationNumber ? `(${b.philHealthAccreditationNumber})` : "(Unaccredited)"}`,
+            }))}
+          />
+
           <Button
-            variant="ghost"
-            size="icon"
-            onClick={loadTransmittals}
-            disabled={loadingTransmittals}
-            title="Refresh Batches"
+            variant="outline"
+            size="sm"
+            onClick={() => selectedBranchId && void loadBranchData(selectedBranchId)}
+            disabled={loadingSummary || loadingSubmissions || !selectedBranchId}
+            className="h-9 rounded-xl text-xs font-semibold gap-1.5"
+            title="Refresh Telemetry"
           >
-            <IconRefresh className={`size-4 ${loadingTransmittals ? "animate-spin" : ""}`} />
+            <IconRefresh className={`h-3.5 w-3.5 ${loadingSummary || loadingSubmissions ? "animate-spin text-primary" : ""}`} />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
         </div>
       </div>
 
-      {/* Branch Accreditation Status Banner */}
+      {/* ── BRANCH ACCREDITATION & MASTERLIST ACTION STRIP ── */}
       {activeBranch && (
-        <Card className={`border ${isBranchAccredited ? "bg-card" : "bg-destructive/10 border-destructive/30"}`}>
-          <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex items-start gap-3">
-              {isBranchAccredited ? (
-                <div className="p-2 bg-primary/10 text-primary rounded-full shrink-0">
-                  <IconShieldCheck className="size-5" />
-                </div>
-              ) : (
-                <div className="p-2 bg-destructive/20 text-destructive rounded-full shrink-0">
-                  <IconAlertTriangle className="size-5" />
-                </div>
-              )}
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm">{activeBranch.name}</span>
-                  {isBranchAccredited ? (
-                    <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-700 text-xs">
-                      PMCC Accredited
-                    </Badge>
-                  ) : (
-                    <Badge variant="destructive" className="text-xs">
-                      Missing PhilHealth Accreditation
-                    </Badge>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                  <span>
-                    <strong>PMCC No:</strong> {activeBranch.philHealthPmccNumber || "Not configured"}
-                  </span>
-                  <span>
-                    <strong>Accreditation No:</strong>{" "}
-                    {activeBranch.philHealthAccreditationNumber || "Not configured"}
-                  </span>
-                  <span>
-                    <strong>Endpoint:</strong>{" "}
-                    {activeBranch.philHealthKonsultaEndpoint || "https://staging.philhealth.gov.ph/KONSULTA/SOAP"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {!isBranchAccredited && (
-              <a
-                href={`/${tenantSlug}/dashboard/branches`}
-                className="text-xs font-semibold text-primary underline underline-offset-4 shrink-0 hover:text-primary/80"
-              >
-                Configure PMCC in Branches & Locations &rarr;
-              </a>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-4 rounded-2xl bg-muted/40 border border-border text-xs">
+          <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+            <IconBuilding className="h-4 w-4 text-primary shrink-0" />
+            <span className="font-semibold text-foreground">{activeBranch.name}</span>
+            {activeBranch.philHealthAccreditationNumber ? (
+              <span className="font-mono text-muted-foreground">
+                Accreditation: <strong className="text-foreground">{activeBranch.philHealthAccreditationNumber}</strong>
+                {activeBranch.philHealthPmccNumber && ` • Facility Code: ${activeBranch.philHealthPmccNumber}`}
+              </span>
+            ) : (
+              <span className="text-destructive font-medium">No PhilHealth Accreditation Configured</span>
             )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Metric Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4 flex flex-col">
-            <span className="text-xs text-muted-foreground">Total Transmittals</span>
-            <span className="text-2xl font-bold mt-1">{totalTransmittals}</span>
-            <span className="text-xs text-muted-foreground mt-1">Batches compiled</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex flex-col">
-            <span className="text-xs text-muted-foreground">Billed Line Items</span>
-            <span className="text-2xl font-bold text-primary mt-1">{totalBilledItems}</span>
-            <span className="text-xs text-muted-foreground mt-1">Encounters, Labs, Prescriptions</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex flex-col">
-            <span className="text-xs text-muted-foreground">Transmitted / Approved</span>
-            <span className="text-2xl font-bold text-emerald-600 mt-1">{submittedTransmittals}</span>
-            <span className="text-xs text-muted-foreground mt-1">Successfully sent to PhilHealth</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex flex-col">
-            <span className="text-xs text-muted-foreground">Drafts Pending Review</span>
-            <span className="text-2xl font-bold text-amber-500 mt-1">{draftTransmittals}</span>
-            <span className="text-xs text-muted-foreground mt-1">Ready for schema pre-check</span>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="flex border-b gap-4">
-        <button
-          onClick={() => setActiveTab("worklist")}
-          className={`pb-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors ${
-            activeTab === "worklist"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <IconFileCertificate className="size-4" />
-          Transmittal Worklist ({transmittals.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("wizard")}
-          className={`pb-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-colors ${
-            activeTab === "wizard"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <IconChecklist className="size-4" />
-          Compile New Batch Transmittal
-        </button>
-      </div>
-
-      {/* Tab 1: Worklist */}
-      {activeTab === "worklist" && (
-        <div className="flex flex-col gap-4">
-          {/* Filters Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/30 p-3 rounded-lg border">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground">Filter Tranche:</span>
-              <select
-                value={filterTagging}
-                onChange={(e) => setFilterTagging(e.target.value)}
-                className="text-xs bg-card border rounded p-1.5 focus:outline-none"
-              >
-                <option value="all">All Tranches</option>
-                <option value="1">Tranche 1 (Enlistment & Profiling)</option>
-                <option value="2">Tranche 2 (Consultations & GAMOT)</option>
-              </select>
-
-              <span className="text-xs font-medium text-muted-foreground ml-3">Filter Status:</span>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="text-xs bg-card border rounded p-1.5 focus:outline-none"
-              >
-                <option value="all">All Statuses</option>
-                <option value="Draft">Draft</option>
-                <option value="Validated">Validated</option>
-                <option value="Submitted">Submitted</option>
-                <option value="Failed">Failed</option>
-              </select>
-            </div>
-
-            <Button size="sm" onClick={() => setActiveTab("wizard")} className="gap-1.5">
-              <IconChecklist className="size-4" />
-              New Transmittal Batch
-            </Button>
+            <Badge
+              variant="outline"
+              title={envInfo.url}
+              className={`text-[10px] font-semibold px-2 py-0.5 ${
+                envInfo.label === "Staging"
+                  ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                  : "bg-background text-muted-foreground border-border"
+              }`}
+            >
+              {envInfo.label}
+            </Badge>
           </div>
 
-          {/* Table */}
-          {loadingTransmittals ? (
-            <div className="flex items-center justify-center p-12 text-muted-foreground gap-2">
-              <IconLoader className="size-5 animate-spin" />
-              <span>Loading transmittals for branch...</span>
-            </div>
-          ) : transmittals.length === 0 ? (
-            <Card className="p-8 text-center border-dashed">
-              <IconFileCertificate className="size-10 text-muted-foreground mx-auto mb-2 opacity-50" />
-              <h3 className="font-semibold text-base">No Transmittals Found</h3>
-              <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-                No transmittal batches have been compiled for this branch yet. Click "Compile New Batch
-                Transmittal" to batch signed clinical encounters.
-              </p>
-              <Button size="sm" onClick={() => setActiveTab("wizard")} className="mt-4 gap-1.5">
-                <IconChecklist className="size-4" />
-                Compile First Batch
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {activeBranch.hasSecretKey ? (
+              <Badge variant="outline" className="text-primary bg-primary/10 border-primary/20 text-[11px] font-medium gap-1 h-8 px-2.5 rounded-xl">
+                <IconShieldCheck className="h-3.5 w-3.5 text-primary" />
+                PhilHealth Connected
+              </Badge>
+            ) : (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5 border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300 hover:bg-amber-500/20"
+              >
+                <Link href={philHealthSetupHref}>
+                  <span>Configure PhilHealth Credentials</span>
+                  <IconArrowRight className="h-3.5 w-3.5" />
+                </Link>
               </Button>
-            </Card>
+            )}
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleSyncMasterlist()}
+                disabled={isSyncingMasterlist || !selectedBranchId}
+                className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5 bg-background hover:bg-muted"
+              >
+                {isSyncingMasterlist ? (
+                  <>
+                    <IconLoader className="h-3.5 w-3.5 animate-spin text-primary" />
+                    <span>Syncing...</span>
+                  </>
+                ) : (
+                  <>
+                    <IconRefresh className="h-3.5 w-3.5 text-primary" />
+                    <span>Sync Masterlist</span>
+                  </>
+                )}
+              </Button>
+              {summary?.lastMasterlistSyncAtUtc && (
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                  Last synced{" "}
+                  {new Date(summary.lastMasterlistSyncAtUtc).toLocaleDateString()}{" "}
+                  {new Date(summary.lastMasterlistSyncAtUtc).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 4 UNIFORM, CLICKABLE KPI TELEMETRY CARDS ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+        {/* Card 1: Empaneled & Masterlist */}
+        <button
+          type="button"
+          onClick={clearFilters}
+          aria-pressed={!hasActiveFilters}
+          className={`text-left w-full h-full rounded-2xl border bg-card p-5 shadow-sm transition-all flex flex-col justify-between gap-3 cursor-pointer hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            !hasActiveFilters ? "border-primary/40 ring-1 ring-primary/15" : "border-border"
+          }`}
+        >
+          <div className="space-y-1.5 w-full">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Empaneled / Masterlist
+              </span>
+              <span className="p-1.5 rounded-lg bg-primary/10 text-primary shrink-0">
+                <IconShieldCheck className="h-4 w-4" />
+              </span>
+            </div>
+            <div className="text-2xl font-black text-foreground">
+              {loadingSummary ? "—" : (summary?.empaneledCount ?? 0).toLocaleString()}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+              <span>
+                Selected: <strong className="text-foreground">{summary?.selectedCount ?? 0}</strong>
+              </span>
+              <span>
+                Total Active: <strong className="text-foreground">{summary?.masterlistTotalCount ?? 0}</strong>
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Service 05 masterlist roster. Click to clear filters.
+            </p>
+          </div>
+        </button>
+
+        {/* Card 2: Pending Polling */}
+        <button
+          type="button"
+          onClick={() =>
+            setStatusFilter((prev) => (prev === "pending_polling" ? "all" : "pending_polling"))
+          }
+          aria-pressed={statusFilter === "pending_polling"}
+          className={`text-left w-full h-full rounded-2xl border bg-card p-5 shadow-sm transition-all flex flex-col justify-between gap-3 cursor-pointer hover:border-amber-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            statusFilter === "pending_polling"
+              ? "border-amber-500/60 ring-2 ring-amber-500/20"
+              : "border-border"
+          }`}
+        >
+          <div className="space-y-1.5 w-full">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Pending Polling
+              </span>
+              <span className="p-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
+                <IconClock className="h-4 w-4" />
+              </span>
+            </div>
+            <div className="text-2xl font-black text-amber-600 dark:text-amber-400">
+              {loadingSummary ? "—" : (summary?.pendingPollingCount ?? 0).toLocaleString()}
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            Submissions awaiting PhilHealth asynchronous batch validation (23B U-prefix batch upload codes).
+          </p>
+        </button>
+
+        {/* Card 3: Accepted Uploads */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter((prev) => (prev === "accepted" ? "all" : "accepted"))}
+          aria-pressed={statusFilter === "accepted"}
+          className={`text-left w-full h-full rounded-2xl border bg-card p-5 shadow-sm transition-all flex flex-col justify-between gap-3 cursor-pointer hover:border-emerald-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            statusFilter === "accepted"
+              ? "border-emerald-500/60 ring-2 ring-emerald-500/20"
+              : "border-border"
+          }`}
+        >
+          <div className="space-y-1.5 w-full">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Accepted Uploads
+              </span>
+              <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <IconCloudCheck className="h-4 w-4" />
+              </span>
+            </div>
+            <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+              {loadingSummary ? "—" : (summary?.acceptedUploadsCount ?? 0).toLocaleString()}
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            Verified transmissions with statutory MCA confirmation numbers.
+          </p>
+        </button>
+
+        {/* Card 4: Rejected / Failed */}
+        <button
+          type="button"
+          onClick={() =>
+            setStatusFilter((prev) => (prev === "rejected_failed" ? "all" : "rejected_failed"))
+          }
+          aria-pressed={statusFilter === "rejected_failed"}
+          className={`text-left w-full h-full rounded-2xl border bg-card p-5 shadow-sm transition-all flex flex-col justify-between gap-3 cursor-pointer hover:border-rose-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            statusFilter === "rejected_failed"
+              ? "border-rose-500/60 ring-2 ring-rose-500/20"
+              : "border-border"
+          }`}
+        >
+          <div className="space-y-1.5 w-full">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Rejected / Failed
+              </span>
+              <span className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 shrink-0">
+                <IconAlertTriangle className="h-4 w-4" />
+              </span>
+            </div>
+            <div className="text-2xl font-black text-rose-600 dark:text-rose-400">
+              {loadingSummary ? "—" : (summary?.rejectedOrFailedCount ?? 0).toLocaleString()}
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            Transmissions rejected by PhilHealth validation. Inspect non-PHI error diagnostics and retry.
+          </p>
+        </button>
+      </div>
+
+      {/* ── SUBMISSIONS LEDGER ── */}
+      <Card className="rounded-2xl border-border bg-card shadow-sm">
+        <CardHeader className="p-5 sm:p-6 pb-4 border-b border-border space-y-4">
+          <div>
+            <CardTitle className="text-base font-bold text-foreground">
+              Submissions &amp; Claims Telemetry Ledger
+            </CardTitle>
+            <CardDescription className="text-xs text-muted-foreground mt-0.5">
+              Filtered strictly by anonymized Patient Code and statutory 23B transaction identifiers.
+            </CardDescription>
+          </div>
+
+          {/* Dedicated Single-Row Filter & Batch Action Toolbar */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 flex-1">
+              <div className="relative w-full sm:w-64">
+                <IconSearch className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search PatientCode, Tx No..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-8 pl-8 text-xs rounded-xl"
+                />
+              </div>
+
+              <SelectField
+                ariaLabel="Filter by submission status"
+                value={statusFilter}
+                onValueChange={(v) => setStatusFilter(v as YakapStatusFilter)}
+                size="sm"
+                className="w-full sm:w-44 shrink-0"
+                options={[
+                  { value: "all", label: "All Statuses" },
+                  { value: "pending_polling", label: "Pending & Submitted" },
+                  { value: "pending", label: "Pending" },
+                  { value: "submitted", label: "Submitted" },
+                  { value: "accepted", label: "Accepted" },
+                  { value: "rejected_failed", label: "Rejected & Failed" },
+                  { value: "rejected", label: "Rejected" },
+                  { value: "failed", label: "Failed" },
+                ]}
+              />
+
+              <SelectField
+                ariaLabel="Filter by submission type"
+                value={typeFilter}
+                onValueChange={setTypeFilter}
+                size="sm"
+                className="w-full sm:w-36 shrink-0"
+                options={[
+                  { value: "all", label: "All Types" },
+                  { value: "fpe", label: "Annual Checkup" },
+                  { value: "consultation", label: "Consultation" },
+                  { value: "diagnostic", label: "Diagnostic" },
+                  { value: "medicine", label: "Medicine" },
+                  { value: "referral", label: "Referral" },
+                ]}
+              />
+
+              {hasActiveFilters && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFilters}
+                  className="h-8 px-2.5 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground gap-1 shrink-0"
+                >
+                  <IconX className="h-3.5 w-3.5" />
+                  <span>Clear</span>
+                </Button>
+              )}
+            </div>
+
+            {pendingPollingCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handlePollAllPending()}
+                disabled={isPollingAll || !selectedBranchId}
+                className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5 shrink-0 border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300 hover:bg-amber-500/20"
+              >
+                {isPollingAll ? (
+                  <>
+                    <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                    <span>Polling Pending...</span>
+                  </>
+                ) : (
+                  <>
+                    <IconRefresh className="h-3.5 w-3.5" />
+                    <span>Poll All Pending ({pendingPollingCount})</span>
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-0">
+          {loadingSubmissions ? (
+            <div className="p-8 text-center space-y-3">
+              <IconLoader className="h-6 w-6 animate-spin text-primary mx-auto" />
+              <p className="text-xs text-muted-foreground">Loading submissions ledger...</p>
+            </div>
+          ) : filteredSubmissions.length === 0 ? (
+            hasActiveFilters ? (
+              <div className="p-12 text-center space-y-3">
+                <div className="p-3 rounded-2xl bg-muted/60 text-muted-foreground inline-block">
+                  <IconFileCertificate className="h-8 w-8" />
+                </div>
+                <h3 className="text-sm font-bold text-foreground">No Submissions Found</h3>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  No transmissions matched your active filters.
+                </p>
+                <div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={clearFilters}
+                    className="h-8 rounded-xl text-xs font-semibold"
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
+              </div>
+            ) : activeBranch && !activeBranch.hasSecretKey ? (
+              <div className="p-10 text-center space-y-5">
+                <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 inline-block">
+                  <IconShieldCheck className="h-8 w-8" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-foreground">
+                    Finish PhilHealth Setup to Start Tracking Submissions
+                  </h3>
+                  <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                    Complete these three steps for <strong>{activeBranch.name}</strong> before checkup submissions can be verified:
+                  </p>
+                </div>
+
+                <ol className="max-w-md mx-auto text-left text-xs space-y-2 rounded-2xl border border-border bg-muted/30 p-4">
+                  <li className="flex items-center gap-2.5 text-foreground font-medium">
+                    <span className="size-5 rounded-full bg-primary/15 text-primary font-bold text-[11px] flex items-center justify-center shrink-0">
+                      1
+                    </span>
+                    <span>Add PhilHealth credentials in Branch Settings</span>
+                  </li>
+                  <li className="flex items-center gap-2.5 text-muted-foreground">
+                    <span className="size-5 rounded-full bg-muted text-muted-foreground font-bold text-[11px] flex items-center justify-center shrink-0">
+                      2
+                    </span>
+                    <span>Sync Assigned Patient List</span>
+                  </li>
+                  <li className="flex items-center gap-2.5 text-muted-foreground">
+                    <span className="size-5 rounded-full bg-muted text-muted-foreground font-bold text-[11px] flex items-center justify-center shrink-0">
+                      3
+                    </span>
+                    <span>Submit checkups and visits from the Clinic App</span>
+                  </li>
+                </ol>
+
+                <div>
+                  <Button asChild size="sm" className="rounded-xl text-xs font-semibold gap-1.5">
+                    <Link href={philHealthSetupHref}>
+                      <span>Configure PhilHealth Credentials</span>
+                      <IconArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-12 text-center space-y-3">
+                <div className="p-3 rounded-2xl bg-muted/60 text-muted-foreground inline-block">
+                  <IconFileCertificate className="h-8 w-8" />
+                </div>
+                <h3 className="text-sm font-bold text-foreground">No Submissions Found</h3>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  No submissions recorded for this branch yet. Checkup and visit records from clinic facilities will appear here.
+                </p>
+              </div>
+            )
           ) : (
-            <div className="border rounded-lg overflow-x-auto bg-card shadow-sm">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40 text-muted-foreground text-xs text-left">
-                    <th className="p-3">Transmittal No.</th>
-                    <th className="p-3">Tranche</th>
-                    <th className="p-3">Year</th>
-                    <th className="p-3">Line Items</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3">PhilHealth Tx No.</th>
-                    <th className="p-3">Created</th>
-                    <th className="p-3 text-right">Actions</th>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left border-collapse">
+                <thead className="bg-muted/40 text-muted-foreground border-b border-border uppercase font-semibold text-[10px] tracking-wider">
+                  <tr>
+                    <th className="py-2.5 px-3.5">Patient Code</th>
+                    <th className="py-2.5 px-3.5">Type</th>
+                    <th className="py-2.5 px-3.5">Local Ref No</th>
+                    <th className="py-2.5 px-3.5">Upload Ref No</th>
+                    <th className="py-2.5 px-3.5">PhilHealth Ref No</th>
+                    <th className="py-2.5 px-3.5">Status</th>
+                    <th className="py-2.5 px-3.5">Submitted</th>
+                    <th className="py-2.5 px-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
-                  {transmittals.map((t) => (
-                    <tr key={t.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="p-3 font-semibold text-primary">{t.transmittalNumber}</td>
-                      <td className="p-3">
-                        {t.reportTagging === "1" ? (
-                          <Badge variant="outline" className="text-xs">
-                            Tranche 1 (Profile)
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-xs">
-                            Tranche 2 (SOAP/Med)
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="p-3">{t.effectiveYear}</td>
-                      <td className="p-3 font-medium">{t.totalItemsCount || t.items?.length || 0}</td>
-                      <td className="p-3">
-                        <Badge
-                          variant={
-                            t.status === "Submitted"
-                              ? "default"
-                              : t.status === "Validated"
-                              ? "secondary"
-                              : t.status === "Failed"
-                              ? "destructive"
-                              : "outline"
-                          }
-                          className="text-xs"
-                        >
-                          {t.status}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-xs font-mono text-muted-foreground">
-                        {t.philHealthTransactionNumber || "—"}
-                      </td>
-                      <td className="p-3 text-xs text-muted-foreground">
-                        {new Date(t.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 gap-1 text-xs"
-                            onClick={() => handleInspectXml(t)}
-                          >
-                            <IconCode className="size-3.5" />
-                            XML
-                          </Button>
+                <tbody className="divide-y divide-border">
+                  {filteredSubmissions.map((sub) => {
+                    const isPending = sub.processingStatus === "Pending" || sub.processingStatus === "Submitted";
+                    const isFailed = sub.processingStatus === "Rejected" || sub.processingStatus === "Failed";
+                    const isAccepted = sub.processingStatus === "Accepted";
 
-                          {t.status === "Draft" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 gap-1 text-xs"
-                              disabled={isValidatingId === t.id}
-                              onClick={() => handleValidateTransmittal(t.id)}
-                            >
-                              {isValidatingId === t.id ? (
-                                <IconLoader className="size-3.5 animate-spin" />
-                              ) : (
-                                <IconCheck className="size-3.5" />
-                              )}
-                              Validate
-                            </Button>
-                          )}
+                    return (
+                      <tr key={sub.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="py-3 px-3.5 font-mono font-bold text-foreground">
+                          <span className="px-2 py-0.5 rounded-md bg-muted border border-border">
+                            {sub.patientCode}
+                          </span>
+                        </td>
 
-                          {t.status !== "Submitted" && (
-                            <Button
-                              size="sm"
-                              className="h-8 gap-1 text-xs"
-                              disabled={isSubmittingId === t.id || !isBranchAccredited}
-                              onClick={() => handleSubmitTransmittal(t)}
-                            >
-                              {isSubmittingId === t.id ? (
-                                <IconLoader className="size-3.5 animate-spin" />
-                              ) : (
-                                <IconSend className="size-3.5" />
-                              )}
-                              Transmit
-                            </Button>
+                        <td className="py-3 px-3.5">
+                          <Badge variant="outline" className="font-semibold text-[10px] py-0">
+                            {sub.submissionType}
+                          </Badge>
+                        </td>
+
+                        <td className="py-3 px-3.5 font-mono text-muted-foreground text-[11px]">
+                          {sub.localTransactionNo || "—"}
+                        </td>
+
+                        <td className="py-3 px-3.5 font-mono font-medium text-foreground text-[11px]">
+                          {sub.uploadTransactionNo ? (
+                            <span className="text-primary font-bold">{sub.uploadTransactionNo}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+
+                        <td className="py-3 px-3.5 font-mono text-[11px]">
+                          {sub.yesReferenceNo ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">{sub.yesReferenceNo}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-3.5">
+                          {isAccepted && (
+                            <Badge variant="outline" className="text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-[10px]">
+                              Accepted
+                            </Badge>
+                          )}
+                          {isPending && (
+                            <Badge variant="outline" className="text-amber-700 bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-[10px] gap-1">
+                              <IconClock className="h-2.5 w-2.5 animate-pulse" />
+                              {sub.processingStatus}
+                            </Badge>
+                          )}
+                          {isFailed && (
+                            <Badge variant="outline" className="text-rose-700 bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-[10px]">
+                              {sub.processingStatus}
+                            </Badge>
+                          )}
+                          {!isAccepted && !isPending && !isFailed && (
+                            <Badge variant="outline" className="text-muted-foreground text-[10px]">
+                              {sub.processingStatus}
+                            </Badge>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-3.5 text-muted-foreground text-[11px] whitespace-nowrap">
+                          {sub.submittedAtUtc
+                            ? new Date(sub.submittedAtUtc).toLocaleDateString() +
+                              " " +
+                              new Date(sub.submittedAtUtc).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                            : "—"}
+                        </td>
+
+                        <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {isPending && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void handlePollStatus(sub.id)}
+                                disabled={pollingId === sub.id || isPollingAll}
+                                className="h-7 px-2 rounded-lg text-[11px] font-semibold gap-1"
+                                title="Check latest PhilHealth status"
+                              >
+                                {pollingId === sub.id ? (
+                                  <IconLoader className="h-3 w-3 animate-spin text-primary" />
+                                ) : (
+                                  <IconRefresh className="h-3 w-3 text-primary" />
+                                )}
+                                <span>Poll</span>
+                              </Button>
+                            )}
+
+                            {isFailed && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void handleRetrySubmission(sub.id)}
+                                disabled={retryingId === sub.id}
+                                className="h-7 px-2 rounded-lg text-[11px] font-semibold gap-1 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                title="Retry submission"
+                              >
+                                {retryingId === sub.id ? (
+                                  <IconLoader className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <IconRefresh className="h-3 w-3" />
+                                )}
+                                <span>Retry</span>
+                              </Button>
+                            )}
+
+                            {(sub.errors?.length > 0 || sub.lastErrorMessage) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setInspectedSubmission(sub)}
+                                className="h-7 px-2 rounded-lg text-[11px] text-muted-foreground hover:text-foreground"
+                                title="View non-PHI validation diagnostics"
+                              >
+                                <IconAlertCircle className="h-3.5 w-3.5 text-rose-500" />
+                                <span className="hidden md:inline">Issues</span>
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
-      {/* Tab 2: Batch Compilation Wizard */}
-      {activeTab === "wizard" && (
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Batch Scope & Filter</CardTitle>
-              <CardDescription>
-                Select the PhilHealth YAKAP Tranche and clinical encounter date range for this branch.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <Label className="text-xs">Report Tranche</Label>
-                  <select
-                    value={wizardTagging}
-                    onChange={(e) => setWizardTagging(e.target.value as "1" | "2")}
-                    className="w-full mt-1.5 text-sm bg-background border rounded-md p-2 focus:outline-none"
-                  >
-                    <option value="1">Tranche 1: Enlistment & Profiling</option>
-                    <option value="2">Tranche 2: Consultations, Labs & GAMOT</option>
-                  </select>
-                </div>
-
-                <div>
-                  <Label className="text-xs">Benefit Year</Label>
-                  <Input
-                    type="text"
-                    value={wizardYear}
-                    onChange={(e) => setWizardYear(e.target.value)}
-                    className="mt-1.5 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <Label className="text-xs">Start Date</Label>
-                  <Input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="mt-1.5 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <Label className="text-xs">End Date</Label>
-                  <Input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="mt-1.5 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <Button
-                  onClick={handleFetchEncounters}
-                  disabled={loadingEncounters || !selectedBranchId}
-                  className="gap-2"
-                >
-                  {loadingEncounters ? (
-                    <IconLoader className="size-4 animate-spin" />
-                  ) : (
-                    <IconSearch className="size-4" />
-                  )}
-                  Fetch Eligible Encounters
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Encounters List */}
-          {eligibleEncounters.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-base">Eligible Encounters for Transmittal</CardTitle>
-                  <CardDescription>
-                    Signed encounters ready to be compiled into the Konsulta batch payload.
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={toggleSelectAll} className="text-xs">
-                    {selectedEncounterIds.length === eligibleEncounters.length
-                      ? "Deselect All"
-                      : "Select All"}
-                  </Button>
-                  <Badge variant="secondary">
-                    {selectedEncounterIds.length} of {eligibleEncounters.length} Selected
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0 border-t">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/40 text-muted-foreground text-xs text-left">
-                        <th className="p-3 w-10 text-center">
-                          <input
-                            type="checkbox"
-                            checked={
-                              eligibleEncounters.length > 0 &&
-                              selectedEncounterIds.length === eligibleEncounters.length
-                            }
-                            onChange={toggleSelectAll}
-                            className="rounded cursor-pointer"
-                          />
-                        </th>
-                        <th className="p-3">Patient Name</th>
-                        <th className="p-3">PIN Status</th>
-                        <th className="p-3">Date</th>
-                        <th className="p-3">Attending Doctor</th>
-                        <th className="p-3">Primary Diagnosis</th>
-                        <th className="p-3 text-center">Rx</th>
-                        <th className="p-3 text-center">Labs</th>
-                        <th className="p-3 text-right">Est. Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {eligibleEncounters.map((enc) => {
-                        const isSelected = selectedEncounterIds.includes(enc.encounterId);
-                        return (
-                          <tr
-                            key={enc.encounterId}
-                            onClick={() => toggleEncounterSelection(enc.encounterId)}
-                            className={`cursor-pointer transition-colors ${
-                              isSelected ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted/20"
-                            }`}
-                          >
-                            <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleEncounterSelection(enc.encounterId)}
-                                className="rounded cursor-pointer"
-                              />
-                            </td>
-                            <td className="p-3 font-medium">{enc.patientName}</td>
-                            <td className="p-3">
-                              {enc.hasPhilHealthPin ? (
-                                <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-300">
-                                  {enc.philHealthIdentificationNumber || "Verified"}
-                                </Badge>
-                              ) : (
-                                <Badge variant="destructive" className="text-xs">
-                                  Missing PIN
-                                </Badge>
-                              )}
-                            </td>
-                            <td className="p-3 text-xs text-muted-foreground">
-                              {new Date(enc.encounterDate).toLocaleDateString()}
-                            </td>
-                            <td className="p-3 text-xs">{enc.doctorName}</td>
-                            <td className="p-3 text-xs max-w-xs truncate" title={enc.primaryDiagnosis || ""}>
-                              {enc.primaryDiagnosis || "—"}
-                            </td>
-                            <td className="p-3 text-center font-semibold">{enc.prescriptionsCount}</td>
-                            <td className="p-3 text-center font-semibold">{enc.diagnosticsCount}</td>
-                            <td className="p-3 text-right font-medium text-xs">
-                              ₱{enc.totalMedicationAmount?.toFixed(2) || "0.00"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="p-4 bg-muted/20 border-t flex flex-col md:flex-row items-center justify-between gap-4">
-                  <div className="text-xs text-muted-foreground">
-                    Selected: <strong>{selectedEncounterIds.length}</strong> encounters under Branch{" "}
-                    <strong>{activeBranch?.name}</strong>.
-                  </div>
-                  <Button
-                    onClick={handleCompileBatch}
-                    disabled={isCompiling || selectedEncounterIds.length === 0}
-                    className="gap-2"
-                  >
-                    {isCompiling ? (
-                      <IconLoader className="size-4 animate-spin" />
-                    ) : (
-                      <IconFileCertificate className="size-4" />
-                    )}
-                    Compile Batch Transmittal ({selectedEncounterIds.length})
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {/* Raw XML Inspector Modal */}
-      <Dialog open={isXmlModalOpen} onOpenChange={setIsXmlModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+      {/* ── NON-PHI ERROR INSPECTOR MODAL ── */}
+      <Dialog open={!!inspectedSubmission} onOpenChange={(open) => !open && setInspectedSubmission(null)}>
+        <DialogContent className="max-w-xl rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <IconCode className="size-5 text-primary" />
-              Konsulta PCB XML Payload: {selectedTransmittalNo}
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <IconAlertCircle className="h-5 w-5 text-rose-500" />
+              Non-PHI Submission Diagnostics
             </DialogTitle>
-            <DialogDescription>
-              PhilHealth compliant statutory XML envelope generated according to Annex D specifications.
+            <DialogDescription className="text-xs">
+              PhilHealth validation issues for reference{" "}
+              <code className="font-mono font-bold text-foreground">{inspectedSubmission?.localTransactionNo}</code>.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-auto bg-muted p-4 rounded-lg font-mono text-xs border">
-            {loadingXml ? (
-              <div className="flex items-center justify-center p-12 text-muted-foreground gap-2">
-                <IconLoader className="size-5 animate-spin" />
-                <span>Loading XML payload...</span>
+          {inspectedSubmission && (
+            <div className="space-y-4 py-2 text-xs">
+              <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-muted/40 border border-border text-[11px]">
+                <div>
+                  <span className="text-muted-foreground block">Patient Code</span>
+                  <span className="font-mono font-bold text-foreground">{inspectedSubmission.patientCode}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Submission Type</span>
+                  <span className="font-semibold text-foreground">{inspectedSubmission.submissionType}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Attempt Count</span>
+                  <span className="font-semibold text-foreground">{inspectedSubmission.attemptCount}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Processing Status</span>
+                  <Badge variant="outline" className="text-rose-700 bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-[10px]">
+                    {inspectedSubmission.processingStatus}
+                  </Badge>
+                </div>
               </div>
-            ) : (
-              <pre className="whitespace-pre-wrap select-all">{selectedXml}</pre>
-            )}
-          </div>
 
-          <DialogFooter className="flex flex-row justify-between items-center sm:justify-between">
-            <span className="text-xs text-muted-foreground">
-              Character length: {selectedXml.length} bytes
-            </span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleCopyXml} className="gap-1 text-xs">
-                <IconCopy className="size-3.5" />
-                Copy
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleDownloadXml} className="gap-1 text-xs">
-                <IconDownload className="size-3.5" />
-                Download .xml
-              </Button>
-              <Button size="sm" onClick={() => setIsXmlModalOpen(false)} className="text-xs">
-                Close
-              </Button>
+              {inspectedSubmission.payloadSha256Hash && (
+                <div className="space-y-1">
+                  <span className="text-xs font-semibold text-foreground">Payload SHA-256 Hash</span>
+                  <div className="p-2 rounded-lg bg-muted/60 font-mono text-[10px] break-all border border-border text-muted-foreground">
+                    {inspectedSubmission.payloadSha256Hash}
+                  </div>
+                </div>
+              )}
+
+              {inspectedSubmission.lastErrorMessage && (
+                <div className="space-y-1">
+                  <span className="text-xs font-semibold text-foreground">Error Summary</span>
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-800 dark:text-rose-300 text-xs">
+                    {inspectedSubmission.lastErrorMessage}
+                  </div>
+                </div>
+              )}
+
+              {inspectedSubmission.errors && inspectedSubmission.errors.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold text-foreground">
+                    Field Validation Issues ({inspectedSubmission.errors.length})
+                  </span>
+                  <div className="border border-border rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                    <table className="w-full text-[11px] text-left">
+                      <thead className="bg-muted/60 text-muted-foreground font-semibold text-[10px] uppercase border-b border-border">
+                        <tr>
+                          <th className="py-2 px-3">Field Path</th>
+                          <th className="py-2 px-3">Code</th>
+                          <th className="py-2 px-3">Issue</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {inspectedSubmission.errors.map((err, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="py-2 px-3 font-mono text-foreground font-medium">{err.fieldPath}</td>
+                            <td className="py-2 px-3 font-mono text-muted-foreground text-[10px]">
+                              {err.errorCode || "—"}
+                            </td>
+                            <td className="py-2 px-3 text-muted-foreground">{err.issue}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInspectedSubmission(null)}
+              className="rounded-xl text-xs font-semibold"
+            >
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -19,8 +19,9 @@ import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
 import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
+import { useEhrOptions } from 'hooks/useEhrOptions';
 
-type PsychotherapyStatus = 'Active' | 'Inactive' | 'None';
+type PsychotherapyStatus = 'Active' | 'Inactive' | 'None' | string;
 
 type FormValues = {
   hasPriorDiagnosis: boolean;
@@ -30,16 +31,11 @@ type FormValues = {
   psychotherapyStatus: PsychotherapyStatus | '';
 };
 
-const PSYCHOTHERAPY_OPTIONS = [
-  { label: 'Active (Currently attending)', value: 'Active' },
-  { label: 'Inactive (Past therapy)', value: 'Inactive' },
-  { label: 'None', value: 'None' },
-];
-
 export default function MentalHealthScreen() {
   const patientId = usePatientId();
   const { getToken } = useAuth();
   const { spacing } = useAppTheme();
+  const { selectOptions: psychotherapyOptions } = useEhrOptions('mental_health_event');
   const navigation = useNavigation();
   const headerHeight = useSafeHeaderHeight();
   const [saving, setSaving] = useState(false);
@@ -161,12 +157,18 @@ export default function MentalHealthScreen() {
           )} />
           <ProfileSectionHeader title="Psychotherapy" />
           <Controller control={control} name="psychotherapyStatus" render={({ field }) => (
-            <ProfileFormField label="Psychotherapy Status" value={PSYCHOTHERAPY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setTherapyModal(true)} placeholder="Select status" picker />
+            <ProfileFormField
+              label="Psychotherapy Status"
+              value={psychotherapyOptions.find(o => o.value === field.value || o.label === field.value)?.label || field.value || ''}
+              onPressIn={() => setTherapyModal(true)}
+              placeholder="Select status"
+              picker
+            />
           )} />
         </ScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />
         <Controller control={control} name="psychotherapyStatus" render={({ field }) => (
-          <ProfileSelectModal visible={therapyModal} title="Psychotherapy Status" options={PSYCHOTHERAPY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setTherapyModal(false)} />
+          <ProfileSelectModal visible={therapyModal} title="Psychotherapy Status" options={psychotherapyOptions} selected={field.value} onSelect={field.onChange} onClose={() => setTherapyModal(false)} />
         )} />
       </KeyboardAvoidingView>
     </Screen>

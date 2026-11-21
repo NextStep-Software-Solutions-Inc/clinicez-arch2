@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
 
 namespace ClinicEz.Clinic.Application.Features.Patients.DTOs;
 
@@ -25,28 +26,51 @@ public sealed record ClinicPatientDto(
     string FullName,
     DateOnly DateOfBirth,
     int Age,
-    string Gender,
+    string Sex,
     string? CivilStatus,
     string ContactNumber,
     string? Email,
-    string? AddressLine,
-    string? Barangay,
-    string? City,
-    string? Province,
-    string? EmergencyContactName,
-    string? EmergencyContactPhone,
-    string? EmergencyContactRelationship,
     string? PhilHealthNumber,
     string? SeniorCitizenId,
     string? PwdId,
     string? BloodType,
-    string? Allergies,
-    string? ChronicConditions,
-    string? Alerts,
-    Guid? SyncPatientId,
     DateTime CreatedAt,
     System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
     string VerificationStatus = "Verified",
     string? ActiveQueueTicket = null,
     Guid? ActiveQueueItemId = null,
-    List<PatientPastMedicalHistoryDto>? PastMedicalHistories = null);
+    List<PatientPastMedicalHistoryDto>? PastMedicalHistories = null,
+    string? ClinicEzId = null,
+    string? LandlineNumber = null,
+    string? MaidenLastName = null,
+    string? PreferredName = null,
+    string? Nationality = null,
+    string? Religion = null,
+    bool IsDeceased = false,
+    DateTime? DeceasedAt = null,
+    PatientPhilHealthMembershipDto? PhilHealthMembership = null,
+    List<PatientYakapEnlistmentDto>? YakapEnlistments = null,
+    List<PatientAlertDto>? AlertsList = null,
+    List<PatientMedicalHistoryDto>? MedicalHistories = null,
+    string? Allergies = null,
+    string? ChronicConditions = null,
+    string? Alerts = null,
+    Guid? SyncPatientId = null,
+    string? GenderIdentity = null,
+    List<PatientAddressDto>? Addresses = null,
+    List<PatientGuardianDto>? Guardians = null,
+    List<PatientActiveQueueTicketDto>? ActiveQueueTickets = null,
+    List<PatientAllergyDto>? StructuredAllergies = null
+);
+
+public sealed record PatientActiveQueueTicketDto(
+    Guid Id,
+    string QueueNumber,
+    string Status,
+    string VisitType,
+    string? ChiefComplaint,
+    Guid? DoctorId,
+    string? DoctorName,
+    DateTime CheckInTime,
+    bool IsDirectVisit = false,
+    Guid? RoomId = null);

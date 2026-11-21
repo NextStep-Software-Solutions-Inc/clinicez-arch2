@@ -7,7 +7,7 @@ namespace ClinicEz.Portal.Application.Features.Staff;
 /// The staff screens speak in one "role" string. This maps it to the workspace role (what a person may do in the
 /// workspace) and an optional <see cref="StaffMember"/> job profile (what they do at a facility).
 /// </summary>
-internal static class StaffMemberMapping
+public static class StaffMemberMapping
 {
     public const string PendingInvitation = "PendingInvitation";
 
@@ -23,23 +23,36 @@ internal static class StaffMemberMapping
     public static bool NeedsProfile(string role, Guid? facilityId) =>
         facilityId.HasValue || WorkspaceRoleFor(role) == WorkspaceMemberRole.Member;
 
-    public static string StatusName(MemberStatus status) => status switch
+    public static string StatusName(MemberStatus status, DateTime? expiresAt = null, DateTime? utcNow = null)
     {
-        MemberStatus.Invited => PendingInvitation,
-        MemberStatus.Suspended => nameof(MemberStatus.Suspended),
-        _ => nameof(MemberStatus.Active)
-    };
+        if (status == MemberStatus.Invited)
+        {
+            var now = utcNow ?? DateTime.UtcNow;
+            if (expiresAt.HasValue && expiresAt.Value < now)
+            {
+                return "Expired";
+            }
+            return nameof(MemberStatus.Invited);
+        }
+
+        return status switch
+        {
+            MemberStatus.Suspended => nameof(MemberStatus.Suspended),
+            MemberStatus.Revoked => nameof(MemberStatus.Revoked),
+            _ => nameof(MemberStatus.Active)
+        };
+    }
 
     public static string RoleName(WorkspaceMember member, StaffMember? profile) =>
         profile is { Role: var job } && member.Role == WorkspaceMemberRole.Member ? job : member.Role.ToString();
 
-    public static StaffMemberDto ToDto(WorkspaceMember member, StaffMember? profile, string? facilityName) => new(
+    public static StaffMemberDto ToDto(WorkspaceMember member, StaffMember? profile, string? facilityName, DateTime? utcNow = null) => new(
         member.Id,
         member.UserId,
         member.Email,
         member.FullName,
         RoleName(member, profile),
-        StatusName(member.Status),
+        StatusName(member.Status, member.InvitationExpiresAt, utcNow),
         profile?.FacilityId,
         facilityName,
         member.JoinedAt,

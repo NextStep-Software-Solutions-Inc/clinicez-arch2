@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Features.Reports.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Workspace;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ClinicEz.Shared.Common;
@@ -21,20 +23,22 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
     private readonly IRepository<Invoice> _invoiceRepo;
     private readonly IRepository<PaymentRecord> _paymentRepo;
     private readonly IRepository<ConsultationEncounter> _consultationRepo;
-    private readonly IRepository<ClinicalProcedure> _procedureRepo;
-    private readonly IRepository<ClinicLabOrder> _labOrderRepo;
+    private readonly IRepository<Procedure> _procedureRepo;
+    private readonly IRepository<LabOrder> _labOrderRepo;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
 
     public GetDailyEodReportQueryHandler(
         IRepository<QueueItem> queueRepo,
         IRepository<Invoice> invoiceRepo,
         IRepository<PaymentRecord> paymentRepo,
         IRepository<ConsultationEncounter> consultationRepo,
-        IRepository<ClinicalProcedure> procedureRepo,
-        IRepository<ClinicLabOrder> labOrderRepo,
+        IRepository<Procedure> procedureRepo,
+        IRepository<LabOrder> labOrderRepo,
         IClinicContext clinicContext,
-        IRepository<ClinicSettings>? settingsRepo = null)
+        IRepository<FacilitySettings>? settingsRepo = null,
+        IWorkspaceProfileProvider? workspaceProfiles = null)
     {
         _queueRepo = queueRepo;
         _invoiceRepo = invoiceRepo;
@@ -44,16 +48,28 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
         _labOrderRepo = labOrderRepo;
         _clinicContext = clinicContext;
         _settingsRepo = settingsRepo;
+        _workspaceProfiles = workspaceProfiles;
     }
 
     public async Task<DailyEodReportDto> Handle(GetDailyEodReportQuery request, CancellationToken cancellationToken)
     {
-        var targetDate = request.Date.HasValue
-            ? request.Date.Value.ToStartOfDayUtc()
-            : DateTime.UtcNow.ToStartOfDayUtc();
+        DateTime targetDate;
+        if (request.Date.HasValue)
+        {
+            targetDate = request.Date.Value.ToStartOfDayUtc();
+        }
+        else
+        {
+            var resolvedToday = await ClinicTimeZoneResolver.ResolveTodayAsync(
+                _workspaceProfiles,
+                _clinicContext.TenantId,
+                cancellationToken,
+                _settingsRepo);
+            targetDate = resolvedToday.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        }
         var nextDay = targetDate.AddDays(1);
 
-        ClinicSettings? settings = null;
+        FacilitySettings? settings = null;
         if (_settingsRepo != null)
         {
             settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
@@ -132,7 +148,7 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
             .Select(g => new DoctorWorkloadSummary(g.DoctorName, g.EncountersCount))
             .ToList();
 
-        var prescriptionData = await _consultationRepo.Query(c => c.EncounterDate >= targetDate && c.EncounterDate < nextDay)
+        var prescriptionData = await _consultationRepo.Query(c => c.EncounterDate >= targetDate && c.EncounterDate < nextDay && c.IsSigned)
             .Select(c => new
             {
                 TotalPrescriptions = c.Prescriptions.Count,
@@ -147,7 +163,7 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
         int totalProceduresPerformed = await _procedureRepo.Query(p => p.ScheduledAt >= targetDate && p.ScheduledAt < nextDay && p.Status == ProcedureStatus.Completed)
             .CountAsync(cancellationToken);
 
-        int totalLabOrdersIssued = await _labOrderRepo.Query(o => o.OrderDate >= targetDate && o.OrderDate < nextDay)
+        int totalLabOrdersIssued = await _labOrderRepo.Query(o => o.OrderDate >= targetDate && o.OrderDate < nextDay && o.IsSigned && o.Status != LabOrderStatus.Cancelled)
             .CountAsync(cancellationToken);
 
         return new DailyEodReportDto(

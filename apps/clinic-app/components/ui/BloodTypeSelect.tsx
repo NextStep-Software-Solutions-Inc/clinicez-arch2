@@ -6,10 +6,11 @@ import Modal from './Modal';
 import { theme } from '../../constants/theme';
 import {
   StandardBloodType,
-  RH_POSITIVE_TYPES,
-  RH_NEGATIVE_TYPES,
-  BLOOD_TYPE_METADATA,
+  getBloodTypeMeta,
+  partitionBloodTypeOptions,
+  formatBloodTypeLabel,
 } from '../../constants/bloodTypes';
+import { useEhrOptions } from '../../hooks/useEhrOptions';
 
 export interface BloodTypeSelectProps {
   label?: string;
@@ -37,10 +38,15 @@ export default function BloodTypeSelect({
   allowClear = true,
 }: BloodTypeSelectProps) {
   const [modalVisible, setModalVisible] = useState(false);
+  const { options: dynamicBloodTypes } = useEhrOptions('blood_type');
 
-  const displayValue = value?.trim() || '';
+  const { rhPositive, rhNegative } = React.useMemo(() => {
+    return partitionBloodTypeOptions(dynamicBloodTypes);
+  }, [dynamicBloodTypes]);
 
-  const handleSelect = (bt: StandardBloodType) => {
+  const displayValue = formatBloodTypeLabel(value) ?? value?.trim() ?? '';
+
+  const handleSelect = (bt: string) => {
     onChange(bt);
     setModalVisible(false);
   };
@@ -55,7 +61,7 @@ export default function BloodTypeSelect({
       {label ? (
         <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
           {label}
-          {required ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
+          {required ? <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText> : null}
         </ThemedText>
       ) : null}
 
@@ -116,11 +122,13 @@ export default function BloodTypeSelect({
             Rh Positive (+)
           </ThemedText>
           <View style={styles.grid}>
-            {RH_POSITIVE_TYPES.map((bt) => {
-              const selected = displayValue === bt;
+            {rhPositive.map((opt) => {
+              const bt = opt.label;
+              const selected = displayValue === bt || displayValue === opt.code;
+              const meta = getBloodTypeMeta(bt);
               return (
                 <Pressable
-                  key={bt}
+                  key={opt.code}
                   onPress={() => handleSelect(bt)}
                   style={[styles.tile, selected && styles.tileActive]}
                   accessibilityRole="radio"
@@ -136,7 +144,7 @@ export default function BloodTypeSelect({
                     variant="caption"
                     color={selected ? theme.colors.primaryLight : theme.colors.textMuted}
                   >
-                    {BLOOD_TYPE_METADATA[bt]?.antigen ?? ''} RhD+
+                    {meta.antigen} RhD+
                   </ThemedText>
                 </Pressable>
               );
@@ -148,11 +156,13 @@ export default function BloodTypeSelect({
             Rh Negative (-)
           </ThemedText>
           <View style={styles.grid}>
-            {RH_NEGATIVE_TYPES.map((bt) => {
-              const selected = displayValue === bt;
+            {rhNegative.map((opt) => {
+              const bt = opt.label;
+              const selected = displayValue === bt || displayValue === opt.code;
+              const meta = getBloodTypeMeta(bt);
               return (
                 <Pressable
-                  key={bt}
+                  key={opt.code}
                   onPress={() => handleSelect(bt)}
                   style={[styles.tile, selected && styles.tileActive]}
                   accessibilityRole="radio"
@@ -168,7 +178,7 @@ export default function BloodTypeSelect({
                     variant="caption"
                     color={selected ? theme.colors.primaryLight : theme.colors.textMuted}
                   >
-                    {BLOOD_TYPE_METADATA[bt]?.antigen ?? ''} RhD-
+                    {meta.antigen} RhD-
                   </ThemedText>
                 </Pressable>
               );

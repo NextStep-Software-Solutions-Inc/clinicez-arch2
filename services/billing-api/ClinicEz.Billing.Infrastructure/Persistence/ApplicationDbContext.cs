@@ -1,6 +1,7 @@
 using ClinicEz.Billing.Application.Abstractions;
 using ClinicEz.Billing.Domain.Entities;
 using ClinicEz.Shared.Interop.Persistence;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
@@ -9,8 +10,9 @@ namespace ClinicEz.Billing.Infrastructure.Persistence;
 public class ApplicationDbContext(
     DbContextOptions<ApplicationDbContext> options,
     IConfiguration configuration,
-    IBillingContext? billingContext = null) : DbContext(options), IBillingDbContext
+    IBillingContext? billingContext = null) : DbContext(options), IBillingDbContext, IDataProtectionKeyContext
 {
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
     public DbSet<InteropInboxMessage> InteropInbox { get; set; }
     public DbSet<Invoice> Invoices { get; set; }

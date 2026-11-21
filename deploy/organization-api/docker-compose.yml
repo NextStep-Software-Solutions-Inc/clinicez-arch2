@@ -55,6 +55,7 @@ services:
       # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
       - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
       - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
+      - MediatR__LicenseKey=${MEDIATR_LICENSE_KEY:-}
     restart: unless-stopped
 
 networks:

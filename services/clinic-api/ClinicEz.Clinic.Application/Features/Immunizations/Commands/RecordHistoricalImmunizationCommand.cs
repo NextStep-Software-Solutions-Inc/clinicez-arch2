@@ -1,11 +1,9 @@
 using System;
 using System.Linq;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Immunizations.DTOs;
-using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
@@ -51,13 +49,13 @@ public sealed class RecordHistoricalImmunizationValidator : AbstractValidator<Re
 
 public sealed class RecordHistoricalImmunizationCommandHandler : IRequestHandler<RecordHistoricalImmunizationCommand, PatientImmunizationDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<PatientImmunization> _immunizationRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public RecordHistoricalImmunizationCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<PatientImmunization> immunizationRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
@@ -78,6 +76,11 @@ public sealed class RecordHistoricalImmunizationCommandHandler : IRequestHandler
 
         var administeredDateTime = request.AdministeredDate.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc);
 
+        var normalizedRoute = !string.IsNullOrWhiteSpace(request.Route) ? request.Route.Trim() : "Not Specified";
+        var normalizedSite = !string.IsNullOrWhiteSpace(request.Route) && !AdministerVaccineValidator.RequiresInjectionSite(request.Route)
+            ? null
+            : (!string.IsNullOrWhiteSpace(request.InjectionSite) ? request.InjectionSite.Trim() : "Not Specified");
+
         var immunization = new PatientImmunization
         {
             Id = Guid.NewGuid(),
@@ -93,8 +96,8 @@ public sealed class RecordHistoricalImmunizationCommandHandler : IRequestHandler
             ExpirationDate = request.AdministeredDate,
             DoseSequence = request.DoseSequence,
             IsSeriesCompleted = request.IsSeriesCompleted,
-            Route = !string.IsNullOrWhiteSpace(request.Route) ? request.Route : "Not Specified",
-            InjectionSite = !string.IsNullOrWhiteSpace(request.InjectionSite) ? request.InjectionSite : "Not Specified",
+            Route = normalizedRoute,
+            InjectionSite = normalizedSite,
             AdministeredAtUtc = administeredDateTime,
             AdministeredByStaffId = Guid.Empty,
             AdministeredByStaffName = !string.IsNullOrWhiteSpace(request.HistoricalFacilityName) ? request.HistoricalFacilityName : "Historical Provider",
@@ -106,7 +109,6 @@ public sealed class RecordHistoricalImmunizationCommandHandler : IRequestHandler
         };
 
         await _immunizationRepo.AddAsync(immunization, cancellationToken);
-        TrySyncToPhilHealthProfile(patient, request.PhilHealthLibrary, request.PhilHealthCode);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new PatientImmunizationDto(
@@ -139,67 +141,5 @@ public sealed class RecordHistoricalImmunizationCommandHandler : IRequestHandler
             immunization.IsSynchronizedToPatientApp,
             immunization.SynchronizedAtUtc
         );
-    }
-
-    private static void TrySyncToPhilHealthProfile(ClinicPatient patient, string philHealthLibrary, string philHealthCode)
-    {
-        if (patient.CustomFields == null || !patient.CustomFields.TryGetValue("philhealth_profile", out var profObj) || profObj == null)
-            return;
-
-        PhilHealthPatientProfileDto? prof = null;
-        if (profObj is PhilHealthPatientProfileDto typed)
-        {
-            prof = typed;
-        }
-        else
-        {
-            try
-            {
-                var json = profObj.ToString();
-                if (!string.IsNullOrWhiteSpace(json))
-                {
-                    prof = JsonSerializer.Deserialize<PhilHealthPatientProfileDto>(json,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                }
-            }
-            catch
-            {
-                return;
-            }
-        }
-
-        if (prof == null) return;
-
-        var lib = philHealthLibrary.ToLowerInvariant();
-        var code = philHealthCode.Trim();
-        if (string.IsNullOrWhiteSpace(code) || code.Equals("999", StringComparison.OrdinalIgnoreCase)) return;
-
-        if (lib.Contains("child"))
-        {
-            if (!prof.ChildImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
-                prof = prof with { ChildImmunizations = [..prof.ChildImmunizations, code] };
-        }
-        else if (lib.Contains("young"))
-        {
-            if (!prof.YoungWomanImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
-                prof = prof with { YoungWomanImmunizations = [..prof.YoungWomanImmunizations, code] };
-        }
-        else if (lib.Contains("preg"))
-        {
-            if (!prof.PregnantWomanImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
-                prof = prof with { PregnantWomanImmunizations = [..prof.PregnantWomanImmunizations, code] };
-        }
-        else if (lib.Contains("elderly"))
-        {
-            if (!prof.ElderlyImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
-                prof = prof with { ElderlyImmunizations = [..prof.ElderlyImmunizations, code] };
-        }
-        else
-        {
-            if (!prof.OtherImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
-                prof = prof with { OtherImmunizations = [..prof.OtherImmunizations, code] };
-        }
-
-        patient.CustomFields["philhealth_profile"] = prof;
     }
 }

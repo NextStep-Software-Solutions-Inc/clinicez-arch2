@@ -164,7 +164,7 @@ const createMockPatient = (overrides?: Partial<ClinicPatient>): ClinicPatient =>
   fullName: 'Maria Dela Cruz',
   firstName: 'Maria',
   lastName: 'Dela Cruz',
-  gender: 'Female',
+  sex: 'Female',
   dateOfBirth: '2018-04-12',
   age: 8,
   bloodType: 'A+',
@@ -811,7 +811,7 @@ describe('Challenger MC-2 Empirical Stress Suite', () => {
       patientId: patient.id,
       demographics: {
         fullName: patient.fullName,
-        gender: patient.gender,
+        sex: patient.sex,
         dateOfBirth: patient.dateOfBirth,
       },
       dentalTeeth: [

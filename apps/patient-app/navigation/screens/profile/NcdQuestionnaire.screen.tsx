@@ -19,19 +19,12 @@ import { useAuth } from 'contexts/AuthContext';
 import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
 import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
+import { useEhrOptions } from 'hooks/useEhrOptions';
 import { randomUUID } from 'expo-crypto';
 import { dialog } from '@utils/dialog';
 
-// ─── WHO/ISH CVD Risk Options (Q17) ──────────────────────────────────────────
-const Q17_OPTIONS = [
-  { label: 'A — Low Risk (< 10%)', value: 'A' },
-  { label: 'B — Moderate Risk (10% to < 20%)', value: 'B' },
-  { label: 'C — High Risk (20% to < 30%)', value: 'C' },
-  { label: 'D — Very High Risk (30% to < 40%)', value: 'D' },
-  { label: 'E — Critical Risk (≥ 40%)', value: 'E' },
-];
-
 export default function NcdQuestionnaireScreen() {
+  const { selectOptions: q17Options } = useEhrOptions('cvd_risk_level');
   const patientId = usePatientId();
   const { getToken } = useAuth();
   const navigation = useNavigation();
@@ -342,7 +335,7 @@ export default function NcdQuestionnaireScreen() {
             <ThemedText variant="captionBold" color="primary">PHILHEALTH YAKAP • EKONSULTA</ThemedText>
             <ThemedText variant="h2">Non-Communicable Disease (NCD) Risk Assessment</ThemedText>
             <ThemedText variant="body" color="textSecondary">
-              Standardized 24-item survey aligned with DOH PhilPEN and PhilHealth KonsultaData v1.14 specification. Your answers establish clinical risk stratification and streamline preventive care consultations.
+              Standardized 24-item survey aligned with DOH PhilPEN and PhilHealth YAKAP 2.0 (PCAPI) specification. Your answers establish clinical risk stratification and streamline preventive care consultations.
             </ThemedText>
           </View>
 
@@ -482,7 +475,7 @@ export default function NcdQuestionnaireScreen() {
               onPress={() => setShowQ17Modal(true)}
             >
               <ThemedText variant="body" color={form.qid17Abcde ? 'text' : 'textMuted'}>
-                {Q17_OPTIONS.find((o) => o.value === form.qid17Abcde)?.label ?? 'Select Risk Category (A – E)'}
+                {q17Options.find((o) => o.value === form.qid17Abcde)?.label ?? 'Select Risk Category (A – E)'}
               </ThemedText>
               <AppIcon name="chevronDown" size={sizes.iconSm} color="textMuted" />
             </Pressable>
@@ -783,7 +776,7 @@ export default function NcdQuestionnaireScreen() {
         <ProfileSelectModal
           visible={showQ17Modal}
           title="WHO/ISH CVD Risk Category"
-          options={Q17_OPTIONS}
+          options={q17Options}
           selected={form.qid17Abcde}
           onSelect={(val) => {
             updateField('qid17Abcde', val);

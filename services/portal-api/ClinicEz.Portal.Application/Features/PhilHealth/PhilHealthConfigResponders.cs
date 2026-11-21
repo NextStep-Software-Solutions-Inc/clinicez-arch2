@@ -13,8 +13,8 @@ namespace ClinicEz.Portal.Application.Features.PhilHealth;
 /// <summary>PhilHealth settings shared by the hub responders and the branch configuration endpoint.</summary>
 public static class PhilHealthDefaults
 {
-    /// <summary>Konsulta SOAP endpoint of a branch that did not set one.</summary>
-    public const string KonsultaEndpoint = "https://staging.philhealth.gov.ph/KONSULTA/SOAP";
+    /// <summary>Canonical PhilHealth PCAPI v2.0 base URL.</summary>
+    public const string PcapiBaseUrl = "https://pcapi.philhealth.gov.ph";
 }
 
 /// <summary>
@@ -88,10 +88,9 @@ public sealed class PhilHealthConfigRequestedResponder(
                 AccreditationNumber = branch.PhilHealthAccreditationNumber ?? string.Empty,
                 PmccNumber = branch.PhilHealthPmccNumber ?? string.Empty,
                 SoftwareCertificateId = branch.PhilHealthSoftwareCertificateId ?? string.Empty,
-                Username = Reveal(branch.PhilHealthEncryptedUsername),
-                Password = Reveal(branch.PhilHealthEncryptedPassword),
+                SecretKey = Reveal(branch.PhilHealthEncryptedSecretKey),
                 CipherKey = Reveal(branch.PhilHealthEncryptedCipherKey),
-                KonsultaEndpoint = branch.PhilHealthKonsultaEndpoint ?? PhilHealthDefaults.KonsultaEndpoint,
+                BaseUrl = branch.PhilHealthBaseUrl ?? PhilHealthDefaults.PcapiBaseUrl,
                 IsActive = branch.IsActive && branch.IsPhilHealthAccredited
             }
         };
@@ -132,17 +131,15 @@ public sealed class PhilHealthConfigUpsertRequestedResponder(
         branch.PhilHealthAccreditationNumber = request.AccreditationNumber.Trim();
         branch.PhilHealthPmccNumber = request.PmccNumber.Trim();
         branch.PhilHealthSoftwareCertificateId = request.SoftwareCertificateId.Trim();
-        branch.PhilHealthKonsultaEndpoint = string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
-            ? PhilHealthDefaults.KonsultaEndpoint
-            : request.KonsultaEndpoint.Trim();
+        branch.PhilHealthBaseUrl = !string.IsNullOrWhiteSpace(request.BaseUrl)
+            ? request.BaseUrl.Trim()
+            : PhilHealthDefaults.PcapiBaseUrl;
         branch.IsPhilHealthAccredited = request.IsActive;
 
-        if (!string.IsNullOrWhiteSpace(request.Username))
-            branch.PhilHealthEncryptedUsername = protector.Protect(request.Username.Trim());
-        if (!string.IsNullOrWhiteSpace(request.Password))
-            branch.PhilHealthEncryptedPassword = protector.Protect(request.Password);
+        if (!string.IsNullOrWhiteSpace(request.SecretKey))
+            branch.PhilHealthEncryptedSecretKey = protector.Protect(request.SecretKey.Trim());
         if (!string.IsNullOrWhiteSpace(request.CipherKey))
-            branch.PhilHealthEncryptedCipherKey = protector.Protect(request.CipherKey);
+            branch.PhilHealthEncryptedCipherKey = protector.Protect(request.CipherKey.Trim());
 
         branch.UpdatedAt = DateTime.UtcNow;
         return new PhilHealthConfigUpsertRespondedPayload { Succeeded = true };

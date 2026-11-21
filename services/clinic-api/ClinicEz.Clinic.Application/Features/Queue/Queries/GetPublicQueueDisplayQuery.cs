@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Features.Queue.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
@@ -16,18 +17,19 @@ public sealed record GetPublicQueueDisplayQuery(
     Guid? ClinicId = null,
     string? TenantSlug = null,
     string? FacilitySlug = null,
-    DateOnly? Date = null
+    DateOnly? Date = null,
+    string? Pin = null
 ) : IRequest<PublicQueueDisplayDto?>;
 
 public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPublicQueueDisplayQuery, PublicQueueDisplayDto?>
 {
     private readonly IRepository<QueueItem> _queueRepo;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetPublicQueueDisplayQueryHandler(
         IRepository<QueueItem> queueRepo,
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IClinicContext clinicContext)
     {
         _queueRepo = queueRepo;
@@ -38,7 +40,7 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
     public async Task<PublicQueueDisplayDto?> Handle(GetPublicQueueDisplayQuery request, CancellationToken ct)
     {
         // 1. Resolve clinic settings without requiring ambient authentication
-        ClinicSettings? clinic = null;
+        FacilitySettings? clinic = null;
 
         if (request.ClinicId.HasValue && request.ClinicId.Value != Guid.Empty)
         {
@@ -92,12 +94,39 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
             return null;
         }
 
-        var targetDate = request.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var mask = clinic.TvDisplayMaskPatientNames;
+        bool isPinRequired = !string.IsNullOrWhiteSpace(clinic.TvDisplayPin);
+        bool isPinValid = !isPinRequired || (!string.IsNullOrWhiteSpace(request.Pin) && string.Equals(request.Pin.Trim(), clinic.TvDisplayPin!.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        // When PIN is required and not yet supplied or invalid, strictly zero tickets are returned
+        if (isPinRequired && !isPinValid)
+        {
+            return new PublicQueueDisplayDto(
+                ClinicId: clinic.ClinicId,
+                ClinicName: clinic.ClinicName,
+                TenantSlug: clinic.TenantSlug ?? "clinic",
+                FacilitySlug: clinic.FacilitySlug ?? "main",
+                NowServing: Array.Empty<ServingTicketDto>(),
+                UpNext: Array.Empty<UpcomingTicketDto>(),
+                MaskPatientNames: mask,
+                GeneratedAtUtc: DateTime.UtcNow,
+                PatientsWaitingCount: 0,
+                LogoUrl: clinic.PrimaryLogoUrl,
+                IsPinRequired: true,
+                IsPinValid: false,
+                TvDisplaySoundTheme: clinic.TvDisplaySoundTheme ?? "classicChime",
+                TvDisplayVoiceEnabled: clinic.TvDisplayVoiceEnabled,
+                TvDisplayShowPhysicianName: clinic.TvDisplayShowPhysicianName
+            );
+        }
+
+        var tz = ClinicTimeZoneResolver.ResolveTimeZone(clinic.TimeZoneId);
+        var targetDate = request.Date ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
 
         // 2. Fetch queue items for this clinic on the target date
         var queueItems = await _queueRepo.IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(q => !q.IsDeleted && q.ClinicId == clinic.ClinicId && q.QueueDate == targetDate)
+            .Where(q => !q.IsDeleted && q.ClinicId == clinic.ClinicId && q.QueueDate == targetDate && !q.IsDirectVisit)
             .OrderByDescending(q => q.Priority)
             .ThenBy(q => q.SequenceNumber)
             .ToListAsync(ct);
@@ -117,14 +146,16 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
             ))
             .ToList();
 
-        // 4. Up Next: upcoming tickets (Waiting, Triaged, OnHold, PendingProcedure, ReEvaluation)
-        var mask = clinic.TvDisplayMaskPatientNames;
+        // 4. Up Next: upcoming tickets (Consultation visits in Waiting, Triaged, OnHold, or procedures/re-eval)
+        // Diverted and DischargedNonDoctor tickets are strictly excluded from public lobby TV display!
+        mask = clinic.TvDisplayMaskPatientNames;
         var upNext = queueItems
-            .Where(q => q.Status == QueueStatus.Waiting ||
-                        q.Status == QueueStatus.Triaged ||
-                        q.Status == QueueStatus.OnHold ||
-                        q.Status == QueueStatus.PendingProcedure ||
-                        q.Status == QueueStatus.ReEvaluation)
+            .Where(q => q.Status != QueueStatus.Diverted &&
+                        q.Status != QueueStatus.DischargedNonDoctor &&
+                        ((q.VisitType.IsPhysicianConsultation() &&
+                          (q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Triaged || q.Status == QueueStatus.OnHold))
+                         || q.Status == QueueStatus.PendingProcedure
+                         || q.Status == QueueStatus.ReEvaluation))
             .OrderByDescending(q => q.Priority)
             .ThenBy(q => q.SequenceNumber)
             .Select(q => new UpcomingTicketDto(
@@ -141,14 +172,19 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
         return new PublicQueueDisplayDto(
             ClinicId: clinic.ClinicId,
             ClinicName: clinic.ClinicName,
-            TenantSlug: clinic.TenantSlug ?? clinic.TenantId,
+            TenantSlug: clinic.TenantSlug ?? "clinic",
             FacilitySlug: clinic.FacilitySlug ?? "main",
             NowServing: nowServing,
             UpNext: upNext,
             MaskPatientNames: mask,
             GeneratedAtUtc: DateTime.UtcNow,
             PatientsWaitingCount: upNext.Count,
-            LogoUrl: clinic.PrimaryLogoUrl
+            LogoUrl: clinic.PrimaryLogoUrl,
+            IsPinRequired: isPinRequired,
+            IsPinValid: true,
+            TvDisplaySoundTheme: clinic.TvDisplaySoundTheme ?? "classicChime",
+            TvDisplayVoiceEnabled: clinic.TvDisplayVoiceEnabled,
+            TvDisplayShowPhysicianName: clinic.TvDisplayShowPhysicianName
         );
     }
 

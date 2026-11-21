@@ -6,6 +6,9 @@ import { FacilityActivationGate } from './components/FacilityActivationGate';
 import { ConnectionGate } from './components/ConnectionGate';
 import { VercelInsights } from './components/analytics/VercelInsights';
 import { loadRuntimeConfig } from './services/runtimeConfig';
+import { LabCommsProvider } from './context/LabCommsContext';
+import LabChatModal from './components/LabChatModal';
+import { LabChatTrigger } from './components/LabChatTrigger';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -21,7 +24,11 @@ export default function App() {
       <StatusBar style="auto" />
       <ConnectionGate>
         <FacilityActivationGate>
-          <Navigation />
+          <LabCommsProvider>
+            <Navigation />
+            <LabChatTrigger />
+            <LabChatModal />
+          </LabCommsProvider>
         </FacilityActivationGate>
       </ConnectionGate>
       <VercelInsights />

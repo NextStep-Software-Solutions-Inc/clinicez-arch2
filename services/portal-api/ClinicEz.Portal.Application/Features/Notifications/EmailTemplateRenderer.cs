@@ -10,6 +10,11 @@ public static class EmailTemplateKeys
     public const string StaffInvitation = "staff.invitation";
     public const string ContactMessage = "contact.message";
     public const string PatientClaimInvitation = "patient.claim.invitation";
+    public const string AdminInvitation = "admin.invitation";
+    public const string ClinicStaffInvitation = "clinic.staff.invitation";
+    public const string ClinicStaffPasswordReset = "clinic.staff.password_reset";
+    public const string PortalPasswordReset = "portal.password_reset";
+    public const string PractitionerAffiliationConfirmation = "practitioner.affiliation.confirmation";
 }
 
 /// <param name="ReplyTo">Where a reply should go, when the template knows (for example the visitor of the contact form).</param>
@@ -47,6 +52,11 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
             EmailTemplateKeys.StaffInvitation => RenderStaffInvitation(subject, model),
             EmailTemplateKeys.ContactMessage => RenderContactMessage(subject, model),
             EmailTemplateKeys.PatientClaimInvitation => RenderPatientClaimInvitation(subject, model),
+            EmailTemplateKeys.AdminInvitation => RenderAdminInvitation(subject, model),
+            EmailTemplateKeys.ClinicStaffInvitation => RenderClinicStaffInvitation(subject, model),
+            EmailTemplateKeys.ClinicStaffPasswordReset => RenderClinicStaffPasswordReset(subject, model),
+            EmailTemplateKeys.PortalPasswordReset => RenderPortalPasswordReset(subject, model),
+            EmailTemplateKeys.PractitionerAffiliationConfirmation => RenderPractitionerAffiliationConfirmation(subject, model),
             _ => throw new EmailTemplateException($"Unknown email template '{templateKey}'.")
         };
     }
@@ -316,6 +326,495 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
               <td style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center;">
                 <p style="font-size: 11px; color: #94a3b8; margin: 0;">
                   If you did not register at {{facilityName}}, you can safely ignore this email.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        """;
+
+    private static RenderedEmail RenderAdminInvitation(string subject, IReadOnlyDictionary<string, string> model)
+    {
+        var inviteeName = Required(model, "inviteeName");
+        var role = Required(model, "role");
+        var inviteUrl = RequiredHttpUrl(model, "inviteUrl");
+        var inviterName = Optional(model, "inviterName");
+
+        var inviterNote = inviterName is null
+            ? "The platform administration"
+            : Encode(inviterName);
+
+        var html = Fill(AdminInvitationHtml, new Dictionary<string, string>
+        {
+            ["subject"] = Encode(subject),
+            ["inviteeName"] = Encode(inviteeName),
+            ["role"] = Encode(role),
+            ["inviterNote"] = inviterNote,
+            ["inviteUrl"] = Encode(inviteUrl)
+        });
+
+        var text = $"""
+            Hello {inviteeName},
+
+            You have been invited by {inviterNote} to join the Clinic EZ Platform Administration as {role}.
+
+            Accept your invitation by visiting:
+            {inviteUrl}
+
+            This invitation will expire in 7 days.
+            """;
+
+        return new RenderedEmail(html, text);
+    }
+
+    private const string AdminInvitationHtml = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>{{subject}}</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <!-- Teal Header -->
+            <tr>
+              <td style="padding: 32px 32px 20px 32px; background: linear-gradient(135deg, #0D6963 0%, #084c47 100%); text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Clinic EZ</h1>
+                <p style="color: #ccfbf1; margin: 6px 0 0 0; font-size: 13px; font-weight: 500;">Platform Administration &amp; Governance</p>
+              </td>
+            </tr>
+
+            <!-- Content Body -->
+            <tr>
+              <td style="padding: 32px;">
+                <h2 style="font-size: 18px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0;">
+                  Hello {{inviteeName}},
+                </h2>
+                <p style="font-size: 15px; line-height: 24px; color: #334155; margin: 0 0 20px 0;">
+                  You have been invited by {{inviterNote}} to join the <strong>Clinic EZ Platform Administration</strong> team.
+                </p>
+
+                <!-- Details Card -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background: #f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+                  <tr>
+                    <td>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Target Domain:</strong> Clinic EZ Main Portal</p>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Administrative Role:</strong> {{role}}</p>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="font-size: 14px; line-height: 22px; color: #475569; margin: 0 0 28px 0;">
+                  Click the button below to accept your invitation and activate your administrative console access. You can sign in with your existing account or create a new one.
+                </p>
+
+                <!-- CTA Button -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td align="center">
+                      <a href="{{inviteUrl}}" target="_blank" style="display: inline-block; background-color: #0D6963; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 10px; box-shadow: 0 2px 4px rgba(13, 105, 99, 0.3);">
+                        Accept Admin Invitation &rarr;
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Link Fallback -->
+                <p style="font-size: 12px; color: #94a3b8; line-height: 18px; margin: 32px 0 0 0; word-break: break-all;">
+                  Or copy and paste this link into your browser:<br />
+                  <a href="{{inviteUrl}}" style="color: #0D6963; text-decoration: underline;">{{inviteUrl}}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center;">
+                <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0;">
+                  This invitation expires in <strong>7 days</strong>.
+                </p>
+                <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+                  If you did not expect this invitation, you can safely ignore this email.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        """;
+
+    private static RenderedEmail RenderClinicStaffInvitation(string subject, IReadOnlyDictionary<string, string> model)
+    {
+        var inviteeName = Required(model, "inviteeName");
+        var clinicName = Optional(model, "clinicName") ?? Optional(model, "workspaceName") ?? Optional(model, "facilityName") ?? "Clinic EZ";
+        var role = Required(model, "role");
+        var inviteUrl = RequiredHttpUrl(model, "inviteUrl");
+
+        var html = Fill(ClinicStaffInvitationHtml, new Dictionary<string, string>
+        {
+            ["subject"] = Encode(subject),
+            ["inviteeName"] = Encode(inviteeName),
+            ["clinicName"] = Encode(clinicName),
+            ["role"] = Encode(role),
+            ["inviteUrl"] = Encode(inviteUrl)
+        });
+
+        var text = $"""
+            Hello {inviteeName},
+
+            You have been invited by {clinicName} to join their clinical team on Clinic EZ as {role}.
+
+            Accept your invitation and set up your workstation password by visiting:
+            {inviteUrl}
+
+            This invitation will expire in 7 days.
+            """;
+
+        return new RenderedEmail(html, text);
+    }
+
+    private const string ClinicStaffInvitationHtml = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>{{subject}}</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <!-- Teal Header -->
+            <tr>
+              <td style="padding: 32px 32px 20px 32px; background: linear-gradient(135deg, #0D6963 0%, #084c47 100%); text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Clinic EZ</h1>
+                <p style="color: #ccfbf1; margin: 6px 0 0 0; font-size: 13px; font-weight: 500;">Clinical Operations &amp; Practice Management</p>
+              </td>
+            </tr>
+
+            <!-- Content Body -->
+            <tr>
+              <td style="padding: 32px;">
+                <h2 style="font-size: 18px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0;">
+                  Hello {{inviteeName}},
+                </h2>
+                <p style="font-size: 15px; line-height: 24px; color: #334155; margin: 0 0 20px 0;">
+                  You have been invited by <strong>{{clinicName}}</strong> to join their clinical team on Clinic EZ as a <strong>{{role}}</strong>.
+                </p>
+
+                <!-- Details Card -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background: #f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+                  <tr>
+                    <td>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Clinic / Healthcare Facility:</strong> {{clinicName}}</p>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Assigned Role:</strong> {{role}}</p>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="font-size: 14px; line-height: 22px; color: #475569; margin: 0 0 28px 0;">
+                  Click the button below to accept your invitation, review your facility details, and create your workstation password.
+                </p>
+
+                <!-- CTA Button -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td align="center">
+                      <a href="{{inviteUrl}}" target="_blank" style="display: inline-block; background-color: #0D6963; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 10px; box-shadow: 0 2px 4px rgba(13, 105, 99, 0.3);">
+                        Accept Invitation &amp; Set Password &rarr;
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Link Fallback -->
+                <p style="font-size: 12px; color: #94a3b8; line-height: 18px; margin: 32px 0 0 0; word-break: break-all;">
+                  Or copy and paste this link into your browser:<br />
+                  <a href="{{inviteUrl}}" style="color: #0D6963; text-decoration: underline;">{{inviteUrl}}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center;">
+                <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0;">
+                  This invitation expires in <strong>7 days</strong>.
+                </p>
+                <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+                  If you did not expect this invitation, you can safely ignore this email.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        """;
+
+    private static RenderedEmail RenderClinicStaffPasswordReset(string subject, IReadOnlyDictionary<string, string> model)
+    {
+        var staffName = Optional(model, "staffName") ?? Required(model, "inviteeName");
+        var clinicName = Optional(model, "clinicName") ?? Optional(model, "workspaceName") ?? Optional(model, "facilityName") ?? "Clinic EZ";
+        var role = Optional(model, "role") ?? "Staff Member";
+        var resetUrlKey = model.ContainsKey("resetUrl") ? "resetUrl" : "inviteUrl";
+        var resetUrl = RequiredHttpUrl(model, resetUrlKey);
+
+        var html = Fill(ClinicStaffPasswordResetHtml, new Dictionary<string, string>
+        {
+            ["subject"] = Encode(subject),
+            ["staffName"] = Encode(staffName),
+            ["clinicName"] = Encode(clinicName),
+            ["role"] = Encode(role),
+            ["resetUrl"] = Encode(resetUrl)
+        });
+
+        var text = $"""
+            Hello {staffName},
+
+            An administrator at {clinicName} has initiated a password reset for your Clinic EZ workstation account ({role}).
+
+            Set your new workstation password by visiting:
+            {resetUrl}
+
+            This password reset link will expire in 7 days.
+            """;
+
+        return new RenderedEmail(html, text);
+    }
+
+    private const string ClinicStaffPasswordResetHtml = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>{{subject}}</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <!-- Teal Header -->
+            <tr>
+              <td style="padding: 32px 32px 20px 32px; background: linear-gradient(135deg, #0D6963 0%, #084c47 100%); text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Clinic EZ</h1>
+                <p style="color: #ccfbf1; margin: 6px 0 0 0; font-size: 13px; font-weight: 500;">Clinical Operations &amp; Practice Management</p>
+              </td>
+            </tr>
+
+            <!-- Content Body -->
+            <tr>
+              <td style="padding: 32px;">
+                <h2 style="font-size: 18px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0;">
+                  Hello {{staffName}},
+                </h2>
+                <p style="font-size: 15px; line-height: 24px; color: #334155; margin: 0 0 20px 0;">
+                  An administrator at <strong>{{clinicName}}</strong> has initiated a password reset for your Clinic EZ workstation account.
+                </p>
+
+                <!-- Details Card -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background: #f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+                  <tr>
+                    <td>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Clinic / Healthcare Facility:</strong> {{clinicName}}</p>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Assigned Role:</strong> {{role}}</p>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="font-size: 14px; line-height: 22px; color: #475569; margin: 0 0 28px 0;">
+                  Click the button below to create a new workstation password and sign in.
+                </p>
+
+                <!-- CTA Button -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td align="center">
+                      <a href="{{resetUrl}}" target="_blank" style="display: inline-block; background-color: #0D6963; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 10px; box-shadow: 0 2px 4px rgba(13, 105, 99, 0.3);">
+                        Set New Workstation Password &rarr;
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Link Fallback -->
+                <p style="font-size: 12px; color: #94a3b8; line-height: 18px; margin: 32px 0 0 0; word-break: break-all;">
+                  Or copy and paste this link into your browser:<br />
+                  <a href="{{resetUrl}}" style="color: #0D6963; text-decoration: underline;">{{resetUrl}}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center;">
+                <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0;">
+                  This password reset link expires in <strong>7 days</strong>.
+                </p>
+                <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+                  If you did not request or expect this password reset, please contact your clinic administrator.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        """;
+
+    private static RenderedEmail RenderPortalPasswordReset(string subject, IReadOnlyDictionary<string, string> model)
+    {
+        var recipientName = Optional(model, "recipientName") ?? Optional(model, "staffName") ?? Required(model, "inviteeName");
+        var scopeName = Optional(model, "scopeName") ?? Optional(model, "workspaceName") ?? "Clinic EZ Portal";
+        var role = Optional(model, "role") ?? "Member";
+        var resetUrlKey = model.ContainsKey("resetUrl") ? "resetUrl" : "inviteUrl";
+        var resetUrl = RequiredHttpUrl(model, resetUrlKey);
+
+        var html = Fill(PortalPasswordResetHtml, new Dictionary<string, string>
+        {
+            ["subject"] = Encode(subject),
+            ["recipientName"] = Encode(recipientName),
+            ["scopeName"] = Encode(scopeName),
+            ["role"] = Encode(role),
+            ["resetUrl"] = Encode(resetUrl)
+        });
+
+        var text = $"""
+            Hello {recipientName},
+
+            An administrator at {scopeName} has initiated a password reset for your Clinic EZ account ({role}).
+
+            Set your new password by visiting:
+            {resetUrl}
+
+            This password reset link will expire in 7 days.
+            """;
+
+        return new RenderedEmail(html, text);
+    }
+
+    private static RenderedEmail RenderPractitionerAffiliationConfirmation(string subject, IReadOnlyDictionary<string, string> model)
+    {
+        var practitionerName = Required(model, "practitionerName");
+        var facilityName = Required(model, "facilityName");
+        var professionKind = Optional(model, "professionKind") ?? "Practitioner";
+        var confirmUrl = RequiredHttpUrl(model, "confirmUrl");
+        var otpCode = Optional(model, "otpCode");
+
+        var otpBlock = otpCode is null
+            ? string.Empty
+            : $"""<p style="margin: 12px 0 0 0; color: #0f172a; font-size: 14px;"><strong>Verification code:</strong> <code style="font-size: 16px; letter-spacing: 2px;">{Encode(otpCode)}</code></p>""";
+
+        var html = $"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head><meta charset="utf-8" /><title>{Encode(subject)}</title></head>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;">
+                <tr>
+                  <td style="padding: 24px 32px; background-color: #0D6963;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Clinic EZ Directory Verification</h1>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 28px 32px;">
+                    <p style="font-size: 15px; line-height: 22px; margin: 0 0 16px 0;">Hello {Encode(practitionerName)},</p>
+                    <p style="font-size: 14px; line-height: 22px; color: #334155; margin: 0 0 16px 0;">
+                      <strong>{Encode(facilityName)}</strong> requested to list your verified {Encode(professionKind)} credentials under their clinic directory on Clinic EZ.
+                    </p>
+                    {otpBlock}
+                    <p style="margin: 24px 0;">
+                      <a href="{Encode(confirmUrl)}" target="_blank" style="display: inline-block; background-color: #0D6963; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 24px; border-radius: 8px;">Confirm Clinic Affiliation</a>
+                    </p>
+                    <p style="font-size: 12px; color: #64748b; word-break: break-all;">Link: <a href="{Encode(confirmUrl)}">{Encode(confirmUrl)}</a></p>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>
+            """;
+
+        var text = $"""
+            Hello {practitionerName},
+
+            {facilityName} requested to list your verified {professionKind} credentials under their clinic directory on Clinic EZ.
+            {(otpCode is null ? string.Empty : $"\nVerification code: {otpCode}\n")}
+            Confirm your clinic affiliation by visiting:
+            {confirmUrl}
+
+            If you did not authorize this listing, do not confirm it.
+            """;
+
+        return new RenderedEmail(html, text);
+    }
+
+    private const string PortalPasswordResetHtml = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>{{subject}}</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <!-- Teal Header -->
+            <tr>
+              <td style="padding: 32px 32px 20px 32px; background: linear-gradient(135deg, #0D6963 0%, #084c47 100%); text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Clinic EZ</h1>
+                <p style="color: #ccfbf1; margin: 6px 0 0 0; font-size: 13px; font-weight: 500;">Healthcare Operations &amp; Workspace Portal</p>
+              </td>
+            </tr>
+
+            <!-- Content Body -->
+            <tr>
+              <td style="padding: 32px;">
+                <h2 style="font-size: 18px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0;">
+                  Hello {{recipientName}},
+                </h2>
+                <p style="font-size: 15px; line-height: 24px; color: #334155; margin: 0 0 20px 0;">
+                  An administrator at <strong>{{scopeName}}</strong> has initiated a password reset for your Clinic EZ account.
+                </p>
+
+                <!-- Details Card -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background: #f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+                  <tr>
+                    <td>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Organization / Scope:</strong> {{scopeName}}</p>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Role:</strong> {{role}}</p>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="font-size: 14px; line-height: 22px; color: #475569; margin: 0 0 28px 0;">
+                  Click the button below to create a new password for your account.
+                </p>
+
+                <!-- CTA Button -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td align="center">
+                      <a href="{{resetUrl}}" target="_blank" style="display: inline-block; background-color: #0D6963; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 10px; box-shadow: 0 2px 4px rgba(13, 105, 99, 0.3);">
+                        Set New Password &rarr;
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Link Fallback -->
+                <p style="font-size: 12px; color: #94a3b8; line-height: 18px; margin: 32px 0 0 0; word-break: break-all;">
+                  Or copy and paste this link into your browser:<br />
+                  <a href="{{resetUrl}}" style="color: #0D6963; text-decoration: underline;">{{resetUrl}}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center;">
+                <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0;">
+                  This password reset link expires in <strong>7 days</strong>.
+                </p>
+                <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+                  If you did not request or expect this password reset, please contact your administrator.
                 </p>
               </td>
             </tr>

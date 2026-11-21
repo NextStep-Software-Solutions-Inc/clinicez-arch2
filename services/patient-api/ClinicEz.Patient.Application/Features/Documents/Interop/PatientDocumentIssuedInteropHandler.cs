@@ -27,6 +27,7 @@ public sealed class PatientDocumentIssuedInteropHandler : IInteropHandler<Patien
     private readonly IStorageService _storage;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<PatientDocumentIssuedInteropHandler> _logger;
+    private readonly IPatientEncryptionService? _encryptionService;
 
     public PatientDocumentIssuedInteropHandler(
         IPatientRepository patients,
@@ -34,7 +35,8 @@ public sealed class PatientDocumentIssuedInteropHandler : IInteropHandler<Patien
         PatientDocumentNotifier notifier,
         IStorageService storage,
         IUnitOfWork unitOfWork,
-        ILogger<PatientDocumentIssuedInteropHandler> logger)
+        ILogger<PatientDocumentIssuedInteropHandler> logger,
+        IPatientEncryptionService? encryptionService = null)
     {
         _patients = patients;
         _documents = documents;
@@ -42,6 +44,7 @@ public sealed class PatientDocumentIssuedInteropHandler : IInteropHandler<Patien
         _storage = storage;
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _encryptionService = encryptionService;
     }
 
     public async Task HandleAsync(PatientDocumentIssuedPayload payload, InteropMessageContext context, CancellationToken ct)
@@ -273,11 +276,27 @@ public sealed class PatientDocumentIssuedInteropHandler : IInteropHandler<Patien
             return;
         }
 
-        var key = $"patients/{report.PatientId}/lab-results/{report.ReportId}/report.pdf";
-        await using var stream = new MemoryStream(bytes);
-        report.FileStorageKey = await _storage.UploadAsync(stream, key, "application/pdf", ct);
-        report.FileName = "report.pdf";
-        report.FileContentType = "application/pdf";
+        var key = $"patients/{report.PatientId}/lab-results/{report.ReportId}.cez";
+        if (_encryptionService != null)
+        {
+            var encrypted = await _encryptionService.EncryptAsync(bytes, report.PatientId, ct);
+            report.FileStorageKey = await _storage.SaveEncryptedAsync(key, encrypted.Ciphertext, ct);
+            report.FileName = "report.pdf";
+            report.FileContentType = "application/pdf";
+            report.EncryptionAlgorithm = encrypted.EncryptionAlgorithm;
+            report.EncryptionIvBase64 = encrypted.IvBase64;
+            report.EncryptionTagBase64 = encrypted.TagBase64;
+            report.WrappedKeyJson = encrypted.WrappedKeyJson;
+            report.EncryptedHash = encrypted.EncryptedHash;
+            report.EncryptedSizeBytes = encrypted.EncryptedSizeBytes;
+        }
+        else
+        {
+            await using var stream = new MemoryStream(bytes);
+            report.FileStorageKey = await _storage.UploadAsync(stream, key, "application/pdf", ct);
+            report.FileName = "report.pdf";
+            report.FileContentType = "application/pdf";
+        }
     }
 
     private async Task<bool> ApplyCertificateAsync(PatientDocumentIssuedPayload payload, CancellationToken ct)

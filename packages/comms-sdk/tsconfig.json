@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "target": "ES2022",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "composite": true,
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@clinicez/design-tokens": ["../design-tokens/src/index.ts"],
+      "@clinicez/design-tokens/*": ["../design-tokens/src/*"],
+      "@shared/safe": ["../shared-ts/index.ts"],
+      "@shared/safe/*": ["../shared-ts/*"]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "../design-tokens/src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "../design-tokens/src/**/*.test.ts"
+  ]
+}

@@ -20,4 +20,8 @@ public sealed class VitalSigns : BaseEntity
     public decimal? TemperatureCelsius { get; set; }
     public decimal? OxygenSaturationPercent { get; set; }
     public int? RespiratoryRateBreathsPerMin { get; set; }
+    public decimal? FastingBloodGlucoseMgDl { get; set; }
+    public int? SleepDurationMinutes { get; set; }
+    public int? DeepSleepMinutes { get; set; }
+    public string? Source { get; set; }
 }

@@ -14,7 +14,7 @@ namespace ClinicEz.Clinic.Application.Features.Patients.Commands;
 public sealed record AddPatientSurgicalHistoryCommand(
     Guid PatientId,
     string ProcedureName,
-    DateOnly SurgeryDate,
+    DateOnly? SurgeryDate = null,
     string? HospitalName = null,
     string? Findings = null,
     string? Complications = null,
@@ -31,13 +31,13 @@ public sealed class AddPatientSurgicalHistoryCommandValidator : AbstractValidato
 
 public sealed class AddPatientSurgicalHistoryCommandHandler : IRequestHandler<AddPatientSurgicalHistoryCommand, PatientSurgicalHistoryDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<PatientSurgicalHistory> _surgicalRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public AddPatientSurgicalHistoryCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<PatientSurgicalHistory> surgicalRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)

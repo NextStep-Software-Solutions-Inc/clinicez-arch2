@@ -1,12 +1,11 @@
 using System;
 using System.Linq;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Immunizations.DTOs;
-using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using FluentValidation;
@@ -28,16 +27,44 @@ public sealed record AdministerVaccineCommand(
     int DoseSequence,
     bool IsSeriesCompleted,
     string Route,
-    string InjectionSite,
+    string? InjectionSite,
     DateTime AdministeredAtUtc,
     Guid AdministeredByStaffId,
     string AdministeredByStaffName,
     string? AdministeredByPrcLicense,
-    string? Remarks
+    string? Remarks,
+    Guid? QueueItemId = null,
+    bool CompleteVisit = false
 ) : IRequest<PatientImmunizationDto>;
 
 public sealed class AdministerVaccineValidator : AbstractValidator<AdministerVaccineCommand>
 {
+    public static bool RequiresInjectionSite(string? route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return true;
+
+        var trimmed = route.Trim();
+        if (trimmed.Contains("Oral", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, "PO", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("(PO)", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("Nasal", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("Intranasal", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static string? NormalizeInjectionSite(string? route, string? injectionSite)
+    {
+        if (!RequiresInjectionSite(route))
+            return null;
+
+        return string.IsNullOrWhiteSpace(injectionSite) ? null : injectionSite.Trim();
+    }
+
     public AdministerVaccineValidator()
     {
         RuleFor(x => x.PatientId).NotEmpty();
@@ -46,7 +73,14 @@ public sealed class AdministerVaccineValidator : AbstractValidator<AdministerVac
         RuleFor(x => x.VaccineName).NotEmpty();
         RuleFor(x => x.LotBatchNumber).NotEmpty();
         RuleFor(x => x.Route).NotEmpty();
-        RuleFor(x => x.InjectionSite).NotEmpty();
+        RuleFor(x => x.InjectionSite)
+            .NotEmpty()
+            .When(x => RequiresInjectionSite(x.Route))
+            .WithMessage("Injection site is required for parenteral vaccine administration.");
+        RuleFor(x => x.InjectionSite)
+            .Must(site => !string.Equals(site?.Trim(), "Oral", StringComparison.OrdinalIgnoreCase))
+            .When(x => RequiresInjectionSite(x.Route) && !string.IsNullOrWhiteSpace(x.InjectionSite))
+            .WithMessage("Oral is not a valid anatomical injection site.");
         RuleFor(x => x.DoseSequence).GreaterThanOrEqualTo(1);
         RuleFor(x => x.AdministeredByStaffName).NotEmpty();
 
@@ -62,24 +96,27 @@ public sealed class AdministerVaccineValidator : AbstractValidator<AdministerVac
 
 public sealed class AdministerVaccineCommandHandler : IRequestHandler<AdministerVaccineCommand, PatientImmunizationDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<PatientImmunization> _immunizationRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IImmunizationEventPublisher _publisher;
+    private readonly IRepository<QueueItem>? _queueRepo;
 
     public AdministerVaccineCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<PatientImmunization> immunizationRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IImmunizationEventPublisher publisher)
+        IImmunizationEventPublisher publisher,
+        IRepository<QueueItem>? queueRepo = null)
     {
         _patientRepo = patientRepo;
         _immunizationRepo = immunizationRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _publisher = publisher;
+        _queueRepo = queueRepo;
     }
 
     public async Task<PatientImmunizationDto> Handle(AdministerVaccineCommand request, CancellationToken cancellationToken)
@@ -108,8 +145,8 @@ public sealed class AdministerVaccineCommandHandler : IRequestHandler<Administer
             ExpirationDate = request.ExpirationDate,
             DoseSequence = request.DoseSequence,
             IsSeriesCompleted = request.IsSeriesCompleted,
-            Route = request.Route,
-            InjectionSite = request.InjectionSite,
+            Route = request.Route.Trim(),
+            InjectionSite = AdministerVaccineValidator.NormalizeInjectionSite(request.Route, request.InjectionSite),
             AdministeredAtUtc = request.AdministeredAtUtc == default ? DateTime.UtcNow : request.AdministeredAtUtc,
             AdministeredByStaffId = request.AdministeredByStaffId,
             AdministeredByStaffName = request.AdministeredByStaffName,
@@ -123,14 +160,31 @@ public sealed class AdministerVaccineCommandHandler : IRequestHandler<Administer
         await _immunizationRepo.AddAsync(immunization, cancellationToken);
 
         // Publish interop event to outbox BEFORE SaveChanges commits (atomic outbox pattern)
-        if (patient.SyncPatientId.HasValue && patient.SyncPatientId.Value != Guid.Empty)
+        if (patient.CloudPatientId.HasValue && patient.CloudPatientId.Value != Guid.Empty)
         {
             await _publisher.PublishImmunizationAdministeredAsync(immunization, cancellationToken);
             immunization.IsSynchronizedToPatientApp = true;
             immunization.SynchronizedAtUtc = DateTime.UtcNow;
         }
 
-        TrySyncToPhilHealthProfile(patient, request.PhilHealthLibrary, request.PhilHealthCode);
+        if (request.QueueItemId.HasValue && request.CompleteVisit && _queueRepo != null)
+        {
+            var queueItem = await _queueRepo.Query(q => q.Id == request.QueueItemId.Value && q.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (queueItem != null && queueItem.Status != QueueStatus.Completed && queueItem.Status != QueueStatus.Cancelled)
+            {
+                queueItem.Status = QueueStatus.DischargedNonDoctor;
+                queueItem.CompletedTime = DateTime.UtcNow;
+                queueItem.DischargedAt = DateTime.UtcNow;
+                queueItem.DischargedByStaffId = request.AdministeredByStaffId;
+                queueItem.DischargeNotes = !string.IsNullOrWhiteSpace(request.Remarks)
+                    ? request.Remarks.Trim()
+                    : $"Discharged following vaccine administration: {request.VaccineName}";
+                queueItem.UpdatedAt = DateTime.UtcNow;
+                _queueRepo.Update(queueItem);
+            }
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new PatientImmunizationDto(
@@ -163,67 +217,5 @@ public sealed class AdministerVaccineCommandHandler : IRequestHandler<Administer
             immunization.IsSynchronizedToPatientApp,
             immunization.SynchronizedAtUtc
         );
-    }
-
-    private static void TrySyncToPhilHealthProfile(ClinicPatient patient, string philHealthLibrary, string philHealthCode)
-    {
-        if (patient.CustomFields == null || !patient.CustomFields.TryGetValue("philhealth_profile", out var profObj) || profObj == null)
-            return;
-
-        PhilHealthPatientProfileDto? prof = null;
-        if (profObj is PhilHealthPatientProfileDto typed)
-        {
-            prof = typed;
-        }
-        else
-        {
-            try
-            {
-                var json = profObj.ToString();
-                if (!string.IsNullOrWhiteSpace(json))
-                {
-                    prof = JsonSerializer.Deserialize<PhilHealthPatientProfileDto>(json,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                }
-            }
-            catch
-            {
-                return;
-            }
-        }
-
-        if (prof == null) return;
-
-        var lib = philHealthLibrary.ToLowerInvariant();
-        var code = philHealthCode.Trim();
-        if (string.IsNullOrWhiteSpace(code) || code.Equals("999", StringComparison.OrdinalIgnoreCase)) return;
-
-        if (lib.Contains("child"))
-        {
-            if (!prof.ChildImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
-                prof = prof with { ChildImmunizations = [..prof.ChildImmunizations, code] };
-        }
-        else if (lib.Contains("young"))
-        {
-            if (!prof.YoungWomanImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
-                prof = prof with { YoungWomanImmunizations = [..prof.YoungWomanImmunizations, code] };
-        }
-        else if (lib.Contains("preg"))
-        {
-            if (!prof.PregnantWomanImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
-                prof = prof with { PregnantWomanImmunizations = [..prof.PregnantWomanImmunizations, code] };
-        }
-        else if (lib.Contains("elderly"))
-        {
-            if (!prof.ElderlyImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
-                prof = prof with { ElderlyImmunizations = [..prof.ElderlyImmunizations, code] };
-        }
-        else
-        {
-            if (!prof.OtherImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
-                prof = prof with { OtherImmunizations = [..prof.OtherImmunizations, code] };
-        }
-
-        patient.CustomFields["philhealth_profile"] = prof;
     }
 }

@@ -9,6 +9,7 @@ import AuditTableSkeleton from './AuditTableSkeleton';
 import AuditEmptyState from './AuditEmptyState';
 import { useVirtualList } from '../../utils/useVirtualList';
 import { useBreakpoint } from '../../utils/useBreakpoint';
+import { useClinic } from '../../context/ClinicContext';
 import type { ClinicAuditEntryDto } from '../../services/clinicService';
 
 export interface AuditTableProps {
@@ -31,6 +32,9 @@ export interface AuditTableProps {
   listTopOffset?: number;
   viewMode?: 'cards' | 'table';
   onViewModeChange?: (mode: 'cards' | 'table') => void;
+  dateFormat?: string;
+  timeFormat?: string;
+  timeZoneId?: string;
 }
 
 export function AuditTable({
@@ -53,7 +57,15 @@ export function AuditTable({
   listTopOffset = 0,
   viewMode: controlledViewMode,
   onViewModeChange,
+  dateFormat: propDateFormat,
+  timeFormat: propTimeFormat,
+  timeZoneId: propTimeZoneId,
 }: AuditTableProps) {
+  const clinic = useClinic();
+  const effectiveDateFormat = propDateFormat || clinic?.dateFormat;
+  const effectiveTimeFormat = propTimeFormat || clinic?.timeFormat;
+  const effectiveTimeZoneId = propTimeZoneId || clinic?.timeZoneId;
+
   const { isCompact } = useBreakpoint();
   const [internalViewMode, setInternalViewMode] = useState<'cards' | 'table'>(
     isCompact ? 'cards' : 'table'
@@ -198,6 +210,9 @@ export function AuditTable({
                     onInspect={onInspect}
                     isEven={globalIndex % 2 === 1}
                     mode="table"
+                    dateFormat={effectiveDateFormat}
+                    timeFormat={effectiveTimeFormat}
+                    timeZoneId={effectiveTimeZoneId}
                   />
                 );
               })}
@@ -222,6 +237,9 @@ export function AuditTable({
                 onInspect={onInspect}
                 isEven={globalIndex % 2 === 1}
                 mode="card"
+                dateFormat={effectiveDateFormat}
+                timeFormat={effectiveTimeFormat}
+                timeZoneId={effectiveTimeZoneId}
               />
             );
           })}
@@ -301,13 +319,17 @@ const styles = StyleSheet.create({
   },
   tableScrollContent: {
     minWidth: '100%',
+    flexGrow: 1,
   },
   tableWrapper: {
     minWidth: 1100,
+    width: '100%',
+    flex: 1,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: '100%',
     backgroundColor: theme.colors.surfaceMuted,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
@@ -327,34 +349,44 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   colTimestamp: {
-    width: 160,
+    width: 175,
+    flexShrink: 0,
   },
   colCategory: {
     width: 110,
+    flexShrink: 0,
   },
   colSeverity: {
     width: 100,
+    flexShrink: 0,
   },
   colAction: {
-    width: 200,
+    flex: 2.5,
+    minWidth: 200,
   },
   colActor: {
-    width: 160,
+    flex: 1.5,
+    minWidth: 160,
   },
   colTarget: {
-    width: 150,
+    flex: 2,
+    minWidth: 150,
   },
   colPatient: {
-    width: 140,
+    flex: 1.5,
+    minWidth: 140,
   },
   colOutcome: {
     width: 90,
+    flexShrink: 0,
   },
   colInspect: {
     width: 90,
+    flexShrink: 0,
   },
   body: {
     backgroundColor: theme.colors.surface,
+    width: '100%',
   },
   footer: {
     flexDirection: 'row',
@@ -418,6 +450,7 @@ const styles = StyleSheet.create({
   },
   toggleBtnActive: {
     backgroundColor: theme.colors.primaryLight,
+    ...theme.shadows.brandSubtle,
   },
   toggleBtnInactive: {
     backgroundColor: theme.colors.transparent,

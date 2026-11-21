@@ -26,10 +26,17 @@ public sealed class LabResultReport : BaseEntity
     public DateTime? ReviewedAt { get; set; }
     public string? ReviewRemarks { get; set; }
 
-    /// <summary>Object key of the attached report file (patient uploads, signed PDFs); never inline bytes.</summary>
     public string? FileStorageKey { get; set; }
     public string? FileName { get; set; }
     public string? FileContentType { get; set; }
 
+    // Server-side PMK AES-256-GCM envelope encryption metadata
+    public string? EncryptionAlgorithm { get; set; } = "AES-256-GCM";
+    public string? EncryptionIvBase64 { get; set; }
+    public string? EncryptionTagBase64 { get; set; }
+    public string? EncryptedHash { get; set; }
+    public long? EncryptedSizeBytes { get; set; }
+    public string? WrappedKeyJson { get; set; }
+
     public ICollection<LabResult> Observations { get; set; } = [];
-}
+}

@@ -375,7 +375,22 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
   };
 
   return (
-    <ResponsiveLayout headerTitle="Import Patient Share" headerSubtitle="Import a patient record from a QR code, share token, or one-time code">
+    <ResponsiveLayout
+      headerTitle="Import Patient Share"
+      headerSubtitle="Import a patient record from a QR code, share token, or one-time code"
+      actions={[
+        {
+          id: 'back-to-patients',
+          label: 'Back to Patients',
+          shortLabel: 'Back',
+          icon: 'arrowLeft',
+          variant: 'outline',
+          onPress: () => {
+            navigation.dispatch(CommonActions.navigate('Patients'));
+          },
+        },
+      ]}
+    >
       <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {!canImport ? (
           <EmptyState

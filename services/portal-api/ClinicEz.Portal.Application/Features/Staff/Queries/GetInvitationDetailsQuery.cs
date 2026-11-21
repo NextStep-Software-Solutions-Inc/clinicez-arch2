@@ -19,7 +19,9 @@ public record InvitationDetailsDto(
     string? FacilityName,
     bool IsExpired,
     bool IsAlreadyAccepted,
-    DateTime? ExpiresAt
+    DateTime? ExpiresAt,
+    bool IsRevoked = false,
+    bool IsSuspended = false
 );
 
 public record GetInvitationDetailsQuery(string Token) : IRequest<InvitationDetailsDto>;
@@ -33,6 +35,22 @@ public class GetInvitationDetailsQueryHandler(IApplicationDbContext context) : I
             throw new KeyNotFoundException("Invitation token cannot be empty.");
         }
 
+        var cleanToken = request.Token.Trim().ToLowerInvariant();
+        if (cleanToken.StartsWith("rx-") || cleanToken.StartsWith("mc-") || cleanToken.StartsWith("ref-") || cleanToken.StartsWith("lab-") || cleanToken.StartsWith("sec-sha256-"))
+        {
+            throw new KeyNotFoundException("The provided token belongs to a clinical document, not a workspace invitation.");
+        }
+
+        if (cleanToken.Length == 65 && cleanToken[32] == '.')
+        {
+            throw new KeyNotFoundException("The provided token is an e-prescription verification token, not a workspace invitation.");
+        }
+
+        if (cleanToken.Length >= 50 && cleanToken.Length <= 60 && cleanToken.IndexOf('.') == 32)
+        {
+            throw new KeyNotFoundException("The provided token is a laboratory upload token, not a workspace invitation.");
+        }
+
         var member = await context.WorkspaceMembers
             .Include(m => m.Tenant)
             .FirstOrDefaultAsync(m => m.InvitationToken == request.Token, cancellationToken)
@@ -44,6 +62,8 @@ public class GetInvitationDetailsQueryHandler(IApplicationDbContext context) : I
 
         var isExpired = member.InvitationExpiresAt.HasValue && member.InvitationExpiresAt.Value < DateTime.UtcNow;
         var isAlreadyAccepted = member.Status == MemberStatus.Active;
+        var isRevoked = member.Status == MemberStatus.Revoked;
+        var isSuspended = member.Status == MemberStatus.Suspended;
 
         return new InvitationDetailsDto(
             member.Id,
@@ -55,7 +75,9 @@ public class GetInvitationDetailsQueryHandler(IApplicationDbContext context) : I
             profile?.Facility?.Name,
             isExpired,
             isAlreadyAccepted,
-            member.InvitationExpiresAt
+            member.InvitationExpiresAt,
+            isRevoked,
+            isSuspended
         );
     }
 }

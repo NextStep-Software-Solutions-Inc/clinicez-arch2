@@ -242,7 +242,7 @@ public class AppointmentBookedHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithPhilHealthDependentSponsor_ProvisionsClinicPatientWithProfile()
+    public async Task Handle_WithPhilHealthDependentSponsor_ProvisionsPatientWithProfile()
     {
         using var db = MessagingTestKit.CreateDbContext();
         var clinicId = Guid.NewGuid();
@@ -281,20 +281,17 @@ public class AppointmentBookedHandlerTests
         patient.Should().NotBeNull();
         patient!.FirstName.Should().Be("Maria");
         patient.LastName.Should().Be("Santos");
-        patient.PhilHealthNumber.Should().Be("12-345678901-2");
-        patient.SyncPatientId.Should().Be(patientId);
-        patient.CustomFields.Should().ContainKey("philhealth_profile");
+        patient.CloudPatientId.Should().Be(patientId);
 
-        var profile = patient.CustomFields["philhealth_profile"] as ClinicEz.Clinic.Application.Features.Yakap.DTOs.PhilHealthPatientProfileDto;
-        profile.Should().NotBeNull();
-        profile!.Pin.Should().Be("12-345678901-2");
-        profile.MemberPin.Should().Be("11-987654321-0");
-        profile.MemberType.Should().Be("DD");
-        profile.MemberFirstName.Should().Be("Jose");
-        profile.MemberLastName.Should().Be("Santos");
-        profile.MemberBirthDate.Should().Be("1992-03-15");
-        profile.DependentRelationship.Should().Be("S");
-        profile.IsWalkedIn.Should().Be("N");
+        var membership = await db.PatientPhilHealthMemberships.IgnoreQueryFilters().FirstOrDefaultAsync(m => m.PatientId == patientId);
+        membership.Should().NotBeNull();
+        membership!.MemberPin.Should().Be("12-345678901-2");
+        membership.PrincipalMemberPin.Should().Be("11-987654321-0");
+        membership.MemberType.Should().Be(ClinicEz.Clinic.Domain.Enums.PhilHealthMemberType.DD);
+        membership.PrincipalFirstName.Should().Be("Jose");
+        membership.PrincipalLastName.Should().Be("Santos");
+        membership.PrincipalDateOfBirth.Should().Be(new DateOnly(1992, 3, 15));
+        membership.DependentRelationship.Should().Be(ClinicEz.Clinic.Domain.Enums.PhilHealthDependentRelationship.S);
 
         var appt = await db.Appointments.IgnoreQueryFilters().FirstOrDefaultAsync(a => a.DraftId == draftId);
         appt.Should().NotBeNull();

@@ -51,7 +51,7 @@ public class HardenedDocumentGenerationTests
     [Fact]
     public void ClinicDocumentPdfService_Should_Generate_Valid_MedicalCertificate_PDF_With_Security_Seal()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-001",
             ClinicId = Guid.NewGuid(),
@@ -92,7 +92,7 @@ public class HardenedDocumentGenerationTests
             CreatedBy = "Dr. Allan Ramos"
         };
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = cert.PatientId,
             TenantId = settings.TenantId,
@@ -102,7 +102,7 @@ public class HardenedDocumentGenerationTests
             FirstName = "Maria Clara",
             LastName = "De Los Santos",
             DateOfBirth = new DateOnly(1992, 5, 14),
-            Gender = "Female",
+            Sex = BiologicalSex.Female,
             PhilHealthNumber = "PHIC-12-050192831-2"
         };
 
@@ -119,7 +119,7 @@ public class HardenedDocumentGenerationTests
     [Fact]
     public void ClinicDocumentPdfService_Should_Generate_Valid_Lab_Requisition_Slip_PDF_With_Dropzone_QR()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-001",
             ClinicId = Guid.NewGuid(),
@@ -170,7 +170,7 @@ public class HardenedDocumentGenerationTests
     [Fact]
     public void ClinicDocumentPdfService_Should_Generate_Valid_Prescription_PDF_Generics_Act_Compliant()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-001",
             ClinicId = Guid.NewGuid(),
@@ -230,7 +230,7 @@ public class HardenedDocumentGenerationTests
                 )
             },
             PublicVerificationToken: "test-rx-token",
-            PublicVerificationUrl: "https://clinicez.ph/rx-verify/test-rx-token",
+            PublicVerificationUrl: "https://clinicez.ph/verify/rx/test-rx-token",
             QrPayload: "CLINICEZ:RX:RX-20261004-0011:test-rx-token",
             DispenseStatus: "Pending",
             DispensedPharmacyName: null,
@@ -300,7 +300,7 @@ public class HardenedDocumentGenerationTests
     [Fact]
     public void ClinicDocumentPdfService_Should_Generate_Valid_Referral_Letter_PDF_With_Security_Seal()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-001",
             ClinicId = Guid.NewGuid(),
@@ -351,7 +351,7 @@ public class HardenedDocumentGenerationTests
             S2LicenseNumber = "S2-0987123"
         };
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = referral.PatientId,
             TenantId = settings.TenantId,
@@ -361,7 +361,7 @@ public class HardenedDocumentGenerationTests
             FirstName = "Juanito",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1980, 8, 20),
-            Gender = "Male",
+            Sex = BiologicalSex.Male,
             PhilHealthNumber = "PHIC-18-091238471-1"
         };
 
@@ -375,20 +375,10 @@ public class HardenedDocumentGenerationTests
         pdfText.Should().Contain("%%EOF");
     }
 
-    [Theory]
-    [InlineData("Juan Dela Cruz", "J**n D**a C**z")]
-    [InlineData("Maria Santos", "M***a S****s")]
-    [InlineData("Al Jo", "A* J*")]
-    public void DocumentVerificationResultDto_MaskName_Should_Protect_Patient_Privacy(string input, string expected)
-    {
-        var masked = ClinicEz.Clinic.Application.Features.Documents.DTOs.DocumentVerificationResultDto.MaskName(input);
-        masked.Should().Be(expected);
-    }
-
     [Fact]
     public void ClinicDocumentPdfService_Should_Generate_Valid_Reception_Placard_PDF()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-001",
             ClinicId = Guid.NewGuid(),
@@ -404,7 +394,7 @@ public class HardenedDocumentGenerationTests
 
         var pdfBytes = _pdfService.GenerateReceptionPlacardPdf(
             settings,
-            "https://dev.clinicez.net/join/E2FW28KT",
+            "https://dev.clinicez.net/join?code=E2FW28KT",
             "E2FW28KT",
             "Oct 15, 2026, 08:49 AM GMT+8 (in 23h)");
 
@@ -416,7 +406,7 @@ public class HardenedDocumentGenerationTests
         pdfText.Should().Contain("%%EOF");
     }
 
-    private static ClinicSettings CreateReportTestSettings() => new()
+    private static FacilitySettings CreateReportTestSettings() => new()
     {
         TenantId = "tenant-test-01",
         ClinicId = Guid.NewGuid(),
@@ -828,7 +818,7 @@ public class HardenedDocumentGenerationTests
         clinicContext.ClinicId.Returns(Guid.NewGuid());
         clinicContext.TenantId.Returns("tenant-1");
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var date = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
         var eodDto = new DailyEodReportDto(
@@ -956,7 +946,7 @@ public class HardenedDocumentGenerationTests
         clinicContext.StaffId.Returns(staffId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
         // Add real staff member to database
@@ -1276,77 +1266,13 @@ public class HardenedDocumentGenerationTests
         Encoding.ASCII.GetString(medCertPdf, 0, 10).Should().StartWith("%PDF-");
     }
 
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_Should_Resolve_By_Security_Digest()
-    {
-        var testDigest = "a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0";
-        var clinicContext = Substitute.For<IClinicContext>();
-        clinicContext.ClinicId.Returns(Guid.NewGuid());
-        clinicContext.TenantId.Returns("tenant-001");
-
-        var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
-        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
-        var sender = Substitute.For<MediatR.ISender>();
-        var pdfService = Substitute.For<IClinicDocumentPdfService>();
-
-        var cert = new MedicalCertificate
-        {
-            Id = Guid.NewGuid(),
-            TenantId = "tenant-001",
-            ClinicId = clinicContext.ClinicId,
-            CertificateNumber = "MC-20261020-0099",
-            PatientId = Guid.NewGuid(),
-            PatientName = "Maria Clara",
-            DoctorId = Guid.NewGuid(),
-            DoctorName = "Dr. Allan Ramos",
-            PrcLicenseNumber = "PRC-0056789",
-            IssueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            Diagnosis = "Acute Bronchitis",
-            FitnessStatus = "UnfitToWork",
-            Purpose = "Rest",
-            IsSigned = true,
-            SignedAt = DateTime.UtcNow,
-            SecurityDigest = testDigest
-        };
-
-        await medCertRepo.AddAsync(cert, CancellationToken.None);
-        await uow.SaveChangesAsync(CancellationToken.None);
-
-        var controller = new DocumentsController(
-            sender,
-            pdfService,
-            medCertRepo,
-            referralRepo,
-            staffRepo,
-            encounterRepo,
-            labOrderRepo,
-            settingsRepo,
-            patientRepo);
-
-        var actionResult = await controller.VerifyDocument(testDigest, CancellationToken.None);
-        actionResult.Should().NotBeNull();
-        actionResult.Result.Should().BeOfType<OkObjectResult>();
-
-        var okResult = (OkObjectResult)actionResult.Result!;
-        var response = okResult.Value as ApiResponse<ClinicEz.Clinic.Application.Features.Documents.DTOs.DocumentVerificationResultDto>;
-        response.Should().NotBeNull();
-        response!.Data.Should().NotBeNull();
-        response.Data!.IsVerified.Should().BeTrue();
-    }
-
     // =========================================================================
     // TEST GENERATION & EXTRACTION HELPERS
     // =========================================================================
 
-    private static ClinicSettings CreateBaseSettings(DocumentPaperSize paperSize)
+    private static FacilitySettings CreateBaseSettings(DocumentPaperSize paperSize)
     {
-        return new ClinicSettings
+        return new FacilitySettings
         {
             TenantId = "tenant-001",
             ClinicId = Guid.NewGuid(),
@@ -1361,7 +1287,7 @@ public class HardenedDocumentGenerationTests
         };
     }
 
-    private static MedicalCertificate CreateBaseMedicalCertificate(ClinicSettings settings)
+    private static MedicalCertificate CreateBaseMedicalCertificate(FacilitySettings settings)
     {
         return new MedicalCertificate
         {
@@ -1391,9 +1317,9 @@ public class HardenedDocumentGenerationTests
         };
     }
 
-    private static ClinicPatient CreateBasePatient(ClinicSettings settings)
+    private static Patient CreateBasePatient(FacilitySettings settings)
     {
-        return new ClinicPatient
+        return new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = settings.TenantId,
@@ -1403,12 +1329,12 @@ public class HardenedDocumentGenerationTests
             FirstName = "Maria Clara",
             LastName = "De Los Santos",
             DateOfBirth = new DateOnly(1992, 5, 14),
-            Gender = "Female",
+            Sex = BiologicalSex.Female,
             PhilHealthNumber = "PHIC-12-050192831-2"
         };
     }
 
-    private byte[] GenerateMedicalCertificate(ClinicSettings settings, SignatureMode mode, byte[]? signatureBytes = null)
+    private byte[] GenerateMedicalCertificate(FacilitySettings settings, SignatureMode mode, byte[]? signatureBytes = null)
     {
         var cert = CreateBaseMedicalCertificate(settings);
         var patient = CreateBasePatient(settings);
@@ -1420,7 +1346,7 @@ public class HardenedDocumentGenerationTests
             signatureBytes);
     }
 
-    private byte[] GeneratePrescription(ClinicSettings settings, SignatureMode mode, bool containsDangerousDrug, byte[]? signatureBytes = null)
+    private byte[] GeneratePrescription(FacilitySettings settings, SignatureMode mode, bool containsDangerousDrug, byte[]? signatureBytes = null)
     {
         var items = new List<PrescriptionSlipItemDto>
         {
@@ -1461,7 +1387,7 @@ public class HardenedDocumentGenerationTests
             SpecialInstructions: "Follow exact dosing schedule",
             Items: items,
             PublicVerificationToken: "test-rx-token",
-            PublicVerificationUrl: "https://clinicez.ph/verify/test-rx-token",
+            PublicVerificationUrl: "https://clinicez.ph/verify/rx/test-rx-token",
             QrPayload: "CLINICEZ:RX:RX-20261020-0088:test-rx-token",
             DispenseStatus: "Pending",
             DispensedPharmacyName: null,
@@ -1480,7 +1406,7 @@ public class HardenedDocumentGenerationTests
             signatureBytes);
     }
 
-    private byte[] GenerateLabSlip(ClinicSettings settings, SignatureMode mode, byte[]? signatureBytes = null)
+    private byte[] GenerateLabSlip(FacilitySettings settings, SignatureMode mode, byte[]? signatureBytes = null)
     {
         var slipDto = new LabOrderSlipDto(
             OrderId: Guid.NewGuid(),
@@ -1515,7 +1441,7 @@ public class HardenedDocumentGenerationTests
             signatureBytes);
     }
 
-    private byte[] GenerateReferral(ClinicSettings settings, SignatureMode mode, byte[]? signatureBytes = null)
+    private byte[] GenerateReferral(FacilitySettings settings, SignatureMode mode, byte[]? signatureBytes = null)
     {
         var referral = new ReferralLetter
         {
@@ -1674,35 +1600,67 @@ public class HardenedDocumentGenerationTests
 
             var endIdx = span.Slice(streamStart).IndexOf(endStreamToken);
             if (endIdx < 0) break;
-            int streamLength = endIdx;
-
-            while (streamLength > 0 && (pdfBytes[streamStart + streamLength - 1] == '\r' || pdfBytes[streamStart + streamLength - 1] == '\n'))
+            int rawLength = endIdx;
+            int streamLength = rawLength;
+            if (streamLength > 0 && pdfBytes[streamStart + streamLength - 1] == '\n')
+            {
+                streamLength--;
+                if (streamLength > 0 && pdfBytes[streamStart + streamLength - 1] == '\r')
+                {
+                    streamLength--;
+                }
+            }
+            else if (streamLength > 0 && pdfBytes[streamStart + streamLength - 1] == '\r')
             {
                 streamLength--;
             }
 
+            string? content = null;
             try
             {
                 using var mem = new MemoryStream(pdfBytes, streamStart, streamLength);
                 using var zlib = new ZLibStream(mem, CompressionMode.Decompress);
                 using var reader = new StreamReader(zlib, Encoding.UTF8);
-                var content = reader.ReadToEnd();
-                sb.Append(content);
-                decompressedStreams.Add(content);
+                content = reader.ReadToEnd();
             }
             catch
             {
-                // Stream is not zlib or raw uncompressed image data, continue safely
+                // If the final byte of the RFC 1950 Adler-32 trailer was 0x0D/0x0A, fall back to self-terminating RFC 1951 DEFLATE.
+                if (rawLength > 6 &&
+                    (pdfBytes[streamStart] & 0x0F) == 8 &&
+                    (pdfBytes[streamStart] >> 4) <= 7 &&
+                    ((pdfBytes[streamStart] * 256 + pdfBytes[streamStart + 1]) % 31) == 0 &&
+                    (pdfBytes[streamStart + 1] & 0x20) == 0)
+                {
+                    try
+                    {
+                        using var deflateMem = new MemoryStream(pdfBytes, streamStart + 2, rawLength - 2);
+                        using var deflate = new DeflateStream(deflateMem, CompressionMode.Decompress);
+                        using var reader = new StreamReader(deflate, Encoding.UTF8);
+                        content = reader.ReadToEnd();
+                    }
+                    catch
+                    {
+                        // Stream is non-Flate binary image data; ignore safely.
+                    }
+                }
+            }
+
+            if (content is not null)
+            {
+                sb.Append(content);
+                decompressedStreams.Add(content);
             }
 
             pos = streamStart + endIdx + endStreamToken.Length;
         }
 
-        // Parse ToUnicode CMaps
-        var cmap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Parse ToUnicode CMaps per font subset so later subsets never overwrite earlier glyph IDs
+        var cmaps = new List<Dictionary<string, string>>();
         foreach (var stream in decompressedStreams)
         {
             if (!stream.Contains("begincmap")) continue;
+            var cmap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             // 1. beginbfchar ... endbfchar
             int bfCharIdx = 0;
@@ -1753,10 +1711,15 @@ public class HardenedDocumentGenerationTests
                 }
                 bfRangeIdx = endBfRange + 10;
             }
+
+            if (cmap.Count > 0)
+            {
+                cmaps.Add(cmap);
+            }
         }
 
-        // If we have CMap entries, decode hex strings in content streams
-        if (cmap.Count > 0)
+        // If we have CMap entries, decode hex strings in content streams across each font subset CMap
+        if (cmaps.Count > 0)
         {
             var decodedSb = new StringBuilder();
             foreach (var stream in decompressedStreams)
@@ -1765,21 +1728,22 @@ public class HardenedDocumentGenerationTests
 
                 // Match <00240033...>
                 var hexMatches = System.Text.RegularExpressions.Regex.Matches(stream, @"<([0-9A-Fa-f]{4,})>");
-                foreach (System.Text.RegularExpressions.Match m in hexMatches)
+                foreach (var cmap in cmaps)
                 {
-                    var hex = m.Groups[1].Value;
-                    for (int i = 0; i + 4 <= hex.Length; i += 4)
+                    foreach (System.Text.RegularExpressions.Match m in hexMatches)
                     {
-                        if (i + 4 <= hex.Length)
+                        var hex = m.Groups[1].Value;
+                        for (int i = 0; i + 4 <= hex.Length; i += 4)
                         {
                             var code = hex.Substring(i, 4);
-                            if (cmap.TryGetValue(code, out var ch))
+                            if (cmap.TryGetValue(code, out var ch) && ch.Length > 0 && ch[0] != (char)0)
                             {
                                 decodedSb.Append(ch);
                             }
                         }
+                        decodedSb.Append(' ');
                     }
-                    decodedSb.Append(' ');
+                    decodedSb.AppendLine();
                 }
 
                 // Also match literal strings (text)

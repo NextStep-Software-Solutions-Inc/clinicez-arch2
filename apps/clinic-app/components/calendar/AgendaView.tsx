@@ -8,6 +8,7 @@ import { CalendarSkeleton } from './CalendarSkeleton';
 import { AppointmentCard } from './AppointmentCard';
 import type { CalendarViewProps, ExtendedAppointmentItem } from './types';
 import type { AppointmentStatus } from '../../services/clinicService';
+import { getAppointmentLocalDateTime } from './calendarUtils';
 
 const STATUS_FILTERS: { label: string; value: string }[] = [
   { label: 'All', value: 'ALL' },
@@ -43,7 +44,7 @@ export function AgendaView({
     );
 
     for (const a of sorted) {
-      const d = a.scheduledAt.split('T')[0];
+      const d = getAppointmentLocalDateTime(a.scheduledAt).dateStr;
       if (!map[d]) map[d] = [];
       map[d].push(a);
     }

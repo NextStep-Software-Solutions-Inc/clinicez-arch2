@@ -5,11 +5,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.DTOs;
 using ClinicEz.Clinic.Application.Common.Exceptions;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Queue.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Workspace;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +30,11 @@ public sealed record CheckInPatientCommand(
     QueuePriority Priority = QueuePriority.Routine,
     string? ChiefComplaint = null,
     string? RoomOrStation = null,
-    Guid? RoomId = null) : IRequest<QueueItemDto>;
+    Guid? RoomId = null,
+    DateOnly? QueueDate = null,
+    VisitType VisitType = VisitType.RoutineCheckup,
+    string? SeriesPrefix = null,
+    bool AllowDuplicateActive = false) : IRequest<QueueItemDto>;
 
 public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPatientCommand>
 {
@@ -37,9 +43,13 @@ public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPa
         RuleFor(x => x.PatientId).NotEmpty();
         RuleFor(x => x.PatientName).NotEmpty().MaximumLength(150);
         RuleFor(x => x.Priority).IsInEnum();
+        RuleFor(x => x.VisitType).IsInEnum();
         RuleFor(x => x.ChiefComplaint)
             .MaximumLength(255)
             .WithMessage("Chief complaint must not exceed 255 characters.");
+        RuleFor(x => x.SeriesPrefix)
+            .MaximumLength(10)
+            .When(x => !string.IsNullOrEmpty(x.SeriesPrefix));
     }
 }
 
@@ -51,8 +61,11 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
     private readonly IClinicContext _clinicContext;
     private readonly IClinicIdentityProvider _clinicIdentity;
     private readonly IPatientAppointmentPublisher _appointmentPublisher;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
     private readonly IRepository<StaffMember>? _staffRepository;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<FacilitySettings>? _settingsRepository;
+    private readonly IRepository<Patient>? _patientRepository;
 
     public CheckInPatientCommandHandler(
         IRepository<QueueItem> queueRepository,
@@ -61,8 +74,11 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         IClinicContext clinicContext,
         IClinicIdentityProvider clinicIdentity,
         IPatientAppointmentPublisher appointmentPublisher,
-        IRepository<ClinicRoom>? roomRepository = null,
-        IRepository<StaffMember>? staffRepository = null)
+        IRepository<Room>? roomRepository = null,
+        IRepository<StaffMember>? staffRepository = null,
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<FacilitySettings>? settingsRepository = null,
+        IRepository<Patient>? patientRepository = null)
     {
         _queueRepository = queueRepository;
         _appointmentRepository = appointmentRepository;
@@ -72,48 +88,82 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         _appointmentPublisher = appointmentPublisher;
         _roomRepository = roomRepository;
         _staffRepository = staffRepository;
+        _workspaceProfiles = workspaceProfiles;
+        _settingsRepository = settingsRepository;
+        _patientRepository = patientRepository;
     }
 
     public async Task<QueueItemDto> Handle(CheckInPatientCommand request, CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = request.QueueDate
+            ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, cancellationToken, _settingsRepository);
 
-        // Enforce active queue day uniqueness: prevent duplicate active tickets today
-        QueueStatus[] activeStatuses =
-        [
-            QueueStatus.Waiting,
-            QueueStatus.Triaged,
-            QueueStatus.InConsultation,
-            QueueStatus.PendingProcedure,
-            QueueStatus.ReEvaluation,
-            QueueStatus.OnHold
-        ];
-
-        var activeTicket = await _queueRepository.Query(q =>
-            q.ClinicId == _clinicContext.ClinicId &&
-            q.QueueDate == today &&
-            q.PatientId == request.PatientId &&
-            activeStatuses.Contains(q.Status))
-            .OrderByDescending(q => q.CheckInTime)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (activeTicket != null)
+        // Enforce active queue day uniqueness: prevent duplicate active tickets today across clinical visits unless explicitly allowed by staff.
+        // Terminal tickets (Completed, Cancelled, NoShow, DischargedNonDoctor, Diverted) do not conflict.
+        if (!request.AllowDuplicateActive)
         {
-            throw new ActiveQueueTicketConflictException(
-                activeTicket.Id,
-                activeTicket.QueueNumber,
-                activeTicket.Status,
-                activeTicket.PatientName);
+            QueueStatus[] activeStatuses =
+            [
+                QueueStatus.Waiting,
+                QueueStatus.Triaged,
+                QueueStatus.InConsultation,
+                QueueStatus.PendingProcedure,
+                QueueStatus.ReEvaluation,
+                QueueStatus.OnHold
+            ];
+
+            var activeCandidates = await _queueRepository.Query(q =>
+                q.ClinicId == _clinicContext.ClinicId &&
+                q.QueueDate == today &&
+                q.PatientId == request.PatientId &&
+                activeStatuses.Contains(q.Status))
+                .OrderByDescending(q => q.CheckInTime)
+                .ToListAsync(cancellationToken);
+
+            var activeTicket = activeCandidates.FirstOrDefault(q => Enum.IsDefined(q.VisitType));
+
+            if (activeTicket != null)
+            {
+                throw new ActiveQueueTicketConflictException(
+                    activeTicket.Id,
+                    activeTicket.QueueNumber,
+                    activeTicket.Status,
+                    activeTicket.PatientName);
+            }
         }
 
-        // Sequence number generation for today in this clinic
-        var lastSequence = await _queueRepository.Query(q => 
-            q.ClinicId == _clinicContext.ClinicId && 
-            q.QueueDate == today)
-            .MaxAsync(q => (int?)q.SequenceNumber, cancellationToken) ?? 0;
+        // Sequence number generation for today in this clinic matching SeriesPrefix
+        string seriesPrefix;
+        if (!string.IsNullOrWhiteSpace(request.SeriesPrefix))
+        {
+            var rawSeriesPrefix = request.SeriesPrefix.Trim().TrimEnd('-').ToUpperInvariant();
+            seriesPrefix = string.IsNullOrWhiteSpace(rawSeriesPrefix) ? "Q" : rawSeriesPrefix;
+        }
+        else
+        {
+            var isSeniorOrPwd = false;
+            if (_patientRepository != null)
+            {
+                var patient = await _patientRepository.Query(p =>
+                    p.Id == request.PatientId &&
+                    p.ClinicId == _clinicContext.ClinicId)
+                    .FirstOrDefaultAsync(cancellationToken);
 
-        var nextSequence = lastSequence + 1;
-        var queueNumber = $"Q-{nextSequence:D3}";
+                if (patient != null)
+                {
+                    isSeniorOrPwd = PatientPriorityHelper.IsSeniorOrPwd(patient, today);
+                }
+            }
+
+            seriesPrefix = isSeniorOrPwd ? "SQ" : "Q";
+        }
+
+        var (nextSequence, queueNumber) = await QueueSeriesHelper.GetNextQueueSequenceAsync(
+            _queueRepository,
+            _clinicContext.ClinicId,
+            today,
+            seriesPrefix,
+            cancellationToken);
 
         Appointment? appointment = null;
         if (request.AppointmentId.HasValue)
@@ -211,6 +261,7 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             RoomId = resolvedRoomId,
             Priority = request.Priority,
             Status = QueueStatus.Waiting,
+            VisitType = request.VisitType,
             CheckInTime = DateTime.UtcNow,
             ChiefComplaint = sanitizedComplaint,
             RoomOrStation = resolvedRoomOrStation,
@@ -280,7 +331,11 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             false,
             null,
             queueItem.RoomOrStation,
-            queueItem.RoomId);
+            queueItem.RoomId,
+            Enum.IsDefined(queueItem.VisitType) ? queueItem.VisitType : null,
+            queueItem.DischargeNotes,
+            queueItem.DischargedAt,
+            queueItem.DischargedByStaffId);
     }
 
     private static string? SanitizeChiefComplaint(string? rawInput)

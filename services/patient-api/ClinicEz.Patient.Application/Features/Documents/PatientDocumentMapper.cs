@@ -100,7 +100,7 @@ public sealed class PatientDocumentMapper
     {
         var fileUrl = string.IsNullOrEmpty(report.FileStorageKey)
             ? null
-            : await _storage.GeneratePresignedDownloadUrlAsync(report.FileStorageKey, FileLinkLifetime, cancellationToken);
+            : $"/api/v1/patients/{report.PatientId}/documents/lab-results/{report.Id}/stream";
 
         return new LabResultDto(
             report.Id,

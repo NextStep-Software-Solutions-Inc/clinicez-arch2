@@ -7,6 +7,7 @@ using ClinicEz.Clinic.Application.Features.Staff.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using MediatR;
@@ -16,6 +17,9 @@ using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Documents.Configuration;
+using System.Security.Cryptography;
+using ClinicEz.Clinic.Application.Common.Helpers;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
@@ -37,7 +41,14 @@ public sealed record CreateStaffMemberCommand(
     string? PhilHealthPan = null,
     IReadOnlyList<Guid>? AssignedRoomIds = null,
     string? SignatureSpecimen = null,
-    SignatureMode? DefaultSignatureMode = null) : IRequest<StaffMemberDto>;
+    SignatureMode? DefaultSignatureMode = null,
+    bool IsDirectoryOptIn = false,
+    DateOnly? PrcExpiryDate = null,
+    string? PrcEvidenceObjectKey = null,
+    string? VerificationContact = null,
+    string? PublicBio = null,
+    string? AvatarUrl = null,
+    bool SkipPendingVerificationSync = false) : IRequest<StaffMemberDto>;
 
 public sealed class CreateStaffMemberCommandValidator : AbstractValidator<CreateStaffMemberCommand>
 {
@@ -55,9 +66,46 @@ public sealed class CreateStaffMemberCommandValidator : AbstractValidator<Create
                 .WithMessage("PRC License Number is mandatory for Doctors.");
         });
 
+        When(x => x.IsDirectoryOptIn, () =>
+        {
+            RuleFor(x => x.Role)
+                .Must(ClinicianDirectoryValidationHelper.IsClinicianRole)
+                .WithMessage("Only Doctors and Nurses can opt into the public directory.");
+
+            RuleFor(x => x.PrcLicenseNumber)
+                .Must(PractitionerIdentity.IsValidPrcFormat)
+                .WithMessage("A valid PRC license number is required for directory verification.");
+
+            RuleFor(x => x.PrcExpiryDate)
+                .Must(d => d.HasValue && d.Value >= DateOnly.FromDateTime(DateTime.UtcNow))
+                .WithMessage("A valid, non-expired PRC expiry date is required for directory verification.");
+
+            RuleFor(x => x.PrcEvidenceObjectKey)
+                .NotEmpty()
+                .WithMessage("PRC proof document must be uploaded before opting into directory verification.");
+
+            RuleFor(x => x.VerificationContact)
+                .NotEmpty()
+                .MaximumLength(255)
+                .WithMessage("A practitioner verification contact is required for directory verification.");
+        });
+
         When(x => !string.IsNullOrEmpty(x.PhilHealthPan), () =>
         {
             RuleFor(x => x.PhilHealthPan).MaximumLength(50);
+        });
+
+        When(x => !string.IsNullOrWhiteSpace(x.Email), () =>
+        {
+            RuleFor(x => x.Email)
+                .MaximumLength(255);
+        });
+
+        When(x => !string.IsNullOrWhiteSpace(x.Email) && string.IsNullOrEmpty(x.InitialPassword) && !x.SendInviteEmail, () =>
+        {
+            RuleFor(x => x.Email)
+                .EmailAddress()
+                .WithMessage("A valid email address is required.");
         });
 
         When(x => !string.IsNullOrEmpty(x.InitialPassword), () =>
@@ -70,29 +118,41 @@ public sealed class CreateStaffMemberCommandValidator : AbstractValidator<Create
                 .MinimumLength(8)
                 .WithMessage("Temporary password must be at least 8 characters.");
         });
+
+        When(x => x.SendInviteEmail, () =>
+        {
+            RuleFor(x => x.Email)
+                .NotEmpty()
+                .EmailAddress()
+                .WithMessage("A valid email address is required when sending an invitation email.");
+        });
     }
 }
 
 public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaffMemberCommand, StaffMemberDto>
 {
     private readonly IRepository<StaffMember> _staffRepository;
-    private readonly IRepository<ClinicRole> _roleRepository;
-    private readonly IRepository<ClinicSettings> _settingsRepository;
+    private readonly IRepository<Role> _roleRepository;
+    private readonly IRepository<FacilitySettings> _settingsRepository;
     private readonly IFacilityLicenseValidator _licenseValidator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IFacilityPasswordHasher _passwordHasher;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
+    private readonly IClinicStaffInvitationNotifier? _invitationNotifier;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public CreateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
-        IRepository<ClinicRole> roleRepository,
-        IRepository<ClinicSettings> settingsRepository,
+        IRepository<Role> roleRepository,
+        IRepository<FacilitySettings> settingsRepository,
         IFacilityLicenseValidator licenseValidator,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IFacilityPasswordHasher? passwordHasher = null,
-        IRepository<ClinicRoom>? roomRepository = null)
+        IRepository<Room>? roomRepository = null,
+        IClinicStaffInvitationNotifier? invitationNotifier = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _staffRepository = staffRepository;
         _roleRepository = roleRepository;
@@ -102,6 +162,8 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         _clinicContext = clinicContext;
         _passwordHasher = passwordHasher ?? new FacilityPasswordHasher();
         _roomRepository = roomRepository;
+        _invitationNotifier = invitationNotifier;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<StaffMemberDto> Handle(CreateStaffMemberCommand request, CancellationToken cancellationToken)
@@ -127,6 +189,40 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             throw new ValidationException("Facility license has expired. The clinic is operating in Grace Read-Only mode. Staff management is locked.");
         }
 
+        ClinicianDirectoryValidationHelper.ValidateOptInRequirements(
+            request.Role,
+            request.IsDirectoryOptIn,
+            request.PrcLicenseNumber,
+            request.PrcExpiryDate,
+            request.PrcEvidenceObjectKey,
+            request.VerificationContact);
+
+        var normalizedEmail = StaffEmailUniquenessHelper.NormalizeEmail(request.Email);
+
+        if (request.SendInviteEmail && normalizedEmail == null)
+        {
+            throw new ValidationException("A valid email address is required when sending an invitation email.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.InitialPassword) && normalizedEmail == null)
+        {
+            throw new ValidationException("An email address is required when provisioning login credentials for a staff member.");
+        }
+
+        if (normalizedEmail != null)
+        {
+            var duplicateEmail = await _staffRepository.Query(s =>
+                s.ClinicId == _clinicContext.ClinicId &&
+                s.Email != null &&
+                s.Email.ToLower() == normalizedEmail)
+                .AnyAsync(cancellationToken);
+
+            if (duplicateEmail)
+            {
+                throw new ValidationException(StaffEmailUniquenessHelper.DuplicateStaffEmailMessage);
+            }
+        }
+
         // Security Hardening: Derive MaxStaff limit strictly from the validated cryptographic payload!
         int maxStaffLimit = licenseResult.Payload?.Limits?.MaxStaff ?? 5;
         int currentActiveStaff = await _staffRepository.Query(s => s.ClinicId == _clinicContext.ClinicId && s.IsActive)
@@ -136,6 +232,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         {
             throw new ValidationException($"Staff limit reached: Your facility license allows up to {maxStaffLimit} active staff members ({currentActiveStaff} currently active). Please upgrade your facility license to add more staff.");
         }
+
         Guid? assignedRoleId = request.ClinicRoleId;
         string? assignedRoleName = null;
 
@@ -165,8 +262,8 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
 
             if (defaultRoleName != null)
             {
-                var defaultRole = await _roleRepository.Query(r => 
-                    r.ClinicId == _clinicContext.ClinicId && 
+                var defaultRole = await _roleRepository.Query(r =>
+                    r.ClinicId == _clinicContext.ClinicId &&
                     r.Name == defaultRoleName)
                     .FirstOrDefaultAsync(cancellationToken);
 
@@ -208,24 +305,6 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
 
         if (!string.IsNullOrWhiteSpace(request.InitialPassword))
         {
-            if (string.IsNullOrWhiteSpace(request.Email))
-            {
-                throw new ValidationException("An email address is required when provisioning login credentials for a staff member.");
-            }
-
-            var normalizedEmail = request.Email.Trim().ToLowerInvariant();
-            var duplicateEmail = await _staffRepository.Query(s =>
-                s.ClinicId == _clinicContext.ClinicId &&
-                s.Email != null &&
-                s.Email.ToLower() == normalizedEmail &&
-                s.PasswordHash != null)
-                .AnyAsync(cancellationToken);
-
-            if (duplicateEmail)
-            {
-                throw new ValidationException($"Another staff member with email '{request.Email.Trim()}' already has login credentials.");
-            }
-
             var problems = _passwordHasher.ValidateStrength(request.InitialPassword, 8);
             if (problems.Count > 0)
             {
@@ -235,6 +314,24 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             passwordHash = _passwordHasher.Hash(request.InitialPassword);
             mustChangePassword = true;
             returnedTempPassword = request.InitialPassword;
+        }
+
+        StaffAccountStatus status;
+        string? invitationToken = null;
+        DateTime? invitationExpiresAt = null;
+        DateTime? inviteAcceptedAt = null;
+        string? inviteUrl = null;
+
+        if (!string.IsNullOrWhiteSpace(request.InitialPassword))
+        {
+            status = StaffAccountStatus.Active;
+            inviteAcceptedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            status = StaffAccountStatus.Invited;
+            invitationToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+            invitationExpiresAt = DateTime.UtcNow.AddDays(7);
         }
 
         var staff = new StaffMember
@@ -248,16 +345,26 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             MiddleName = request.MiddleName?.Trim(),
             Title = request.Title?.Trim(),
             Role = request.Role,
-            Email = request.Email?.Trim(),
+            Email = normalizedEmail,
             PhoneNumber = request.PhoneNumber?.Trim(),
             PrcLicenseNumber = request.PrcLicenseNumber?.Trim(),
             PtrNumber = request.PtrNumber?.Trim(),
             S2LicenseNumber = request.S2LicenseNumber?.Trim(),
             Specialty = request.Specialty?.Trim(),
             PhilHealthPan = request.PhilHealthPan?.Trim(),
+            IsDirectoryOptIn = request.IsDirectoryOptIn,
+            PrcExpiryDate = request.PrcExpiryDate,
+            PrcEvidenceObjectKey = string.IsNullOrWhiteSpace(request.PrcEvidenceObjectKey) ? null : request.PrcEvidenceObjectKey.Trim(),
+            VerificationContact = string.IsNullOrWhiteSpace(request.VerificationContact) ? null : request.VerificationContact.Trim(),
+            PublicBio = string.IsNullOrWhiteSpace(request.PublicBio) ? null : request.PublicBio.Trim(),
+            AvatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl.Trim(),
             SignatureSpecimen = request.SignatureSpecimen,
             DefaultSignatureMode = request.DefaultSignatureMode ?? SignatureMode.ESignatureSpecimen,
             IsActive = true,
+            Status = status,
+            InvitationToken = invitationToken,
+            InvitationExpiresAt = invitationExpiresAt,
+            InviteAcceptedAt = inviteAcceptedAt,
             PasswordHash = passwordHash,
             MustChangePassword = mustChangePassword,
             TokenVersion = passwordHash != null ? 1 : 0,
@@ -266,35 +373,51 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         };
         staff.SetAssignedRoomIds(validRoomIds);
 
-        await _staffRepository.AddAsync(staff, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        if (status == StaffAccountStatus.Invited && invitationToken != null)
+        {
+            inviteUrl = _invitationNotifier?.BuildInviteUrl(invitationToken, settings?.TenantSlug, settings?.FacilitySlug);
+            if (request.SendInviteEmail)
+            {
+                _invitationNotifier?.EnqueueInvitationEmail(
+                    _clinicContext.TenantId,
+                    _clinicContext.ClinicId,
+                    settings?.ClinicName ?? "Clinic EZ",
+                    settings?.TenantSlug,
+                    settings?.FacilitySlug,
+                    staff,
+                    invitationToken);
+            }
+        }
 
-        return new StaffMemberDto(
-            staff.Id,
-            staff.TenantId,
-            staff.ClinicId,
-            staff.ClinicRoleId,
+        await _staffRepository.AddAsync(staff, cancellationToken);
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (StaffEmailUniquenessHelper.IsStaffEmailUniqueViolation(ex))
+        {
+            throw new ValidationException(StaffEmailUniquenessHelper.DuplicateStaffEmailMessage);
+        }
+
+        if (!request.SkipPendingVerificationSync
+            && request.IsDirectoryOptIn
+            && _directorySyncService != null
+            && settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+        {
+            await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                settings,
+                throwOnConflict: false,
+                _clinicContext.StaffId?.ToString(),
+                _clinicContext.StaffName,
+                cancellationToken);
+        }
+
+        return StaffMemberDto.FromEntity(
+            staff,
             assignedRoleName,
-            staff.FirstName,
-            staff.LastName,
-            staff.MiddleName,
-            staff.Title,
-            staff.Role,
-            staff.Email,
-            staff.PhoneNumber,
-            staff.PrcLicenseNumber,
-            staff.PtrNumber,
-            staff.S2LicenseNumber,
-            staff.Specialty,
-            staff.IsActive,
-            staff.CreatedAt,
-            HasCredentials: passwordHash != null,
-            MustChangePassword: mustChangePassword,
-            TemporaryPassword: returnedTempPassword,
-            PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomIds: staff.GetAssignedRoomIds(),
-            AssignedRoomNames: assignedRoomNames,
-            SignatureSpecimen: staff.SignatureSpecimen,
-            DefaultSignatureMode: staff.DefaultSignatureMode);
+            assignedRoomNames,
+            hasCredentials: passwordHash != null,
+            temporaryPassword: returnedTempPassword,
+            inviteUrl: inviteUrl);
     }
 }

@@ -477,24 +477,25 @@ describe("Milestone 4 Challenger 2: Search Relevance, Categories & Deep Linking 
       }
     });
 
-    test("4.3: Branch items deep link directly to the branches workstation", () => {
+    test("4.3: Branch items deep link directly to their branch detail page", () => {
       const branchItems = getBranchItems(mockBranches, TEST_TENANT).filter(
         (i) => i.category === "branches"
       );
       expect(branchItems.length).toBe(3);
-      for (const item of branchItems) {
-        expect(item.url).toBe(`/${TEST_TENANT}/dashboard/branches`);
-      }
+      expect(branchItems.map((item) => item.url)).toEqual(
+        mockBranches.map((branch) => `/${TEST_TENANT}/dashboard/branches/${branch.id}`)
+      );
     });
 
-    test("4.4: Facility items deep link directly to the branches workstation", () => {
+    test("4.4: Facility items deep link directly to their parent branch detail page", () => {
       const facilityItems = getBranchItems(mockBranches, TEST_TENANT).filter(
         (i) => i.category === "facilities"
       );
       expect(facilityItems.length).toBe(4);
-      for (const item of facilityItems) {
-        expect(item.url).toBe(`/${TEST_TENANT}/dashboard/branches`);
-      }
+      const expectedFacilityUrls = mockBranches.flatMap((branch) =>
+        (branch.facilities || []).map(() => `/${TEST_TENANT}/dashboard/branches/${branch.id}`)
+      );
+      expect(facilityItems.map((item) => item.url)).toEqual(expectedFacilityUrls);
     });
 
     test("4.5: Team items deep link directly to the team workstation", () => {

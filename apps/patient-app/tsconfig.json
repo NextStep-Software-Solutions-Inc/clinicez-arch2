@@ -6,6 +6,12 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
+      "@clinicez/comms-sdk": [
+        "../../packages/comms-sdk/src"
+      ],
+      "@clinicez/comms-sdk/*": [
+        "../../packages/comms-sdk/src/*"
+      ],
       "@ui/*": [
         "components/ui/*"
       ],

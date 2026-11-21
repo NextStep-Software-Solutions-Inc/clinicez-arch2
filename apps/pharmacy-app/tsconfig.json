@@ -6,6 +6,9 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
+      "@clinicez/design-tokens": ["../../packages/design-tokens/src"],
+      "@clinicez/comms-sdk": ["../../packages/comms-sdk/src"],
+      "@clinicez/comms-sdk/*": ["../../packages/comms-sdk/src/*"],
       "@ui/*": ["components/ui/*"],
       "@ui": ["components/ui"],
       "@services/*": ["services/*"],

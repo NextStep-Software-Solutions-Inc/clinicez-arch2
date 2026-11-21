@@ -19,7 +19,7 @@
   (portal HubEdgeCredentials). -NoLocalHub (single facility, no hub): clinic and billing use the PORTAL-issued per-service
   clients against the cloud hub: -CloudHubUrl (= MESSAGING_HUB_URL), -ClinicHubClientId/-ClinicHubClientSecret and
   -BillingHubClientId/-BillingHubClientSecret. -AirGapped: UPSTREAM_ENABLED=false, same-cell traffic only (cross-cell messages
-  are rejected, not queued); not combinable with -NoLocalHub. -With laboratory,pharmacy,organization,cashier switches optional
+  are rejected, not queued); not combinable with -NoLocalHub. -With laboratory,pharmacy,organization,cashier,comms switches optional
   profiles on. -Force rewrites .env (old one saved as .env.bak.<time>, generated secrets kept).
   -Yes never prompts. -NoPull skips the pull (images loaded with `docker load`). -NoStart only writes the configuration.
   Keys (ECDSA P-256, one-line base64 of a PEM). -LicensePublicKey <key> | -LicensePublicKeyFile <pem file>: the portal's license PUBLIC key
@@ -51,6 +51,11 @@ param(
   [string]$ClinicHubSigningKey = '', [string]$ClinicHubSigningKeyFile = '',
   [string]$BillingHubSigningKey = '', [string]$BillingHubSigningKeyFile = '',
   [string]$BackupDir = '',
+  [string]$StorageProvider = '',
+  [string]$S3ServiceUrl = '', [string]$S3Bucket = '', [string]$S3AccessKey = '', [string]$S3SecretKey = '',
+  [string]$S3Region = '', [string]$S3ForcePathStyle = '',
+  [string]$StorageFallback = '',
+  [string]$R2AccountId = '', [string]$R2Bucket = '', [string]$R2AccessKey = '', [string]$R2SecretKey = '', [string]$R2PublicUrl = '',
 
   [switch]$AirGapped, [switch]$NoLocalHub, [switch]$Force, [switch]$Yes,
   [switch]$NoPull, [switch]$NoStart, [switch]$NoBackup, [switch]$Upgrade
@@ -69,24 +74,27 @@ $Keys = @(
   'GHCR_OWNER_REPO', 'IMAGE_TAG', 'COMPOSE_PROFILES', 'TENANT_ID', 'EDGE_CELL_ID', 'EDGE_CELL_NAME',
   'CLINIC_FACILITY_ID', 'CLINIC_FACILITY_NAME', 'LABORATORY_FACILITY_ID', 'LABORATORY_FACILITY_NAME',
   'PHARMACY_FACILITY_ID', 'PHARMACY_FACILITY_NAME', 'ORGANIZATION_FACILITY_ID', 'ORGANIZATION_FACILITY_NAME', 'BASE_DOMAIN', 'CORS_ALLOWED_ORIGINS',
-  'UPSTREAM_ENABLED', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'CLINIC_PUBLIC_UPLOAD_BASE_URL', 'MESSAGING_HUB_URL',
+  'UPSTREAM_ENABLED', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'PORTAL_BASE_URL', 'MESSAGING_HUB_URL',
   'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET',
   'LABORATORY_HUB_CLIENT_ID', 'LABORATORY_HUB_CLIENT_SECRET', 'PHARMACY_HUB_CLIENT_ID', 'PHARMACY_HUB_CLIENT_SECRET',
-  'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET', 'HUB_PAYLOAD_ENCRYPTION_KEY', 'HUB_BIND', 'HUB_LAN_PORT',
+  'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET', 'COMMS_HUB_CLIENT_ID', 'COMMS_HUB_CLIENT_SECRET', 'HUB_PAYLOAD_ENCRYPTION_KEY', 'HUB_BIND', 'HUB_LAN_PORT',
   'POSTGRES_USER', 'POSTGRES_PASSWORD', 'HANGFIRE_DASHBOARD_PASSWORD',
-  'CLINIC_JWT_SIGNING_KEY', 'BILLING_JWT_SIGNING_KEY', 'LABORATORY_JWT_SIGNING_KEY', 'PHARMACY_JWT_SIGNING_KEY', 'ORGANIZATION_JWT_SIGNING_KEY', 'CLINIC_ENCRYPTION_MASTER_SECRET',
+  'CLINIC_JWT_SIGNING_KEY', 'BILLING_JWT_SIGNING_KEY', 'LABORATORY_JWT_SIGNING_KEY', 'PHARMACY_JWT_SIGNING_KEY', 'ORGANIZATION_JWT_SIGNING_KEY', 'COMMS_JWT_SIGNING_KEY', 'CLINIC_ENCRYPTION_MASTER_SECRET',
   'CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0', 'CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1', 'CLINIC_DOCUMENT_SIGNING_KEY', 'LABORATORY_DOCUMENT_SIGNING_KEY', 'GAMOT_UPSC_SECRET_KEY',
   'FACILITY_LICENSE_PUBLIC_KEY', 'FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS', 'HUB_SIGNING_REQUIRED', 'EDGE_HUB_SIGNING_KEY',
   'CLINIC_HUB_SIGNING_KEY', 'CLINIC_HUB_PUBLIC_KEY', 'BILLING_HUB_SIGNING_KEY', 'BILLING_HUB_PUBLIC_KEY',
   'LABORATORY_HUB_SIGNING_KEY', 'LABORATORY_HUB_PUBLIC_KEY', 'PHARMACY_HUB_SIGNING_KEY', 'PHARMACY_HUB_PUBLIC_KEY',
-  'ORGANIZATION_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY',
+  'ORGANIZATION_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY', 'COMMS_HUB_SIGNING_KEY', 'COMMS_HUB_PUBLIC_KEY',
   'CLINIC_WEB_PORT', 'LABORATORY_WEB_PORT', 'PHARMACY_WEB_PORT', 'CASHIER_WEB_PORT',
-  'BACKUP_DIR', 'BACKUP_INTERVAL_HOURS', 'BACKUP_RETENTION_DAYS'
+  'BACKUP_DIR', 'BACKUP_INTERVAL_HOURS', 'BACKUP_RETENTION_DAYS',
+  'STORAGE_PROVIDER', 'STORAGE_ENABLE_LOCAL_FALLBACK',
+  'S3_SERVICE_URL', 'S3_BUCKET_NAME', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_REGION', 'S3_FORCE_PATH_STYLE',
+  'R2_ACCOUNT_ID', 'R2_BUCKET_NAME', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_PUBLIC_URL'
 )
 
 # Keys that must be a P-256 PEM (checked, normalized to one-line base64): public / private.
-$PubKeyVars = @('FACILITY_LICENSE_PUBLIC_KEY', 'FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS', 'CLINIC_HUB_PUBLIC_KEY', 'BILLING_HUB_PUBLIC_KEY', 'LABORATORY_HUB_PUBLIC_KEY', 'PHARMACY_HUB_PUBLIC_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY')
-$PrivKeyVars = @('EDGE_HUB_SIGNING_KEY', 'CLINIC_HUB_SIGNING_KEY', 'BILLING_HUB_SIGNING_KEY', 'LABORATORY_HUB_SIGNING_KEY', 'PHARMACY_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_SIGNING_KEY')
+$PubKeyVars = @('FACILITY_LICENSE_PUBLIC_KEY', 'FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS', 'CLINIC_HUB_PUBLIC_KEY', 'BILLING_HUB_PUBLIC_KEY', 'LABORATORY_HUB_PUBLIC_KEY', 'PHARMACY_HUB_PUBLIC_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY', 'COMMS_HUB_PUBLIC_KEY')
+$PrivKeyVars = @('EDGE_HUB_SIGNING_KEY', 'CLINIC_HUB_SIGNING_KEY', 'BILLING_HUB_SIGNING_KEY', 'LABORATORY_HUB_SIGNING_KEY', 'PHARMACY_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_SIGNING_KEY', 'COMMS_HUB_SIGNING_KEY')
 
 # service, env prefix, compose profile ('' = always), hub facility type ('-' = no facility)
 $Services = @(
@@ -94,7 +102,8 @@ $Services = @(
   @{ Svc = 'billing'; Prefix = 'BILLING'; Profile = ''; FType = '-' },
   @{ Svc = 'laboratory'; Prefix = 'LABORATORY'; Profile = 'laboratory'; FType = 'Laboratory' },
   @{ Svc = 'pharmacy'; Prefix = 'PHARMACY'; Profile = 'pharmacy'; FType = 'Pharmacy' },
-  @{ Svc = 'organization'; Prefix = 'ORGANIZATION'; Profile = 'organization'; FType = 'Organization' }
+  @{ Svc = 'organization'; Prefix = 'ORGANIZATION'; Profile = 'organization'; FType = 'Organization' },
+  @{ Svc = 'comms'; Prefix = 'COMMS'; Profile = 'comms'; FType = '-' }
 )
 
 $Cfg = @{}
@@ -363,11 +372,16 @@ $FromArgs = @{
   CLINIC_FACILITY_ID = $FacilityId; CLINIC_FACILITY_NAME = $FacilityName
   LABORATORY_FACILITY_ID = $LabFacilityId; PHARMACY_FACILITY_ID = $PharmacyFacilityId; ORGANIZATION_FACILITY_ID = $OrgFacilityId
   UPSTREAM_HUB_URL = $CloudHubUrl; UPSTREAM_CLIENT_ID = $EdgeClientId; UPSTREAM_CLIENT_SECRET = $EdgeClientSecret
-  BASE_DOMAIN = $BaseDomain; CLINIC_PUBLIC_UPLOAD_BASE_URL = $PublicUploadUrl
+  BASE_DOMAIN = $BaseDomain; PORTAL_BASE_URL = $PortalBaseUrl
   CLINIC_HUB_CLIENT_ID = $ClinicHubClientId; CLINIC_HUB_CLIENT_SECRET = $ClinicHubClientSecret
   BILLING_HUB_CLIENT_ID = $BillingHubClientId; BILLING_HUB_CLIENT_SECRET = $BillingHubClientSecret
   UPSTREAM_ENABLED = ''
   BACKUP_DIR = $BackupDir
+  STORAGE_PROVIDER = $StorageProvider; STORAGE_ENABLE_LOCAL_FALLBACK = $StorageFallback
+  S3_SERVICE_URL = $S3ServiceUrl; S3_BUCKET_NAME = $S3Bucket; S3_ACCESS_KEY_ID = $S3AccessKey; S3_SECRET_ACCESS_KEY = $S3SecretKey
+  S3_REGION = $S3Region; S3_FORCE_PATH_STYLE = $S3ForcePathStyle
+  R2_ACCOUNT_ID = $R2AccountId; R2_BUCKET_NAME = $R2Bucket; R2_ACCESS_KEY_ID = $R2AccessKey; R2_SECRET_ACCESS_KEY = $R2SecretKey
+  R2_PUBLIC_URL = $R2PublicUrl
   FACILITY_LICENSE_PUBLIC_KEY = (Format-KeyValue $LicensePublicKey); EDGE_HUB_SIGNING_KEY = (Format-KeyValue $EdgeSigningKey)
   CLINIC_HUB_SIGNING_KEY = (Format-KeyValue $ClinicHubSigningKey); BILLING_HUB_SIGNING_KEY = (Format-KeyValue $BillingHubSigningKey)
 }
@@ -387,6 +401,7 @@ function Get-EnabledServices {
   if (Test-HasProfile 'pharmacy') { $s += 'pharmacy-api'; $s += 'pharmacy-web' }
   if (Test-HasProfile 'organization') { $s += 'organization-api' }
   if (Test-HasProfile 'cashier') { $s += 'cashier-web' }
+  if (Test-HasProfile 'comms') { $s += 'comms-api' }
   return $s
 }
 
@@ -433,13 +448,13 @@ function Select-Profiles {
   if ($With) { $extra = $With }
   elseif ($Cfg['COMPOSE_PROFILES']) { $extra = $Cfg['COMPOSE_PROFILES'] }
   elseif ($Interactive) {
-    foreach ($p in 'laboratory', 'pharmacy', 'organization', 'cashier') {
+    foreach ($p in @('laboratory', 'pharmacy', 'organization', 'cashier', 'comms')) {
       if (Read-YesNo "Enable the $p profile?" $false) { $extra = "$extra,$p" }
     }
   }
   $list = @($extra -replace '\s', '' -split ',' | Where-Object { $_ -and $_ -ne 'local-hub' })
   foreach ($p in $list) {
-    if (@('laboratory', 'pharmacy', 'organization', 'cashier') -notcontains $p) { Stop-Install "Unknown profile '$p' (laboratory, pharmacy, organization, cashier)." }
+    if (@('laboratory', 'pharmacy', 'organization', 'cashier', 'comms') -notcontains $p) { Stop-Install "Unknown profile '$p' (laboratory, pharmacy, organization, cashier, comms)." }
   }
   if ($NoLocalHub) {
     if ($list.Count -gt 0) { Stop-Install '-NoLocalHub only fits a single-facility site: several facilities need the local hub (README).' }
@@ -489,6 +504,16 @@ function Get-Config([string]$Mode) {
   Set-Default 'BACKUP_INTERVAL_HOURS' '24'
   Set-Default 'BACKUP_RETENTION_DAYS' '14'
   Set-Default 'HUB_SIGNING_REQUIRED' 'true'
+  Set-Default 'STORAGE_PROVIDER' 'Local'
+  Set-Default 'STORAGE_ENABLE_LOCAL_FALLBACK' 'true'
+  Set-Default 'S3_REGION' 'auto'
+  Set-Default 'S3_FORCE_PATH_STYLE' 'true'
+
+  # Infer provider if S3 or R2 parameters were passed explicitly without -StorageProvider
+  if ([string]::IsNullOrEmpty($StorageProvider) -and ($Cfg['STORAGE_PROVIDER'] -eq 'Local')) {
+    if ($Cfg['S3_SERVICE_URL'] -or $Cfg['S3_BUCKET_NAME']) { $Cfg['STORAGE_PROVIDER'] = 'S3' }
+    elseif ($Cfg['R2_ACCOUNT_ID'] -or $Cfg['R2_BUCKET_NAME']) { $Cfg['STORAGE_PROVIDER'] = 'R2' }
+  }
 
   if ($Mode -eq 'new') { Select-Profiles }
   $hubB = -not (Test-HasProfile 'local-hub')
@@ -515,6 +540,25 @@ function Get-Config([string]$Mode) {
     if (Test-HasProfile 'pharmacy') { Read-Value 'PHARMACY_FACILITY_ID' 'Pharmacy facility id (GUID)' }
     if (Test-HasProfile 'organization') { Read-Value 'ORGANIZATION_FACILITY_ID' 'Organization facility id (GUID)' }
     Read-Value 'FACILITY_LICENSE_PUBLIC_KEY' 'License public key (base64 of PEM, from the portal; or pass -LicensePublicKeyFile)'
+
+    if ($Interactive -and [string]::IsNullOrEmpty($StorageProvider) -and (-not ($Cfg['S3_SERVICE_URL'] -or $Cfg['S3_BUCKET_NAME'] -or $Cfg['R2_ACCOUNT_ID'] -or $Cfg['R2_BUCKET_NAME']))) {
+      if (Read-YesNo 'Configure external S3-compatible storage (e.g. MinIO, Ceph, Cloudflare R2)?' $false) {
+        $sp = Read-Host -Prompt 'Storage provider (S3/R2) [S3]'
+        if ([string]::IsNullOrWhiteSpace($sp)) { $sp = 'S3' }
+        if ($sp -match '^[rR]2?') { $Cfg['STORAGE_PROVIDER'] = 'R2' } else { $Cfg['STORAGE_PROVIDER'] = 'S3' }
+      }
+    }
+    if ($Cfg['STORAGE_PROVIDER'] -eq 'S3') {
+      Read-Value 'S3_SERVICE_URL' 'S3 service URL (e.g. http://minio.local:9000, https://s3.hospital.internal)'
+      Read-Value 'S3_BUCKET_NAME' 'S3 bucket name'
+      Read-Value 'S3_ACCESS_KEY_ID' 'S3 access key id'
+      Read-Value 'S3_SECRET_ACCESS_KEY' 'S3 secret access key' -Secret
+    } elseif ($Cfg['STORAGE_PROVIDER'] -eq 'R2') {
+      Read-Value 'R2_ACCOUNT_ID' 'Cloudflare R2 Account ID'
+      Read-Value 'R2_BUCKET_NAME' 'Cloudflare R2 Bucket name'
+      Read-Value 'R2_ACCESS_KEY_ID' 'Cloudflare R2 Access Key ID'
+      Read-Value 'R2_SECRET_ACCESS_KEY' 'Cloudflare R2 Secret Access Key' -Secret
+    }
   }
 
   if (@('true', 'false') -notcontains $Cfg['UPSTREAM_ENABLED']) { Stop-Install 'UPSTREAM_ENABLED must be true or false.' }
@@ -531,7 +575,7 @@ function Get-Config([string]$Mode) {
       Read-Value 'BILLING_HUB_CLIENT_SECRET' 'Billing hub client secret (portal-issued)' -Secret
       Read-Value 'CLINIC_HUB_SIGNING_KEY' 'Clinic hub signing key (portal-issued, base64 of PEM)' -Secret
       Read-Value 'BILLING_HUB_SIGNING_KEY' 'Billing hub signing key (portal-issued, base64 of PEM)' -Secret
-      Read-Value 'CLINIC_PUBLIC_UPLOAD_BASE_URL' 'Public lab-upload page URL (cloud portal)'
+      Read-Value 'PORTAL_BASE_URL' 'Portal web base URL (cloud portal)'
     }
   } else {
     Set-Default 'MESSAGING_HUB_URL' 'http://interop-hub:8080'
@@ -540,11 +584,11 @@ function Get-Config([string]$Mode) {
       Read-Value 'UPSTREAM_CLIENT_ID' 'Upstream edge client id (portal HubEdgeCredentials.ClientId)'
       Read-Value 'UPSTREAM_CLIENT_SECRET' 'Upstream edge client secret (portal HubEdgeCredentials.ClientSecret)' -Secret
       Read-Value 'EDGE_HUB_SIGNING_KEY' 'Edge hub signing key (portal-issued with the edge client, base64 of PEM)' -Secret
-      Read-Value 'CLINIC_PUBLIC_UPLOAD_BASE_URL' 'Public lab-upload page URL (cloud portal)'
+      Read-Value 'PORTAL_BASE_URL' 'Portal web base URL (cloud portal)'
     }
   }
-  if (-not $Cfg['CLINIC_PUBLIC_UPLOAD_BASE_URL']) {
-    Write-Warn 'CLINIC_PUBLIC_UPLOAD_BASE_URL is empty: lab orders cannot be issued until it is set (public URL of the cloud lab-upload page; -PublicUploadUrl, or edit .env and run .\install.ps1 apply).'
+  if (-not $Cfg['PORTAL_BASE_URL']) {
+    Write-Warn 'PORTAL_BASE_URL is empty: lab orders cannot be issued until it is set (public URL of the cloud portal; -PortalBaseUrl, or edit .env and run .\install.ps1 apply).'
   }
   if ($Mode -eq 'reuse' -and $AirGapped -and $old['UPSTREAM_ENABLED'] -ne 'false') {
     Write-Warn '-AirGapped is ignored on an existing .env: set UPSTREAM_ENABLED=false in .env and run .\install.ps1 apply (or re-run with -Force).'
@@ -570,7 +614,7 @@ function Get-Config([string]$Mode) {
   Set-GeneratedSecret 'GAMOT_UPSC_SECRET_KEY' 64
   if ([string]::IsNullOrEmpty($Cfg['HUB_PAYLOAD_ENCRYPTION_KEY'])) { $Cfg['HUB_PAYLOAD_ENCRYPTION_KEY'] = New-Base64Key32 }
 
-  foreach ($k in 'UPSTREAM_HUB_URL', 'CLINIC_PUBLIC_UPLOAD_BASE_URL', 'MESSAGING_HUB_URL') { $Cfg[$k] = $Cfg[$k].TrimEnd('/') }
+  foreach ($k in 'UPSTREAM_HUB_URL', 'PORTAL_BASE_URL', 'MESSAGING_HUB_URL', 'S3_SERVICE_URL', 'R2_PUBLIC_URL') { $Cfg[$k] = $Cfg[$k].TrimEnd('/') }
   foreach ($k in $Keys) {
     if ($k -eq 'EDGE_CELL_NAME' -or $k -like '*_FACILITY_NAME') { Test-SafeValue $k -AllowSpaces } else { Test-SafeValue $k }
   }
@@ -579,12 +623,28 @@ function Get-Config([string]$Mode) {
   }
   if ($Cfg['EDGE_CELL_ID'].Contains(':')) { Stop-Install "EDGE_CELL_ID must not contain ':'." }
   if (@('true', 'false') -notcontains $Cfg['HUB_SIGNING_REQUIRED']) { Stop-Install 'HUB_SIGNING_REQUIRED must be true or false.' }
+  if (@('Local', 'S3', 'R2') -notcontains $Cfg['STORAGE_PROVIDER']) { Stop-Install "STORAGE_PROVIDER must be Local, S3, or R2 (got '$($Cfg['STORAGE_PROVIDER'])')." }
+  if (@('true', 'false') -notcontains $Cfg['STORAGE_ENABLE_LOCAL_FALLBACK']) { Stop-Install 'STORAGE_ENABLE_LOCAL_FALLBACK must be true or false.' }
+  if (@('true', 'false') -notcontains $Cfg['S3_FORCE_PATH_STYLE']) { Stop-Install 'S3_FORCE_PATH_STYLE must be true or false.' }
+
+  if ($Cfg['STORAGE_PROVIDER'] -eq 'S3') {
+    if (-not $Cfg['S3_BUCKET_NAME']) { Stop-Install 'S3_BUCKET_NAME is required when STORAGE_PROVIDER=S3.' }
+    if (-not $Cfg['S3_ACCESS_KEY_ID']) { Stop-Install 'S3_ACCESS_KEY_ID is required when STORAGE_PROVIDER=S3.' }
+    if (-not $Cfg['S3_SECRET_ACCESS_KEY']) { Stop-Install 'S3_SECRET_ACCESS_KEY is required when STORAGE_PROVIDER=S3.' }
+  } elseif ($Cfg['STORAGE_PROVIDER'] -eq 'R2') {
+    if (-not $Cfg['R2_ACCOUNT_ID']) { Stop-Install 'R2_ACCOUNT_ID is required when STORAGE_PROVIDER=R2.' }
+    if (-not $Cfg['R2_BUCKET_NAME']) { Stop-Install 'R2_BUCKET_NAME is required when STORAGE_PROVIDER=R2.' }
+    if (-not $Cfg['R2_ACCESS_KEY_ID']) { Stop-Install 'R2_ACCESS_KEY_ID is required when STORAGE_PROVIDER=R2.' }
+    if (-not $Cfg['R2_SECRET_ACCESS_KEY']) { Stop-Install 'R2_SECRET_ACCESS_KEY is required when STORAGE_PROVIDER=R2.' }
+  }
   foreach ($k in $PubKeyVars) { Test-KeyValue $k 'public' }
   foreach ($k in $PrivKeyVars) { Test-KeyValue $k 'private' }
   if ($Mode -eq 'reuse') {
-    $required = @('GHCR_OWNER_REPO', 'TENANT_ID', 'EDGE_CELL_ID', 'CLINIC_FACILITY_ID', 'FACILITY_LICENSE_PUBLIC_KEY')
+    $required = @('GHCR_OWNER_REPO', 'TENANT_ID', 'EDGE_CELL_ID', 'CLINIC_FACILITY_ID', 'FACILITY_LICENSE_PUBLIC_KEY', 'STORAGE_PROVIDER')
     if ($hubB) { $required += @('MESSAGING_HUB_URL', 'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET', 'CLINIC_HUB_SIGNING_KEY', 'BILLING_HUB_SIGNING_KEY') }
     elseif ($Cfg['UPSTREAM_ENABLED'] -eq 'true') { $required += @('UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'EDGE_HUB_SIGNING_KEY') }
+    if ($Cfg['STORAGE_PROVIDER'] -eq 'S3') { $required += @('S3_BUCKET_NAME', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY') }
+    elseif ($Cfg['STORAGE_PROVIDER'] -eq 'R2') { $required += @('R2_ACCOUNT_ID', 'R2_BUCKET_NAME', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY') }
     foreach ($k in $required) {
       if (-not $Cfg[$k]) { Stop-Install "$k is empty in $EnvFile. Fix it, or re-run with -Force and the parameters (a missing key can also be given with its parameter on this command: .\install.ps1 apply|upgrade stores it in $EnvFile)." }
     }
@@ -608,15 +668,16 @@ function Write-EnvFile {
       'UPSTREAM_ENABLED', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET'),
     @('# Public URL of the lab-result upload page printed on lab slips (a cloud page; the site only needs outbound access).',
       '# Required to issue lab orders. May be empty when air-gapped.',
-      'CLINIC_PUBLIC_UPLOAD_BASE_URL'),
+      'PORTAL_BASE_URL'),
     @('# Messaging clients of the services.',
       '#   Local hub (default): MESSAGING_HUB_URL is the local hub; every <SVC>_HUB_CLIENT_ID/SECRET is a LOCAL client (site-<service>)',
       '#     generated here; the same values go into hub-bootstrap.env.',
       '#   -NoLocalHub: MESSAGING_HUB_URL is the cloud hub; CLINIC_ and BILLING_HUB_CLIENT_ID/SECRET are the PORTAL-issued',
       '#     per-service clients (the other services do not run).',
-      'MESSAGING_HUB_URL', 'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET', 'LABORATORY_HUB_CLIENT_ID', 'LABORATORY_HUB_CLIENT_SECRET', 'PHARMACY_HUB_CLIENT_ID', 'PHARMACY_HUB_CLIENT_SECRET', 'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET', 'HUB_PAYLOAD_ENCRYPTION_KEY', 'HUB_BIND', 'HUB_LAN_PORT'),
+      'MESSAGING_HUB_URL', 'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET', 'LABORATORY_HUB_CLIENT_ID', 'LABORATORY_HUB_CLIENT_SECRET', 'PHARMACY_HUB_CLIENT_ID', 'PHARMACY_HUB_CLIENT_SECRET', 'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET', 'COMMS_HUB_CLIENT_ID', 'COMMS_HUB_CLIENT_SECRET', 'HUB_PAYLOAD_ENCRYPTION_KEY', 'HUB_BIND', 'HUB_LAN_PORT'),
     @('# Database', 'POSTGRES_USER', 'POSTGRES_PASSWORD'),
-    @('# Service secrets', 'HANGFIRE_DASHBOARD_PASSWORD', 'CLINIC_JWT_SIGNING_KEY', 'BILLING_JWT_SIGNING_KEY', 'LABORATORY_JWT_SIGNING_KEY', 'PHARMACY_JWT_SIGNING_KEY', 'ORGANIZATION_JWT_SIGNING_KEY', 'CLINIC_ENCRYPTION_MASTER_SECRET',
+    @('# Clinical Record Storage', 'STORAGE_PROVIDER', 'STORAGE_ENABLE_LOCAL_FALLBACK', 'S3_SERVICE_URL', 'S3_BUCKET_NAME', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_REGION', 'S3_FORCE_PATH_STYLE', 'R2_ACCOUNT_ID', 'R2_BUCKET_NAME', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_PUBLIC_URL'),
+    @('# Service secrets', 'HANGFIRE_DASHBOARD_PASSWORD', 'CLINIC_JWT_SIGNING_KEY', 'BILLING_JWT_SIGNING_KEY', 'LABORATORY_JWT_SIGNING_KEY', 'PHARMACY_JWT_SIGNING_KEY', 'ORGANIZATION_JWT_SIGNING_KEY', 'COMMS_JWT_SIGNING_KEY', 'CLINIC_ENCRYPTION_MASTER_SECRET',
       '# Only while rotating the master secret: the previous value(s), so old records stay readable (see README).',
       'CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0', 'CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1',
       '# Keys of the document digests (verification QR codes), one per service, and the pharmacy UPSC code key: keep them with this file.',
@@ -629,7 +690,7 @@ function Write-EnvFile {
       'FACILITY_LICENSE_PUBLIC_KEY', 'FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS', 'HUB_SIGNING_REQUIRED', 'EDGE_HUB_SIGNING_KEY',
       'CLINIC_HUB_SIGNING_KEY', 'CLINIC_HUB_PUBLIC_KEY', 'BILLING_HUB_SIGNING_KEY', 'BILLING_HUB_PUBLIC_KEY',
       'LABORATORY_HUB_SIGNING_KEY', 'LABORATORY_HUB_PUBLIC_KEY', 'PHARMACY_HUB_SIGNING_KEY', 'PHARMACY_HUB_PUBLIC_KEY',
-      'ORGANIZATION_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY'),
+      'ORGANIZATION_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY', 'COMMS_HUB_SIGNING_KEY', 'COMMS_HUB_PUBLIC_KEY'),
     @('# Web ports', 'CLINIC_WEB_PORT', 'LABORATORY_WEB_PORT', 'PHARMACY_WEB_PORT', 'CASHIER_WEB_PORT'),
     @('# Backups', 'BACKUP_DIR', 'BACKUP_INTERVAL_HOURS', 'BACKUP_RETENTION_DAYS')
   )
@@ -806,6 +867,7 @@ function Show-NextSteps {
     Write-Host '  Air-gapped:      same-cell traffic only; cross-cell/portal messages are rejected, not queued. To connect later: set UPSTREAM_ENABLED=true + UPSTREAM_* in .env, then .\install.ps1 apply'
   }
   Write-Host "  Backups:         every $($Cfg['BACKUP_INTERVAL_HOURS'])h to $($Cfg['BACKUP_DIR']), kept $($Cfg['BACKUP_RETENTION_DAYS']) days.  Copy .env somewhere safe too."
+  Write-Host "  Storage:         $($Cfg['STORAGE_PROVIDER']) (fallback to local disk: $($Cfg['STORAGE_ENABLE_LOCAL_FALLBACK']))"
   Write-Host '  Status / logs:   .\install.ps1 status      docker compose logs -f clinic-api'
   Write-Host '  Upgrade:         .\install.ps1 upgrade -Tag <version>'
 }
@@ -872,7 +934,7 @@ function Invoke-Restore {
     if (-not $Yes -and -not (Read-YesNo 'Continue?' $false)) { Stop-Install 'Cancelled.' }
     [void](Invoke-Dc (@('stop') + $stop))
     $dockerArgs = @('run', '--rm', '-v', 'clinicez-edge_clinic-records:/data/clinic-records')
-    foreach ($svc in 'clinic-api', 'billing-api', 'laboratory-api', 'pharmacy-api', 'organization-api') { $dockerArgs += '-v'; $dockerArgs += "clinicez-edge_${svc}-keys:/data/keys/$svc" }
+    foreach ($svc in 'clinic-api', 'billing-api', 'laboratory-api', 'pharmacy-api', 'organization-api', 'comms-api') { $dockerArgs += '-v'; $dockerArgs += "clinicez-edge_${svc}-keys:/data/keys/$svc" }
     $dockerArgs += '-v'; $dockerArgs += ((Split-Path -Parent $full) + ':/in:ro')
     $dockerArgs += 'postgres:16'; $dockerArgs += 'tar'; $dockerArgs += '-xzf'; $dockerArgs += "/in/$name"; $dockerArgs += '-C'; $dockerArgs += '/data'
     & docker @dockerArgs | Out-Host

@@ -426,6 +426,7 @@ describe("Milestone 4: Tenant Billing Guidance, Offline Banking Instructions & O
       if (originalWindowOpen) {
         globalThis.window.open = originalWindowOpen
       }
+      delete (globalThis as any).window
     })
   })
 
@@ -487,7 +488,10 @@ describe("Milestone 4: Tenant Billing Guidance, Offline Banking Instructions & O
       const hexColorRegex = /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g
 
       for (const relPath of touchedFiles) {
-        const fullPath = path.resolve(process.cwd(), relPath)
+        let fullPath = path.resolve(process.cwd(), relPath)
+        if (!fs.existsSync(fullPath)) {
+          fullPath = path.resolve(process.cwd(), relPath.replace(/^apps\/portal-web\//, ""))
+        }
         expect(fs.existsSync(fullPath)).toBe(true)
 
         const content = fs.readFileSync(fullPath, "utf-8")

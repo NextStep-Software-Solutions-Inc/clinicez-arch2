@@ -49,8 +49,7 @@ public sealed class ConsultationSearchProvider : ISearchProvider
                 c.Objective.ToLower().Contains(term) ||
                 c.Plan.ToLower().Contains(term) ||
                 (c.PhilHealthOtherComplaint != null && c.PhilHealthOtherComplaint.ToLower().Contains(term)) ||
-                (c.PhilHealthCaseNo != null && c.PhilHealthCaseNo.ToLower().Contains(term)) ||
-                (c.HciCaseNo != null && c.HciCaseNo.ToLower().Contains(term)))
+                (c.PhilHealthCaseNo != null && c.PhilHealthCaseNo.ToLower().Contains(term)))
             .OrderByDescending(c => c.EncounterDate)
             .Take(boundedLimit)
             .ToListAsync(ct);

@@ -19,18 +19,19 @@ public sealed record UploadAndEncryptRecordAttachmentCommand(
     byte[] FileBytes,
     string? Notes = null,
     Guid? UploadedByStaffId = null,
-    string? UploadedByStaffName = null) : IRequest<ClinicRecordAttachmentDto>;
+    string? UploadedByStaffName = null,
+    DateOnly? DocumentDate = null) : IRequest<ClinicRecordAttachmentDto>;
 
 public sealed class UploadAndEncryptRecordAttachmentCommandHandler : IRequestHandler<UploadAndEncryptRecordAttachmentCommand, ClinicRecordAttachmentDto>
 {
-    private readonly IRepository<ClinicRecordAttachment> _attachmentRepo;
+    private readonly IRepository<RecordAttachment> _attachmentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IClinicEncryptionService _encryptionService;
     private readonly IClinicStorageService _storageService;
 
     public UploadAndEncryptRecordAttachmentCommandHandler(
-        IRepository<ClinicRecordAttachment> attachmentRepo,
+        IRepository<RecordAttachment> attachmentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IClinicEncryptionService encryptionService,
@@ -62,8 +63,13 @@ public sealed class UploadAndEncryptRecordAttachmentCommandHandler : IRequestHan
         var storageKey = $"tenants/{tenantId}/clinics/{clinicId}/records/{attachmentId}.cez";
         await _storageService.SaveEncryptedFileAsync(storageKey, encryptedPayload.Ciphertext, ct);
 
+        var resolvedStaffId = request.UploadedByStaffId.HasValue && request.UploadedByStaffId.Value != Guid.Empty
+            ? request.UploadedByStaffId
+            : _clinicContext.StaffId;
+        var resolvedStaffName = ResolveActorStaffName(request.UploadedByStaffName, _clinicContext.StaffName);
+
         // 3. Create verified attachment record
-        var attachment = new ClinicRecordAttachment
+        var attachment = new RecordAttachment
         {
             Id = attachmentId,
             TenantId = tenantId,
@@ -76,14 +82,14 @@ public sealed class UploadAndEncryptRecordAttachmentCommandHandler : IRequestHan
             ContentType = string.IsNullOrWhiteSpace(request.ContentType) ? "application/pdf" : request.ContentType.Trim(),
             FileSizeBytes = encryptedPayload.EncryptedSizeBytes,
             StorageUri = storageKey,
-            DocumentDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            DocumentDate = request.DocumentDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
             Notes = request.Notes?.Trim(),
-            UploadedByStaffId = request.UploadedByStaffId,
-            UploadedByStaffName = request.UploadedByStaffName ?? "Clinic Staff",
+            UploadedByStaffId = resolvedStaffId,
+            UploadedByStaffName = resolvedStaffName,
             VerificationStatus = "Verified",
             VerifiedAt = DateTime.UtcNow,
-            VerifiedByStaffId = request.UploadedByStaffId,
-            VerifiedByStaffName = request.UploadedByStaffName ?? "Clinic Staff",
+            VerifiedByStaffId = resolvedStaffId,
+            VerifiedByStaffName = resolvedStaffName,
             EncryptionAlgorithm = encryptedPayload.EncryptionAlgorithm,
             EncryptionKeyId = "cmk-v1",
             EncryptionIvBase64 = encryptedPayload.IvBase64,
@@ -92,7 +98,7 @@ public sealed class UploadAndEncryptRecordAttachmentCommandHandler : IRequestHan
             EncryptedHash = encryptedPayload.EncryptedHash,
             WrappedKeyJson = encryptedPayload.WrappedKeyJson,
             CreatedAt = DateTime.UtcNow,
-            CreatedBy = request.UploadedByStaffName ?? "ClinicStaff"
+            CreatedBy = resolvedStaffName
         };
 
         await _attachmentRepo.AddAsync(attachment, ct);
@@ -125,4 +131,31 @@ public sealed class UploadAndEncryptRecordAttachmentCommandHandler : IRequestHan
             attachment.EncryptedSizeBytes,
             attachment.EncryptedHash);
     }
+
+    internal static string ResolveActorStaffName(string? explicitName, string? contextStaffName)
+    {
+        var trimmedExplicit = explicitName?.Trim();
+        var trimmedContext = contextStaffName?.Trim();
+
+        if (!string.IsNullOrWhiteSpace(trimmedExplicit) && !IsGenericStaffPlaceholder(trimmedExplicit))
+        {
+            return trimmedExplicit;
+        }
+
+        if (!string.IsNullOrWhiteSpace(trimmedContext) && !IsGenericStaffPlaceholder(trimmedContext))
+        {
+            return trimmedContext;
+        }
+
+        if (!string.IsNullOrWhiteSpace(trimmedExplicit))
+        {
+            return trimmedExplicit;
+        }
+
+        return "Clinic Staff";
+    }
+
+    private static bool IsGenericStaffPlaceholder(string value) =>
+        string.Equals(value, "Clinic Staff", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(value, "ClinicStaff", StringComparison.OrdinalIgnoreCase);
 }

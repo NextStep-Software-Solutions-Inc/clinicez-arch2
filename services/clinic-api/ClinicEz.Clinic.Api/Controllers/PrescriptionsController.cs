@@ -10,7 +10,6 @@ using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
-using System.Linq;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -25,16 +24,19 @@ public sealed class PrescriptionsController : ControllerBase
 {
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService _pdfService;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
+    private readonly IRepository<StaffMember>? _staffRepo;
 
     public PrescriptionsController(
         ISender sender,
         IClinicDocumentPdfService pdfService,
-        IRepository<ClinicSettings> settingsRepo)
+        IRepository<FacilitySettings> settingsRepo,
+        IRepository<StaffMember>? staffRepo = null)
     {
         _sender = sender;
         _pdfService = pdfService;
         _settingsRepo = settingsRepo;
+        _staffRepo = staffRepo;
     }
 
     [HttpGet("{consultationId:guid}/slip")]
@@ -55,20 +57,7 @@ public sealed class PrescriptionsController : ControllerBase
         CancellationToken ct = default)
     {
         var slip = await _sender.Send(new GetPrescriptionSlipQuery(ConsultationId: consultationId), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
-        {
-            TenantId = "default",
-            ClinicId = Guid.Empty,
-            ClinicName = slip.ClinicName
-        };
-
-        var isDangerous = slip.Items.Any(i => i.IsDangerousDrug);
-        var signatureMode = isDangerous || wet == true
-            ? SignatureMode.WetSignature
-            : (wet == false ? SignatureMode.ESignatureSpecimen : SignatureMode.ESignatureSpecimen);
-
-        var pdfBytes = _pdfService.GeneratePrescriptionPdf(slip, settings, doctor: null, signatureMode: signatureMode);
-        return File(pdfBytes, "application/pdf", $"Prescription-{slip.PrescriptionNumber}.pdf");
+        return await GeneratePrescriptionPdfFileAsync(slip, wet, ct);
     }
 
     [HttpGet("by-number/{prescriptionNumber}/slip")]
@@ -89,19 +78,30 @@ public sealed class PrescriptionsController : ControllerBase
         CancellationToken ct = default)
     {
         var slip = await _sender.Send(new GetPrescriptionSlipQuery(PrescriptionNumber: prescriptionNumber), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        return await GeneratePrescriptionPdfFileAsync(slip, wet, ct);
+    }
+
+    private async Task<FileContentResult> GeneratePrescriptionPdfFileAsync(
+        PrescriptionSlipDto slip,
+        bool? wet,
+        CancellationToken ct)
+    {
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = "default",
             ClinicId = Guid.Empty,
             ClinicName = slip.ClinicName
         };
 
-        var isDangerous = slip.Items.Any(i => i.IsDangerousDrug);
-        var signatureMode = isDangerous || wet == true
-            ? SignatureMode.WetSignature
-            : (wet == false ? SignatureMode.ESignatureSpecimen : SignatureMode.ESignatureSpecimen);
+        var doctor = (_staffRepo != null && slip.DoctorId.HasValue)
+            ? await _staffRepo.GetByIdAsync(slip.DoctorId.Value, ct)
+            : null;
 
-        var pdfBytes = _pdfService.GeneratePrescriptionPdf(slip, settings, doctor: null, signatureMode: signatureMode);
+        SignatureMode? signatureMode = wet == true
+            ? SignatureMode.WetSignature
+            : (wet == false ? SignatureMode.ESignatureSpecimen : null);
+
+        var pdfBytes = _pdfService.GeneratePrescriptionPdf(slip, settings, doctor: doctor, signatureMode: signatureMode);
         return File(pdfBytes, "application/pdf", $"Prescription-{slip.PrescriptionNumber}.pdf");
     }
 

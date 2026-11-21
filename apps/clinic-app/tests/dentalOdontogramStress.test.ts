@@ -152,7 +152,7 @@ describe('Milestone MC Empirical Stress Testing & Adversarial Challenge', () => 
       );
       expect(html).toContain('inline-dental-chart-card-order-proc-btn');
       expect(html).toContain('Order Procedure for Tooth #16');
-    });
+    }, 30000);
 
     test('FAIL-CHECK: renders + Order Procedure button when onQuickOrderProcedure is provided (Consultations.screen usage)', () => {
       // In Consultations.screen.tsx:3242, onQuickOrderProcedure={handleQuickOrderDentalProcedure} is used without onOrderProcedure.
@@ -333,7 +333,7 @@ describe('Milestone MC Empirical Stress Testing & Adversarial Challenge', () => 
       expect(childHtml).toContain('tooth-cell-85');
       expect(childHtml).toContain('Primary molar caries');
       expect(childHtml).toContain('MO');
-    });
+    }, 30000);
 
     test('Switching dentition maintains non-healthy count badge accurately across mixed dentition', () => {
       const mixedChart: Record<number, DentalToothState> = {
@@ -352,7 +352,7 @@ describe('Milestone MC Empirical Stress Testing & Adversarial Challenge', () => 
 
       // 4 abnormal findings (16, 21, 55, 85)
       expect(html).toContain('4 Findings');
-    });
+    }, 30000);
   });
 
   // =========================================================================

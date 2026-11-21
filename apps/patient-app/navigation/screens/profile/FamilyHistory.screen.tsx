@@ -23,6 +23,7 @@ import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncSer
 import { deletePatientFamilyHistory } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
+import { useEhrOptions } from 'hooks/useEhrOptions';
 
 type FamilySide = 'Paternal' | 'Maternal' | 'Both' | 'Unknown';
 
@@ -39,14 +40,8 @@ type Form = {
 };
 const EMPTY: Form = { id: null, condition: '', affectedRelative: '', side: '', ageOfOnset: '', isDeceased: false, ageAtDeath: '', causeOfDeath: '', notes: '' };
 
-const SIDE_OPTIONS = [
-  { label: 'Paternal', value: 'Paternal' },
-  { label: 'Maternal', value: 'Maternal' },
-  { label: 'Both', value: 'Both' },
-  { label: 'Unknown', value: 'Unknown' },
-];
-
 export default function FamilyHistoryScreen() {
+  const { selectOptions: sideOptions } = useEhrOptions('family_side');
   const patientId = usePatientId();
   const { getToken } = useAuth();
   const { spacing } = useAppTheme();
@@ -178,7 +173,7 @@ export default function FamilyHistoryScreen() {
             <ProfileFormField label="Affected Relative" value={field.value} onChangeText={field.onChange} placeholder="e.g. Father, Mother, Sibling" />
           )} />
           <Controller control={control} name="side" render={({ field }) => (
-            <ProfileFormField label="Family Side" value={SIDE_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setSideModal(true)} placeholder="Select side" picker />
+            <ProfileFormField label="Family Side" value={sideOptions.find(o => o.value === field.value)?.label || ''} onPressIn={() => setSideModal(true)} placeholder="Select side" picker />
           )} />
           <Controller control={control} name="ageOfOnset" render={({ field }) => (
             <ProfileFormField label="Age of Onset" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="Optional" />
@@ -204,7 +199,7 @@ export default function FamilyHistoryScreen() {
       </ThemedBottomSheetModal>
 
       <Controller control={control} name="side" render={({ field }) => (
-        <ProfileSelectModal visible={sideModal} title="Family Side" options={SIDE_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setSideModal(false)} />
+        <ProfileSelectModal visible={sideModal} title="Family Side" options={sideOptions} selected={field.value} onSelect={field.onChange} onClose={() => setSideModal(false)} />
       )} />
     </BottomSheetModalProvider>
   );

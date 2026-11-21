@@ -99,6 +99,34 @@
       "when": 1791559928395,
       "tag": "0014_booking_draft_share_sections",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1792646400000,
+      "tag": "0015_health_records_and_upload_queue",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1792700000000,
+      "tag": "0016_add_psgc_address_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1792732800000,
+      "tag": "0017_sync_queue_error_message",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1793673600000,
+      "tag": "0018_home_dashboard_telemetry",
+      "breakpoints": true
     }
   ]
 }

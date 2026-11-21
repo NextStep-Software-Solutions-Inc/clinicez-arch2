@@ -22,9 +22,9 @@ public sealed record CheckPatientDuplicatesQuery(
 
 public sealed class CheckPatientDuplicatesQueryHandler : IRequestHandler<CheckPatientDuplicatesQuery, DuplicatePatientCheckResultDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
 
-    public CheckPatientDuplicatesQueryHandler(IRepository<ClinicPatient> patientRepo)
+    public CheckPatientDuplicatesQueryHandler(IRepository<Patient> patientRepo)
     {
         _patientRepo = patientRepo;
     }
@@ -67,7 +67,7 @@ public sealed class CheckPatientDuplicatesQueryHandler : IRequestHandler<CheckPa
             return new DuplicatePatientCheckResultDto(false, Array.Empty<DuplicateMatchDto>());
         }
 
-        var matchesMap = new Dictionary<Guid, (ClinicPatient Patient, List<string> Reasons, double MaxScore, string Confidence)>();
+        var matchesMap = new Dictionary<Guid, (Patient Patient, List<string> Reasons, double MaxScore, string Confidence)>();
 
         foreach (var p in candidates)
         {

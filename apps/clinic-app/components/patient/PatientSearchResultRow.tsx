@@ -3,13 +3,15 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
 import { theme } from '../../constants/theme';
+import { formatBloodTypeLabel } from '../../constants/bloodTypes';
 import { ClinicPatient, ClinicCustomFieldDefinition } from '../../services/clinicService';
+import { computePatientLocation } from './patientLocation';
 
 export const STANDARD_SEARCH_FIELDS = [
   { key: 'patientCode', label: 'Patient Code / ID', defaultChecked: true },
   { key: 'age', label: 'Age (e.g. 28y)', defaultChecked: false },
-  { key: 'dateOfBirth', label: 'Date of Birth (YYYY-MM-DD)', defaultChecked: false },
-  { key: 'gender', label: 'Sex / Gender', defaultChecked: false },
+  { key: 'dateOfBirth', label: 'Date of Birth', defaultChecked: false },
+  { key: 'sex', label: 'Sex', defaultChecked: false },
   { key: 'contactNumber', label: 'Contact Phone Number', defaultChecked: false },
   { key: 'philHealthNumber', label: 'PhilHealth PIN', defaultChecked: false },
   { key: 'barangay', label: 'Address / Location', defaultChecked: false },
@@ -23,6 +25,9 @@ export interface PatientSearchResultRowProps {
   customFieldDefs?: ClinicCustomFieldDefinition[];
   onPress?: () => void;
   testID?: string;
+  selected?: boolean;
+  extraBadges?: React.ReactNode;
+  rightAction?: React.ReactNode;
 }
 
 export function parseConfiguredSearchFields(jsonOrArray?: string | string[] | null): string[] {
@@ -43,6 +48,9 @@ export default function PatientSearchResultRow({
   customFieldDefs = [],
   onPress,
   testID = 'patient-search-result-row',
+  selected = false,
+  extraBadges,
+  rightAction,
 }: PatientSearchResultRowProps) {
   const activeKeys = configuredFieldKeys.length > 0 ? configuredFieldKeys : ['patientCode'];
 
@@ -55,18 +63,23 @@ export default function PatientSearchResultRow({
         return patient.age != null ? { value: `${patient.age}y` } : null;
       case 'dateOfBirth':
         return patient.dateOfBirth ? { label: 'DOB', value: patient.dateOfBirth } : null;
-      case 'gender':
-        return patient.gender ? { value: patient.gender } : null;
+      case 'sex':
+      case 'gender': {
+        const val = patient.sex || (patient as any).gender;
+        return val ? { value: val } : null;
+      }
       case 'contactNumber':
         return patient.contactNumber ? { value: patient.contactNumber } : null;
       case 'philHealthNumber':
         return patient.philHealthNumber ? { label: 'PhilHealth', value: patient.philHealthNumber } : null;
-      case 'bloodType':
-        return patient.bloodType ? { label: 'Blood', value: patient.bloodType } : null;
+      case 'bloodType': {
+        const formatted = formatBloodTypeLabel(patient.bloodType);
+        return formatted ? { label: 'Blood', value: formatted } : null;
+      }
       case 'civilStatus':
         return patient.civilStatus ? { value: patient.civilStatus } : null;
       case 'barangay': {
-        const loc = [patient.barangay, patient.city].filter(Boolean).join(', ');
+        const loc = computePatientLocation(patient);
         return loc ? { value: loc } : null;
       }
       default: {
@@ -89,23 +102,27 @@ export default function PatientSearchResultRow({
     .map((k) => renderFieldDetail(k))
     .filter((d): d is { label?: string; value: string } => d !== null);
 
-  return (
-    <Pressable
-      testID={testID}
-      style={({ pressed }) => [styles.resultRow, pressed && styles.resultRowPressed]}
-      onPress={onPress}
-    >
+  const displayName =
+    patient.fullName ||
+    `${patient.firstName || ''} ${patient.lastName || ''}`.trim() ||
+    'Unnamed Patient';
+
+  const rowContent = (
+    <View style={styles.flexFill}>
       <View style={styles.headerLine}>
         <ThemedText variant="bodyBold" color={theme.colors.text}>
-          {patient.fullName}
+          {displayName}
         </ThemedText>
-        {patient.verificationStatus ? (
-          <Badge
-            label={patient.verificationStatus}
-            variant={patient.verificationStatus === 'Verified' ? 'success' : 'neutral'}
-            size="sm"
-          />
-        ) : null}
+        <View style={styles.badgeCluster}>
+          {patient.verificationStatus ? (
+            <Badge
+              label={patient.verificationStatus}
+              variant={patient.verificationStatus === 'Verified' ? 'success' : 'neutral'}
+              size="sm"
+            />
+          ) : null}
+          {extraBadges}
+        </View>
       </View>
 
       {details.length > 0 ? (
@@ -127,6 +144,42 @@ export default function PatientSearchResultRow({
           ))}
         </View>
       ) : null}
+    </View>
+  );
+
+  if (rightAction) {
+    return (
+      <View
+        testID={testID}
+        style={[
+          styles.resultRow,
+          styles.resultRowWithAction,
+          selected && styles.resultRowSelected,
+        ]}
+      >
+        <Pressable
+          style={styles.flexFill}
+          onPress={onPress}
+          disabled={!onPress}
+        >
+          {rowContent}
+        </Pressable>
+        <View style={styles.actionWrap}>{rightAction}</View>
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      testID={testID}
+      style={({ pressed }) => [
+        styles.resultRow,
+        pressed && styles.resultRowPressed,
+        selected && styles.resultRowSelected,
+      ]}
+      onPress={onPress}
+    >
+      {rowContent}
     </Pressable>
   );
 }
@@ -144,11 +197,36 @@ const styles = StyleSheet.create({
   resultRowPressed: {
     backgroundColor: theme.colors.surfaceMuted,
   },
+  resultRowSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  resultRowWithAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  flexFill: {
+    flex: 1,
+    gap: 4,
+  },
+  actionWrap: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
   headerLine: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+  },
+  badgeCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
   },
   detailsRow: {
     flexDirection: 'row',

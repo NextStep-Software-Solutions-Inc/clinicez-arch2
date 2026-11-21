@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RoleChip } from "@/components/dashboard/RoleChip";
 import { describeApiError } from "@/lib/apiError";
@@ -114,19 +115,18 @@ function OwnerPanel({ tenantSlug, offer, members, onChanged }: OwnerPanelProps) 
           <>
             <div className="space-y-1.5">
               <Label htmlFor="ownership-target" className="text-xs font-bold">New owner</Label>
-              <select
+              <SelectField
                 id="ownership-target"
                 value={targetId}
-                onChange={(e) => setTargetId(e.target.value)}
-                className="h-10 w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="">Choose a member</option>
-                {candidates.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.fullName} ({m.email}) · {m.role}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setTargetId}
+                placeholder="Choose a member"
+                size="md"
+                className="max-w-md text-sm"
+                options={candidates.map((m) => ({
+                  value: m.id,
+                  label: `${m.fullName} (${m.email}) · ${m.role}`,
+                }))}
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ownership-confirm" className="text-xs font-bold">

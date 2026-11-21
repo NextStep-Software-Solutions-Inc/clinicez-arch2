@@ -312,7 +312,7 @@ public static class E2ETestHarness
         public static List<CdsRuleAlert> EvaluateOrderSafety(
             IReadOnlyList<string> orderedGenericDrugs,
             IReadOnlyList<PatientAllergyDto> patientAllergies,
-            IReadOnlyList<PatientProblemDto> activeProblems)
+            IReadOnlyList<PatientMedicalHistoryDto> activeProblems)
         {
             var alerts = new List<CdsRuleAlert>();
 

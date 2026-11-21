@@ -10,6 +10,7 @@ using ClinicEz.Clinic.Application.Features.CustomFields.Queries;
 using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -46,7 +47,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var handler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
 
         var dataTypes = new[]
@@ -66,7 +67,7 @@ public class CustomFieldsE2ETests
                 FieldKey: $"test_field_{dt.ToString().ToLower()}",
                 Label: $"Label for {dt}",
                 DataType: dt,
-                EntityType: "ClinicPatient",
+                EntityType: "Patient",
                 Category: "TestCategory",
                 IsRequired: i % 2 == 0,
                 DisplayOrder: i + 1,
@@ -87,7 +88,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var handler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
 
         // Act
@@ -106,7 +107,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var handler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
 
         // Act
@@ -134,7 +135,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var deleteHandler = new DeleteCustomFieldDefinitionCommandHandler(repo, uow);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
@@ -147,7 +148,7 @@ public class CustomFieldsE2ETests
 
         // Act
         var deleteResult = await deleteHandler.Handle(new DeleteCustomFieldDefinitionCommand(created.Id), CancellationToken.None);
-        var activeFields = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var activeFields = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
 
         // Assert
         deleteResult.Should().BeTrue();
@@ -159,7 +160,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
@@ -171,7 +172,7 @@ public class CustomFieldsE2ETests
         await createHandler.Handle(new CreateCustomFieldDefinitionCommand("f2_alt", "Field Alpha", CustomFieldDataType.Text, DisplayOrder: 2), CancellationToken.None);
 
         // Act
-        var results = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var results = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
 
         // Assert
         results.Should().HaveCount(4);
@@ -186,7 +187,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
@@ -195,7 +196,7 @@ public class CustomFieldsE2ETests
         await createHandler.Handle(new CreateCustomFieldDefinitionCommand("all1", "Blood Type", CustomFieldDataType.Text, Category: "All"), CancellationToken.None);
 
         // Act
-        var studentOnly = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient", "Student"), CancellationToken.None);
+        var studentOnly = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient", "Student"), CancellationToken.None);
 
         // Assert
         studentOnly.Should().Contain(f => f.FieldKey == "stud1");
@@ -212,7 +213,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
@@ -229,7 +230,7 @@ public class CustomFieldsE2ETests
         repo.Update(entity3);
         await uow.SaveChangesAsync();
 
-        var reordered = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var reordered = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
 
         // Assert
         reordered[0].FieldKey.Should().Be("field_3");
@@ -242,7 +243,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
 
         var f1 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("field_1", "First", CustomFieldDataType.Text, DisplayOrder: 1), CancellationToken.None);
@@ -257,7 +258,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
@@ -266,7 +267,7 @@ public class CustomFieldsE2ETests
         await createHandler.Handle(new CreateCustomFieldDefinitionCommand("gap_100", "Order Hundred", CustomFieldDataType.Text, DisplayOrder: 100), CancellationToken.None);
 
         // Act
-        var results = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var results = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
 
         // Assert
         results[0].FieldKey.Should().Be("gap_10");
@@ -279,7 +280,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange - Tenant 1
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo1 = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo1 = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler1 = new CreateCustomFieldDefinitionCommandHandler(repo1, uow, _clinicContext);
 
         // Tenant 2
@@ -287,15 +288,15 @@ public class CustomFieldsE2ETests
         tenant2Context.TenantId.Returns("other_tenant_99");
         tenant2Context.ClinicId.Returns(Guid.NewGuid());
         var (context2, uow2, sieve2) = TestDbHelper.CreateTestContext(tenant2Context);
-        var repo2 = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context2, sieve2);
+        var repo2 = TestDbHelper.CreateRepository<CustomFieldDefinition>(context2, sieve2);
         var createHandler2 = new CreateCustomFieldDefinitionCommandHandler(repo2, uow2, tenant2Context);
 
         // Act
         var t1Field = await createHandler1.Handle(new CreateCustomFieldDefinitionCommand("field_t1", "Tenant 1 Field", CustomFieldDataType.Text), CancellationToken.None);
         var t2Field = await createHandler2.Handle(new CreateCustomFieldDefinitionCommand("field_t2", "Tenant 2 Field", CustomFieldDataType.Text), CancellationToken.None);
 
-        var t1List = await new GetClinicCustomFieldsQueryHandler(repo1).Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
-        var t2List = await new GetClinicCustomFieldsQueryHandler(repo2).Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var t1List = await new GetClinicCustomFieldsQueryHandler(repo1).Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
+        var t2List = await new GetClinicCustomFieldsQueryHandler(repo2).Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
 
         // Assert
         t1List.Should().Contain(f => f.FieldKey == "field_t1");
@@ -309,11 +310,11 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
         // Act
-        var emptyList = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var emptyList = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
 
         // Assert
         emptyList.Should().BeEmpty();
@@ -420,7 +421,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext);
 
         var customFields = new Dictionary<string, object?>
@@ -439,7 +440,7 @@ public class CustomFieldsE2ETests
             MiddleName: "Bautista",
             Suffix: null,
             DateOfBirth: new DateOnly(2005, 8, 14),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: "Single",
             ContactNumber: "0917-123-4567",
             Email: "juan.delacruz@ustp.edu.ph",
@@ -478,7 +479,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext);
 
         var command = new RegisterClinicPatientCommand(
@@ -487,7 +488,7 @@ public class CustomFieldsE2ETests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1998, 4, 10),
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: "Single",
             ContactNumber: "0918-000-1122",
             Email: null,
@@ -523,7 +524,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var bulkHandler = new BulkRegisterClinicPatientsCommandHandler(patientRepo, uow, _clinicContext);
 
         var batch = new List<BulkPatientItemDto>
@@ -546,8 +547,8 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var attachmentRepo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var attachmentRepo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
         var selfEnrollHandler = new PublicStudentSelfEnrollCommandHandler(patientRepo, attachmentRepo, uow, _clinicContext);
 
         var command = new PublicStudentSelfEnrollCommand(
@@ -555,7 +556,7 @@ public class CustomFieldsE2ETests
             LastName: "Yulo",
             MiddleName: "Edriel",
             DateOfBirth: new DateOnly(2000, 2, 16),
-            Gender: "Male",
+            Sex: "Male",
             ContactNumber: "0917-888-9999",
             Email: "carlos.yulo@ustp.edu.ph",
             AddressLine: "Gymnastics Center",
@@ -597,7 +598,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var handler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
 
         // Act
@@ -619,7 +620,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var handler = new DeleteCustomFieldDefinitionCommandHandler(repo, uow);
 
         // Act
@@ -634,11 +635,11 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
         // Act
-        var result = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient", "NonExistentCategory123"), CancellationToken.None);
+        var result = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient", "NonExistentCategory123"), CancellationToken.None);
 
         // Assert
         result.Should().BeEmpty();
@@ -649,7 +650,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
         // Act
@@ -664,7 +665,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var handler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
 
         var longLabel = new string('A', 250);
@@ -693,7 +694,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
@@ -709,7 +710,7 @@ public class CustomFieldsE2ETests
         repo.Update(entity2);
         await uow.SaveChangesAsync();
 
-        var reordered = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var reordered = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
 
         // Assert
         reordered[0].FieldKey.Should().Be("f2");
@@ -721,8 +722,8 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var fieldRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var fieldRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var fieldHandler = new CreateCustomFieldDefinitionCommandHandler(fieldRepo, uow, _clinicContext);
         var patientHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext);
@@ -741,7 +742,7 @@ public class CustomFieldsE2ETests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1985, 5, 20),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: "Married",
             ContactNumber: "0917-111-2233",
             Email: null,
@@ -782,8 +783,8 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var fieldRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var fieldRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var fieldHandler = new CreateCustomFieldDefinitionCommandHandler(fieldRepo, uow, _clinicContext);
         var patientHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext);
@@ -791,11 +792,11 @@ public class CustomFieldsE2ETests
         // Seed USTP Preset custom fields
         var ustpFields = new[]
         {
-            new CreateCustomFieldDefinitionCommand("affiliation", "Affiliation", CustomFieldDataType.Select, "ClinicPatient", "Student", true, 1, "[\"Student\",\"Employee/Faculty\"]"),
-            new CreateCustomFieldDefinitionCommand("student_id", "Student ID Number", CustomFieldDataType.Text, "ClinicPatient", "Student", true, 2),
-            new CreateCustomFieldDefinitionCommand("college", "College", CustomFieldDataType.Select, "ClinicPatient", "Student", true, 3, "[\"Engineering\",\"IT\"]"),
-            new CreateCustomFieldDefinitionCommand("program", "Program", CustomFieldDataType.Select, "ClinicPatient", "Student", true, 4),
-            new CreateCustomFieldDefinitionCommand("campus_location", "Campus Location", CustomFieldDataType.Select, "ClinicPatient", "All", true, 5, "[\"CDO Main\",\"Alubijid\"]")
+            new CreateCustomFieldDefinitionCommand("affiliation", "Affiliation", CustomFieldDataType.Select, "Patient", "Student", true, 1, "[\"Student\",\"Employee/Faculty\"]"),
+            new CreateCustomFieldDefinitionCommand("student_id", "Student ID Number", CustomFieldDataType.Text, "Patient", "Student", true, 2),
+            new CreateCustomFieldDefinitionCommand("college", "College", CustomFieldDataType.Select, "Patient", "Student", true, 3, "[\"Engineering\",\"IT\"]"),
+            new CreateCustomFieldDefinitionCommand("program", "Program", CustomFieldDataType.Select, "Patient", "Student", true, 4),
+            new CreateCustomFieldDefinitionCommand("campus_location", "Campus Location", CustomFieldDataType.Select, "Patient", "All", true, 5, "[\"CDO Main\",\"Alubijid\"]")
         };
 
         foreach (var cmd in ustpFields)
@@ -810,7 +811,7 @@ public class CustomFieldsE2ETests
             MiddleName: "Phils",
             Suffix: null,
             DateOfBirth: new DateOnly(2006, 10, 17),
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: "Single",
             ContactNumber: "0917-333-4455",
             Email: "bea.alonzo@ustp.edu.ph",
@@ -863,7 +864,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var handler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
 
         var complexOptionsJson = "[\"Option \\\"Alpha\\\" with quotes\",\"Option & Special <Characters>\"]";
@@ -888,7 +889,7 @@ public class CustomFieldsE2ETests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var handler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
 
         var xssPayload = "<script>alert('pwned')</script>";
@@ -902,6 +903,224 @@ public class CustomFieldsE2ETests
 
         // Assert
         result.Label.Should().Be(xssPayload);
+    }
+
+    [Fact]
+    public async Task TC_IF_004_1_CreateCustomField_DuplicateMachineKey_ShouldThrowConflictException()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
+        var handler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
+
+        await handler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "student_id",
+            Label: "Student ID",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        // Act
+        var act = () => handler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "student_id",
+            Label: "Duplicate Student ID",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<ConflictException>()
+            .WithMessage("A custom field with this machine key already exists.");
+    }
+
+    [Fact]
+    public async Task TC_IF_004_2_UpdateCustomField_DuplicateMachineKey_ShouldThrowConflictException()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
+        var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
+        var updateHandler = new UpdateCustomFieldDefinitionCommandHandler(repo, uow);
+
+        await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "student_id",
+            Label: "Student ID",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        var second = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "employee_id",
+            Label: "Employee ID",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        // Act
+        var act = () => updateHandler.Handle(new UpdateCustomFieldDefinitionCommand(
+            Id: second.Id,
+            Label: "Employee ID",
+            DataType: CustomFieldDataType.Text,
+            FieldKey: "student_id"
+        ), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<ConflictException>()
+            .WithMessage("A custom field with this machine key already exists.");
+    }
+
+    [Fact]
+    public async Task TC_IF_004_3_CreateCustomField_AfterSoftDeletingSameMachineKey_ShouldSucceed()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
+        var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
+        var deleteHandler = new DeleteCustomFieldDefinitionCommandHandler(repo, uow);
+
+        var first = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "student_id",
+            Label: "Student ID",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        await deleteHandler.Handle(new DeleteCustomFieldDefinitionCommand(first.Id), CancellationToken.None);
+
+        // Act
+        var recreated = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "student_id",
+            Label: "Student ID Recreated",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        // Assert
+        recreated.Should().NotBeNull();
+        recreated.FieldKey.Should().Be("student_id");
+        recreated.Id.Should().NotBe(first.Id);
+    }
+
+    [Fact]
+    public async Task TC_IF_004_4_ConcurrentUniqueConstraintDbUpdateException_ShouldThrowConflictException()
+    {
+        // Arrange
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
+        var racingUow = Substitute.For<IUnitOfWork>();
+        racingUow.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns<Task<int>>(_ => throw new Microsoft.EntityFrameworkCore.DbUpdateException(
+                "An error occurred while saving the entity changes.",
+                new Exception("23505: duplicate key value violates unique constraint \"IX_CustomFieldDefinitions_TenantId_ClinicId_EntityType_FieldKey\"")));
+
+        var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, racingUow, _clinicContext);
+
+        // Act
+        var act = () => createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "student_id",
+            Label: "Student ID",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<ConflictException>()
+            .WithMessage("A custom field with this machine key already exists.");
+    }
+
+    [Theory]
+    [InlineData("full name 89 123!@#!")]
+    [InlineData("student-id")]
+    [InlineData("student@id")]
+    [InlineData("Student_ID")]
+    [InlineData("  student_id  ")]
+    [InlineData("student id")]
+    [InlineData("student_id\n")]
+    public void TC_IF_006_1_CreateCustomFieldValidator_InvalidMachineKeyFormat_ShouldFailValidation(string invalidKey)
+    {
+        // Arrange
+        var validator = new CreateCustomFieldDefinitionCommandValidator();
+        var command = new CreateCustomFieldDefinitionCommand(
+            FieldKey: invalidKey,
+            Label: "Test Field",
+            DataType: CustomFieldDataType.Text
+        );
+
+        // Act
+        var result = validator.Validate(command);
+
+        // Assert
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e =>
+            e.PropertyName == "FieldKey" &&
+            e.ErrorMessage == "Machine key must contain only lowercase alphanumeric characters and underscores.");
+    }
+
+    [Theory]
+    [InlineData("full name 89 123!@#!")]
+    [InlineData("student-id")]
+    [InlineData("Student_ID")]
+    [InlineData("  student_id  ")]
+    [InlineData("student_id\n")]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void TC_IF_006_2_UpdateCustomFieldValidator_InvalidMachineKeyFormat_ShouldFailValidation(string invalidKey)
+    {
+        // Arrange
+        var validator = new UpdateCustomFieldDefinitionCommandValidator();
+        var command = new UpdateCustomFieldDefinitionCommand(
+            Id: Guid.NewGuid(),
+            Label: "Test Field",
+            DataType: CustomFieldDataType.Text,
+            FieldKey: invalidKey
+        );
+
+        // Act
+        var result = validator.Validate(command);
+
+        // Assert
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e =>
+            e.PropertyName == "FieldKey" &&
+            e.ErrorMessage == "Machine key must contain only lowercase alphanumeric characters and underscores.");
+    }
+
+    [Fact]
+    public async Task TC_IF_006_3_CreateAndUpdateHandlers_SpecialCharactersOrEmptyMachineKey_ShouldThrowValidationException()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
+        var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
+        var updateHandler = new UpdateCustomFieldDefinitionCommandHandler(repo, uow);
+
+        var validField = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "valid_key",
+            Label: "Valid Field",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        // Act & Assert - Create handler rejects special characters
+        var createAct = () => createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "full name 89 123!@#!",
+            Label: "Invalid Field",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+        await createAct.Should().ThrowAsync<ValidationException>()
+            .WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
+
+        // Act & Assert - Update handler rejects special characters
+        var updateAct = () => updateHandler.Handle(new UpdateCustomFieldDefinitionCommand(
+            Id: validField.Id,
+            Label: "Valid Field",
+            DataType: CustomFieldDataType.Text,
+            FieldKey: "full name 89 123!@#!"
+        ), CancellationToken.None);
+        await updateAct.Should().ThrowAsync<ValidationException>()
+            .WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
+
+        // Act & Assert - Update handler rejects whitespace-only or empty non-null FieldKey
+        var updateWhitespaceAct = () => updateHandler.Handle(new UpdateCustomFieldDefinitionCommand(
+            Id: validField.Id,
+            Label: "Valid Field",
+            DataType: CustomFieldDataType.Text,
+            FieldKey: "   "
+        ), CancellationToken.None);
+        await updateWhitespaceAct.Should().ThrowAsync<ValidationException>()
+            .WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
     }
 
     #endregion

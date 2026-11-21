@@ -153,7 +153,7 @@ public class ConsultationCommandHandlersTests
         var identity = Substitute.For<IClinicIdentityProvider>();
         identity.GetAsync(Arg.Any<CancellationToken>()).Returns(new ClinicIdentity(tenantId, clinicId, "Apex Clinic"));
         var handler = new SignConsultationCommandHandler(
-            consultationRepo, staffRepo, queueRepo, apptRepo, TestDbHelper.CreateRepository<ClinicPatient>(context, sieve), uow, clinicContext,
+            consultationRepo, staffRepo, queueRepo, apptRepo, TestDbHelper.CreateRepository<Patient>(context, sieve), uow, clinicContext,
             identity, appointmentPublisher, Substitute.For<IPrescriptionPublisher>(),
             Phase3TestKit.Claims(), Phase3TestKit.Documents(context));
 
@@ -241,7 +241,7 @@ public class ConsultationCommandHandlersTests
         await context.SaveChangesAsync();
 
         var handler = new SignConsultationCommandHandler(
-            consultationRepo, staffRepo, queueRepo, apptRepo, TestDbHelper.CreateRepository<ClinicPatient>(context, sieve), uow, clinicContext,
+            consultationRepo, staffRepo, queueRepo, apptRepo, TestDbHelper.CreateRepository<Patient>(context, sieve), uow, clinicContext,
             Substitute.For<IClinicIdentityProvider>(), appointmentPublisher, Substitute.For<IPrescriptionPublisher>(),
             Phase3TestKit.Claims(), Phase3TestKit.Documents(context));
 
@@ -270,7 +270,7 @@ public class ConsultationCommandHandlersTests
         var diagnosisRepo = TestDbHelper.CreateRepository<EncounterDiagnosis>(context, sieve);
         var prescriptionRepo = TestDbHelper.CreateRepository<PrescriptionItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var doctor = new StaffMember
         {
@@ -284,14 +284,14 @@ public class ConsultationCommandHandlersTests
         };
         await context.StaffMembers.AddAsync(doctor);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = tenantId,
             ClinicId = clinicId,
             ClinicName = "Apex Family Care",
             AccreditationNumber = "PHIC-KONSULTA-09214"
         };
-        await context.ClinicSettings.AddAsync(settings);
+        await context.Settings.AddAsync(settings);
 
         var encounter = new ConsultationEncounter
         {
@@ -305,19 +305,17 @@ public class ConsultationCommandHandlersTests
             EncounterDate = new DateTime(2026, 4, 15),
             IsYakapEligible = false,
             DoctorPhilHealthPan = null,
-            HciCaseNo = null,
-            HciTransNo = null,
-            SoapTransNo = null
+            PhilHealthCaseNo = null,
+            PhilHealthSoapTransNo = null
         };
         await context.Consultations.AddAsync(encounter);
         await context.SaveChangesAsync();
 
         var sequenceGenerator = Substitute.For<IPhilHealthSequenceGenerator>();
         var journeyNumbers = new PhilHealthPatientJourneyNumbers(
-            CaseNumber: "C00921202600001",
-            EnlistmentTransactionNumber: "E00921202600001",
-            ProfilingTransactionNumber: "P00921202600001",
-            SoapTransactionNumber: "S00921202600001");
+            CaseNumber: "CH100000012026112000001",
+            ProfilingTransactionNumber: "PH100000012026112000001",
+            SoapTransactionNumber: "SH100000012026112000001");
 
         sequenceGenerator.AssignPatientJourneyNumbersAsync(
             tenantId,
@@ -358,17 +356,16 @@ public class ConsultationCommandHandlersTests
         result.IsYakapEligible.Should().BeTrue();
         result.DoctorPhilHealthPan.Should().Be("PAN-DOC-987654");
         result.PhilHealthAtc.Should().Be("ATC-KON-2026-001");
-        result.HciCaseNo.Should().Be("C00921202600001");
-        result.HciTransNo.Should().Be("E00921202600001");
-        result.SoapTransNo.Should().Be("S00921202600001");
+        result.HciCaseNo.Should().Be("CH100000012026112000001");
+        result.HciTransNo.Should().Be("PH100000012026112000001");
+        result.SoapTransNo.Should().Be("SH100000012026112000001");
 
         var savedEncounter = await context.Consultations.FirstAsync(c => c.Id == encounterId);
         savedEncounter.IsYakapEligible.Should().BeTrue();
         savedEncounter.DoctorPhilHealthPan.Should().Be("PAN-DOC-987654");
         savedEncounter.PhilHealthAtc.Should().Be("ATC-KON-2026-001");
-        savedEncounter.HciCaseNo.Should().Be("C00921202600001");
-        savedEncounter.HciTransNo.Should().Be("E00921202600001");
-        savedEncounter.SoapTransNo.Should().Be("S00921202600001");
+        savedEncounter.PhilHealthCaseNo.Should().Be("CH100000012026112000001");
+        savedEncounter.PhilHealthSoapTransNo.Should().Be("SH100000012026112000001");
     }
 
     [Fact]
@@ -390,7 +387,7 @@ public class ConsultationCommandHandlersTests
         var diagnosisRepo = TestDbHelper.CreateRepository<EncounterDiagnosis>(context, sieve);
         var prescriptionRepo = TestDbHelper.CreateRepository<PrescriptionItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var doctor = new StaffMember
         {
@@ -553,7 +550,7 @@ public class ConsultationCommandHandlersTests
         var diagnosisRepo = TestDbHelper.CreateRepository<EncounterDiagnosis>(context, sieve);
         var prescriptionRepo = TestDbHelper.CreateRepository<PrescriptionItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         // Doctor with NO PhilHealthPan configured
         var doctor = new StaffMember
@@ -630,7 +627,7 @@ public class ConsultationCommandHandlersTests
         var diagnosisRepo = TestDbHelper.CreateRepository<EncounterDiagnosis>(context, sieve);
         var prescriptionRepo = TestDbHelper.CreateRepository<PrescriptionItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var encounter = new ConsultationEncounter
         {
@@ -679,7 +676,7 @@ public class ConsultationCommandHandlersTests
         await act.Should().NotThrowAsync();
         var updated = await context.Consultations.FirstAsync(c => c.Id == encounterId);
         updated.Subjective.Should().Be("Yakap visit with offline sequence fallback");
-        updated.HciCaseNo.Should().BeNull(); // sequence failed, handled gracefully
+        updated.PhilHealthCaseNo.Should().BeNull(); // sequence failed, handled gracefully
     }
 
     [Fact]
@@ -736,20 +733,14 @@ public class ConsultationCommandHandlersTests
             .WithMessage("*already signed and locked*");
     }
 
-    [Theory]
-    [InlineData("not a json")]
-    [InlineData("{ malformed json }")]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData(null)]
-    public void PhysicalExamFindings_CorruptedOrEmptyJson_ReturnsNullSafely(string? input)
+    [Fact]
+    public void PhysicalExamFindings_NoPhysicalExams_ReturnsNullSafely()
     {
         var encounter = new ConsultationEncounter
         {
             TenantId = "tenant_test",
             PatientName = "Test Patient",
-            DoctorName = "Dr. Test",
-            PhysicalExamFindingsJson = input
+            DoctorName = "Dr. Test"
         };
 
         var findings = encounter.GetPhysicalExamFindings();
@@ -985,7 +976,7 @@ public class ConsultationCommandHandlersTests
         var diagnosisRepo = TestDbHelper.CreateRepository<EncounterDiagnosis>(context, sieve);
         var prescriptionRepo = TestDbHelper.CreateRepository<PrescriptionItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var initialEncounter = new ConsultationEncounter
         {

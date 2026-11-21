@@ -1,7 +1,10 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Infrastructure.Context;
 using ClinicEz.Shared.LocalAuth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 
 namespace ClinicEz.Clinic.Infrastructure.Auth;
@@ -9,8 +12,9 @@ namespace ClinicEz.Clinic.Infrastructure.Auth;
 /// <summary>
 /// Runs after authentication.
 /// <list type="bullet">
-///   <item>Staff tokens: <c>X-Clinic-Id</c> is only a client hint. If present it must equal the token's clinic, otherwise 403
-///   (prevents cross-clinic probing with a valid token).</item>
+///   <item>Staff and kiosk tokens: <c>X-Clinic-Id</c> and <c>X-Tenant-Id</c> are only client hints. If present they must equal the token's claims, otherwise 403
+///   (prevents cross-clinic or cross-tenant probing with a valid token).</item>
+///   <item>Kiosk tokens: restricted to endpoints with KioskIntake policy.</item>
 ///   <item>Internal services: resolves the clinic for the supplied tenant when <c>X-Clinic-Id</c> is absent.</item>
 /// </list>
 /// </summary>
@@ -26,27 +30,65 @@ public sealed class ClinicScopeMiddleware
         if (user.Identity?.IsAuthenticated == true)
         {
             var isInternal = user.HasClaim(FacilityAuthSchemes.InternalClaim, "true");
-            var hasHeader = context.Request.Headers.TryGetValue("X-Clinic-Id", out var rawClinic) &&
-                            Guid.TryParse(rawClinic.ToString(), out _);
+            var isKiosk = string.Equals(user.FindFirst(ClinicClaimTypes.TokenType)?.Value, "kiosk", StringComparison.OrdinalIgnoreCase);
+            var hasClinicHeader = context.Request.Headers.TryGetValue("X-Clinic-Id", out var rawClinic) &&
+                                  Guid.TryParse(rawClinic.ToString(), out _);
 
-            if (!isInternal && hasHeader)
+            if (!isInternal)
             {
-                var claimed = user.FindFirst(ClinicClaimTypes.ClinicId)?.Value;
-                if (!Guid.TryParse(claimed, out var tokenClinic) ||
-                    !Guid.TryParse(rawClinic.ToString(), out var headerClinic) ||
-                    tokenClinic != headerClinic)
+                if (hasClinicHeader)
+                {
+                    var claimed = user.FindFirst(ClinicClaimTypes.ClinicId)?.Value;
+                    if (!Guid.TryParse(claimed, out var tokenClinic) ||
+                        !Guid.TryParse(rawClinic.ToString(), out var headerClinic) ||
+                        tokenClinic != headerClinic)
+                    {
+                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        await context.Response.WriteAsJsonAsync(new
+                        {
+                            success = false,
+                            message = "Forbidden: the requested clinic does not match your session."
+                        });
+                        return;
+                    }
+                }
+
+                if (context.Request.Headers.TryGetValue("X-Tenant-Id", out var rawTenant) &&
+                    !string.IsNullOrWhiteSpace(rawTenant.ToString()))
+                {
+                    var tokenTenant = user.FindFirst(ClinicClaimTypes.TenantId)?.Value;
+                    if (!string.Equals(tokenTenant, rawTenant.ToString(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        await context.Response.WriteAsJsonAsync(new
+                        {
+                            success = false,
+                            message = "Forbidden: the requested tenant does not match your session."
+                        });
+                        return;
+                    }
+                }
+            }
+
+            if (isKiosk)
+            {
+                var endpoint = context.GetEndpoint();
+                var authorizeData = endpoint?.Metadata.GetOrderedMetadata<IAuthorizeData>();
+                var allowsKiosk = authorizeData != null && authorizeData.Any(a => a.Policy == ClinicPolicies.KioskIntake);
+
+                if (!allowsKiosk)
                 {
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
                     await context.Response.WriteAsJsonAsync(new
                     {
                         success = false,
-                        message = "Forbidden: the requested clinic does not match your session."
+                        message = "Forbidden: Kiosk tokens are restricted to kiosk intake endpoints."
                     });
                     return;
                 }
             }
 
-            if (isInternal && !hasHeader)
+            if (isInternal && !hasClinicHeader)
             {
                 var hasFacilitySlug = context.Request.Headers.TryGetValue("X-Facility-Slug", out var facHeader) && !string.IsNullOrWhiteSpace(facHeader);
                 var hasTenantSlug = context.Request.Headers.TryGetValue("X-Tenant-Id", out var tenantHeader) && !string.IsNullOrWhiteSpace(tenantHeader);

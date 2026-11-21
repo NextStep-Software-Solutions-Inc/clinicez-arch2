@@ -69,7 +69,7 @@ public static class GovernanceSafetyChecker
 
     public static async Task EnsureGovernancePermissionsRemainOnStaffChangeAsync(
         IRepository<StaffMember> staffRepository,
-        IRepository<ClinicRole> roleRepository,
+        IRepository<Role> roleRepository,
         Guid clinicId,
         StaffMember currentStaff,
         bool newIsActive,
@@ -133,7 +133,7 @@ public static class GovernanceSafetyChecker
     public static async Task EnsureGovernancePermissionsRemainOnRoleUpdateAsync(
         IRepository<StaffMember> staffRepository,
         Guid clinicId,
-        ClinicRole existingRole,
+        Role existingRole,
         IReadOnlyList<string> updatedPermissions,
         CancellationToken ct = default)
     {

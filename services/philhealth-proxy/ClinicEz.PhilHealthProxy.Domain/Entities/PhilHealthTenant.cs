@@ -4,31 +4,31 @@ public sealed class PhilHealthTenant
 {
     public Guid Id { get; init; } = Guid.NewGuid();
 
-    /// <summary>External tenant identifier — links to the clinic in the broader system.</summary>
+    /// <summary>External tenant identifier (Organization / Workspace).</summary>
     public Guid TenantId { get; init; }
+
+    /// <summary>Branch identifier when configured per clinic branch; null for organization default.</summary>
+    public Guid? BranchId { get; set; }
 
     public string FacilityName { get; set; } = string.Empty;
 
-    /// <summary>PhilHealth accreditation number — used as pHospitalCode in SOAP requests.</summary>
+    /// <summary>PhilHealth accreditation number (exactly 9 characters, e.g. H10000001).</summary>
     public string AccreditationNumber { get; set; } = string.Empty;
 
-    /// <summary>PMCC number issued by PhilHealth (e.g., Z15445).</summary>
+    /// <summary>PMCC number issued by PhilHealth (e.g. Z15445).</summary>
     public string PmccNumber { get; set; } = string.Empty;
 
-    /// <summary>Software certificate ID issued by PhilHealth (e.g., KON-DUMMYCERTS-Z15445).</summary>
+    /// <summary>Software certificate ID issued to Service Provider (e.g. KON-DUMMYCERTS-Z15445).</summary>
     public string SoftwareCertificateId { get; set; } = string.Empty;
 
-    /// <summary>Encrypted SOAP pUsername credential.</summary>
-    public string EncryptedUsername { get; set; } = string.Empty;
+    /// <summary>Encrypted PCAPI Secret Key (used for POST /api/v1/auth/token).</summary>
+    public string EncryptedSecretKey { get; set; } = string.Empty;
 
-    /// <summary>Encrypted SOAP pUserPassword credential.</summary>
-    public string EncryptedPassword { get; set; } = string.Empty;
-
-    /// <summary>Encrypted cipher key used for field-level payload encryption.</summary>
+    /// <summary>Encrypted PCAPI Cipher Key (used for Annex C payload AES-256-CBC encryption).</summary>
     public string EncryptedCipherKey { get; set; } = string.Empty;
 
-    /// <summary>PhilHealth Konsulta SOAP endpoint URL for this tenant.</summary>
-    public string KonsultaEndpoint { get; set; } = "https://staging.philhealth.gov.ph/KONSULTA/SOAP";
+    /// <summary>Base URL for the PCAPI environment (default: https://pcapi.philhealth.gov.ph).</summary>
+    public string BaseUrl { get; set; } = "https://pcapi.philhealth.gov.ph";
 
     public bool IsActive { get; set; } = true;
 

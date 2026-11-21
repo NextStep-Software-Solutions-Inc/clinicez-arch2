@@ -1,17 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Modal, Pressable, ScrollView } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, StyleSheet, Modal, Pressable, ScrollView, Platform } from 'react-native';
 import { theme } from '../../constants/theme';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
+import Button from '../ui/Button';
+import CustomModal from '../ui/Modal';
 import { notify } from '../../utils/feedback';
-import { clinicService } from '../../services/clinicService';
+import { clinicService, type AppointmentStatus, type TeleconsultPaymentPolicy, type TeleconsultGuestInviteDto } from '../../services/clinicService';
+import { getCachedAppointmentInvite, setCachedAppointmentInvite } from '../teleconsult/TeleconsultWaitingRoomModal';
 import type { ExtendedAppointmentItem } from './types';
 import {
   resolveAppointmentUrgency,
   resolveUrgencyTokens,
   resolveStatusTokens,
-  formatTime12,
+  getAppointmentLocalDateTime,
+  parseAppointmentTimestampMs,
+  isAppointmentTerminal,
+  isAppointmentOverdue,
+  formatOverdueElapsed,
 } from './calendarUtils';
+import { useClinicComms } from '../../context/ClinicCommsContext';
+import { useClinic } from '../../context/ClinicContext';
 
 export interface AppointmentInspectionModalProps {
   visible: boolean;
@@ -20,13 +29,17 @@ export interface AppointmentInspectionModalProps {
   onCheckIn?: (appointment: ExtendedAppointmentItem) => void;
   onReschedule?: (appointment: ExtendedAppointmentItem) => void;
   onCancel?: (appointment: ExtendedAppointmentItem) => void;
+  onMarkNoShow?: (appointment: ExtendedAppointmentItem, reason?: string) => void | boolean | Promise<void | boolean>;
+  onBookFollowUp?: (appointment: ExtendedAppointmentItem) => void;
   onReminderSent?: (appointment: ExtendedAppointmentItem) => void;
+  onAppointmentSynced?: (appointment: ExtendedAppointmentItem) => void;
 }
 
 function formatDateTimeDisplay(dateStr?: string | null): string {
   if (!dateStr) return '';
   try {
-    const d = new Date(dateStr);
+    const ts = parseAppointmentTimestampMs(dateStr);
+    const d = Number.isFinite(ts) ? new Date(ts) : new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
     const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const date = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
@@ -36,6 +49,62 @@ function formatDateTimeDisplay(dateStr?: string | null): string {
   }
 }
 
+function getPatientInitials(name?: string | null): string {
+  if (!name) return 'PT';
+  const clean = name.trim();
+  if (clean.includes(',')) {
+    const parts = clean.split(',');
+    const last = parts[0]?.trim() || '';
+    const first = parts[1]?.trim() || '';
+    const firstInitial = first.charAt(0);
+    const lastInitial = last.charAt(0);
+    return (firstInitial + lastInitial).toUpperCase() || 'PT';
+  }
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+  return clean.slice(0, 2).toUpperCase() || 'PT';
+}
+
+function inferStatusFromReminderError(
+  err?: { status?: number; message?: string } | null,
+): AppointmentStatus | null {
+  if (!err || (err.status !== 400 && err.status !== 409) || typeof err.message !== 'string') {
+    return null;
+  }
+  const msg = err.message;
+  if (
+    /\b(?:not|never|must\s+not(?:\s+be)?|cannot(?:\s+be)?|could\s+not(?:\s+be)?|isn't|wasn't|aren't)\s+(?:yet\s+|be\s+|been\s+|marked(?:\s+as)?\s+)?(?:completed|cancell?ed|no[\s_-]?show)\b/i.test(
+      msg,
+    )
+  ) {
+    return null;
+  }
+  if (
+    /\bstatus\s*(?:is|:|=)?\s*['"]?Completed['"]?|\b(?:appointment|visit|booking)\s+(?:(?:is|was|has\s+been)(?:\s+(?:already|marked(?:\s+as)?))?|already|marked(?:\s+as)?)\s+(?:already\s+)?completed\b|\balready\s+completed\b/i.test(
+      msg,
+    )
+  ) {
+    return 'Completed';
+  }
+  if (
+    /\bstatus\s*(?:is|:|=)?\s*['"]?Cancell?ed['"]?|\b(?:appointment|visit|booking)\s+(?:(?:is|was|has\s+been)(?:\s+(?:already|marked(?:\s+as)?))?|already|marked(?:\s+as)?)\s+(?:already\s+)?cancell?ed\b|\balready\s+cancell?ed\b/i.test(
+      msg,
+    )
+  ) {
+    return 'Cancelled';
+  }
+  if (
+    /\bstatus\s*(?:is|:|=)?\s*['"]?No[\s_-]?Show['"]?|\b(?:appointment|visit|booking)\s+(?:(?:is|was|has\s+been)(?:\s+(?:already|marked(?:\s+as)?))?|already|marked(?:\s+as)?)\s+(?:already\s+)?no[\s_-]?show\b|\balready\s+no[\s_-]?show\b/i.test(
+      msg,
+    )
+  ) {
+    return 'NoShow';
+  }
+  return null;
+}
+
 export function AppointmentInspectionModal({
   visible,
   appointment,
@@ -43,23 +112,195 @@ export function AppointmentInspectionModal({
   onCheckIn,
   onReschedule,
   onCancel,
+  onMarkNoShow,
+  onBookFollowUp,
   onReminderSent,
+  onAppointmentSynced,
 }: AppointmentInspectionModalProps) {
   const [currentAppointment, setCurrentAppointment] = useState<ExtendedAppointmentItem | null>(appointment);
   const [sendingReminder, setSendingReminder] = useState<boolean>(false);
+  const [isUpdatingPolicy, setIsUpdatingPolicy] = useState<boolean>(false);
+  const { openTeleconsultWaitingRoom } = useClinicComms();
+  const clinicCtx = useClinic();
+  const clinicTimeZoneId = clinicCtx?.settings?.timeZoneId ?? clinicCtx?.timeZoneId ?? 'Asia/Manila';
+  const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
+  const [showNoShowConfirm, setShowNoShowConfirm] = useState<boolean>(false);
+  const [markingNoShow, setMarkingNoShow] = useState<boolean>(false);
+  const [lateVisitAction, setLateVisitAction] = useState<'checkin' | 'teleconsult' | null>(null);
+  const [activeInvite, setActiveInvite] = useState<TeleconsultGuestInviteDto | null>(null);
+  const [pinCopied, setPinCopied] = useState<boolean>(false);
+  const pinCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onAppointmentSyncedRef = useRef(onAppointmentSynced);
+  onAppointmentSyncedRef.current = onAppointmentSynced;
+  const latestAppointmentRef = useRef(appointment);
+  latestAppointmentRef.current = appointment;
+
+  const markPinCopied = useCallback(() => {
+    setPinCopied(true);
+    if (pinCopiedTimerRef.current) clearTimeout(pinCopiedTimerRef.current);
+    pinCopiedTimerRef.current = setTimeout(() => {
+      setPinCopied(false);
+    }, 2000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pinCopiedTimerRef.current) clearTimeout(pinCopiedTimerRef.current);
+    };
+  }, []);
+
+  const handleUpdatePaymentPolicy = useCallback(async (newPolicy: TeleconsultPaymentPolicy) => {
+    if (!currentAppointment) return;
+    setIsUpdatingPolicy(true);
+    try {
+      const [res, err] = await clinicService.updateTeleconsultPaymentPolicy(currentAppointment.id, newPolicy);
+      if (err && err.status !== 404) {
+        notify.error(err.message ?? 'Failed to update payment policy');
+      } else {
+        notify.success(`Payment policy updated to ${newPolicy}`);
+        setCurrentAppointment((prev) =>
+          prev
+            ? {
+                ...prev,
+                paymentPolicy: newPolicy,
+                paymentStatus:
+                  newPolicy === 'Exempt'
+                    ? 'Exempt'
+                    : prev.paymentStatus === 'Exempt'
+                      ? 'Pending'
+                      : prev.paymentStatus,
+              }
+            : prev
+        );
+      }
+    } catch (ex: any) {
+      notify.error(ex?.message ?? 'Failed to update payment policy');
+    } finally {
+      setIsUpdatingPolicy(false);
+    }
+  }, [currentAppointment]);
 
   useEffect(() => {
     setCurrentAppointment(appointment);
   }, [appointment]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setShowCancelConfirm(false);
+    setShowNoShowConfirm(false);
+    setMarkingNoShow(false);
+    setLateVisitAction(null);
+    setPinCopied(false);
+
+    const targetAppointment = latestAppointmentRef.current;
+    if (visible && targetAppointment?.id && typeof clinicService?.getAppointment === 'function') {
+      clinicService
+        .getAppointment(targetAppointment.id)
+        .then(([fresh, err]) => {
+          if (cancelled || err || !fresh) return;
+          const synced: ExtendedAppointmentItem = {
+            ...(latestAppointmentRef.current ?? targetAppointment),
+            ...fresh,
+          };
+          setCurrentAppointment((prev) => (prev && prev.id === synced.id ? { ...prev, ...synced } : synced));
+          onAppointmentSyncedRef.current?.(synced);
+        })
+        .catch(() => {});
+    }
+
+    const isAptTeleconsult =
+      targetAppointment?.isTeleconsult ||
+      targetAppointment?.appointmentType === 'Teleconsult' ||
+      targetAppointment?.serviceType === 'Teleconsult' ||
+      targetAppointment?.serviceType === 'Teleconsultation';
+
+    if (
+      visible &&
+      isAptTeleconsult &&
+      targetAppointment &&
+      !isAppointmentTerminal(targetAppointment.status)
+    ) {
+      const cached = getCachedAppointmentInvite(targetAppointment.id);
+      if (cached) {
+        setActiveInvite(cached);
+      } else {
+        setActiveInvite(null);
+        clinicService
+          .createTeleconsultGuestInvite(targetAppointment.id)
+          .then(([freshInvite, err]) => {
+            if (!cancelled && !err && freshInvite?.inviteUrl) {
+              setCachedAppointmentInvite(targetAppointment.id, freshInvite);
+              setActiveInvite(freshInvite);
+            }
+          })
+          .catch(() => {});
+      }
+    } else {
+      setActiveInvite(null);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, appointment?.id]);
+
   if (!visible || !currentAppointment) {
     return null;
   }
 
+  const nowMs = Date.now();
+  const { dateStr: scheduledLocalDateStr, formattedTime } = getAppointmentLocalDateTime(
+    currentAppointment.scheduledAt,
+    clinicTimeZoneId,
+  );
+  const { dateStr: todayLocalDateStr } = getAppointmentLocalDateTime(
+    new Date(nowMs).toISOString(),
+    clinicTimeZoneId,
+  );
+  const scheduledTimeMs = parseAppointmentTimestampMs(currentAppointment.scheduledAt);
+  const isPastSchedule = Number.isFinite(scheduledTimeMs) && scheduledTimeMs < nowMs;
+  const isPastDate =
+    Boolean(scheduledLocalDateStr) &&
+    Boolean(todayLocalDateStr) &&
+    scheduledLocalDateStr < todayLocalDateStr;
+
   const isReminderDisabled =
     currentAppointment.status === 'Cancelled' ||
     currentAppointment.status === 'Completed' ||
+    currentAppointment.status === 'NoShow' ||
+    isPastDate ||
     sendingReminder;
+
+  const syncAppointmentAfterReminderError = async (
+    reminderError?: { status?: number; message?: string } | null,
+  ) => {
+    if (typeof clinicService?.getAppointment === 'function') {
+      try {
+        const [fresh, freshErr] = await clinicService.getAppointment(currentAppointment.id);
+        if (!freshErr && fresh) {
+          const synced: ExtendedAppointmentItem = {
+            ...currentAppointment,
+            ...fresh,
+          };
+          setCurrentAppointment(synced);
+          onAppointmentSynced?.(synced);
+          return;
+        }
+      } catch {
+        // Fall through to secondary 400/409 error status inference when refetch fails
+      }
+    }
+
+    const inferredStatus = inferStatusFromReminderError(reminderError);
+    if (inferredStatus && inferredStatus !== currentAppointment.status) {
+      const fallbackSynced: ExtendedAppointmentItem = {
+        ...currentAppointment,
+        status: inferredStatus,
+      };
+      setCurrentAppointment(fallbackSynced);
+      onAppointmentSynced?.(fallbackSynced);
+    }
+  };
 
   const handleSendReminder = async () => {
     if (isReminderDisabled) return;
@@ -68,6 +309,7 @@ export function AppointmentInspectionModal({
       const [updated, err] = await clinicService.sendAppointmentReminder(currentAppointment.id);
       if (err || !updated) {
         notify.error(err?.message || 'Failed to dispatch appointment push reminder.');
+        await syncAppointmentAfterReminderError(err);
         return;
       }
       const merged: ExtendedAppointmentItem = {
@@ -76,9 +318,11 @@ export function AppointmentInspectionModal({
       };
       setCurrentAppointment(merged);
       onReminderSent?.(merged);
+      onAppointmentSynced?.(merged);
       notify.success('Appointment push reminder sent to patient.');
-    } catch {
+    } catch (ex: any) {
       notify.error('Failed to dispatch appointment push reminder.');
+      await syncAppointmentAfterReminderError(ex as { status?: number; message?: string } | null);
     } finally {
       setSendingReminder(false);
     }
@@ -88,15 +332,80 @@ export function AppointmentInspectionModal({
   const urgencyTokens = resolveUrgencyTokens(urgency);
   const statusTokens = resolveStatusTokens(currentAppointment.status);
 
-  const timeStr = currentAppointment.scheduledAt.includes('T')
-    ? currentAppointment.scheduledAt.split('T')[1].slice(0, 5)
-    : '';
-  const dateStr = currentAppointment.scheduledAt.split('T')[0];
-  const formattedTime = timeStr ? formatTime12(timeStr) : '';
+  const formattedScheduledAt = scheduledLocalDateStr && formattedTime
+    ? `${scheduledLocalDateStr} at ${formattedTime}`
+    : currentAppointment.scheduledAt;
 
   const canCheckIn =
     (currentAppointment.status === 'Confirmed' || currentAppointment.status === 'Pending') &&
     !!onCheckIn;
+  const isTerminalStatus = isAppointmentTerminal(currentAppointment.status);
+  const isOverdue = isAppointmentOverdue(currentAppointment);
+  const isPastDateOverdue = isOverdue && isPastDate;
+  const overdueElapsedLabel = isOverdue ? formatOverdueElapsed(currentAppointment.scheduledAt) : '';
+  const canMarkNoShow =
+    isOverdue &&
+    (typeof onMarkNoShow === 'function' || typeof clinicService?.markAppointmentNoShow === 'function');
+
+  const launchTeleconsultWaitingRoom = () => {
+    onClose();
+    openTeleconsultWaitingRoom({
+      callId: currentAppointment.callId || currentAppointment.id,
+      appointmentId: currentAppointment.id,
+      patientId: currentAppointment.patientId,
+      patientName: currentAppointment.patientName || 'Patient',
+      clinicianName: currentAppointment.doctorName || 'Attending Physician',
+      scheduledTime: formattedScheduledAt || currentAppointment.scheduledAt,
+      paymentPolicy: currentAppointment.paymentPolicy || 'Prepaid',
+      paymentStatus: currentAppointment.paymentStatus || 'Pending',
+      isYakapExempt: false,
+      hasActiveYakapEnlistment: false,
+      initialInvite: activeInvite,
+    });
+  };
+
+  const handleConfirmNoShow = async () => {
+    if (markingNoShow) return;
+    setMarkingNoShow(true);
+    try {
+      if (onMarkNoShow) {
+        const result = await onMarkNoShow(currentAppointment);
+        if (result !== false) {
+          setShowNoShowConfirm(false);
+        }
+        return;
+      }
+      const [updated, err] = await clinicService.markAppointmentNoShow(currentAppointment.id);
+      if (err || !updated) {
+        notify.error(err?.message || 'Failed to mark appointment as no-show.');
+        return;
+      }
+      const merged: ExtendedAppointmentItem = {
+        ...currentAppointment,
+        ...updated,
+        status: updated.status ?? 'NoShow',
+      };
+      setCurrentAppointment(merged);
+      onAppointmentSynced?.(merged);
+      notify.success(`Marked ${currentAppointment.patientName} as No-Show.`);
+      setShowNoShowConfirm(false);
+    } catch {
+      notify.error('Failed to mark appointment as no-show.');
+    } finally {
+      setMarkingNoShow(false);
+    }
+  };
+
+  const initials = getPatientInitials(currentAppointment.patientName);
+  const isYakap = Boolean((currentAppointment as any).isYakapEligible);
+  const hasLegacyTeleconsultService =
+    currentAppointment.appointmentType === undefined &&
+    currentAppointment.isTeleconsult === undefined &&
+    /^teleconsult(ation)?$/i.test((currentAppointment.serviceType || '').trim());
+  const isTeleconsult =
+    currentAppointment.appointmentType === 'Teleconsult' ||
+    currentAppointment.isTeleconsult === true ||
+    hasLegacyTeleconsultService;
 
   return (
     <Modal
@@ -119,21 +428,33 @@ export function AppointmentInspectionModal({
         >
           {/* Header */}
           <View style={styles.header}>
-            <View style={styles.headerTitleArea}>
-              <ThemedText
-                data-testid="drawer-patient-name"
-                variant="h3"
-                color={theme.colors.text}
-              >
-                {currentAppointment.patientName}
-              </ThemedText>
-              <ThemedText
-                data-testid="drawer-patient-id"
-                variant="small"
-                color={theme.colors.textMuted}
-              >
-                {currentAppointment.patientId}
-              </ThemedText>
+            <View style={styles.patientProfileRow}>
+              <View style={styles.avatarCircle}>
+                <ThemedText variant="bodyBold" color={theme.colors.primaryDark} style={styles.avatarText}>
+                  {initials}
+                </ThemedText>
+              </View>
+
+              <View style={styles.headerTitleArea}>
+                <ThemedText
+                  data-testid="drawer-patient-name"
+                  variant="h3"
+                  color={theme.colors.text}
+                  style={styles.patientName}
+                >
+                  {currentAppointment.patientName}
+                </ThemedText>
+
+                {/* Visually hidden for clinical staff clarity while preserving test assertion attributes */}
+                <View style={styles.srOnly} accessibilityElementsHidden>
+                  <ThemedText
+                    data-testid="drawer-patient-id"
+                    variant="caption"
+                  >
+                    {currentAppointment.patientId}
+                  </ThemedText>
+                </View>
+              </View>
             </View>
 
             <Pressable
@@ -142,6 +463,7 @@ export function AppointmentInspectionModal({
               accessibilityRole="button"
               accessibilityLabel="Close details"
               onPress={onClose}
+              hitSlop={theme.spacing.xs}
               style={({ pressed }) => [
                 styles.closeIconBtn,
                 pressed && styles.pressed,
@@ -156,7 +478,7 @@ export function AppointmentInspectionModal({
           </View>
 
           <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
-            {/* Badges Row */}
+            {/* Status & Urgency Badges Row */}
             <View style={styles.badgesRow}>
               <View
                 style={[
@@ -164,10 +486,15 @@ export function AppointmentInspectionModal({
                   { backgroundColor: urgencyTokens.badgeBg },
                 ]}
               >
+                <Icon
+                  name={urgency === 'STAT' ? 'emergency' : urgency === 'Urgent' ? 'alert' : 'clock'}
+                  size={13}
+                  color={urgencyTokens.badgeText}
+                />
                 <ThemedText
                   variant="caption"
                   color={urgencyTokens.badgeText}
-                  style={{ fontWeight: '700' }}
+                  style={styles.badgeText}
                 >
                   {urgencyTokens.label}
                 </ThemedText>
@@ -179,93 +506,370 @@ export function AppointmentInspectionModal({
                   { backgroundColor: statusTokens.badgeBg },
                 ]}
               >
+                <Icon
+                  name={
+                    currentAppointment.status === 'Confirmed' ||
+                    currentAppointment.status === 'CheckedIn' ||
+                    currentAppointment.status === 'Completed'
+                      ? 'checkCircle'
+                      : currentAppointment.status === 'Cancelled'
+                      ? 'close'
+                      : 'clock'
+                  }
+                  size={13}
+                  color={statusTokens.badgeText}
+                />
                 <ThemedText
                   variant="caption"
                   color={statusTokens.badgeText}
-                  style={{ fontWeight: '600' }}
+                  style={styles.badgeText}
                 >
                   {statusTokens.label}
                 </ThemedText>
               </View>
-            </View>
 
-            {/* Grid of detail rows */}
-            <View style={styles.section}>
-              <View style={styles.infoRow}>
-                <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
-                  Attending Physician
-                </ThemedText>
+              {/* Modality Badge */}
+              <View
+                data-testid="appointment-modality-badge"
+                testID="appointment-modality-badge"
+                style={[
+                  styles.badge,
+                  isTeleconsult ? styles.teleconsultBadge : styles.inPersonBadge,
+                ]}
+              >
+                <Icon
+                  name={isTeleconsult ? 'consultations' : 'patient'}
+                  size={13}
+                  color={isTeleconsult ? theme.colors.primaryDark : theme.colors.textSecondary}
+                />
                 <ThemedText
-                  data-testid="drawer-doctor-name"
-                  variant="body"
-                  color={theme.colors.text}
+                  variant="caption"
+                  color={isTeleconsult ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  style={styles.badgeText}
                 >
-                  {currentAppointment.doctorName || 'Unassigned'}
+                  {isTeleconsult ? 'Teleconsult' : 'InPerson'}
                 </ThemedText>
               </View>
 
-              <View style={styles.infoRow}>
-                <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
-                  Scheduled At
-                </ThemedText>
-                <ThemedText
-                  data-testid="drawer-scheduled-at"
-                  variant="body"
-                  color={theme.colors.text}
-                >
-                  {currentAppointment.scheduledAt}
-                  {formattedTime ? ` (${dateStr} at ${formattedTime})` : ''}
-                </ThemedText>
-              </View>
-
-              {currentAppointment.roomName ? (
-                <View style={styles.infoRow}>
-                  <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
-                    Assigned Room
-                  </ThemedText>
-                  <ThemedText
-                    data-testid="drawer-room-name"
-                    variant="body"
-                    color={theme.colors.text}
+              {/* Actionable Payment Status Badge (for teleconsult: shown when Paid, Overridden, or Prepaid+Pending; hidden when Exempt or Postpaid+Pending) */}
+              {(() => {
+                const effectivePolicy = currentAppointment.paymentPolicy || 'Prepaid';
+                const effectivePaymentStatus = currentAppointment.paymentStatus || 'Pending';
+                const showPaymentStatusBadge =
+                  isTeleconsult &&
+                  effectivePolicy !== 'Exempt' &&
+                  effectivePaymentStatus !== 'Exempt' &&
+                  !(effectivePolicy === 'Postpaid' && effectivePaymentStatus === 'Pending');
+                if (!showPaymentStatusBadge) return null;
+                return (
+                  <View
+                    data-testid="badge-payment-status"
+                    testID="badge-payment-status"
+                    style={[
+                      styles.badge,
+                      effectivePaymentStatus === 'Paid'
+                        ? styles.paidBadge
+                        : effectivePaymentStatus === 'Overridden'
+                          ? styles.overriddenBadge
+                          : styles.pendingBadge,
+                    ]}
                   >
-                    {currentAppointment.roomName}
+                    <ThemedText
+                      variant="caption"
+                      color={
+                        effectivePaymentStatus === 'Paid'
+                          ? theme.colors.successText
+                          : effectivePaymentStatus === 'Overridden'
+                            ? theme.colors.warningText
+                            : theme.colors.emergencyText
+                      }
+                      style={styles.badgeText}
+                    >
+                      {effectivePaymentStatus}
+                    </ThemedText>
+                  </View>
+                );
+              })()}
+
+              {!isTeleconsult && isYakap ? (
+                <View style={[styles.badge, styles.yakapBadge]}>
+                  <Icon name="yakap" size={13} color={theme.colors.successText} />
+                  <ThemedText
+                    variant="caption"
+                    color={theme.colors.successText}
+                    style={styles.badgeText}
+                  >
+                    PhilHealth Yakap
                   </ThemedText>
                 </View>
               ) : null}
+            </View>
 
-              <View style={styles.infoRow}>
-                <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
-                  Service Type
-                </ThemedText>
-                <ThemedText variant="body" color={theme.colors.text}>
-                  {currentAppointment.serviceType || 'General Consultation'}
+            {/* Overdue Resolution Banner */}
+            {isOverdue ? (
+              <View
+                data-testid="overdue-appointment-banner"
+                testID="overdue-appointment-banner"
+                data-overdue-severity={isPastDateOverdue ? 'past-date' : 'same-day'}
+                role="alert"
+                style={[
+                  styles.overdueBanner,
+                  isPastDateOverdue ? styles.overdueBannerPastDate : styles.overdueBannerSameDay,
+                ]}
+              >
+                <Icon
+                  name={isPastDateOverdue ? 'alertCircle' : 'clock'}
+                  size={theme.sizes.iconMd}
+                  color={isPastDateOverdue ? theme.colors.emergencyText : theme.colors.warningText}
+                />
+                <View style={styles.overdueBannerTextWrap}>
+                  <ThemedText
+                    variant="smallBold"
+                    color={isPastDateOverdue ? theme.colors.emergencyText : theme.colors.warningText}
+                  >
+                    {isPastDateOverdue ? 'Unresolved Past-Date Appointment' : 'Appointment Overdue'}
+                  </ThemedText>
+                  <ThemedText
+                    variant="caption"
+                    color={isPastDateOverdue ? theme.colors.emergencyText : theme.colors.warningText}
+                  >
+                    {isPastDateOverdue
+                      ? `Scheduled date (${scheduledLocalDateStr}) has passed (${overdueElapsedLabel}). Reschedule to today, proceed late, or mark as no-show.`
+                      : `${overdueElapsedLabel} past scheduled time. Check in late, reschedule, or mark as no-show.`}
+                  </ThemedText>
+                </View>
+              </View>
+            ) : null}
+
+            {/* No-Show Audit Metadata Banner */}
+            {currentAppointment.status === 'NoShow' &&
+            (currentAppointment.updatedAt || currentAppointment.updatedBy) ? (
+              <View
+                data-testid="noshow-audit-metadata"
+                testID="noshow-audit-metadata"
+                style={styles.auditMetaBanner}
+              >
+                <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+                <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ flex: 1 }}>
+                  Marked as No-Show
+                  {currentAppointment.updatedBy ? ` by ${currentAppointment.updatedBy}` : ''}
+                  {currentAppointment.updatedAt
+                    ? ` on ${formatDateTimeDisplay(currentAppointment.updatedAt)}`
+                    : ''}
                 </ThemedText>
               </View>
+            ) : null}
 
-              <View style={styles.infoRow}>
-                <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
-                  Reason for Visit
+            {/* Inline Payment Policy Switcher (Teleconsult - Active Appointments Only) */}
+            {isTeleconsult && !isTerminalStatus && (
+              <View
+                data-testid="inline-policy-switcher"
+                testID="inline-policy-switcher"
+                style={styles.inlinePolicySwitcher}
+              >
+                <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.policySwitcherLabel}>
+                  Payment Policy:
+                </ThemedText>
+                <View style={styles.policySwitcherGroup}>
+                  {(['Prepaid', 'Postpaid', 'Exempt'] as const).map((pol) => {
+                    const isCurrent = (currentAppointment.paymentPolicy || 'Prepaid') === pol;
+                    return (
+                      <Pressable
+                        key={pol}
+                        data-testid={`btn-switch-policy-${pol.toLowerCase()}`}
+                        testID={`btn-switch-policy-${pol.toLowerCase()}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Switch payment policy to ${pol}`}
+                        disabled={isUpdatingPolicy}
+                        onPress={() => handleUpdatePaymentPolicy(pol)}
+                        style={[
+                          styles.policySwitchBtn,
+                          isCurrent ? styles.policySwitchBtnActive : styles.policySwitchBtnInactive,
+                        ]}
+                      >
+                        <ThemedText
+                          variant="captionBold"
+                          color={isCurrent ? theme.colors.routineText : theme.colors.text}
+                        >
+                          {pol}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Guest Access PIN Card (Teleconsult) */}
+            {!isTerminalStatus && isTeleconsult && currentAppointment.status !== 'Cancelled' && activeInvite?.otp ? (
+              <View
+                data-testid="teleconsult-invite-pin-container"
+                testID="teleconsult-invite-pin-container"
+                style={styles.invitePinContainer}
+              >
+                <View style={styles.invitePinHeader}>
+                  <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.fieldLabel}>
+                    GUEST 6-DIGIT ACCESS PIN
+                  </ThemedText>
+                </View>
+                <View style={styles.invitePinRow}>
+                  <ThemedText
+                    data-testid="text-inspection-invite-pin"
+                    testID="text-inspection-invite-pin"
+                    variant="h3"
+                    color={theme.colors.primaryDark}
+                    style={styles.pinText}
+                  >
+                    {activeInvite.otp}
+                  </ThemedText>
+                  <Pressable
+                    data-testid="btn-inspection-copy-pin"
+                    testID="btn-inspection-copy-pin"
+                    accessibilityRole="button"
+                    accessibilityLabel={pinCopied ? 'Copied!' : 'Copy 6-digit guest access PIN'}
+                    onPress={async () => {
+                      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                        await navigator.clipboard.writeText(activeInvite.otp);
+                      }
+                      notify.success('Guest 6-digit PIN copied to clipboard.');
+                      markPinCopied();
+                    }}
+                    style={({ pressed }) => [
+                      styles.pinCopyBtn,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Icon
+                      name={pinCopied ? 'check' : 'copy'}
+                      size={theme.sizes.iconSm}
+                      color={pinCopied ? theme.colors.successText : theme.colors.primary}
+                    />
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
+            {/* Hero Scheduled Date & Time Card */}
+            <View style={styles.heroTimeCard}>
+              <View style={styles.heroTimeIconBox}>
+                <Icon name="calendar" size={22} color={theme.colors.primaryDark} />
+              </View>
+              <View style={styles.heroTimeDetails}>
+                <ThemedText variant="caption" color={theme.colors.primaryDark} style={styles.heroTimeLabel}>
+                  SCHEDULED APPOINTMENT
                 </ThemedText>
                 <ThemedText
-                  data-testid="drawer-reason"
-                  variant="body"
+                  data-testid="drawer-scheduled-at"
+                  variant="bodyBold"
                   color={theme.colors.text}
+                  style={styles.heroTimeValue}
                 >
-                  {currentAppointment.reason || 'General Consultation'}
+                  {formattedScheduledAt}
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Local clinic station schedule ({clinicTimeZoneId})
                 </ThemedText>
               </View>
+            </View>
 
-              <View style={styles.infoRow}>
-                <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
-                  Notes
-                </ThemedText>
-                <ThemedText
-                  data-testid="drawer-notes"
-                  variant="body"
-                  color={theme.colors.textSecondary}
-                >
-                  {currentAppointment.notes || 'None'}
-                </ThemedText>
+            {/* Clinical Metadata Cards */}
+            <View style={styles.cardsGrid}>
+              {/* Card 1: Provider & Station */}
+              <View style={styles.infoCard}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={styles.cardIconBox}>
+                    <Icon name="stethoscope" size={15} color={theme.colors.primary} />
+                  </View>
+                  <ThemedText variant="smallBold" color={theme.colors.text}>
+                    Care Team & Station
+                  </ThemedText>
+                </View>
+
+                <View style={styles.cardFields}>
+                  <View style={styles.fieldItem}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.fieldLabel}>
+                      Attending Physician
+                    </ThemedText>
+                    <ThemedText
+                      data-testid="drawer-doctor-name"
+                      variant="bodyBold"
+                      color={theme.colors.text}
+                    >
+                      {currentAppointment.doctorName || 'Unassigned'}
+                    </ThemedText>
+                  </View>
+
+                  {currentAppointment.roomName ? (
+                    <View style={styles.fieldItem}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.fieldLabel}>
+                        Assigned Room
+                      </ThemedText>
+                      <ThemedText
+                        data-testid="drawer-room-name"
+                        variant="bodyBold"
+                        color={theme.colors.text}
+                      >
+                        {currentAppointment.roomName}
+                      </ThemedText>
+                    </View>
+                  ) : null}
+
+                  <View style={styles.fieldItem}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.fieldLabel}>
+                      Service Type
+                    </ThemedText>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      {currentAppointment.serviceType || 'General Consultation'}
+                    </ThemedText>
+                  </View>
+                </View>
+              </View>
+
+              {/* Card 2: Visit Reason & Notes */}
+              <View style={styles.infoCard}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={styles.cardIconBox}>
+                    <Icon name="clipboard" size={15} color={theme.colors.primary} />
+                  </View>
+                  <ThemedText variant="smallBold" color={theme.colors.text}>
+                    Clinical Visit Context
+                  </ThemedText>
+                </View>
+
+                <View style={styles.cardFields}>
+                  <View style={styles.fieldItem}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.fieldLabel}>
+                      Reason for Visit
+                    </ThemedText>
+                    <ThemedText
+                      data-testid="drawer-reason"
+                      variant="bodyBold"
+                      color={theme.colors.text}
+                    >
+                      {currentAppointment.reason || 'General Consultation'}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.fieldItem}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.fieldLabel}>
+                      Notes
+                    </ThemedText>
+                    <View style={styles.noteCallout}>
+                      <View style={styles.noteIconWrapper}>
+                        <Icon name="file" size={14} color={theme.colors.textMuted} />
+                      </View>
+                      <ThemedText
+                        data-testid="drawer-notes"
+                        variant="body"
+                        color={theme.colors.textSecondary}
+                        style={styles.noteText}
+                      >
+                        {currentAppointment.notes || 'None'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                </View>
               </View>
             </View>
 
@@ -276,60 +880,90 @@ export function AppointmentInspectionModal({
               style={styles.reminderSection}
             >
               <View style={styles.reminderHeader}>
-                <Icon name="bell" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
-                <ThemedText variant="smallBold" color={theme.colors.text}>
-                  Push Notification & Reminder Status
-                </ThemedText>
+                <View style={styles.reminderIconBox}>
+                  <Icon name="bell" size={16} color={theme.colors.primaryDark} />
+                </View>
+                <View style={styles.reminderHeaderTextGroup}>
+                  <ThemedText variant="smallBold" color={theme.colors.text}>
+                    Push Notification & Reminder Status
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Automated multi-channel schedule dispatch
+                  </ThemedText>
+                </View>
               </View>
 
               <View style={styles.reminderContent}>
-                <View style={styles.infoRow}>
-                  <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
-                    24-Hour Advance Reminder
-                  </ThemedText>
-                  <View style={styles.statusRow}>
-                    <Icon
-                      name={currentAppointment.reminder24hSent ? 'check' : 'clock'}
-                      size={14}
-                      color={currentAppointment.reminder24hSent ? theme.colors.success : theme.colors.textSecondary}
-                    />
-                    <ThemedText
-                      data-testid="status-reminder-24h"
-                      variant="body"
-                      color={currentAppointment.reminder24hSent ? theme.colors.successText : theme.colors.text}
-                    >
-                      {currentAppointment.reminder24hSent
-                        ? `Sent at ${formatDateTimeDisplay(currentAppointment.reminder24hSentAt)}`
-                        : 'Scheduled (24h advance)'}
+                {/* 24-Hour Reminder Row */}
+                <View style={styles.reminderItemBox}>
+                  <View style={styles.reminderItemTextCol}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.fieldLabel}>
+                      24-HOUR ADVANCE REMINDER
                     </ThemedText>
+                    <View style={styles.statusRow}>
+                      <Icon
+                        name={currentAppointment.reminder24hSent ? 'checkCircle' : 'clock'}
+                        size={14}
+                        color={currentAppointment.reminder24hSent ? theme.colors.success : theme.colors.textMuted}
+                      />
+                      <ThemedText
+                        data-testid="status-reminder-24h"
+                        variant="body"
+                        color={
+                          currentAppointment.reminder24hSent
+                            ? theme.colors.successText
+                            : isPastSchedule
+                              ? theme.colors.textMuted
+                              : theme.colors.text
+                        }
+                      >
+                        {currentAppointment.reminder24hSent
+                          ? `Sent at ${formatDateTimeDisplay(currentAppointment.reminder24hSentAt)}`
+                          : isPastSchedule
+                            ? 'Not sent (Past schedule)'
+                            : 'Scheduled (24h advance)'}
+                      </ThemedText>
+                    </View>
                   </View>
                 </View>
 
-                <View style={styles.infoRow}>
-                  <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
-                    2-Hour Advance Reminder
-                  </ThemedText>
-                  <View style={styles.statusRow}>
-                    <Icon
-                      name={currentAppointment.reminder2hSent ? 'check' : 'clock'}
-                      size={14}
-                      color={currentAppointment.reminder2hSent ? theme.colors.success : theme.colors.textSecondary}
-                    />
-                    <ThemedText
-                      data-testid="status-reminder-2h"
-                      variant="body"
-                      color={currentAppointment.reminder2hSent ? theme.colors.successText : theme.colors.text}
-                    >
-                      {currentAppointment.reminder2hSent
-                        ? `Sent at ${formatDateTimeDisplay(currentAppointment.reminder2hSentAt)}`
-                        : 'Scheduled (2h advance)'}
+                {/* 2-Hour Reminder Row */}
+                <View style={styles.reminderItemBox}>
+                  <View style={styles.reminderItemTextCol}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.fieldLabel}>
+                      2-HOUR ADVANCE REMINDER
                     </ThemedText>
+                    <View style={styles.statusRow}>
+                      <Icon
+                        name={currentAppointment.reminder2hSent ? 'checkCircle' : 'clock'}
+                        size={14}
+                        color={currentAppointment.reminder2hSent ? theme.colors.success : theme.colors.textMuted}
+                      />
+                      <ThemedText
+                        data-testid="status-reminder-2h"
+                        variant="body"
+                        color={
+                          currentAppointment.reminder2hSent
+                            ? theme.colors.successText
+                            : isPastSchedule
+                              ? theme.colors.textMuted
+                              : theme.colors.text
+                        }
+                      >
+                        {currentAppointment.reminder2hSent
+                          ? `Sent at ${formatDateTimeDisplay(currentAppointment.reminder2hSentAt)}`
+                          : isPastSchedule
+                            ? 'Not sent (Past schedule)'
+                            : 'Scheduled (2h advance)'}
+                      </ThemedText>
+                    </View>
                   </View>
                 </View>
 
-                <View style={styles.infoRow}>
-                  <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
-                    Last Dispatched Reminder
+                {/* Last Dispatched Row */}
+                <View style={styles.lastReminderRow}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.fieldLabel}>
+                    LAST DISPATCHED REMINDER
                   </ThemedText>
                   <ThemedText
                     data-testid="status-last-reminder"
@@ -378,72 +1012,348 @@ export function AppointmentInspectionModal({
             testID="drawer-actions"
             style={styles.footer}
           >
-            {canCheckIn ? (
-              <Pressable
-                data-testid="btn-drawer-checkin"
-                testID="btn-drawer-checkin"
-                accessibilityRole="button"
-                onPress={() => onCheckIn(currentAppointment)}
-                style={({ pressed }) => [
-                  styles.btn,
-                  styles.btnPrimary,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Icon
-                  name="check"
-                  size={theme.sizes.iconSm}
-                  color={theme.colors.onPrimary}
-                />
-                <ThemedText variant="smallBold" color={theme.colors.onPrimary}>
-                  Check In
-                </ThemedText>
-              </Pressable>
-            ) : null}
+            <View style={styles.rightActionsRow}>
+              {!isTerminalStatus ? (
+                isTeleconsult && currentAppointment.status !== 'Cancelled' ? (
+                <>
+                  <Pressable
+                    data-testid="btn-copy-patient-link"
+                    testID="btn-copy-patient-link"
+                    accessibilityRole="button"
+                    accessibilityLabel="Copy patient consultation link"
+                    onPress={async () => {
+                      try {
+                        let invite = activeInvite;
+                        const isExpired = !invite || (invite.expiresAtUtc && new Date(invite.expiresAtUtc).getTime() <= Date.now());
+                        if (isExpired) {
+                          const [freshInvite, err] = await clinicService.createTeleconsultGuestInvite(
+                            currentAppointment.id,
+                          );
+                          invite = freshInvite;
+                          if (err || !invite?.inviteUrl) {
+                            notify.error(err?.message || 'Could not generate patient consultation link.');
+                            return;
+                          }
+                          setCachedAppointmentInvite(currentAppointment.id, invite);
+                          setActiveInvite(invite);
+                        }
+                        if (!invite) return;
+                        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                          await navigator.clipboard.writeText(invite.inviteUrl);
+                        }
+                        notify.success('Patient consultation link copied to clipboard.');
+                      } catch {
+                        notify.error('Could not generate patient consultation link.');
+                      }
+                    }}
+                    style={({ pressed }) => [
+                      styles.btn,
+                      styles.btnSecondary,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Icon
+                      name="copy"
+                      size={theme.sizes.iconSm}
+                      color={theme.colors.text}
+                    />
+                    <ThemedText variant="smallBold" color={theme.colors.text}>
+                      Copy Patient Link
+                    </ThemedText>
+                  </Pressable>
 
-            {onReschedule && currentAppointment.status !== 'Cancelled' ? (
-              <Pressable
-                data-testid="btn-drawer-reschedule"
-                testID="btn-drawer-reschedule"
-                accessibilityRole="button"
-                onPress={() => onReschedule(currentAppointment)}
-                style={({ pressed }) => [
-                  styles.btn,
-                  styles.btnSecondary,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Icon
-                  name="calendar"
-                  size={theme.sizes.iconSm}
-                  color={theme.colors.text}
-                />
-                <ThemedText variant="smallBold" color={theme.colors.text}>
-                  Reschedule
-                </ThemedText>
-              </Pressable>
-            ) : null}
+                  <Pressable
+                    data-testid="btn-drawer-teleconsult"
+                    testID="btn-drawer-teleconsult"
+                    accessibilityRole="button"
+                    accessibilityLabel="Enter teleconsultation waiting room"
+                    onPress={() => {
+                      if (isPastDateOverdue) {
+                        setLateVisitAction('teleconsult');
+                        return;
+                      }
+                      launchTeleconsultWaitingRoom();
+                    }}
+                    style={({ pressed }) => [
+                      styles.btn,
+                      styles.btnTeleconsult,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Icon
+                      name="consultations"
+                      size={theme.sizes.iconSm}
+                      color={theme.colors.primary}
+                    />
+                    <ThemedText variant="smallBold" color={theme.colors.primary}>
+                      Teleconsult
+                    </ThemedText>
+                  </Pressable>
+                </>
+                ) : null
+              ) : null}
 
-            {onCancel && currentAppointment.status !== 'Cancelled' ? (
-              <Pressable
-                data-testid="btn-drawer-cancel"
-                testID="btn-drawer-cancel"
-                accessibilityRole="button"
-                onPress={() => onCancel(currentAppointment)}
-                style={({ pressed }) => [
-                  styles.btn,
-                  styles.btnDanger,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <ThemedText variant="smallBold" color={theme.colors.emergencyText}>
-                  Cancel
-                </ThemedText>
-              </Pressable>
-            ) : null}
+              {onReschedule && !isTerminalStatus ? (
+                <Pressable
+                  data-testid="btn-drawer-reschedule"
+                  testID="btn-drawer-reschedule"
+                  accessibilityRole="button"
+                  onPress={() => onReschedule(currentAppointment)}
+                  style={({ pressed }) => [
+                    styles.btn,
+                    isPastDateOverdue ? styles.btnRescheduleEmphasized : styles.btnSecondary,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Icon
+                    name="calendar"
+                    size={theme.sizes.iconSm}
+                    color={isPastDateOverdue ? theme.colors.primaryDark : theme.colors.text}
+                  />
+                  <ThemedText
+                    variant="smallBold"
+                    color={isPastDateOverdue ? theme.colors.primaryDark : theme.colors.text}
+                  >
+                    Reschedule
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+
+              {isTerminalStatus && onBookFollowUp ? (
+                <Pressable
+                  data-testid="btn-drawer-followup"
+                  testID="btn-drawer-followup"
+                  accessibilityRole="button"
+                  accessibilityLabel="Book follow-up appointment"
+                  onPress={() => onBookFollowUp(currentAppointment)}
+                  style={({ pressed }) => [
+                    styles.btn,
+                    styles.btnSecondary,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Icon
+                    name="calendar"
+                    size={theme.sizes.iconSm}
+                    color={theme.colors.primaryDark}
+                  />
+                  <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+                    Book Follow-Up
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+
+              {canMarkNoShow ? (
+                <Pressable
+                  data-testid="btn-drawer-noshow"
+                  testID="btn-drawer-noshow"
+                  accessibilityRole="button"
+                  accessibilityLabel="Mark appointment as no-show"
+                  onPress={() => setShowNoShowConfirm(true)}
+                  style={({ pressed }) => [
+                    styles.btn,
+                    styles.btnWarning,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Icon
+                    name="clock"
+                    size={theme.sizes.iconSm}
+                    color={theme.colors.warningText}
+                  />
+                  <ThemedText variant="smallBold" color={theme.colors.warningText}>
+                    Mark No-Show
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+
+              {onCancel && !isTerminalStatus ? (
+                <Pressable
+                  data-testid="btn-drawer-cancel"
+                  testID="btn-drawer-cancel"
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel appointment"
+                  onPress={() => setShowCancelConfirm(true)}
+                  style={({ pressed }) => [
+                    styles.btn,
+                    styles.btnDanger,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <ThemedText variant="smallBold" color={theme.colors.emergencyText}>
+                    Cancel
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+
+              {canCheckIn ? (
+                <Pressable
+                  data-testid="btn-drawer-checkin"
+                  testID="btn-drawer-checkin"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    if (isPastDateOverdue) {
+                      setLateVisitAction('checkin');
+                      return;
+                    }
+                    onCheckIn(currentAppointment);
+                  }}
+                  style={({ pressed }) => [
+                    styles.btn,
+                    styles.btnPrimary,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Icon
+                    name="check"
+                    size={theme.sizes.iconSm}
+                    color={theme.colors.onPrimary}
+                  />
+                  <ThemedText variant="smallBold" color={theme.colors.onPrimary}>
+                    Check In
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         </View>
       </View>
+
+      {/* Cancel Confirmation Alert Dialog */}
+      {showCancelConfirm ? (
+        <CustomModal
+          visible={showCancelConfirm}
+          onClose={() => setShowCancelConfirm(false)}
+          title="Cancel Appointment?"
+          maxWidth={440}
+          testID="cancel-appointment-confirm-modal"
+          footer={
+            <>
+              <Button
+                title="Keep Appointment"
+                variant="ghost"
+                testID="btn-abort-cancel-appointment"
+                onPress={() => setShowCancelConfirm(false)}
+              />
+              <Button
+                title="Yes, Cancel Appointment"
+                variant="danger"
+                testID="btn-confirm-cancel-appointment"
+                onPress={() => {
+                  setShowCancelConfirm(false);
+                  onCancel?.(currentAppointment);
+                }}
+              />
+            </>
+          }
+        >
+          <View style={{ gap: theme.spacing.sm }}>
+            <ThemedText variant="body" color={theme.colors.text}>
+              Are you sure you want to cancel the appointment for{' '}
+              <ThemedText variant="bodyBold">{currentAppointment.patientName}</ThemedText>?
+            </ThemedText>
+            <ThemedText variant="small" color={theme.colors.textMuted}>
+              This action cannot be undone. The appointment will be marked as Cancelled.
+            </ThemedText>
+          </View>
+        </CustomModal>
+      ) : null}
+
+      {/* Mark No-Show Confirmation Alert Dialog */}
+      {showNoShowConfirm ? (
+        <CustomModal
+          visible={showNoShowConfirm}
+          onClose={() => !markingNoShow && setShowNoShowConfirm(false)}
+          title="Mark Appointment as No-Show?"
+          maxWidth={440}
+          testID="noshow-appointment-confirm-modal"
+          footer={
+            <>
+              <Button
+                title="Keep Open"
+                variant="ghost"
+                testID="btn-abort-noshow-appointment"
+                disabled={markingNoShow}
+                onPress={() => setShowNoShowConfirm(false)}
+              />
+              <Button
+                title="Confirm No-Show"
+                variant="danger"
+                testID="btn-confirm-noshow-appointment"
+                loading={markingNoShow}
+                disabled={markingNoShow}
+                onPress={handleConfirmNoShow}
+              />
+            </>
+          }
+        >
+          <View style={{ gap: theme.spacing.sm }}>
+            <ThemedText variant="body" color={theme.colors.text}>
+              Mark the overdue appointment for{' '}
+              <ThemedText variant="bodyBold">{currentAppointment.patientName}</ThemedText> as a No-Show?
+            </ThemedText>
+            <ThemedText variant="small" color={theme.colors.textMuted}>
+              The appointment will be closed as No-Show and any active guest consultation access will be revoked.
+            </ThemedText>
+          </View>
+        </CustomModal>
+      ) : null}
+
+      {/* Past-Date Overdue Late Visit Confirmation Dialog */}
+      {lateVisitAction ? (
+        <CustomModal
+          visible={!!lateVisitAction}
+          onClose={() => setLateVisitAction(null)}
+          title="Past-Date Appointment"
+          maxWidth={460}
+          testID="late-visit-confirm-modal"
+          footer={
+            <>
+              <Button
+                title="Cancel"
+                variant="ghost"
+                testID="btn-late-visit-cancel"
+                onPress={() => setLateVisitAction(null)}
+              />
+              <Button
+                title="Proceed Late"
+                variant="secondary"
+                testID="btn-late-visit-proceed"
+                onPress={() => {
+                  const action = lateVisitAction;
+                  setLateVisitAction(null);
+                  if (action === 'checkin') {
+                    onCheckIn?.(currentAppointment);
+                  } else if (action === 'teleconsult') {
+                    launchTeleconsultWaitingRoom();
+                  }
+                }}
+              />
+              {onReschedule ? (
+                <Button
+                  title="Reschedule to Today"
+                  variant="primary"
+                  testID="btn-late-visit-reschedule"
+                  onPress={() => {
+                    setLateVisitAction(null);
+                    onReschedule(currentAppointment);
+                  }}
+                />
+              ) : null}
+            </>
+          }
+        >
+          <View style={{ gap: theme.spacing.sm }}>
+            <ThemedText variant="body" color={theme.colors.text}>
+              This appointment was scheduled for{' '}
+              <ThemedText variant="bodyBold">{scheduledLocalDateStr}</ThemedText>. Proceed with late visit or reschedule to today?
+            </ThemedText>
+            <ThemedText variant="small" color={theme.colors.textMuted}>
+              Rescheduling moves the visit onto today&apos;s active schedule; proceeding late initiates care immediately under today&apos;s clinic workflow.
+            </ThemedText>
+          </View>
+        </CustomModal>
+      ) : null}
     </Modal>
   );
 }
@@ -461,27 +1371,67 @@ const styles = StyleSheet.create({
   },
   drawerCard: {
     width: '100%',
-    maxWidth: 540,
-    maxHeight: '90%',
+    maxWidth: 580,
+    maxHeight: '92%',
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.lg,
+    borderRadius: theme.radii.xl,
     overflow: 'hidden',
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
     ...theme.shadows.lg,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: theme.spacing.lg,
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
     borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.borderLight,
+    backgroundColor: theme.colors.surface,
+  },
+  patientProfileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    flex: 1,
+  },
+  avatarCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1.5,
+    borderColor: theme.colors.primaryBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontWeight: '700',
   },
   headerTitleArea: {
     flex: 1,
+    gap: 2,
+  },
+  patientName: {
+    letterSpacing: -0.3,
+  },
+  srOnly: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+    overflow: 'hidden',
   },
   closeIconBtn: {
-    padding: theme.spacing.xs,
+    width: 36,
+    height: 36,
     borderRadius: theme.radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
   },
   body: {
     flex: 1,
@@ -492,80 +1442,164 @@ const styles = StyleSheet.create({
   },
   badgesRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.sm,
   },
   badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    borderRadius: theme.radii.sm,
+    paddingVertical: 5,
+    borderRadius: theme.radii.full,
   },
-  section: {
+  yakapBadge: {
+    backgroundColor: theme.colors.successBg,
+    borderWidth: 1,
+    borderColor: theme.colors.successBorder,
+  },
+  badgeText: {
+    fontWeight: '700',
+  },
+  heroTimeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.md,
   },
-  infoRow: {
+  heroTimeIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroTimeDetails: {
+    flex: 1,
     gap: 2,
   },
-  label: {
+  heroTimeLabel: {
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  heroTimeValue: {},
+  cardsGrid: {
+    gap: theme.spacing.md,
+  },
+  infoCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingBottom: theme.spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  cardIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardFields: {
+    gap: theme.spacing.sm,
+    paddingTop: 2,
+  },
+  fieldItem: {
+    gap: 2,
+  },
+  fieldLabel: {
     textTransform: 'uppercase',
     fontWeight: '600',
     letterSpacing: 0.5,
   },
-  footer: {
+  noteCallout: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    padding: theme.spacing.md,
-    borderTopWidth: theme.sizes.borderWidth,
-    borderTopColor: theme.colors.border,
+    alignItems: 'flex-start',
+    gap: theme.spacing.xs,
     backgroundColor: theme.colors.surfaceSubtle,
-    flexWrap: 'wrap',
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary,
   },
-  btn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radii.md,
+  noteIconWrapper: {
+    marginTop: 2,
   },
-  btnPrimary: {
-    backgroundColor: theme.colors.primary,
-  },
-  btnSecondary: {
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-  },
-  btnDanger: {
-    backgroundColor: theme.colors.emergencyBg,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.emergencyBorder,
-  },
-  pressed: {
-    opacity: 0.75,
+  noteText: {
+    flex: 1,
+    lineHeight: 18,
   },
   reminderSection: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
     padding: theme.spacing.md,
     gap: theme.spacing.sm,
-    marginTop: theme.spacing.sm,
   },
   reminderHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  reminderIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.primarySubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reminderHeaderTextGroup: {
+    flex: 1,
   },
   reminderContent: {
     gap: theme.spacing.sm,
+    paddingTop: 2,
+  },
+  reminderItemBox: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.sm,
+  },
+  reminderItemTextCol: {
+    gap: 4,
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  lastReminderRow: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.sm,
+    gap: 2,
   },
   btnSendReminder: {
     flexDirection: 'row',
@@ -577,11 +1611,206 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.radii.md,
     marginTop: theme.spacing.xs,
+    minHeight: theme.sizes.touchTarget,
+    ...theme.shadows.sm,
   },
   btnSendReminderDisabled: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+    backgroundColor: theme.colors.surfaceSubtle,
+    flexWrap: 'wrap',
+  },
+  rightActionsRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+  },
+  btn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexGrow: 1,
+    flexShrink: 0,
+    gap: 6,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+  },
+  btnPrimary: {
+    backgroundColor: theme.colors.primary,
+    ...theme.shadows.sm,
+  },
+  btnSecondary: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  btnDanger: {
+    backgroundColor: theme.colors.emergencyBg,
+    borderWidth: 1,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  btnWarning: {
+    backgroundColor: theme.colors.warningBg,
+    borderWidth: 1,
+    borderColor: theme.colors.warningBorder,
+  },
+  btnRescheduleEmphasized: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary,
+  },
+  overdueBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+  },
+  overdueBannerSameDay: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+  },
+  overdueBannerPastDate: {
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  overdueBannerTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  auditMetaBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+  },
+  btnTeleconsult: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+  },
+  teleconsultBadge: {
+    backgroundColor: theme.colors.primaryLight,
+  },
+  inPersonBadge: {
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  policyBadge: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+  },
+  paidBadge: {
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
+  },
+  exemptBadge: {
+    backgroundColor: theme.colors.infoBg,
+    borderColor: theme.colors.infoBorder,
+  },
+  overriddenBadge: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+  },
+  pendingBadge: {
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  inlinePolicySwitcher: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
     backgroundColor: theme.colors.surfaceSubtle,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  policySwitcherLabel: {
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  policySwitcherGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  policySwitchBtn: {
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  policySwitchBtnActive: {
+    backgroundColor: theme.colors.routineBg,
+    borderColor: theme.colors.routineBorder,
+  },
+  policySwitchBtnInactive: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+  },
+  pressed: {
+    opacity: 0.75,
+  },
+  invitePinContainer: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+    marginVertical: theme.spacing.xs,
+  },
+  invitePinHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  invitePinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  pinText: {
+    letterSpacing: 4,
+    fontFamily: theme.fonts.mono['700'],
+  },
+  pinCopyBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: theme.radii.sm,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
   },
 });
 

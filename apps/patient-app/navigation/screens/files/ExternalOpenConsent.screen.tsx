@@ -20,11 +20,12 @@ export default function ExternalOpenConsentScreen({ route }: FilesScreenProps<'E
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
   const { runWithAutoLockPaused } = useAppAuth();
-  const { fileId } = route.params;
+  const fileId = route.params?.fileId ?? '';
   const [fileName, setFileName] = useState('File');
   const [isOpening, setIsOpening] = useState(false);
 
   useEffect(() => {
+    if (!fileId) return;
     getFileById(patientId, fileId).then((file) => {
       if (file?.name) setFileName(file.name);
     });
@@ -96,7 +97,7 @@ export default function ExternalOpenConsentScreen({ route }: FilesScreenProps<'E
             {fileName}
           </ThemedText>{' '}
           {isWeb
-            ? 'will be downloaded and decrypted to your device.'
+            ? 'will be downloaded directly to your device.'
             : 'will be shared with the app you choose. Only continue if you trust the app.'}
         </ThemedText>
 

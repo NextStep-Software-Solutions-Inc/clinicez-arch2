@@ -29,7 +29,7 @@ public class PatientShareFlowTests
         import.Status.Should().Be(ShareImportStatus.Imported);
         import.Scopes.Should().Be(SharingScopes.Demographics);
         var chart = await ChartAsync(cell, import);
-        chart.SyncPatientId.Should().Be(accountId);
+        chart.CloudPatientId.Should().Be(accountId);
         chart.FirstName.Should().Be("Maria");
         chart.LastName.Should().Be("Santos");
         chart.Allergies.Should().BeNullOrEmpty("the patient did not share allergies");
@@ -53,7 +53,7 @@ public class PatientShareFlowTests
 
         import.Status.Should().Be(ShareImportStatus.Imported);
         import.Scopes.Should().Be(SharingScopes.Demographics | SharingScopes.Allergies);
-        (await ChartAsync(cell, import)).Allergies.Should().Contain("Penicillin");
+        (await ChartAsync(cell, import)).Allergies.Should().Contain(a => a.Allergen == "Penicillin");
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class PatientShareFlowTests
 
         first.Status.Should().Be(ShareImportStatus.Imported);
         second.Status.Should().Be(ShareImportStatus.Denied);
-        second.ClinicPatientId.Should().BeNull();
+        second.PatientId.Should().BeNull();
         (await cell.Clinic.DbAsync(db => db.Patients.IgnoreQueryFilters().CountAsync(p => p.ClinicId == secondClinic.Id))).Should().Be(0);
     }
 
@@ -112,10 +112,10 @@ public class PatientShareFlowTests
         import.Scopes.Should().Be(SharingScopes.Demographics | SharingScopes.Allergies);
 
         var chart = await ChartAsync(cell, import);
-        chart.SyncPatientId.Should().Be(accountId);
+        chart.CloudPatientId.Should().Be(accountId);
         chart.FirstName.Should().Be("Maria");
         chart.LastName.Should().Be("Santos");
-        chart.Allergies.Should().Contain("Amoxicillin");
+        chart.Allergies.Should().Contain(a => a.Allergen == "Amoxicillin");
 
         var grant = (await cell.Patient.DbAsync(db => db.PatientAccessGrants.IgnoreQueryFilters().Where(g => g.PatientId == accountId).ToListAsync())).Should().ContainSingle().Subject;
         grant.TenantId.Should().Be(clinic.Tenant);
@@ -191,7 +191,7 @@ public class PatientShareFlowTests
         import.Status.Should().Be(ShareImportStatus.Imported);
 
         var chart = await ChartAsync(cell, import);
-        chart.SyncPatientId.Should().Be(accountId);
+        chart.CloudPatientId.Should().Be(accountId);
         chart.FirstName.Should().Be("Maria");
 
         foreach (var host in cell.Hosts) await host.AssertNothingStuckAsync();
@@ -210,6 +210,6 @@ public class PatientShareFlowTests
         return await cell.Clinic.DbAsync(db => db.ShareImports.IgnoreQueryFilters().SingleAsync(i => i.Id == accepted.CorrelationId));
     }
 
-    private static Task<ClinicPatient> ChartAsync(TestCell cell, ShareImport import) =>
-        cell.Clinic.DbAsync(db => db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == import.ClinicPatientId));
+    private static Task<ClinicEz.Clinic.Domain.Entities.Patient> ChartAsync(TestCell cell, ShareImport import) =>
+        cell.Clinic.DbAsync(db => db.Patients.IgnoreQueryFilters().Include(p => p.Allergies).SingleAsync(p => p.Id == import.PatientId));
 }

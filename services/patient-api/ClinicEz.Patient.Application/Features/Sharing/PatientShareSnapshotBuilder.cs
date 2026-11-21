@@ -87,6 +87,10 @@ public sealed class PatientShareSnapshotBuilder
 
         return new ShareDemographicsDto
         {
+            FirstName = patient.FirstName,
+            MiddleName = patient.MiddleName,
+            LastName = patient.LastName,
+            Suffix = patient.Suffix,
             FullName = Join(" ", patient.FirstName, patient.MiddleName, patient.LastName, patient.Suffix) ?? string.Empty,
             DateOfBirth = patient.DateOfBirth?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             Sex = patient.Sex?.ToString(),

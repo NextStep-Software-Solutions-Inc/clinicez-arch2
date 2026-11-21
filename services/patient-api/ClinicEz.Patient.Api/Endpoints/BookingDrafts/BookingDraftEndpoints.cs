@@ -16,20 +16,36 @@ public sealed record CreateBookingDraftRequest(
     string? Notes,
     string ShareFieldsJson,
     string AttachedFileIdsJson,
-    IReadOnlyList<string>? ShareSections = null);
+    IReadOnlyList<string>? ShareSections = null,
+    Guid? ProviderId = null,
+    string? ProviderName = null);
 
 public sealed class CreateBookingDraftEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapPost("/patients/{patientId:guid}/booking-drafts", async (
-                Guid patientId, CreateBookingDraftRequest request,
-                ISender sender, CancellationToken ct) =>
+                Guid patientId,
+                CreateBookingDraftRequest request,
+                HttpContext httpContext,
+                ISender sender,
+                CancellationToken ct) =>
             {
+                var remoteIp = httpContext.Connection.RemoteIpAddress?.ToString();
                 var id = await sender.Send(new CreateBookingDraftCommand(
-                    patientId, request.ClinicId, request.OrganizationId,
-                    request.PreferredDate, request.PreferredTime,
-                    request.Reason, request.Notes, request.ShareFieldsJson, request.AttachedFileIdsJson ?? "[]", request.ShareSections), ct);
+                    patientId,
+                    request.ClinicId,
+                    request.OrganizationId,
+                    request.PreferredDate,
+                    request.PreferredTime,
+                    request.Reason,
+                    request.Notes,
+                    request.ShareFieldsJson,
+                    request.AttachedFileIdsJson ?? "[]",
+                    request.ShareSections,
+                    remoteIp,
+                    request.ProviderId,
+                    request.ProviderName), ct);
 
                 return Results.Created(
                     $"/api/v1/patients/{patientId}/booking-drafts/{id}",
@@ -41,6 +57,7 @@ public sealed class CreateBookingDraftEndpoint : IEndpoint
             .WithDescription("Creates a new draft appointment request with preferred details, reason, and notes for a patient.")
             .Produces<ApiResponse<Guid>>(StatusCodes.Status201Created)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
+            .Produces<ApiResponse<object>>(StatusCodes.Status409Conflict)
             .RequireAuthorization();
     }
 }

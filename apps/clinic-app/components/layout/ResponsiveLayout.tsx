@@ -153,6 +153,7 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     height: '100%',
     overflow: 'hidden',
+    zIndex: 0,
   },
   content: {
     flex: 1,

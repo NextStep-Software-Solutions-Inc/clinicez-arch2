@@ -21,22 +21,25 @@ public sealed class ReportsController : ControllerBase
 {
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService _pdfService;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IClinicCensusExcelService _excelService;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IRepository<StaffMember>? _staffRepo;
     private readonly IClinicContext? _clinicContext;
 
     public ReportsController(
         ISender sender,
         IClinicDocumentPdfService pdfService,
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IRepository<StaffMember>? staffRepo = null,
-        IClinicContext? clinicContext = null)
+        IClinicContext? clinicContext = null,
+        IClinicCensusExcelService? excelService = null)
     {
         _sender = sender;
         _pdfService = pdfService;
         _settingsRepo = settingsRepo;
         _staffRepo = staffRepo;
         _clinicContext = clinicContext;
+        _excelService = excelService ?? new ClinicEz.Clinic.Infrastructure.Services.ClinicCensusExcelService();
     }
 
     private async Task<string> ResolvePreparedByNameAsync(CancellationToken ct)
@@ -128,7 +131,7 @@ public sealed class ReportsController : ControllerBase
         CancellationToken ct)
     {
         var report = await _sender.Send(new GetDailyEodReportQuery(date), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = report.TenantId,
             ClinicId = report.ClinicId,
@@ -147,7 +150,7 @@ public sealed class ReportsController : ControllerBase
         CancellationToken ct)
     {
         var report = await _sender.Send(new GetMorbidityReportQuery(startDate, endDate), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = report.TenantId,
             ClinicId = report.ClinicId,
@@ -166,7 +169,7 @@ public sealed class ReportsController : ControllerBase
         CancellationToken ct)
     {
         var report = await _sender.Send(new GetTaxDiscountAuditReportQuery(startDate, endDate), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = report.TenantId,
             ClinicId = report.ClinicId,
@@ -185,7 +188,7 @@ public sealed class ReportsController : ControllerBase
         CancellationToken ct)
     {
         var report = await _sender.Send(new GetDoctorSharesReportQuery(startDate, endDate), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = report.TenantId,
             ClinicId = report.ClinicId,
@@ -204,7 +207,7 @@ public sealed class ReportsController : ControllerBase
         CancellationToken ct)
     {
         var analytics = await _sender.Send(new GetClinicAnalyticsQuery(startDate, endDate), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = analytics.TenantId,
             ClinicId = analytics.ClinicId,
@@ -213,5 +216,86 @@ public sealed class ReportsController : ControllerBase
         var preparedBy = await ResolvePreparedByNameAsync(ct);
         var pdfBytes = _pdfService.GenerateClinicAnalyticsPdf(analytics, settings, preparedBy);
         return File(pdfBytes, "application/pdf", $"ClinicAnalyticsReport-{analytics.StartDate:yyyyMMdd}-{analytics.EndDate:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet("census")]
+    [HasPermission(ClinicPermissions.ReportsRead)]
+    public async Task<ActionResult<ApiResponse<ClinicCensusReportDto>>> GetClinicCensusReport(
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate,
+        [FromQuery] Guid? doctorId,
+        [FromQuery] Guid? nurseId,
+        [FromQuery] string? visitType,
+        [FromQuery] string? status,
+        CancellationToken ct = default,
+        [FromQuery] string? acuity = null,
+        [FromQuery] string? search = null,
+        [FromQuery] int? page = null,
+        [FromQuery] int? pageSize = null,
+        [FromQuery] string? tableVisitType = null)
+    {
+        var result = await _sender.Send(
+            new GetClinicCensusReportQuery(
+                startDate,
+                endDate,
+                doctorId,
+                nurseId,
+                visitType,
+                status,
+                acuity,
+                search,
+                page,
+                pageSize,
+                tableVisitType),
+            ct);
+        return Ok(ApiResponse<ClinicCensusReportDto>.Success(result));
+    }
+
+    [HttpGet("census/pdf")]
+    [HasPermission(ClinicPermissions.ReportsRead)]
+    public async Task<IActionResult> GetClinicCensusReportPdf(
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate,
+        [FromQuery] Guid? doctorId,
+        [FromQuery] Guid? nurseId,
+        [FromQuery] string? visitType,
+        [FromQuery] string? status,
+        CancellationToken ct)
+    {
+        var report = await _sender.Send(new GetClinicCensusReportQuery(startDate, endDate, doctorId, nurseId, visitType, status), ct);
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
+        {
+            TenantId = report.TenantId,
+            ClinicId = report.ClinicId,
+            ClinicName = report.ClinicName ?? "Clinic"
+        };
+        var preparedBy = await ResolvePreparedByNameAsync(ct);
+        var pdfBytes = _pdfService.GenerateClinicCensusReportPdf(report, settings, preparedBy);
+        return File(pdfBytes, "application/pdf", $"ClinicCensusReport-{report.StartDate:yyyyMMdd}-{report.EndDate:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet("census/excel")]
+    [HasPermission(ClinicPermissions.ReportsRead)]
+    public async Task<IActionResult> GetClinicCensusReportExcel(
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate,
+        [FromQuery] Guid? doctorId,
+        [FromQuery] Guid? nurseId,
+        [FromQuery] string? visitType,
+        [FromQuery] string? status,
+        CancellationToken ct)
+    {
+        var report = await _sender.Send(new GetClinicCensusReportQuery(startDate, endDate, doctorId, nurseId, visitType, status), ct);
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
+        {
+            TenantId = report.TenantId,
+            ClinicId = report.ClinicId,
+            ClinicName = report.ClinicName ?? "Clinic"
+        };
+        var excelBytes = _excelService.GenerateClinicCensusExcel(report, settings);
+        return File(
+            excelBytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"ClinicCensusReport-{report.StartDate:yyyyMMdd}-{report.EndDate:yyyyMMdd}.xlsx");
     }
 }

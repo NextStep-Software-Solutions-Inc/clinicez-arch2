@@ -19,12 +19,12 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
 {
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
 
     public GetStaffMembersQueryHandler(
         IRepository<StaffMember> staffRepository,
         IClinicContext clinicContext,
-        IRepository<ClinicRoom>? roomRepository = null)
+        IRepository<Room>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _clinicContext = clinicContext;
@@ -65,33 +65,19 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
             var roomIds = staff.GetAssignedRoomIds();
             var roomNames = roomIds.Where(id => roomMap.ContainsKey(id)).Select(id => roomMap[id]).ToList();
 
-            return new StaffMemberDto(
-                staff.Id,
-                staff.TenantId,
-                staff.ClinicId,
-                staff.ClinicRoleId,
+            var effectiveStatus = staff.Status;
+            // Healing fallback: Accounts with established credentials or lacking invitation tokens
+            // are active clinical members (or suspended), never pending invitations.
+            if (effectiveStatus == StaffAccountStatus.Invited && (!string.IsNullOrEmpty(staff.PasswordHash) || staff.InvitationToken == null))
+            {
+                effectiveStatus = staff.IsActive ? StaffAccountStatus.Active : StaffAccountStatus.Suspended;
+            }
+
+            return StaffMemberDto.FromEntity(
+                staff,
                 staff.ClinicRole?.Name,
-                staff.FirstName,
-                staff.LastName,
-                staff.MiddleName,
-                staff.Title,
-                staff.Role,
-                staff.Email,
-                staff.PhoneNumber,
-                staff.PrcLicenseNumber,
-                staff.PtrNumber,
-                staff.S2LicenseNumber,
-                staff.Specialty,
-                staff.IsActive,
-                staff.CreatedAt,
-                HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-                MustChangePassword: staff.MustChangePassword,
-                PhilHealthPan: staff.PhilHealthPan,
-                AssignedRoomIds: roomIds,
-                AssignedRoomNames: roomNames,
-                SignatureSpecimen: staff.SignatureSpecimen,
-                DefaultSignatureMode: staff.DefaultSignatureMode
-            );
+                roomNames,
+                statusOverride: effectiveStatus);
         }).ToList();
     }
 }
@@ -102,12 +88,12 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
 {
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
 
     public GetStaffMemberByIdQueryHandler(
         IRepository<StaffMember> staffRepository,
         IClinicContext clinicContext,
-        IRepository<ClinicRoom>? roomRepository = null)
+        IRepository<Room>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _clinicContext = clinicContext;
@@ -136,31 +122,16 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
             roomNames = roomIds.Where(id => roomMap.ContainsKey(id)).Select(id => roomMap[id]).ToList();
         }
 
-        return new StaffMemberDto(
-            staff.Id,
-            staff.TenantId,
-            staff.ClinicId,
-            staff.ClinicRoleId,
+        var effectiveStatus = staff.Status;
+        if (effectiveStatus == StaffAccountStatus.Invited && (!string.IsNullOrEmpty(staff.PasswordHash) || staff.InvitationToken == null))
+        {
+            effectiveStatus = staff.IsActive ? StaffAccountStatus.Active : StaffAccountStatus.Suspended;
+        }
+
+        return StaffMemberDto.FromEntity(
+            staff,
             staff.ClinicRole?.Name,
-            staff.FirstName,
-            staff.LastName,
-            staff.MiddleName,
-            staff.Title,
-            staff.Role,
-            staff.Email,
-            staff.PhoneNumber,
-            staff.PrcLicenseNumber,
-            staff.PtrNumber,
-            staff.S2LicenseNumber,
-            staff.Specialty,
-            staff.IsActive,
-            staff.CreatedAt,
-            HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-            MustChangePassword: staff.MustChangePassword,
-            PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomIds: roomIds,
-            AssignedRoomNames: roomNames,
-            SignatureSpecimen: staff.SignatureSpecimen,
-            DefaultSignatureMode: staff.DefaultSignatureMode);
+            roomNames,
+            statusOverride: effectiveStatus);
     }
 }

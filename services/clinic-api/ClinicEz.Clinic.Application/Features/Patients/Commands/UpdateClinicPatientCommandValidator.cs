@@ -30,16 +30,24 @@ public sealed class UpdateClinicPatientCommandValidator : AbstractValidator<Upda
             .NotEmpty().WithMessage("Contact number is required.")
             .MaximumLength(30).WithMessage("Contact number must not exceed 30 characters.");
 
-        RuleFor(x => x.Gender)
-            .NotEmpty().WithMessage("Gender is required.")
-            .Must(g => g is "Male" or "Female" or "Other")
-            .WithMessage("Gender must be 'Male', 'Female', or 'Other'.");
+        RuleFor(x => x.Sex)
+            .NotEmpty().WithMessage("Sex is required.")
+            .Must(RegisterClinicPatientCommandValidator.BeValidPhilHealthSex)
+            .WithMessage("Sex must be 'Male' or 'Female'.");
+
+        When(x => !string.IsNullOrWhiteSpace(x.GenderIdentity), () =>
+        {
+            RuleFor(x => x.GenderIdentity!)
+                .MaximumLength(50).WithMessage("Gender identity must not exceed 50 characters.");
+        });
 
         When(x => !string.IsNullOrWhiteSpace(x.PhilHealthNumber), () =>
         {
             RuleFor(x => x.PhilHealthNumber!)
                 .Must(pin => PinRegex.IsMatch(pin.Trim()))
                 .WithMessage("PhilHealth Identification Number must follow the 12-digit format 'XX-XXXXXXXXX-X' per RA 11223.")
+                .Must(pin => !pin.Replace("-", "").Replace(" ", "").Trim().All(c => c == '0'))
+                .WithMessage("PhilHealth Identification Number cannot be all zeros (unassigned placeholder).")
                 .Must(RegisterClinicPatientCommandValidator.BeValidPhilHealthMod11)
                 .WithMessage("PhilHealth Identification Number check digit is invalid (Mod-11 verification failed).");
         });
@@ -48,6 +56,23 @@ public sealed class UpdateClinicPatientCommandValidator : AbstractValidator<Upda
         {
             RuleFor(x => x.Email!)
                 .MaximumLength(255).WithMessage("Email must not exceed 255 characters.");
+        });
+
+        When(x => !string.IsNullOrWhiteSpace(x.BloodType), () =>
+        {
+            RuleFor(x => x.BloodType!)
+                .Must(s => BloodTypeParser.TryParse(s, out _))
+                .WithMessage("Blood type must be a valid ABO/Rh blood group (e.g., A+, A-, B+, B-, AB+, AB-, O+, O-, Unknown).");
+        });
+
+        When(x => x.StructuredAllergies != null && x.StructuredAllergies.Count > 0, () =>
+        {
+            RuleForEach(x => x.StructuredAllergies!).ChildRules(allergy =>
+            {
+                allergy.RuleFor(a => a.Allergen)
+                    .NotEmpty().WithMessage("Allergen name is required when submitting structured allergy.")
+                    .MaximumLength(150).WithMessage("Allergen name cannot exceed 150 characters.");
+            });
         });
     }
 }

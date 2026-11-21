@@ -1,3 +1,4 @@
+using ClinicEz.Portal.Api.Endpoints;
 using ClinicEz.Portal.Application.Features.PublicUploads;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
@@ -5,6 +6,8 @@ using ClinicEz.Portal.Tests.Support;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interoperability;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -165,4 +168,54 @@ public class LabUploadRelayTests : IDisposable
     [InlineData("C:\\temp\\a.pdf", "application/pdf", "a.pdf")]
     public void SafeFileName_StripsPathsAndFallsBackToADefault(string? name, string contentType, string expected) =>
         Assert.Equal(expected, LabUploadValidator.SafeFileName(name, contentType));
+
+    [Fact]
+    public async Task ValidateLabUploadToken_ValidToken_Returns200WithClinicInfo()
+    {
+        var token = TokenFor(_clinic);
+        var result = await PublicLabUploadEndpoints.ValidateLabUploadTokenAsync(token, _context);
+
+        var okResult = Assert.IsAssignableFrom<IValueHttpResult>(result);
+        var response = Assert.IsAssignableFrom<ApiResponse<LabUploadValidationInfo>>(okResult.Value);
+        Assert.True(response.Succeeded);
+        Assert.True(response.Data?.IsValid);
+        Assert.Equal(_clinic.Name, response.Data?.ClinicName);
+    }
+
+    [Theory]
+    [InlineData("random-string-token")]
+    [InlineData("not-a-token")]
+    [InlineData("00000000000000000000000000000000.randomsecret12345")]
+    public async Task ValidateLabUploadToken_RandomToken_Returns404NotFound(string badToken)
+    {
+        var result = await PublicLabUploadEndpoints.ValidateLabUploadTokenAsync(badToken, _context);
+        var notFound = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(404, notFound.StatusCode);
+    }
+
+    [Fact]
+    public async Task ValidateLabUploadToken_EmptyToken_Returns400BadRequest()
+    {
+        var result = await PublicLabUploadEndpoints.ValidateLabUploadTokenAsync("", _context);
+        var badRequest = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(400, badRequest.StatusCode);
+    }
+
+    [Fact]
+    public async Task ValidateLabUploadToken_RxVerificationToken_Returns404NotFound()
+    {
+        // 65-character Rx verification token format: {clinicId:N}.{32-hex-secret}
+        var rxToken = $"{_clinic.Id:N}.abcdef0123456789abcdef0123456789";
+        var result = await PublicLabUploadEndpoints.ValidateLabUploadTokenAsync(rxToken, _context);
+        var notFound = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(404, notFound.StatusCode);
+    }
+
+    [Fact]
+    public async Task ValidateLabUploadToken_RxDocumentNumber_Returns404NotFound()
+    {
+        var result = await PublicLabUploadEndpoints.ValidateLabUploadTokenAsync("RX-20261025-0001", _context);
+        var notFound = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(404, notFound.StatusCode);
+    }
 }

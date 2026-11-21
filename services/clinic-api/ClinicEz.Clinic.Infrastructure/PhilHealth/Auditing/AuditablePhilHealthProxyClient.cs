@@ -11,23 +11,24 @@ using ClinicEz.Clinic.Application.Common.Audit;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Common.Privacy;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
+using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Constants;
-using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Clinic.Infrastructure.Services;
 using ClinicEz.Shared.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
-/// Audit decorator for IPhilHealthProxyClient ensuring 100% statutory event capture
-/// (pin verified, masterlist synced, transmittal generated/encrypted, soap submitted, claim rejected)
-/// per RA 11223, Circular 2023-0004, and RA 10173.
+/// Audit decorator for IPhilHealthProxyClient and IYakapPcapiClient ensuring 100% statutory event capture
+/// across all PhilHealth YAKAP 2.0 (PCAPI v2.0 Services 01–08) calls with strict PIN masking (RA 10173).
 /// </summary>
-public sealed class AuditablePhilHealthProxyClient : IPhilHealthProxyClient
+public sealed class AuditablePhilHealthProxyClient : IPhilHealthProxyClient, IYakapPcapiClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     private readonly IPhilHealthProxyClient _inner;
+    private readonly IYakapPcapiClient? _pcapiInner;
     private readonly IAuditLogQueue _auditQueue;
     private readonly IClinicContext _clinicContext;
     private readonly IPhiRedactionService _redactionService;
@@ -40,9 +41,11 @@ public sealed class AuditablePhilHealthProxyClient : IPhilHealthProxyClient
         IClinicContext clinicContext,
         IPhiRedactionService redactionService,
         IHttpContextAccessor httpContextAccessor,
-        ILogger<AuditablePhilHealthProxyClient> logger)
+        ILogger<AuditablePhilHealthProxyClient> logger,
+        IYakapPcapiClient? pcapiInner = null)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        _pcapiInner = pcapiInner ?? (inner as IYakapPcapiClient);
         _auditQueue = auditQueue ?? throw new ArgumentNullException(nameof(auditQueue));
         _clinicContext = clinicContext ?? throw new ArgumentNullException(nameof(clinicContext));
         _redactionService = redactionService ?? throw new ArgumentNullException(nameof(redactionService));
@@ -50,21 +53,83 @@ public sealed class AuditablePhilHealthProxyClient : IPhilHealthProxyClient
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    // ── 1. PIN Validation (yakap.pin.verified) ────────────────────────────────
+    private IYakapPcapiClient RequirePcapiInner() =>
+        _pcapiInner ?? throw new InvalidOperationException("Inner client does not implement IYakapPcapiClient.");
+
+    // ── Service 01: PCU Liveness ─────────────────────────────────────────────
+    public async Task<ApiResponse<PcuStartResponse>> StartPcuSessionAsync(PcuStartRequest request, CancellationToken ct = default)
+    {
+        var response = await RequirePcapiInner().StartPcuSessionAsync(request, ct);
+        var maskedPin = _redactionService.MaskPhilHealthPin(request.Pin);
+        EnqueueAudit(
+            action: PhilHealthAuditEvents.PcuVerified,
+            severity: response.Succeeded ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
+            targetEntityType: "PhilHealthIdentityVerification",
+            targetEntityId: response.Data?.LivenessAuthorizationId ?? maskedPin,
+            patientId: null,
+            patientName: null,
+            patientPin: request.Pin,
+            outcome: response.Succeeded ? "Success" : "Failure",
+            description: response.Succeeded
+                ? $"Started face liveness check for PhilHealth member '{maskedPin}'."
+                : $"Failed to start face liveness check for '{maskedPin}': {response.Message}",
+            metadata: new { PinMasked = maskedPin, Stage = "Start", Succeeded = response.Succeeded });
+        return response;
+    }
+
+    public async Task<ApiResponse<PcuVerifyResponse>> VerifyPcuTokenAsync(PcuVerifyRequest request, CancellationToken ct = default)
+    {
+        var response = await RequirePcapiInner().VerifyPcuTokenAsync(request, ct);
+        var isVerified = response.Succeeded && response.Data?.PinMatched == true;
+        EnqueueAudit(
+            action: PhilHealthAuditEvents.PcuVerified,
+            severity: isVerified ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
+            targetEntityType: "PhilHealthIdentityVerification",
+            targetEntityId: response.Data?.TransNo ?? request.LivenessAuthorizationId,
+            patientId: null,
+            patientName: null,
+            patientPin: response.Data?.MemberPin,
+            outcome: isVerified ? "Success" : "Warning",
+            description: isVerified
+                ? $"Completed PhilHealth PCU identity verification (ref: {response.Data?.TransNo})."
+                : $"PhilHealth PCU identity verification failed or did not match: {response.Message}",
+            metadata: new { response.Data?.Status, response.Data?.PinMatched, response.Data?.TransNo });
+        return response;
+    }
+
+    // ── Service 02: Standing Validator & PIN Format Check ────────────────────
+    public async Task<ApiResponse<YakapValidatorResponse>> ValidateStandingAsync(YakapValidateStandingRequest request, CancellationToken ct = default)
+    {
+        var response = await RequirePcapiInner().ValidateStandingAsync(request, ct);
+        var maskedPin = _redactionService.MaskPhilHealthPin(request.PatientPin);
+        EnqueueAudit(
+            action: PhilHealthAuditEvents.StandingValidated,
+            severity: response.Succeeded ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
+            targetEntityType: "PhilHealthMember",
+            targetEntityId: maskedPin,
+            patientId: null,
+            patientName: null,
+            patientPin: request.PatientPin,
+            outcome: response.Succeeded ? "Success" : "Failure",
+            description: response.Succeeded
+                ? $"Checked PhilHealth standing for '{maskedPin}' (Selection: {response.Data?.Selection?.Status}, Empanelment: {response.Data?.Empanelment?.Status})."
+                : $"Failed PhilHealth standing check for '{maskedPin}': {response.Message}",
+            metadata: new
+            {
+                PinMasked = maskedPin,
+                EffectiveYear = request.EffYear,
+                SelectionStatus = response.Data?.Selection?.Status,
+                EmpanelmentStatus = response.Data?.Empanelment?.Status,
+                FpeStatus = response.Data?.Fpe?.Status
+            });
+        return response;
+    }
+
     public async Task<ApiResponse<bool>> ValidatePinAsync(string pin, CancellationToken ct = default)
     {
         var response = await _inner.ValidatePinAsync(pin, ct);
-
         var isValid = response.Succeeded && response.Data;
         var maskedPin = _redactionService.MaskPhilHealthPin(pin);
-
-        var metadata = new
-        {
-            PinMasked = maskedPin,
-            IsValid = isValid,
-            ValidationMethod = "Modulus11",
-            ErrorMessage = response.Message
-        };
 
         EnqueueAudit(
             action: PhilHealthAuditEvents.PinVerified,
@@ -76,215 +141,252 @@ public sealed class AuditablePhilHealthProxyClient : IPhilHealthProxyClient
             patientPin: pin,
             outcome: isValid ? "Success" : "Warning",
             description: isValid
-                ? $"PhilHealth PIN '{maskedPin}' successfully verified via Modulus-11 check."
-                : $"PhilHealth PIN '{maskedPin}' verification failed or check digit invalid.",
-            metadata: metadata);
+                ? $"PhilHealth number '{maskedPin}' passed format check."
+                : $"PhilHealth number '{maskedPin}' failed format check.",
+            metadata: new { PinMasked = maskedPin, IsValid = isValid, ErrorMessage = response.Message });
 
         return response;
     }
 
-    // ── 2. Masterlist Sync (yakap.masterlist.synced) ───────────────────────────
-    public async Task<ApiResponse<YakapMasterlistProxyResponse>> ExtractMasterlistAsync(
-        ExtractMasterlistProxyRequest request,
-        CancellationToken ct = default)
+    // ── Service 03: Empanelment ──────────────────────────────────────────────
+    public async Task<ApiResponse<YakapEmpanelmentResponse>> SubmitEmpanelmentAsync(YakapEmpanelmentRequest request, CancellationToken ct = default)
     {
-        var response = await _inner.ExtractMasterlistAsync(request, ct);
+        var response = await RequirePcapiInner().SubmitEmpanelmentAsync(request, ct);
+        var maskedPin = _redactionService.MaskPhilHealthPin(request.PatientPin);
+        var ok = response.Succeeded && response.Data != null;
 
-        var isSuccess = response.Succeeded && response.Data?.IsSuccess == true;
-        var totalCount = response.Data?.TotalCount ?? 0;
+        EnqueueAudit(
+            action: PhilHealthAuditEvents.EmpanelmentSubmitted,
+            severity: ok ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
+            targetEntityType: "PhilHealthEmpanelment",
+            targetEntityId: response.Data?.YesReferenceNo ?? maskedPin,
+            patientId: null,
+            patientName: null,
+            patientPin: request.PatientPin,
+            outcome: ok ? "Success" : "Failure",
+            description: ok
+                ? $"Submitted PhilHealth YAKAP 2.0 empanelment for '{maskedPin}' (YesRef: {response.Data!.YesReferenceNo})."
+                : $"PhilHealth YAKAP 2.0 empanelment failed for '{maskedPin}': {response.Message}",
+            metadata: new
+            {
+                PinMasked = maskedPin,
+                Method = request.PatientVerificationMode,
+                response.Data?.YesReferenceNo,
+                response.Data?.WithYes,
+                response.Data?.WithFpe
+            });
+        return response;
+    }
 
-        var metadata = new
-        {
-            AccreditationNumber = request.AccreditationNumber,
-            EffectiveYear = request.EffectiveYear,
-            TotalMembersSynced = totalCount,
-            DtdSchema = "KonsultaMasterlist_v1.4.dtd",
-            XsdSchema = "KonsultaMasterlist_v1.5.xsd",
-            ErrorMessage = response.Data?.ErrorMessage ?? response.Message
-        };
+    // ── Service 04: Selection ────────────────────────────────────────────────
+    public async Task<ApiResponse<YakapSelectionResponse>> SubmitSelectionAsync(YakapSelectionRequest request, CancellationToken ct = default)
+    {
+        var response = await RequirePcapiInner().SubmitSelectionAsync(request, ct);
+        var maskedPin = _redactionService.MaskPhilHealthPin(request.PatientPin);
+        var ok = response.Succeeded && response.Data != null;
 
+        EnqueueAudit(
+            action: PhilHealthAuditEvents.SelectionSubmitted,
+            severity: ok ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
+            targetEntityType: "PhilHealthSelection",
+            targetEntityId: response.Data?.Selection?.TransactionNo ?? maskedPin,
+            patientId: null,
+            patientName: null,
+            patientPin: request.PatientPin,
+            outcome: ok ? "Success" : "Failure",
+            description: ok
+                ? $"Assigned PhilHealth member '{maskedPin}' to this clinic (Ref: {response.Data!.Selection.TransactionNo})."
+                : $"Failed to assign PhilHealth member '{maskedPin}' to this clinic: {response.Message}",
+            metadata: new
+            {
+                PinMasked = maskedPin,
+                SelectionDate = request.SelectionDate,
+                Status = response.Data?.Selection?.Status,
+                TransactionNo = response.Data?.Selection?.TransactionNo
+            });
+        return response;
+    }
+
+    // ── Service 05: Masterlist ───────────────────────────────────────────────
+    public async Task<ApiResponse<MasterlistDownloadResponse>> DownloadIndividualMasterlistAsync(MasterlistIndividualRequest request, CancellationToken ct = default)
+    {
+        var response = await RequirePcapiInner().DownloadIndividualMasterlistAsync(request, ct);
+        var maskedPin = _redactionService.MaskPhilHealthPin(request.PatientPin);
         EnqueueAudit(
             action: PhilHealthAuditEvents.MasterlistSynced,
-            severity: isSuccess ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
+            severity: response.Succeeded ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
             targetEntityType: "PhilHealthMasterlist",
-            targetEntityId: $"{request.AccreditationNumber}-{request.EffectiveYear}",
+            targetEntityId: maskedPin,
             patientId: null,
             patientName: null,
-            patientPin: null,
-            outcome: isSuccess ? "Success" : "Failure",
-            description: isSuccess
-                ? $"PhilHealth Konsulta masterlist synced: {totalCount} beneficiaries loaded for year {request.EffectiveYear}."
-                : $"PhilHealth Konsulta masterlist sync failed for year {request.EffectiveYear}: {response.Data?.ErrorMessage ?? response.Message}",
-            metadata: metadata);
-
+            patientPin: request.PatientPin,
+            outcome: response.Succeeded ? "Success" : "Failure",
+            description: response.Succeeded
+                ? $"Downloaded PhilHealth individual assignment record for '{maskedPin}' ({request.EffYear})."
+                : $"Failed downloading individual assignment record for '{maskedPin}': {response.Message}",
+            metadata: new { PinMasked = maskedPin, request.EffYear, TotalRecords = response.Data?.TotalRecords ?? 0 });
         return response;
     }
 
-    // ── 3. Transmittal Validation & Encryption (yakap.transmittal.generated / encrypted / claim.rejected)
-    public async Task<ApiResponse<YakapValidationProxyResponse>> ValidateReportAsync(
-        GenerateAndValidateReportProxyRequest request,
-        CancellationToken ct = default)
+    public async Task<ApiResponse<MasterlistDownloadResponse>> DownloadBatchMasterlistAsync(MasterlistBatchRequest request, CancellationToken ct = default)
     {
-        var response = await _inner.ValidateReportAsync(request, ct);
-
-        if (response.Succeeded && response.Data != null)
-        {
-            var data = response.Data;
-            var rawXml = data.RawXml ?? string.Empty;
-            var xmlSha256 = !string.IsNullOrEmpty(rawXml)
-                ? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawXml))).ToLowerInvariant()
-                : null;
-
-            // yakap.transmittal.generated
-            var genMetadata = new
-            {
-                ReportTagging = request.ReportTagging,
-                DtdVersion = "KonsultaData_v1.14.dtd",
-                IsValid = data.IsValid,
-                XmlSha256Checksum = xmlSha256,
-                XmlByteCount = rawXml.Length,
-                ValidationErrorsCount = data.ValidationErrors?.Count ?? 0
-            };
-
-            EnqueueAudit(
-                action: PhilHealthAuditEvents.TransmittalGenerated,
-                severity: data.IsValid ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
-                targetEntityType: "YakapTransmittal",
-                targetEntityId: request.Document?.HciAccreNo ?? request.Document?.HciTransmittalNumber,
-                patientId: null,
-                patientName: null,
-                patientPin: null,
-                outcome: data.IsValid ? "Success" : "Failure",
-                description: $"PhilHealth Yakap transmittal XML generated against KonsultaData_v1.14.dtd (Tranche {request.ReportTagging}). Status: {(data.IsValid ? "Valid" : "Deficient")}",
-                metadata: genMetadata);
-
-            // yakap.transmittal.encrypted
-            if (!string.IsNullOrEmpty(data.EncryptedPayload))
-            {
-                var encMetadata = new
-                {
-                    ReportTagging = request.ReportTagging,
-                    CipherAlgorithm = "AES-256-CBC",
-                    Padding = "PKCS7",
-                    KeyDerivation = "SHA-256",
-                    PreEncryptionHash = xmlSha256,
-                    EncryptedPayloadHash = data.EncryptedPayload.Length > 64 ? data.EncryptedPayload[..64] : data.EncryptedPayload
-                };
-
-                EnqueueAudit(
-                    action: PhilHealthAuditEvents.TransmittalEncrypted,
-                    severity: ClinicAuditSeverities.Routine,
-                    targetEntityType: "YakapTransmittal",
-                    targetEntityId: request.Document?.HciAccreNo ?? request.Document?.HciTransmittalNumber,
-                    patientId: null,
-                    patientName: null,
-                    patientPin: null,
-                    outcome: "Success",
-                    description: "PhilHealth Yakap transmittal payload encrypted using AES-256-CBC (Annex D compliant).",
-                    metadata: encMetadata);
-            }
-
-            // yakap.claim.rejected (if DTD validation failed)
-            if (!data.IsValid)
-            {
-                var rejMetadata = new
-                {
-                    ReportTagging = request.ReportTagging,
-                    RejectionStage = "Validation",
-                    ValidationErrors = data.ValidationErrors
-                };
-
-                EnqueueAudit(
-                    action: PhilHealthAuditEvents.ClaimRejected,
-                    severity: ClinicAuditSeverities.Urgent,
-                    targetEntityType: "YakapTransmittal",
-                    targetEntityId: request.Document?.HciAccreNo ?? request.Document?.HciTransmittalNumber,
-                    patientId: null,
-                    patientName: null,
-                    patientPin: null,
-                    outcome: "Failure",
-                    description: $"PhilHealth Yakap transmittal rejected during DTD validation: {string.Join("; ", data.ValidationErrors ?? new List<string>())}",
-                    metadata: rejMetadata);
-            }
-        }
-
-        return response;
-    }
-
-    // ── 4. SOAP Submission (yakap.soap.submitted / claim.rejected) ─────────────
-    public async Task<ApiResponse<YakapSubmissionProxyResponse>> SubmitReportAsync(
-        GenerateAndSubmitReportProxyRequest request,
-        CancellationToken ct = default)
-    {
-        var response = await _inner.SubmitReportAsync(request, ct);
-
-        var isSuccess = response.Succeeded && response.Data?.IsSuccess == true;
-        var transNo = response.Data?.TransactionNumber;
-
-        var subMetadata = new
-        {
-            ReportTagging = request.ReportTagging,
-            PhilHealthTransactionNumber = transNo,
-            SoapAction = "http://philhealth.gov.ph/submitReport",
-            IsSuccess = isSuccess,
-            ValidationErrors = response.Data?.ValidationErrors
-        };
-
-        // yakap.soap.submitted
+        var response = await RequirePcapiInner().DownloadBatchMasterlistAsync(request, ct);
+        var total = response.Data?.TotalRecords ?? 0;
         EnqueueAudit(
-            action: PhilHealthAuditEvents.SoapSubmitted,
-            severity: isSuccess ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
-            targetEntityType: "YakapTransmittal",
-            targetEntityId: transNo ?? request.Document?.HciAccreNo,
+            action: PhilHealthAuditEvents.MasterlistSynced,
+            severity: response.Succeeded ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
+            targetEntityType: "PhilHealthMasterlist",
+            targetEntityId: response.Data?.TransmittalNo ?? $"{request.StartDate}_{request.EndDate}",
             patientId: null,
             patientName: null,
             patientPin: null,
-            outcome: isSuccess ? "Success" : "Failure",
-            description: isSuccess
-                ? $"PhilHealth Yakap transmittal submitted via SOAP. PhilHealth Transaction Number: {transNo}"
-                : $"PhilHealth Yakap SOAP submission rejected: {string.Join("; ", response.Data?.ValidationErrors ?? new List<string>())}",
-            metadata: subMetadata);
-
-        // yakap.claim.rejected (if PhilHealth SOAP rejected transmission)
-        if (!isSuccess && response.Data != null)
-        {
-            var rejMetadata = new
-            {
-                ReportTagging = request.ReportTagging,
-                RejectionStage = "SOAP Submission",
-                RejectionReasons = response.Data.ValidationErrors
-            };
-
-            EnqueueAudit(
-                action: PhilHealthAuditEvents.ClaimRejected,
-                severity: ClinicAuditSeverities.Urgent,
-                targetEntityType: "YakapTransmittal",
-                targetEntityId: transNo ?? request.Document?.HciAccreNo,
-                patientId: null,
-                patientName: null,
-                patientPin: null,
-                outcome: "Failure",
-                description: $"PhilHealth statutory transmittal rejected by gateway: {string.Join("; ", response.Data.ValidationErrors ?? new List<string>())}",
-                metadata: rejMetadata);
-        }
-
+            outcome: response.Succeeded ? "Success" : "Failure",
+            description: response.Succeeded
+                ? $"Synced PhilHealth clinic roster ({total} members from {request.StartDate} to {request.EndDate})."
+                : $"Failed syncing PhilHealth clinic roster ({request.StartDate} to {request.EndDate}): {response.Message}",
+            metadata: new { request.StartDate, request.EndDate, TotalRecords = total, response.Data?.TransmittalNo });
         return response;
     }
 
-    public Task<ApiResponse<SoapSimulationReportDto>> RunSoapSimulationAsync(RunSoapSimulationProxyRequest request, CancellationToken ct = default)
-        => _inner.RunSoapSimulationAsync(request, ct);
-    public Task<ApiResponse<SoapSandboxStatusDto>> GetSoapSandboxStatusAsync(CancellationToken ct = default)
-        => _inner.GetSoapSandboxStatusAsync(ct);
-    public Task<ApiResponse<SoapSandboxStatusDto>> SetSoapSandboxScenarioAsync(SetSimulationScenarioRequest request, CancellationToken ct = default)
-        => _inner.SetSoapSandboxScenarioAsync(request, ct);
-    public Task<ApiResponse<SoapSandboxStatusDto>> ResetSoapSandboxAsync(CancellationToken ct = default)
-        => _inner.ResetSoapSandboxAsync(ct);
+    // ── Service 06: Data Upload & Status Polling ─────────────────────────────
+    public Task<ApiResponse<DataUploadResponse>> UploadDataAsync(string form, PhilHealthEncryptedPayload payload, CancellationToken ct = default) =>
+        AuditUploadAsync(form, payload.Hash, () => RequirePcapiInner().UploadDataAsync(form, payload, ct));
+
+    public Task<ApiResponse<DataUploadResponse>> UploadPlainJsonAsync(string form, string plainJson, CancellationToken ct = default)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(plainJson))).ToLowerInvariant();
+        return AuditUploadAsync(form, hash, () => RequirePcapiInner().UploadPlainJsonAsync(form, plainJson, ct));
+    }
+
+    private async Task<ApiResponse<DataUploadResponse>> AuditUploadAsync(
+        string form,
+        string payloadHash,
+        Func<Task<ApiResponse<DataUploadResponse>>> execute)
+    {
+        var response = await execute();
+        var action = string.Equals(form, "consultation", StringComparison.OrdinalIgnoreCase)
+            ? PhilHealthAuditEvents.ConsultationUploaded
+            : PhilHealthAuditEvents.FpeUploaded;
+        var ok = response.Succeeded && response.Data != null;
+
+        EnqueueAudit(
+            action: action,
+            severity: ok ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
+            targetEntityType: "YakapSubmission",
+            targetEntityId: response.Data?.UploadTransactionNo ?? response.Data?.CaseNo ?? form,
+            patientId: null,
+            patientName: null,
+            patientPin: null,
+            outcome: ok ? "Success" : "Failure",
+            description: ok
+                ? $"Uploaded YAKAP 2.0 '{form}' record (UploadTx: {response.Data!.UploadTransactionNo}, Status: {response.Data.ProcessingStatus})."
+                : $"Failed YAKAP 2.0 '{form}' upload: {response.Message}",
+            metadata: new
+            {
+                Form = form,
+                PayloadSha256 = payloadHash,
+                response.Data?.UploadTransactionNo,
+                response.Data?.CaseNo,
+                response.Data?.ProcessingStatus
+            });
+        return response;
+    }
+
+    public async Task<ApiResponse<DataUploadStatusResponse>> GetUploadStatusAsync(string uploadTransactionNo, CancellationToken ct = default)
+    {
+        var response = await RequirePcapiInner().GetUploadStatusAsync(uploadTransactionNo, ct);
+        EnqueueAudit(
+            action: PhilHealthAuditEvents.SubmissionStatusPolled,
+            severity: response.Data?.ProcessingStatus == "rejected" ? ClinicAuditSeverities.Urgent : ClinicAuditSeverities.Routine,
+            targetEntityType: "YakapSubmission",
+            targetEntityId: uploadTransactionNo,
+            patientId: null,
+            patientName: null,
+            patientPin: null,
+            outcome: response.Succeeded ? "Success" : "Failure",
+            description: response.Succeeded
+                ? $"Checked PhilHealth processing status for '{uploadTransactionNo}': {response.Data?.ProcessingStatus}."
+                : $"Failed polling PhilHealth status for '{uploadTransactionNo}': {response.Message}",
+            metadata: new
+            {
+                UploadTransactionNo = uploadTransactionNo,
+                ProcessingStatus = response.Data?.ProcessingStatus,
+                ErrorCount = response.Data?.Errors?.Count ?? 0
+            });
+        return response;
+    }
+
+    // ── Service 07: OTP Validation ───────────────────────────────────────────
+    public async Task<ApiResponse<VerificationCodeResponse>> ValidateVerificationCodeAsync(VerificationCodeRequest request, CancellationToken ct = default)
+    {
+        var response = await RequirePcapiInner().ValidateVerificationCodeAsync(request, ct);
+        var maskedPin = _redactionService.MaskPhilHealthPin(request.PatientPin);
+        var ok = response.Succeeded && string.Equals(response.Data?.Status, "VALID", StringComparison.OrdinalIgnoreCase);
+
+        EnqueueAudit(
+            action: PhilHealthAuditEvents.OtpValidated,
+            severity: ok ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
+            targetEntityType: "PhilHealthIdentityVerification",
+            targetEntityId: maskedPin,
+            patientId: null,
+            patientName: null,
+            patientPin: request.PatientPin,
+            outcome: ok ? "Success" : "Warning",
+            description: ok
+                ? $"Validated text verification code for PhilHealth member '{maskedPin}'."
+                : $"Failed text verification code check for '{maskedPin}': {response.Message}",
+            metadata: new { PinMasked = maskedPin, request.TransactionDate, Status = response.Data?.Status });
+        return response;
+    }
+
+    // ── Service 08: Availment Slip ───────────────────────────────────────────
+    public async Task<ApiResponse<AvailmentSlipResponse>> GenerateAvailmentSlipAsync(AvailmentSlipRequest request, CancellationToken ct = default)
+    {
+        var response = await RequirePcapiInner().GenerateAvailmentSlipAsync(request, ct);
+        var maskedPin = _redactionService.MaskPhilHealthPin(request.PatientPin);
+        EnqueueAudit(
+            action: PhilHealthAuditEvents.AvailmentSlipGenerated,
+            severity: response.Succeeded ? ClinicAuditSeverities.Routine : ClinicAuditSeverities.Urgent,
+            targetEntityType: "PhilHealthAvailmentSlip",
+            targetEntityId: maskedPin,
+            patientId: null,
+            patientName: null,
+            patientPin: request.PatientPin,
+            outcome: response.Succeeded ? "Success" : "Failure",
+            description: response.Succeeded
+                ? $"Generated PhilHealth YAKAP confirmation slip PDF for '{maskedPin}' ({request.EffYear})."
+                : $"Failed generating PhilHealth confirmation slip for '{maskedPin}': {response.Message}",
+            metadata: new { PinMasked = maskedPin, request.EffYear });
+        return response;
+    }
+
+    // ── Tenant Credentials & Sandbox Passthroughs ────────────────────────────
     public Task<ApiResponse<PhilHealthConfigStatusResponse>> ConfigureTenantCredentialsAsync(ConfigurePhilHealthCredentialsProxyRequest request, CancellationToken ct = default)
         => _inner.ConfigureTenantCredentialsAsync(request, ct);
+
     public Task<ApiResponse<PhilHealthConfigStatusResponse>> GetTenantConfigurationStatusAsync(CancellationToken ct = default)
         => _inner.GetTenantConfigurationStatusAsync(ct);
+
     public Task<ApiResponse<string>> TestTenantConnectionAsync(CancellationToken ct = default)
         => _inner.TestTenantConnectionAsync(ct);
+
+    public Task<ApiResponse<TenantConfigurationStatusResponse>> ConfigureTenantCredentialsAsync(ConfigureTenantCredentialsRequest request, CancellationToken ct = default)
+        => RequirePcapiInner().ConfigureTenantCredentialsAsync(request, ct);
+
+    Task<ApiResponse<TenantConfigurationStatusResponse>> IYakapPcapiClient.GetTenantConfigurationStatusAsync(CancellationToken ct)
+        => RequirePcapiInner().GetTenantConfigurationStatusAsync(ct);
+
+    Task<ApiResponse<TestTenantConnectionResponse>> IYakapPcapiClient.TestTenantConnectionAsync(CancellationToken ct)
+        => RequirePcapiInner().TestTenantConnectionAsync(ct);
+
+    public Task<ApiResponse<SandboxStatus>> GetSandboxStatusAsync(CancellationToken ct = default)
+        => RequirePcapiInner().GetSandboxStatusAsync(ct);
+
+    public Task<ApiResponse<SandboxStatus>> SetSandboxScenarioAsync(SetSandboxScenarioRequest request, CancellationToken ct = default)
+        => RequirePcapiInner().SetSandboxScenarioAsync(request, ct);
+
+    public Task<ApiResponse<SandboxStatus>> ResetSandboxAsync(CancellationToken ct = default)
+        => RequirePcapiInner().ResetSandboxAsync(ct);
 
     private void EnqueueAudit(
         string action,
@@ -312,10 +414,9 @@ public sealed class AuditablePhilHealthProxyClient : IPhilHealthProxyClient
                 : (Guid.TryParse(user?.FindFirst("clinic_id")?.Value, out var cid) ? cid : Guid.Empty);
 
             Guid? actorStaffId = _clinicContext.StaffId;
-            if (!actorStaffId.HasValue && user != null)
+            if (!actorStaffId.HasValue && user != null && Guid.TryParse(user.FindFirst("sub")?.Value, out var sid))
             {
-                if (Guid.TryParse(user.FindFirst("sub")?.Value, out var sid))
-                    actorStaffId = sid;
+                actorStaffId = sid;
             }
 
             var actorName = user?.FindFirst("name")?.Value

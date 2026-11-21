@@ -3,6 +3,7 @@ import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { theme } from '../../constants/theme';
 import ThemedText from '../ui/ThemedText';
 import ErrorState from '../ui/ErrorState';
+import { useBreakpoint } from '../../utils/useBreakpoint';
 import { CalendarSkeleton } from './CalendarSkeleton';
 import type { CalendarViewProps, ExtendedAppointmentItem } from './types';
 import {
@@ -22,6 +23,8 @@ export function MonthView({
   onSelectDate,
   onSelectAppointment,
 }: CalendarViewProps) {
+  const { isDesktop } = useBreakpoint();
+
   if (isLoading) {
     return <CalendarSkeleton viewMode="month" />;
   }
@@ -50,10 +53,10 @@ export function MonthView({
   return (
     <ScrollView
       horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.scrollContent}
+      showsHorizontalScrollIndicator={!isDesktop}
+      contentContainerStyle={[styles.scrollContent, isDesktop && styles.desktopScrollContent]}
     >
-      <View style={styles.gridWrapper}>
+      <View style={[styles.gridWrapper, isDesktop && styles.desktopGridWrapper]}>
         {/* Day-of-week header */}
         <View style={styles.headerRow}>
           {DAY_LABELS.map((day) => (
@@ -190,6 +193,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
   },
+  desktopScrollContent: {
+    width: '100%',
+    maxWidth: '100%',
+  },
   gridWrapper: {
     minWidth: 700,
     flex: 1,
@@ -199,7 +206,13 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     overflow: 'hidden',
   },
+  desktopGridWrapper: {
+    width: '100%',
+    minWidth: '100%',
+    maxWidth: '100%',
+  },
   headerRow: {
+    width: '100%',
     flexDirection: 'row',
     backgroundColor: theme.colors.surfaceSubtle,
     borderBottomWidth: theme.sizes.borderWidth,
@@ -207,22 +220,29 @@ const styles = StyleSheet.create({
   },
   headerCell: {
     flex: 1,
+    minWidth: 0,
+    maxWidth: '14.2857%',
+    overflow: 'hidden',
     paddingVertical: theme.spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   grid: {
+    width: '100%',
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
   cell: {
     width: '14.2857%', // 100% / 7 columns
+    maxWidth: '14.2857%',
+    minWidth: 0,
     minHeight: 90,
     borderRightWidth: theme.sizes.borderWidth,
     borderBottomWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
     padding: theme.spacing.xs,
     backgroundColor: theme.colors.surface,
+    overflow: 'hidden',
   },
   outsideMonthCell: {
     backgroundColor: theme.colors.surfaceMuted,
@@ -253,9 +273,15 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primaryLight,
   },
   chipContainer: {
+    width: '100%',
+    minWidth: 0,
+    overflow: 'hidden',
     gap: 2,
   },
   chip: {
+    width: '100%',
+    minWidth: 0,
+    overflow: 'hidden',
     paddingHorizontal: theme.spacing.xs,
     paddingVertical: 1,
     borderRadius: theme.radii.sm,

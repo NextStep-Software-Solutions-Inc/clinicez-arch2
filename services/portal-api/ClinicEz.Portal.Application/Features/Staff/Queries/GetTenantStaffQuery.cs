@@ -62,16 +62,17 @@ public class GetTenantStaffQueryHandler(
             .ToListAsync(cancellationToken);
         var profileByMember = profiles.ToDictionary(p => p.WorkspaceMemberId);
 
+        var now = DateTime.UtcNow;
         var memberDtos = members.Select(m =>
         {
             profileByMember.TryGetValue(m.Id, out var profile);
-            return StaffMemberMapping.ToDto(m, profile, profile?.Facility?.Name);
+            return StaffMemberMapping.ToDto(m, profile, profile?.Facility?.Name, now);
         }).ToList();
 
         var snapshot = await entitlements.ResolveAsync(tenant.Id, cancellationToken);
         var limit = snapshot.Limit(EntitlementKeys.LimitMembers);
         var maxAllowed = limit >= int.MaxValue ? int.MaxValue : (int)limit;
-        var counted = members.Count(m => m.Status != MemberStatus.Suspended);
+        var counted = members.Count(m => m.Status != MemberStatus.Suspended && m.Status != MemberStatus.Revoked);
 
         var quotaDto = new StaffQuotaDto(
             counted,

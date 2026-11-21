@@ -25,8 +25,8 @@ public sealed class BillingController : ControllerBase
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService? _pdfService;
     private readonly IRepository<Invoice>? _invoiceRepo;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
-    private readonly IRepository<ClinicPatient>? _patientRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
+    private readonly IRepository<Patient>? _patientRepo;
     private readonly IRepository<StaffMember>? _staffRepo;
     private readonly IRepository<QueueItem>? _queueRepo;
 
@@ -34,8 +34,8 @@ public sealed class BillingController : ControllerBase
         ISender sender,
         IClinicDocumentPdfService? pdfService = null,
         IRepository<Invoice>? invoiceRepo = null,
-        IRepository<ClinicSettings>? settingsRepo = null,
-        IRepository<ClinicPatient>? patientRepo = null,
+        IRepository<FacilitySettings>? settingsRepo = null,
+        IRepository<Patient>? patientRepo = null,
         IRepository<StaffMember>? staffRepo = null,
         IRepository<QueueItem>? queueRepo = null)
     {
@@ -64,8 +64,14 @@ public sealed class BillingController : ControllerBase
     [HasPermission(ClinicPermissions.BillingRead)]
     public async Task<IActionResult> DownloadInvoicePdf(
         Guid id,
+        [FromQuery] string? type,
         CancellationToken ct)
     {
+        if (string.Equals(type, "receipt", StringComparison.OrdinalIgnoreCase))
+        {
+            return await DownloadReceiptPdf(id, null, ct);
+        }
+
         if (_invoiceRepo == null || _pdfService == null)
             return StatusCode(503, "Document generation service is unavailable.");
 
@@ -76,15 +82,15 @@ public sealed class BillingController : ControllerBase
 
         if (invoice == null) return NotFound($"Invoice '{id}' not found.");
 
-        var settings = (_settingsRepo != null ? await _settingsRepo.Query().FirstOrDefaultAsync(ct) : null) ?? new ClinicSettings
+        var settings = (_settingsRepo != null ? await _settingsRepo.Query().FirstOrDefaultAsync(ct) : null) ?? new FacilitySettings
         {
             TenantId = invoice.TenantId ?? "default",
             ClinicId = invoice.ClinicId,
             ClinicName = "Clinic EZ Partner Medical Clinic"
         };
 
-        var patient = (invoice.PatientId != Guid.Empty && _patientRepo != null)
-            ? await _patientRepo.GetByIdAsync(invoice.PatientId, ct)
+        var patient = (invoice.PatientId.HasValue && invoice.PatientId.Value != Guid.Empty && _patientRepo != null)
+            ? await _patientRepo.GetByIdAsync(invoice.PatientId.Value, ct)
             : null;
 
         var doctor = (invoice.AttendingDoctorId.HasValue && _staffRepo != null)
@@ -99,9 +105,62 @@ public sealed class BillingController : ControllerBase
         }
 
         var pdfBytes = _pdfService.GenerateInvoicePdf(invoice, settings, doctor, patient, queueNumber);
-        var filename = invoice.Status == InvoiceStatus.Paid
-            ? $"Receipt-{invoice.InvoiceNumber}.pdf"
-            : $"SOA-{invoice.InvoiceNumber}.pdf";
+        var filename = $"SOA-{invoice.InvoiceNumber}.pdf";
+
+        return File(pdfBytes, "application/pdf", filename);
+    }
+
+    [HttpGet("invoices/{id:guid}/receipt-pdf")]
+    [HasPermission(ClinicPermissions.BillingRead)]
+    public async Task<IActionResult> DownloadReceiptPdf(
+        Guid id,
+        [FromQuery] Guid? paymentId,
+        CancellationToken ct)
+    {
+        if (_invoiceRepo == null || _pdfService == null)
+            return StatusCode(503, "Document generation service is unavailable.");
+
+        var invoice = await _invoiceRepo.Query(i => i.Id == id)
+            .Include(i => i.LineItems)
+            .Include(i => i.Payments)
+            .FirstOrDefaultAsync(ct);
+
+        if (invoice == null) return NotFound($"Invoice '{id}' not found.");
+
+        var settings = (_settingsRepo != null ? await _settingsRepo.Query().FirstOrDefaultAsync(ct) : null) ?? new FacilitySettings
+        {
+            TenantId = invoice.TenantId ?? "default",
+            ClinicId = invoice.ClinicId,
+            ClinicName = "Clinic EZ Partner Medical Clinic"
+        };
+
+        var patient = (invoice.PatientId.HasValue && invoice.PatientId.Value != Guid.Empty && _patientRepo != null)
+            ? await _patientRepo.GetByIdAsync(invoice.PatientId.Value, ct)
+            : null;
+
+        var doctor = (invoice.AttendingDoctorId.HasValue && _staffRepo != null)
+            ? await _staffRepo.GetByIdAsync(invoice.AttendingDoctorId.Value, ct)
+            : null;
+
+        string? queueNumber = null;
+        if (invoice.QueueItemId.HasValue && _queueRepo != null)
+        {
+            var qItem = await _queueRepo.GetByIdAsync(invoice.QueueItemId.Value, ct);
+            queueNumber = qItem?.QueueNumber;
+        }
+
+        PaymentRecord? payment = null;
+        if (paymentId.HasValue)
+        {
+            payment = invoice.Payments.FirstOrDefault(p => p.Id == paymentId.Value);
+        }
+        payment ??= invoice.Payments.OrderByDescending(p => p.PaymentDate).FirstOrDefault();
+
+        var pdfBytes = _pdfService.GenerateOfficialReceiptPdf(invoice, payment, settings, doctor, patient, queueNumber);
+        var docNumber = payment != null && !string.IsNullOrWhiteSpace(payment.PaymentNumber)
+            ? payment.PaymentNumber
+            : invoice.InvoiceNumber;
+        var filename = $"Receipt-{docNumber}.pdf";
 
         return File(pdfBytes, "application/pdf", filename);
     }
@@ -115,7 +174,7 @@ public sealed class BillingController : ControllerBase
         if (_pdfService == null)
             return StatusCode(503, "Document generation service is unavailable.");
 
-        var settings = (_settingsRepo != null ? await _settingsRepo.Query().FirstOrDefaultAsync(ct) : null) ?? new ClinicSettings
+        var settings = (_settingsRepo != null ? await _settingsRepo.Query().FirstOrDefaultAsync(ct) : null) ?? new FacilitySettings
         {
             TenantId = "default",
             ClinicName = "Clinic EZ Partner Medical Clinic"
@@ -136,6 +195,15 @@ public sealed class BillingController : ControllerBase
         [FromBody] CreateInvoiceRequest request,
         CancellationToken ct)
     {
+        if (request.IsWalkInRetail &&
+            string.IsNullOrWhiteSpace(request.WalkInCustomerName) &&
+            string.IsNullOrWhiteSpace(request.PatientName))
+        {
+            return BadRequest(ApiResponse<InvoiceDto>.Fail(
+                "Customer name is required for Walk-In Retail POS invoices.",
+                [new ApiFieldError("WalkInCustomerName", "Required", "Customer name is required for Walk-In Retail POS invoices.")]));
+        }
+
         var command = new CreateInvoiceCommand(
             request.PatientId,
             request.PatientName,
@@ -148,7 +216,10 @@ public sealed class BillingController : ControllerBase
             request.CustomDiscountPercentage,
             request.Notes,
             request.LineItems,
-            request.AllowDuplicate
+            request.AllowDuplicate,
+            request.IsWalkInRetail,
+            request.WalkInCustomerName,
+            request.VisitType
         );
 
         var result = await _sender.Send(command, ct);

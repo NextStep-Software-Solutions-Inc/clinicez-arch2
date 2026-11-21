@@ -7,6 +7,7 @@ namespace ClinicEz.Shared.Interop.Contracts;
 /// <summary>
 /// Payload carried by <see cref="InteropTypes.PatientJoinRequested"/> envelopes from Portal to Clinic.
 /// Ingests public patient registration requests into clinic quarantine with outside document review.
+/// Upgraded with structured 10-digit PSGC address fields for cascading location selection.
 /// </summary>
 public sealed record PatientJoinRequestedPayload
 {
@@ -25,7 +26,46 @@ public sealed record PatientJoinRequestedPayload
     public string? CivilStatus { get; init; }
     public required string ContactNumber { get; init; }
     public string? Email { get; init; }
+
+    // =========================================================================
+    // Address Fields: Structured Cascading 10-digit PSGC + Fallback
+    // =========================================================================
+
+    /// <summary>Legacy single free-text address string (preserved for fallback and raw text input).</summary>
     public string? Address { get; init; }
+
+    /// <summary>10-digit Philippine Standard Geographic Code for the Region (e.g. "1300000000").</summary>
+    public string? RegionPsgc { get; init; }
+
+    /// <summary>10-digit Philippine Standard Geographic Code for the Province (e.g. "1339000000").</summary>
+    public string? ProvincePsgc { get; init; }
+
+    /// <summary>10-digit Philippine Standard Geographic Code for the City/Municipality (e.g. "1339010000").</summary>
+    public string? CityMunicipalityPsgc { get; init; }
+
+    /// <summary>10-digit Philippine Standard Geographic Code for the Barangay (e.g. "1339010001").</summary>
+    public string? BarangayPsgc { get; init; }
+
+    /// <summary>Descriptive name of the Region.</summary>
+    public string? RegionName { get; init; }
+
+    /// <summary>Descriptive name of the Province.</summary>
+    public string? ProvinceName { get; init; }
+
+    /// <summary>Descriptive name of the City or Municipality.</summary>
+    public string? CityMunicipalityName { get; init; }
+
+    /// <summary>Descriptive name of the Barangay.</summary>
+    public string? BarangayName { get; init; }
+
+    /// <summary>House / unit number, building name, and street / subdivision.</summary>
+    public string? StreetAddress { get; init; }
+
+    /// <summary>4-digit Philippine postal ZIP code.</summary>
+    public string? ZipCode { get; init; }
+
+    /// <summary>Optional multi-address list (e.g. Permanent and Current addresses with IsSameAsPermanent toggle).</summary>
+    public List<PatientJoinAddressItem>? Addresses { get; init; }
 
     // Statutory PhilHealth & Welfare Identifiers
     public string? PhilHealthPin { get; init; } // 12-digit Mod-11 PIN
@@ -46,6 +86,32 @@ public sealed record PatientJoinRequestedPayload
     // Structured Clinical Lists & External Attachments
     public List<PatientJoinAllergyItem>? Allergies { get; init; }
     public List<PatientJoinAttachmentItem>? Attachments { get; init; }
+}
+
+/// <summary>
+/// Structured address item carried in public join intake payloads.
+/// Supports Permanent and Current address separation with 10-digit PSGC hierarchy.
+/// </summary>
+public sealed record PatientJoinAddressItem
+{
+    /// <summary>Address classification: "Permanent" or "Current".</summary>
+    public string AddressType { get; init; } = "Permanent";
+
+    /// <summary>Whether the current address is identical to permanent address.</summary>
+    public bool IsSameAsPermanent { get; init; }
+
+    public string? RegionPsgc { get; init; }
+    public string? ProvincePsgc { get; init; }
+    public string? CityMunicipalityPsgc { get; init; }
+    public string? BarangayPsgc { get; init; }
+
+    public string? RegionName { get; init; }
+    public string? ProvinceName { get; init; }
+    public string? CityMunicipalityName { get; init; }
+    public string? BarangayName { get; init; }
+
+    public string? StreetAddress { get; init; }
+    public string? ZipCode { get; init; }
 }
 
 /// <summary>

@@ -1,16 +1,23 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Clinic.Infrastructure.Services;
 
-public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
+/// <summary>
+/// Generates 23-character PhilHealth PCAPI v2.0 (rev20261026) 23B daily sequences
+/// using Asia/Manila dates stored in <see cref="PhilHealthDailySequence"/>.
+/// Format: {Prefix:1}{AccreNo:9}{yyyyMMdd:8}{Sequence:D5} = 23 chars.
+/// </summary>
+public sealed class PhilHealthSequenceGenerator : ClinicEz.Clinic.Domain.Interfaces.IPhilHealthSequenceGenerator
 {
+    private static readonly TimeZoneInfo ManilaTimeZone = ResolveManilaTimeZone();
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<PhilHealthSequenceGenerator> _logger;
 
@@ -22,18 +29,13 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
         _logger = logger;
     }
 
-    public async Task<string> GenerateCaseNumberAsync(
+    public Task<string> GenerateCaseNumberAsync(
         string tenantId,
         Guid clinicId,
         string accreditationNumber,
         string effectiveYear,
-        CancellationToken ct = default)
-    {
-        var seq = await GetNextSequenceAsync(tenantId, clinicId, PhilHealthSequenceType.Case, effectiveYear, ct);
-        var accreClean = SanitizeAccreditation(accreditationNumber);
-        var yearClean = string.IsNullOrWhiteSpace(effectiveYear) ? DateTime.UtcNow.Year.ToString() : effectiveYear;
-        return $"C{accreClean}{yearClean}{seq:D5}";
-    }
+        CancellationToken ct = default) =>
+        GenerateTransactionNumberAsync(tenantId, clinicId, PhilHealthSequenceType.Case, accreditationNumber, effectiveYear, ct);
 
     public async Task<string> GenerateTransactionNumberAsync(
         string tenantId,
@@ -43,38 +45,33 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
         string effectiveYear,
         CancellationToken ct = default)
     {
-        var seq = await GetNextSequenceAsync(tenantId, clinicId, type, effectiveYear, ct);
-        var accreClean = SanitizeAccreditation(accreditationNumber);
-        var yearClean = string.IsNullOrWhiteSpace(effectiveYear) ? DateTime.UtcNow.Year.ToString() : effectiveYear;
-
-        char prefix = type switch
-        {
-            PhilHealthSequenceType.Enlistment => 'E',
-            PhilHealthSequenceType.Profiling => 'P',
-            PhilHealthSequenceType.Soap => 'S',
-            PhilHealthSequenceType.Medicine => 'M',
-            PhilHealthSequenceType.Transmittal => 'R',
-            _ => 'T'
-        };
-
-        return $"{prefix}{accreClean}{yearClean}{seq:D5}";
+        var manilaDate = ResolveManilaDate(effectiveYear, referenceDate: null);
+        return await GenerateForDateAsync(tenantId, clinicId, type, accreditationNumber, manilaDate, ct);
     }
 
-    public async Task<string> GenerateTransmittalNumberAsync(
+    private async Task<string> GenerateForDateAsync(
         string tenantId,
         Guid clinicId,
+        PhilHealthSequenceType type,
+        string accreditationNumber,
+        DateOnly manilaDate,
+        CancellationToken ct)
+    {
+        var accreClean = SanitizeAccreditation9(accreditationNumber);
+        var prefix = MapPrefix(type);
+        var seq = await GetNextDailySequenceAsync(tenantId, clinicId, accreClean, prefix, manilaDate, ct);
+        return $"{prefix}{accreClean}{manilaDate:yyyyMMdd}{seq:D5}";
+    }
+
+    public Task<PhilHealthPatientJourneyNumbers> AssignPatientJourneyNumbersAsync(
+        string tenantId,
+        Guid clinicId,
+        Guid patientId,
+        Guid? encounterId,
         string accreditationNumber,
         string effectiveYear,
-        CancellationToken ct = default)
-    {
-        return await GenerateTransactionNumberAsync(
-            tenantId,
-            clinicId,
-            PhilHealthSequenceType.Transmittal,
-            accreditationNumber,
-            effectiveYear,
-            ct);
-    }
+        CancellationToken ct) =>
+        AssignPatientJourneyNumbersAsync(tenantId, clinicId, patientId, encounterId, accreditationNumber, effectiveYear, referenceDate: null, ct);
 
     public async Task<PhilHealthPatientJourneyNumbers> AssignPatientJourneyNumbersAsync(
         string tenantId,
@@ -83,11 +80,11 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
         Guid? encounterId,
         string accreditationNumber,
         string effectiveYear,
+        DateTime? referenceDate = null,
         CancellationToken ct = default)
     {
-        var yearClean = string.IsNullOrWhiteSpace(effectiveYear) ? DateTime.UtcNow.Year.ToString() : effectiveYear;
-
         var patient = await _dbContext.Patients
+            .Include(p => p.YakapEnlistments)
             .FirstOrDefaultAsync(p => p.Id == patientId, ct);
 
         if (patient == null)
@@ -95,135 +92,199 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
             throw new InvalidOperationException($"Patient {patientId} not found.");
         }
 
+        ConsultationEncounter? encounter = null;
+        if (encounterId.HasValue)
+        {
+            encounter = await _dbContext.Consultations
+                .FirstOrDefaultAsync(e => e.Id == encounterId.Value, ct);
+        }
+
+        int? requestedYear = int.TryParse(effectiveYear, out var ey) ? ey : null;
+        PatientYakapEnlistment activeEntry;
+
+        if (encounter != null || referenceDate.HasValue)
+        {
+            var refDate = encounter != null
+                ? DateOnly.FromDateTime(encounter.EncounterDate)
+                : DateOnly.FromDateTime(referenceDate!.Value);
+
+            activeEntry = patient.ResolveActiveEnlistmentOrThrow(refDate, requestedYear);
+        }
+        else
+        {
+            var targetYear = requestedYear ?? DateTime.UtcNow.Year;
+            activeEntry = patient.ResolveActiveEnlistmentForYearOrThrow(targetYear);
+        }
+
+        var manilaDate = ResolveManilaDate(
+            activeEntry.EffectiveYear > 0 ? activeEntry.EffectiveYear.ToString() : effectiveYear,
+            encounter?.EncounterDate ?? referenceDate);
+
         bool patientModified = false;
 
-        // 1. Assign Patient Annual Case Number if missing
-        if (string.IsNullOrWhiteSpace(patient.PhilHealthCaseNo))
+        // 1. Assign Patient Annual Case Number (C...) if missing
+        var currentCaseNo = activeEntry.CaseNo;
+        if (string.IsNullOrWhiteSpace(currentCaseNo))
         {
-            patient.PhilHealthCaseNo = await GenerateCaseNumberAsync(tenantId, clinicId, accreditationNumber, yearClean, ct);
+            currentCaseNo = await GenerateForDateAsync(tenantId, clinicId, PhilHealthSequenceType.Case, accreditationNumber, manilaDate, ct);
+            activeEntry.CaseNo = currentCaseNo;
             patientModified = true;
         }
 
-        // 2. Assign Enlistment Transaction Number if missing
-        if (string.IsNullOrWhiteSpace(patient.PhilHealthEnlistmentNo))
+        // 2. Assign Profiling / FPE Transaction Number (P...) if missing
+        var currentProfNo = activeEntry.ProfilingTransNo;
+        if (string.IsNullOrWhiteSpace(currentProfNo))
         {
-            patient.PhilHealthEnlistmentNo = await GenerateTransactionNumberAsync(
-                tenantId,
-                clinicId,
-                PhilHealthSequenceType.Enlistment,
-                accreditationNumber,
-                yearClean,
-                ct);
-            patientModified = true;
-        }
-
-        // 3. Assign Profiling Transaction Number if missing
-        if (string.IsNullOrWhiteSpace(patient.PhilHealthProfilingTransNo))
-        {
-            patient.PhilHealthProfilingTransNo = await GenerateTransactionNumberAsync(
-                tenantId,
-                clinicId,
-                PhilHealthSequenceType.Profiling,
-                accreditationNumber,
-                yearClean,
-                ct);
+            currentProfNo = await GenerateForDateAsync(tenantId, clinicId, PhilHealthSequenceType.Profiling, accreditationNumber, manilaDate, ct);
+            activeEntry.ProfilingTransNo = currentProfNo;
             patientModified = true;
         }
 
         if (patientModified)
         {
+            patient.AddOrRenewYakapEnlistment(activeEntry);
             await _dbContext.SaveChangesAsync(ct);
             _logger.LogInformation(
-                "Assigned PhilHealth Journey Numbers to patient {PatientId}: Case={CaseNo}, Enlist={EnlistNo}, Prof={ProfNo}",
-                patient.Id, patient.PhilHealthCaseNo, patient.PhilHealthEnlistmentNo, patient.PhilHealthProfilingTransNo);
+                "Assigned PhilHealth YAKAP 2.0 23B numbers to patient {PatientId}: Case={CaseNo}, Profiling={ProfNo}",
+                patient.Id, currentCaseNo, currentProfNo);
         }
 
-        // 4. Assign Encounter SOAP Transaction Number if an encounter is specified
+        // 3. Assign Consultation / SOAP Transaction Number (S...) if encounter is specified
         string? soapTransNo = null;
-        if (encounterId.HasValue)
+        if (encounter != null)
         {
-            var encounter = await _dbContext.Consultations
-                .FirstOrDefaultAsync(e => e.Id == encounterId.Value, ct);
+            encounter.PhilHealthCaseNo = currentCaseNo;
 
-            if (encounter != null)
+            if (string.IsNullOrWhiteSpace(encounter.PhilHealthSoapTransNo))
             {
-                encounter.PhilHealthCaseNo = patient.PhilHealthCaseNo;
-                encounter.HciCaseNo = patient.PhilHealthCaseNo;
-                encounter.HciTransNo = patient.PhilHealthEnlistmentNo;
-                if (string.IsNullOrWhiteSpace(encounter.PhilHealthSoapTransNo))
-                {
-                    encounter.PhilHealthSoapTransNo = await GenerateTransactionNumberAsync(
-                        tenantId,
-                        clinicId,
-                        PhilHealthSequenceType.Soap,
-                        accreditationNumber,
-                        yearClean,
-                        ct);
-                }
-                encounter.SoapTransNo = encounter.PhilHealthSoapTransNo;
-                await _dbContext.SaveChangesAsync(ct);
-                soapTransNo = encounter.PhilHealthSoapTransNo;
+                encounter.PhilHealthSoapTransNo = await GenerateForDateAsync(
+                    tenantId,
+                    clinicId,
+                    PhilHealthSequenceType.Consultation,
+                    accreditationNumber,
+                    manilaDate,
+                    ct);
             }
+
+            await _dbContext.SaveChangesAsync(ct);
+            soapTransNo = encounter.PhilHealthSoapTransNo;
         }
 
         return new PhilHealthPatientJourneyNumbers(
-            CaseNumber: patient.PhilHealthCaseNo,
-            EnlistmentTransactionNumber: patient.PhilHealthEnlistmentNo,
-            ProfilingTransactionNumber: patient.PhilHealthProfilingTransNo,
+            CaseNumber: currentCaseNo!,
+            ProfilingTransactionNumber: currentProfNo!,
             SoapTransactionNumber: soapTransNo);
     }
 
-    private async Task<int> GetNextSequenceAsync(
+    private async Task<long> GetNextDailySequenceAsync(
         string tenantId,
         Guid clinicId,
-        PhilHealthSequenceType sequenceType,
-        string effectiveYear,
+        string accreditationNo,
+        string prefix,
+        DateOnly manilaDate,
         CancellationToken ct)
     {
-        var tracker = await _dbContext.PhilHealthSequenceTrackers
+        var tracker = await _dbContext.PhilHealthDailySequences
             .FirstOrDefaultAsync(t =>
-                t.TenantId == tenantId &&
                 t.ClinicId == clinicId &&
-                t.SequenceType == sequenceType &&
-                t.EffectiveYear == effectiveYear, ct);
+                t.AccreditationNo == accreditationNo &&
+                t.Prefix == prefix &&
+                t.ManilaDate == manilaDate &&
+                !t.IsDeleted, ct);
 
         if (tracker == null)
         {
-            tracker = new PhilHealthSequenceTracker
+            tracker = new PhilHealthDailySequence
             {
                 Id = Guid.NewGuid(),
-                TenantId = tenantId,
+                TenantId = string.IsNullOrWhiteSpace(tenantId) ? "tenant_default" : tenantId,
                 ClinicId = clinicId,
-                SequenceType = sequenceType,
-                EffectiveYear = effectiveYear,
-                CurrentSequence = 1,
-                LastAssignedAt = DateTime.UtcNow
+                AccreditationNo = accreditationNo,
+                Prefix = prefix,
+                ManilaDate = manilaDate,
+                LastValue = 1
             };
-            _dbContext.PhilHealthSequenceTrackers.Add(tracker);
+            _dbContext.PhilHealthDailySequences.Add(tracker);
         }
         else
         {
-            tracker.CurrentSequence++;
-            tracker.LastAssignedAt = DateTime.UtcNow;
+            tracker.LastValue++;
         }
 
         await _dbContext.SaveChangesAsync(ct);
-        return tracker.CurrentSequence;
+        return tracker.LastValue;
     }
 
-    private static string SanitizeAccreditation(string? accreditationNumber)
+    private static string MapPrefix(PhilHealthSequenceType type) => type switch
+    {
+        PhilHealthSequenceType.Case => "C",
+        PhilHealthSequenceType.Profiling => "P",
+        PhilHealthSequenceType.Consultation => "S",
+        PhilHealthSequenceType.DiagnosticRequest => "D",
+        PhilHealthSequenceType.DiagnosticResults => "L",
+        PhilHealthSequenceType.Medicine => "M",
+        PhilHealthSequenceType.Referral => "R",
+        _ => "C"
+    };
+
+    private static DateOnly ResolveManilaDate(string? effectiveYear, DateTime? referenceDate)
+    {
+        if (referenceDate.HasValue)
+        {
+            var utc = referenceDate.Value.Kind == DateTimeKind.Utc
+                ? referenceDate.Value
+                : referenceDate.Value.ToUniversalTime();
+            return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utc, ManilaTimeZone));
+        }
+
+        var manilaToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, ManilaTimeZone));
+        if (int.TryParse(effectiveYear, out var yr) && yr > 0 && yr != manilaToday.Year)
+        {
+            return new DateOnly(yr, manilaToday.Month, Math.Min(manilaToday.Day, DateTime.DaysInMonth(yr, manilaToday.Month)));
+        }
+
+        return manilaToday;
+    }
+
+    private static string SanitizeAccreditation9(string? accreditationNumber)
     {
         if (string.IsNullOrWhiteSpace(accreditationNumber))
         {
-            return "000921";
+            return "H00000001";
         }
 
-        var clean = accreditationNumber
-            .Replace("-", string.Empty)
-            .Replace("HCI", string.Empty, StringComparison.OrdinalIgnoreCase)
-            .Replace("NCR", string.Empty, StringComparison.OrdinalIgnoreCase)
-            .Trim();
+        var clean = new string(accreditationNumber
+            .Trim()
+            .ToUpperInvariant()
+            .Where(char.IsLetterOrDigit)
+            .ToArray());
 
-        return clean.Length > 6 ? clean.Substring(clean.Length - 6) : clean.PadLeft(6, '0');
+        if (clean.Length == 0)
+        {
+            return "H00000001";
+        }
+
+        return clean.Length >= 9
+            ? clean[^9..]
+            : clean.PadLeft(9, '0');
+    }
+
+    private static TimeZoneInfo ResolveManilaTimeZone()
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
+        }
+        catch
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time");
+            }
+            catch
+            {
+                return TimeZoneInfo.CreateCustomTimeZone("Asia/Manila", TimeSpan.FromHours(8), "Philippine Standard Time", "Philippine Standard Time");
+            }
+        }
     }
 }

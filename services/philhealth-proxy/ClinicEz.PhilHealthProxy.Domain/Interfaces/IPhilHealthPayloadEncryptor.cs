@@ -3,32 +3,29 @@ using ClinicEz.PhilHealthProxy.Domain.Models;
 namespace ClinicEz.PhilHealthProxy.Domain.Interfaces;
 
 /// <summary>
-/// Provides payload encryption and decryption per PhilHealth PKA v1.1 Annex D:
-/// - AES-256-CBC algorithm
-/// - SHA-256 key derivation from tenant cipher key (first 32 bytes)
-/// - 16-byte random Initialization Vector (Base64-encoded)
-/// - SHA-256 integrity hash of unencrypted raw XML
-/// - JSON envelope packaging
+/// Implements PhilHealth PCAPI v2.0 Annex C payload cryptography:
+/// - AES-256-CBC algorithm with PaddingMode.None
+/// - Manual 0x00 null-byte padding (0 bytes added when plainBytes.Length % 16 == 0)
+/// - SHA-256 key derivation (32 bytes) from facility cipher key
+/// - 16-byte cryptographically secure random IV (Base64-encoded)
+/// - Lowercase hexadecimal SHA-256 integrity hash of plain data computed before padding
+/// - Envelope packaging with docMimeType "application/json" or "application/pdf"
 /// </summary>
 public interface IPhilHealthPayloadEncryptor
 {
-    /// <summary>
-    /// Encrypts raw XML text using the tenant's cipher key and packages it into the PhilHealth JSON envelope string.
-    /// </summary>
-    string EncryptPayload(string rawXml, string cipherKey);
+    PhilHealthEncryptedPayload EncryptJson(string plainJson, string cipherKey);
+    string EncryptJsonToString(string plainJson, string cipherKey);
+    PhilHealthEncryptedPayload EncryptBytes(byte[] plainBytes, string mimeType, string cipherKey);
 
-    /// <summary>
-    /// Encrypts raw XML text and returns the strongly typed payload envelope.
-    /// </summary>
-    PhilHealthEncryptedPayload Encrypt(string rawXml, string cipherKey);
+    string DecryptJson(PhilHealthEncryptedPayload envelope, string cipherKey);
+    string DecryptJsonFromString(string jsonEnvelope, string cipherKey);
+    byte[] DecryptPdf(PhilHealthEncryptedPayload envelope, string cipherKey);
+    byte[] DecryptPdfFromString(string jsonEnvelope, string cipherKey);
+    byte[] DecryptBytes(PhilHealthEncryptedPayload envelope, string cipherKey);
 
-    /// <summary>
-    /// Decrypts a PhilHealth JSON envelope string using the tenant's cipher key, verifies the SHA-256 hash, and returns the raw XML string.
-    /// </summary>
-    string DecryptPayload(string jsonEnvelope, string cipherKey);
-
-    /// <summary>
-    /// Decrypts a strongly typed PhilHealth payload envelope using the tenant's cipher key, verifies the SHA-256 hash, and returns the raw XML string.
-    /// </summary>
-    string Decrypt(PhilHealthEncryptedPayload envelope, string cipherKey);
+    // Compatibility aliases
+    string EncryptPayload(string rawText, string cipherKey) => EncryptJsonToString(rawText, cipherKey);
+    PhilHealthEncryptedPayload Encrypt(string rawText, string cipherKey) => EncryptJson(rawText, cipherKey);
+    string DecryptPayload(string jsonEnvelope, string cipherKey) => DecryptJsonFromString(jsonEnvelope, cipherKey);
+    string Decrypt(PhilHealthEncryptedPayload envelope, string cipherKey) => DecryptJson(envelope, cipherKey);
 }

@@ -45,11 +45,11 @@ public class ChallengerM2TenantAndPermissionSecurityTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
         // Same name, code, contact in two different clinics
-        var patientClinicA = new ClinicPatient
+        var patientClinicA = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -62,7 +62,7 @@ public class ChallengerM2TenantAndPermissionSecurityTests
             PhilHealthNumber = "11-222333444-5"
         };
 
-        var patientClinicB = new ClinicPatient
+        var patientClinicB = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-b",
@@ -180,10 +180,10 @@ public class ChallengerM2TenantAndPermissionSecurityTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
-        var activePatient = new ClinicPatient
+        var activePatient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -196,7 +196,7 @@ public class ChallengerM2TenantAndPermissionSecurityTests
             IsDeleted = false
         };
 
-        var softDeletedPatient = new ClinicPatient
+        var softDeletedPatient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -209,7 +209,7 @@ public class ChallengerM2TenantAndPermissionSecurityTests
             IsDeleted = true // SOFT DELETED
         };
 
-        var softDeletedByCodeOnly = new ClinicPatient
+        var softDeletedByCodeOnly = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -475,21 +475,22 @@ public class ChallengerM2TenantAndPermissionSecurityTests
     [InlineData(null, null, "PWD-44123", "Female", "PWD", "neutral")]
     [InlineData(null, null, null, "Female", "Female", "routine")]
     [InlineData(null, null, null, "Male", "Male", "routine")]
-    [InlineData(null, null, null, "Other", "Other", "routine")]
+    [InlineData(null, null, null, "Intersex", "Intersex", "routine")]
+    [InlineData(null, null, null, "Unknown", "Unknown", "routine")]
     public async Task PatientSearchProvider_BadgesMapCorrectlyToSemanticVariants(
         string? alerts,
         string? seniorId,
         string? pwdId,
-        string? gender,
+        string? sex,
         string expectedBadgeText,
         string expectedBadgeVariant)
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -499,11 +500,27 @@ public class ChallengerM2TenantAndPermissionSecurityTests
             LastName = "Subject",
             ContactNumber = "09170000000",
             DateOfBirth = new DateOnly(1985, 5, 5),
-            Alerts = alerts,
             SeniorCitizenId = seniorId,
             PwdId = pwdId,
-            Gender = gender!
+            Sex = Enum.TryParse<BiologicalSex>(sex, true, out var g) ? g : BiologicalSex.Male
         };
+        if (!string.IsNullOrWhiteSpace(alerts))
+        {
+            patient.Alerts.Add(new PatientAlert
+            {
+                Id = Guid.NewGuid(),
+                TenantId = "tenant-a",
+                ClinicId = _clinicIdA,
+                PatientId = patient.Id,
+                Category = PatientAlertCategory.ClinicalSafety,
+                Code = "SAFETY",
+                Title = alerts,
+                Severity = PatientAlertSeverity.High,
+                Status = PatientAlertStatus.Active,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "Tester"
+            });
+        }
 
         context.Patients.Add(patient);
         await context.SaveChangesAsync();
@@ -592,7 +609,7 @@ public class ChallengerM2TenantAndPermissionSecurityTests
         clinicContext.HasPermission(ClinicPermissions.BillingRead).Returns(false);
 
         var (context, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
 
         var patientProvider = new PatientSearchProvider(patientRepo);
@@ -604,7 +621,7 @@ public class ChallengerM2TenantAndPermissionSecurityTests
             NullLogger<GlobalClinicSearchQueryHandler>.Instance);
 
         // Seed data
-        var patientA = new ClinicPatient
+        var patientA = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -614,11 +631,11 @@ public class ChallengerM2TenantAndPermissionSecurityTests
             LastName = "Luna",
             ContactNumber = "09170000001",
             DateOfBirth = new DateOnly(1980, 10, 23),
-            Gender = "Male",
+            Sex = BiologicalSex.Male,
             IsDeleted = false
         };
 
-        var patientB = new ClinicPatient
+        var patientB = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-b",
@@ -628,11 +645,11 @@ public class ChallengerM2TenantAndPermissionSecurityTests
             LastName = "Luna",
             ContactNumber = "09170000002",
             DateOfBirth = new DateOnly(1980, 10, 23),
-            Gender = "Male",
+            Sex = BiologicalSex.Male,
             IsDeleted = false
         };
 
-        var patientDeleted = new ClinicPatient
+        var patientDeleted = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -642,7 +659,7 @@ public class ChallengerM2TenantAndPermissionSecurityTests
             LastName = "Luna",
             ContactNumber = "09170000003",
             DateOfBirth = new DateOnly(1980, 10, 23),
-            Gender = "Male",
+            Sex = BiologicalSex.Male,
             IsDeleted = true // SOFT DELETED
         };
 

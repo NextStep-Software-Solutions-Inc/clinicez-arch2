@@ -32,5 +32,10 @@ public sealed record PublicQueueDisplayDto(
     bool MaskPatientNames,
     DateTime GeneratedAtUtc,
     int PatientsWaitingCount,
-    string? LogoUrl = null
+    string? LogoUrl = null,
+    bool IsPinRequired = false,
+    bool IsPinValid = true,
+    string TvDisplaySoundTheme = "classicChime",
+    bool TvDisplayVoiceEnabled = false,
+    bool TvDisplayShowPhysicianName = true
 );

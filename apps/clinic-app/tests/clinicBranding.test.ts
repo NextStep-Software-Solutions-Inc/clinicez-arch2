@@ -220,9 +220,48 @@ describe('Clinic Branding & Database Logo Persistence', () => {
     expect(captured.colorSource).toBe('workspace_inherited');
   });
 
-  test('auto-inherits workspace accent when clinic has legacy unset default color (#0284C7)', () => {
+  test('persists Sky Blue (#0284C8) as an explicit clinic_override while unset values auto-inherit workspace accent (#151)', () => {
     setDeviceItem(CLINIC_WORKSPACE_ACCENT_STORAGE_KEY, '#4F46E5');
-    setDeviceItem(CLINIC_PRIMARY_COLOR_OVERRIDE_KEY, '#0284C7');
+    setDeviceItem(CLINIC_PRIMARY_COLOR_OVERRIDE_KEY, '#0284C8');
+
+    let captured: any = null;
+    const renderProvider = () =>
+      renderToStaticMarkup(
+        React.createElement(
+          ClinicProvider,
+          null,
+          React.createElement(TestClinicConsumer, {
+            onRender: (ctx) => {
+              captured = ctx;
+            },
+          })
+        )
+      );
+
+    renderProvider();
+
+    expect(captured).not.toBeNull();
+    expect(captured.primaryColorHex).toBe('#0284C8');
+    expect(captured.isColorOverridden).toBe(true);
+    expect(captured.colorSource).toBe('clinic_override');
+
+    for (const unsetVal of ['', '   ', 'inherit', '#0284C7', '#0284c7', null]) {
+      setDeviceItem(CLINIC_PRIMARY_COLOR_OVERRIDE_KEY, unsetVal);
+      renderProvider();
+      expect(captured.primaryColorHex).toBe('#4F46E5');
+      expect(captured.isColorOverridden).toBe(false);
+      expect(captured.colorSource).toBe('workspace_inherited');
+    }
+  });
+
+  test('auto-inherits workspace accent color when database returns legacy default #0284C7 without local override', () => {
+    mockSettingsResponse = {
+      clinicName: 'St. Jude General Hospital',
+      primaryLogoUrl: null,
+      primaryColorHex: '#0284C7',
+    };
+    setDeviceItem(CLINIC_WORKSPACE_ACCENT_STORAGE_KEY, '#4F46E5');
+    setDeviceItem(CLINIC_PRIMARY_COLOR_OVERRIDE_KEY, null);
 
     let captured: any = null;
     renderToStaticMarkup(

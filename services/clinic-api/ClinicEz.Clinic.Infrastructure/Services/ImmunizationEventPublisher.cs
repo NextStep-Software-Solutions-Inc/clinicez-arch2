@@ -37,23 +37,28 @@ public sealed class ImmunizationEventPublisher : IImmunizationEventPublisher
             return false;
         }
 
+        var resolvedRoute = immunization.Route ?? "IM";
+        var isNonParenteral = resolvedRoute.Contains("Oral", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(resolvedRoute.Trim(), "PO", StringComparison.OrdinalIgnoreCase)
+            || resolvedRoute.Contains("(PO)", StringComparison.OrdinalIgnoreCase);
+
         var payload = new ClinicalImmunizationAdministeredPayload(
             ImmunizationId: immunization.Id,
             PatientId: address.SyncPatientId,
             ClinicId: immunization.ClinicId,
-            PhilHealthLibrary: immunization.PhilHealthLibrary,
-            PhilHealthCode: immunization.PhilHealthCode,
+            PhilHealthLibrary: immunization.PhilHealthLibrary ?? "VACCINE",
+            PhilHealthCode: immunization.PhilHealthCode ?? "OTHER",
             VaccineName: immunization.VaccineName,
             BrandName: immunization.BrandName,
-            LotBatchNumber: immunization.LotBatchNumber,
-            ExpirationDate: immunization.ExpirationDate,
+            LotBatchNumber: immunization.LotBatchNumber ?? "LOT-NA",
+            ExpirationDate: immunization.ExpirationDate ?? DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
             DoseSequence: immunization.DoseSequence,
             IsSeriesCompleted: immunization.IsSeriesCompleted,
-            Route: immunization.Route,
-            InjectionSite: immunization.InjectionSite,
+            Route: resolvedRoute,
+            InjectionSite: immunization.InjectionSite ?? (isNonParenteral ? "N/A" : "Arm"),
             AdministeredAtUtc: immunization.AdministeredAtUtc,
-            AdministeredByStaffId: immunization.AdministeredByStaffId,
-            AdministeredByStaffName: immunization.AdministeredByStaffName,
+            AdministeredByStaffId: immunization.AdministeredByStaffId ?? Guid.Empty,
+            AdministeredByStaffName: immunization.AdministeredByStaffName ?? "Clinic Staff",
             AdministeredByPrcLicense: immunization.AdministeredByPrcLicense,
             IsHistorical: immunization.IsHistorical,
             HistoricalFacilityName: immunization.HistoricalFacilityName

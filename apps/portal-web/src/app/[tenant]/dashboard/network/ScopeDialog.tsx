@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { LINK_SCOPES, type LinkScope } from "@/services/link.service";
 
 const SCOPE_LABELS: Record<LinkScope, string> = {
@@ -81,18 +82,13 @@ export function ScopeDialog({
               {sources.length === 0 ? (
                 <p className="text-xs text-amber-700 dark:text-amber-400">You have no active facility that can start a link.</p>
               ) : (
-                <select
+                <SelectField
                   id="link-source"
                   value={sourceId}
-                  onChange={(e) => setSourceId(e.target.value)}
-                  className="h-9 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  {sources.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setSourceId}
+                  className="text-sm"
+                  options={sources.map((s) => ({ value: s.id, label: s.name }))}
+                />
               )}
             </div>
           )}

@@ -3,8 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { NextRequest } from "next/server";
 import { createRouteMatcher } from "@clerk/nextjs/server";
+import { isPublicRoute } from "../src/proxy";
 import { generateQrMatrix, buildQrPathData, buildQrSvgString } from "../src/components/join/qrGenerator";
-import { generateDigitalPass, resolveJoinRoute, validateFileUpload, sanitizeCustomFields } from "../src/lib/join";
+import { generateDigitalPass, validateFileUpload, sanitizeCustomFields } from "../src/lib/join";
 import { validatePhilHealthPinMod11 } from "../src/lib/philhealth";
 
 const PORTAL_ROOT = path.resolve(__dirname, "..");
@@ -44,12 +45,6 @@ describe("Challenger Suite 1: Legacy Route Absence & 404 Verification", () => {
   });
 
   test("C1.3: Clerk proxy does NOT whitelist legacy /student-intake routes as public", () => {
-    const isPublicRoute = createRouteMatcher([
-      "/upload(.*)",
-      "/join(.*)",
-      "/api/v1/public(.*)",
-    ]);
-
     const reqLegacy1 = new NextRequest("http://localhost/student-intake");
     const reqLegacy2 = new NextRequest("http://localhost/student-intake/ustp");
     const reqLegacy3 = new NextRequest("http://localhost/student-intake/metro-health/submit");
@@ -65,12 +60,6 @@ describe("Challenger Suite 1: Legacy Route Absence & 404 Verification", () => {
 // =============================================================================
 
 describe("Challenger Suite 2: Proxy Route Matching Stress & Security Boundaries", () => {
-  const isPublicRoute = createRouteMatcher([
-    "/upload(.*)",
-    "/join(.*)",
-    "/api/v1/public(.*)",
-  ]);
-
   const isProtectedRoute = createRouteMatcher([
     "/:tenant/dashboard(.*)",
     "/sync-auth(.*)",
@@ -86,8 +75,10 @@ describe("Challenger Suite 2: Proxy Route Matching Stress & Security Boundaries"
       "/join/multi/nested/facility/branch",
       "/join",
       "/join/",
-      "/api/v1/public/join",
-      "/api/v1/public/join?source=qr",
+      "/claim",
+      "/claim?token=XYZ",
+      "/verify",
+      "/verify/rx/RX-123",
       "/upload",
       "/upload/documents/sample",
     ];
@@ -133,22 +124,23 @@ describe("Challenger Suite 2: Proxy Route Matching Stress & Security Boundaries"
     }
   });
 
-  test("C2.4: Join route resolver extracts tenant, facility and join code correctly", () => {
-    const res1 = resolveJoinRoute("/join/acme-health", new URLSearchParams());
-    expect(res1.isJoinRoute).toBe(true);
-    expect(res1.routeType).toBe("tenant-picker");
-    expect(res1.tenantSlug).toBe("acme-health");
-    expect(res1.facilitySlug).toBeUndefined();
+  test("C2.4: Canonical public routes and join code parameter extraction", () => {
+    const params1 = new URLSearchParams("");
+    expect(params1.get("code")).toBeNull();
 
-    const res2 = resolveJoinRoute(
-      "/join/acme-health/main-clinic",
-      new URLSearchParams("code=ACME2026")
-    );
-    expect(res2.isJoinRoute).toBe(true);
-    expect(res2.routeType).toBe("locked-facility");
-    expect(res2.tenantSlug).toBe("acme-health");
-    expect(res2.facilitySlug).toBe("main-clinic");
-    expect(res2.joinCode).toBe("ACME2026");
+    const params2 = new URLSearchParams("code=ACME2026");
+    expect(params2.get("code")).toBe("ACME2026");
+
+    // Canonical route file paths verification
+    expect(fs.existsSync(path.join(PORTAL_ROOT, "src/app/join/page.tsx"))).toBe(true);
+    expect(fs.existsSync(path.join(PORTAL_ROOT, "src/app/join/[tenantSlug]/[facilitySlug]/page.tsx"))).toBe(true);
+    expect(fs.existsSync(path.join(PORTAL_ROOT, "src/app/claim/page.tsx"))).toBe(true);
+    expect(fs.existsSync(path.join(PORTAL_ROOT, "src/app/verify/page.tsx"))).toBe(true);
+    expect(fs.existsSync(path.join(PORTAL_ROOT, "src/app/verify/[kind]/[token]/page.tsx"))).toBe(true);
+    // Retired route paths do not exist
+    expect(fs.existsSync(path.join(PORTAL_ROOT, "src/app/join/[joinKey]"))).toBe(false);
+    expect(fs.existsSync(path.join(PORTAL_ROOT, "src/app/rx-verify"))).toBe(false);
+    expect(fs.existsSync(path.join(PORTAL_ROOT, "src/app/verify/[...ref]"))).toBe(false);
   });
 });
 

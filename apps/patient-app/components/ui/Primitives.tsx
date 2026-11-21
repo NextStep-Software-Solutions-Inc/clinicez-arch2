@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import type { ColorToken } from '../../constants/theme';
 import ThemedText from './ThemedText';
 import { AppIcon, type IconName } from './Icon';
@@ -242,7 +243,19 @@ export function StatTile({
   onPress?: () => void;
 }) {
   const { colors, spacing, radii, sizes, shadows } = useAppTheme();
+  const { isCompact } = useBreakpoint();
   const t = TONE_COLORS[tone];
+  const strValue = String(value);
+  const isLongText =
+    typeof value === 'string' && strValue.length > 5 && !/^[₱$0-9.,\s]+$/.test(strValue);
+  const valueVariant = isLongText
+    ? isCompact
+      ? 'h3'
+      : 'h2'
+    : isCompact
+      ? 'h2'
+      : 'h1';
+
   const body = (
     <View
       style={[
@@ -251,7 +264,8 @@ export function StatTile({
           backgroundColor: colors.card,
           borderColor: colors.border,
           borderRadius: radii.lg,
-          padding: spacing.lg,
+          padding: isCompact ? spacing.md : spacing.lg,
+          gap: spacing.xs,
         },
         shadows.sm,
       ]}
@@ -265,16 +279,18 @@ export function StatTile({
             backgroundColor: colors[t.bg],
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: spacing.md,
+            marginBottom: isCompact ? spacing.xs : spacing.sm,
           }}
         >
           <AppIcon name={icon} size={sizes.iconMd} color={t.fg} />
         </View>
       ) : null}
-      <ThemedText variant="h1">{String(value)}</ThemedText>
-      <ThemedText variant="small" color="textMuted">
-        {label}
-      </ThemedText>
+      <View style={{ gap: spacing.xxs }}>
+        <ThemedText variant={valueVariant}>{strValue}</ThemedText>
+        <ThemedText variant={isCompact ? 'caption' : 'small'} color="textMuted">
+          {label}
+        </ThemedText>
+      </View>
     </View>
   );
   return onPress ? (
@@ -290,5 +306,5 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   sectionRow: { flexDirection: 'row', alignItems: 'center' },
   row: { flexDirection: 'row', alignItems: 'center' },
-  stat: { borderWidth: 1 },
+  stat: { flex: 1, justifyContent: 'space-between', borderWidth: 1 },
 });

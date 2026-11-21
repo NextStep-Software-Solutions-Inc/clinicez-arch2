@@ -58,7 +58,9 @@ public sealed class HubFixture : IAsyncDisposable
         (InteropServices.Pharmacy, HubClientKind.CloudService),
         (InteropServices.Billing, HubClientKind.CloudService),
         (InteropServices.Patient, HubClientKind.PatientPlane),
-        (InteropServices.Philhealth, HubClientKind.PlatformService)
+        (InteropServices.Philhealth, HubClientKind.PlatformService),
+        (InteropServices.Comms, HubClientKind.CloudService),
+        (InteropServices.Media, HubClientKind.PlatformService)
     ];
 
     public static HubFixture Start()
@@ -166,6 +168,19 @@ public sealed class HubFixture : IAsyncDisposable
             PollWaitSeconds = 0
         }));
         return sign ? new SigningHubClient(client, new EnvelopeSigner(SigningKey(service), ClientId(service))) : client;
+    }
+
+    /// <summary>An IHubKeyClient wired to this fixture's hub to resolve client public keys.</summary>
+    public IHubKeyClient NewKeyClient(string service = InteropServices.Comms)
+    {
+        var http = _factory.CreateClient();
+        return new HubHttpClient(http, Microsoft.Extensions.Options.Options.Create(new InteropOptions
+        {
+            HubUrl = "http://localhost",
+            ClientId = ClientId(service),
+            ClientSecret = Secret(service),
+            PollWaitSeconds = 0
+        }));
     }
 
     /// <summary>The SDK client of a service that, like the real relay, signs everything it sends with its own key.</summary>

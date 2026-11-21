@@ -4,11 +4,8 @@ using ClinicEz.Clinic.Domain.Enums;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class QueueItem : BaseEntity
+public sealed class QueueItem : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
-
     /// <summary>
     /// Formatted daily ticket number e.g. "Q-001"
     /// </summary>
@@ -17,6 +14,7 @@ public sealed class QueueItem : BaseEntity
     public DateOnly QueueDate { get; set; }
 
     public Guid PatientId { get; set; }
+    public Patient? Patient { get; set; }
     public required string PatientName { get; set; }
 
     public Guid? AppointmentId { get; set; }
@@ -26,10 +24,10 @@ public sealed class QueueItem : BaseEntity
     public string? DoctorName { get; set; }
 
     /// <summary>
-    /// Optional foreign key to the assigned ClinicRoom entity.
+    /// Optional foreign key to the assigned Room entity.
     /// </summary>
     public Guid? RoomId { get; set; }
-    public ClinicRoom? Room { get; set; }
+    public Room? Room { get; set; }
 
     /// <summary>
     /// Exam room or nursing station assignment (e.g. "Exam Room 1 - Dr. Santos", "Triage Station A", "Procedure Bay")
@@ -45,6 +43,7 @@ public sealed class QueueItem : BaseEntity
     /// Stored as string in database: "Waiting", "Triaged", "InConsultation", "Completed", "Cancelled", "NoShow"
     /// </summary>
     public QueueStatus Status { get; set; } = QueueStatus.Waiting;
+    public VisitWorkflowMode VisitWorkflowMode { get; set; } = VisitWorkflowMode.Regular;
 
     public DateTime CheckInTime { get; set; } = DateTime.UtcNow;
     public DateTime? CalledTime { get; set; }
@@ -55,7 +54,7 @@ public sealed class QueueItem : BaseEntity
     /// <summary>
     /// Optional linkage to cloud Patient App ID if patient has synchronized.
     /// </summary>
-    public Guid? SyncPatientId { get; set; }
+    public Guid? CloudPatientId { get; set; }
 
     /// <summary>
     /// Indicates whether an approaching-turn alert notification has already been sent to the patient.
@@ -63,11 +62,67 @@ public sealed class QueueItem : BaseEntity
     public bool ApproachingNotificationSent { get; set; } = false;
 
     /// <summary>
+    /// Indicates whether this visit was created directly at a clinical workstation/modal
+    /// without a front-desk check-in ticket (e.g. "DV-001"), bypassing lobby TV and pure lobby call queues.
+    /// </summary>
+    public bool IsDirectVisit { get; set; } = false;
+
+    /// <summary>
     /// Indicates whether a called-to-room alert notification has already been sent to the patient.
     /// </summary>
     public bool CalledNotificationSent { get; set; } = false;
 
+    /// <summary>
+    /// Outpatient visit purpose classification: RoutineCheckup, AcuteIllnessConsultation, ChronicDiseaseFollowUp, PreventiveHealthAssessment, UrgentCareVisit
+    /// </summary>
+    public VisitType VisitType { get; set; } = VisitType.RoutineCheckup;
+
+    /// <summary>
+    /// Optional clinical or administrative remarks upon non-doctor discharge or cancellation
+    /// </summary>
+    public string? DischargeNotes { get; set; }
+
+    /// <summary>
+    /// Timestamp when patient was discharged by non-doctor staff
+    /// </summary>
+    public DateTime? DischargedAt { get; set; }
+
+    /// <summary>
+    /// Staff ID of nurse, receptionist, or cashier who discharged the visit
+    /// </summary>
+    public Guid? DischargedByStaffId { get; set; }
+
+    /// <summary>
+    /// Target destination hospital / ER facility for emergency diversion
+    /// </summary>
+    public string? DivertedToFacility { get; set; }
+
+    /// <summary>
+    /// Transport mode (e.g. Ambulance, Private Vehicle, Clinic Van)
+    /// </summary>
+    public string? TransportMode { get; set; }
+
+    /// <summary>
+    /// Accompanying paramedic, nurse escort, or driver name
+    /// </summary>
+    public string? ParamedicOrEscortName { get; set; }
+
+    /// <summary>
+    /// Clinical handover summary and acuity findings upon emergency diversion
+    /// </summary>
+    public string? HandoverSummary { get; set; }
+
+    /// <summary>
+    /// Timestamp when patient was transferred/diverted to emergency facility
+    /// </summary>
+    public DateTime? DivertedAt { get; set; }
+
+    /// <summary>
+    /// Staff ID of healthcare worker who authorized and executed diversion
+    /// </summary>
+    public Guid? DivertedByStaffId { get; set; }
+
     // Navigations
-    public TriageVitals? TriageVitals { get; set; }
+    public PatientVitals? PatientVitals { get; set; }
     public ConsultationEncounter? Consultation { get; set; }
 }

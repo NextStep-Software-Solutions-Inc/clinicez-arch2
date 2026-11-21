@@ -36,13 +36,13 @@ public sealed class UpdateClinicRoleCommandValidator : AbstractValidator<UpdateC
 
 public sealed class UpdateClinicRoleCommandHandler : IRequestHandler<UpdateClinicRoleCommand, ClinicRoleDto>
 {
-    private readonly IRepository<ClinicRole> _roleRepository;
+    private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public UpdateClinicRoleCommandHandler(
-        IRepository<ClinicRole> roleRepository,
+        IRepository<Role> roleRepository,
         IRepository<StaffMember> staffRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
@@ -129,13 +129,13 @@ public sealed record DeleteClinicRoleCommand(Guid Id) : IRequest<bool>;
 
 public sealed class DeleteClinicRoleCommandHandler : IRequestHandler<DeleteClinicRoleCommand, bool>
 {
-    private readonly IRepository<ClinicRole> _roleRepository;
+    private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public DeleteClinicRoleCommandHandler(
-        IRepository<ClinicRole> roleRepository,
+        IRepository<Role> roleRepository,
         IRepository<StaffMember> staffRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)

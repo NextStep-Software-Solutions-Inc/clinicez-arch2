@@ -36,9 +36,14 @@ public class CreateTenantCommandHandler(
 {
     public async Task<TenantDto> Handle(CreateTenantCommand request, CancellationToken cancellationToken)
     {
+        var slug = request.TenantSlug.Trim().ToLowerInvariant();
+        if (ReservedTenantSlugs.IsReserved(slug))
+        {
+            throw new ValidationException("This workplace URL slug is reserved by Clinic EZ. Please choose another.");
+        }
+
         await ownership.EnsureCanOwnAsync(request.OwnerId, ConflictCodes.OwnerAlreadyHasWorkspace, cancellationToken);
 
-        var slug = request.TenantSlug.Trim().ToLowerInvariant();
         if (await context.Tenants.AnyAsync(t => t.TenantSlug.ToLower() == slug, cancellationToken))
         {
             throw new ValidationException("Workplace URL slug is already taken. Please choose a different URL.");

@@ -5,6 +5,8 @@ import type { SyncWireStatus } from './wireEnums';
 
 export interface PatientSummary {
     id: string;
+    clinicEzId?: string | null;
+    welcomeVisitedStepsJson?: string | null;
     firstName: string;
     middleName: string | null;
     lastName: string;
@@ -29,7 +31,23 @@ export interface PatientSummary {
 
 // ── Sub-entity types ──────────────────────────────────────────────────────────
 
-export interface GovernmentIdItem { id: string; clientId: string; idType: string; idNumber: string; issuedAt: string | null; expiresAt: string | null; updatedAt: string | null }
+export interface GovernmentIdItem {
+    id: string;
+    clientId: string;
+    idType: string;
+    idNumber: string;
+    issuedAt: string | null;
+    expiresAt: string | null;
+    updatedAt: string | null;
+    philhealthCategory?: string | null;
+    sponsorPin?: string | null;
+    sponsorLastName?: string | null;
+    sponsorFirstName?: string | null;
+    sponsorMiddleName?: string | null;
+    sponsorSuffix?: string | null;
+    sponsorDob?: string | null;
+    sponsorRelationship?: string | null;
+}
 export interface AddressItem {
     id: string;
     clientId: string;
@@ -45,6 +63,15 @@ export interface AddressItem {
     postalCode?: string | null;
     country: string | null;
     isPrimary: boolean;
+    regionPsgc?: string | null;
+    provincePsgc?: string | null;
+    cityMunicipalityPsgc?: string | null;
+    barangayPsgc?: string | null;
+    regionName?: string | null;
+    provinceName?: string | null;
+    cityMunicipalityName?: string | null;
+    barangayName?: string | null;
+    isSameAsPermanent?: boolean | null;
     updatedAt: string | null;
 }
 export interface EmergencyContactItem { id: string; clientId: string; fullName: string; relationship: string | null; mobile: string | null; altPhone: string | null; isPrimary: boolean; updatedAt: string | null }
@@ -374,6 +401,14 @@ export interface UpdateGovernmentIdInput {
     idNumber: string;
     issuedAt?: string | null;
     expiresAt?: string | null;
+    philhealthCategory?: string | null;
+    sponsorPin?: string | null;
+    sponsorLastName?: string | null;
+    sponsorFirstName?: string | null;
+    sponsorMiddleName?: string | null;
+    sponsorSuffix?: string | null;
+    sponsorDob?: string | null;
+    sponsorRelationship?: string | null;
 }
 
 export async function getPatientGovernmentIds(
@@ -388,7 +423,7 @@ export async function updatePatientGovernmentIds(
     patientId: string,
     governmentIds: UpdateGovernmentIdInput[],
 ): Promise<GovernmentIdItem[]> {
-    return api.put<GovernmentIdItem[]>(getToken, `/patients/${patientId}/government-ids`, { governmentIds });
+    return api.put<GovernmentIdItem[]>(getToken, `/patients/${patientId}/government-ids`, { items: governmentIds });
 }
 
 export interface AddressInput {
@@ -401,6 +436,15 @@ export interface AddressInput {
     zipCode?: string | null;
     country?: string | null;
     isPrimary?: boolean;
+    regionPsgc?: string | null;
+    provincePsgc?: string | null;
+    cityMunicipalityPsgc?: string | null;
+    barangayPsgc?: string | null;
+    regionName?: string | null;
+    provinceName?: string | null;
+    cityMunicipalityName?: string | null;
+    barangayName?: string | null;
+    isSameAsPermanent?: boolean | null;
 }
 
 export async function getPatientAddresses(

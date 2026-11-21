@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Constants;
+using ClinicEz.Portal.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -38,12 +39,20 @@ public class GetAdminMeQueryHandler(IApplicationDbContext context) : IRequestHan
 
             if (admin != null)
             {
-                admin.ClerkUserId = request.ClerkUserId;
-                await context.SaveChangesAsync(cancellationToken);
+                // Only allow auto-linking for already-active accounts (e.g. bootstrap accounts)
+                if (admin.Status == AdminUserStatus.Active)
+                {
+                    admin.ClerkUserId = request.ClerkUserId;
+                    await context.SaveChangesAsync(cancellationToken);
+                }
+                else
+                {
+                    admin = null;
+                }
             }
         }
 
-        if (admin == null || !admin.IsActive || admin.Role == null) return null;
+        if (admin == null || !admin.IsActive || admin.Status != AdminUserStatus.Active || admin.Role == null) return null;
 
         // Ensure Super Admin role always inherits Permissions.All
         var isSuperAdmin = admin.Role.Id == Guid.Parse("44444444-4444-4444-4444-444444444444") ||

@@ -52,6 +52,21 @@
     <ProjectReference Include="..\..\services\patient-api\ClinicEz.Patient.Application\ClinicEz.Patient.Application.csproj" />
     <ProjectReference Include="..\..\services\patient-api\ClinicEz.Patient.Domain\ClinicEz.Patient.Domain.csproj" />
     <ProjectReference Include="..\..\services\patient-api\ClinicEz.Patient.Infrastructure\ClinicEz.Patient.Infrastructure.csproj" />
+
+    <!-- Comms API & Media Broker & Migration Tool Project References -->
+    <ProjectReference Include="..\..\services\comms-api\ClinicEz.Comms.Application\ClinicEz.Comms.Application.csproj" />
+    <ProjectReference Include="..\..\services\comms-api\ClinicEz.Comms.Domain\ClinicEz.Comms.Domain.csproj" />
+    <ProjectReference Include="..\..\services\comms-api\ClinicEz.Comms.Infrastructure\ClinicEz.Comms.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\services\comms-api\ClinicEz.Comms.MigrationTool\ClinicEz.Comms.MigrationTool.csproj" />
+
+    <ProjectReference Include="..\..\services\media-broker\ClinicEz.MediaBroker.Application\ClinicEz.MediaBroker.Application.csproj" />
+    <ProjectReference Include="..\..\services\media-broker\ClinicEz.MediaBroker.Domain\ClinicEz.MediaBroker.Domain.csproj" />
+    <ProjectReference Include="..\..\services\media-broker\ClinicEz.MediaBroker.Infrastructure\ClinicEz.MediaBroker.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\services\media-broker\ClinicEz.MediaBroker.Api\ClinicEz.MediaBroker.Api.csproj" Aliases="MediaBrokerApi" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
   </ItemGroup>
 
 </Project>

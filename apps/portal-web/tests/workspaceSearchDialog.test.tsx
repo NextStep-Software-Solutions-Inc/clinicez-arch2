@@ -778,7 +778,7 @@ describe("Workspace-Wide Search Tool (⌘K / Ctrl+K) Test Suite", () => {
 
       // 2. Verify popstate and pathname listeners in WorkspaceSearchDialog.tsx
       const componentPath = path.resolve(__dirname, "../src/components/dashboard/WorkspaceSearchDialog.tsx");
-      const source = fs.readFileSync(componentPath, "utf-8");
+      const source = fs.readFileSync(componentPath, "utf-8").replace(/\r\n/g, "\n");
 
       expect(source).toContain('window.addEventListener("popstate", handlePopState)');
       expect(source).toContain('window.removeEventListener("popstate", handlePopState)');
@@ -794,13 +794,13 @@ describe("Workspace-Wide Search Tool (⌘K / Ctrl+K) Test Suite", () => {
 
       // Verify nav-main.tsx also auto-closes search on pathname change
       const navMainPath = path.resolve(__dirname, "../src/components/dashboard/nav-main.tsx");
-      const navMainContent = fs.readFileSync(navMainPath, "utf-8");
+      const navMainContent = fs.readFileSync(navMainPath, "utf-8").replace(/\r\n/g, "\n");
       expect(navMainContent).toContain("useEffect(() => {\n    setIsSearchOpen(false)\n  }, [pathname])");
     });
 
     test("T7.2: Touch and mobile responsiveness & iOS Safari zoom protection (ISSUE-9)", () => {
       const componentPath = path.resolve(__dirname, "../src/components/dashboard/WorkspaceSearchDialog.tsx");
-      const source = fs.readFileSync(componentPath, "utf-8");
+      const source = fs.readFileSync(componentPath, "utf-8").replace(/\r\n/g, "\n");
 
       // 1. Pointer type guard in onPointerMove (touch dragging ignored, avoiding scrollIntoView jitter)
       expect(source).toContain('if (e.pointerType !== "mouse")');
@@ -828,14 +828,14 @@ describe("Workspace-Wide Search Tool (⌘K / Ctrl+K) Test Suite", () => {
 
       // 8. nav-main.tsx mobile drawer sheet dismissal when opening search
       const navMainPath = path.resolve(__dirname, "../src/components/dashboard/nav-main.tsx");
-      const navMainContent = fs.readFileSync(navMainPath, "utf-8");
+      const navMainContent = fs.readFileSync(navMainPath, "utf-8").replace(/\r\n/g, "\n");
       expect(navMainContent).toContain("if (isMobile) {\n                      setOpenMobile?.(false)\n                    }");
       expect(navMainContent).toContain("touch-manipulation");
     });
 
     test("T7.3: Timer cleanup, unmount safety, and safe DOM ID escaping", () => {
       const componentPath = path.resolve(__dirname, "../src/components/dashboard/WorkspaceSearchDialog.tsx");
-      const source = fs.readFileSync(componentPath, "utf-8");
+      const source = fs.readFileSync(componentPath, "utf-8").replace(/\r\n/g, "\n");
 
       // 1. Focus timer ref with clear timer cleanup
       expect(source).toContain("focusTimerRef");

@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigation, navigationRef } from './navigation/Navigation';
 import { linking } from './navigation/linking';
 import WebShell from 'components/ui/WebShell';
@@ -10,6 +10,8 @@ import { ActivityIndicator, ColorValue, Platform, StyleSheet, View } from 'react
 import { AppThemeProvider, useAppTheme } from 'contexts/ThemeContext';
 import { buildNavigationTheme } from './constants/navigationTheme';
 import { fontAssets, setCustomFontsAvailable } from './constants/fonts';
+import { clinicalEmpathyFontAssets } from './constants/clinicalEmpathyFonts';
+import { setClinicalEmpathyFontsAvailable } from './constants/clinicalEmpathy';
 import { lightTheme } from './constants/theme';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -19,7 +21,7 @@ import DialogHost from 'components/ui/DialogHost';
 import { OnboardingProvider } from 'contexts/OnboardingContext';
 import { AppearanceProvider } from 'contexts/AppearanceContext';
 import { NotificationProvider } from 'contexts/NotificationContext';
-import { ClerkProvider } from '@clerk/expo';
+import { ClerkProvider, useUser } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import { resourceCache } from '@clerk/expo/resource-cache'
 import DatabaseProvider from 'components/DatabaseProvider';
@@ -34,6 +36,9 @@ import * as TaskManager from 'expo-task-manager';
 import { ErrorBoundary } from 'components/ui/ErrorBoundary';
 import { VercelInsights } from 'components/analytics/VercelInsights';
 import { scheduleLocalNotification } from 'services/notifications/notificationService';
+import { PrivacyProvider } from 'contexts/PrivacyContext';
+import { CommsProvider } from '@clinicez/comms-sdk';
+import { communicationsService } from 'services/comms/communicationsService';
 
 // ─── Background notification task ─────────────────────────────────────────────
 // This task runs when a push notification is received while the app is
@@ -45,21 +50,31 @@ import { scheduleLocalNotification } from 'services/notifications/notificationSe
 const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND_NOTIFICATION_TASK';
 
 if (Platform.OS !== 'web') {
+  interface BackgroundNotificationPayload {
+    notification?: {
+      request?: {
+        content?: {
+          data?: Record<string, unknown>;
+        };
+      };
+    };
+  }
+
   TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => {
     if (error) {
       console.error('[BackgroundNotification] Task error:', error);
       return;
     }
     
-    const payload = data as any;
-    const raw = payload.notification?.request?.content;
+    const payload = data as BackgroundNotificationPayload | undefined;
+    const raw = payload?.notification?.request?.content;
     if (!raw) return;
     
-    const rawData = raw.data as Record<string, any>;
+    const rawData = raw.data;
     
     // If a silent push contains title/body inside the data payload (significant change),
     // we wake up and display it as a local follow-up notification.
-    if (rawData?.title && rawData?.body) {
+    if (typeof rawData?.title === 'string' && typeof rawData?.body === 'string') {
       await scheduleLocalNotification(
         rawData.title,
         rawData.body,
@@ -88,6 +103,28 @@ if (Platform.OS !== 'web') {
   );
 }
 
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  if (typeof document !== 'undefined' && !document.querySelector('link[rel="manifest"]')) {
+    const link = document.createElement('link');
+    link.rel = 'manifest';
+    link.href = '/manifest.json';
+    document.head.appendChild(link);
+  }
+
+  if ('serviceWorker' in navigator && process.env.NODE_ENV !== 'test') {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((reg) => {
+          // Registration successful
+        })
+        .catch((err) => {
+          console.error('[SW] Service Worker registration failed:', err);
+        });
+    });
+  }
+}
+
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
 function LockOverlay({ backgroundColor }: { backgroundColor: ColorValue }) {
@@ -107,13 +144,21 @@ function LockOverlay({ backgroundColor }: { backgroundColor: ColorValue }) {
   );
 }
 
+function OTAUpdater() {
+  useOTAUpdate();
+  return null;
+}
+
 function AppWithTheme() {
   const theme = useAppTheme();
-  const { showUserNotFoundAlert, setShowUserNotFoundAlert, userId, logout } = useAuth();
-
-  useOTAUpdate();
+  const { showUserNotFoundAlert, setShowUserNotFoundAlert, userId, logout, getToken, internalPatientId } = useAuth();
+  const { user } = useUser();
 
   const selectedTheme = useMemo(() => buildNavigationTheme(theme), [theme]);
+
+  const getCommsTicket = useCallback(async () => {
+    return communicationsService.getCommsTicket(getToken);
+  }, [getToken]);
 
   return (
     <>
@@ -124,22 +169,34 @@ function AppWithTheme() {
           <BottomSheetModalProvider>
             <ThemeProvider value={selectedTheme}>
               <OfflineAlertProvider>
-                <WebShell>
-                  <Navigation ref={navigationRef} theme={selectedTheme} linking={linking} />
-                  <LockOverlay backgroundColor={selectedTheme.colors.background} />
-                </WebShell>
-                <DialogHost />
-                <CustomAlertModal
-                  visible={showUserNotFoundAlert}
-                  title="Account Not Found"
-                  message={`The user profile for Clerk ID: "${userId || ''}" was not found in our database. Please contact support or register your account.`}
-                  buttonText="Sign Out"
-                  iconName="alert"
-                  onClose={async () => {
-                    setShowUserNotFoundAlert(false);
-                    await logout();
-                  }}
-                />
+                <PrivacyProvider>
+                  <CommsProvider
+                    baseUrl={process.env.EXPO_PUBLIC_API_URL ?? ''}
+                    getCommsTicket={getCommsTicket}
+                    tenantId="patient-home"
+                    facilityId="patient-portal"
+                    staffId={internalPatientId ?? userId ?? 'patient'}
+                    staffDisplayName={user?.fullName ?? 'Patient'}
+                    options={{ autoConnect: false }}
+                  >
+                    <WebShell>
+                      <Navigation ref={navigationRef} theme={selectedTheme} linking={linking} />
+                      <LockOverlay backgroundColor={selectedTheme.colors.background} />
+                    </WebShell>
+                    <DialogHost />
+                    <CustomAlertModal
+                      visible={showUserNotFoundAlert}
+                      title="Profile Setup Incomplete"
+                      message="We could not find a health profile linked to this account yet. Please sign out and try again when connected, or contact clinic support."
+                      buttonText="Sign Out"
+                      iconName="alert"
+                      onClose={async () => {
+                        setShowUserNotFoundAlert(false);
+                        await logout();
+                      }}
+                    />
+                  </CommsProvider>
+                </PrivacyProvider>
               </OfflineAlertProvider>
             </ThemeProvider>
           </BottomSheetModalProvider>
@@ -150,12 +207,16 @@ function AppWithTheme() {
 }
 
 export default function App() {
-  const [fontsLoaded, fontError] = useFonts(fontAssets);
+  const [fontsLoaded, fontError] = useFonts({
+    ...fontAssets,
+    ...clinicalEmpathyFontAssets,
+  });
 
   // If the typeface fails to load, fall back to the system font instead of rendering
   // text against missing font families.
   if (fontError) {
     setCustomFontsAvailable(false);
+    setClinicalEmpathyFontsAvailable(false);
   }
 
   if (!fontsLoaded && !fontError) {
@@ -178,6 +239,7 @@ export default function App() {
             <AppThemeProvider>
               <OnboardingProvider>
                 <AuthProvider>
+                  <OTAUpdater />
                   <ErrorBoundary>
                     <AppWithTheme />
                   </ErrorBoundary>

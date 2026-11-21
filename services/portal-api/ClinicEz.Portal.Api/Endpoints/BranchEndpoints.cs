@@ -10,6 +10,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
+using ClinicEz.Portal.Infrastructure.PhilHealth;
+using ClinicEz.Portal.Application.Features.Admin.Services;
 
 namespace ClinicEz.Portal.Api.Endpoints;
 
@@ -25,7 +28,11 @@ public record CreateBranchRequest(
     string? ZipCode = null,
     string? ContactNumber = null,
     string? ContactEmail = null,
-    List<Guid>? FacilityIds = null);
+    List<Guid>? FacilityIds = null,
+    string? RegionPsgc = null,
+    string? ProvincePsgc = null,
+    string? CityMunicipalityPsgc = null,
+    string? BarangayPsgc = null);
 
 public record UpdateBranchRequest(
     string Name,
@@ -38,26 +45,28 @@ public record UpdateBranchRequest(
     string? ZipCode = null,
     string? ContactNumber = null,
     string? ContactEmail = null,
-    bool IsActive = true);
+    bool IsActive = true,
+    string? RegionPsgc = null,
+    string? ProvincePsgc = null,
+    string? CityMunicipalityPsgc = null,
+    string? BarangayPsgc = null);
 
 public record ConfigureBranchPhilHealthRequest(
     string AccreditationNumber,
     string? PmccNumber = null,
     string? SoftwareCertificateId = null,
-    string? Username = null,
-    string? Password = null,
+    string? SecretKey = null,
     string? CipherKey = null,
-    string? KonsultaEndpoint = null,
+    string? BaseUrl = null,
     bool IsPhilHealthAccredited = true);
 
 public record TestBranchPhilHealthRequest(
     string? AccreditationNumber = null,
     string? PmccNumber = null,
     string? SoftwareCertificateId = null,
-    string? Username = null,
-    string? Password = null,
+    string? SecretKey = null,
     string? CipherKey = null,
-    string? KonsultaEndpoint = null);
+    string? BaseUrl = null);
 
 public record BranchFacilitySummaryDto(
     Guid Id,
@@ -82,8 +91,14 @@ public record BranchResponse(
     string? PhilHealthAccreditationNumber,
     string? PhilHealthPmccNumber,
     string? PhilHealthSoftwareCertificateId,
-    string? PhilHealthKonsultaEndpoint,
+    string? PhilHealthBaseUrl,
     bool IsPhilHealthAccredited,
+    bool HasSecretKey,
+    bool HasCipherKey,
+    string? RegionPsgc,
+    string? ProvincePsgc,
+    string? CityMunicipalityPsgc,
+    string? BarangayPsgc,
     List<BranchFacilitySummaryDto> Facilities);
 
 public class BranchEndpoints : IEndpoint
@@ -138,6 +153,10 @@ public class BranchEndpoints : IEndpoint
                 ZipCode = request.ZipCode,
                 ContactNumber = request.ContactNumber,
                 ContactEmail = request.ContactEmail,
+                RegionPsgc = request.RegionPsgc?.Trim(),
+                ProvincePsgc = request.ProvincePsgc?.Trim(),
+                CityMunicipalityPsgc = request.CityMunicipalityPsgc?.Trim(),
+                BarangayPsgc = request.BarangayPsgc?.Trim(),
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = clerkUserId
@@ -164,26 +183,7 @@ public class BranchEndpoints : IEndpoint
 
             await context.SaveChangesAsync(CancellationToken.None);
 
-            var summary = new BranchResponse(
-                branch.Id,
-                branch.TenantId,
-                branch.Name,
-                branch.Code,
-                branch.IsActive,
-                branch.StreetAddress,
-                branch.Barangay,
-                branch.City,
-                branch.Province,
-                branch.Region,
-                branch.ZipCode,
-                branch.ContactNumber,
-                branch.ContactEmail,
-                branch.PhilHealthAccreditationNumber,
-                branch.PhilHealthPmccNumber,
-                branch.PhilHealthSoftwareCertificateId,
-                branch.PhilHealthKonsultaEndpoint,
-                branch.IsPhilHealthAccredited,
-                new List<BranchFacilitySummaryDto>());
+            var summary = ToResponse(branch, new List<BranchFacilitySummaryDto>());
 
             return Results.Created($"/api/v1/branches/{branch.Id}", ApiResponse<BranchResponse>.Success(summary));
         })
@@ -271,37 +271,13 @@ public class BranchEndpoints : IEndpoint
                 await context.SaveChangesAsync(CancellationToken.None);
             }
 
-            var list = await context.Branches
+            var branchesList = await context.Branches
                 .Where(b => b.TenantId == tenant.Id && !b.IsDeleted)
                 .Include(b => b.Facilities)
                 .OrderBy(b => b.Name)
-                .Select(b => new BranchResponse(
-                    b.Id,
-                    b.TenantId,
-                    b.Name,
-                    b.Code,
-                    b.IsActive,
-                    b.StreetAddress,
-                    b.Barangay,
-                    b.City,
-                    b.Province,
-                    b.Region,
-                    b.ZipCode,
-                    b.ContactNumber,
-                    b.ContactEmail,
-                    b.PhilHealthAccreditationNumber,
-                    b.PhilHealthPmccNumber,
-                    b.PhilHealthSoftwareCertificateId,
-                    b.PhilHealthKonsultaEndpoint,
-                    b.IsPhilHealthAccredited,
-                    b.Facilities.Where(f => !f.IsDeleted).Select(f => new BranchFacilitySummaryDto(
-                        f.Id,
-                        f.Name,
-                        f.FacilityType.ToString(),
-                        f.Status.ToString()
-                    )).ToList()
-                ))
                 .ToListAsync();
+
+            var list = branchesList.Select(b => ToResponse(b)).ToList();
 
             return Results.Ok(ApiResponse<List<BranchResponse>>.Success(list));
         })
@@ -345,31 +321,7 @@ public class BranchEndpoints : IEndpoint
                 return Results.Forbid();
             }
 
-            var response = new BranchResponse(
-                branch.Id,
-                branch.TenantId,
-                branch.Name,
-                branch.Code,
-                branch.IsActive,
-                branch.StreetAddress,
-                branch.Barangay,
-                branch.City,
-                branch.Province,
-                branch.Region,
-                branch.ZipCode,
-                branch.ContactNumber,
-                branch.ContactEmail,
-                branch.PhilHealthAccreditationNumber,
-                branch.PhilHealthPmccNumber,
-                branch.PhilHealthSoftwareCertificateId,
-                branch.PhilHealthKonsultaEndpoint,
-                branch.IsPhilHealthAccredited,
-                branch.Facilities.Where(f => !f.IsDeleted).Select(f => new BranchFacilitySummaryDto(
-                    f.Id,
-                    f.Name,
-                    f.FacilityType.ToString(),
-                    f.Status.ToString()
-                )).ToList());
+            var response = ToResponse(branch);
 
             return Results.Ok(ApiResponse<BranchResponse>.Success(response));
         })
@@ -425,6 +377,10 @@ public class BranchEndpoints : IEndpoint
             branch.ZipCode = request.ZipCode;
             branch.ContactNumber = request.ContactNumber;
             branch.ContactEmail = request.ContactEmail;
+            if (request.RegionPsgc != null) branch.RegionPsgc = request.RegionPsgc.Trim();
+            if (request.ProvincePsgc != null) branch.ProvincePsgc = request.ProvincePsgc.Trim();
+            if (request.CityMunicipalityPsgc != null) branch.CityMunicipalityPsgc = request.CityMunicipalityPsgc.Trim();
+            if (request.BarangayPsgc != null) branch.BarangayPsgc = request.BarangayPsgc.Trim();
             branch.IsActive = request.IsActive;
             branch.UpdatedAt = DateTime.UtcNow;
             branch.UpdatedBy = clerkUserId;
@@ -451,6 +407,7 @@ public class BranchEndpoints : IEndpoint
             IApplicationDbContext context,
             IPhilHealthSecretProtector protector,
             ClinicEz.Portal.Application.Features.Admin.Services.IFacilityProvisioningPublisher provisioningPublisher,
+            IHostEnvironment env,
             CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -482,22 +439,33 @@ public class BranchEndpoints : IEndpoint
                 return Results.Forbid();
             }
 
+            var resolvedEndpoint = !string.IsNullOrWhiteSpace(request.BaseUrl)
+                ? request.BaseUrl.Trim()
+                : PhilHealthDefaults.PcapiBaseUrl;
+
+            if (request.IsPhilHealthAccredited && env.IsProduction() && !PhilHealthPcapiTester.IsStagingOrSandbox(resolvedEndpoint))
+            {
+                var effectiveSecretKey = request.SecretKey != null
+                    ? request.SecretKey.Trim()
+                    : (!string.IsNullOrEmpty(branch.PhilHealthEncryptedSecretKey) ? protector.Unprotect(branch.PhilHealthEncryptedSecretKey) : string.Empty);
+
+                if (string.IsNullOrWhiteSpace(effectiveSecretKey))
+                {
+                    return Results.BadRequest(ApiResponse<bool>.Fail("PhilHealth PCAPI Secret Key is required for production PhilHealth gateway endpoints."));
+                }
+            }
+
             branch.PhilHealthAccreditationNumber = request.AccreditationNumber?.Trim();
             branch.PhilHealthPmccNumber = request.PmccNumber?.Trim();
             branch.PhilHealthSoftwareCertificateId = request.SoftwareCertificateId?.Trim();
-            branch.PhilHealthKonsultaEndpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
-                ? request.KonsultaEndpoint.Trim()
-                : PhilHealthDefaults.KonsultaEndpoint;
+            branch.PhilHealthBaseUrl = resolvedEndpoint;
             branch.IsPhilHealthAccredited = request.IsPhilHealthAccredited;
 
-            if (!string.IsNullOrWhiteSpace(request.Username))
-                branch.PhilHealthEncryptedUsername = protector.Protect(request.Username.Trim());
-
-            if (!string.IsNullOrWhiteSpace(request.Password))
-                branch.PhilHealthEncryptedPassword = protector.Protect(request.Password);
+            if (request.SecretKey != null)
+                branch.PhilHealthEncryptedSecretKey = protector.Protect(request.SecretKey.Trim());
 
             if (!string.IsNullOrWhiteSpace(request.CipherKey))
-                branch.PhilHealthEncryptedCipherKey = protector.Protect(request.CipherKey);
+                branch.PhilHealthEncryptedCipherKey = protector.Protect(request.CipherKey.Trim());
 
             branch.UpdatedAt = DateTime.UtcNow;
             branch.UpdatedBy = clerkUserId;
@@ -514,16 +482,17 @@ public class BranchEndpoints : IEndpoint
         })
         .RequireAuthorization()
         .WithName("ConfigureBranchPhilHealth")
-        .WithDescription("Encrypted configuration of PhilHealth PMCC, software cert, and SOAP credentials on a branch.");
+        .WithDescription("Encrypted configuration of PhilHealth PMCC, software cert, and PCAPI credentials on a branch.");
 
-        // 5b. Test PhilHealth SOAP gateway connection for a branch before or after saving
+        // 5b. Test PhilHealth PCAPI gateway connection for a branch before or after saving
         branches.MapPost("/{id:guid}/philhealth-test", async (
             Guid id,
             TestBranchPhilHealthRequest request,
             HttpContext httpContext,
             IApplicationDbContext context,
             IPhilHealthSecretProtector protector,
-            IPhilHealthSoapTester soapTester,
+            IPhilHealthPcapiTester pcapiTester,
+            IHostEnvironment env,
             CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -566,21 +535,17 @@ public class BranchEndpoints : IEndpoint
                 ? request.SoftwareCertificateId.Trim()
                 : branch.PhilHealthSoftwareCertificateId;
 
-            var endpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
-                ? request.KonsultaEndpoint.Trim()
-                : (!string.IsNullOrWhiteSpace(branch.PhilHealthKonsultaEndpoint) ? branch.PhilHealthKonsultaEndpoint : PhilHealthDefaults.KonsultaEndpoint);
+            var baseUrl = !string.IsNullOrWhiteSpace(request.BaseUrl)
+                ? request.BaseUrl.Trim()
+                : (!string.IsNullOrWhiteSpace(branch.PhilHealthBaseUrl) ? branch.PhilHealthBaseUrl.Trim() : PhilHealthDefaults.PcapiBaseUrl);
 
-            var isCustomUnsavedEndpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint) &&
-                !string.Equals(request.KonsultaEndpoint.Trim(), branch.PhilHealthKonsultaEndpoint?.Trim(), StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(request.KonsultaEndpoint.Trim(), PhilHealthDefaults.KonsultaEndpoint, StringComparison.OrdinalIgnoreCase);
+            var isCustomUnsavedUrl = !string.IsNullOrWhiteSpace(request.BaseUrl) &&
+                !string.Equals(request.BaseUrl.Trim(), branch.PhilHealthBaseUrl?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(request.BaseUrl.Trim(), PhilHealthDefaults.PcapiBaseUrl, StringComparison.OrdinalIgnoreCase);
 
-            var username = !string.IsNullOrWhiteSpace(request.Username)
-                ? request.Username.Trim()
-                : (!isCustomUnsavedEndpoint && !string.IsNullOrWhiteSpace(branch.PhilHealthEncryptedUsername) ? protector.Unprotect(branch.PhilHealthEncryptedUsername) : null);
-
-            var password = !string.IsNullOrWhiteSpace(request.Password)
-                ? request.Password
-                : (!isCustomUnsavedEndpoint && !string.IsNullOrWhiteSpace(branch.PhilHealthEncryptedPassword) ? protector.Unprotect(branch.PhilHealthEncryptedPassword) : null);
+            var secretKey = request.SecretKey != null
+                ? request.SecretKey.Trim()
+                : (!isCustomUnsavedUrl && !string.IsNullOrWhiteSpace(branch.PhilHealthEncryptedSecretKey) ? protector.Unprotect(branch.PhilHealthEncryptedSecretKey) : string.Empty);
 
             if (string.IsNullOrWhiteSpace(accreditationNumber))
             {
@@ -588,38 +553,39 @@ public class BranchEndpoints : IEndpoint
                     new PhilHealthTestConnectionResult(false, "PhilHealth Accreditation Number (Hospital Code) is required to test gateway connectivity.")));
             }
 
-            if (string.IsNullOrWhiteSpace(username))
+            var isProduction = env.IsProduction();
+            var isStagingOrSandbox = PhilHealthPcapiTester.IsStagingOrSandbox(baseUrl);
+
+            if (isProduction && !isStagingOrSandbox)
             {
-                return Results.Ok(ApiResponse<PhilHealthTestConnectionResult>.Success(
-                    new PhilHealthTestConnectionResult(false, "SOAP Username is required to authenticate with the PhilHealth gateway.")));
+                if (string.IsNullOrWhiteSpace(secretKey))
+                {
+                    return Results.Ok(ApiResponse<PhilHealthTestConnectionResult>.Success(
+                        new PhilHealthTestConnectionResult(false, "PCAPI Secret Key is required to authenticate with the PhilHealth gateway.")));
+                }
             }
 
-            if (string.IsNullOrWhiteSpace(password))
-            {
-                return Results.Ok(ApiResponse<PhilHealthTestConnectionResult>.Success(
-                    new PhilHealthTestConnectionResult(false, "SOAP Password is required to authenticate with the PhilHealth gateway.")));
-            }
-
-            var result = await soapTester.TestConnectionAsync(
+            var result = await pcapiTester.TestConnectionAsync(
                 accreditationNumber: accreditationNumber,
-                username: username,
-                password: password,
+                secretKey: secretKey ?? string.Empty,
                 softwareCertificateId: softwareCertId,
-                endpoint: endpoint,
+                baseUrl: baseUrl,
                 ct: ct);
 
             return Results.Ok(ApiResponse<PhilHealthTestConnectionResult>.Success(result));
         })
         .RequireAuthorization()
         .WithName("TestBranchPhilHealthConnection")
-        .WithDescription("Tests live connectivity and authentication with PhilHealth SOAP gateway before or after saving credentials.");
+        .WithDescription("Tests live connectivity and authentication with PhilHealth PCAPI gateway before or after saving credentials.");
 
         // 6. Assign facilities to a branch
         branches.MapPost("/{id:guid}/facilities", async (
             Guid id,
             List<Guid> facilityIds,
             HttpContext httpContext,
-            IApplicationDbContext context) =>
+            IApplicationDbContext context,
+            IFacilityProvisioningPublisher provisioningPublisher,
+            CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId))
@@ -627,13 +593,13 @@ public class BranchEndpoints : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var branch = await context.Branches.FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted);
+            var branch = await context.Branches.FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted, ct);
             if (branch == null)
             {
                 return Results.NotFound(new { Message = "Branch not found." });
             }
 
-            var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == branch.TenantId);
+            var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == branch.TenantId, ct);
             if (tenant == null)
             {
                 return Results.NotFound(new { Message = "Workspace not found." });
@@ -641,7 +607,7 @@ public class BranchEndpoints : IEndpoint
 
             var isOwner = tenant.OwnerId == clerkUserId;
             var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active, ct);
 
             if (!isOwner && !isAdmin)
             {
@@ -650,18 +616,20 @@ public class BranchEndpoints : IEndpoint
 
             var facilities = await context.Facilities
                 .Where(f => f.TenantId == branch.TenantId && facilityIds.Contains(f.Id))
-                .ToListAsync();
+                .ToListAsync(ct);
 
-            await BranchFacilityRules.EnsureCanLinkAsync(context, branch, facilities, CancellationToken.None);
+            await BranchFacilityRules.EnsureCanLinkAsync(context, branch, facilities, ct);
 
             foreach (var fac in facilities)
             {
                 fac.BranchId = branch.Id;
+                fac.Branch = branch;
                 fac.UpdatedAt = DateTime.UtcNow;
                 fac.UpdatedBy = clerkUserId;
+                await provisioningPublisher.StageDirectoryUpdateAsync(tenant, fac, ct);
             }
 
-            await context.SaveChangesAsync(CancellationToken.None);
+            await context.SaveChangesAsync(ct);
             return Results.Ok(ApiResponse<bool>.Success(true, "Facilities linked to branch successfully."));
         })
         .RequireAuthorization()
@@ -673,7 +641,9 @@ public class BranchEndpoints : IEndpoint
             Guid id,
             Guid facilityId,
             HttpContext httpContext,
-            IApplicationDbContext context) =>
+            IApplicationDbContext context,
+            IFacilityProvisioningPublisher provisioningPublisher,
+            CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId))
@@ -681,17 +651,35 @@ public class BranchEndpoints : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == facilityId && f.BranchId == id && !f.IsDeleted);
+            var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == facilityId && f.BranchId == id && !f.IsDeleted, ct);
             if (facility == null)
             {
                 return Results.NotFound(new { Message = "Facility not found in this branch." });
             }
 
+            var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == facility.TenantId, ct);
+            if (tenant == null)
+            {
+                return Results.NotFound(new { Message = "Workspace not found." });
+            }
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active, ct);
+
+            if (!isOwner && !isAdmin)
+            {
+                return Results.Forbid();
+            }
+
             facility.BranchId = null;
+            facility.Branch = null;
             facility.UpdatedAt = DateTime.UtcNow;
             facility.UpdatedBy = clerkUserId;
 
-            await context.SaveChangesAsync(CancellationToken.None);
+            await provisioningPublisher.StageDirectoryUpdateAsync(tenant, facility, ct);
+
+            await context.SaveChangesAsync(ct);
             return Results.Ok(ApiResponse<bool>.Success(true, "Facility unlinked from branch."));
         })
         .RequireAuthorization()
@@ -701,7 +689,9 @@ public class BranchEndpoints : IEndpoint
         branches.MapDelete("/{id:guid}", async (
             Guid id,
             HttpContext httpContext,
-            IApplicationDbContext context) =>
+            IApplicationDbContext context,
+            IFacilityProvisioningPublisher provisioningPublisher,
+            CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId))
@@ -711,14 +701,14 @@ public class BranchEndpoints : IEndpoint
 
             var branch = await context.Branches
                 .Include(b => b.Facilities)
-                .FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted);
+                .FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted, ct);
 
             if (branch == null)
             {
                 return Results.NotFound(new { Message = "Branch not found." });
             }
 
-            var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == branch.TenantId);
+            var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == branch.TenantId, ct);
             if (tenant == null)
             {
                 return Results.NotFound(new { Message = "Workspace not found." });
@@ -726,28 +716,64 @@ public class BranchEndpoints : IEndpoint
 
             var isOwner = tenant.OwnerId == clerkUserId;
             var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active, ct);
 
             if (!isOwner && !isAdmin)
             {
                 return Results.Forbid();
             }
 
-            foreach (var fac in branch.Facilities)
+            foreach (var fac in branch.Facilities.Where(f => !f.IsDeleted))
             {
                 fac.BranchId = null;
+                fac.Branch = null;
                 fac.UpdatedAt = DateTime.UtcNow;
                 fac.UpdatedBy = clerkUserId;
+                await provisioningPublisher.StageDirectoryUpdateAsync(tenant, fac, ct);
             }
 
             branch.IsDeleted = true;
             branch.DeletedAt = DateTime.UtcNow;
             branch.DeletedBy = clerkUserId;
 
-            await context.SaveChangesAsync(CancellationToken.None);
+            await context.SaveChangesAsync(ct);
             return Results.Ok(ApiResponse<bool>.Success(true, "Branch deleted successfully."));
         })
         .RequireAuthorization()
         .WithName("DeleteBranch");
     }
+
+    public static BranchResponse ToResponse(Branch b, List<BranchFacilitySummaryDto>? facilities = null) =>
+        new(
+            b.Id,
+            b.TenantId,
+            b.Name,
+            b.Code,
+            b.IsActive,
+            b.StreetAddress,
+            b.Barangay,
+            b.City,
+            b.Province,
+            b.Region,
+            b.ZipCode,
+            b.ContactNumber,
+            b.ContactEmail,
+            b.PhilHealthAccreditationNumber,
+            b.PhilHealthPmccNumber,
+            b.PhilHealthSoftwareCertificateId,
+            b.PhilHealthBaseUrl,
+            b.IsPhilHealthAccredited,
+            HasSecretKey: !string.IsNullOrEmpty(b.PhilHealthEncryptedSecretKey),
+            HasCipherKey: !string.IsNullOrEmpty(b.PhilHealthEncryptedCipherKey),
+            b.RegionPsgc,
+            b.ProvincePsgc,
+            b.CityMunicipalityPsgc,
+            b.BarangayPsgc,
+            facilities ?? (b.Facilities?.Where(f => !f.IsDeleted).Select(f => new BranchFacilitySummaryDto(
+                f.Id,
+                f.Name,
+                f.FacilityType.ToString(),
+                f.Status.ToString()
+            )).ToList() ?? new List<BranchFacilitySummaryDto>())
+        );
 }

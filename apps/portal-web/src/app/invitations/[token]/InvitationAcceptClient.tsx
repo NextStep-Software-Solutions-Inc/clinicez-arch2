@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useUser, SignInButton, SignUpButton } from "@clerk/nextjs";
+import { useUser, useClerk, SignInButton, SignUpButton } from "@clerk/nextjs";
 import { 
     IconBuildingHospital, 
     IconShieldCheck, 
@@ -12,7 +12,8 @@ import {
     IconClock, 
     IconArrowRight, 
     IconLoader, 
-    IconUser
+    IconUser,
+    IconSwitchHorizontal
 } from "@tabler/icons-react";
 import { Stethoscope, Sparkles } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -20,6 +21,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { staffService, InvitationDetailsDto } from "@/services/staff.service";
 import { toast } from "sonner";
+import { setPendingInvitationCookie, clearPendingInvitationCookie } from "@/lib/invitationCookie";
+import { isUserEmailMatched, INVITATION_EMAIL_MISMATCH_MESSAGE } from "@/lib/invitationEmailMatcher";
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
     Owner: "Primary enterprise administrator with full authority over workspace settings and billing.",
@@ -31,45 +34,136 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
     Member: "General workspace member with access to assigned workspace resources."
 };
 
+function getInitialInvitationError(token?: string): string | null {
+    if (!token || !token.trim()) {
+        return "Invitation token is missing or invalid.";
+    }
+    const cleanToken = token.trim();
+    const lower = cleanToken.toLowerCase();
+    if (
+        lower.startsWith("rx-") ||
+        lower.startsWith("mc-") ||
+        lower.startsWith("ref-") ||
+        lower.startsWith("lab-") ||
+        lower.startsWith("sec-sha256-") ||
+        (cleanToken.length === 65 && cleanToken[32] === ".") ||
+        (cleanToken.length >= 50 && cleanToken.length <= 60 && cleanToken.indexOf(".") === 32)
+    ) {
+        return "The provided link contains a token for a clinical document, not a workspace invitation.";
+    }
+    return null;
+}
+
 export default function InvitationAcceptClient({ token }: { token: string }) {
     const router = useRouter();
     const { isSignedIn, user, isLoaded } = useUser();
+    const { signOut } = useClerk();
 
+    const initialError = getInitialInvitationError(token);
     const [invite, setInvite] = useState<InvitationDetailsDto | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(!initialError);
+    const [error, setError] = useState<string | null>(initialError);
     const [accepting, setAccepting] = useState(false);
+    const [switchingAccount, setSwitchingAccount] = useState(false);
+    const autoAcceptAttemptedRef = useRef<string | null>(null);
+
+    const isEmailMatched = Boolean(
+        isSignedIn &&
+        user &&
+        invite?.inviteeEmail &&
+        isUserEmailMatched(user, invite.inviteeEmail)
+    );
+    const isEmailMismatch = Boolean(isSignedIn && invite && !isEmailMatched);
 
     useEffect(() => {
+        if (!token || !token.trim()) {
+            clearPendingInvitationCookie();
+            setError("Invitation token is missing or invalid.");
+            setLoading(false);
+            return;
+        }
+
+        if (initialError) {
+            clearPendingInvitationCookie();
+            setError(initialError);
+            setLoading(false);
+            return;
+        }
+
         const fetchDetails = async () => {
             try {
                 const data = await staffService.getInvitationDetails(token);
                 setInvite(data);
+                if (data.isRevoked || data.isSuspended || data.isExpired || data.isAlreadyAccepted) {
+                    clearPendingInvitationCookie();
+                }
             } catch (err: any) {
+                clearPendingInvitationCookie();
                 setError(err.response?.data?.message || err.message || "Failed to load invitation.");
             } finally {
                 setLoading(false);
             }
         };
 
-        if (token) {
-            fetchDetails();
-        }
+        fetchDetails();
     }, [token]);
 
+    useEffect(() => {
+        if (!isLoaded || !invite) return;
+
+        if (invite.isRevoked || invite.isSuspended || invite.isExpired || invite.isAlreadyAccepted || isEmailMismatch) {
+            clearPendingInvitationCookie();
+        } else if (!isSignedIn && token && token.trim()) {
+            setPendingInvitationCookie({ type: "workspace", token: token.trim() });
+        }
+    }, [isLoaded, isSignedIn, invite, isEmailMismatch, token]);
+
     const handleAccept = async () => {
-        if (!invite) return;
+        if (!invite || !isEmailMatched) return;
         setAccepting(true);
         try {
             const res = await staffService.acceptInvitation(token);
+            clearPendingInvitationCookie();
             toast.success(`Welcome to ${res.workspaceName}!`);
             router.push(`/${res.tenantSlug}/dashboard/overview`);
         } catch (err: any) {
+            clearPendingInvitationCookie();
             const msg = err.response?.data?.message || err.message || "Failed to accept invitation.";
             toast.error(msg);
             setAccepting(false);
         }
     };
+
+    const handleSwitchAccount = async () => {
+        if (!token || !token.trim()) return;
+        setSwitchingAccount(true);
+        try {
+            const trimmedToken = token.trim();
+            setPendingInvitationCookie({ type: "workspace", token: trimmedToken });
+            await signOut({ redirectUrl: `/invitations/${encodeURIComponent(trimmedToken)}` });
+        } catch (err: any) {
+            toast.error(err?.message || "Failed to switch account. Please sign out and try again.");
+            setSwitchingAccount(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!isLoaded || loading || !isSignedIn || !invite || accepting || !isEmailMatched) {
+            return;
+        }
+
+        if (invite.isRevoked || invite.isSuspended || invite.isExpired || invite.isAlreadyAccepted || error) {
+            return;
+        }
+
+        const currentUserKey = user?.id ?? "__signed_in__";
+        if (autoAcceptAttemptedRef.current === currentUserKey) {
+            return;
+        }
+
+        autoAcceptAttemptedRef.current = currentUserKey;
+        handleAccept();
+    }, [isLoaded, loading, isSignedIn, user?.id, invite, accepting, error, isEmailMatched]);
 
     const renderShell = (content: React.ReactNode) => (
         <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
@@ -129,10 +223,48 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
         );
     }
 
+    if (invite.isRevoked) {
+        return renderShell(
+            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-rose-200 dark:border-rose-900 shadow-sm bg-rose-50/30 dark:bg-rose-950/20">
+                <div className="size-12 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-3">
+                    <IconAlertCircle className="h-6 w-6" />
+                </div>
+                <h2 className="text-lg font-bold text-foreground">Invitation Revoked</h2>
+                <p className="text-xs text-muted-foreground mt-2 mb-6 leading-relaxed">
+                    This invitation to join <strong>{invite.tenantName}</strong> has been revoked by a workspace administrator. Please contact your clinic administrator if you believe this was an error.
+                </p>
+                <Link href="/">
+                    <Button variant="outline" className="rounded-xl text-xs font-semibold">
+                        Return to Homepage
+                    </Button>
+                </Link>
+            </Card>
+        );
+    }
+
+    if (invite.isSuspended) {
+        return renderShell(
+            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-slate-200 dark:border-slate-800 shadow-sm bg-slate-50/30 dark:bg-slate-900/20">
+                <div className="size-12 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center mx-auto mb-3">
+                    <IconAlertCircle className="h-6 w-6" />
+                </div>
+                <h2 className="text-lg font-bold text-foreground">Account Suspended</h2>
+                <p className="text-xs text-muted-foreground mt-2 mb-6 leading-relaxed">
+                    This account or membership in <strong>{invite.tenantName}</strong> is currently suspended. Please contact your workspace administrator to reactivate your access.
+                </p>
+                <Link href="/">
+                    <Button variant="outline" className="rounded-xl text-xs font-semibold">
+                        Return to Homepage
+                    </Button>
+                </Link>
+            </Card>
+        );
+    }
+
     if (invite.isExpired) {
         return renderShell(
-            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-amber-200 dark:border-amber-900 shadow-sm bg-amber-50/30 dark:bg-amber-950/20">
-                <div className="size-12 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto mb-3">
+            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-warning/30 shadow-sm bg-warning/5">
+                <div className="size-12 rounded-full bg-warning/15 text-warning flex items-center justify-center mx-auto mb-3">
                     <IconClock className="h-6 w-6" />
                 </div>
                 <h2 className="text-lg font-bold text-foreground">Invitation Expired</h2>
@@ -150,8 +282,8 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
 
     if (invite.isAlreadyAccepted) {
         return renderShell(
-            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-emerald-200 dark:border-emerald-900 shadow-sm bg-emerald-50/30 dark:bg-emerald-950/20">
-                <div className="size-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-3">
+            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-success/30 shadow-sm bg-success/5">
+                <div className="size-12 rounded-full bg-success/15 text-success flex items-center justify-center mx-auto mb-3">
                     <IconCheck className="h-6 w-6" />
                 </div>
                 <h2 className="text-lg font-bold text-foreground">Already Accepted</h2>
@@ -249,50 +381,119 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
 
                 {/* Action / Auth Section */}
                 {isSignedIn ? (
-                    <div className="space-y-4">
-                        <div className="p-3.5 rounded-2xl bg-primary/5 dark:bg-primary/10 border border-primary/15 text-xs flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3 min-w-0">
-                                <div className="size-9 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
-                                    {user.imageUrl ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img src={user.imageUrl} alt={user.fullName || "User"} className="size-9 rounded-full object-cover" />
-                                    ) : (
-                                        user.firstName?.[0] || user.primaryEmailAddress?.emailAddress?.[0]?.toUpperCase() || "U"
-                                    )}
-                                </div>
-                                <div className="min-w-0">
-                                    <div className="font-semibold text-foreground truncate flex items-center gap-1.5">
-                                        <span>{user.fullName || user.primaryEmailAddress?.emailAddress}</span>
-                                        <IconShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+                    isEmailMismatch ? (
+                        <div className="space-y-4">
+                            <div className="p-3.5 rounded-2xl bg-muted/40 border border-border text-xs flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="size-9 rounded-full bg-warning/15 text-warning flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
+                                        {user?.imageUrl ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img src={user.imageUrl} alt={user.fullName || "User"} className="size-9 rounded-full object-cover" />
+                                        ) : (
+                                            user?.firstName?.[0] || user?.primaryEmailAddress?.emailAddress?.[0]?.toUpperCase() || "U"
+                                        )}
                                     </div>
-                                    <div className="text-[11px] text-muted-foreground truncate">
-                                        {user.primaryEmailAddress?.emailAddress}
+                                    <div className="min-w-0">
+                                        <div className="font-semibold text-foreground truncate">
+                                            {user?.fullName || user?.primaryEmailAddress?.emailAddress || "Authenticated User"}
+                                        </div>
+                                        <div className="text-[11px] text-muted-foreground truncate">
+                                            {user?.primaryEmailAddress?.emailAddress || "No verified email"}
+                                        </div>
+                                    </div>
+                                </div>
+                                <span className="text-[10px] font-semibold bg-warning/15 text-warning border border-warning/25 px-2 py-0.5 rounded-full shrink-0">
+                                    Account Mismatch
+                                </span>
+                            </div>
+
+                            <div role="alert" className="p-4 rounded-2xl bg-warning/10 border border-warning/25 space-y-2">
+                                <div className="flex items-start gap-2.5">
+                                    <IconAlertCircle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                                    <div className="space-y-1 text-xs leading-relaxed">
+                                        <p className="font-bold text-foreground">
+                                            Different Account Signed In
+                                        </p>
+                                        <p className="text-muted-foreground">
+                                            {INVITATION_EMAIL_MISMATCH_MESSAGE}
+                                        </p>
+                                        <p className="text-[11px] text-muted-foreground pt-1">
+                                            Invited recipient: <span className="font-mono font-semibold text-foreground">{invite.inviteeEmail}</span>
+                                        </p>
                                     </div>
                                 </div>
                             </div>
-                            <span className="text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full shrink-0">
-                                Signed In
-                            </span>
-                        </div>
 
-                        <Button
-                            onClick={handleAccept}
-                            disabled={accepting}
-                            className="w-full h-11 rounded-xl text-sm font-bold shadow-md gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-                        >
-                            {accepting ? (
-                                <>
-                                    <IconLoader className="h-4 w-4 animate-spin" />
-                                    <span>Accepting &amp; Entering Workspace...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <IconShieldCheck className="h-4 w-4" />
-                                    <span>Accept Invitation &amp; Enter Workspace</span>
-                                </>
-                            )}
-                        </Button>
-                    </div>
+                            <div className="space-y-2.5">
+                                <Button
+                                    onClick={handleSwitchAccount}
+                                    disabled={switchingAccount}
+                                    className="w-full h-11 rounded-xl text-sm font-bold shadow-md gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+                                >
+                                    {switchingAccount ? (
+                                        <>
+                                            <IconLoader className="h-4 w-4 animate-spin" />
+                                            <span>Signing Out to Switch Account...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <IconSwitchHorizontal className="h-4 w-4" />
+                                            <span>Switch Account &amp; Sign In</span>
+                                        </>
+                                    )}
+                                </Button>
+
+                                <Button asChild variant="outline" className="w-full h-10 rounded-xl text-xs font-semibold">
+                                    <Link href="/">Return to Homepage</Link>
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="p-3.5 rounded-2xl bg-primary/5 dark:bg-primary/10 border border-primary/15 text-xs flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="size-9 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
+                                        {user?.imageUrl ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img src={user.imageUrl} alt={user.fullName || "User"} className="size-9 rounded-full object-cover" />
+                                        ) : (
+                                            user?.firstName?.[0] || user?.primaryEmailAddress?.emailAddress?.[0]?.toUpperCase() || "U"
+                                        )}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <div className="font-semibold text-foreground truncate flex items-center gap-1.5">
+                                            <span>{user?.fullName || user?.primaryEmailAddress?.emailAddress}</span>
+                                            <IconShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+                                        </div>
+                                        <div className="text-[11px] text-muted-foreground truncate">
+                                            {user?.primaryEmailAddress?.emailAddress}
+                                        </div>
+                                    </div>
+                                </div>
+                                <span className="text-[10px] font-semibold bg-success/10 text-success border border-success/20 px-2 py-0.5 rounded-full shrink-0">
+                                    Signed In
+                                </span>
+                            </div>
+
+                            <Button
+                                onClick={handleAccept}
+                                disabled={accepting}
+                                className="w-full h-11 rounded-xl text-sm font-bold shadow-md gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+                            >
+                                {accepting ? (
+                                    <>
+                                        <IconLoader className="h-4 w-4 animate-spin" />
+                                        <span>Accepting &amp; Entering Workspace...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <IconShieldCheck className="h-4 w-4" />
+                                        <span>Accept Invitation &amp; Enter Workspace</span>
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    )
                 ) : (
                     <div className="space-y-3">
                         <p className="text-xs text-muted-foreground text-center leading-relaxed">
@@ -300,15 +501,30 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
                         </p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                            <SignInButton mode="modal">
-                                <Button className="w-full h-10 rounded-xl text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground">
+                            <SignInButton
+                                mode="modal"
+                                forceRedirectUrl={`/invitations/${encodeURIComponent(token)}`}
+                                fallbackRedirectUrl={`/invitations/${encodeURIComponent(token)}`}
+                            >
+                                <Button
+                                    onClick={() => setPendingInvitationCookie({ type: "workspace", token: token.trim() })}
+                                    className="w-full h-10 rounded-xl text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
+                                >
                                     <span>Sign In to Accept</span>
                                     <IconArrowRight className="h-3.5 w-3.5" />
                                 </Button>
                             </SignInButton>
 
-                            <SignUpButton mode="modal">
-                                <Button variant="outline" className="w-full h-10 rounded-xl text-xs font-semibold">
+                            <SignUpButton
+                                mode="modal"
+                                forceRedirectUrl={`/invitations/${encodeURIComponent(token)}`}
+                                fallbackRedirectUrl={`/invitations/${encodeURIComponent(token)}`}
+                            >
+                                <Button
+                                    onClick={() => setPendingInvitationCookie({ type: "workspace", token: token.trim() })}
+                                    variant="outline"
+                                    className="w-full h-10 rounded-xl text-xs font-semibold"
+                                >
                                     Create New Account
                                 </Button>
                             </SignUpButton>

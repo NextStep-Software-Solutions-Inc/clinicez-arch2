@@ -18,6 +18,7 @@ import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
 import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
+import { useEhrOptions } from 'hooks/useEhrOptions';
 
 type CorrectiveLenses = 'None' | 'Glasses' | 'Contacts' | 'Both';
 
@@ -29,14 +30,8 @@ type FormValues = {
   correctiveLenses: CorrectiveLenses | '';
 };
 
-const LENSES_OPTIONS = [
-  { label: 'None', value: 'None' },
-  { label: 'Eyeglasses', value: 'Glasses' },
-  { label: 'Contact Lenses', value: 'Contacts' },
-  { label: 'Both', value: 'Both' },
-];
-
 export default function DentalVisionScreen() {
+  const { selectOptions: lensesOptions } = useEhrOptions('corrective_lenses');
   const patientId = usePatientId();
   const { getToken } = useAuth();
   const { spacing } = useAppTheme();
@@ -162,12 +157,12 @@ export default function DentalVisionScreen() {
             <ProfileFormField label="Eye Doctor / Ophthalmologist" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
           )} />
           <Controller control={control} name="correctiveLenses" render={({ field }) => (
-            <ProfileFormField label="Corrective Lenses" value={LENSES_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setLensesModal(true)} placeholder="Select option" picker />
+            <ProfileFormField label="Corrective Lenses" value={lensesOptions.find(o => o.value === field.value)?.label || ''} onPressIn={() => setLensesModal(true)} placeholder="Select option" picker />
           )} />
         </ScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />
         <Controller control={control} name="correctiveLenses" render={({ field }) => (
-          <ProfileSelectModal visible={lensesModal} title="Corrective Lenses" options={LENSES_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setLensesModal(false)} />
+          <ProfileSelectModal visible={lensesModal} title="Corrective Lenses" options={lensesOptions} selected={field.value} onSelect={field.onChange} onClose={() => setLensesModal(false)} />
         )} />
       </KeyboardAvoidingView>
     </Screen>

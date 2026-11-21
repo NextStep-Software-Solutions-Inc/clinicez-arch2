@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { UploadCloud, FileText, Trash2, ShieldAlert, AlertCircle } from "lucide-react";
 import { validateFileUpload } from "@/lib/join";
+import { SelectField } from "@/components/ui/select";
 import { type PatientJoinAttachmentItem } from "./types";
 
 interface OutsideDocumentDropzoneProps {
@@ -80,11 +81,11 @@ export function OutsideDocumentDropzone({ attachments, onChange }: OutsideDocume
   return (
     <div className="space-y-4">
       {/* Clinical Quarantine Disclosure Notice Banner */}
-      <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs">
-        <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+      <div className="flex items-start gap-3 p-4 rounded-xl bg-warning/10 border border-warning/20 text-foreground text-xs">
+        <ShieldAlert className="w-4 h-4 text-warning shrink-0 mt-0.5" />
         <div>
           <span className="font-bold">Document Quarantine Notice:</span> Uploaded medical files are placed in secure clinical quarantine (
-          <code className="font-mono font-bold text-amber-800 dark:text-amber-300">PendingVerification</code>) until reviewed and approved by clinic healthcare staff.
+          <code className="font-mono font-bold text-warning">PendingVerification</code>) until reviewed and approved by clinic healthcare staff.
         </div>
       </div>
 
@@ -135,17 +136,14 @@ export function OutsideDocumentDropzone({ attachments, onChange }: OutsideDocume
               </div>
 
               <div className="flex items-center gap-2 self-end sm:self-auto">
-                <select
+                <SelectField
+                  ariaLabel={`Document category for ${file.fileName}`}
                   value={file.recordType || "OutsideChestXRay"}
-                  onChange={(e) => handleTypeChange(idx, e.target.value)}
-                  className="px-2.5 py-1.5 rounded-lg border border-input text-xs bg-background text-foreground"
-                >
-                  {DOCUMENT_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={(v) => handleTypeChange(idx, v)}
+                  size="sm"
+                  className="w-fit min-w-52 rounded-lg"
+                  options={DOCUMENT_TYPES}
+                />
 
                 <button
                   type="button"

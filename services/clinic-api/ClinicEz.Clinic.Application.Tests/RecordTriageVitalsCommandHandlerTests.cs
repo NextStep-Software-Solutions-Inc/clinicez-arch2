@@ -29,8 +29,8 @@ public class RecordTriageVitalsCommandHandlerTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var queueItem = new QueueItem
         {
@@ -79,7 +79,7 @@ public class RecordTriageVitalsCommandHandlerTests
         var updatedQueue = await context.QueueItems.FirstAsync(q => q.Id == queueItemId);
         updatedQueue.Status.Should().Be(QueueStatus.Triaged);
 
-        var savedVitals = await context.TriageVitals.FirstOrDefaultAsync(v => v.QueueItemId == queueItemId);
+        var savedVitals = await context.PatientVitals.FirstOrDefaultAsync(v => v.QueueItemId == queueItemId);
         savedVitals.Should().NotBeNull();
         savedVitals!.Bmi.Should().Be(23.53m);
     }

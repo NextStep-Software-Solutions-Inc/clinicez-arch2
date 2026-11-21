@@ -16,13 +16,13 @@ public sealed record GetClinicRoomsQuery(bool ActiveOnly = false) : IRequest<IRe
 
 public sealed class GetClinicRoomsQueryHandler : IRequestHandler<GetClinicRoomsQuery, IReadOnlyList<ClinicRoomDto>>
 {
-    private readonly IRepository<ClinicRoom> _roomRepository;
+    private readonly IRepository<Room> _roomRepository;
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public GetClinicRoomsQueryHandler(
-        IRepository<ClinicRoom> roomRepository,
+        IRepository<Room> roomRepository,
         IRepository<StaffMember> staffRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
@@ -46,7 +46,7 @@ public sealed class GetClinicRoomsQueryHandler : IRequestHandler<GetClinicRoomsQ
             var actor = _clinicContext.StaffId?.ToString() ?? "SystemSeed";
             var defaults = new[]
             {
-                new ClinicRoom
+                new Room
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,
@@ -60,7 +60,7 @@ public sealed class GetClinicRoomsQueryHandler : IRequestHandler<GetClinicRoomsQ
                     CreatedAt = now,
                     CreatedBy = actor
                 },
-                new ClinicRoom
+                new Room
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,
@@ -74,7 +74,7 @@ public sealed class GetClinicRoomsQueryHandler : IRequestHandler<GetClinicRoomsQ
                     CreatedAt = now,
                     CreatedBy = actor
                 },
-                new ClinicRoom
+                new Room
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,
@@ -88,7 +88,7 @@ public sealed class GetClinicRoomsQueryHandler : IRequestHandler<GetClinicRoomsQ
                     CreatedAt = now,
                     CreatedBy = actor
                 },
-                new ClinicRoom
+                new Room
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,

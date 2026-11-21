@@ -61,11 +61,11 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
 
         var (context, uow, sieve) = TestDbHelper.CreateSharedTestContext(dbName, contextSubstitute);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var auditRepo = TestDbHelper.CreateRepository<EodReconciliationAudit>(context, sieve);
 
-        // Seed ClinicSettings
-        await settingsRepo.AddAsync(new ClinicSettings
+        // Seed FacilitySettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantIdA,
@@ -218,14 +218,14 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
         contextSubstitute.TenantId.Returns(_tenantIdA);
 
         var (context, uow, sieve) = TestDbHelper.CreateSharedTestContext(dbName, contextSubstitute);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<QueueNotificationDispatcher>.Instance;
 
         // Settings with Push Enabled, threshold = 2
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantIdA,
@@ -238,7 +238,7 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
         // Two distinct patients with identical name "Juan Dela Cruz" but distinct SyncPatientIds
         var syncPatientId1 = Guid.NewGuid();
         var syncPatientId2 = Guid.NewGuid();
-        var patient1 = new ClinicPatient
+        var patient1 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantIdA,
@@ -248,9 +248,9 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1990, 1, 1),
             ContactNumber = "0917-111-1111",
-            SyncPatientId = syncPatientId1
+            CloudPatientId = syncPatientId1
         };
-        var patient2 = new ClinicPatient
+        var patient2 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantIdA,
@@ -260,7 +260,7 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1985, 5, 15),
             ContactNumber = "0917-222-2222",
-            SyncPatientId = syncPatientId2
+            CloudPatientId = syncPatientId2
         };
         await patientRepo.AddAsync(patient1, CancellationToken.None);
         await patientRepo.AddAsync(patient2, CancellationToken.None);
@@ -275,7 +275,7 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
             SequenceNumber = 1,
             QueueDate = _today,
             PatientId = patient1.Id,
-            SyncPatientId = syncPatientId1,
+            CloudPatientId = syncPatientId1,
             PatientName = "Juan Dela Cruz",
             Status = QueueStatus.Waiting
         };
@@ -288,7 +288,7 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
             SequenceNumber = 2,
             QueueDate = _today,
             PatientId = patient2.Id,
-            SyncPatientId = syncPatientId2,
+            CloudPatientId = syncPatientId2,
             PatientName = "Juan Dela Cruz",
             Status = QueueStatus.Waiting
         };
@@ -352,13 +352,13 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
         contextSubstitute.TenantId.Returns(_tenantIdA);
 
         var (context, uow, sieve) = TestDbHelper.CreateSharedTestContext(dbName, contextSubstitute);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<QueueNotificationDispatcher>.Instance;
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantIdA,
@@ -378,7 +378,7 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
             SequenceNumber = 1,
             QueueDate = _today,
             PatientId = Guid.NewGuid(),
-            SyncPatientId = syncPatientId,
+            CloudPatientId = syncPatientId,
             PatientName = "Dedup Patient",
             Status = QueueStatus.Waiting,
             ApproachingNotificationSent = false,
@@ -431,13 +431,13 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
         contextSubstitute.TenantId.Returns(_tenantIdA);
 
         var (context, uow, sieve) = TestDbHelper.CreateSharedTestContext(dbName, contextSubstitute);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<QueueNotificationDispatcher>.Instance;
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantIdA,
@@ -457,7 +457,7 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
             SequenceNumber = 1,
             QueueDate = _today,
             PatientId = Guid.NewGuid(),
-            SyncPatientId = null,
+            CloudPatientId = null,
             PatientName = "Walkin Unregistered",
             Status = QueueStatus.Waiting
         };
@@ -498,7 +498,7 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
     [InlineData(null)]
     public void Adv_06_EodBackgroundService_Invalid24HourFormats_ReturnsFalseGracefully(string? invalidTime)
     {
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             ClinicId = Guid.NewGuid(),
             TenantId = "tenant_test",
@@ -516,7 +516,7 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
     [Fact]
     public void Adv_07_EodBackgroundService_WhitespacePaddedTime_SuccessfullyParses()
     {
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             ClinicId = Guid.NewGuid(),
             TenantId = "tenant_test",
@@ -544,7 +544,7 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
     [Fact]
     public void Adv_09_EodBackgroundService_AutoEodDisabled_ReturnsFalseEvenWhenPastTime()
     {
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             ClinicId = Guid.NewGuid(),
             TenantId = "tenant_test",
@@ -637,7 +637,7 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
         contextSubstitute.TenantId.Returns(_tenantIdA);
 
         var (context, _, sieve) = TestDbHelper.CreateTestContext(contextSubstitute);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var handler = new CheckPatientDuplicatesQueryHandler(patientRepo);
 
         var result = await handler.Handle(new CheckPatientDuplicatesQuery(), CancellationToken.None);
@@ -653,9 +653,9 @@ public class Tier5_OpdSuiteAdversarialHardeningTests
         contextSubstitute.TenantId.Returns(_tenantIdA);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(contextSubstitute);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existing = new ClinicPatient
+        var existing = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantIdA,

@@ -9,7 +9,10 @@
       "@ui/*": ["components/ui/*"],
       "@ui": ["components/ui"],
       "@services/*": ["services/*"],
-      "@screens/*": ["navigation/screens/*"]
+      "@screens/*": ["navigation/screens/*"],
+      "@clinicez/comms-sdk/*": ["../../packages/comms-sdk/src/*"],
+      "@clinicez/comms-sdk": ["../../packages/comms-sdk/src/index.ts"],
+      "@clinicez/design-tokens": ["../../packages/design-tokens/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "dist", ".expo", "tests"]

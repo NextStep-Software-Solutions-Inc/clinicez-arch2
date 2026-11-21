@@ -26,7 +26,7 @@ public sealed record PublicStudentSelfEnrollCommand(
     string LastName,
     string? MiddleName,
     DateOnly DateOfBirth,
-    string Gender,
+    string Sex,
     string ContactNumber,
     string? Email,
     string? AddressLine,
@@ -55,15 +55,15 @@ public sealed record PublicStudentSelfEnrollResultDto(
 public sealed class PublicStudentSelfEnrollCommandHandler
     : IRequestHandler<PublicStudentSelfEnrollCommand, PublicStudentSelfEnrollResultDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<ClinicRecordAttachment> _attachmentRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<RecordAttachment> _attachmentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IPatientCodeGenerator _codeGenerator;
 
     public PublicStudentSelfEnrollCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<ClinicRecordAttachment> attachmentRepo,
+        IRepository<Patient> patientRepo,
+        IRepository<RecordAttachment> attachmentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IPatientCodeGenerator? codeGenerator = null)
@@ -76,7 +76,7 @@ public sealed class PublicStudentSelfEnrollCommandHandler
     }
 
     private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IUnitOfWork unitOfWork)
     {
         var dbContext = (patientRepo.GetType().GetProperty("DbContext")?.GetValue(patientRepo)
@@ -113,14 +113,39 @@ public sealed class PublicStudentSelfEnrollCommandHandler
         var patientCode = reservation.PatientCode;
         var queueToken = $"Q-{((reservation.Sequence - 1) % 500 + 1):D3}";
 
-        var customFields = request.AdditionalCustomFields ?? new Dictionary<string, object?>();
+        var customFields = request.AdditionalCustomFields != null
+            ? new Dictionary<string, object?>(request.AdditionalCustomFields)
+            : new Dictionary<string, object?>();
+
         customFields["classification"] = "Student";
+        customFields["affiliation"] = "Student";
         customFields["student_id"] = request.StudentId.Trim();
         if (!string.IsNullOrWhiteSpace(request.College)) customFields["college"] = request.College.Trim();
         if (!string.IsNullOrWhiteSpace(request.Program)) customFields["program"] = request.Program.Trim();
         if (!string.IsNullOrWhiteSpace(request.YearLevel)) customFields["year_level"] = request.YearLevel.Trim();
 
-        var patient = new ClinicPatient
+        if (!string.IsNullOrWhiteSpace(request.AddressLine) && !customFields.ContainsKey("primary_address_line"))
+            customFields["primary_address_line"] = request.AddressLine.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.Barangay) && !customFields.ContainsKey("primary_barangay"))
+            customFields["primary_barangay"] = request.Barangay.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.City) && !customFields.ContainsKey("primary_city"))
+            customFields["primary_city"] = request.City.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.Province) && !customFields.ContainsKey("primary_province"))
+            customFields["primary_province"] = request.Province.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.EmergencyContactName) && !customFields.ContainsKey("emergency_contact_name"))
+            customFields["emergency_contact_name"] = request.EmergencyContactName.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.EmergencyContactPhone) && !customFields.ContainsKey("emergency_contact_phone"))
+            customFields["emergency_contact_phone"] = request.EmergencyContactPhone.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.EmergencyContactRelationship) && !customFields.ContainsKey("emergency_contact_relationship"))
+            customFields["emergency_contact_relationship"] = request.EmergencyContactRelationship.Trim();
+
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,
@@ -130,19 +155,12 @@ public sealed class PublicStudentSelfEnrollCommandHandler
             LastName = request.LastName.Trim(),
             MiddleName = request.MiddleName?.Trim(),
             DateOfBirth = request.DateOfBirth,
-            Gender = string.IsNullOrWhiteSpace(request.Gender) ? "Male" : request.Gender,
+            Sex = RegisterClinicPatientCommandHandler.ParseBiologicalSex(request.Sex),
             ContactNumber = request.ContactNumber.Trim(),
             Email = request.Email?.Trim(),
-            AddressLine = request.AddressLine?.Trim(),
-            Barangay = request.Barangay?.Trim(),
-            City = request.City?.Trim(),
-            Province = request.Province?.Trim(),
-            EmergencyContactName = request.EmergencyContactName?.Trim(),
-            EmergencyContactPhone = request.EmergencyContactPhone?.Trim(),
-            EmergencyContactRelationship = request.EmergencyContactRelationship?.Trim(),
-            BloodType = request.BloodType?.Trim(),
+            BloodType = BloodTypeParser.TryParse(request.BloodType, out var bt) ? bt : null,
             CustomFields = customFields,
-            VerificationStatus = "PendingVerification",
+            VerificationStatus = PatientVerificationStatus.PendingVerification,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = "StudentSelfEnrollmentPortal"
         };
@@ -154,7 +172,7 @@ public sealed class PublicStudentSelfEnrollCommandHandler
         {
             foreach (var doc in request.Documents)
             {
-                var attachment = new ClinicRecordAttachment
+                var attachment = new RecordAttachment
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,
@@ -193,6 +211,8 @@ public sealed class PublicStudentSelfEnrollCommandHandler
                 {
                     throw new InvalidOperationException("Failed to self-enroll student after multiple sequence allocation attempts.", ex);
                 }
+
+                await _codeGenerator.SynchronizeTrackerWithMaxExistingAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
 
                 var newReservation = await _codeGenerator.ReserveNextAsync(
                     _clinicContext.TenantId,

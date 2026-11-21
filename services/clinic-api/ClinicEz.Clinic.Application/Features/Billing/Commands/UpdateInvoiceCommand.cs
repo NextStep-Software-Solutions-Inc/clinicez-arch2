@@ -35,16 +35,16 @@ public record UpdateInvoiceRequest(
 public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand, InvoiceDto>
 {
     private readonly IRepository<Invoice> _invoiceRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<ConsultationEncounter> _encounterRepo;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IBillingRequestPublisher _billingPublisher;
 
     public UpdateInvoiceCommandHandler(
         IRepository<Invoice> invoiceRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<ConsultationEncounter> encounterRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
@@ -55,9 +55,9 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
 
     public UpdateInvoiceCommandHandler(
         IRepository<Invoice> invoiceRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<ConsultationEncounter> encounterRepo,
-        IRepository<ClinicSettings>? settingsRepo,
+        IRepository<FacilitySettings>? settingsRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IBillingRequestPublisher billingPublisher)
@@ -189,7 +189,7 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
             isCashierCounter = string.Equals(mode, "CashierCounter", StringComparison.OrdinalIgnoreCase);
         }
 
-        if (isCashierCounter || invoice.BillingRequestedAt.HasValue)
+        if ((isCashierCounter || invoice.BillingRequestedAt.HasValue) && invoice.PatientId != Guid.Empty)
         {
             await RePublishInvoiceRequestAsync(invoice, ct);
         }
@@ -201,22 +201,22 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
 
     private async Task RePublishInvoiceRequestAsync(Invoice invoice, CancellationToken ct)
     {
-        if (invoice.NetAmount <= 0m && !invoice.BillingRequestedAt.HasValue) return;
+        if (invoice.PatientId == Guid.Empty || (invoice.NetAmount <= 0m && !invoice.BillingRequestedAt.HasValue)) return;
 
-        var visitKey = invoice.ConsultationId;
-        if (visitKey is null && invoice.QueueItemId.HasValue)
+        Guid? resolvedQueueItemId = invoice.QueueItemId;
+        if (!resolvedQueueItemId.HasValue && invoice.ConsultationId.HasValue && _encounterRepo != null)
         {
-            var queueItemId = invoice.QueueItemId.Value;
-            var encounterId = await _encounterRepo
-                .Query(e => e.ClinicId == _clinicContext.ClinicId && e.QueueItemId == queueItemId)
-                .Select(e => (Guid?)e.Id)
+            var consultationId = invoice.ConsultationId.Value;
+            resolvedQueueItemId = await _encounterRepo
+                .Query(e => e.ClinicId == _clinicContext.ClinicId && e.Id == consultationId)
+                .Select(e => e.QueueItemId)
                 .FirstOrDefaultAsync(ct);
-            visitKey = encounterId ?? queueItemId;
         }
+        var visitKey = resolvedQueueItemId ?? invoice.ConsultationId;
 
         var syncPatientId = await _patientRepo
             .Query(p => p.ClinicId == _clinicContext.ClinicId && p.Id == invoice.PatientId)
-            .Select(p => p.SyncPatientId)
+            .Select(p => p.CloudPatientId)
             .FirstOrDefaultAsync(ct);
 
         var lines = invoice.LineItems

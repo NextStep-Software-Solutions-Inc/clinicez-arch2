@@ -78,9 +78,30 @@ public class Facility : BaseEntity
     public string? ContactNumber { get; set; }
     public string? ContactEmail { get; set; }
 
+    // 10-digit Philippine Standard Geographic Code (PSGC) Hierarchy
+    public string? RegionPsgc { get; set; }
+    public string? ProvincePsgc { get; set; }
+    public string? CityMunicipalityPsgc { get; set; }
+    public string? BarangayPsgc { get; set; }
+
     // Facility letterhead/logo/stamp are owned by each facility's own service (e.g. clinic ClinicSettings),
     // not by the portal. Workspace-level brand defaults live in WorkspaceSettings.
 
     // Notification Preferences
     public string? NotificationPreferencesJson { get; set; }
+
+    // Public Join Link Settings
+    public bool IsJoinEnabled { get; set; } = true;
+    public string? JoinCode { get; set; }
+    public DateTime? JoinCodeExpiresAtUtc { get; set; }
+    public DateTime? JoinSettingsUpdatedAtUtc { get; set; }
+
+    // Platform Directory Verification
+    public PlatformVerificationStatus PlatformVerificationStatus { get; set; } = PlatformVerificationStatus.Unverified;
+    public string? LtoEvidenceObjectKey { get; set; }
+    public DateOnly? LtoExpiryDate { get; set; }
+    public Guid? LatestVerificationRequestId { get; set; }
+    public DateTime? VerifiedAtUtc { get; set; }
+    public string? VerifiedByAdminUserId { get; set; }
+    public string? RejectionReason { get; set; }
 }

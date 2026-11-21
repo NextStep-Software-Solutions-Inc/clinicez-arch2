@@ -43,13 +43,13 @@ public sealed class UpdatePatientReproductiveHistoryCommandValidator : AbstractV
 
 public sealed class UpdatePatientReproductiveHistoryCommandHandler : IRequestHandler<UpdatePatientReproductiveHistoryCommand, PatientReproductiveHistoryDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<PatientReproductiveHistory> _reproductiveRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public UpdatePatientReproductiveHistoryCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<PatientReproductiveHistory> reproductiveRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
@@ -70,8 +70,8 @@ public sealed class UpdatePatientReproductiveHistoryCommandHandler : IRequestHan
             throw new NotFoundException($"Patient '{request.PatientId}' not found in this clinic.");
         }
 
-        // Gender check: male patients are not applicable
-        var isMale = patient.Gender.Equals("Male", StringComparison.OrdinalIgnoreCase);
+        // Sex check: male patients are not applicable
+        var isMale = patient.Sex == BiologicalSex.Male;
         var effectiveApplicable = !isMale && request.IsApplicable;
 
         var entry = await _reproductiveRepo.Query(r => r.PatientId == request.PatientId)
@@ -159,6 +159,7 @@ public sealed class UpdatePatientReproductiveHistoryCommandHandler : IRequestHan
             entry.DeliveryType,
             entry.HadPreEclampsiaHypertension,
             entry.ReceivedFamilyPlanningCounseling,
-            entry.Remarks);
+            entry.Remarks,
+            entry.UpdatedAt ?? entry.CreatedAt);
     }
 }

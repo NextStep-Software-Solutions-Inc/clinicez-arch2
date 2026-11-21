@@ -24,9 +24,9 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
     private readonly IRepository<Invoice> _invoiceRepo;
     private readonly IRepository<PaymentRecord> _paymentRepo;
     private readonly IRepository<ConsultationEncounter> _consultationRepo;
-    private readonly IRepository<ClinicalProcedure> _procedureRepo;
-    private readonly IRepository<ClinicLabOrder> _labOrderRepo;
-    private readonly IRepository<ClinicPatient>? _patientRepo;
+    private readonly IRepository<Procedure> _procedureRepo;
+    private readonly IRepository<LabOrder> _labOrderRepo;
+    private readonly IRepository<Patient>? _patientRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetClinicAnalyticsQueryHandler(
@@ -34,10 +34,10 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
         IRepository<Invoice> invoiceRepo,
         IRepository<PaymentRecord> paymentRepo,
         IRepository<ConsultationEncounter> consultationRepo,
-        IRepository<ClinicalProcedure> procedureRepo,
-        IRepository<ClinicLabOrder> labOrderRepo,
+        IRepository<Procedure> procedureRepo,
+        IRepository<LabOrder> labOrderRepo,
         IClinicContext clinicContext,
-        IRepository<ClinicPatient>? patientRepo = null)
+        IRepository<Patient>? patientRepo = null)
     {
         _queueRepo = queueRepo;
         _invoiceRepo = invoiceRepo;
@@ -203,7 +203,7 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
             .Select(g => new ServiceUsageDto("Procedure", g.ProcedureName, g.Quantity))
             .ToList();
 
-        var labOrders = await _labOrderRepo.Query(o => o.OrderDate >= start && o.OrderDate < end)
+        var labOrders = await _labOrderRepo.Query(o => o.OrderDate >= start && o.OrderDate < end && o.IsSigned && o.Status != LabOrderStatus.Cancelled)
             .Select(o => o.Items.Select(i => i.TestName).ToList())
             .ToListAsync(cancellationToken);
 
@@ -279,7 +279,7 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
         if (_patientRepo != null && distinctPatientIds.Count > 0)
         {
             var patients = await _patientRepo.Query(p => distinctPatientIds.Contains(p.Id))
-                .Select(p => new { p.DateOfBirth, p.Gender })
+                .Select(p => new { p.DateOfBirth, p.Sex })
                 .ToListAsync(cancellationToken);
 
             var todayDateOnly = DateOnly.FromDateTime(today);
@@ -292,7 +292,7 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
                 else if (age >= 60) seniorCount++;
                 else adultCount++;
 
-                var g = p.Gender?.ToLowerInvariant() ?? "";
+                var g = p.Sex.ToString().ToLowerInvariant();
                 if (g.StartsWith("m")) maleCount++;
                 else if (g.StartsWith("f")) femaleCount++;
                 else otherGenderCount++;

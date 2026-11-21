@@ -3,6 +3,10 @@
 import { useClerk } from "@clerk/nextjs";
 import { IconShieldLock } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
+import {
+    CLERK_PORTAL_APPEARANCE,
+    sanitizeStaleClerkBillingHash,
+} from "@/lib/clerkAppearance";
 
 interface MfaRequiredGateProps {
     workspaceName: string;
@@ -16,11 +20,16 @@ interface MfaRequiredGateProps {
 export function MfaRequiredGate({ workspaceName }: MfaRequiredGateProps) {
     const { openUserProfile, signOut } = useClerk();
 
+    const handleOpenSecurity = () => {
+        sanitizeStaleClerkBillingHash();
+        openUserProfile({ appearance: CLERK_PORTAL_APPEARANCE });
+    };
+
     return (
         <div className="min-h-svh flex items-center justify-center p-6 bg-muted/30">
             <div className="max-w-md w-full rounded-3xl border bg-background p-8 shadow-sm space-y-5 text-center">
                 <div className="mx-auto h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
-                    <IconShieldLock className="h-6 w-6" />
+                    <IconShieldLock className="h-6 w-6" aria-hidden="true" />
                 </div>
                 <div className="space-y-2">
                     <h1 className="text-xl font-extrabold tracking-tight">Two-step verification required</h1>
@@ -30,13 +39,13 @@ export function MfaRequiredGate({ workspaceName }: MfaRequiredGateProps) {
                     </p>
                 </div>
                 <div className="flex flex-col gap-2">
-                    <Button onClick={() => openUserProfile()} className="rounded-xl font-bold">
+                    <Button type="button" onClick={handleOpenSecurity} className="rounded-xl font-bold">
                         Open account security
                     </Button>
-                    <Button variant="outline" onClick={() => window.location.reload()} className="rounded-xl font-semibold">
+                    <Button type="button" variant="outline" onClick={() => window.location.reload()} className="rounded-xl font-semibold">
                         I&apos;ve turned it on - continue
                     </Button>
-                    <Button variant="ghost" onClick={() => signOut({ redirectUrl: "/sign-in" })} className="rounded-xl text-xs">
+                    <Button type="button" variant="ghost" onClick={() => signOut({ redirectUrl: "/sign-in" })} className="rounded-xl text-xs">
                         Sign out
                     </Button>
                 </div>

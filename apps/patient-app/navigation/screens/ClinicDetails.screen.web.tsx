@@ -69,7 +69,7 @@ export default function ClinicDetailsScreenWeb() {
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
   const { showOfflineAlert } = useOfflineAlert();
-  const clinicId = String(route.params?.clinicId ?? '');
+  const clinicId = String(route.params?.clinicId ?? route.params?.id ?? '');
 
   const [clinic, setClinic] = useState<ClinicDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);

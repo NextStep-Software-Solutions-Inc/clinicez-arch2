@@ -186,7 +186,8 @@ public class SystemSettingsTests
             Name = "BGC Main Branch",
             City = "Taguig City",
             Province = "Metro Manila",
-            IsPhilHealthAccredited = true
+            IsPhilHealthAccredited = true,
+            PhilHealthAccreditationNumber = "P123456789"
         };
         var clinic = new Facility
         {
@@ -197,33 +198,45 @@ public class SystemSettingsTests
             Name = "BGC Family & Primary Care Clinic",
             FacilityType = FacilityType.Clinic,
             Status = FacilityStatus.Active,
+            IsPatientDiscoveryEligible = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
             City = "Taguig City",
             Province = "Metro Manila",
             Classification = "Primary Care & YAKAP Clinic",
             PhilHealthAccreditationNumber = "P123456789"
         };
-        var member = new WorkspaceMember
+        var practitioner = new Practitioner
         {
             Id = Guid.NewGuid(),
-            TenantId = tenant.Id,
-            Email = "dr.santos@stlukes.example.ph",
-            FullName = "Dr. Maria Santos, MD",
-            Status = MemberStatus.Active
+            ProfessionKind = "Doctor",
+            NormalizedPrcLicenseNo = "0123456",
+            DisplayPrcLicenseNo = "0123456",
+            FirstName = "Maria",
+            LastName = "Santos",
+            Title = "Dr.",
+            PrimarySpecialty = "Family Medicine Physician",
+            VerificationStatus = PractitionerVerificationLevel.Verified,
+            VerifiedAtUtc = DateTime.UtcNow
         };
-        var staff = new StaffMember
+        var affiliation = new PractitionerAffiliation
         {
             Id = Guid.NewGuid(),
-            TenantId = tenant.Id,
-            WorkspaceMemberId = member.Id,
+            PractitionerId = practitioner.Id,
             FacilityId = clinic.Id,
-            Role = "Family Medicine Physician"
+            TenantId = tenant.Id,
+            ClinicStaffMemberId = Guid.NewGuid(),
+            Role = "Doctor",
+            LocalDisplayName = "Dr. Maria Santos",
+            LocalSpecialty = "Family Medicine Physician",
+            AffiliationStatus = "Active",
+            OptedInAtUtc = DateTime.UtcNow
         };
 
         db.Tenants.Add(tenant);
         db.Branches.Add(branch);
         db.Facilities.Add(clinic);
-        db.WorkspaceMembers.Add(member);
-        db.StaffMembers.Add(staff);
+        db.Practitioners.Add(practitioner);
+        db.PractitionerAffiliations.Add(affiliation);
         await db.SaveChangesAsync();
 
         var clinicsResult = await PublicDirectoryEndpoints.GetClinicsAsync(db, q: "BGC", city: null);

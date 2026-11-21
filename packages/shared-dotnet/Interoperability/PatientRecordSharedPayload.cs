@@ -20,4 +20,6 @@ public record PatientRecordSharedPayload
     /// <summary>Short-lived pre-signed download URL for the stored (unencrypted) file.</summary>
     public string DownloadUrl { get; init; } = string.Empty;
     public DateTime ExpiresAtUtc { get; init; }
+    /// <summary>Optional inline base64 encoded plaintext content for zero-HTTP delivery and independent copy ingestion.</summary>
+    public string? FileBase64 { get; init; }
 }

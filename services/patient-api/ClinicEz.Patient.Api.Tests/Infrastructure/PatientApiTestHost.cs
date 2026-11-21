@@ -6,6 +6,8 @@ using ClinicEz.Patient.Api.Middleware;
 using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Patient.Infrastructure.Persistence;
 using ClinicEz.Patient.Infrastructure.Services.Auth;
+using ClinicEz.Patient.Application.Common.Interfaces;
+using ClinicEz.Patient.Infrastructure.Locations;
 using ClinicEz.Shared.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authentication;
@@ -56,6 +58,7 @@ public sealed class PatientApiTestHost : IAsyncDisposable
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Configuration["Cors:AllowedOrigins:0"] = "https://app.test";
+        builder.Configuration["PatientEncryption:MasterSecret"] = "test-patient-encryption-master-secret-32chars-min-ok!";
         builder.Services.AddApiServices(builder.Configuration, builder.Environment);
         builder.Services.ConfigureHttpJsonOptions(o => ApiJson.Configure(o.SerializerOptions));
         builder.Services.AddHttpContextAccessor();
@@ -64,6 +67,7 @@ public sealed class PatientApiTestHost : IAsyncDisposable
         builder.Services.AddSingleton(Substitute.For<IMediator>());
         builder.Services.AddSingleton(patients);
         builder.Services.AddSingleton(Substitute.For<IUnitOfWork>());
+        builder.Services.AddSingleton<IPsgcLocationService, PsgcLocationService>();
         builder.Services.AddDbContext<ApplicationDbContext>(o => o.UseNpgsql(UnreachableDatabase));
         builder.Services
             .AddAuthentication(HeaderAuthHandler.SchemeName)

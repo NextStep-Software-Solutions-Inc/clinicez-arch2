@@ -8,15 +8,24 @@ import {
   hubEdgeCredentialsSchema,
   hubRotatedCredentialsSchema,
   parseWire,
+  platformVerificationStatusSchema,
   type FacilityDeploymentMode,
   type FacilityKind,
   type FacilityVisibility,
   type HubClientCredentials,
   type HubEdgeCredentials,
   type HubRotatedCredentials,
+  type PlatformVerificationStatus,
 } from "@/lib/wire";
+import {
+  verificationService,
+  type EvidenceBlobResult,
+  type FacilityVerificationStatusDto,
+  type UploadLtoProofJsonPayload,
+  type UploadLtoProofResult,
+} from "@/services/verification.service";
 
-export type { FacilityKind, FacilityVisibility };
+export type { FacilityKind, FacilityVisibility, PlatformVerificationStatus };
 
 const optionalText = z.string().nullish().transform((v) => v ?? null);
 
@@ -31,6 +40,7 @@ const workspaceFacilitySchema = z.object({
   consoleUrl: optionalText,
   classification: optionalText,
   licenseToOperate: optionalText,
+  ltoExpiryDate: optionalText,
   philHealthAccreditationNumber: optionalText,
   taxIdentificationNumber: optionalText,
   operatingHours: optionalText,
@@ -48,6 +58,12 @@ const workspaceFacilitySchema = z.object({
   acceptsExternalRequests: z.boolean(),
   branchId: optionalText,
   isPatientDiscoveryEligible: z.boolean().nullish().transform((v) => v ?? false),
+  platformVerificationStatus: platformVerificationStatusSchema
+    .nullish()
+    .transform((v) => v ?? "Unverified"),
+  rejectionReason: optionalText,
+  ltoEvidenceObjectKey: optionalText,
+  verifiedAtUtc: optionalText,
 });
 export type WorkspaceFacility = z.infer<typeof workspaceFacilitySchema>;
 
@@ -104,12 +120,40 @@ const rotateHubCredentialsResultSchema = z.object({
   hubCredentials: hubRotatedCredentialsSchema,
 });
 
-const setDiscoveryEligibilityResultSchema = z.object({
+export const setDiscoveryEligibilityResultSchema = z.object({
   facilityId: z.string(),
   isEligible: z.boolean(),
   updatedAt: z.string(),
 });
 export type SetDiscoveryEligibilityResult = z.infer<typeof setDiscoveryEligibilityResultSchema>;
+
+export interface UpdateFacilitySettingsPayload {
+  tenantSlug: string;
+  name?: string;
+  slug?: string;
+  status?: "Provisioning" | "Active" | "Suspended" | "Failed";
+  classification?: string;
+  licenseToOperate?: string;
+  philHealthAccreditationNumber?: string;
+  taxIdentificationNumber?: string;
+  operatingHours?: string;
+  region?: string;
+  province?: string;
+  city?: string;
+  barangay?: string;
+  zipCode?: string;
+  streetAddress?: string;
+  contactNumber?: string;
+  contactEmail?: string;
+  notificationPreferencesJson?: string;
+  ltoExpiryDate?: string | null;
+}
+
+/** Normalizes `<Input type="date" />` values so blank/whitespace inputs become `null` for ASP.NET Core `DateOnly?`. */
+export function normalizeOptionalDateInput(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
 
 export const facilityService = {
   getFacilities: async (tenantSlug: string): Promise<WorkspaceFacility[]> => {
@@ -149,6 +193,43 @@ export const facilityService = {
       { isEligible, tenantSlug },
     );
     return parseWire(setDiscoveryEligibilityResultSchema, res.data, "discovery eligibility");
+  },
+
+  /** Retrieves platform verification status, latest request, and bundled clinician summary. */
+  getVerificationStatus: async (
+    tenantSlug: string,
+    facilityId: string,
+  ): Promise<FacilityVerificationStatusDto> => {
+    return verificationService.getFacilityVerificationStatus(facilityId, tenantSlug);
+  },
+
+  /** Uploads a DOH LTO proof file (PDF/JPEG/PNG) or attaches an existing object key. */
+  uploadLtoProof: async (
+    tenantSlug: string,
+    facilityId: string,
+    input: File | UploadLtoProofJsonPayload,
+  ): Promise<UploadLtoProofResult> => {
+    return verificationService.uploadFacilityLtoProof(facilityId, input, tenantSlug);
+  },
+
+  /** Fetches the facility's uploaded DOH LTO proof document as a Blob for inline viewing. */
+  fetchLtoProof: async (
+    tenantSlug: string,
+    facilityId: string,
+  ): Promise<EvidenceBlobResult> => {
+    return verificationService.fetchFacilityLtoProof(facilityId, tenantSlug);
+  },
+
+  /** Updates facility profile and statutory settings (`PUT /facilities/{id}/settings`). */
+  updateFacilitySettings: async (
+    facilityId: string,
+    payload: UpdateFacilitySettingsPayload,
+  ): Promise<unknown> => {
+    const res = await apiClient.put<unknown>(
+      `/facilities/${encodeURIComponent(facilityId)}/settings`,
+      payload,
+    );
+    return res.data;
   },
 };
 

@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Schedules.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -25,7 +27,8 @@ public sealed record UpsertDoctorScheduleTemplateCommand(
     bool IsActive = true,
     DateOnly? EffectiveStartDate = null,
     DateOnly? EffectiveEndDate = null,
-    List<DoctorBreakTimeDto>? Breaks = null) : IRequest<DoctorScheduleTemplateDto>;
+    List<DoctorBreakTimeDto>? Breaks = null,
+    bool SkipPendingVerificationSync = false) : IRequest<DoctorScheduleTemplateDto>;
 
 public sealed class UpsertDoctorScheduleTemplateValidator : AbstractValidator<UpsertDoctorScheduleTemplateCommand>
 {
@@ -101,29 +104,36 @@ public sealed class UpsertDoctorScheduleTemplateCommandHandler
     private readonly IRepository<StaffMember> _staffRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public UpsertDoctorScheduleTemplateCommandHandler(
         IRepository<DoctorScheduleTemplate> templateRepo,
         IRepository<DoctorBreakTime> breakRepo,
         IRepository<StaffMember> staffRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<FacilitySettings>? settingsRepo = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _templateRepo = templateRepo;
         _breakRepo = breakRepo;
         _staffRepo = staffRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _settingsRepo = settingsRepo;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<DoctorScheduleTemplateDto> Handle(UpsertDoctorScheduleTemplateCommand request, CancellationToken ct)
     {
+        StaffMember? clinician = null;
         var doctorName = request.DoctorName?.Trim();
         if (string.IsNullOrWhiteSpace(doctorName))
         {
-            var staff = await _staffRepo.Query()
+            clinician = await _staffRepo.Query()
                 .FirstOrDefaultAsync(s => s.ClinicId == _clinicContext.ClinicId && s.Id == request.DoctorId && !s.IsDeleted, ct);
-            doctorName = staff != null ? $"{staff.FirstName} {staff.LastName}".Trim() : "Attending Physician";
+            doctorName = clinician != null ? $"{clinician.FirstName} {clinician.LastName}".Trim() : "Attending Physician";
         }
 
         var template = await _templateRepo.Query()
@@ -200,6 +210,39 @@ public sealed class UpsertDoctorScheduleTemplateCommandHandler
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        if (!request.SkipPendingVerificationSync && _directorySyncService != null)
+        {
+            clinician ??= await _staffRepo.Query()
+                .FirstOrDefaultAsync(s => s.ClinicId == _clinicContext.ClinicId && s.Id == request.DoctorId && !s.IsDeleted, ct);
+
+            if (clinician is { IsActive: true, IsDirectoryOptIn: true }
+                && ClinicianDirectoryValidationHelper.IsClinicianRole(clinician.Role))
+            {
+                if (clinician.PublicVerificationStatus == PractitionerVerificationLevel.PendingVerification)
+                {
+                    await _directorySyncService.SyncPendingPractitionerVerificationAsync(
+                        clinician.Id,
+                        throwOnConflict: false,
+                        _clinicContext.StaffId?.ToString(),
+                        _clinicContext.StaffName,
+                        ct);
+                }
+                else if (_settingsRepo != null)
+                {
+                    var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct);
+                    if (settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+                    {
+                        await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                            settings,
+                            throwOnConflict: false,
+                            _clinicContext.StaffId?.ToString(),
+                            _clinicContext.StaffName,
+                            ct);
+                    }
+                }
+            }
+        }
 
         var activeBreaks = template.BreakTimes
             .Where(b => !b.IsDeleted)

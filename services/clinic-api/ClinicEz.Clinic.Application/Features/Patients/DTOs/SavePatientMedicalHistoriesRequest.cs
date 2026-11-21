@@ -18,4 +18,5 @@ public sealed record SavePatientMedicalHistoriesRequest(
 
 public sealed record PatientMedicalHistoryResultDto(
     List<PatientPastMedicalHistoryDto> Items,
-    string? PersonalMedicalHistoryNotes);
+    string? PersonalMedicalHistoryNotes,
+    DateTime? UpdatedAt = null);

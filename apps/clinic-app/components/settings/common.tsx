@@ -3,6 +3,7 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
+import { PENDING_VERIFICATION_HELPER_NOTE } from '../../utils/directoryVerification';
 
 export const formatPeso = (amount: number | undefined | null) =>
   `₱${(amount ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
@@ -12,22 +13,38 @@ export function Chip({
   active,
   onPress,
   disabled = false,
+  size = 'md',
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
   disabled?: boolean;
+  size?: 'sm' | 'md';
 }) {
+  const isSmall = size === 'sm';
   return (
     <Pressable
       onPress={disabled ? undefined : onPress}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ selected: active, disabled }}
-      style={[styles.chip, active && styles.chipActive, disabled && styles.chipDisabled]}
+      style={[
+        styles.chip,
+        isSmall && styles.chipSm,
+        active && styles.chipActive,
+        disabled && styles.chipDisabled,
+      ]}
     >
       <ThemedText
-        variant={active ? 'smallBold' : 'small'}
+        variant={
+          isSmall
+            ? active
+              ? 'captionBold'
+              : 'caption'
+            : active
+            ? 'smallBold'
+            : 'small'
+        }
         color={active ? theme.colors.primary : theme.colors.textSecondary}
         numberOfLines={1}
       >
@@ -80,6 +97,17 @@ export function FieldGroup({ label, children }: { label: string; children: React
   );
 }
 
+export function PendingVerificationNote({ testID }: { testID?: string }) {
+  return (
+    <View style={styles.pendingNoteRow} testID={testID}>
+      <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+      <ThemedText variant="caption" color={theme.colors.warningText} style={styles.pendingNoteText}>
+        {PENDING_VERIFICATION_HELPER_NOTE}
+      </ThemedText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
@@ -92,6 +120,10 @@ const styles = StyleSheet.create({
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderDark,
     flexShrink: 0,
+  },
+  chipSm: {
+    paddingHorizontal: theme.spacing.sm + 2,
+    paddingVertical: theme.spacing.xs,
   },
   chipActive: {
     backgroundColor: theme.colors.primaryLight,
@@ -119,5 +151,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.emergencySubtle,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.emergencyBorder,
+  },
+  pendingNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexShrink: 1,
+  },
+  pendingNoteText: {
+    flexShrink: 1,
   },
 });

@@ -218,6 +218,11 @@ public sealed class LabResultReportConfiguration : IEntityTypeConfiguration<LabR
         builder.Property(r => r.FileStorageKey).HasMaxLength(500);
         builder.Property(r => r.FileName).HasMaxLength(260);
         builder.Property(r => r.FileContentType).HasMaxLength(100);
+        builder.Property(r => r.EncryptionAlgorithm).HasMaxLength(50);
+        builder.Property(r => r.EncryptionIvBase64).HasMaxLength(100);
+        builder.Property(r => r.EncryptionTagBase64).HasMaxLength(100);
+        builder.Property(r => r.EncryptedHash).HasMaxLength(200);
+        builder.Property(r => r.WrappedKeyJson).HasColumnType("text");
 
         builder.HasOne(r => r.Patient)
             .WithMany()

@@ -22,14 +22,32 @@ public sealed record PatientGovernmentIdDto(
     Guid Id, Guid ClientId,
     string IdType, string IdNumber,
     DateOnly? IssuedAt, DateOnly? ExpiresAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    string? PhilhealthCategory = null,
+    string? SponsorPin = null,
+    string? SponsorLastName = null,
+    string? SponsorFirstName = null,
+    string? SponsorMiddleName = null,
+    string? SponsorSuffix = null,
+    DateOnly? SponsorDob = null,
+    string? SponsorRelationship = null);
 
 public sealed record PatientAddressDto(
     Guid Id, Guid ClientId,
     string Type,
     string? HouseStreet, string? Barangay, string? CityMunicipality,
     string? Province, string? Region, string? ZipCode, string? Country,
-    bool IsPrimary, DateTime? UpdatedAt);
+    bool IsPrimary, DateTime? UpdatedAt,
+    string? StreetAddress = null,
+    string? RegionPsgc = null,
+    string? ProvincePsgc = null,
+    string? CityMunicipalityPsgc = null,
+    string? BarangayPsgc = null,
+    string? RegionName = null,
+    string? ProvinceName = null,
+    string? CityMunicipalityName = null,
+    string? BarangayName = null,
+    bool IsSameAsPermanent = false);
 
 public sealed record EmergencyContactDto(
     Guid Id, Guid ClientId,
@@ -195,3 +213,25 @@ public sealed record PatientFullRecordDto(
     PatientDentalVisionDto? DentalVision,
     PatientMentalHealthProfileDto? MentalHealthProfile,
     PatientNcdQuestionnaireDto? NcdQuestionnaire = null);
+
+// ── Caller-scoped Intake Autofill (Me) ───────────────────────────────────
+
+public sealed record PatientMeDto(
+    Guid Id,
+    string ClinicEzId,
+    string FirstName,
+    string? MiddleName,
+    string LastName,
+    string? Suffix,
+    string? Sex,
+    DateOnly? DateOfBirth,
+    string? CivilStatus,
+    string? ContactNumber,
+    string? Mobile,
+    string? Email,
+    string? Address,
+    IReadOnlyList<PatientAddressDto> Addresses,
+    string? PhilHealthPin,
+    IReadOnlyList<PatientGovernmentIdDto> GovernmentIds,
+    IReadOnlyList<PatientAllergyDto> Allergies
+);

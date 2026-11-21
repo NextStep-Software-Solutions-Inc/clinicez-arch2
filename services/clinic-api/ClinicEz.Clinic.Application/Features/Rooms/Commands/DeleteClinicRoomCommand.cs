@@ -14,13 +14,13 @@ public sealed record DeleteClinicRoomCommand(Guid Id) : IRequest<bool>;
 
 public sealed class DeleteClinicRoomCommandHandler : IRequestHandler<DeleteClinicRoomCommand, bool>
 {
-    private readonly IRepository<ClinicRoom> _roomRepository;
+    private readonly IRepository<Room> _roomRepository;
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public DeleteClinicRoomCommandHandler(
-        IRepository<ClinicRoom> roomRepository,
+        IRepository<Room> roomRepository,
         IRepository<StaffMember> staffRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)

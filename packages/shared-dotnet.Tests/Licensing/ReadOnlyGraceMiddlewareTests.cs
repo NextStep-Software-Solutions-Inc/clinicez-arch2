@@ -4,7 +4,6 @@ using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Licensing;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Options;
 
 namespace ClinicEz.Shared.Tests.Licensing;
 
@@ -44,7 +43,7 @@ public class ReadOnlyGraceMiddlewareTests
         var options = new ReadOnlyGraceOptions();
         options.ExemptPathPrefixes.AddRange(exempt);
         var reached = false;
-        var middleware = new ReadOnlyGraceMiddleware(_ => { reached = true; return Task.CompletedTask; }, Options.Create(options));
+        var middleware = new ReadOnlyGraceMiddleware(_ => { reached = true; return Task.CompletedTask; }, global::Microsoft.Extensions.Options.Options.Create(options));
         var context = new DefaultHttpContext();
         context.Request.Method = method;
         context.Request.Path = path;

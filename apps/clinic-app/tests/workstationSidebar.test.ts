@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 (globalThis as any).__DEV__ = true;
 
 const createMockComponent = (name: string) => {
-  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, value, onPress, title, source, resizeMode }: any) =>
+  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, value, onPress, title, source, resizeMode, style }: any) =>
     React.createElement(
       'div',
       {
@@ -17,6 +17,7 @@ const createMockComponent = (name: string) => {
         ...(value !== undefined ? { 'data-value': value } : {}),
         ...(title ? { 'data-title': title } : {}),
         ...(source?.uri ? { 'data-src': source.uri } : {}),
+        ...(style ? { 'data-style': JSON.stringify(style) } : {}),
         onClick: onPress,
       },
       title ?? placeholder ?? children
@@ -284,6 +285,20 @@ describe('WorkstationSidebar Component', () => {
     }
   });
 
+  test('does not include "Scan patient QR" in workstation navigation items (accessible directly on Patients screen)', () => {
+    const hasScanQr = WORKSTATION_NAV_ITEMS.some((item) => item.key === 'ShareImport' || item.label === 'Scan patient QR');
+    expect(hasScanQr).toBe(false);
+
+    const html = renderToStaticMarkup(
+      React.createElement(WorkstationSidebar, {
+        currentRoute: 'Patients',
+        onNavigate: () => {},
+        mode: 'open',
+      })
+    );
+    expect(html).not.toContain('Scan patient QR');
+  });
+
   test('renders compact icon-rail mode (72px) without label texts', () => {
     const html = renderToStaticMarkup(
       React.createElement(WorkstationSidebar, {
@@ -298,6 +313,20 @@ describe('WorkstationSidebar Component', () => {
     expect(html).toContain('data-title="Patients"');
     expect(html).toContain('aria-label="Patients"');
     expect(html).not.toContain('Clinic workstation');
+  });
+
+  test('has elevated zIndex and visible overflow in icon mode for floating tooltips', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(WorkstationSidebar, {
+        currentRoute: 'Patients',
+        onNavigate: () => {},
+        mode: 'icon',
+        width: 72,
+      })
+    );
+
+    expect(html).toContain('&quot;zIndex&quot;:100');
+    expect(html).toContain('&quot;overflow&quot;:&quot;visible&quot;');
   });
 
   test('renders active user menu in footer', () => {

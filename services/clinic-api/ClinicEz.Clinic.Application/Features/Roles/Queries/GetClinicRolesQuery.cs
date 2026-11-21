@@ -16,12 +16,12 @@ public sealed record GetClinicRolesQuery : IRequest<IReadOnlyList<ClinicRoleDto>
 
 public sealed class GetClinicRolesQueryHandler : IRequestHandler<GetClinicRolesQuery, IReadOnlyList<ClinicRoleDto>>
 {
-    private readonly IRepository<ClinicRole> _roleRepository;
+    private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IClinicContext _clinicContext;
 
     public GetClinicRolesQueryHandler(
-        IRepository<ClinicRole> roleRepository,
+        IRepository<Role> roleRepository,
         IRepository<StaffMember> staffRepository,
         IClinicContext clinicContext)
     {

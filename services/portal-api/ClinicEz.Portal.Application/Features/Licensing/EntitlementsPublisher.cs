@@ -1,7 +1,9 @@
+using ClinicEz.Portal.Application.Features.Entitlements;
 using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -30,6 +32,47 @@ public sealed class EntitlementsPublisher(
         var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken);
         if (tenant is null) return;
 
+        var snapshot = await entitlements.ResolveAsync(tenantId, cancellationToken);
+        var now = DateTime.UtcNow;
+
+        var billing = await context.WorkspaceTeleconsultBillings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.TenantId == tenantId, cancellationToken);
+
+        var isActive = snapshot.Has(EntitlementKeys.FeatureTeleconsultation) && snapshot.IsActive;
+        var billingMode = billing?.BillingMode ?? WorkspaceTeleconsultBilling.ModePostpaid;
+        var ratePerMinute = billing?.RatePerMinutePhp ?? WorkspaceTeleconsultBilling.DefaultRatePerMinutePhp;
+        var allowOverdraft = billing?.AllowOverageBeyondAllocation ?? true;
+
+        int callMinutesMonthly = 0;
+        if (isActive)
+        {
+            if (string.Equals(billingMode, WorkspaceTeleconsultBilling.ModePrepaid, StringComparison.OrdinalIgnoreCase) && ratePerMinute > 0)
+            {
+                callMinutesMonthly = (int)Math.Floor(billing!.PrepaidBalancePhp / ratePerMinute);
+            }
+            else if (billing?.AllocatedBudgetPhp > 0 && ratePerMinute > 0)
+            {
+                callMinutesMonthly = (int)Math.Floor(billing.AllocatedBudgetPhp / ratePerMinute);
+            }
+        }
+
+        // Stage Media Broker entitlement update
+        publisher.Enqueue(
+            InteropTypes.MediaEntitlementUpdated,
+            Party.Portal,
+            Party.Media,
+            tenant.Id,
+            new MediaEntitlementUpdatedPayload(
+                tenant.Id.ToString(),
+                callMinutesMonthly,
+                isActive,
+                snapshot.Version,
+                now,
+                allowOverdraft,
+                billingMode,
+                ratePerMinute));
+
         var facilities = (await context.Facilities
                 .Where(f => f.TenantId == tenantId)
                 .ToListAsync(cancellationToken))
@@ -37,7 +80,6 @@ public sealed class EntitlementsPublisher(
             .ToList();
         if (facilities.Count == 0) return;
 
-        var snapshot = await entitlements.ResolveAsync(tenantId, cancellationToken);
         var shares = await allocations.ComputeSharesAsync(tenantId, snapshot, null, cancellationToken);
 
         foreach (var facility in facilities)
@@ -71,8 +113,8 @@ public sealed class EntitlementsPublisher(
                     ReadOnlyGraceUntilUtc = payload.ReadOnlyGraceUntil!.Value
                 };
 
-            // The facility's own service and the billing service of the same cell each hold the license.
-            foreach (var service in new[] { null, InteropServices.Billing })
+            // The facility's own service, billing, and comms services of the same cell each hold the license.
+            foreach (var service in new[] { null, InteropServices.Billing, InteropServices.Comms })
             {
                 publisher.Enqueue(
                     InteropTypes.EntitlementsChanged,

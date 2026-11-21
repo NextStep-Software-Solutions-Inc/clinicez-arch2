@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@source "../../../../packages/comms-sdk/src";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -25,6 +26,10 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -53,6 +58,9 @@
   --popover-foreground: oklch(0.145 0 0);
   --primary: #0D6963;
   --primary-foreground: oklch(0.985 0 0);
+  --ez-primary-shadow-subtle: color-mix(in srgb, var(--primary) 22%, transparent);
+  --ez-primary-shadow-sm: color-mix(in srgb, var(--primary) 34%, transparent);
+  --ez-primary-shadow-md: color-mix(in srgb, var(--primary) 46%, transparent);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
@@ -60,6 +68,10 @@
   --accent: #D9FAF1;
   --accent-foreground: #0D6963;
   --destructive: oklch(0.577 0.245 27.325);
+  --success: #16A34A;
+  --success-foreground: oklch(0.985 0 0);
+  --warning: #D97706;
+  --warning-foreground: oklch(0.985 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: #6B7280;
@@ -94,6 +106,10 @@
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: #4ADE80;
+  --success-foreground: oklch(0.145 0 0);
+  --warning: #FBBF24;
+  --warning-foreground: oklch(0.145 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
@@ -150,4 +166,26 @@
 .animate-serving-pulse {
   animation: servingPulse 1.2s ease-in-out 3;
 }
-
+
+
+/* ClinicEZ manages workspace subscriptions natively (/dashboard/billing); Clerk Billing API is unused */
+.cl-navbarButton__billing,
+.cl-menuItem__billing,
+.cl-profilePage__billing,
+.cl-profileSection__subscriptionsList,
+.cl-profileSection__paymentMethods,
+.cl-profileSection__accountCredits,
+button[data-localization-key="userProfile.navbar.billing"],
+button:has([data-localization-key="userProfile.navbar.billing"]),
+a[data-localization-key="userProfile.navbar.billing"],
+a:has([data-localization-key="userProfile.navbar.billing"]),
+[role="menuitem"][data-localization-key="userProfile.navbar.billing"],
+[role="menuitem"]:has([data-localization-key="userProfile.navbar.billing"]),
+button[data-localization-key="organizationProfile.navbar.billing"],
+button:has([data-localization-key="organizationProfile.navbar.billing"]),
+a[data-localization-key="organizationProfile.navbar.billing"],
+a:has([data-localization-key="organizationProfile.navbar.billing"]),
+[role="menuitem"][data-localization-key="organizationProfile.navbar.billing"],
+[role="menuitem"]:has([data-localization-key="organizationProfile.navbar.billing"]) {
+  display: none !important;
+}

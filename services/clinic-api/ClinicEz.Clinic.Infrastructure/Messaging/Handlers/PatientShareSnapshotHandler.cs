@@ -119,24 +119,70 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             MergeDemographics(patient, message.Demographics!);
         }
 
-        patient.SyncPatientId = message.PatientId;
-        if (!string.IsNullOrWhiteSpace(message.ClinicEzId))
-        {
-            patient.ClinicEzId = message.ClinicEzId.Trim();
-        }
+        patient.LinkCloudAccount(message.PatientId, message.ClinicEzId);
         patient.ShareGrantId = message.GrantId;
         patient.ShareGrantScopes = message.Scopes;
         patient.ShareGrantExpiresAt = message.ExpiresAtUtc;
         patient.UpdatedAt = now;
 
         var items = message.Items.Where(i => IsGranted(i, message.Scopes)).ToList();
-        MergeList(items, AllergyKind, patient.Allergies, v => patient.Allergies = v);
-        MergeList(items, ConditionKind, patient.ChronicConditions, v => patient.ChronicConditions = v);
+        
+        var existingAllergies = await _dbContext.PatientAllergies
+            .Where(a => a.ClinicId == clinic.ClinicId && a.PatientId == patient.Id)
+            .Select(a => a.Allergen.ToLower())
+            .ToListAsync(ct);
+
+        foreach (var item in items.Where(i => string.Equals(i.Kind, AllergyKind, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(i.Name)))
+        {
+            if (!existingAllergies.Contains(item.Name.Trim().ToLower()))
+            {
+                _dbContext.PatientAllergies.Add(new PatientAllergy
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = clinic.TenantId,
+                    ClinicId = clinic.ClinicId,
+                    PatientId = patient.Id,
+                    Category = AllergyCategory.Other,
+                    Allergen = item.Name.Trim(),
+                    Severity = AllergySeverity.Moderate,
+                    Status = AllergyStatus.Active,
+                    CreatedAt = now,
+                    CreatedBy = "System:PatientShareImport"
+                });
+                existingAllergies.Add(item.Name.Trim().ToLower());
+            }
+        }
+
+        var existingConditions = await _dbContext.PatientMedicalHistories
+            .Where(m => m.ClinicId == clinic.ClinicId && m.PatientId == patient.Id)
+            .Select(m => m.ConditionTitle.ToLower())
+            .ToListAsync(ct);
+
+        foreach (var item in items.Where(i => string.Equals(i.Kind, ConditionKind, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(i.Name)))
+        {
+            if (!existingConditions.Contains(item.Name.Trim().ToLower()))
+            {
+                _dbContext.PatientMedicalHistories.Add(new PatientMedicalHistory
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = clinic.TenantId,
+                    ClinicId = clinic.ClinicId,
+                    PatientId = patient.Id,
+                    Category = MedicalHistoryCategory.MedicalHistory,
+                    VerificationStatus = ConditionVerificationStatus.Confirmed,
+                    ConditionTitle = item.Name.Trim(),
+                    Status = ProblemStatus.Active,
+                    CreatedAt = now,
+                    CreatedBy = "System:PatientShareImport"
+                });
+                existingConditions.Add(item.Name.Trim().ToLower());
+            }
+        }
 
         var kept = items.Where(i => !IsMergedKind(i.Kind)).ToList();
 
         import.Status = ShareImportStatus.Imported;
-        import.ClinicPatientId = patient.Id;
+        import.PatientId = patient.Id;
         import.PatientName = DisplayName(patient);
         import.ClinicEzId = patient.ClinicEzId;
         import.GrantId = message.GrantId;
@@ -163,18 +209,20 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             import.Id, patient.Id, import.ItemsImported);
     }
 
-    private async Task<ClinicPatient?> FindPatientAsync(Guid clinicId, PatientShareSnapshotPayload message, CancellationToken ct)
+    private async Task<Patient?> FindPatientAsync(Guid clinicId, PatientShareSnapshotPayload message, CancellationToken ct)
     {
         var patients = _dbContext.Patients.IgnoreQueryFilters().Where(p => !p.IsDeleted && p.ClinicId == clinicId);
 
         if (!string.IsNullOrWhiteSpace(message.ClinicEzId))
         {
             var clinicEzId = message.ClinicEzId.Trim();
-            var byClinicEzId = await patients.FirstOrDefaultAsync(p => p.ClinicEzId == clinicEzId, ct);
+            var clinicEzIdUpper = clinicEzId.ToUpperInvariant();
+            var byClinicEzId = await patients.FirstOrDefaultAsync(
+                p => p.ClinicEzId != null && (p.ClinicEzId == clinicEzId || p.ClinicEzId.ToUpper() == clinicEzIdUpper), ct);
             if (byClinicEzId != null) return byClinicEzId;
         }
 
-        return await patients.FirstOrDefaultAsync(p => p.SyncPatientId == message.PatientId, ct);
+        return await patients.FirstOrDefaultAsync(p => p.CloudPatientId == message.PatientId, ct);
     }
 
     private static bool IsPatientPlane(Party from, PatientShareSnapshotPayload message)
@@ -218,38 +266,84 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
         assign(string.Join(", ", merged));
     }
 
-    private static ClinicPatient NewPatient(string tenantId, Guid clinicId, ShareDemographicsDto demographics, Guid patientPlaneId, DateTime now)
+    private static Patient NewPatient(string tenantId, Guid clinicId, ShareDemographicsDto demographics, Guid patientPlaneId, DateTime now)
     {
-        var (first, last) = SplitName(demographics.FullName);
-        return new ClinicPatient
+        var (first, middle, last, suffix) = ResolveNames(demographics);
+
+        var customFields = new Dictionary<string, object?>();
+        var address = Clean(demographics.Address);
+        if (!string.IsNullOrWhiteSpace(address))
+        {
+            customFields["primary_address_line"] = address;
+        }
+
+        return new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ClinicId = clinicId,
             PatientCode = $"PAT-EXT-{now:yyyyMMdd}-{patientPlaneId.ToString("N")[..6].ToUpperInvariant()}",
             FirstName = first,
+            MiddleName = middle,
             LastName = last,
+            Suffix = suffix,
             DateOfBirth = ParseDate(demographics.DateOfBirth) ?? new DateOnly(2000, 1, 1),
-            Gender = NormalizeGender(demographics.Sex),
+            Sex = ParseSex(demographics.Sex),
             ContactNumber = !string.IsNullOrWhiteSpace(demographics.MobileNumber) ? demographics.MobileNumber.Trim() : "N/A",
             Email = Clean(demographics.Email),
-            AddressLine = Clean(demographics.Address),
             PhilHealthNumber = Clean(demographics.PhilHealthPin),
-            CustomFields = new Dictionary<string, object?>(),
+            CustomFields = customFields,
             CreatedAt = now,
             CreatedBy = "System:PatientShareImport"
         };
     }
 
-    private static void MergeDemographics(ClinicPatient patient, ShareDemographicsDto demographics)
+    private static void MergeDemographics(Patient patient, ShareDemographicsDto demographics)
     {
+        var hasDiscreteFirst = !string.IsNullOrWhiteSpace(demographics.FirstName);
+        var hasDiscreteLast = !string.IsNullOrWhiteSpace(demographics.LastName);
+        var hasDiscreteMiddle = !string.IsNullOrWhiteSpace(demographics.MiddleName);
+        var hasDiscreteSuffix = !string.IsNullOrWhiteSpace(demographics.Suffix);
+
+        if (hasDiscreteFirst || hasDiscreteLast || hasDiscreteMiddle || hasDiscreteSuffix)
+        {
+            if (hasDiscreteFirst) patient.FirstName = demographics.FirstName!.Trim();
+            if (hasDiscreteLast) patient.LastName = demographics.LastName!.Trim();
+            if (hasDiscreteMiddle) patient.MiddleName = demographics.MiddleName!.Trim();
+            if (hasDiscreteSuffix) patient.Suffix = demographics.Suffix!.Trim();
+        }
+        else if (!string.IsNullOrWhiteSpace(demographics.FullName))
+        {
+            var (first, middle, last, suffix) = SplitFullNameLossless(demographics.FullName);
+            if (!string.IsNullOrWhiteSpace(first)) patient.FirstName = first;
+            if (!string.IsNullOrWhiteSpace(last)) patient.LastName = last;
+            if (!string.IsNullOrWhiteSpace(middle)) patient.MiddleName = middle;
+            if (!string.IsNullOrWhiteSpace(suffix)) patient.Suffix = suffix;
+        }
+
+        var parsedDob = ParseDate(demographics.DateOfBirth);
+        if (parsedDob.HasValue) patient.DateOfBirth = parsedDob.Value;
+
+        if (!string.IsNullOrWhiteSpace(demographics.Sex))
+            patient.Sex = ParseSex(demographics.Sex);
+
         if (!string.IsNullOrWhiteSpace(demographics.MobileNumber)) patient.ContactNumber = demographics.MobileNumber.Trim();
         if (!string.IsNullOrWhiteSpace(demographics.Email)) patient.Email = demographics.Email.Trim();
-        if (string.IsNullOrWhiteSpace(patient.AddressLine)) patient.AddressLine = Clean(demographics.Address);
+
+        patient.CustomFields ??= new Dictionary<string, object?>();
+        var cleanAddress = Clean(demographics.Address);
+        if (!string.IsNullOrWhiteSpace(cleanAddress) &&
+            (!patient.CustomFields.TryGetValue("primary_address_line", out var existing) ||
+             existing == null ||
+             string.IsNullOrWhiteSpace(existing.ToString())))
+        {
+            patient.CustomFields["primary_address_line"] = cleanAddress;
+        }
+
         if (string.IsNullOrWhiteSpace(patient.PhilHealthNumber)) patient.PhilHealthNumber = Clean(demographics.PhilHealthPin);
     }
 
-    private async Task<QueueItem> QueuePatientAsync(ClinicSettings clinic, ClinicPatient patient, ShareImport import, DateTime now, CancellationToken ct)
+    private async Task<QueueItem> QueuePatientAsync(FacilitySettings clinic, Patient patient, ShareImport import, DateTime now, CancellationToken ct)
     {
         var today = DateOnly.FromDateTime(now);
         var lastSequence = await _dbContext.QueueItems
@@ -280,27 +374,75 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
         return queueItem;
     }
 
-    private static string DisplayName(ClinicPatient patient) => $"{patient.FirstName} {patient.LastName}".Trim();
-
-    private static (string First, string Last) SplitName(string fullName)
+    private static string DisplayName(Patient patient)
     {
-        var parts = (fullName ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var parts = new[] { patient.FirstName, patient.MiddleName, patient.LastName, patient.Suffix }
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s!.Trim());
+        return string.Join(" ", parts);
+    }
+
+    private static readonly HashSet<string> KnownSuffixes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Jr", "Jr.", "Sr", "Sr.", "II", "III", "IV", "V", "VI", "VII", "VIII"
+    };
+
+    private static (string FirstName, string? MiddleName, string LastName, string? Suffix) ResolveNames(ShareDemographicsDto demographics)
+    {
+        var hasDiscreteFirst = !string.IsNullOrWhiteSpace(demographics.FirstName);
+        var hasDiscreteLast = !string.IsNullOrWhiteSpace(demographics.LastName);
+
+        if (hasDiscreteFirst || hasDiscreteLast)
+        {
+            var first = hasDiscreteFirst ? demographics.FirstName!.Trim() : "Patient";
+            var last = hasDiscreteLast ? demographics.LastName!.Trim() : "Unknown";
+            var middle = Clean(demographics.MiddleName);
+            var suffix = Clean(demographics.Suffix);
+            return (first, middle, last, suffix);
+        }
+
+        return SplitFullNameLossless(demographics.FullName);
+    }
+
+    private static (string FirstName, string? MiddleName, string LastName, string? Suffix) SplitFullNameLossless(string? fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName))
+            return ("Patient", null, "Unknown", null);
+
+        var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return parts.Length switch
         {
-            0 => ("Patient", "Unknown"),
-            1 => (parts[0], parts[0]),
-            _ => (parts[0], parts[^1])
+            0 => ("Patient", null, "Unknown", null),
+            1 => (parts[0], null, parts[0], null),
+            2 => KnownSuffixes.Contains(parts[1]) ? (parts[0], null, parts[0], parts[1]) : (parts[0], null, parts[1], null),
+            _ => ResolveMultiTokenFallback(parts)
         };
+    }
+
+    private static (string FirstName, string? MiddleName, string LastName, string? Suffix) ResolveMultiTokenFallback(string[] parts)
+    {
+        if (parts.Length >= 3 && KnownSuffixes.Contains(parts[^1]))
+        {
+            var suffix = parts[^1];
+            var last = parts[^2];
+            var first = string.Join(" ", parts[..^2]);
+            return (first, null, last, suffix);
+        }
+
+        var lastName = parts[^1];
+        var firstName = string.Join(" ", parts[..^1]);
+        return (firstName, null, lastName, null);
     }
 
     private static DateOnly? ParseDate(string? value) =>
         DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
 
-    private static string NormalizeGender(string? sex) => sex?.Trim().ToLowerInvariant() switch
+    private static BiologicalSex ParseSex(string? sex) => sex?.Trim().ToLowerInvariant() switch
     {
-        "male" or "m" => "Male",
-        "female" or "f" => "Female",
-        _ => "Other"
+        "male" or "m" => BiologicalSex.Male,
+        "female" or "f" => BiologicalSex.Female,
+        "intersex" or "i" => BiologicalSex.Intersex,
+        _ => BiologicalSex.Unknown
     };
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

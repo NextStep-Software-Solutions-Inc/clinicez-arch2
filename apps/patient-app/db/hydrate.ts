@@ -11,9 +11,10 @@
  */
 
 import { originalDb, flushDatabaseSnapshot, ensureDatabaseReady } from './index';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne, or } from 'drizzle-orm';
 import {
   patients,
+  patientHomeCache,
   patientGovernmentIds,
   patientAddresses,
   emergencyContacts,
@@ -70,15 +71,38 @@ export async function upsertPatientSummary(
 ): Promise<void> {
   await ensureDatabaseReady();
   const ts = now();
+
+  let effectiveClerkId = clerkUserId;
+  if (!effectiveClerkId) {
+    try {
+      const existing = await originalDb.query.patients.findFirst({
+        where: eq(patients.id, summary.id),
+      });
+      if (existing?.clerkUserId) {
+        effectiveClerkId = existing.clerkUserId;
+      }
+    } catch {
+      // Ignore query failure if table is empty or being initialized
+    }
+  }
+
+  if (effectiveClerkId) {
+    // Delete any stale/duplicate row for this clerk user that has a different id
+    await originalDb
+      .delete(patients)
+      .where(and(eq(patients.clerkUserId, effectiveClerkId), ne(patients.id, summary.id)));
+  }
+
   const row: typeof patients.$inferInsert = {
     id: summary.id,
-    ...(clerkUserId ? { clerkUserId } : {}),
+    ...(effectiveClerkId ? { clerkUserId: effectiveClerkId } : {}),
     firstName: summary.firstName,
     middleName: summary.middleName ?? null,
     lastName: summary.lastName,
     suffix: summary.suffix ?? null,
     sex: (summary.sex as any) ?? null,
     dob: summary.dateOfBirth ?? null,
+    placeOfBirth: summary.placeOfBirth ?? null,
     bloodType: (fromBackendBloodType(summary.bloodType) as any) ?? null,
     civilStatus: (summary.civilStatus as any) ?? null,
     nationality: summary.nationality ?? null,
@@ -101,6 +125,32 @@ export async function upsertPatientSummary(
     .insert(patients)
     .values(row)
     .onConflictDoUpdate({ target: patients.id, set: row });
+
+  if (summary.clinicEzId !== undefined || summary.welcomeVisitedStepsJson !== undefined) {
+    try {
+      await originalDb
+        .insert(patientHomeCache)
+        .values({
+          patientId: summary.id,
+          clinicEzId: summary.clinicEzId ?? null,
+          welcomeVisitedStepsJson: summary.welcomeVisitedStepsJson ?? '[]',
+          checkedInAppointmentsJson: '{}',
+          updatedAt: ts,
+        })
+        .onConflictDoUpdate({
+          target: patientHomeCache.patientId,
+          set: {
+            ...(summary.clinicEzId !== undefined ? { clinicEzId: summary.clinicEzId } : {}),
+            ...(summary.welcomeVisitedStepsJson !== undefined
+              ? { welcomeVisitedStepsJson: summary.welcomeVisitedStepsJson ?? '[]' }
+              : {}),
+            updatedAt: ts,
+          },
+        });
+    } catch {
+      // Optional cache table may not exist in older unit-test in-memory fixtures
+    }
+  }
   // Web: hydration bypasses the sync interceptor; make sure it is written to IndexedDB now.
   await flushDatabaseSnapshot();
 }
@@ -114,13 +164,15 @@ export async function upsertPatientSummary(
  * 3. Inserts or updates the canonical server row (with serverId=item.id).
  * 4. Removes any stale local rows for this patient that are not on the server and not pending in syncQueue.
  */
-async function reconcileListEntity<TItem extends { id: string; clientId?: string | null }>(
+export async function reconcileListEntity<TItem extends { id: string; clientId?: string | null }>(
   table: any,
   patientId: string,
   serverItems: TItem[] | undefined | null,
   pendingEntityIds: Set<string>,
-  mapRow: (item: TItem, index: number) => any,
+  mapRow: (item: TItem, index: number, existing?: any) => any,
+  dbOverride?: any,
 ): Promise<void> {
+  const targetDb = dbOverride || originalDb;
   const items = serverItems || [];
   const serverIds = new Set<string>();
 
@@ -133,23 +185,41 @@ async function reconcileListEntity<TItem extends { id: string; clientId?: string
       continue;
     }
 
+    // Query existing local row so we preserve local-only columns
+    let existingRow: any = null;
+    try {
+      const whereConds = [eq(table.id, item.id)];
+      if (item.clientId) whereConds.push(eq(table.id, item.clientId));
+      if (table.serverId) whereConds.push(eq(table.serverId, item.id));
+      const candidates = await targetDb
+        .select()
+        .from(table)
+        .where(whereConds.length > 1 ? or(...whereConds) : whereConds[0])
+        .limit(1);
+      if (candidates && candidates.length > 0) {
+        existingRow = candidates[0];
+      }
+    } catch {
+      // Ignore query errors
+    }
+
     // If there is an existing local row that had the client-generated ID, remove it so it's not orphaned
     if (item.clientId && item.clientId !== '00000000-0000-0000-0000-000000000000' && item.clientId !== item.id) {
-      await originalDb.delete(table).where(eq(table.id, item.clientId));
+      await targetDb.delete(table).where(eq(table.id, item.clientId));
     }
 
     const row = {
-      ...mapRow(item, i),
+      ...mapRow(item, i, existingRow),
       serverId: item.id,
     };
-    await originalDb
+    await targetDb
       .insert(table)
       .values(row)
       .onConflictDoUpdate({ target: table.id, set: row });
   }
 
   // Remove stale local rows that are no longer on the server and are not pending in the sync queue
-  const localRows = await originalDb
+  const localRows = await targetDb
     .select({ id: table.id, serverId: table.serverId })
     .from(table)
     .where(eq(table.patientId, patientId));
@@ -158,7 +228,7 @@ async function reconcileListEntity<TItem extends { id: string; clientId?: string
     const isServerKnown = serverIds.has(local.id) || (local.serverId && serverIds.has(local.serverId));
     const isPending = pendingEntityIds.has(local.id) || (local.serverId && pendingEntityIds.has(local.serverId));
     if (!isServerKnown && !isPending) {
-      await originalDb.delete(table).where(eq(table.id, local.id));
+      await targetDb.delete(table).where(eq(table.id, local.id));
     }
   }
 }
@@ -174,7 +244,12 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   const patientId = record.demographics.id;
 
   const pendingQueue = await originalDb
-    .select({ entityId: syncQueue.entityId, payloadJson: syncQueue.payloadJson })
+    .select({
+      entityId: syncQueue.entityId,
+      entityType: syncQueue.entityType,
+      status: syncQueue.status,
+      payloadJson: syncQueue.payloadJson,
+    })
     .from(syncQueue);
   const pendingEntityIds = new Set<string>();
   for (const q of pendingQueue) {
@@ -184,11 +259,19 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
         const payload = JSON.parse(q.payloadJson);
         if (payload.id) pendingEntityIds.add(payload.id);
         if (payload.clientId) pendingEntityIds.add(payload.clientId);
+        if (payload.patientId) pendingEntityIds.add(payload.patientId);
       } catch {
         // ignore parse error
       }
     }
   }
+  const hasPendingGovIds = pendingQueue.some(
+    (q) =>
+      q.entityType === 'patient_government_ids' &&
+      q.status !== 'synced' &&
+      q.status !== 'rejected' &&
+      q.status !== 'dead',
+  );
 
   // 1. demographics
   if (!pendingEntityIds.has(patientId)) {
@@ -196,69 +279,101 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   }
 
   // 2. government IDs: map the list of typed ID items into the singleton row
-  if (!pendingEntityIds.has(patientId)) {
+  if (!pendingEntityIds.has(patientId) && !hasPendingGovIds) {
     const govIds = record.governmentIds || [];
-    const findItem = (type: string) => {
-      const matching = govIds.filter((g) => g.idType?.toLowerCase() === type.toLowerCase());
-      return matching.length > 0 ? matching[matching.length - 1] : undefined;
-    };
+    const existingRows = await originalDb
+      .select()
+      .from(patientGovernmentIds)
+      .where(eq(patientGovernmentIds.patientId, patientId))
+      .limit(1);
+    const existingGov = existingRows[0];
 
-    const philhealth = findItem('philhealth');
-    const sss = findItem('sss');
-    const gsis = findItem('gsis');
-    const pagibig = findItem('pagibig');
-    const tin = findItem('tin');
-    const senior = findItem('seniorcitizen');
-    const pwd = findItem('pwd');
-    const hmo = findItem('hmo');
+    if (govIds.length > 0 || existingGov) {
+      const findItem = (type: string) => {
+        const matching = govIds.filter((g) => g.idType?.toLowerCase() === type.toLowerCase());
+        return matching.length > 0 ? matching[matching.length - 1] : undefined;
+      };
 
-    const idMap: Record<string, { id: string; clientId: string }> = {};
-    for (const g of govIds) {
-      if (g.idType) {
-        idMap[g.idType] = { id: g.id, clientId: g.clientId };
-        idMap[g.idType.toLowerCase()] = { id: g.id, clientId: g.clientId };
+      const pickNonEmpty = <T extends string>(
+        serverVal: T | null | undefined,
+        localVal: T | null | undefined,
+      ): T | null => {
+        if (typeof serverVal === 'string' && serverVal.trim().length > 0) return serverVal.trim() as T;
+        if (typeof localVal === 'string' && localVal.trim().length > 0) return localVal;
+        return null;
+      };
+
+      const philhealth = findItem('philhealth');
+      const sss = findItem('sss');
+      const gsis = findItem('gsis');
+      const pagibig = findItem('pagibig');
+      const tin = findItem('tin');
+      const senior = findItem('seniorcitizen');
+      const pwd = findItem('pwd');
+      const hmo = findItem('hmo');
+
+      const idMap: Record<string, { id: string; clientId: string }> = {};
+      if (existingGov?.serverId && existingGov.serverId.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(existingGov.serverId);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            Object.assign(idMap, parsed);
+          }
+        } catch {
+          // Ignore legacy non-JSON serverId markers
+        }
       }
+      for (const g of govIds) {
+        if (g.idType) {
+          idMap[g.idType] = { id: g.id, clientId: g.clientId };
+          idMap[g.idType.toLowerCase()] = { id: g.id, clientId: g.clientId };
+        }
+      }
+
+      const pwdIdNumber = pickNonEmpty(pwd?.idNumber, existingGov?.pwdIdNumber);
+
+      const govRow: typeof patientGovernmentIds.$inferInsert = {
+        id: existingGov?.id || patientId,
+        patientId,
+        philhealthId: pickNonEmpty(philhealth?.idNumber, existingGov?.philhealthId),
+        philhealthCategory: pickNonEmpty(
+          philhealth?.philhealthCategory as 'MM' | 'DD' | null | undefined,
+          existingGov?.philhealthCategory,
+        ),
+        sponsorPin: pickNonEmpty(philhealth?.sponsorPin, existingGov?.sponsorPin),
+        sponsorLastName: pickNonEmpty(philhealth?.sponsorLastName, existingGov?.sponsorLastName),
+        sponsorFirstName: pickNonEmpty(philhealth?.sponsorFirstName, existingGov?.sponsorFirstName),
+        sponsorMiddleName: pickNonEmpty(philhealth?.sponsorMiddleName, existingGov?.sponsorMiddleName),
+        sponsorSuffix: pickNonEmpty(philhealth?.sponsorSuffix, existingGov?.sponsorSuffix),
+        sponsorDob: pickNonEmpty(philhealth?.sponsorDob, existingGov?.sponsorDob),
+        sponsorRelationship: pickNonEmpty(
+          philhealth?.sponsorRelationship as 'S' | 'C' | 'P' | 'D' | null | undefined,
+          existingGov?.sponsorRelationship,
+        ),
+        sssNumber: pickNonEmpty(sss?.idNumber, existingGov?.sssNumber),
+        gsisNumber: pickNonEmpty(gsis?.idNumber, existingGov?.gsisNumber),
+        pagibigId: pickNonEmpty(pagibig?.idNumber, existingGov?.pagibigId),
+        tin: pickNonEmpty(tin?.idNumber, existingGov?.tin),
+        seniorCitizenId: pickNonEmpty(senior?.idNumber, existingGov?.seniorCitizenId),
+        isPwd: Boolean(pwdIdNumber) || (existingGov?.isPwd ?? false),
+        pwdIdNumber,
+        disabilityType: existingGov?.disabilityType ?? null,
+        hmoProvider: existingGov?.hmoProvider ?? null,
+        hmoPolicyNumber: pickNonEmpty(hmo?.idNumber, existingGov?.hmoPolicyNumber),
+        hmoPlanType: existingGov?.hmoPlanType ?? null,
+        hmoCoverageStart: existingGov?.hmoCoverageStart ?? null,
+        hmoCoverageEnd: existingGov?.hmoCoverageEnd ?? null,
+        createdAt: existingGov?.createdAt ?? ts,
+        updatedAt: ts,
+        syncedAt: ts,
+        serverId: JSON.stringify(idMap),
+      };
+
+      await originalDb
+        .insert(patientGovernmentIds)
+        .values(govRow)
+        .onConflictDoUpdate({ target: patientGovernmentIds.patientId, set: govRow });
     }
-
-    const existingGov = await originalDb.query.patientGovernmentIds.findFirst({
-      where: (t: any, { eq }: any) => eq(t.patientId, patientId),
-    });
-
-    const govRow: typeof patientGovernmentIds.$inferInsert = {
-      id: existingGov?.id || patientId,
-      patientId,
-      philhealthId: philhealth?.idNumber ?? existingGov?.philhealthId ?? null,
-      philhealthCategory: (philhealth as any)?.philhealthCategory ?? existingGov?.philhealthCategory ?? null,
-      sponsorPin: (philhealth as any)?.sponsorPin ?? existingGov?.sponsorPin ?? null,
-      sponsorLastName: (philhealth as any)?.sponsorLastName ?? existingGov?.sponsorLastName ?? null,
-      sponsorFirstName: (philhealth as any)?.sponsorFirstName ?? existingGov?.sponsorFirstName ?? null,
-      sponsorMiddleName: (philhealth as any)?.sponsorMiddleName ?? existingGov?.sponsorMiddleName ?? null,
-      sponsorSuffix: (philhealth as any)?.sponsorSuffix ?? existingGov?.sponsorSuffix ?? null,
-      sponsorDob: (philhealth as any)?.sponsorDob ?? existingGov?.sponsorDob ?? null,
-      sponsorRelationship: (philhealth as any)?.sponsorRelationship ?? existingGov?.sponsorRelationship ?? null,
-      sssNumber: sss?.idNumber ?? existingGov?.sssNumber ?? null,
-      gsisNumber: gsis?.idNumber ?? existingGov?.gsisNumber ?? null,
-      pagibigId: pagibig?.idNumber ?? existingGov?.pagibigId ?? null,
-      tin: tin?.idNumber ?? existingGov?.tin ?? null,
-      seniorCitizenId: senior?.idNumber ?? existingGov?.seniorCitizenId ?? null,
-      isPwd: Boolean(pwd?.idNumber) || (existingGov?.isPwd ?? false),
-      pwdIdNumber: pwd?.idNumber ?? existingGov?.pwdIdNumber ?? null,
-      disabilityType: existingGov?.disabilityType ?? null,
-      hmoProvider: existingGov?.hmoProvider ?? null,
-      hmoPolicyNumber: hmo?.idNumber ?? existingGov?.hmoPolicyNumber ?? null,
-      hmoPlanType: existingGov?.hmoPlanType ?? null,
-      hmoCoverageStart: existingGov?.hmoCoverageStart ?? null,
-      hmoCoverageEnd: existingGov?.hmoCoverageEnd ?? null,
-      createdAt: existingGov?.createdAt ?? ts,
-      updatedAt: ts,
-      syncedAt: ts,
-      serverId: JSON.stringify(idMap),
-    };
-
-    await originalDb
-      .insert(patientGovernmentIds)
-      .values(govRow)
-      .onConflictDoUpdate({ target: patientGovernmentIds.patientId, set: govRow });
   }
 
   // 3. addresses
@@ -278,6 +393,15 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       region: addr.region ?? null,
       zipCode: addr.zipCode ?? addr.postalCode ?? null,
       country: addr.country ?? 'Philippines',
+      regionPsgc: addr.regionPsgc ?? null,
+      provincePsgc: addr.provincePsgc ?? null,
+      cityMunicipalityPsgc: addr.cityMunicipalityPsgc ?? null,
+      barangayPsgc: addr.barangayPsgc ?? null,
+      regionName: addr.regionName ?? addr.region ?? null,
+      provinceName: addr.provinceName ?? addr.province ?? null,
+      cityMunicipalityName: addr.cityMunicipalityName ?? addr.cityMunicipality ?? addr.city ?? null,
+      barangayName: addr.barangayName ?? addr.barangay ?? null,
+      isSameAsPermanent: Boolean(addr.isSameAsPermanent),
       createdAt: ts,
       updatedAt: toDate(addr.updatedAt) ?? ts,
       syncedAt: ts,
@@ -291,17 +415,17 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     patientId,
     record.emergencyContacts,
     pendingEntityIds,
-    (ec, i) => ({
+    (ec, i, existing) => ({
       id: ec.id,
       patientId,
       sortOrder: ec.isPrimary ? 1 : i + 2,
       name: ec.fullName,
-      relationship: ec.relationship ?? null,
-      phone: ec.mobile ?? '',
-      altPhone: ec.altPhone ?? null,
-      email: null as string | null,
-      address: null as string | null,
-      createdAt: ts,
+      relationship: ec.relationship ?? existing?.relationship ?? null,
+      phone: ec.mobile ?? existing?.phone ?? '',
+      altPhone: ec.altPhone ?? existing?.altPhone ?? null,
+      email: existing?.email ?? null,
+      address: existing?.address ?? null,
+      createdAt: existing?.createdAt ?? ts,
       updatedAt: toDate(ec.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
@@ -312,23 +436,26 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   const providerTypeMap: Record<string, string> = {
     PrimaryCare: 'primary_care',
     Specialist: 'specialist_1',
+    primary_care: 'primary_care',
+    specialist_1: 'specialist_1',
+    specialist_2: 'specialist_2',
   };
   await reconcileListEntity(
     patientHealthcareProviders,
     patientId,
     record.healthcareProviders,
     pendingEntityIds,
-    (hp, i) => {
+    (hp, i, existing) => {
       const typeKey = i === 0 ? 'primary_care' : i === 1 ? 'specialist_1' : 'specialist_2';
       return {
         id: hp.id,
         patientId,
         providerType: (providerTypeMap[hp.providerType] ?? typeKey) as 'primary_care' | 'specialist_1' | 'specialist_2',
-        name: hp.name ?? null,
-        specialty: hp.specialty ?? null,
-        clinicHospital: hp.clinicHospital ?? null,
-        phone: hp.phone ?? null,
-        createdAt: ts,
+        name: hp.name ?? existing?.name ?? null,
+        specialty: hp.specialty ?? existing?.specialty ?? null,
+        clinicHospital: hp.clinicHospital ?? existing?.clinicHospital ?? null,
+        phone: hp.phone ?? existing?.phone ?? null,
+        createdAt: existing?.createdAt ?? ts,
         updatedAt: toDate(hp.updatedAt) ?? ts,
         syncedAt: ts,
         deletedAt: null,
@@ -342,15 +469,15 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     patientId,
     record.allergies,
     pendingEntityIds,
-    (al) => ({
+    (al, _i, existing) => ({
       id: al.id,
       patientId,
-      allergen: al.allergenName,
-      reactionType: al.reaction ?? null,
-      severity: (al.severity as any) ?? null,
-      management: al.notes ?? null,
-      isActive: true,
-      createdAt: ts,
+      allergen: al.allergenName ?? (al as any).allergen ?? existing?.allergen,
+      reactionType: al.reaction ?? (al as any).reactionType ?? existing?.reactionType ?? null,
+      severity: (al.severity as any) ?? existing?.severity ?? null,
+      management: al.notes ?? (al as any).management ?? existing?.management ?? null,
+      isActive: existing?.isActive ?? true,
+      createdAt: existing?.createdAt ?? ts,
       updatedAt: toDate(al.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
@@ -363,18 +490,18 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     patientId,
     record.medications,
     pendingEntityIds,
-    (med) => ({
+    (med, _i, existing) => ({
       id: med.id,
       patientId,
-      drugName: med.medicationName,
-      dosage: med.dosage ?? null,
-      dosageForm: null as string | null,
-      frequency: med.frequency ?? null,
-      prescribingPhysician: med.prescribedBy ?? null,
-      startDate: med.startDate ?? null,
-      indication: med.purpose ?? null,
-      isActive: med.isCurrentlyTaking,
-      createdAt: ts,
+      drugName: med.medicationName ?? (med as any).drugName ?? existing?.drugName,
+      dosage: med.dosage ?? existing?.dosage ?? null,
+      dosageForm: existing?.dosageForm ?? (med as any).route ?? null,
+      frequency: med.frequency ?? existing?.frequency ?? null,
+      prescribingPhysician: med.prescribedBy ?? existing?.prescribingPhysician ?? null,
+      startDate: med.startDate ?? existing?.startDate ?? null,
+      indication: med.purpose ?? existing?.indication ?? null,
+      isActive: med.isCurrentlyTaking ?? existing?.isActive ?? true,
+      createdAt: existing?.createdAt ?? ts,
       updatedAt: toDate(med.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
@@ -486,6 +613,18 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   //     Local schema differs significantly — map best-effort
   if (record.socialHistory && !pendingEntityIds.has(patientId)) {
     const sh = record.socialHistory;
+    let existingSh: any = null;
+    try {
+      const rows = await originalDb
+        .select()
+        .from(patientSocialHistory)
+        .where(eq(patientSocialHistory.patientId, patientId))
+        .limit(1);
+      existingSh = rows[0] || null;
+    } catch {
+      // Ignore query error
+    }
+
     let mappedSmokingStatus: 'Never' | 'Former' | 'Current' | null = null;
     if (sh.smokingStatus) {
       const s = sh.smokingStatus.toLowerCase();
@@ -497,31 +636,31 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     const row = {
       id: sh.id,
       patientId,
-      tobaccoStatus: mappedSmokingStatus,
-      cigsPerDay: sh.cigsPerDay ?? null,
-      packYears: sh.packYears ?? null,
-      quitDate: sh.quitDate ?? null,
-      otherTobaccoProducts: sh.otherTobaccoProducts ?? null,
-      alcoholUseLevel: sh.alcoholUse ?? null,
-      alcoholType: sh.alcoholType ?? null,
-      alcoholFrequencyDaysPerWeek: sh.alcoholFrequencyDaysPerWeek ?? null,
-      alcoholQuantityPerOccasion: sh.alcoholQuantityPerOccasion ?? null,
-      substanceUse: sh.usesSubstances,
-      substanceName: sh.substanceName ?? null,
-      substanceRoute: sh.substanceRoute ?? null,
-      substanceFrequency: sh.substanceFrequency ?? null,
-      activityLevel: sh.activityLevel ?? null,
-      exerciseType: sh.exerciseType ?? null,
-      exerciseFrequencyDaysPerWeek: sh.exerciseFrequencyDaysPerWeek ?? null,
-      dietPattern: sh.dietPattern ?? null,
-      foodRestrictions: sh.foodRestrictions ?? null,
-      sleepAvgHours: sh.sleepAvgHours ?? null,
-      sleepQuality: (sh.sleepQuality as any) ?? null,
-      isSexuallyActive: sh.isSexuallyActive ?? null,
-      waterIntake: sh.waterIntake ?? null,
-      caffeineUse: null as string | null,
-      dailyScreenTime: null as string | null,
-      createdAt: ts,
+      tobaccoStatus: mappedSmokingStatus ?? existingSh?.tobaccoStatus ?? 'Never',
+      cigsPerDay: sh.cigsPerDay ?? existingSh?.cigsPerDay ?? null,
+      packYears: sh.packYears ?? existingSh?.packYears ?? null,
+      quitDate: sh.quitDate ?? existingSh?.quitDate ?? null,
+      otherTobaccoProducts: sh.otherTobaccoProducts ?? existingSh?.otherTobaccoProducts ?? null,
+      alcoholUseLevel: sh.alcoholUse ?? existingSh?.alcoholUseLevel ?? null,
+      alcoholType: sh.alcoholType ?? existingSh?.alcoholType ?? null,
+      alcoholFrequencyDaysPerWeek: sh.alcoholFrequencyDaysPerWeek ?? existingSh?.alcoholFrequencyDaysPerWeek ?? null,
+      alcoholQuantityPerOccasion: sh.alcoholQuantityPerOccasion ?? existingSh?.alcoholQuantityPerOccasion ?? null,
+      substanceUse: sh.usesSubstances ?? existingSh?.substanceUse ?? false,
+      substanceName: sh.substanceName ?? existingSh?.substanceName ?? null,
+      substanceRoute: sh.substanceRoute ?? existingSh?.substanceRoute ?? null,
+      substanceFrequency: sh.substanceFrequency ?? existingSh?.substanceFrequency ?? null,
+      activityLevel: sh.activityLevel ?? existingSh?.activityLevel ?? null,
+      exerciseType: sh.exerciseType ?? existingSh?.exerciseType ?? null,
+      exerciseFrequencyDaysPerWeek: sh.exerciseFrequencyDaysPerWeek ?? existingSh?.exerciseFrequencyDaysPerWeek ?? null,
+      dietPattern: sh.dietPattern ?? existingSh?.dietPattern ?? null,
+      foodRestrictions: sh.foodRestrictions ?? existingSh?.foodRestrictions ?? null,
+      sleepAvgHours: sh.sleepAvgHours ?? existingSh?.sleepAvgHours ?? null,
+      sleepQuality: (sh.sleepQuality as any) ?? existingSh?.sleepQuality ?? null,
+      isSexuallyActive: sh.isSexuallyActive ?? existingSh?.isSexuallyActive ?? null,
+      waterIntake: sh.waterIntake ?? existingSh?.waterIntake ?? null,
+      caffeineUse: existingSh?.caffeineUse ?? null,
+      dailyScreenTime: existingSh?.dailyScreenTime ?? null,
+      createdAt: existingSh?.createdAt ?? ts,
       updatedAt: toDate(sh.updatedAt) ?? ts,
       syncedAt: ts,
       serverId: sh.id,
@@ -538,18 +677,18 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     patientId,
     record.familyHistories,
     pendingEntityIds,
-    (fh) => ({
+    (fh, _i, existing) => ({
       id: fh.id,
       patientId,
       condition: fh.conditionName,
-      affectedRelative: fh.relation ?? null,
-      side: null as ('Paternal' | 'Maternal' | 'Both' | 'Unknown' | null),
-      ageOfOnset: fh.ageOfOnset ?? null,
-      isDeceased: fh.isDeceased,
-      ageAtDeath: null as number | null,
-      causeOfDeath: null as string | null,
-      notes: fh.notes ?? null,
-      createdAt: ts,
+      affectedRelative: fh.relation ?? existing?.affectedRelative ?? null,
+      side: (existing?.side as any) ?? null,
+      ageOfOnset: fh.ageOfOnset ?? existing?.ageOfOnset ?? null,
+      isDeceased: fh.isDeceased ?? existing?.isDeceased ?? false,
+      ageAtDeath: existing?.ageAtDeath ?? null,
+      causeOfDeath: existing?.causeOfDeath ?? null,
+      notes: fh.notes ?? existing?.notes ?? null,
+      createdAt: existing?.createdAt ?? ts,
       updatedAt: toDate(fh.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
@@ -559,16 +698,28 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   // 15. occupation (singleton)  (local: occupation, employer, industry, workEnvironment, yearsInOccupation, hazardExposure)
   if (record.occupation && !pendingEntityIds.has(patientId)) {
     const occ = record.occupation;
+    let existingOcc: any = null;
+    try {
+      const rows = await originalDb
+        .select()
+        .from(patientOccupation)
+        .where(eq(patientOccupation.patientId, patientId))
+        .limit(1);
+      existingOcc = rows[0] || null;
+    } catch {
+      // Ignore query error
+    }
+
     const row = {
       id: occ.id,
       patientId,
-      occupation: occ.occupation ?? null,
-      employer: occ.employer ?? null,
-      industry: occ.industry ?? null,
-      workEnvironment: (occ.workEnvironment as any) ?? null,
-      yearsInOccupation: occ.yearsInOccupation ?? null,
-      hazardExposure: occ.hazardExposure ?? null,
-      createdAt: ts,
+      occupation: occ.occupation ?? existingOcc?.occupation ?? null,
+      employer: occ.employer ?? existingOcc?.employer ?? null,
+      industry: occ.industry ?? existingOcc?.industry ?? null,
+      workEnvironment: (occ.workEnvironment as any) ?? existingOcc?.workEnvironment ?? null,
+      yearsInOccupation: occ.yearsInOccupation ?? existingOcc?.yearsInOccupation ?? null,
+      hazardExposure: occ.hazardExposure ?? existingOcc?.hazardExposure ?? null,
+      createdAt: existingOcc?.createdAt ?? ts,
       updatedAt: toDate(occ.updatedAt) ?? ts,
       syncedAt: ts,
       serverId: occ.id,
@@ -585,16 +736,16 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     patientId,
     record.travelHistories,
     pendingEntityIds,
-    (th) => ({
+    (th, _i, existing) => ({
       id: th.id,
       patientId,
       destination: th.destination,
-      cityProvince: th.cityProvince ?? null,
-      departureDate: th.departureDate ?? null,
-      returnDate: th.returnDate ?? null,
-      purpose: (th.purpose as any) ?? null,
-      illnessDuringAfterTravel: th.illnessDuringAfterTravel ?? null,
-      createdAt: ts,
+      cityProvince: th.cityProvince ?? existing?.cityProvince ?? null,
+      departureDate: th.departureDate ?? existing?.departureDate ?? null,
+      returnDate: th.returnDate ?? existing?.returnDate ?? null,
+      purpose: (th.purpose as any) ?? existing?.purpose ?? null,
+      illnessDuringAfterTravel: th.illnessDuringAfterTravel ?? existing?.illnessDuringAfterTravel ?? null,
+      createdAt: existing?.createdAt ?? ts,
       updatedAt: toDate(th.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
@@ -605,6 +756,18 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   //     Local schema uses: gravida, para, abortion, livingChildren, lmp, cycleLength, etc.
   if (record.obstetricProfile && !pendingEntityIds.has(patientId)) {
     const op = record.obstetricProfile;
+    let existingOp: any = null;
+    try {
+      const rows = await originalDb
+        .select()
+        .from(patientObstetricProfile)
+        .where(eq(patientObstetricProfile.patientId, patientId))
+        .limit(1);
+      existingOp = rows[0] || null;
+    } catch {
+      // Ignore query error
+    }
+
     let ageAtMenarche: number | null = null;
     if (op.menarche) {
       const parsed = parseInt(op.menarche, 10);
@@ -619,34 +782,37 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
         }
       }
     }
+    if (ageAtMenarche === null && existingOp?.ageAtMenarche !== undefined) {
+      ageAtMenarche = existingOp.ageAtMenarche;
+    }
 
     const row = {
       id: op.id,
       patientId,
-      gravida: op.gravida ?? null,
-      para: op.para ?? null,
-      abortion: op.abortusCount ?? null,
-      livingChildren: op.livingChildren ?? null,
-      lmp: op.lastMenstrualPeriod ?? null,
+      gravida: op.gravida ?? existingOp?.gravida ?? null,
+      para: op.para ?? existingOp?.para ?? null,
+      abortion: op.abortusCount ?? existingOp?.abortion ?? null,
+      livingChildren: op.livingChildren ?? existingOp?.livingChildren ?? null,
+      lmp: op.lastMenstrualPeriod ?? existingOp?.lmp ?? null,
       ageAtMenarche,
-      cycleLength: op.menstrualCycleLengthDays ?? null,
-      cycleDuration: null as number | null,
-      regularity: null as ('Regular' | 'Irregular' | null),
-      dysmenorrheaSeverity: op.hasDysmenorrhea ? 'Mild' as const : 'None' as const,
-      menopausalStatus: null as ('PreMenopausal' | 'Peri' | 'PostMenopausal' | 'NA' | null),
-      ageAtMenopause: null as number | null,
-      padsPerDay: null as number | null,
-      ageAtOnsetSexualActivity: null as number | null,
-      currentContraceptiveMethod: null as string | null,
-      menstruationApplicable: true,
-      deliveryCnt: null as number | null,
-      deliveryType: null as string | null,
-      fullTermDeliveries: null as number | null,
-      prematureDeliveries: null as number | null,
-      pregnancyInducedHypertension: null as boolean | null,
-      onFamilyPlanning: null as boolean | null,
-      pregnancyApplicable: true,
-      createdAt: ts,
+      cycleLength: op.menstrualCycleLengthDays ?? existingOp?.cycleLength ?? null,
+      cycleDuration: existingOp?.cycleDuration ?? null,
+      regularity: existingOp?.regularity ?? null,
+      dysmenorrheaSeverity: op.hasDysmenorrhea ? ('Mild' as const) : (existingOp?.dysmenorrheaSeverity ?? ('None' as const)),
+      menopausalStatus: existingOp?.menopausalStatus ?? null,
+      ageAtMenopause: existingOp?.ageAtMenopause ?? null,
+      padsPerDay: existingOp?.padsPerDay ?? null,
+      ageAtOnsetSexualActivity: existingOp?.ageAtOnsetSexualActivity ?? null,
+      currentContraceptiveMethod: existingOp?.currentContraceptiveMethod ?? null,
+      menstruationApplicable: existingOp?.menstruationApplicable ?? true,
+      deliveryCnt: existingOp?.deliveryCnt ?? null,
+      deliveryType: existingOp?.deliveryType ?? null,
+      fullTermDeliveries: existingOp?.fullTermDeliveries ?? null,
+      prematureDeliveries: existingOp?.prematureDeliveries ?? null,
+      pregnancyInducedHypertension: existingOp?.pregnancyInducedHypertension ?? null,
+      onFamilyPlanning: existingOp?.onFamilyPlanning ?? null,
+      pregnancyApplicable: existingOp?.pregnancyApplicable ?? true,
+      createdAt: existingOp?.createdAt ?? ts,
       updatedAt: toDate(op.updatedAt) ?? ts,
       syncedAt: ts,
       serverId: op.id,

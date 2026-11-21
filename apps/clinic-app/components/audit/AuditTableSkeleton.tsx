@@ -81,6 +81,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
+    width: '100%',
   },
   headerPlaceholderText: {
     color: theme.colors.textMuted,
@@ -89,6 +90,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: '100%',
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.md,
     borderBottomWidth: theme.sizes.borderWidth,
@@ -105,30 +107,39 @@ const styles = StyleSheet.create({
   },
   cellTimestamp: {
     width: 140,
+    flexShrink: 0,
   },
   cellCategory: {
     width: 90,
+    flexShrink: 0,
   },
   cellSeverity: {
     width: 70,
+    flexShrink: 0,
   },
   cellAction: {
-    width: 160,
+    flex: 2.5,
+    minWidth: 160,
   },
   cellActor: {
-    width: 130,
+    flex: 1.5,
+    minWidth: 130,
   },
   cellTarget: {
-    width: 110,
+    flex: 2,
+    minWidth: 110,
   },
   cellPatient: {
-    width: 110,
+    flex: 1.5,
+    minWidth: 110,
   },
   cellOutcome: {
     width: 70,
+    flexShrink: 0,
   },
   cellInspect: {
     width: 60,
+    flexShrink: 0,
   },
 });
 export default AuditTableSkeleton;

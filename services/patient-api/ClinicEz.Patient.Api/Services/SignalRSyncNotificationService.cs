@@ -77,4 +77,15 @@ public sealed class SignalRSyncNotificationService : ISyncNotificationService
                 new { Reason = reason },
                 cancellationToken);
     }
+
+    public Task NotifyCommsEventAsync(
+        Guid patientId,
+        string eventType,
+        object? payload,
+        CancellationToken cancellationToken = default)
+    {
+        return _hubContext.Clients
+            .Group(SyncHub.PatientGroup(patientId))
+            .SendAsync(eventType, payload, cancellationToken);
+    }
 }

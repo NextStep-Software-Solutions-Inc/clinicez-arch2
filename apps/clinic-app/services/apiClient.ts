@@ -5,6 +5,8 @@ import {
   ApiError,
   extractApiError,
   resolveTenantContext,
+  getStoredTenantSlug,
+  getStoredFacilitySlug,
   ensureApiPrefix,
   joinApiUrl,
 } from '@shared/safe';
@@ -49,8 +51,10 @@ export class ClinicApiClient {
 
       // Workspace hints (cloud multi-tenant hosts). On-prem single-clinic servers resolve the clinic themselves.
       const context = resolveTenantContext();
-      if (context.tenantSlug) config.headers['X-Tenant-Id'] = context.tenantSlug;
-      if (context.facilitySlug) config.headers['X-Facility-Slug'] = context.facilitySlug;
+      const effectiveFacility = context.facilitySlug || getStoredFacilitySlug();
+      const tenantHint = context.tenantSlug || (!effectiveFacility ? getStoredTenantSlug() : null);
+      if (effectiveFacility) config.headers['X-Facility-Slug'] = effectiveFacility;
+      if (tenantHint) config.headers['X-Tenant-Id'] = tenantHint;
       if (context.clinicId) config.headers['X-Clinic-Id'] = context.clinicId;
 
       if (this.options.authenticated) {
@@ -124,6 +128,53 @@ export class ClinicApiClient {
     const [response, error] = await safeAwait(this.client.post<Blob>(url, body, { ...config, responseType: 'blob' }));
     if (error) return [null, ClinicApiClient.toError(error)];
     return [response?.data ?? null, null];
+  }
+
+  /**
+   * Synchronously dispatches a browser `fetch(..., { keepalive: true })` JSON write so pending
+   * consultation drafts survive hard page refreshes (`pagehide` / `beforeunload`) and tab hides.
+   * Returns `false` when unavailable or when payload exceeds the browser 64 KiB keepalive cap.
+   */
+  sendKeepaliveJson(method: 'POST' | 'PUT', path: string, data: unknown): boolean {
+    if (typeof fetch !== 'function') return false;
+    const base = this.options.baseUrl();
+    if (!base) return false;
+
+    const jsonBody = JSON.stringify(data ?? {});
+    // Browser keepalive body limit is 64 KiB; guard conservatively at 60,000 UTF-16 code units / bytes.
+    const estimatedBytes =
+      typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(jsonBody).length : jsonBody.length * 2;
+    if (estimatedBytes > 60000) {
+      return false;
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    const context = resolveTenantContext();
+    const effectiveFacility = context.facilitySlug || getStoredFacilitySlug();
+    const tenantHint = context.tenantSlug || (!effectiveFacility ? getStoredTenantSlug() : null);
+    if (effectiveFacility) headers['X-Facility-Slug'] = effectiveFacility;
+    if (tenantHint) headers['X-Tenant-Id'] = tenantHint;
+    if (context.clinicId) headers['X-Clinic-Id'] = context.clinicId;
+
+    if (this.options.authenticated) {
+      const token = getAccessToken();
+      if (token) headers.Authorization = `Bearer ${token}`;
+    }
+
+    try {
+      const fullUrl = joinApiUrl(base, path);
+      void fetch(fullUrl, {
+        method,
+        headers,
+        body: jsonBody,
+        keepalive: true,
+      }).catch(() => {});
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 

@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-09T16:21:30Z
+# BRIEFING — 2026-10-21T08:35:00Z
 
 ## Mission
-Review the Master Plan Specification for Frontend Expo & Clinical Workflows (`apps/clinic-app/`, Expo SDK 56, React Navigation v8 static nav, doctor roster/shift/slots, immunization/barcode/AEFI, ICD-10 problem list/allergies/NCD charts, SOAP/PE checklist/WHO growth charts, responsiveness).
+Conduct an independent review of Cryptographic Security, Multi-Tenancy Boundary, Deployment Configs, and Migration Runbooks for Clinic File Storage migration to S3/R2.
 
 ## 🔒 My Identity
 - Archetype: reviewer_and_critic
@@ -10,33 +10,55 @@ Review the Master Plan Specification for Frontend Expo & Clinical Workflows (`ap
 - Original parent: 45a7f0e0-f5b1-41d1-a74d-e52fd5602522
 - Milestone: Master Plan Specification Review (Frontend Expo & Clinical Workflows)
 - Instance: 2 of 3 (Reviewer 2)
+- Re-dispatched Parent: 0570e9be-cc00-4a26-807d-12537fe47556 (orchestrator_20)
+- Current Milestone: Clinic File Storage S3/R2 Migration Review (2026-10-21)
+- Current Instance: Reviewer 2 (Security, Multi-Tenancy, Deployment, Migration)
 
 ## 🔒 Key Constraints
 - Review-only — do NOT modify implementation code
 - Review against ORIGINAL_REQUEST.md and comprehensive-clinic-features-plan.md
 - Active check for integrity violations: hardcoded outputs, dummy facades, task bypassing, fabricated outputs, self-certifying work
 - Issue explicit verdict (APPROVE or REQUEST_CHANGES) with findings
+- Audit AES-256-GCM envelope encryption, DEK generation, HKDF-SHA256 derived CMK with tenant salt & clinic info, and key zeroization
+- Verify S3 opaque .cez ciphertext, generic application/octet-stream ContentType, zero PHI in object keys/headers
+- Verify strict folder partitioning per tenant/clinic
+- Verify cross-tenant decryption failure (CryptographicException)
+- Audit docker-compose.yml, deploy-clinic-api-dev.yml, migration scripts (.sh, .ps1), data-ownership.md, deployment-configuration.md
 
 ## Current Parent
-- Conversation ID: 45a7f0e0-f5b1-41d1-a74d-e52fd5602522
-- Updated: not yet
+- Conversation ID: 0570e9be-cc00-4a26-807d-12537fe47556
+- Updated: 2026-10-21T08:35:00Z
 
 ## Review Scope
 - **Files to review**:
-  - `c:\Users\User\projects\nextstep\github\clinicez-arch2\docs\plans\comprehensive-clinic-features-plan.md`
-  - `c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\ORIGINAL_REQUEST.md`
-  - `apps/clinic-app/` architecture, packages, navigation, components
-- **Interface contracts**: `docs/plans/comprehensive-clinic-features-plan.md`, `ORIGINAL_REQUEST.md`
-- **Review criteria**: Expo SDK 56 compliance, React Navigation v8 static config, token-based design, clinical correctness (PhilHealth organ tags, WHO growth charts, AEFI, ICD-10, NCDs), responsiveness (mobile & 240px sidebar), concurrency/race conditions (double-booking).
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/ClinicEncryptionService.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/ClinicEncryptionKeyRing.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/S3ClinicStorageAdapter.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/R2ClinicStorageService.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/FallbackClinicStorageService.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application/Common/Interfaces/IClinicStorageService.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/DependencyInjection.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicStorageEncryptionIntegrationTests.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEncryptionServiceTests.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/R2ClinicStorageServiceTests.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/FallbackClinicStorageServiceTests.cs`
+  - `deploy/clinic-api/docker-compose.yml`
+  - `.github/workflows/deploy-clinic-api-dev.yml`
+  - `scripts/migrate-clinic-storage-to-r2.sh`
+  - `scripts/migrate-clinic-storage-to-r2.ps1`
+  - `docs/architecture/data-ownership.md`
+  - `docs/deployment-configuration.md`
+- **Interface contracts**: `c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\ORIGINAL_REQUEST.md` (2026-10-21T08:13:16Z)
+- **Review criteria**: Cryptographic rigor, multi-tenant isolation, absence of PHI leaks, deployment alignment, runbook idempotence, zero-knowledge compliance, integrity checks.
 
 ## Key Decisions Made
-- Analyzed all 6 review areas in detail.
-- Discovered critical integrity/facade issue: GiST exclusion constraint claimed for double-booking prevention, but only a basic B-tree index is provided in DDL and EF Core configs, leaving a TOCTOU race condition unhandled.
-- Discovered non-existent token references (`theme.colors.textPrimary`, `theme.typography.titleLarge/bodyMedium/labelSmall`, mismatched spacing scale) that will fail TypeScript and runtime execution.
-- Discovered missing backend command/endpoints for retroactive AEFI recording.
-- Discovered clinical scaling defect in NCD trend chart (mixing BP, FBS, HbA1c on single vertical axis).
-- Discovered WHO growth standards omission (recumbent vs standing 0.7cm adjustment, missing 5-19y LMS tables).
-- Decided on verdict: REQUEST_CHANGES.
+- Confirmed AES-256-GCM envelope encryption with unique 256-bit DEK per file and RFC 5869 HKDF-SHA256 derived CMK.
+- Confirmed zero PHI stored in S3 object keys or metadata headers; ContentType is strictly generic `application/octet-stream`.
+- Confirmed strict folder partitioning: `tenants/{tenantId}/clinics/{clinicId}/records/{attachmentId}.cez` and `tenants/{tenantId}/clinics/{clinicId}/lab-results/{resultId}.cez`.
+- Confirmed cross-tenant decryption failure via authentication tag mismatch throwing `CryptographicException`.
+- Verified build and 35 unit/integration tests pass with 0 failures.
+- No integrity violations detected.
+- Issued verdict: APPROVE.
 
 ## Artifact Index
 - `c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\reviewer_2\handoff.md` — Final review report
@@ -45,24 +67,22 @@ Review the Master Plan Specification for Frontend Expo & Clinical Workflows (`ap
 
 ## Review Checklist
 - **Items reviewed**:
-  - `docs/plans/comprehensive-clinic-features-plan.md` (Sections 1 through 10)
-  - `apps/clinic-app/package.json`
-  - `apps/clinic-app/navigation/Navigation.tsx`
-  - `apps/clinic-app/constants/theme.ts` & `tokens.ts`
-  - `apps/clinic-app/utils/useBreakpoint.ts`
-  - `apps/clinic-app/components/layout/WorkstationSidebar.tsx` & `ResponsiveLayout.tsx`
-  - `apps/clinic-app/components/ui/Modal.tsx` & `Icon.tsx`
-  - `apps/clinic-app/components/PhilHealthProfileModal.tsx`
-  - `apps/clinic-app/scripts/check-tokens.mjs`
-  - `services/.../lib_zscore.json` and `lib_icd.json`
-- **Verdict**: REQUEST_CHANGES
-- **Unverified claims**: Database-level exclusion claimed via GiST, but actual code writes B-tree.
+  - `ClinicEncryptionService.cs` & `ClinicEncryptionKeyRing.cs` (Envelope encryption, DEK/CMK, ZeroMemory, Key Ring)
+  - `S3ClinicStorageAdapter.cs`, `R2ClinicStorageService.cs`, `FallbackClinicStorageService.cs`, `LocalClinicStorageService.cs`
+  - `deploy/clinic-api/docker-compose.yml` & `.github/workflows/deploy-clinic-api-dev.yml`
+  - `scripts/migrate-clinic-storage-to-r2.sh` & `.ps1`
+  - `docs/architecture/data-ownership.md` & `docs/deployment-configuration.md`
+  - Storage & encryption test suites (18 + 17 = 35 tests)
+- **Verdict**: APPROVE
+- **Unverified claims**: None. All core claims verified through direct source inspection and test execution.
 
 ## Attack Surface
 - **Hypotheses tested**:
-  - H1: Double-booking concurrency prevention survives parallel requests. Result: FAILED. B-tree index in DDL doesn't prevent overlapping ranges; TOCTOU race condition exists.
-  - H2: Frontend token consumption matches `constants/theme.ts`. Result: FAILED. Invented tokens `textPrimary`, `titleLarge`, `bodyMedium`, `labelSmall`.
-  - H3: 2D Barcode scanner parses real GS1 DataMatrix vials. Result: FAILED. Assumes bracketed `(01)`/`(10)`/`(17)` rather than GS1 FNC1 byte stream.
-  - H4: WHO growth calculations handle length vs height and older pediatric patients. Result: FAILED. Missing 0.7cm posture correction; missing 61-228m LMS tables.
-  - H5: Workstation layout fits dense clinical visualizers in 540px modal dialogs. Result: FAILED. Cramped layout without responsive maxWidth override.
-- **Vulnerabilities found**: 2 Critical, 5 Major, 5 Minor.
+  - H1: DEK reuse across files or predictable nonce generation. (PASS - CSPRNG 32-byte DEK and 12-byte IV per file)
+  - H2: Memory leaks of plaintext keys. (MINOR FINDING - `EncryptAsync` lacks `try...finally` around `ZeroMemory`)
+  - H3: HKDF salt/info vulnerability to cross-tenant or cross-clinic collision or substitution. (PASS - lowercase trimmed tenantId salt, clinicId GUID in info string)
+  - H4: Header tampering or metadata PHI leakage in S3 requests/responses. (PASS - zero PHI in headers/keys, generic octet-stream ContentType)
+  - H5: Storage key path traversal or spoofing. (MINOR FINDING - `LocalClinicStorageService` lacks `Path.GetFullPath` prefix check)
+  - H6: Migration script data destruction or non-idempotence. (PASS - `head-object` check skips existing objects, local files never deleted; MINOR FINDING - trailing slash in bash `STORAGE_DIR`)
+- **Vulnerabilities found**: 0 Critical, 0 Major, 3 Minor.
+- **Untested angles**: None within the assigned review scope.

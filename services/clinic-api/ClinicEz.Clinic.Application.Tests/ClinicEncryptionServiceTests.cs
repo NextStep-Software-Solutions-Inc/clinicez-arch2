@@ -260,7 +260,7 @@ public class ClinicEncryptionServiceTests
         clinicContext.TenantId.Returns(_testTenantId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
         var uploadHandler = new UploadRecordAttachmentCommandHandler(repo, uow, clinicContext);
         var queryHandler = new GetPatientRecordAttachmentsQueryHandler(repo);
 

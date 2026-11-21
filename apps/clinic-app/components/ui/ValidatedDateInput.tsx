@@ -217,12 +217,15 @@ export interface ValidatedDateInputProps {
   containerStyle?: StyleProp<ViewStyle>;
   inputStyle?: StyleProp<TextStyle>;
   testID?: string;
+  inputTestID?: string;
   leftIcon?: string;
   rightIcon?: string;
   onRightIconPress?: () => void;
   onCalendarPress?: () => void;
   disableCalendarPicker?: boolean;
   hideValidFeedback?: boolean;
+  accessibilityHint?: string;
+  title?: string;
 }
 
 export default function ValidatedDateInput({
@@ -244,12 +247,15 @@ export default function ValidatedDateInput({
   containerStyle,
   inputStyle,
   testID = 'validated-date-input',
+  inputTestID,
   leftIcon = 'calendar',
   rightIcon,
   onRightIconPress,
   onCalendarPress,
   disableCalendarPicker = false,
   hideValidFeedback = true,
+  accessibilityHint,
+  title,
 }: ValidatedDateInputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -263,7 +269,7 @@ export default function ValidatedDateInput({
   );
 
   const isCalendarPressable = Boolean(
-    onCalendarPress || (!disableCalendarPicker && isInteractive && leftIcon === 'calendar')
+    onCalendarPress || (!disableCalendarPicker && isInteractive && (leftIcon === 'calendar' || rightIcon === 'calendar'))
   );
 
   const handleCalendarPress = () => {
@@ -336,11 +342,16 @@ export default function ValidatedDateInput({
       {label ? (
         <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
           {label}
-          {required ? <ThemedText color={theme.colors.emergency}> *</ThemedText> : null}
+          {required && !label.trim().endsWith('*') ? (
+            <ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText>
+          ) : null}
         </ThemedText>
       ) : null}
 
       <View
+        {...({
+          ...(title ? { title } : {}),
+        } as any)}
         style={[
           styles.inputWrapper,
           { borderColor: wrapperBorderColor, backgroundColor: wrapperBgColor },
@@ -372,6 +383,8 @@ export default function ValidatedDateInput({
         )}
 
         <TextInput
+          data-testid={inputTestID || (testID ? `${testID}-input` : undefined)}
+          testID={inputTestID || (testID ? `${testID}-input` : undefined)}
           style={[styles.input, inputStyle]}
           value={value}
           onChangeText={handleChangeText}
@@ -384,6 +397,8 @@ export default function ValidatedDateInput({
           onBlur={handleBlur}
           autoCorrect={false}
           autoCapitalize="none"
+          accessibilityHint={accessibilityHint}
+          {...(title ? { title } : {})}
         />
 
         {value.length > 0 && isInteractive ? (
@@ -397,7 +412,13 @@ export default function ValidatedDateInput({
         ) : null}
 
         {rightIcon ? (
-          <Pressable onPress={onRightIconPress} style={styles.rightIconBtn} hitSlop={theme.spacing.sm}>
+          <Pressable
+            onPress={onRightIconPress || (rightIcon === 'calendar' ? handleCalendarPress : undefined)}
+            style={styles.rightIconBtn}
+            hitSlop={theme.spacing.sm}
+            accessibilityRole={rightIcon === 'calendar' && !onRightIconPress ? 'button' : undefined}
+            accessibilityLabel={rightIcon === 'calendar' && !onRightIconPress ? 'Open calendar picker' : undefined}
+          >
             <IconSlot value={rightIcon} size={theme.sizes.iconSm} color={theme.colors.textMuted} />
           </Pressable>
         ) : null}

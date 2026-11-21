@@ -8,7 +8,9 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 const TAB_ICONS: Record<string, IconName> = {
   HomeScreen: 'home',
-  AppointmentsScreen: 'appointments',
+  RecordsScreen: 'heartPulse',
+  AppointmentsScreen: 'calendar',
+  MessagesScreen: 'chat',
   FilesScreen: 'files',
   ProfileScreen: 'profile',
 };
@@ -23,6 +25,21 @@ export default function WebNavBar({ state, descriptors, navigation }: BottomTabB
   const { isWorkstation } = useBreakpoint();
 
   if (isWorkstation) return null;
+
+  const currentRoute = state.routes[state.index];
+  const currentOptions = descriptors[currentRoute?.key]?.options;
+  const tabBarStyle = currentOptions?.tabBarStyle as { display?: string } | undefined;
+  if (tabBarStyle?.display === 'none') {
+    return null;
+  }
+
+  // Failsafe: hide tab bar when viewing file in nested stack
+  const subState = currentRoute?.state as { routes?: { name: string }[]; index?: number } | undefined;
+  const activeIndex = subState?.index ?? (subState?.routes ? subState.routes.length - 1 : 0);
+  const activeSubRoute = subState?.routes?.[activeIndex];
+  if (activeSubRoute?.name === 'FileViewerScreen') {
+    return null;
+  }
 
   return (
     <View

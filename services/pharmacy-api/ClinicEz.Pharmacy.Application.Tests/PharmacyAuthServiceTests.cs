@@ -319,7 +319,7 @@ public class PharmacyAuthServiceTests
         var stored = await f.Db.RefreshTokens.SingleAsync();
 
         stored.TokenHash.Should().NotBe(tokens.RefreshToken);
-        stored.TokenHash.Should().Be(f.Tokens.HashRefreshToken(tokens.RefreshToken));
+        stored.TokenHash.Should().Be(f.Tokens.HashRefreshToken(tokens.RefreshToken!));
     }
 
     [Fact]

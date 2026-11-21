@@ -15,16 +15,16 @@ namespace ClinicEz.Clinic.Application.Features.Queue.Services;
 
 public sealed class QueueNotificationDispatcher : IQueueNotificationDispatcher
 {
-    private readonly IRepository<ClinicSettings> _settingsRepository;
+    private readonly IRepository<FacilitySettings> _settingsRepository;
     private readonly IRepository<QueueItem> _queueRepository;
-    private readonly IRepository<ClinicPatient> _patientRepository;
+    private readonly IRepository<Patient> _patientRepository;
     private readonly IInteropPublisher _publisher;
     private readonly ILogger<QueueNotificationDispatcher> _logger;
 
     public QueueNotificationDispatcher(
-        IRepository<ClinicSettings> settingsRepository,
+        IRepository<FacilitySettings> settingsRepository,
         IRepository<QueueItem> queueRepository,
-        IRepository<ClinicPatient> patientRepository,
+        IRepository<Patient> patientRepository,
         IInteropPublisher publisher,
         ILogger<QueueNotificationDispatcher> logger)
     {
@@ -37,6 +37,11 @@ public sealed class QueueNotificationDispatcher : IQueueNotificationDispatcher
 
     public async Task DispatchCalledAlertAsync(QueueItem item, string? doctorName, string? roomOrStation, CancellationToken ct)
     {
+        if (item.IsDirectVisit)
+        {
+            return;
+        }
+
         var settings = await _settingsRepository.Query(s => s.ClinicId == item.ClinicId)
             .FirstOrDefaultAsync(ct);
 
@@ -52,16 +57,16 @@ public sealed class QueueNotificationDispatcher : IQueueNotificationDispatcher
             return;
         }
 
-        var syncPatientId = item.SyncPatientId;
+        var syncPatientId = item.CloudPatientId;
         if (!syncPatientId.HasValue || syncPatientId.Value == Guid.Empty)
         {
             syncPatientId = await _patientRepository.Query(p => p.Id == item.PatientId && p.ClinicId == item.ClinicId)
-                .Select(p => p.SyncPatientId)
+                .Select(p => p.CloudPatientId)
                 .FirstOrDefaultAsync(ct);
 
             if (syncPatientId.HasValue && syncPatientId.Value != Guid.Empty)
             {
-                item.SyncPatientId = syncPatientId;
+                item.CloudPatientId = syncPatientId;
             }
         }
 
@@ -89,7 +94,7 @@ public sealed class QueueNotificationDispatcher : IQueueNotificationDispatcher
 
         _publisher.Enqueue(InteropTypes.PatientQueueAlert, from, to, item.Id, payload);
         item.CalledNotificationSent = true;
-        _logger.LogInformation("Enqueued called to room push alert for ticket {QueueNumber} to patient {SyncPatientId}.", item.QueueNumber, syncPatientId.Value);
+        _logger.LogInformation("Enqueued called to room push alert for ticket {QueueNumber} to patient {CloudPatientId}.", item.QueueNumber, syncPatientId.Value);
     }
 
     public async Task EvaluateAndDispatchApproachingAlertsAsync(Guid clinicId, DateOnly queueDate, CancellationToken ct)
@@ -108,6 +113,7 @@ public sealed class QueueNotificationDispatcher : IQueueNotificationDispatcher
         var waitingLine = await _queueRepository.Query(q =>
             q.ClinicId == clinicId &&
             q.QueueDate == queueDate &&
+            !q.IsDirectVisit &&
             (q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Triaged))
             .OrderByDescending(q => q.Priority)
             .ThenBy(q => q.SequenceNumber)
@@ -120,16 +126,16 @@ public sealed class QueueNotificationDispatcher : IQueueNotificationDispatcher
 
             if (aheadInLine <= threshold && !ticket.ApproachingNotificationSent)
             {
-                var syncPatientId = ticket.SyncPatientId;
+                var syncPatientId = ticket.CloudPatientId;
                 if (!syncPatientId.HasValue || syncPatientId.Value == Guid.Empty)
                 {
                     syncPatientId = await _patientRepository.Query(p => p.Id == ticket.PatientId && p.ClinicId == clinicId)
-                        .Select(p => p.SyncPatientId)
+                        .Select(p => p.CloudPatientId)
                         .FirstOrDefaultAsync(ct);
 
                     if (syncPatientId.HasValue && syncPatientId.Value != Guid.Empty)
                     {
-                        ticket.SyncPatientId = syncPatientId;
+                        ticket.CloudPatientId = syncPatientId;
                     }
                 }
 
@@ -158,7 +164,7 @@ public sealed class QueueNotificationDispatcher : IQueueNotificationDispatcher
                 _publisher.Enqueue(InteropTypes.PatientQueueAlert, from, to, ticket.Id, payload);
                 ticket.ApproachingNotificationSent = true;
                 _queueRepository.Update(ticket);
-                _logger.LogInformation("Enqueued approaching turn alert for ticket {QueueNumber} (ahead: {AheadInLine}) to patient {SyncPatientId}.", ticket.QueueNumber, aheadInLine, syncPatientId.Value);
+                _logger.LogInformation("Enqueued approaching turn alert for ticket {QueueNumber} (ahead: {AheadInLine}) to patient {CloudPatientId}.", ticket.QueueNumber, aheadInLine, syncPatientId.Value);
             }
         }
     }

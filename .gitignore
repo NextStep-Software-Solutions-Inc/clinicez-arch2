@@ -35,6 +35,7 @@ Thumbs.db
 /out/
 dist/
 web-build/
+*.tsbuildinfo
 
 # Test results
 TestResults/
@@ -51,6 +52,7 @@ pnpm-debug.log*
 
 # Node / JavaScript
 node_modules/
+node_modules
 /.pnp/
 .pnp.js
 

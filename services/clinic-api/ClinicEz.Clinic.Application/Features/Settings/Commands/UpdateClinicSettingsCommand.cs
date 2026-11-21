@@ -8,6 +8,10 @@ using ClinicEz.Clinic.Application.Features.ServicesCatalog.Common;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Shared.Licensing;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,6 +43,7 @@ public sealed record UpdateClinicSettingsCommand(
     string? JoinCode = null,
     DateTime? JoinCodeExpiresAt = null,
     bool ClearJoinCode = false,
+    bool ClearJoinCodeExpiresAt = false,
     string? PatientSearchDisplayFieldsJson = null,
     string? EodReconciliationTime = null,
     bool? AutoEodEnabled = null,
@@ -59,25 +64,62 @@ public sealed record UpdateClinicSettingsCommand(
     bool? EnableAppointmentReminders = null,
     bool? AppointmentReminder24hEnabled = null,
     bool? AppointmentReminder2hEnabled = null,
-    bool? EnableStaffAppointmentNotifications = null) : IRequest<ClinicSettingsDto>;
+    bool? EnableStaffAppointmentNotifications = null,
+    string? TimeZoneId = null,
+    string? DateFormat = null,
+    string? TimeFormat = null,
+    string? TvDisplayPin = null,
+    bool ClearTvDisplayPin = false,
+    bool? IsKioskIntakeEnabled = null,
+    string? TvDisplaySoundTheme = null,
+    bool? TvDisplayVoiceEnabled = null,
+    bool? TvDisplayShowPhysicianName = null,
+    string? TeleconsultRecordingPolicy = null,
+    int? TeleconsultRecordingRetentionDays = null,
+    bool? TeleconsultRecordingConsentRequired = null,
+    TeleconsultPaymentPolicy? TeleconsultPaymentPolicy = null,
+    decimal? TeleconsultDefaultFee = null,
+    bool? EnableTeleconsultation = null,
+    DateOnly? DohLtoExpiryDate = null,
+    bool ClearDohLtoExpiryDate = false,
+    bool SkipPendingVerificationSync = false,
+    bool? AllowNurseMidwifeYakapFpeFacilitator = null,
+    Guid? DefaultHealthScreeningServiceItemId = null,
+    string? DefaultHealthScreeningServiceCode = null,
+    bool ClearDefaultHealthScreeningServiceItemId = false,
+    bool? EnableStaffMorningDigest = null,
+    bool? EnableStaffPreSlotReminders = null,
+    bool? EnableStaffOverdueAlerts = null,
+    int? IdleLockMinutes = null,
+    int? MaxLockedSessionHours = null,
+    bool? AllowStaffPinUnlock = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IRepository<ClinicServiceItem>? _serviceRepo;
+    private readonly IRepository<ServiceItem>? _serviceRepo;
+    private readonly ClinicEz.Clinic.Domain.Interfaces.IKioskAccessInvalidator? _kioskInvalidator;
+    private readonly IFacilityLicenseValidator? _licenseValidator;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public UpdateClinicSettingsCommandHandler(
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork,
-        IRepository<ClinicServiceItem>? serviceRepo = null)
+        IRepository<ServiceItem>? serviceRepo = null,
+        ClinicEz.Clinic.Domain.Interfaces.IKioskAccessInvalidator? kioskInvalidator = null,
+        IFacilityLicenseValidator? licenseValidator = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
         _serviceRepo = serviceRepo;
+        _kioskInvalidator = kioskInvalidator;
+        _licenseValidator = licenseValidator;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<ClinicSettingsDto> Handle(UpdateClinicSettingsCommand request, CancellationToken ct)
@@ -87,7 +129,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
 
         if (settings == null)
         {
-            settings = new ClinicSettings
+            settings = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 TenantId = _clinicContext.TenantId,
@@ -98,6 +140,19 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             };
             await _settingsRepo.AddAsync(settings, ct);
         }
+
+        var prevClinicName = settings.ClinicName;
+        var prevOperatingHours = settings.OperatingHours;
+        var prevLetterheadAddress = settings.LetterheadAddress;
+        var prevLetterheadContact = settings.LetterheadContact;
+        var prevLetterheadDohLto = settings.LetterheadDohLto;
+        var prevDohLtoExpiryDate = settings.DohLtoExpiryDate;
+        var prevSpecialtyMode = settings.SpecialtyMode;
+        var prevAccreditationNumber = settings.AccreditationNumber;
+        var prevIsPhilHealthConfigured = settings.IsPhilHealthConfigured;
+        var prevEnableTeleconsultation = settings.EnableTeleconsultation;
+        var prevIsJoinEnabled = settings.IsJoinEnabled;
+        var prevJoinCode = settings.JoinCode;
 
         if (!string.IsNullOrWhiteSpace(request.ClinicName))
             settings.ClinicName = request.ClinicName.Trim();
@@ -141,6 +196,11 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.LetterheadDohLto != null)
             settings.LetterheadDohLto = string.IsNullOrWhiteSpace(request.LetterheadDohLto) ? null : request.LetterheadDohLto.Trim();
 
+        if (request.ClearDohLtoExpiryDate)
+            settings.DohLtoExpiryDate = null;
+        else if (request.DohLtoExpiryDate.HasValue)
+            settings.DohLtoExpiryDate = request.DohLtoExpiryDate.Value;
+
         if (request.LetterheadFooter != null)
             settings.LetterheadFooter = string.IsNullOrWhiteSpace(request.LetterheadFooter) ? null : request.LetterheadFooter.Trim();
 
@@ -163,7 +223,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.IsJoinEnabled.HasValue)
             settings.IsJoinEnabled = request.IsJoinEnabled.Value;
 
-        if (request.ClearJoinCode)
+        if (request.ClearJoinCode || (request.JoinCode != null && string.IsNullOrWhiteSpace(request.JoinCode)))
         {
             settings.JoinCode = null;
             settings.JoinCodeExpiresAt = null;
@@ -171,10 +231,16 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         else
         {
             if (request.JoinCode != null)
-                settings.JoinCode = string.IsNullOrWhiteSpace(request.JoinCode) ? null : request.JoinCode.Trim().ToUpperInvariant();
+                settings.JoinCode = request.JoinCode.Trim().ToUpperInvariant();
 
-            if (request.JoinCodeExpiresAt.HasValue)
+            if (request.ClearJoinCodeExpiresAt)
+            {
+                settings.JoinCodeExpiresAt = null;
+            }
+            else if (request.JoinCodeExpiresAt.HasValue)
+            {
                 settings.JoinCodeExpiresAt = request.JoinCodeExpiresAt.Value;
+            }
         }
 
         if (request.PatientSearchDisplayFieldsJson != null)
@@ -188,6 +254,20 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
 
         if (request.TvDisplayMaskPatientNames.HasValue)
             settings.TvDisplayMaskPatientNames = request.TvDisplayMaskPatientNames.Value;
+
+        if (request.ClearTvDisplayPin || (request.TvDisplayPin != null && string.IsNullOrWhiteSpace(request.TvDisplayPin)))
+            settings.TvDisplayPin = null;
+        else if (!string.IsNullOrWhiteSpace(request.TvDisplayPin))
+            settings.TvDisplayPin = request.TvDisplayPin.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.TvDisplaySoundTheme))
+            settings.TvDisplaySoundTheme = request.TvDisplaySoundTheme.Trim();
+
+        if (request.TvDisplayVoiceEnabled.HasValue)
+            settings.TvDisplayVoiceEnabled = request.TvDisplayVoiceEnabled.Value;
+
+        if (request.TvDisplayShowPhysicianName.HasValue)
+            settings.TvDisplayShowPhysicianName = request.TvDisplayShowPhysicianName.Value;
 
         if (request.EnableQueuePushNotifications.HasValue)
             settings.EnableQueuePushNotifications = request.EnableQueuePushNotifications.Value;
@@ -260,69 +340,178 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.EnableStaffAppointmentNotifications.HasValue)
             settings.EnableStaffAppointmentNotifications = request.EnableStaffAppointmentNotifications.Value;
 
+        if (request.EnableStaffMorningDigest.HasValue)
+            settings.EnableStaffMorningDigest = request.EnableStaffMorningDigest.Value;
+
+        if (request.EnableStaffPreSlotReminders.HasValue)
+            settings.EnableStaffPreSlotReminders = request.EnableStaffPreSlotReminders.Value;
+
+        if (request.EnableStaffOverdueAlerts.HasValue)
+            settings.EnableStaffOverdueAlerts = request.EnableStaffOverdueAlerts.Value;
+
+        if (request.TimeZoneId != null)
+        {
+            var trimmed = request.TimeZoneId.Trim();
+            settings.TimeZoneId = string.IsNullOrEmpty(trimmed) || trimmed.Equals("inherit", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : trimmed;
+        }
+
+        if (request.DateFormat != null)
+        {
+            var trimmed = request.DateFormat.Trim();
+            settings.DateFormat = string.IsNullOrEmpty(trimmed) || trimmed.Equals("inherit", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : trimmed;
+        }
+
+        if (request.TimeFormat != null)
+        {
+            var trimmed = request.TimeFormat.Trim();
+            settings.TimeFormat = string.IsNullOrEmpty(trimmed) || trimmed.Equals("inherit", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : trimmed;
+        }
+
+        if (request.IsKioskIntakeEnabled.HasValue)
+        {
+            settings.IsKioskIntakeEnabled = request.IsKioskIntakeEnabled.Value;
+            _kioskInvalidator?.Invalidate(settings.ClinicId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.TeleconsultRecordingPolicy))
+        {
+            var normalized = request.TeleconsultRecordingPolicy.Trim();
+            if (normalized.Equals("Disabled", StringComparison.OrdinalIgnoreCase))
+                settings.TeleconsultRecordingPolicy = "Disabled";
+            else if (normalized.Equals("WorkspaceVaultOnly", StringComparison.OrdinalIgnoreCase))
+                settings.TeleconsultRecordingPolicy = "WorkspaceVaultOnly";
+            else if (normalized.Equals("Both", StringComparison.OrdinalIgnoreCase))
+                settings.TeleconsultRecordingPolicy = "Both";
+            else if (normalized.Equals("LocalDeviceOnly", StringComparison.OrdinalIgnoreCase))
+                settings.TeleconsultRecordingPolicy = "LocalDeviceOnly";
+        }
+
+        if (request.TeleconsultRecordingRetentionDays.HasValue && request.TeleconsultRecordingRetentionDays.Value >= 0)
+            settings.TeleconsultRecordingRetentionDays = request.TeleconsultRecordingRetentionDays.Value;
+
+        if (request.TeleconsultRecordingConsentRequired.HasValue)
+            settings.TeleconsultRecordingConsentRequired = request.TeleconsultRecordingConsentRequired.Value;
+
+        if (request.TeleconsultPaymentPolicy.HasValue)
+            settings.TeleconsultPaymentPolicy = request.TeleconsultPaymentPolicy.Value.ToString();
+
+        if (request.TeleconsultDefaultFee.HasValue && request.TeleconsultDefaultFee.Value >= 0)
+            settings.TeleconsultDefaultFee = request.TeleconsultDefaultFee.Value;
+
+        if (request.EnableTeleconsultation.HasValue)
+        {
+            if (request.EnableTeleconsultation.Value)
+            {
+                var isWorkspaceTeleconsultEntitled = false;
+                if (!string.IsNullOrWhiteSpace(settings.LicenseToken))
+                {
+                    var validation = (_licenseValidator ?? new FacilityLicenseValidator()).Validate(settings.LicenseToken, _clinicContext.ClinicId, _clinicContext.TenantId);
+                    isWorkspaceTeleconsultEntitled = validation.IsValid &&
+                        validation.Payload?.EnabledFeatures != null &&
+                        validation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+                }
+
+                if (!isWorkspaceTeleconsultEntitled)
+                {
+                    throw new ForbiddenException("Clinic cannot enable teleconsultation because tenant workspace lacks active teleconsultation entitlement.");
+                }
+
+                settings.EnableTeleconsultation = true;
+            }
+            else
+            {
+                settings.EnableTeleconsultation = false;
+            }
+        }
+
+        if (request.AllowNurseMidwifeYakapFpeFacilitator.HasValue)
+            settings.AllowNurseMidwifeYakapFpeFacilitator = request.AllowNurseMidwifeYakapFpeFacilitator.Value;
+
+        if (request.ClearDefaultHealthScreeningServiceItemId || request.DefaultHealthScreeningServiceItemId == Guid.Empty)
+            settings.DefaultHealthScreeningServiceItemId = null;
+        else if (request.DefaultHealthScreeningServiceItemId.HasValue)
+            settings.DefaultHealthScreeningServiceItemId = request.DefaultHealthScreeningServiceItemId.Value;
+
+        if (request.DefaultHealthScreeningServiceCode != null)
+            settings.DefaultHealthScreeningServiceCode = string.IsNullOrWhiteSpace(request.DefaultHealthScreeningServiceCode)
+                ? null
+                : request.DefaultHealthScreeningServiceCode.Trim();
+
+        if (request.IdleLockMinutes.HasValue)
+        {
+            var mins = request.IdleLockMinutes.Value;
+            if (mins == 0 || (mins >= 5 && mins <= 120))
+                settings.IdleLockMinutes = mins;
+        }
+
+        if (request.MaxLockedSessionHours.HasValue)
+        {
+            var hours = request.MaxLockedSessionHours.Value;
+            if (hours >= 1 && hours <= 24)
+                settings.MaxLockedSessionHours = hours;
+        }
+
+        if (request.AllowStaffPinUnlock.HasValue)
+            settings.AllowStaffPinUnlock = request.AllowStaffPinUnlock.Value;
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
         await _unitOfWork.SaveChangesAsync(ct);
 
-        return new ClinicSettingsDto(
-            settings.Id,
-            settings.TenantId,
-            settings.ClinicId,
-            settings.ClinicName,
-            settings.TaxIdentificationNumber,
-            settings.AccreditationNumber,
-            settings.OperatingHours,
-            settings.DefaultSlotDurationMinutes,
-            settings.QueuePrefix,
-            settings.InvoicePrefix,
-            settings.DefaultConsultationFee,
-            settings.VatRate,
-            settings.LetterheadHeader,
-            settings.LetterheadSubHeader,
-            settings.LetterheadAddress,
-            settings.LetterheadContact,
-            settings.LetterheadFooter,
-            settings.LicenseToken,
-            settings.PlanTier,
-            settings.MaxStaffLimit,
-            settings.LicenseExpiresAt,
-            settings.PmccNumber,
-            settings.SoftwareCertificateId,
-            settings.KonsultaEndpoint,
-            settings.IsPhilHealthConfigured,
-            settings.PrimaryColorHex,
-            settings.PrimaryLogoUrl,
-            settings.PaperSize,
-            settings.PreferredChartLayout,
-            settings.IsJoinEnabled,
-            settings.JoinCode,
-            settings.JoinCodeExpiresAt,
-            settings.PatientSearchDisplayFieldsJson,
-            settings.EodReconciliationTime,
-            settings.AutoEodEnabled,
-            settings.TvDisplayMaskPatientNames,
-            settings.EnableQueuePushNotifications,
-            settings.QueuePushNotificationThreshold,
-            settings.EnableChipLevelQueueCalling,
-            settings.StaffNotificationRetentionDays,
-            settings.EnableStatAudioAlert,
-            settings.EnableStatVibrationAlert,
-            settings.IsDirectoryPublished,
-            settings.IsOnlineBookingPaused,
-            settings.SpecialtyMode,
-            settings.EnableDentalModule,
-            settings.DefaultDoctorSharePercentage,
-            settings.CashierMode,
-            LetterheadDohLto: settings.LetterheadDohLto,
-            LetterheadAccentColorHex: settings.LetterheadAccentColorHex,
-            DefaultApproverName: settings.DefaultApproverName,
-            DefaultApproverTitle: settings.DefaultApproverTitle,
-            DocumentSignatoriesJson: settings.DocumentSignatoriesJson,
-            EnableAppointmentReminders: settings.EnableAppointmentReminders,
-            AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
-            AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,
-            EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications);
+        var directoryFieldsChanged =
+            !string.Equals(prevClinicName, settings.ClinicName, StringComparison.Ordinal) ||
+            !string.Equals(prevOperatingHours, settings.OperatingHours, StringComparison.Ordinal) ||
+            !string.Equals(prevLetterheadAddress, settings.LetterheadAddress, StringComparison.Ordinal) ||
+            !string.Equals(prevLetterheadContact, settings.LetterheadContact, StringComparison.Ordinal) ||
+            !string.Equals(prevLetterheadDohLto, settings.LetterheadDohLto, StringComparison.Ordinal) ||
+            prevDohLtoExpiryDate != settings.DohLtoExpiryDate ||
+            !string.Equals(prevSpecialtyMode, settings.SpecialtyMode, StringComparison.Ordinal) ||
+            !string.Equals(prevAccreditationNumber, settings.AccreditationNumber, StringComparison.Ordinal) ||
+            prevIsPhilHealthConfigured != settings.IsPhilHealthConfigured ||
+            prevEnableTeleconsultation != settings.EnableTeleconsultation;
+
+        var joinGatingChanged =
+            prevIsJoinEnabled != settings.IsJoinEnabled ||
+            !string.Equals(prevJoinCode, settings.JoinCode, StringComparison.Ordinal);
+
+        if (!request.SkipPendingVerificationSync
+            && directoryFieldsChanged
+            && _directorySyncService != null
+            && settings.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
+        {
+            await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                settings,
+                throwOnConflict: false,
+                _clinicContext.StaffId?.ToString(),
+                _clinicContext.StaffName,
+                ct);
+        }
+        else if ((directoryFieldsChanged || joinGatingChanged)
+            && _directorySyncService != null
+            && settings.PlatformVerificationStatus == PlatformVerificationStatus.Verified
+            && settings.IsDirectoryPublished)
+        {
+            await _directorySyncService.EnqueueDirectoryUpdateAsync(settings, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+
+        var isWorkspaceEntitled = false;
+        if (!string.IsNullOrWhiteSpace(settings.LicenseToken))
+        {
+            var validation = (_licenseValidator ?? new FacilityLicenseValidator()).Validate(settings.LicenseToken, _clinicContext.ClinicId, _clinicContext.TenantId);
+            isWorkspaceEntitled = validation.IsValid &&
+                validation.Payload?.EnabledFeatures != null &&
+                validation.Payload.EnabledFeatures.Contains(FacilityFeatureKeys.Teleconsultation, StringComparer.OrdinalIgnoreCase);
+        }
+
+        return ClinicSettingsDto.FromEntity(settings, isWorkspaceEntitled);
     }
 
     private async Task EnsureDentalPresetsSeededAsync(CancellationToken ct)
@@ -354,7 +543,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             }
             else
             {
-                var newItem = new ClinicServiceItem
+                var newItem = new ServiceItem
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,
@@ -373,5 +562,3 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         }
     }
 }
-
-

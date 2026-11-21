@@ -20,13 +20,13 @@ public record GetLabResultReviewQueueQuery(VerificationState State = Verificatio
 
 public class GetLabResultReviewQueueQueryHandler : IRequestHandler<GetLabResultReviewQueueQuery, List<LabResultReviewItemDto>>
 {
-    private readonly IRepository<ClinicLabResult> _resultRepo;
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
+    private readonly IRepository<LabResult> _resultRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetLabResultReviewQueueQueryHandler(
-        IRepository<ClinicLabResult> resultRepo,
-        IRepository<ClinicLabOrder> orderRepo,
+        IRepository<LabResult> resultRepo,
+        IRepository<LabOrder> orderRepo,
         IClinicContext clinicContext)
     {
         _resultRepo = resultRepo;
@@ -67,13 +67,13 @@ public class GetLabResultFileQueryHandler :
     IRequestHandler<GetLabResultFileQuery, LabResultFileDto>,
     IRequestHandler<GetLabOrderReportFileQuery, LabResultFileDto>
 {
-    private readonly IRepository<ClinicLabResult> _resultRepo;
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
+    private readonly IRepository<LabResult> _resultRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
     private readonly ILabResultFileStore _files;
 
     public GetLabResultFileQueryHandler(
-        IRepository<ClinicLabResult> resultRepo,
-        IRepository<ClinicLabOrder> orderRepo,
+        IRepository<LabResult> resultRepo,
+        IRepository<LabOrder> orderRepo,
         ILabResultFileStore files)
     {
         _resultRepo = resultRepo;
@@ -110,7 +110,7 @@ public class GetLabResultFileQueryHandler :
         return await ReadAsync(result, cancellationToken);
     }
 
-    private async Task<LabResultFileDto> ReadAsync(ClinicLabResult result, CancellationToken cancellationToken)
+    private async Task<LabResultFileDto> ReadAsync(LabResult result, CancellationToken cancellationToken)
     {
         var content = await _files.ReadAsync(result, cancellationToken)
             ?? throw new NotFoundException("This result has no file.");

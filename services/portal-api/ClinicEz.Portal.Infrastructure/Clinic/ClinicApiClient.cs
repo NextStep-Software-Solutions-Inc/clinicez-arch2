@@ -16,8 +16,8 @@ using Microsoft.Extensions.Logging;
 namespace ClinicEz.Portal.Infrastructure.Clinic;
 
 /// <summary>
-/// Interop-backed client that routes YAKAP transmittal operations to clinic facilities over the Interop Hub
-/// using the <c>yakap.transmittal.requested</c> request/reply pattern. Replaces direct HTTP calls.
+/// Interop-backed client that routes Zero-PHI YAKAP 2.0 operations to clinic facilities over the Interop Hub
+/// using the <c>yakap.submission.requested</c> request/reply pattern.
 /// </summary>
 public sealed class ClinicApiClient : IClinicApiClient
 {
@@ -50,28 +50,6 @@ public sealed class ClinicApiClient : IClinicApiClient
         return Party.ForFacility(resolvedTenant, facilityId.ToString(), FacilityType.Clinic);
     }
 
-    private async Task<Party> ResolveClinicPartyForTransmittalAsync(string tenantId, Guid? branchId, CancellationToken ct)
-    {
-        if (branchId.HasValue && branchId.Value != Guid.Empty)
-        {
-            return await ResolveClinicPartyAsync(tenantId, branchId.Value, ct);
-        }
-
-        // Fallback: look up the tenant's first active clinic facility
-        if (Guid.TryParse(tenantId, out var tGuid))
-        {
-            var facility = await _dbContext.Facilities
-                .AsNoTracking()
-                .FirstOrDefaultAsync(f => !f.IsDeleted && f.TenantId == tGuid && f.FacilityType == FacilityType.Clinic, ct);
-            if (facility != null)
-            {
-                return Party.ForFacility(facility.TenantId.ToString(), facility.Id.ToString(), FacilityType.Clinic);
-            }
-        }
-
-        return Party.ForFacility(tenantId, (branchId ?? Guid.Empty).ToString(), FacilityType.Clinic);
-    }
-
     private async Task<ApiResponse<T>> SendInteropAsync<T>(
         Party to,
         string method,
@@ -81,7 +59,7 @@ public sealed class ClinicApiClient : IClinicApiClient
         string operationDescription,
         CancellationToken ct)
     {
-        var payload = new YakapTransmittalRequestedPayload
+        var payload = new YakapSubmissionRequestedPayload
         {
             Method = method,
             Path = path,
@@ -91,9 +69,9 @@ public sealed class ClinicApiClient : IClinicApiClient
 
         try
         {
-            var reply = await _requestClient.RequestAsync<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload>(
-                InteropTypes.YakapTransmittalRequested,
-                InteropTypes.YakapTransmittalResponded,
+            var reply = await _requestClient.RequestAsync<YakapSubmissionRequestedPayload, YakapSubmissionRespondedPayload>(
+                InteropTypes.YakapSubmissionRequested,
+                InteropTypes.YakapSubmissionResponded,
                 Party.Portal,
                 to,
                 payload,
@@ -126,96 +104,79 @@ public sealed class ClinicApiClient : IClinicApiClient
         }
     }
 
-    public async Task<ApiResponse<List<PortalEligibleYakapEncounterDto>>> GetEligibleEncountersAsync(
+    public async Task<ApiResponse<PortalYakapBranchSummaryDto>> GetBranchYakapSummaryAsync(
         string tenantId,
         Guid branchId,
-        string reportTagging,
-        DateTime? startDate,
-        DateTime? endDate,
-        CancellationToken ct = default)
-    {
-        var to = await ResolveClinicPartyAsync(tenantId, branchId, ct);
-        var query = $"reportTagging={Uri.EscapeDataString(reportTagging)}&branchId={branchId}";
-        if (startDate.HasValue) query += $"&startDate={startDate.Value:O}";
-        if (endDate.HasValue) query += $"&endDate={endDate.Value:O}";
-
-        return await SendInteropAsync<List<PortalEligibleYakapEncounterDto>>(
-            to, "GET", "encounters/eligible", query, null, "get eligible encounters", ct);
-    }
-
-    public async Task<ApiResponse<IReadOnlyList<PortalYakapTransmittalDto>>> GetTransmittalsAsync(
-        string tenantId,
-        Guid branchId,
-        string? status,
-        string? reportTagging,
         CancellationToken ct = default)
     {
         var to = await ResolveClinicPartyAsync(tenantId, branchId, ct);
         var query = $"branchId={branchId}";
+        return await SendInteropAsync<PortalYakapBranchSummaryDto>(
+            to, "GET", "submissions/summary", query, null, "get branch yakap summary", ct);
+    }
+
+    public async Task<ApiResponse<IReadOnlyList<PortalYakapSubmissionDto>>> GetSubmissionsAsync(
+        string tenantId,
+        Guid branchId,
+        string? status = null,
+        string? submissionType = null,
+        int page = 1,
+        int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var to = await ResolveClinicPartyAsync(tenantId, branchId, ct);
+        var query = $"branchId={branchId}&page={page}&pageSize={pageSize}";
         if (!string.IsNullOrWhiteSpace(status)) query += $"&status={Uri.EscapeDataString(status)}";
-        if (!string.IsNullOrWhiteSpace(reportTagging)) query += $"&reportTagging={Uri.EscapeDataString(reportTagging)}";
+        if (!string.IsNullOrWhiteSpace(submissionType)) query += $"&submissionType={Uri.EscapeDataString(submissionType)}";
 
-        return await SendInteropAsync<IReadOnlyList<PortalYakapTransmittalDto>>(
-            to, "GET", "transmittals", query, null, "get transmittals", ct);
+        return await SendInteropAsync<IReadOnlyList<PortalYakapSubmissionDto>>(
+            to, "GET", "submissions", query, null, "get submissions", ct);
     }
 
-    public async Task<ApiResponse<PortalYakapTransmittalDto>> GetTransmittalByIdAsync(
-        string tenantId,
-        Guid id,
-        CancellationToken ct = default)
-    {
-        var to = await ResolveClinicPartyForTransmittalAsync(tenantId, null, ct);
-        return await SendInteropAsync<PortalYakapTransmittalDto>(
-            to, "GET", $"transmittals/{id}", null, null, $"get transmittal {id}", ct);
-    }
-
-    public async Task<ApiResponse<string>> GetTransmittalRawXmlAsync(
-        string tenantId,
-        Guid id,
-        CancellationToken ct = default)
-    {
-        var to = await ResolveClinicPartyForTransmittalAsync(tenantId, null, ct);
-        return await SendInteropAsync<string>(
-            to, "GET", $"transmittals/{id}/xml", null, null, $"get transmittal XML {id}", ct);
-    }
-
-    public async Task<ApiResponse<PortalYakapTransmittalDto>> CreateTransmittalAsync(
-        string tenantId,
-        Guid branchId,
-        PortalCreateYakapTransmittalRequest requestPayload,
-        CancellationToken ct = default)
-    {
-        var to = await ResolveClinicPartyAsync(tenantId, branchId, ct);
-        var body = JsonSerializer.Serialize(new
-        {
-            ConsultationEncounterIds = requestPayload.ConsultationEncounterIds,
-            ReportTagging = requestPayload.ReportTagging,
-            EffectiveYear = requestPayload.EffectiveYear,
-            BranchId = branchId
-        }, _jsonOptions);
-
-        return await SendInteropAsync<PortalYakapTransmittalDto>(
-            to, "POST", "transmittals", null, body, "create transmittal", ct);
-    }
-
-    public async Task<ApiResponse<PortalYakapValidationResultDto>> ValidateTransmittalAsync(
-        string tenantId,
-        Guid id,
-        CancellationToken ct = default)
-    {
-        var to = await ResolveClinicPartyForTransmittalAsync(tenantId, null, ct);
-        return await SendInteropAsync<PortalYakapValidationResultDto>(
-            to, "POST", $"transmittals/{id}/validate", null, null, $"validate transmittal {id}", ct);
-    }
-
-    public async Task<ApiResponse<PortalYakapSubmissionResultDto>> SubmitTransmittalAsync(
+    public async Task<ApiResponse<PortalYakapSubmissionDto>> GetSubmissionByIdAsync(
         string tenantId,
         Guid branchId,
         Guid id,
         CancellationToken ct = default)
     {
         var to = await ResolveClinicPartyAsync(tenantId, branchId, ct);
-        return await SendInteropAsync<PortalYakapSubmissionResultDto>(
-            to, "POST", $"transmittals/{id}/submit", null, null, $"submit transmittal {id}", ct);
+        var query = $"branchId={branchId}";
+        return await SendInteropAsync<PortalYakapSubmissionDto>(
+            to, "GET", $"submissions/{id}", query, null, $"get submission {id}", ct);
+    }
+
+    public async Task<ApiResponse<PortalYakapSubmissionDto>> PollSubmissionStatusAsync(
+        string tenantId,
+        Guid branchId,
+        Guid id,
+        CancellationToken ct = default)
+    {
+        var to = await ResolveClinicPartyAsync(tenantId, branchId, ct);
+        var query = $"branchId={branchId}";
+        return await SendInteropAsync<PortalYakapSubmissionDto>(
+            to, "POST", $"submissions/{id}/poll", query, null, $"poll submission {id}", ct);
+    }
+
+    public async Task<ApiResponse<PortalYakapSubmissionDto>> RetrySubmissionAsync(
+        string tenantId,
+        Guid branchId,
+        Guid id,
+        CancellationToken ct = default)
+    {
+        var to = await ResolveClinicPartyAsync(tenantId, branchId, ct);
+        var query = $"branchId={branchId}";
+        return await SendInteropAsync<PortalYakapSubmissionDto>(
+            to, "POST", $"submissions/{id}/retry", query, null, $"retry submission {id}", ct);
+    }
+
+    public async Task<ApiResponse<PortalYakapMasterlistSyncResultDto>> SyncMasterlistAsync(
+        string tenantId,
+        Guid branchId,
+        CancellationToken ct = default)
+    {
+        var to = await ResolveClinicPartyAsync(tenantId, branchId, ct);
+        var query = $"branchId={branchId}";
+        return await SendInteropAsync<PortalYakapMasterlistSyncResultDto>(
+            to, "POST", "masterlist/sync", query, null, "sync masterlist", ct);
     }
 }

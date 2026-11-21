@@ -64,7 +64,7 @@ public class ClinicAuthServiceTests
 
         if (withSettings)
         {
-            db.ClinicSettings.Add(new ClinicSettings
+            db.Settings.Add(new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -161,7 +161,7 @@ public class ClinicAuthServiceTests
     public async Task Bootstrap_RejectsTamperedLicense()
     {
         var f = await CreateAsync();
-        var settings = await f.Db.ClinicSettings.SingleAsync();
+        var settings = await f.Db.Settings.SingleAsync();
         var tampered = settings.LicenseToken![..^4] + "AAAA";
         settings.LicenseToken = tampered;
         await f.Db.SaveChangesAsync();
@@ -376,7 +376,7 @@ public class ClinicAuthServiceTests
         var f = await CreateAsync();
         await f.Service.BootstrapAsync(Bootstrap(f));
 
-        var settings = await f.Db.ClinicSettings.SingleAsync();
+        var settings = await f.Db.Settings.SingleAsync();
         settings.LicenseToken = SignLicense(f.ClinicId, f.TenantId, "owner@clinic.test", expires: DateTime.UtcNow.AddDays(-2));
         await f.Db.SaveChangesAsync();
         (await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, null))).Ok
@@ -387,4 +387,428 @@ public class ClinicAuthServiceTests
         (await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, null))).Failure
             .Should().Be(AuthFailure.LicenseTampered);
     }
+
+    [Fact]
+    public async Task LoginRefreshAndGetCurrentUser_IncludeStaffEmailInUserDtoAndJwtClaims()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var doctorRole = await f.Db.Roles.IgnoreQueryFilters()
+            .SingleAsync(r => r.ClinicId == f.ClinicId && r.Name == ClinicRoleSeeder.DoctorRoleName);
+
+        var doctor = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = f.TenantId,
+            ClinicId = f.ClinicId,
+            ClinicRoleId = doctorRole.Id,
+            Title = "Dr.",
+            FirstName = "Ely An",
+            LastName = "Real",
+            Email = "lovelyjean.maureal@ustp.edu.ph",
+            PrcLicenseNumber = "010714",
+            Role = StaffRole.Doctor,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "test"
+        };
+        f.Db.StaffMembers.Add(doctor);
+        await f.Db.SaveChangesAsync();
+
+        (await f.Service.SetTemporaryPasswordAsync(doctor.Id, "Temp-Pass-12345")).Ok.Should().BeTrue();
+        var changed = await f.Service.ChangePasswordAsync(doctor.Id, new ChangePasswordRequest("Temp-Pass-12345", "Doctor-Strong-Pass-99!"), null);
+        changed.Ok.Should().BeTrue(changed.Message);
+        changed.Tokens!.User.Email.Should().Be("lovelyjean.maureal@ustp.edu.ph");
+
+        var login = await f.Service.LoginAsync(new LoginRequest(null, "lovelyjean.maureal@ustp.edu.ph", "Doctor-Strong-Pass-99!", "workstation"));
+        login.Ok.Should().BeTrue(login.Message);
+        login.Tokens!.User.Email.Should().Be("lovelyjean.maureal@ustp.edu.ph");
+        login.Tokens.User.Permissions.Should().Contain("staff:read");
+
+        var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+        var jwt = handler.ReadJwtToken(login.Tokens.AccessToken);
+        jwt.Claims.FirstOrDefault(c => c.Type == ClinicEz.Clinic.Infrastructure.Context.ClinicClaimTypes.Email)?.Value
+            .Should().Be("lovelyjean.maureal@ustp.edu.ph");
+
+        var refreshed = await f.Service.RefreshAsync(login.Tokens.RefreshToken);
+        refreshed.Ok.Should().BeTrue(refreshed.Message);
+        refreshed.Tokens!.User.Email.Should().Be("lovelyjean.maureal@ustp.edu.ph");
+
+        var current = await f.Service.GetCurrentUserAsync(doctor.Id);
+        current.Should().NotBeNull();
+        current!.Email.Should().Be("lovelyjean.maureal@ustp.edu.ph");
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_ValidLicenseAndAdminEmail_SucceedsAndUnlocksAccount()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var admin = await f.Db.StaffMembers.SingleAsync();
+        var initialVersion = admin.TokenVersion;
+        admin.FailedLoginCount = 5;
+        admin.LockoutEnd = DateTime.UtcNow.AddMinutes(15);
+        admin.MustChangePassword = true;
+        await f.Db.SaveChangesAsync();
+
+        var request = new RecoverAdminRequest(
+            null,
+            f.License,
+            "owner@clinic.test",
+            "New-Strong-Pass-123!",
+            "workstation-1");
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeTrue(outcome.Message);
+        outcome.Tokens.Should().NotBeNull();
+        outcome.Tokens!.AccessToken.Should().NotBeNullOrWhiteSpace();
+        outcome.Tokens.RefreshToken.Should().NotBeNullOrWhiteSpace();
+        outcome.Tokens.User.Email.Should().Be("owner@clinic.test");
+        outcome.Tokens.User.Role.Should().Be("Admin");
+
+        var updatedAdmin = await f.Db.StaffMembers.SingleAsync();
+        updatedAdmin.FailedLoginCount.Should().Be(0);
+        updatedAdmin.LockoutEnd.Should().BeNull();
+        updatedAdmin.MustChangePassword.Should().BeFalse();
+        updatedAdmin.IsActive.Should().BeTrue();
+        updatedAdmin.Status.Should().Be(StaffAccountStatus.Active);
+        updatedAdmin.TokenVersion.Should().Be(initialVersion + 1);
+
+        // Subsequent login succeeds with the new password
+        var login = await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", "New-Strong-Pass-123!", "workstation-1"));
+        login.Ok.Should().BeTrue(login.Message);
+        login.Tokens.Should().NotBeNull();
+
+        // Old password no longer works
+        var oldLogin = await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, "workstation-1"));
+        oldLogin.Ok.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_DefaultsToLicenseOwnerEmail_WhenEmailNotProvided()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var request = new RecoverAdminRequest(
+            null,
+            f.License,
+            null,
+            "BrandNew-Strong-99!",
+            "workstation-1");
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeTrue(outcome.Message);
+        outcome.Tokens.Should().NotBeNull();
+        outcome.Tokens!.User.Email.Should().Be("owner@clinic.test");
+
+        var login = await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", "BrandNew-Strong-99!", null));
+        login.Ok.Should().BeTrue(login.Message);
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_RejectsNonAdminStaff()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var nurse = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = f.TenantId,
+            ClinicId = f.ClinicId,
+            FirstName = "Nancy",
+            LastName = "Nurse",
+            Email = "nurse@clinic.test",
+            Role = StaffRole.Nurse,
+            IsActive = true,
+            PasswordHash = new FacilityPasswordHasher().Hash("NurseOriginalPass1!"),
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "test"
+        };
+        f.Db.StaffMembers.Add(nurse);
+        await f.Db.SaveChangesAsync();
+
+        var request = new RecoverAdminRequest(
+            null,
+            f.License,
+            "nurse@clinic.test",
+            "Attempted-Admin-Pass-1!",
+            null);
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeFalse();
+        outcome.Failure.Should().Be(AuthFailure.InvalidRequest);
+        outcome.Message.Should().Contain("Only clinic administrator");
+
+        var storedNurse = await f.Db.StaffMembers.SingleAsync(s => s.Id == nurse.Id);
+        storedNurse.PasswordHash.Should().Be(nurse.PasswordHash);
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_RejectsTamperedLicense()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var tampered = f.License[..^4] + "AAAA";
+
+        var request = new RecoverAdminRequest(
+            null,
+            tampered,
+            "owner@clinic.test",
+            "New-Strong-Pass-123!",
+            null);
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeFalse();
+        outcome.Failure.Should().Be(AuthFailure.LicenseTampered);
+
+        // Password remains original
+        var login = await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, null));
+        login.Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_RejectsForeignLicenseNotMatchingFacility()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var foreignClinicId = Guid.NewGuid();
+        var foreignTenantId = Guid.NewGuid().ToString();
+        var foreignLicense = SignLicense(foreignClinicId, foreignTenantId, "foreign@clinic.test");
+
+        var request = new RecoverAdminRequest(
+            f.ClinicId.ToString(),
+            foreignLicense,
+            "owner@clinic.test",
+            "New-Strong-Pass-123!",
+            null);
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeFalse();
+        outcome.Failure.Should().Be(AuthFailure.InvalidRequest);
+        outcome.Message.Should().Be("The license key does not match this facility.");
+
+        // Credentials were not mutated
+        var login = await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, null));
+        login.Ok.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("short1")]
+    [InlineData("alllettersnodigits")]
+    [InlineData("12345678901234")]
+    public async Task RecoverAdmin_RejectsWeakPassword(string weakPassword)
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var request = new RecoverAdminRequest(
+            null,
+            f.License,
+            "owner@clinic.test",
+            weakPassword,
+            null);
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeFalse();
+        outcome.Failure.Should().Be(AuthFailure.WeakPassword);
+
+        // Password was not mutated
+        var login = await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, null));
+        login.Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_RevokesExistingActiveSessionsAndRefreshTokens()
+    {
+        var f = await CreateAsync();
+        var boot = (await f.Service.BootstrapAsync(Bootstrap(f))).Tokens!;
+
+        var admin = await f.Db.StaffMembers.SingleAsync();
+        var initialVersion = admin.TokenVersion;
+
+        var session1 = (await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, "device-1"))).Tokens!;
+
+        var request = new RecoverAdminRequest(
+            null,
+            f.License,
+            "owner@clinic.test",
+            "Recovered-Strong-Pass-1!",
+            "device-recovery");
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeTrue(outcome.Message);
+        f.AccessCache.Received().Invalidate(admin.Id);
+
+        // Pre-recovery refresh tokens are revoked
+        (await f.Service.RefreshAsync(boot.RefreshToken)).Ok.Should().BeFalse();
+        (await f.Service.RefreshAsync(session1.RefreshToken)).Ok.Should().BeFalse();
+
+        // TokenVersion is bumped in database
+        var reloadedAdmin = await f.Db.StaffMembers.SingleAsync();
+        reloadedAdmin.TokenVersion.Should().Be(initialVersion + 1);
+
+        // New recovery refresh token is valid
+        var refreshed = await f.Service.RefreshAsync(outcome.Tokens!.RefreshToken);
+        refreshed.Ok.Should().BeTrue(refreshed.Message);
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_FailsWhenStaffNotFound()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var request = new RecoverAdminRequest(
+            null,
+            f.License,
+            "nonexistent@clinic.test",
+            "New-Strong-Pass-123!",
+            null);
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeFalse();
+        outcome.Failure.Should().Be(AuthFailure.NotFound);
+        outcome.Message.Should().Contain("No staff member matching this email address was found in this facility.");
+    }
+
+    [Fact]
+    public async Task LockAndUnlockWithPin_BlocksRefreshWhileLocked_AndUnlocksWithRotatedTokens()
+    {
+        var f = await CreateAsync();
+        var boot = (await f.Service.BootstrapAsync(Bootstrap(f))).Tokens!;
+        boot.User.HasQuickUnlockPin.Should().BeFalse();
+        boot.User.SessionPolicy.Should().NotBeNull();
+        boot.User.SessionPolicy!.IdleLockMinutes.Should().Be(15);
+
+        // Weak PINs rejected
+        var weak = await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest(StrongPassword, "123456"));
+        weak.User.Should().BeNull();
+        weak.Failure.Should().Be(AuthFailure.WeakPassword);
+
+        // Wrong password rejected
+        var badPass = await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest("wrong-password", "246810"));
+        badPass.User.Should().BeNull();
+        badPass.Failure.Should().Be(AuthFailure.InvalidCredentials);
+
+        // Valid 6-digit PIN accepted
+        var setOk = await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest(StrongPassword, "246810"));
+        setOk.User.Should().NotBeNull();
+        setOk.User!.HasQuickUnlockPin.Should().BeTrue();
+
+        // Lock session -> RefreshAsync returns SessionLocked without tokens (blocks F5 bypass)
+        var locked = await f.Service.LockSessionAsync(boot.RefreshToken);
+        locked.Failure.Should().Be(AuthFailure.SessionLocked);
+        locked.Tokens.Should().BeNull();
+        locked.LockedSession.Should().NotBeNull();
+        locked.LockedSession!.HasQuickUnlockPin.Should().BeTrue();
+
+        var refreshWhileLocked = await f.Service.RefreshAsync(boot.RefreshToken);
+        refreshWhileLocked.Ok.Should().BeFalse();
+        refreshWhileLocked.Failure.Should().Be(AuthFailure.SessionLocked);
+        refreshWhileLocked.Tokens.Should().BeNull();
+
+        // Unlock with valid PIN rotates refresh token and clears lock
+        var unlocked = await f.Service.UnlockWithPinAsync(boot.RefreshToken, "246810");
+        unlocked.Ok.Should().BeTrue(unlocked.Message);
+        unlocked.Tokens!.RefreshToken.Should().NotBe(boot.RefreshToken);
+        unlocked.Tokens.User.HasQuickUnlockPin.Should().BeTrue();
+
+        // Subsequent silent refresh succeeds normally
+        var postUnlockRefresh = await f.Service.RefreshAsync(unlocked.Tokens.RefreshToken);
+        postUnlockRefresh.Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UnlockWithPin_FiveWrongAttempts_RevokesSessionFamily()
+    {
+        var f = await CreateAsync();
+        var boot = (await f.Service.BootstrapAsync(Bootstrap(f))).Tokens!;
+        await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest(StrongPassword, "357913"));
+        await f.Service.LockSessionAsync(boot.RefreshToken);
+
+        for (var i = 1; i <= 4; i++)
+        {
+            var attempt = await f.Service.UnlockWithPinAsync(boot.RefreshToken, "111222");
+            attempt.Ok.Should().BeFalse();
+            attempt.Failure.Should().Be(AuthFailure.InvalidCredentials);
+            attempt.Message.Should().Contain($"{5 - i} attempt");
+        }
+
+        // 5th wrong attempt revokes the refresh token family
+        var fifth = await f.Service.UnlockWithPinAsync(boot.RefreshToken, "111222");
+        fifth.Ok.Should().BeFalse();
+        fifth.Failure.Should().Be(AuthFailure.InvalidToken);
+
+        // Even the real PIN cannot unlock the revoked family
+        var withRealPin = await f.Service.UnlockWithPinAsync(boot.RefreshToken, "357913");
+        withRealPin.Ok.Should().BeFalse();
+        withRealPin.Failure.Should().Be(AuthFailure.InvalidToken);
+    }
+
+    [Fact]
+    public async Task UnlockWithPin_ExpiredLockWindow_OrDisabledByClinic_Rejected()
+    {
+        var f = await CreateAsync();
+        var boot = (await f.Service.BootstrapAsync(Bootstrap(f))).Tokens!;
+        await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest(StrongPassword, "357913"));
+        await f.Service.LockSessionAsync(boot.RefreshToken);
+
+        // When clinic disables PIN unlock, PIN attempt fails and password unlock still succeeds
+        var settings = await f.Db.Settings.SingleAsync();
+        settings.AllowStaffPinUnlock = false;
+        await f.Db.SaveChangesAsync();
+
+        var disabledAttempt = await f.Service.UnlockWithPinAsync(boot.RefreshToken, "357913");
+        disabledAttempt.Ok.Should().BeFalse();
+        disabledAttempt.Failure.Should().Be(AuthFailure.InvalidRequest);
+
+        var pwUnlock = await f.Service.UnlockWithPasswordAsync(boot.RefreshToken, StrongPassword);
+        pwUnlock.Ok.Should().BeTrue(pwUnlock.Message);
+
+        // Lock past MaxLockedSessionHours -> both refresh and unlock fail & revoke
+        settings.AllowStaffPinUnlock = true;
+        settings.MaxLockedSessionHours = 4;
+        await f.Db.SaveChangesAsync();
+
+        await f.Service.LockSessionAsync(pwUnlock.Tokens!.RefreshToken);
+        var stored = await f.Db.RefreshTokens.IgnoreQueryFilters().FirstAsync(t => t.RevokedAt == null);
+        stored.LockedAtUtc = DateTime.UtcNow.AddHours(-5);
+        await f.Db.SaveChangesAsync();
+
+        var expiredRefresh = await f.Service.RefreshAsync(pwUnlock.Tokens.RefreshToken);
+        expiredRefresh.Ok.Should().BeFalse();
+        expiredRefresh.Failure.Should().Be(AuthFailure.InvalidToken);
+    }
+
+    [Fact]
+    public async Task RemoveQuickUnlockPin_AndAdminReset_ClearStoredPin()
+    {
+        var f = await CreateAsync();
+        var boot = (await f.Service.BootstrapAsync(Bootstrap(f))).Tokens!;
+        await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest(StrongPassword, "357913"));
+
+        var removed = await f.Service.RemoveQuickUnlockPinAsync(boot.User.Id, new RemoveQuickUnlockPinRequest(StrongPassword));
+        removed.User!.HasQuickUnlockPin.Should().BeFalse();
+
+        // Re-set PIN then trigger admin temp password reset -> PIN cleared
+        await f.Service.SetQuickUnlockPinAsync(boot.User.Id, new SetQuickUnlockPinRequest(StrongPassword, "357913"));
+        await f.Service.SetTemporaryPasswordAsync(boot.User.Id, "Temp-Strong-Pass-99");
+        var reloaded = await f.Db.StaffMembers.IgnoreQueryFilters().SingleAsync();
+        reloaded.QuickUnlockPinHash.Should().BeNull();
+    }
 }
+

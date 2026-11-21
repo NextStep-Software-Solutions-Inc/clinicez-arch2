@@ -43,16 +43,16 @@ public sealed class GetAuditLogsQueryValidator : AbstractValidator<GetAuditLogsQ
 
 public sealed class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, AuditLogListDto>
 {
-    private readonly IRepository<ClinicAuditEntry> _auditRepo;
+    private readonly IRepository<AuditEntry> _auditRepo;
 
-    public GetAuditLogsQueryHandler(IRepository<ClinicAuditEntry> auditRepo)
+    public GetAuditLogsQueryHandler(IRepository<AuditEntry> auditRepo)
     {
         _auditRepo = auditRepo ?? throw new ArgumentNullException(nameof(auditRepo));
     }
 
     public async Task<AuditLogListDto> Handle(GetAuditLogsQuery request, CancellationToken cancellationToken)
     {
-        IQueryable<ClinicAuditEntry> query = _auditRepo.Query().AsNoTracking();
+        IQueryable<AuditEntry> query = _auditRepo.Query().AsNoTracking();
 
         // 1. Filter by Category
         if (!string.IsNullOrWhiteSpace(request.Category) && !string.Equals(request.Category, "All", StringComparison.OrdinalIgnoreCase))
@@ -146,7 +146,7 @@ public sealed class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery
             TotalCount: dtos.Count);
     }
 
-    public static ClinicAuditEntryDto MapToDto(ClinicAuditEntry entry) => new(
+    public static ClinicAuditEntryDto MapToDto(AuditEntry entry) => new(
         Id: entry.Id,
         TenantId: entry.TenantId,
         ClinicId: entry.ClinicId,

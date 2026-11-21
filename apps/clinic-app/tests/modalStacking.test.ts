@@ -28,6 +28,7 @@ mock.module('react-native', () => ({
   StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
   View: createMockComponent('View'),
   Pressable: createMockComponent('Pressable'),
+  TouchableOpacity: createMockComponent('TouchableOpacity'),
   ScrollView: createMockComponent('ScrollView'),
   TextInput: createMockComponent('TextInput'),
   Text: createMockComponent('Text'),
@@ -35,6 +36,7 @@ mock.module('react-native', () => ({
   Modal: createMockComponent('Modal'),
   Image: createMockComponent('Image'),
   KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
+  Switch: createMockComponent('Switch'),
   Dimensions: {
     get: () => ({ width: 1280, height: 800 }),
     addEventListener: () => ({ remove: () => {} }),
@@ -99,6 +101,7 @@ mock.module('../utils/useBreakpoint', () => ({
 }));
 
 const previousClinicContext = (globalThis as any).__mockClinicContext;
+const previousAuthContext = (globalThis as any).__mockAuthContext;
 const modalStackingClinicContextFactory = () => ({
   useClinic: () =>
     (globalThis as any).__mockClinicContext ?? {
@@ -132,6 +135,10 @@ mock.module('@utils/usePhilHealthCatalog', () => ({
   usePhilHealthCatalog: () => ({ items: [], loading: false, error: null, reload: () => {} }),
 }));
 
+mock.module('../hooks/useEhrOptions', () => ({
+  useEhrOptions: () => ({ options: [], loading: false, error: null, reload: () => {} }),
+}));
+
 const {
   registerModal,
   attachPortalElement,
@@ -156,7 +163,8 @@ const {
 
 const { default: Modal } = await import('../components/ui/Modal');
 const { default: PatientChartModal } = await import('../components/chart/PatientChartModal');
-const { default: PhilHealthProfileModal } = await import('../components/PhilHealthProfileModal');
+const { default: PhilHealthCoverageModal } = await import('../components/patient/PhilHealthCoverageModal');
+const { default: HealthScreeningModal } = await import('../components/screening/HealthScreeningModal');
 const { default: EditPatientModal } = await import('../components/patient/EditPatientModal');
 const { default: ActionMenu } = await import('../components/ui/ActionMenu');
 const { default: DiagnosticLabTab } = await import('../components/chart/DiagnosticLabTab');
@@ -171,6 +179,7 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
       accreditationNumber: 'ACC-12345',
       settings: { preferredChartLayout: 'centered' },
     };
+    (globalThis as any).__mockAuthContext = { can: () => true };
     (globalThis as any).__mockStaffContext = null;
   });
 
@@ -507,7 +516,7 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
         id: 'pat-stack-1',
         fullName: 'Juan Dela Cruz',
         patientCode: 'PAT-001',
-        gender: 'Male',
+        sex: 'Male',
         dateOfBirth: '1985-05-15',
         age: 40,
         contactNumber: '0917-123-4567',
@@ -833,7 +842,7 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
         id: 'pat-tabs-1',
         fullName: 'Maria Santos',
         patientCode: 'PAT-002',
-        gender: 'Female',
+        sex: 'Female',
         dateOfBirth: '1990-08-20',
         age: 35,
         contactNumber: '0918-765-4321',
@@ -868,39 +877,62 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
       }
     });
 
-    test('R3: PhilHealthProfileModal renders cleanly and respects visible=false short-circuit', () => {
+    test('R3: PhilHealthCoverageModal and HealthScreeningModal render cleanly and respect visible=false short-circuit', () => {
       const mockPatient = {
         id: 'pat-phil-1',
         fullName: 'Elena Gomez',
         patientCode: 'PAT-003',
-        gender: 'Female',
+        sex: 'Female',
         age: 28,
         philHealthNumber: '12-345678901-2',
       };
 
-      // 1. Dormant modal returns null
-      const closedMarkup = renderToStaticMarkup(
-        React.createElement(PhilHealthProfileModal, {
+      // 1. Dormant modals return null (empty SSR markup)
+      const closedCoverageMarkup = renderToStaticMarkup(
+        React.createElement(PhilHealthCoverageModal, {
           visible: false,
           patient: mockPatient as any,
           onClose: () => {},
         })
       );
-      expect(closedMarkup).toBe('');
+      expect(closedCoverageMarkup).toBe('');
 
-      // 2. Visible modal renders header and tabs
-      const openMarkup = renderToStaticMarkup(
-        React.createElement(PhilHealthProfileModal, {
+      const closedScreeningMarkup = renderToStaticMarkup(
+        React.createElement(HealthScreeningModal, {
+          visible: false,
+          patient: mockPatient as any,
+          onClose: () => {},
+        })
+      );
+      expect(closedScreeningMarkup).toBe('');
+
+      // 2. Visible PhilHealthCoverageModal renders coverage header and patient name
+      const openCoverageMarkup = renderToStaticMarkup(
+        React.createElement(PhilHealthCoverageModal, {
           visible: true,
           patient: mockPatient as any,
           onClose: () => {},
         })
       );
-      expect(openMarkup).toContain('PhilHealth patient profile');
-      expect(openMarkup).toContain('Elena Gomez');
-      expect(openMarkup).toContain('General and vitals');
-      expect(openMarkup).toContain('Medical and family');
-      expect(openMarkup).toContain('Social and vaccines');
+      expect(openCoverageMarkup).toContain('PhilHealth Coverage &amp; Clinic Assignment');
+      expect(openCoverageMarkup).toContain('Elena Gomez');
+
+      // 3. Visible HealthScreeningModal renders workstation title and all 4 stations
+      const openScreeningMarkup = renderToStaticMarkup(
+        React.createElement(HealthScreeningModal, {
+          visible: true,
+          patient: mockPatient as any,
+          onClose: () => {},
+        })
+      );
+      expect(openScreeningMarkup).toContain('Health Screening &amp; Preventive Assessment');
+      expect(openScreeningMarkup).toContain('Elena Gomez');
+      expect(openScreeningMarkup).toContain('Vitals &amp; Vision');
+      expect(openScreeningMarkup).toContain('History &amp; Risk');
+      expect(openScreeningMarkup).toContain('Physical Exam &amp; Labs');
+      expect(openScreeningMarkup).toContain('Summary &amp; Sign-Off');
+      expect(openScreeningMarkup).toContain('Intake &amp; PhilPEN');
+      expect(openScreeningMarkup).toContain('Disposition');
     });
 
     test('R4: Multi-level sub-modals layer on top and preserve parent intact on close', () => {
@@ -1200,7 +1232,7 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
       }
     });
 
-    test('ADV-4: PhilHealthProfileModal tab switching between all 5 tabs leaves DOM children undisturbed', () => {
+    test('ADV-4: PhilHealthCoverageModal and HealthScreeningModal leave DOM children undisturbed on render', () => {
       const originalDoc = (globalThis as any).document;
       let appendCount = 0;
       const mockBody: any = {
@@ -1219,24 +1251,33 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
         id: 'pat-ph-adv-1',
         fullName: 'Carmela Ramos',
         patientCode: 'PAT-888',
-        gender: 'Female',
+        sex: 'Female',
         age: 32,
         philHealthNumber: '12-987654321-0',
       };
 
       try {
-        // Tab list: general, medical, lifestyle, reproductive, ncd
-        const openMarkupGeneral = renderToStaticMarkup(
-          React.createElement(PhilHealthProfileModal, {
+        const coverageMarkup = renderToStaticMarkup(
+          React.createElement(PhilHealthCoverageModal, {
             visible: true,
             patient: mockPatient as any,
             onClose: () => {},
           })
         );
-        expect(openMarkupGeneral).toContain('PhilHealth patient profile');
-        expect(openMarkupGeneral).toContain('General and vitals');
+        expect(coverageMarkup).toContain('PhilHealth Coverage &amp; Clinic Assignment');
 
-        // Dormant BloodTypeSelect modal inside General tab produced NO body appends
+        const screeningMarkup = renderToStaticMarkup(
+          React.createElement(HealthScreeningModal, {
+            visible: true,
+            patient: mockPatient as any,
+            onClose: () => {},
+          })
+        );
+        expect(screeningMarkup).toContain('Health Screening &amp; Preventive Assessment');
+        expect(screeningMarkup).toContain('Vitals &amp; Vision');
+        expect(screeningMarkup).toContain('Nurse / Triage');
+
+        // Dormant sub-modals inside PhilHealthCoverageModal and HealthScreeningModal produce NO body appends
         expect(appendCount).toBe(0);
         expect(mockBody.children.length).toBe(0);
       } finally {
@@ -1489,7 +1530,7 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
         id: 'pat-all-tabs-1',
         fullName: 'Juan dela Cruz',
         patientCode: 'PAT-101',
-        gender: 'Male',
+        sex: 'Male',
         age: 45,
         dateOfBirth: '1981-05-12',
         verificationStatus: 'Verified',
@@ -1529,7 +1570,7 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
       }
     });
 
-    test('ADV-10: PhilHealthProfileModal tab cycling across ALL 5 tabs produces ZERO body appends', () => {
+    test('ADV-10: HealthScreeningModal across cohorts and PhilHealthCoverageModal produce ZERO body appends', () => {
       const originalDoc = (globalThis as any).document;
       let appendCount = 0;
       const mockBody: any = {
@@ -1544,24 +1585,33 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
       };
       (globalThis as any).document = { body: mockBody };
 
-      const mockPatient = {
-        id: 'pat-ph-adv-10',
-        fullName: 'Ana Santos',
-        patientCode: 'PAT-999',
-        gender: 'Female',
-        age: 29,
-        philHealthNumber: '12-345678901-2',
-      };
+      const cohorts = [
+        { id: 'pat-ph-adv-10-f', fullName: 'Ana Santos', patientCode: 'PAT-999', sex: 'Female', age: 29, philHealthNumber: '12-345678901-2' },
+        { id: 'pat-ph-adv-10-m', fullName: 'Marco Cruz', patientCode: 'PAT-1000', sex: 'Male', age: 35, philHealthNumber: null },
+        { id: 'pat-ph-adv-10-p', fullName: 'Leo Reyes', patientCode: 'PAT-1001', sex: 'Male', age: 10, philHealthNumber: null },
+      ];
 
       try {
-        const markup = renderToStaticMarkup(
-          React.createElement(PhilHealthProfileModal, {
-            visible: true,
-            patient: mockPatient as any,
-            onClose: () => {},
-          })
-        );
-        expect(markup).toContain('PhilHealth patient profile');
+        for (const mockPatient of cohorts) {
+          const screeningMarkup = renderToStaticMarkup(
+            React.createElement(HealthScreeningModal, {
+              visible: true,
+              patient: mockPatient as any,
+              onClose: () => {},
+            })
+          );
+          expect(screeningMarkup).toContain('Health Screening &amp; Preventive Assessment');
+          expect(screeningMarkup).toContain(mockPatient.fullName);
+
+          const coverageMarkup = renderToStaticMarkup(
+            React.createElement(PhilHealthCoverageModal, {
+              visible: true,
+              patient: mockPatient as any,
+              onClose: () => {},
+            })
+          );
+          expect(coverageMarkup).toContain('PhilHealth Coverage &amp; Clinic Assignment');
+        }
         expect(appendCount).toBe(0);
         expect(mockBody.children.length).toBe(0);
       } finally {
@@ -1759,6 +1809,38 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
         (globalThis as any).document = originalDoc;
       }
     });
+
+    test('ADV-17: findPortalContainer ignores top-layer portals marked with data-clinicez-top-layer="true"', () => {
+      const originalDoc = (globalThis as any).document;
+      try {
+        const mockBody: any = { children: [] };
+        const topLayerPortal: any = {
+          parentNode: mockBody,
+          dataset: { clinicezTopLayer: 'true' },
+          getAttribute: (attr: string) => (attr === 'data-clinicez-top-layer' ? 'true' : null),
+        };
+        const nestedConfirmDialog: any = {
+          parentNode: topLayerPortal,
+          getAttribute: (attr: string) => (attr === 'aria-modal' ? 'true' : null),
+        };
+        const normalModalPortal: any = {
+          parentNode: mockBody,
+          dataset: {},
+          getAttribute: () => null,
+        };
+        const normalDialog: any = {
+          parentNode: normalModalPortal,
+          getAttribute: (attr: string) => (attr === 'aria-modal' ? 'true' : null),
+        };
+        mockBody.children = [normalModalPortal, topLayerPortal];
+        (globalThis as any).document = { body: mockBody };
+
+        expect(findPortalContainer(nestedConfirmDialog)).toBeNull();
+        expect(findPortalContainer(normalDialog)).toBe(normalModalPortal);
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
   });
 
   afterAll(() => {
@@ -1766,6 +1848,11 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
       (globalThis as any).__mockClinicContext = previousClinicContext;
     } else {
       delete (globalThis as any).__mockClinicContext;
+    }
+    if (previousAuthContext !== undefined) {
+      (globalThis as any).__mockAuthContext = previousAuthContext;
+    } else {
+      delete (globalThis as any).__mockAuthContext;
     }
   });
 });

@@ -70,9 +70,9 @@ const { parseConfiguredSearchFields, STANDARD_SEARCH_FIELDS } = await import(
 
 describe('Patient Search Configuration - Parsing and Validation', () => {
   test('parseConfiguredSearchFields parses JSON array of field keys', () => {
-    const json = JSON.stringify(['patientCode', 'age', 'gender', 'meta:insurance_tier']);
+    const json = JSON.stringify(['patientCode', 'age', 'sex', 'meta:insurance_tier']);
     const parsed = parseConfiguredSearchFields(json);
-    expect(parsed).toEqual(['patientCode', 'age', 'gender', 'meta:insurance_tier']);
+    expect(parsed).toEqual(['patientCode', 'age', 'sex', 'meta:insurance_tier']);
   });
 
   test('parseConfiguredSearchFields falls back to [patientCode] when empty or invalid', () => {
@@ -87,7 +87,7 @@ describe('Patient Search Configuration - Parsing and Validation', () => {
     expect(keys).toContain('patientCode');
     expect(keys).toContain('age');
     expect(keys).toContain('dateOfBirth');
-    expect(keys).toContain('gender');
+    expect(keys).toContain('sex');
     expect(keys).toContain('contactNumber');
     expect(keys).toContain('philHealthNumber');
     expect(keys).toContain('barangay');

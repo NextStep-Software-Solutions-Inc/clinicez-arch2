@@ -123,7 +123,7 @@ public class Tier4_RealWorldClinicalScenarioTests
     public void Scenario2_DiabeticAdultCvdRiskAndMedicationSafetyWorkflow()
     {
         // STEP 1: Longitudinal Problem List
-        var problems = new List<PatientProblemDto>
+        var problems = new List<PatientMedicalHistoryDto>
         {
             new(Guid.NewGuid(), _clinicId, _patientId, "E11.9", "Type 2 Diabetes Mellitus", new DateOnly(2019, 3, 1), ProblemStatus.Active, null, "006"),
             new(Guid.NewGuid(), _clinicId, _patientId, "I10", "Essential Hypertension", new DateOnly(2017, 8, 1), ProblemStatus.Active, null, "001"),

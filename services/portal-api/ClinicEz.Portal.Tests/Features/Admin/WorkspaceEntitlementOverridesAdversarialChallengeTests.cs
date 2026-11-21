@@ -275,13 +275,15 @@ public class WorkspaceEntitlementOverridesAdversarialChallengeTests : IDisposabl
         var (tenant, _) = await SeedTenantWithPlanAsync("revoke-feature-tenant", "pro");
 
         var baseSnapshot = await _entitlements.ResolveAsync(tenant.Id, CancellationToken.None);
-        Assert.Contains(EntitlementKeys.FeatureTeleconsultation, baseSnapshot.Features);
+        Assert.DoesNotContain(EntitlementKeys.FeatureTeleconsultation, baseSnapshot.Features);
         Assert.Contains(EntitlementKeys.FeatureElectronicPrescriptions, baseSnapshot.Features);
         Assert.Contains(EntitlementKeys.FeaturePhilHealthKonsulta, baseSnapshot.Features);
         Assert.Contains(EntitlementKeys.FeatureLisIntegration, baseSnapshot.Features);
 
-        // Guard check on baseline succeeds
-        await _guard.EnsureFeatureAsync(tenant.Id, EntitlementKeys.FeatureTeleconsultation, CancellationToken.None);
+        // Guard check on baseline teleconsultation fails (opt-in PAYG required)
+        var baseEx = await Assert.ThrowsAsync<EntitlementException>(() =>
+            _guard.EnsureFeatureAsync(tenant.Id, EntitlementKeys.FeatureTeleconsultation, CancellationToken.None));
+        Assert.Equal(EntitlementGuard.FeatureUnavailableCode, baseEx.Code);
         await _guard.EnsureFeatureAsync(tenant.Id, EntitlementKeys.FeaturePhilHealthKonsulta, CancellationToken.None);
 
         // SuperAdmin explicitly disables FeatureTeleconsultation and FeaturePhilHealthKonsulta (Enabled = false)
@@ -480,9 +482,9 @@ public class WorkspaceEntitlementOverridesAdversarialChallengeTests : IDisposabl
         Assert.Contains(FacilityFeatureKeys.Teleconsultation, valLab.Payload.EnabledFeatures);
 
         // Verify outbox messages enqueued:
-        // 3 routable facilities * 2 services (own service + billing service) = 6 outbox events
+        // 3 routable facilities * 3 services (own service + billing service + comms service) = 9 outbox events
         var outboxEvents = TestSupport.OutboxPayloads<EntitlementsChangedEvent>(_context, InteropTypes.EntitlementsChanged);
-        Assert.Equal(6, outboxEvents.Count);
+        Assert.Equal(9, outboxEvents.Count);
 
         Assert.Contains(outboxEvents, e => e.FacilityId == mainClinic.Id && e.EntitlementVersion == dto.EntitlementVersion);
         Assert.Contains(outboxEvents, e => e.FacilityId == branchClinic.Id && e.EntitlementVersion == dto.EntitlementVersion);

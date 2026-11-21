@@ -1,14 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { View, Pressable, StyleSheet, ColorValue, DeviceEventEmitter } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ColorValue, DeviceEventEmitter, Pressable, StyleSheet, View } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { AppIcon, type IconName } from '@ui/Icon';
 import ThemedText from '@ui/ThemedText';
 import { CircularProgress } from '../ui/CircularProgress';
-import { FileBrowserFile, FileBrowserFolder, formatBytes } from '../../services/files';
+import { FileBrowserFile } from '../../services/files';
+import {
+  formatRecordFileName,
+  formatRecordSubtitle,
+} from '../../services/files/recordPresentation';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import type { ColorToken } from '../../constants/theme';
+import { ClinicalUrgencyBadge } from '../records/ClinicalUrgencyBadge';
+import { SyncStatusDot } from './SyncStatusDot';
 
-type BrowserItem = FileBrowserFolder | FileBrowserFile;
+type BrowserItem = FileBrowserFile;
 
 const TYPE_META: Record<string, { colorToken: ColorToken; icon: IconName }> = {
   'file-type-xray': { colorToken: 'info', icon: 'activity' },
@@ -17,8 +23,10 @@ const TYPE_META: Record<string, { colorToken: ColorToken; icon: IconName }> = {
   'file-type-prescription': { colorToken: 'emergency', icon: 'pill' },
   'file-type-id': { colorToken: 'purple', icon: 'badge' },
 };
-const FOLDER_META: { colorToken: ColorToken; icon: IconName } = { colorToken: 'warning', icon: 'folder' };
-const DEFAULT_META: { colorToken: ColorToken; icon: IconName } = { colorToken: 'textSecondary', icon: 'document' };
+const DEFAULT_META: { colorToken: ColorToken; icon: IconName } = {
+  colorToken: 'textSecondary',
+  icon: 'document',
+};
 
 function fileMeta(item: FileBrowserFile) {
   if (item.previewKind === 'image') return { colorToken: 'purple' as ColorToken, icon: 'image' as IconName };
@@ -42,33 +50,9 @@ export function Icon({
   return <AppIcon android={android} ios={ios} name={name} size={size} color={color} />;
 }
 
-function StatusDot({ status }: { status: string }) {
-  const { colors, radii, spacing } = useAppTheme();
-  const c: ColorToken =
-    status === 'synced' ? 'success' :
-      status === 'failed' ? 'emergency' :
-        status === 'syncing' ? 'info' : 'warning';
-  const bgToken: ColorToken =
-    status === 'synced' ? 'successBg' :
-      status === 'failed' ? 'emergencyBg' :
-        status === 'syncing' ? 'infoBg' : 'warningBg';
-  const l =
-    status === 'synced' ? 'Backed up' :
-      status === 'failed' ? 'Error' :
-        status === 'syncing' ? 'Syncing' : 'On device';
-
-  return (
-    <View style={[styles.dot, { backgroundColor: colors[bgToken], borderRadius: radii.full, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs }]}>
-      <View style={[styles.dotInner, { backgroundColor: colors[c], borderRadius: radii.full }]} />
-      <ThemedText variant="captionBold" color={c}>{l}</ThemedText>
-    </View>
-  );
-}
-
 export function FileRow({
   item,
   onPress,
-  onMove,
   onDelete,
   onShare,
   onRename,
@@ -76,19 +60,17 @@ export function FileRow({
 }: {
   item: BrowserItem;
   onPress: () => void;
-  onMove: () => void;
+  onMove?: () => void;
   onDelete: () => void;
   onShare: () => void;
   onRename?: () => void;
   onErrorPress?: () => void;
 }) {
   const { colors, spacing, radii, sizes, shadows } = useAppTheme();
-  const isFolder = item.kind === 'folder';
-
   const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
-    if (isFolder || (item as FileBrowserFile).syncStatus !== 'syncing') return;
+    if (item.syncStatus !== 'syncing') return;
 
     const sub = DeviceEventEmitter.addListener('file-sync-progress', (e) => {
       if (e.fileId === item.id) {
@@ -96,51 +78,34 @@ export function FileRow({
       }
     });
     return () => sub.remove();
-  }, [isFolder, item.id, (item as FileBrowserFile).syncStatus]);
+  }, [item.id, item.syncStatus]);
 
-  const meta = isFolder ? FOLDER_META : fileMeta(item as FileBrowserFile);
-  const dateStr =
-    !isFolder && (item as FileBrowserFile).createdAt
-      ? new Date((item as FileBrowserFile).createdAt!).toLocaleDateString(undefined, {
-        month: 'short', day: 'numeric', year: 'numeric',
-      })
-      : '';
-
-  const subtitle = isFolder
-    ? `${(item as FileBrowserFolder).childCount} item${(item as FileBrowserFolder).childCount === 1 ? '' : 's'}`
-    : [
-      (item as FileBrowserFile).typeLabel,
-      formatBytes((item as FileBrowserFile).sizeBytes),
-      dateStr,
-    ].filter(Boolean).join('  ·  ');
+  const meta = fileMeta(item);
+  const displayFileName = formatRecordFileName(item);
+  const recordSubtitle = formatRecordSubtitle(item);
 
   const swipeableRef = React.useRef<any>(null);
 
   const renderRightActions = () => (
     <View style={[styles.swipeWrap, { borderRadius: radii.lg, marginLeft: spacing.xs }]}>
-      {!isFolder && (
-        <Pressable
-          onPress={() => { swipeableRef.current?.close(); onShare(); }}
-          accessibilityRole="button"
-          accessibilityLabel="Share"
-          style={[styles.swipeBtn, { backgroundColor: colors.infoBg, width: sizes.avatarLg }]}
-        >
-          <AppIcon name="share" color="infoText" size={sizes.iconMd} />
-          <ThemedText variant="captionBold" color="infoText">Share</ThemedText>
-        </Pressable>
-      )}
       <Pressable
-        onPress={() => { swipeableRef.current?.close(); onMove(); }}
+        onPress={() => {
+          swipeableRef.current?.close();
+          onShare();
+        }}
         accessibilityRole="button"
-        accessibilityLabel="Move"
-        style={[styles.swipeBtn, { backgroundColor: colors.primaryLight, width: sizes.avatarLg }]}
+        accessibilityLabel="Share"
+        style={[styles.swipeBtn, { backgroundColor: colors.infoBg, width: sizes.avatarLg }]}
       >
-        <AppIcon name="folderMove" color="primaryText" size={sizes.iconMd} />
-        <ThemedText variant="captionBold" color="primaryText">Move</ThemedText>
+        <AppIcon name="share" color="infoText" size={sizes.iconMd} />
+        <ThemedText variant="captionBold" color="infoText">Share</ThemedText>
       </Pressable>
-      {onRename && (
+      {onRename ? (
         <Pressable
-          onPress={() => { swipeableRef.current?.close(); onRename(); }}
+          onPress={() => {
+            swipeableRef.current?.close();
+            onRename();
+          }}
           accessibilityRole="button"
           accessibilityLabel="Rename"
           style={[styles.swipeBtn, { backgroundColor: colors.surfaceSubtle, width: sizes.avatarLg }]}
@@ -148,9 +113,12 @@ export function FileRow({
           <AppIcon name="edit" color="textSecondary" size={sizes.iconMd} />
           <ThemedText variant="captionBold" color="textSecondary">Rename</ThemedText>
         </Pressable>
-      )}
+      ) : null}
       <Pressable
-        onPress={() => { swipeableRef.current?.close(); onDelete(); }}
+        onPress={() => {
+          swipeableRef.current?.close();
+          onDelete();
+        }}
         accessibilityRole="button"
         accessibilityLabel="Delete"
         style={[styles.swipeBtn, { backgroundColor: colors.emergencyBg, width: sizes.avatarLg }]}
@@ -166,7 +134,7 @@ export function FileRow({
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={item.name}
+        accessibilityLabel={displayFileName}
         style={({ pressed }) => [
           styles.row,
           {
@@ -200,38 +168,61 @@ export function FileRow({
         >
           <AppIcon name={meta.icon} color={meta.colorToken} size={sizes.iconLg} />
         </View>
+
         <View style={styles.rowBody}>
-          <ThemedText variant="bodyBold" numberOfLines={1}>{item.name}</ThemedText>
-          <ThemedText variant="small" color="textMuted" numberOfLines={1}>{subtitle}</ThemedText>
-          {!isFolder && (item as FileBrowserFile).syncStatus === 'failed' && (item as FileBrowserFile).syncError && (
-            <ThemedText variant="caption" color="emergencyText" numberOfLines={2} style={{ marginTop: spacing.xxs }}>
-              {(item as FileBrowserFile).syncError}
+          {/* Filename.ext + Urgent/STAT clinical indicator */}
+          <View style={[styles.titleRow, { gap: spacing.xs, marginBottom: spacing.xxs }]}>
+            <ThemedText variant="bodyBold" numberOfLines={1} style={styles.titleText}>
+              {displayFileName}
             </ThemedText>
-          )}
-        </View>
-        {!isFolder
-          ? (item as FileBrowserFile).syncStatus === 'failed' ? (
-            <Pressable onPress={onErrorPress} style={{ padding: spacing.xs, margin: -spacing.xs }} hitSlop={10}>
-              <StatusDot status={(item as FileBrowserFile).syncStatus} />
-            </Pressable>
-          ) : (item as FileBrowserFile).syncStatus === 'syncing' ? (
-            <CircularProgress
-              progress={uploadProgress}
-              size={sizes.iconXl}
-              color={colors.info}
-              trackColor={colors.surfaceSubtle}
+            <ClinicalUrgencyBadge
+              urgency={(item as any).urgency}
+              isCritical={(item as any).isCritical}
             />
-          ) : <StatusDot status={(item as FileBrowserFile).syncStatus} />
-          : (
-            <View style={{ opacity: 0.4 }}>
-              <AppIcon name="forward" color="textMuted" size={sizes.iconSm} />
-            </View>
-          )
-        }
+          </View>
+
+          {/* Timestamp + file size subtitle */}
+          <View style={[styles.subtitleRow, { gap: spacing.xs }]}>
+            {recordSubtitle ? (
+              <ThemedText variant="small" color="textMuted" numberOfLines={1} style={styles.subtitleText}>
+                {recordSubtitle}
+              </ThemedText>
+            ) : null}
+          </View>
+
+          {item.syncStatus === 'failed' && (item.syncError || item.lastSyncError) ? (
+            <ThemedText variant="caption" color="emergencyText" numberOfLines={2} style={{ marginTop: spacing.xxs }}>
+              {item.syncError || item.lastSyncError}
+            </ThemedText>
+          ) : null}
+        </View>
+
+        {item.syncStatus === 'failed' ? (
+          <Pressable
+            onPress={onErrorPress}
+            style={{ padding: spacing.xs, margin: -spacing.xs }}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Sync error details"
+          >
+            <SyncStatusDot status={item.syncStatus} />
+          </Pressable>
+        ) : item.syncStatus === 'syncing' ? (
+          <CircularProgress
+            progress={uploadProgress}
+            size={sizes.iconLg}
+            color={colors.info}
+            trackColor={colors.surfaceSubtle}
+          />
+        ) : (
+          <SyncStatusDot status={item.syncStatus} />
+        )}
       </Pressable>
     </Swipeable>
   );
 }
+
+export default FileRow;
 
 const styles = StyleSheet.create({
   row: {
@@ -241,19 +232,25 @@ const styles = StyleSheet.create({
   rowIcon: {
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   rowBody: {
     flex: 1,
     minWidth: 0,
   },
-  dot: {
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
-  dotInner: {
-    width: 6,
-    height: 6,
+  titleText: {
+    flexShrink: 1,
+  },
+  subtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  subtitleText: {
+    flexShrink: 1,
   },
   swipeWrap: {
     flexDirection: 'row',

@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
-using ClinicEz.Clinic.Application.Features.Patients.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
@@ -17,20 +16,14 @@ public sealed record GetPatientNcdRiskAssessmentsQuery(Guid PatientId, bool Incl
 public sealed class GetPatientNcdRiskAssessmentsQueryHandler : IRequestHandler<GetPatientNcdRiskAssessmentsQuery, List<NcdRiskAssessmentDto>>
 {
     private readonly IRepository<NcdRiskAssessment> _ncdRepo;
-    private readonly ILegacyPatientProfileIngestionService _legacyIngestion;
 
-    public GetPatientNcdRiskAssessmentsQueryHandler(
-        IRepository<NcdRiskAssessment> ncdRepo,
-        ILegacyPatientProfileIngestionService legacyIngestion)
+    public GetPatientNcdRiskAssessmentsQueryHandler(IRepository<NcdRiskAssessment> ncdRepo)
     {
         _ncdRepo = ncdRepo;
-        _legacyIngestion = legacyIngestion;
     }
 
     public async Task<List<NcdRiskAssessmentDto>> Handle(GetPatientNcdRiskAssessmentsQuery request, CancellationToken cancellationToken)
     {
-        await _legacyIngestion.EnsureIngestedAsync(request.PatientId, cancellationToken);
-
         var query = request.IncludeVoided
             ? _ncdRepo.Query(n => n.PatientId == request.PatientId, ignoreQueryFilters: true)
             : _ncdRepo.Query(n => n.PatientId == request.PatientId);

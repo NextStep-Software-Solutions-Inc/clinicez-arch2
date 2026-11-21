@@ -84,6 +84,28 @@ public static class ClinicTokenEvents
             return;
         }
 
+        var tokenType = principal.FindFirst(ClinicClaimTypes.TokenType)?.Value;
+        if (string.Equals(tokenType, "kiosk", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Guid.TryParse(principal.FindFirst(ClinicClaimTypes.ClinicId)?.Value, out var clinicId) ||
+                !int.TryParse(principal.FindFirst(ClinicClaimTypes.TokenVersion)?.Value, out var kioskVersion))
+            {
+                context.Fail("Malformed kiosk token claims.");
+                return;
+            }
+
+            var kioskCache = context.HttpContext.RequestServices.GetRequiredService<IKioskAccessCache>();
+            var kioskInfo = await kioskCache.GetAsync(clinicId, context.HttpContext.RequestAborted);
+            if (kioskInfo is null || !kioskInfo.IsKioskIntakeEnabled || kioskInfo.KioskTokenVersion != kioskVersion)
+            {
+                context.Fail("Kiosk session is no longer valid.");
+                return;
+            }
+
+            // Kiosk tokens receive ZERO staff permissions
+            return;
+        }
+
         if (!Guid.TryParse(principal.FindFirst(ClinicClaimTypes.Subject)?.Value, out var staffId) ||
             !int.TryParse(principal.FindFirst(ClinicClaimTypes.TokenVersion)?.Value, out var version))
         {

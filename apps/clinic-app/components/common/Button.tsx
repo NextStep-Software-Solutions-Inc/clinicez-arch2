@@ -60,6 +60,7 @@ export default function Button({
   const { multiplier } = useUiDensity();
   const variantStyles = getButtonVariantStyles(variant);
   const sizeStyles = getButtonSizeStyles(size, multiplier);
+  const isRefreshIcon = resolveIconName(icon) === 'refresh';
   const showLeftIcon = !loading && !!resolveIconName(icon);
   const showRightIcon = !loading && !!resolveIconName(rightIcon);
   const isPlusIcon = icon === 'plus' || resolveIconName(icon) === 'plus';
@@ -104,7 +105,9 @@ export default function Button({
       onPress={onPress}
       {...rest}
     >
-      {loading ? (
+      {loading && isRefreshIcon ? (
+        <IconSlot value={icon} size={sizeStyles.iconSize} color={variantStyles.text.color} spin={true} />
+      ) : loading ? (
         <ActivityIndicator size="small" color={variantStyles.indicatorColor} />
       ) : showLeftIcon ? (
         <IconSlot value={icon} size={sizeStyles.iconSize} color={variantStyles.text.color} />

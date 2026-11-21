@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@shared/safe"],
+  transpilePackages: ["@shared/safe", "@clinicez/comms-sdk", "@clinicez/design-tokens"],
   images: {
     remotePatterns: [
       {
@@ -19,18 +19,13 @@ const nextConfig: NextConfig = {
         destination: "/sign-up",
         permanent: true,
       },
-    ];
-  },
-  async rewrites() {
-    const rawClinicApiUrl = (process.env.NEXT_PUBLIC_CLINIC_API_URL || process.env.CLINIC_API_URL || "http://localhost:5245").replace(/\/+$/, "");
-    const clinicOrigin = rawClinicApiUrl.replace(/\/api\/v1\/?$/i, "");
-    return [
       {
-        source: "/api/v1/public/:path*",
-        destination: `${clinicOrigin}/api/v1/public/:path*`,
+        source: "/guest/teleconsult",
+        destination: "/teleconsult/join",
+        permanent: false,
       },
     ];
-  }
+  },
 };
 
 export default nextConfig;

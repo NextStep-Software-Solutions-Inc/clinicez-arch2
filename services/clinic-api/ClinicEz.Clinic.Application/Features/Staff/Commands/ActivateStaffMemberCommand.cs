@@ -3,9 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Staff.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Licensing;
 using FluentValidation;
@@ -15,7 +19,7 @@ using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
-public sealed record ActivateStaffMemberCommand(Guid Id) : IRequest<StaffMemberDto>;
+public sealed record ActivateStaffMemberCommand(Guid Id, bool SkipPendingVerificationSync = false) : IRequest<StaffMemberDto>;
 
 public sealed class ActivateStaffMemberCommandValidator : AbstractValidator<ActivateStaffMemberCommand>
 {
@@ -28,19 +32,21 @@ public sealed class ActivateStaffMemberCommandValidator : AbstractValidator<Acti
 public sealed class ActivateStaffMemberCommandHandler : IRequestHandler<ActivateStaffMemberCommand, StaffMemberDto>
 {
     private readonly IRepository<StaffMember> _staffRepository;
-    private readonly IRepository<ClinicSettings> _settingsRepository;
+    private readonly IRepository<FacilitySettings> _settingsRepository;
     private readonly IFacilityLicenseValidator _licenseValidator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
+    private readonly IClinicDirectorySyncService? _directorySyncService;
 
     public ActivateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
-        IRepository<ClinicSettings> settingsRepository,
+        IRepository<FacilitySettings> settingsRepository,
         IFacilityLicenseValidator licenseValidator,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IRepository<ClinicRoom>? roomRepository = null)
+        IRepository<Room>? roomRepository = null,
+        IClinicDirectorySyncService? directorySyncService = null)
     {
         _staffRepository = staffRepository;
         _settingsRepository = settingsRepository;
@@ -48,6 +54,7 @@ public sealed class ActivateStaffMemberCommandHandler : IRequestHandler<Activate
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _roomRepository = roomRepository;
+        _directorySyncService = directorySyncService;
     }
 
     public async Task<StaffMemberDto> Handle(ActivateStaffMemberCommand request, CancellationToken cancellationToken)
@@ -110,39 +117,31 @@ public sealed class ActivateStaffMemberCommandHandler : IRequestHandler<Activate
         await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
             staff.IsActive = true;
+            staff.Status = StaffAccountStatus.Active;
             staff.UpdatedAt = DateTime.UtcNow;
             staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
 
             _staffRepository.Update(staff);
         }, cancellationToken);
 
+        if (!request.SkipPendingVerificationSync
+            && staff.IsDirectoryOptIn
+            && ClinicianDirectoryValidationHelper.IsClinicianRole(staff.Role)
+            && PractitionerIdentity.IsValidPrcFormat(staff.PrcLicenseNumber)
+            && settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview
+            && _directorySyncService != null)
+        {
+            await _directorySyncService.SyncPendingFacilityVerificationAsync(
+                settings,
+                throwOnConflict: false,
+                _clinicContext.StaffId?.ToString(),
+                _clinicContext.StaffName,
+                cancellationToken);
+        }
+
         return MapToDto(staff, roomNames);
     }
 
     private static StaffMemberDto MapToDto(StaffMember staff, IReadOnlyList<string>? roomNames = null) =>
-        new(
-            staff.Id,
-            staff.TenantId,
-            staff.ClinicId,
-            staff.ClinicRoleId,
-            staff.ClinicRole?.Name,
-            staff.FirstName,
-            staff.LastName,
-            staff.MiddleName,
-            staff.Title,
-            staff.Role,
-            staff.Email,
-            staff.PhoneNumber,
-            staff.PrcLicenseNumber,
-            staff.PtrNumber,
-            staff.S2LicenseNumber,
-            staff.Specialty,
-            staff.IsActive,
-            staff.CreatedAt,
-            HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-            MustChangePassword: staff.MustChangePassword,
-            PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomIds: staff.GetAssignedRoomIds(),
-            AssignedRoomNames: roomNames ?? Array.Empty<string>()
-        );
+        StaffMemberDto.FromEntity(staff, staff.ClinicRole?.Name, roomNames);
 }

@@ -99,7 +99,9 @@ public sealed class DocumentCommandsTests
         report.Source.Should().Be(ResultProvenance.PatientUploaded);
         report.Verification.Should().Be(ResultVerification.Unverified);
         report.FileName.Should().Be("my_result.pdf");
-        report.FileStorageKey.Should().StartWith($"patients/{patientId}/lab-results/");
+        report.FileStorageKey.Should().StartWith($"patients/{patientId}/lab-results/").And.EndWith(".cez");
+        report.EncryptionAlgorithm.Should().Be("AES-256-GCM");
+        report.EncryptionIvBase64.Should().NotBeNullOrWhiteSpace();
         (await h.WithDbAsync(db => db.LabRequestSlips.AsNoTracking().SingleAsync())).Stage.Should().Be(LabSlipStage.ExternalSubmitted);
 
         await h.Relay.RunOnceAsync(default);
@@ -112,6 +114,7 @@ public sealed class DocumentCommandsTests
         payload.UploaderKind.Should().Be(UploaderKind.Patient);
         payload.UploadId.Should().Be(accepted.ResultId);
         payload.DocumentUrl.Should().StartWith("https://files.example.test/patients/");
+        payload.FileBase64.Should().NotBeNullOrWhiteSpace();
         payload.Notes.Should().Be("from home");
     }
 

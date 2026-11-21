@@ -1,7 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, EmptyState, Button, Modal } from '../ui';
+import { ThemedText, Badge, Icon, EmptyState, Button, Modal, Input } from '../ui';
+import { notify } from '@utils/feedback';
+import { clinicService } from '../../services/clinicService';
+import { openDocument } from '../../services/documentOpener';
+import { pickLabResultDocument, type PickedDocumentResult } from '../../utils/documentPickerHelper';
+import { LabOrderStageChip } from '../interop/InteropBadges';
+import { PERMISSIONS } from '../../constants/permissions';
+import { useAuth, usePermission } from '../../context/AuthContext';
+import { useStaff } from '../../context/StaffContext';
 import type {
   ClinicPatient,
   ClinicLabOrderRecord,
@@ -10,11 +18,13 @@ import type {
 export interface DiagnosticLabTabProps {
   patient?: ClinicPatient | null;
   patientId?: string;
+  patientName?: string;
   labOrders: ClinicLabOrderRecord[];
   onViewLabSlip?: (orderId: string) => void;
   onOpenLabSlip?: (order: ClinicLabOrderRecord) => void;
   onAttachExternalResult?: (orderId: string) => void;
   onAttachExternalLab?: (orderId: string) => void;
+  onOrderDiagnostic?: () => void;
   onAcknowledgePanic?: (orderId: string, readbackNotes: string) => Promise<void>;
   onRefreshChart?: () => void;
 }
@@ -57,16 +67,33 @@ export function lookupStatutoryDiagnosticCode(testName: string): { code: string;
 export default function DiagnosticLabTab({
   patient,
   patientId,
+  patientName,
   labOrders = [],
   onViewLabSlip,
   onOpenLabSlip,
   onAttachExternalResult,
   onAttachExternalLab,
+  onOrderDiagnostic,
   onAcknowledgePanic,
   onRefreshChart,
 }: DiagnosticLabTabProps) {
+  const { user } = useAuth();
+  const staffCtx = useStaff();
+  const currentStaff = staffCtx?.current || (staffCtx as any)?.currentStaff;
+
+  const hasLabOrdersWrite = usePermission(PERMISSIONS.labOrdersWrite) || user?.role === 'Admin';
+  const effectiveRole = currentStaff?.role || user?.role;
+  const isDoctor = effectiveRole?.toLowerCase() === 'doctor';
+  const prcNumber = currentStaff?.prcLicenseNumber || (user as any)?.prcLicenseNumber;
+  const hasPrcLicense = Boolean(prcNumber && prcNumber.trim().length > 0);
+
+  // Gated by permission + PRC license if doctor only
+  const canOrderDiagnostic = (user ? hasLabOrdersWrite : true) && (!isDoctor || hasPrcLicense);
+
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED' | 'EXTERNAL' | 'PANIC'>('ALL');
   const [panicModalVisible, setPanicModalVisible] = useState(false);
+  const [attachModalVisible, setAttachModalVisible] = useState(false);
+  const [targetAttachOrderId, setTargetAttachOrderId] = useState<string | null>(null);
   const [targetPanicOrder, setTargetPanicOrder] = useState<any | null>(null);
   const [readbackNotes, setReadbackNotes] = useState('');
   const [submittingPanic, setSubmittingPanic] = useState(false);
@@ -115,11 +142,20 @@ export default function DiagnosticLabTab({
     }
   };
 
-  const handleSlipAction = (order: ClinicLabOrderRecord) => {
+  const handleSlipAction = async (order: ClinicLabOrderRecord) => {
     if (onOpenLabSlip) {
       onOpenLabSlip(order);
     } else if (onViewLabSlip) {
       onViewLabSlip(order.id);
+    } else {
+      const url = clinicService.getLabOrderSlipPdfUrl(order.id);
+      try {
+        if (!(await openDocument(url))) {
+          throw new Error('Could not open requisition slip');
+        }
+      } catch (err: any) {
+        notify.error(err?.message || 'Unable to open laboratory requisition slip.');
+      }
     }
   };
 
@@ -128,7 +164,24 @@ export default function DiagnosticLabTab({
       onAttachExternalLab(orderId);
     } else if (onAttachExternalResult) {
       onAttachExternalResult(orderId);
+    } else {
+      setTargetAttachOrderId(orderId);
+      setAttachModalVisible(true);
     }
+  };
+
+  const handleCancelLabOrder = async (order: ClinicLabOrderRecord) => {
+    const confirmed = typeof window !== 'undefined' && window.confirm
+      ? window.confirm(`Cancel laboratory requisition #${order.orderNumber}? This will revoke the lab order.`)
+      : true;
+    if (!confirmed) return;
+    const [, err] = await clinicService.cancelLabOrder(order.id);
+    if (err) {
+      notify.error(err.message || 'Failed to cancel laboratory order.');
+      return;
+    }
+    notify.success(`Requisition #${order.orderNumber} cancelled.`);
+    onRefreshChart?.();
   };
 
   return (
@@ -156,79 +209,120 @@ export default function DiagnosticLabTab({
                   ) : null}
                 </View>
               </View>
-              <Pressable
+              <Button
+                variant="danger"
+                size="xs"
+                icon="checkCircle"
+                title="Acknowledge & Document Verbal Readback"
                 onPress={() => handleOpenPanicModal(pOrder)}
                 style={styles.acknowledgeBtn}
-              >
-                <Icon name="checkCircle" size={14} color={theme.colors.onPrimary} />
-                <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-                  Acknowledge & Document Verbal Readback
-                </ThemedText>
-              </Pressable>
+              />
             </View>
           ))}
         </View>
       ) : null}
 
       {/* ========================================================================= */}
-      {/* FILTER BUTTONS                                                            */}
+      {/* FILTER BUTTONS & ACTION BAR                                               */}
       {/* ========================================================================= */}
-      <View style={styles.filterRow}>
-        <Pressable
-          onPress={() => setSelectedFilter('ALL')}
-          style={[styles.filterBtn, selectedFilter === 'ALL' && styles.filterBtn_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+      <View style={styles.topBar}>
+        <View style={styles.filterScrollWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterRow}
           >
-            All Orders ({labOrders.length})
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setSelectedFilter('PENDING')}
-          style={[styles.filterBtn, selectedFilter === 'PENDING' && styles.filterBtn_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedFilter === 'PENDING' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            <Pressable
+              onPress={() => setSelectedFilter('ALL')}
+              style={[styles.filterBtn, selectedFilter === 'ALL' && styles.filterBtn_active]}
+            >
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                All Orders ({labOrders.length})
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('PENDING')}
+              style={[styles.filterBtn, selectedFilter === 'PENDING' && styles.filterBtn_active]}
+            >
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'PENDING' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Pending
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('COMPLETED')}
+              style={[styles.filterBtn, selectedFilter === 'COMPLETED' && styles.filterBtn_active]}
+            >
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'COMPLETED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Completed
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('EXTERNAL')}
+              style={[styles.filterBtn, selectedFilter === 'EXTERNAL' && styles.filterBtn_active]}
+            >
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'EXTERNAL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                External Reports
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('PANIC')}
+              style={[styles.filterBtn, selectedFilter === 'PANIC' && styles.filterBtn_active]}
+            >
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'PANIC' ? theme.colors.emergencyText : theme.colors.textSecondary}
+              >
+                Critical / Panic ({activePanicOrders.length})
+              </ThemedText>
+            </Pressable>
+          </ScrollView>
+        </View>
+
+        {canOrderDiagnostic ? (
+          <Button
+            testID="order-diagnostic-button"
+            variant="primary"
+            size="sm"
+            icon="plus"
+            title="Order Diagnostic"
+            numberOfLines={1}
+            onPress={() => onOrderDiagnostic?.()}
+            style={styles.orderDiagnosticBtn}
+          />
+        ) : isDoctor && (user ? hasLabOrdersWrite : true) && !hasPrcLicense ? (
+          <Pressable
+            testID="order-diagnostic-prc-required"
+            accessibilityRole="button"
+            accessibilityLabel="PRC License Required to order diagnostics"
+            onPress={() => {
+              notify.warning('Physicians must have a registered PRC license number on file to issue diagnostic orders.');
+            }}
+            style={styles.orderDiagnosticBtn_disabled}
           >
-            Pending
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setSelectedFilter('COMPLETED')}
-          style={[styles.filterBtn, selectedFilter === 'COMPLETED' && styles.filterBtn_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedFilter === 'COMPLETED' ? theme.colors.primaryDark : theme.colors.textSecondary}
-          >
-            Completed
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setSelectedFilter('EXTERNAL')}
-          style={[styles.filterBtn, selectedFilter === 'EXTERNAL' && styles.filterBtn_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedFilter === 'EXTERNAL' ? theme.colors.primaryDark : theme.colors.textSecondary}
-          >
-            External Reports
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setSelectedFilter('PANIC')}
-          style={[styles.filterBtn, selectedFilter === 'PANIC' && styles.filterBtn_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedFilter === 'PANIC' ? theme.colors.emergencyText : theme.colors.textSecondary}
-          >
-            Critical / Panic ({activePanicOrders.length})
-          </ThemedText>
-        </Pressable>
+            <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+            <ThemedText variant="captionBold" numberOfLines={1} color={theme.colors.emergencyText}>
+              PRC License Required
+            </ThemedText>
+          </Pressable>
+        ) : null}
       </View>
 
       {/* ========================================================================= */}
@@ -270,10 +364,11 @@ export default function DiagnosticLabTab({
                       <Badge label="Panic Value" variant="emergency" size="sm" icon="emergency" />
                     ) : null}
                     <Badge
-                      label={order.status}
-                      variant={isCompleted ? 'success' : order.status === 'Draft' ? 'neutral' : 'info'}
+                      label={order.status === 'SpecimenCollected' ? 'Specimen Collected' : order.status}
+                      variant={isCompleted ? 'success' : order.status === 'SpecimenCollected' ? 'info' : order.status === 'Draft' ? 'neutral' : 'info'}
                       size="sm"
                     />
+                    <LabOrderStageChip order={order} />
                   </View>
                 </View>
 
@@ -324,38 +419,44 @@ export default function DiagnosticLabTab({
 
                 {/* Actions */}
                 <View style={styles.orderFooter}>
-                  <Pressable
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    icon="file"
+                    title="View Lab Slip & QR"
                     onPress={() => handleSlipAction(order)}
-                    style={styles.actionBtn}
-                  >
-                    <Icon name="file" size={14} color={theme.colors.primaryDark} />
-                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                      View Lab Slip & QR
-                    </ThemedText>
-                  </Pressable>
+                  />
 
-                  {!isCompleted ? (
-                    <Pressable
+                  {!isCompleted && order.status !== 'Cancelled' ? (
+                    <Button
+                      testID={`attach-external-result-${order.id}`}
+                      variant="outline"
+                      size="xs"
+                      icon="upload"
+                      title="Attach External Result"
                       onPress={() => handleAttachAction(order.id)}
-                      style={styles.actionBtn}
-                    >
-                      <Icon name="upload" size={14} color={theme.colors.primaryDark} />
-                      <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                        Attach External Result
-                      </ThemedText>
-                    </Pressable>
+                    />
+                  ) : null}
+
+                  {!isCompleted && order.status === 'Ordered' ? (
+                    <Button
+                      testID={`cancel-lab-order-${order.id}`}
+                      variant="dangerOutline"
+                      size="xs"
+                      icon="close"
+                      title="Cancel Requisition"
+                      onPress={() => handleCancelLabOrder(order)}
+                    />
                   ) : null}
 
                   {isPanic && !order.isPanicAcknowledged ? (
-                    <Pressable
+                    <Button
+                      variant="dangerOutline"
+                      size="xs"
+                      icon="checkCircle"
+                      title="Document Readback"
                       onPress={() => handleOpenPanicModal(order)}
-                      style={[styles.actionBtn, styles.actionBtn_emergency]}
-                    >
-                      <Icon name="checkCircle" size={14} color={theme.colors.emergencyText} />
-                      <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                        Document Readback
-                      </ThemedText>
-                    </Pressable>
+                    />
                   ) : null}
                 </View>
               </View>
@@ -417,6 +518,24 @@ export default function DiagnosticLabTab({
           </View>
         </View>
       </Modal>
+
+      {/* Attach External Lab Result Modal */}
+      <AttachExternalLabModal
+        visible={attachModalVisible}
+        orderId={targetAttachOrderId}
+        pendingOrders={labOrders.filter(
+          (o) => o.status !== 'Completed' && o.status !== 'CompletedWithExternalReport' && o.status !== 'Cancelled'
+        )}
+        onClose={() => {
+          setAttachModalVisible(false);
+          setTargetAttachOrderId(null);
+        }}
+        onSuccess={() => {
+          setAttachModalVisible(false);
+          setTargetAttachOrderId(null);
+          onRefreshChart?.();
+        }}
+      />
     </ScrollView>
   );
 }
@@ -446,28 +565,32 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   acknowledgeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: theme.colors.emergency,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: theme.radii.sm,
     alignSelf: 'flex-start',
+  },
+  filterScrollWrap: {
+    flexDirection: 'row',
+    flex: 1,
+    minWidth: 0,
+  },
+  filterScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
   },
   filterRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
     gap: theme.spacing.xs,
-    marginBottom: theme.spacing.md,
   },
   filterBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    flexShrink: 0,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
   },
   filterBtn_active: {
@@ -551,25 +674,11 @@ const styles = StyleSheet.create({
   orderFooter: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.sm,
     paddingTop: 6,
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-  },
-  actionBtn_emergency: {
-    backgroundColor: theme.colors.emergencyBg,
-    borderColor: theme.colors.emergencyBorder,
   },
   modalOverlay: {
     flex: 1,
@@ -609,4 +718,389 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     marginTop: theme.spacing.xs,
   },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'nowrap',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+    width: '100%',
+    minWidth: 0,
+  },
+  orderDiagnosticBtn: {
+    flexShrink: 0,
+  },
+  orderDiagnosticBtn_disabled: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.sm,
+    minHeight: theme.sizes.controlSm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  modalContent: {
+    padding: theme.spacing.md,
+    gap: theme.spacing.md,
+  },
+  modalSection: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  fieldBlock: {
+    gap: 6,
+  },
+  classificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  formatChipRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  formatChip: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  formatChip_active: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
+  },
+  pickedFileBox: {
+    gap: 4,
+  },
+  pickedFileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.md,
+    gap: theme.spacing.sm,
+  },
+  pickedFileInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flex: 1,
+  },
+  pickedFileActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  pickFileBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.md,
+    gap: 4,
+  },
+  orderSummaryBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+    marginBottom: theme.spacing.sm,
+  },
+  orderSelectChip: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  orderSelectChip_active: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
+  },
+  specimenCollectedBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.successBg,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.successBorder,
+    marginTop: theme.spacing.xs,
+  },
 });
+
+export function AttachExternalLabModal({
+  visible,
+  orderId,
+  pendingOrders = [],
+  onClose,
+  onSuccess,
+}: {
+  visible: boolean;
+  orderId: string | null;
+  pendingOrders?: ClinicLabOrderRecord[];
+  onClose: () => void;
+  onSuccess?: () => void;
+}) {
+  const [selectedOrderId, setSelectedOrderId] = useState<string>(orderId || '');
+  const [labName, setLabName] = useState('');
+  const [docType, setDocType] = useState<'PDF' | 'Photo'>('PDF');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [pickedFile, setPickedFile] = useState<PickedDocumentResult | null>(null);
+  const [picking, setPicking] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      const activeId = orderId || (pendingOrders.length > 0 ? pendingOrders[0].id : '');
+      setSelectedOrderId(activeId);
+      setLabName('');
+      setDocType('PDF');
+      setNotes('');
+      setPickedFile(null);
+      setSaving(false);
+      setPicking(false);
+    }
+  }, [visible, orderId, pendingOrders]);
+
+  const activeTargetOrder = (pendingOrders || []).find((o) => o.id === selectedOrderId) ||
+    (orderId ? (pendingOrders || []).find((o) => o.id === orderId) : (pendingOrders || [])[0]);
+
+  const handlePick = async () => {
+    setPicking(true);
+    try {
+      const res = await pickLabResultDocument();
+      if (res) {
+        setPickedFile(res);
+        setDocType(res.documentType);
+      }
+    } catch (err: any) {
+      notify.error(err?.message || 'Failed to select document file.');
+    } finally {
+      setPicking(false);
+    }
+  };
+
+  const handleSave = async () => {
+    const finalOrderId = selectedOrderId || orderId || activeTargetOrder?.id;
+    if (!finalOrderId) {
+      notify.error('Please select an active laboratory requisition to attach results.');
+      return;
+    }
+    if (!labName.trim()) {
+      notify.error('Diagnostic laboratory name is required.');
+      return;
+    }
+    if (!pickedFile?.base64) {
+      notify.error('A result file is required. Please choose a PDF or image.');
+      return;
+    }
+    setSaving(true);
+    const [, err] = await clinicService.attachExternalLabResult(finalOrderId, {
+      externalLabName: labName.trim(),
+      documentType: docType,
+      fileBase64: pickedFile.base64,
+      contentType: pickedFile.mimeType,
+      fileName: pickedFile.name,
+      notes: notes.trim() || undefined,
+      documentUrl: 'external-labs/lab-result.pdf',
+    });
+    setSaving(false);
+    if (err) {
+      notify.error(err.message || 'Could not attach the laboratory result.');
+      return;
+    }
+    notify.success('External laboratory result attached. Requisition marked as completed.');
+    onSuccess?.();
+    onClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      title="Attach External Lab Result"
+      subtitle="Upload outside laboratory findings to complete the patient record"
+      onClose={onClose}
+      footer={
+        <View style={styles.modalActions}>
+          <Button title="Cancel" variant="ghost" onPress={onClose} disabled={saving} />
+          <Button
+            testID="confirm-attach-result-button"
+            title={saving ? 'Attaching...' : 'Attach Result'}
+            variant="primary"
+            icon="upload"
+            loading={saving}
+            onPress={handleSave}
+          />
+        </View>
+      }
+    >
+      <View style={styles.modalSection}>
+        {activeTargetOrder ? (
+          <View style={styles.orderSummaryBox}>
+            <Icon name="lab" size={16} color={theme.colors.primaryDark} />
+            <View style={{ flex: 1 }}>
+              <ThemedText variant="captionBold" color={theme.colors.text}>
+                Requisition #{activeTargetOrder.orderNumber}
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                {(activeTargetOrder.items || []).map((i: any) => i.testName).join(', ') || 'Diagnostic Panel'}
+              </ThemedText>
+            </View>
+          </View>
+        ) : null}
+
+        {!orderId && pendingOrders.length > 1 ? (
+          <View style={{ marginBottom: theme.spacing.sm }}>
+            <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
+              Select Requisition to Attach to:
+            </ThemedText>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {pendingOrders.map((o) => (
+                <Pressable
+                  key={o.id}
+                  onPress={() => setSelectedOrderId(o.id)}
+                  style={[
+                    styles.orderSelectChip,
+                    (selectedOrderId || activeTargetOrder?.id) === o.id && styles.orderSelectChip_active,
+                  ]}
+                >
+                  <ThemedText
+                    variant="captionBold"
+                    color={(selectedOrderId || activeTargetOrder?.id) === o.id ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  >
+                    #{o.orderNumber}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+          EXTERNAL LABORATORY DETAILS
+        </ThemedText>
+        <Input
+          label="Diagnostic Laboratory Name *"
+          value={labName}
+          onChangeText={setLabName}
+          placeholder="e.g. Hi-Precision Diagnostics / St. Luke's"
+        />
+
+        <View style={styles.fieldBlock}>
+          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+            Result File Attachment * (PDF, JPEG, PNG)
+          </ThemedText>
+          {pickedFile ? (
+            <View style={styles.pickedFileBox}>
+              <View style={styles.pickedFileCard}>
+                <View style={styles.pickedFileInfo}>
+                  <Icon
+                    name={docType === 'PDF' ? 'file' : 'camera'}
+                    size={theme.sizes.iconMd}
+                    color={theme.colors.primary}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text} numberOfLines={1}>
+                      {pickedFile.name}
+                    </ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      {pickedFile.size ? `${(pickedFile.size / 1024).toFixed(1)} KB • ` : ''}
+                      Ready to attach
+                    </ThemedText>
+                  </View>
+                </View>
+                <View style={styles.pickedFileActions}>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    title="Change"
+                    disabled={picking || saving}
+                    onPress={handlePick}
+                  />
+                  <Button
+                    variant="dangerOutline"
+                    size="xs"
+                    title="Remove"
+                    disabled={saving}
+                    onPress={() => setPickedFile(null)}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.classificationRow}>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Document Format:
+                </ThemedText>
+                <View style={styles.formatChipRow}>
+                  {(['PDF', 'Photo'] as const).map((fmt) => (
+                    <Pressable
+                      key={fmt}
+                      style={[
+                        styles.formatChip,
+                        docType === fmt && styles.formatChip_active,
+                      ]}
+                      onPress={() => setDocType(fmt)}
+                    >
+                      <ThemedText
+                        variant="captionBold"
+                        color={docType === fmt ? theme.colors.primaryDark : theme.colors.textSecondary}
+                      >
+                        {fmt === 'PDF' ? 'Official PDF' : 'Scanned Photo'}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            </View>
+          ) : (
+            <Pressable
+              style={styles.pickFileBtn}
+              onPress={handlePick}
+              disabled={picking || saving}
+            >
+              <Icon name="upload" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+              <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+                {picking ? 'Opening File Browser...' : 'Select Result Document (PDF / Photo)'}
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                PDF, JPG, or PNG up to 15 MB • Auto-detected format
+              </ThemedText>
+            </Pressable>
+          )}
+        </View>
+
+        <Input
+          label="Clinical Notes / Findings Summary"
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Pathologist findings, reference range values, notes..."
+          multiline
+        />
+      </View>
+    </Modal>
+  );
+}

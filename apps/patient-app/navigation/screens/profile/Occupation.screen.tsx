@@ -18,6 +18,7 @@ import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
 import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
+import { useEhrOptions } from 'hooks/useEhrOptions';
 
 type WorkEnvironment = 'Office' | 'Field' | 'Factory' | 'Healthcare' | 'Agriculture' | 'Other';
 
@@ -30,13 +31,8 @@ type FormValues = {
   hazardExposure: string;
 };
 
-const WORK_ENV_OPTIONS = [
-  { label: 'Office', value: 'Office' }, { label: 'Field', value: 'Field' },
-  { label: 'Factory', value: 'Factory' }, { label: 'Healthcare', value: 'Healthcare' },
-  { label: 'Agriculture', value: 'Agriculture' }, { label: 'Other', value: 'Other' },
-];
-
 export default function OccupationScreen() {
+  const { selectOptions: workEnvOptions } = useEhrOptions('work_environment');
   const patientId = usePatientId();
   const { getToken } = useAuth();
   const { spacing } = useAppTheme();
@@ -155,7 +151,7 @@ export default function OccupationScreen() {
             <ProfileFormField label="Industry / Sector" value={field.value} onChangeText={field.onChange} placeholder="e.g. Healthcare, IT, Education" />
           )} />
           <Controller control={control} name="workEnvironment" render={({ field }) => (
-            <ProfileFormField label="Work Environment" value={WORK_ENV_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setEnvModal(true)} placeholder="Select environment" picker />
+            <ProfileFormField label="Work Environment" value={workEnvOptions.find(o => o.value === field.value)?.label || ''} onPressIn={() => setEnvModal(true)} placeholder="Select environment" picker />
           )} />
           <Controller control={control} name="yearsInOccupation" render={({ field }) => (
             <ProfileFormField label="Years in Current Occupation" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="Optional" />
@@ -166,7 +162,7 @@ export default function OccupationScreen() {
         </ScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />
         <Controller control={control} name="workEnvironment" render={({ field }) => (
-          <ProfileSelectModal visible={envModal} title="Work Environment" options={WORK_ENV_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setEnvModal(false)} />
+          <ProfileSelectModal visible={envModal} title="Work Environment" options={workEnvOptions} selected={field.value} onSelect={field.onChange} onClose={() => setEnvModal(false)} />
         )} />
       </KeyboardAvoidingView>
     </Screen>

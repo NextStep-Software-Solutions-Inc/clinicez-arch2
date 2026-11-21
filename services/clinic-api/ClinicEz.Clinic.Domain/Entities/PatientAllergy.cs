@@ -27,11 +27,10 @@ public enum AllergyStatus
     Refuted = 3
 }
 
-public sealed class PatientAllergy : BaseEntity
+public sealed class PatientAllergy : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
     public Guid PatientId { get; set; }
+    public Patient Patient { get; set; } = null!;
 
     public AllergyCategory Category { get; set; } = AllergyCategory.Medication;
     public required string Allergen { get; set; } // e.g. "Penicillin", "Amoxicillin", "Peanuts"

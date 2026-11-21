@@ -8,11 +8,20 @@ import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import { NotificationPopover } from "@/components/dashboard/NotificationPopover";
 
+export function resolveSiteHeaderTitle(pathname: string | null | undefined): string {
+  const trimmedPath = (pathname || "").replace(/\/+$/, "");
+  if (!trimmedPath) return "home";
+  const segments = trimmedPath.split("/").filter(Boolean);
+  const branchesIndex = segments.indexOf("branches");
+  if (branchesIndex !== -1 && segments.length > branchesIndex + 1) {
+    return "Branch Details";
+  }
+  return segments.length > 0 ? segments[segments.length - 1] : "home";
+}
+
 export function SiteHeader() {
   const pathname = usePathname();
-  const trimmedPath = pathname.replace(/\/+$/, "");
-  const segments = trimmedPath.split("/");
-  const currentPage = segments.length > 1 ? segments.pop() : "home";
+  const currentPage = resolveSiteHeaderTitle(pathname);
   
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height) bg-background">

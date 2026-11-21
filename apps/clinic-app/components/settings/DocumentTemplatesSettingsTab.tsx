@@ -18,7 +18,14 @@ import { Skeleton, SkeletonList } from '../ui/Skeleton';
 import SegmentedControl, { SegmentedOption } from '../ui/SegmentedControl';
 import { theme } from '../../constants/theme';
 import { useBreakpoint } from '../../utils/useBreakpoint';
-import { clinicService, type ClinicSettingsRecord } from '../../services/clinicService';
+import {
+  clinicService,
+  isVerificationConflictError,
+  type ClinicSettingsRecord,
+  type PlatformVerificationStatus,
+} from '../../services/clinicService';
+import { PENDING_VERIFICATION_BUTTON_LABEL } from '../../utils/directoryVerification';
+import { PendingVerificationNote } from './common';
 import {
   BRAND_COLOR_PRESETS,
   DEFAULT_CLINIC_BRAND_COLOR,
@@ -53,6 +60,8 @@ export interface DocumentTemplatesSettingsTabProps {
   settingsLoadError?: string | null;
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
   onRefreshSettings?: () => Promise<void>;
+  platformVerificationStatus?: PlatformVerificationStatus;
+  onRefreshVerificationState?: () => Promise<void>;
 }
 
 const CATEGORY_OPTIONS: SegmentedOption<StudioCategory>[] = [
@@ -101,44 +110,68 @@ const PAPER_SIZE_OPTIONS: SegmentedOption<PaperSize>[] = [
   { value: 'A5', label: 'A5' },
 ];
 
+const DEFAULT_STATUTORY_FOOTER =
+  'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.';
+
+function deriveStationeryFormValues(record: ClinicSettingsRecord | null | undefined) {
+  const docAccent =
+    record?.letterheadAccentColorHex ||
+    record?.documentAccentColorHex ||
+    record?.primaryColorHex ||
+    DEFAULT_CLINIC_BRAND_COLOR;
+  return {
+    letterheadHeader: record?.letterheadHeader || record?.clinicName || '',
+    letterheadSubHeader: record?.letterheadSubHeader || '',
+    letterheadAddress: record?.letterheadAddress || '',
+    letterheadContact: record?.letterheadContact || '',
+    dohLicenseToOperate: record?.dohLicenseToOperate || record?.letterheadDohLto || '',
+    accreditationNumber: record?.accreditationNumber || '',
+    primaryLogoUrl: record?.primaryLogoUrl ?? null,
+    letterheadAccentColorHex: docAccent,
+    paperSize: ((record?.paperSize as PaperSize) || 'Letter') as PaperSize,
+    letterheadFooter: record?.letterheadFooter || DEFAULT_STATUTORY_FOOTER,
+    defaultApproverName: record?.defaultApproverName || '',
+    defaultApproverTitle: record?.defaultApproverTitle || '',
+  };
+}
+
 export default function DocumentTemplatesSettingsTab({
   settings: initialSettings,
   showSkeletons = false,
   settingsLoadError = null,
   onSettingsUpdated,
   onRefreshSettings,
+  platformVerificationStatus,
+  onRefreshVerificationState,
 }: DocumentTemplatesSettingsTabProps) {
   const { isDesktop } = useBreakpoint();
+  const initialForm = deriveStationeryFormValues(initialSettings);
 
   // Internal state for self-loading if props are omitted (e.g. standalone rendering in tests)
   const [internalSettings, setInternalSettings] = useState<ClinicSettingsRecord | null>(initialSettings ?? null);
+  const effectiveVerificationStatus = platformVerificationStatus ?? internalSettings?.platformVerificationStatus;
+  const isPendingFacility = effectiveVerificationStatus === 'PendingReview';
   const [loading, setLoading] = useState<boolean>(!initialSettings && showSkeletons);
   const [loadError, setLoadError] = useState<string | null>(settingsLoadError);
 
   // Form Fields
-  const [letterheadHeader, setLetterheadHeader] = useState(initialSettings?.letterheadHeader || initialSettings?.clinicName || '');
-  const [letterheadSubHeader, setLetterheadSubHeader] = useState(initialSettings?.letterheadSubHeader || '');
-  const [letterheadAddress, setLetterheadAddress] = useState(initialSettings?.letterheadAddress || '');
-  const [letterheadContact, setLetterheadContact] = useState(initialSettings?.letterheadContact || '');
-  const [dohLicenseToOperate, setDohLicenseToOperate] = useState(initialSettings?.dohLicenseToOperate || initialSettings?.letterheadDohLto || '');
-  const [accreditationNumber, setAccreditationNumber] = useState(initialSettings?.accreditationNumber || '');
-  const [primaryLogoUrl, setPrimaryLogoUrl] = useState<string | null>(initialSettings?.primaryLogoUrl ?? null);
+  const [letterheadHeader, setLetterheadHeader] = useState(initialForm.letterheadHeader);
+  const [letterheadSubHeader, setLetterheadSubHeader] = useState(initialForm.letterheadSubHeader);
+  const [letterheadAddress, setLetterheadAddress] = useState(initialForm.letterheadAddress);
+  const [letterheadContact, setLetterheadContact] = useState(initialForm.letterheadContact);
+  const [dohLicenseToOperate, setDohLicenseToOperate] = useState(initialForm.dohLicenseToOperate);
+  const [accreditationNumber, setAccreditationNumber] = useState(initialForm.accreditationNumber);
+  const [primaryLogoUrl, setPrimaryLogoUrl] = useState<string | null>(initialForm.primaryLogoUrl);
   const [letterheadAccentColorHex, setLetterheadAccentColorHex] = useState<string>(
-    initialSettings?.letterheadAccentColorHex ||
-      initialSettings?.documentAccentColorHex ||
-      initialSettings?.primaryColorHex ||
-      DEFAULT_CLINIC_BRAND_COLOR
+    initialForm.letterheadAccentColorHex
   );
   const [customHexInput, setCustomHexInput] = useState<string>(
-    initialSettings?.letterheadAccentColorHex ||
-      initialSettings?.documentAccentColorHex ||
-      initialSettings?.primaryColorHex ||
-      DEFAULT_CLINIC_BRAND_COLOR
+    initialForm.letterheadAccentColorHex
   );
-  const [paperSize, setPaperSize] = useState<PaperSize>((initialSettings?.paperSize as PaperSize) || 'Letter');
-  const [letterheadFooter, setLetterheadFooter] = useState(initialSettings?.letterheadFooter || '');
-  const [defaultApproverName, setDefaultApproverName] = useState(initialSettings?.defaultApproverName || '');
-  const [defaultApproverTitle, setDefaultApproverTitle] = useState(initialSettings?.defaultApproverTitle || '');
+  const [paperSize, setPaperSize] = useState<PaperSize>(initialForm.paperSize);
+  const [letterheadFooter, setLetterheadFooter] = useState(initialForm.letterheadFooter);
+  const [defaultApproverName, setDefaultApproverName] = useState(initialForm.defaultApproverName);
+  const [defaultApproverTitle, setDefaultApproverTitle] = useState(initialForm.defaultApproverTitle);
 
   // Right column live studio state
   const [docCategory, setDocCategory] = useState<StudioCategory>('Clinical');
@@ -181,29 +214,20 @@ export default function DocumentTemplatesSettingsTab({
   };
 
   const populateForm = useCallback((record: ClinicSettingsRecord) => {
-    setLetterheadHeader(record.letterheadHeader || record.clinicName || '');
-    setLetterheadSubHeader(record.letterheadSubHeader || '');
-    setLetterheadAddress(record.letterheadAddress || '');
-    setLetterheadContact(record.letterheadContact || '');
-    setDohLicenseToOperate(record.dohLicenseToOperate || record.letterheadDohLto || '');
-    setAccreditationNumber(record.accreditationNumber || '');
-    setPrimaryLogoUrl(record.primaryLogoUrl ?? null);
-    // Document Accent Color is completely independent of Workstation Color Branding (primaryColorHex).
-    // Falls back to record.primaryColorHex only if not explicitly set.
-    const docAccent =
-      record.letterheadAccentColorHex ||
-      record.documentAccentColorHex ||
-      record.primaryColorHex ||
-      DEFAULT_CLINIC_BRAND_COLOR;
-    setLetterheadAccentColorHex(docAccent);
-    setCustomHexInput(docAccent);
-    setPaperSize((record.paperSize as PaperSize) || 'Letter');
-    setLetterheadFooter(
-      record.letterheadFooter ||
-        'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'
-    );
-    setDefaultApproverName(record.defaultApproverName || '');
-    setDefaultApproverTitle(record.defaultApproverTitle || '');
+    const next = deriveStationeryFormValues(record);
+    setLetterheadHeader(next.letterheadHeader);
+    setLetterheadSubHeader(next.letterheadSubHeader);
+    setLetterheadAddress(next.letterheadAddress);
+    setLetterheadContact(next.letterheadContact);
+    setDohLicenseToOperate(next.dohLicenseToOperate);
+    setAccreditationNumber(next.accreditationNumber);
+    setPrimaryLogoUrl(next.primaryLogoUrl);
+    setLetterheadAccentColorHex(next.letterheadAccentColorHex);
+    setCustomHexInput(next.letterheadAccentColorHex);
+    setPaperSize(next.paperSize);
+    setLetterheadFooter(next.letterheadFooter);
+    setDefaultApproverName(next.defaultApproverName);
+    setDefaultApproverTitle(next.defaultApproverTitle);
   }, []);
 
   // Sync when initialSettings or settingsLoadError changes
@@ -314,8 +338,9 @@ export default function DocumentTemplatesSettingsTab({
         documentAccentColorHex: letterheadAccentColorHex,
         paperSize,
         letterheadFooter: letterheadFooter.trim(),
-        defaultApproverName: defaultApproverName.trim() || null,
-        defaultApproverTitle: defaultApproverTitle.trim() || null,
+        defaultApproverName: defaultApproverName.trim(),
+        defaultApproverTitle: defaultApproverTitle.trim(),
+        ...(isPendingFacility ? { skipPendingVerificationSync: true } : {}),
       };
 
       const [updated, err] = await clinicService.updateSettings(payload);
@@ -325,6 +350,30 @@ export default function DocumentTemplatesSettingsTab({
         setInternalSettings(updated);
         populateForm(updated);
         onSettingsUpdated?.(updated);
+
+        if (isPendingFacility) {
+          const [, syncErr] = await clinicService.updatePendingDirectoryVerification();
+          if (syncErr) {
+            if (isVerificationConflictError(syncErr)) {
+              const conflictMsg =
+                syncErr.message ||
+                'Verification submission is no longer pending review. Refreshing status.';
+              notify.error(conflictMsg);
+              Alert.alert('Verification Status Changed', conflictMsg);
+              await (onRefreshVerificationState ? onRefreshVerificationState() : fetchSettings());
+              return;
+            }
+            const syncMsg =
+              syncErr.message ||
+              'Stationery saved locally, but pending verification update failed.';
+            notify.error(syncMsg);
+            Alert.alert('Pending Verification Sync Failed', syncMsg);
+            return;
+          }
+          notify.success('Stationery saved and pending verification submission updated.');
+          return;
+        }
+
         notify.success('Stationery and document settings successfully saved.');
       }
     } catch (e: any) {
@@ -426,6 +475,23 @@ export default function DocumentTemplatesSettingsTab({
   }
 
   // State 4: Active Full Workstation Studio
+  const savedBaseline = deriveStationeryFormValues(internalSettings);
+  const isDirty =
+    internalSettings.id === 'new' ||
+    letterheadHeader !== savedBaseline.letterheadHeader ||
+    letterheadSubHeader !== savedBaseline.letterheadSubHeader ||
+    letterheadAddress !== savedBaseline.letterheadAddress ||
+    letterheadContact !== savedBaseline.letterheadContact ||
+    dohLicenseToOperate !== savedBaseline.dohLicenseToOperate ||
+    accreditationNumber !== savedBaseline.accreditationNumber ||
+    primaryLogoUrl !== savedBaseline.primaryLogoUrl ||
+    letterheadAccentColorHex.toUpperCase() !== savedBaseline.letterheadAccentColorHex.toUpperCase() ||
+    customHexInput.toUpperCase() !== savedBaseline.letterheadAccentColorHex.toUpperCase() ||
+    paperSize !== savedBaseline.paperSize ||
+    letterheadFooter !== savedBaseline.letterheadFooter ||
+    defaultApproverName !== savedBaseline.defaultApproverName ||
+    defaultApproverTitle !== savedBaseline.defaultApproverTitle;
+
   return (
     <View testID="document-studio-active" style={styles.container}>
       <View style={[styles.workstationLayout, isDesktop ? styles.rowLayout : styles.columnLayout]}>
@@ -479,7 +545,7 @@ export default function DocumentTemplatesSettingsTab({
                 value={accreditationNumber}
                 onChangeText={setAccreditationNumber}
                 placeholder="e.g. PHIC-ACC-2026-9912"
-                helperText="PhilHealth accreditation number for Konsulta / Yakap compliance."
+                helperText="PhilHealth accreditation number for YAKAP compliance."
                 testID="input-phic-acc"
               />
             </View>
@@ -628,16 +694,25 @@ export default function DocumentTemplatesSettingsTab({
           </Card>
 
           {/* Save Action Bar */}
-          <View style={styles.saveActionBar}>
-            <Button
-              title={saving ? 'Saving Changes...' : 'Save Changes'}
-              icon="save"
-              variant="primary"
-              loading={saving}
-              onPress={handleSaveSettings}
-              testID="btn-save-settings"
-            />
-          </View>
+          {isDirty || saving ? (
+            <View style={styles.saveActionBar}>
+              {isPendingFacility ? <PendingVerificationNote /> : null}
+              <Button
+                title={
+                  saving
+                    ? 'Saving Changes...'
+                    : isPendingFacility
+                    ? PENDING_VERIFICATION_BUTTON_LABEL
+                    : 'Save Changes'
+                }
+                icon="save"
+                variant="primary"
+                loading={saving}
+                onPress={handleSaveSettings}
+                testID="btn-save-settings"
+              />
+            </View>
+          ) : null}
         </View>
 
         {/* Right Column: Interactive Live Canvas Previewer */}
@@ -1212,7 +1287,7 @@ export default function DocumentTemplatesSettingsTab({
                     'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'}
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textLight}>
-                  Verify online: portal.clinicez.ph/verify/DOC-SEC-2026
+                  Verify online: portal.clinicez.ph/verify/med-cert/DOC-SEC-2026
                 </ThemedText>
               </View>
             </ScrollView>
@@ -1312,6 +1387,7 @@ const styles = StyleSheet.create({
   saveActionBar: {
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.lg,
+    gap: theme.spacing.xs,
   },
   canvasContainerCard: {
     padding: theme.spacing.md,

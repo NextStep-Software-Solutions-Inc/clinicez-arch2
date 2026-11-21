@@ -5,15 +5,20 @@ using ClinicEz.Clinic.Domain.Enums;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class Invoice : BaseEntity
+public sealed class Invoice : ClinicScopedEntity
 {
-    public string? TenantId { get; set; }
-    public Guid ClinicId { get; set; }
     public required string InvoiceNumber { get; set; }
     public DateTime InvoiceDate { get; set; } = DateTime.UtcNow;
 
-    public Guid PatientId { get; set; }
+    /// <summary>
+    /// Registered clinic patient ID. NULL for walk-in retail purchases (OTC pharmacy/supplies)
+    /// without a registered patient chart.
+    /// </summary>
+    public Guid? PatientId { get; set; }
+    public Patient? Patient { get; set; }
     public required string PatientName { get; set; }
+    public bool IsWalkInRetail { get; set; } = false;
+
     public Guid? QueueItemId { get; set; }
     public Guid? AppointmentId { get; set; }
     public Guid? ConsultationId { get; set; }
@@ -42,14 +47,14 @@ public sealed class Invoice : BaseEntity
     /// </summary>
     public DateTime? BillingRequestedAt { get; set; }
 
-    public List<InvoiceLineItem> LineItems { get; set; } = new();
-    public List<PaymentRecord> Payments { get; set; } = new();
+    public IList<InvoiceLineItem> LineItems { get; set; } = new List<InvoiceLineItem>();
+    public ICollection<PaymentRecord> Payments { get; set; } = new List<PaymentRecord>();
 }
 
-public sealed class InvoiceLineItem
+public sealed class InvoiceLineItem : ClinicScopedEntity
 {
-    public Guid Id { get; set; }
     public Guid InvoiceId { get; set; }
+    public Invoice Invoice { get; set; } = null!;
     public Guid? DoctorId { get; set; }
     public string? DoctorName { get; set; }
     public Guid? ServiceItemId { get; set; }
@@ -61,11 +66,10 @@ public sealed class InvoiceLineItem
     public decimal TotalPrice { get; set; }
 }
 
-public sealed class PaymentRecord : BaseEntity
+public sealed class PaymentRecord : ClinicScopedEntity
 {
     public Guid InvoiceId { get; set; }
-    public string? TenantId { get; set; }
-    public Guid ClinicId { get; set; }
+    public Invoice Invoice { get; set; } = null!;
     public required string PaymentNumber { get; set; }
     public DateTime PaymentDate { get; set; } = DateTime.UtcNow;
     public decimal Amount { get; set; }

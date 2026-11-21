@@ -17,8 +17,10 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { branchService, type BranchDto } from "@/services/branch.service";
+import { resolveDashboardNavHref } from "@/components/dashboard/nav-main";
 
 interface QuickCreateDialogProps {
   trigger: React.ReactNode;
@@ -75,7 +77,7 @@ export default function QuickCreateDialog({ trigger }: QuickCreateDialogProps) {
 
   const handleCreateBranch = () => {
     setIsOpen(false);
-    router.push(`/${tenantSlug}/dashboard/branches?createBranch=true`);
+    router.push(resolveDashboardNavHref(tenantSlug, "/dashboard/branches?createBranch=true"));
   };
 
   const selectedBranch = branches.find((b) => b.id === selectedBranchId);
@@ -86,7 +88,12 @@ export default function QuickCreateDialog({ trigger }: QuickCreateDialogProps) {
   const handleProceedFacility = () => {
     if (!selectedBranchId || isTypeTakenInSelectedBranch) return;
     setIsOpen(false);
-    router.push(`/${tenantSlug}/dashboard/branches?create=${selectedType}&branchId=${selectedBranchId}`);
+    router.push(
+      resolveDashboardNavHref(
+        tenantSlug,
+        `/dashboard/branches/${selectedBranchId}?create=${selectedType}&branchId=${selectedBranchId}`,
+      ),
+    );
   };
 
   return (
@@ -241,17 +248,15 @@ export default function QuickCreateDialog({ trigger }: QuickCreateDialogProps) {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <select
+                    <SelectField
+                      ariaLabel="Select target branch"
                       value={selectedBranchId}
-                      onChange={(e) => setSelectedBranchId(e.target.value)}
-                      className="w-full h-9 px-3 text-xs rounded-xl border border-border bg-background font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    >
-                      {branches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name} ({b.city || "Main Location"})
-                        </option>
-                      ))}
-                    </select>
+                      onValueChange={setSelectedBranchId}
+                      options={branches.map((b) => ({
+                        value: b.id,
+                        label: `${b.name} (${b.city || "Main Location"})`,
+                      }))}
+                    />
 
                     {isTypeTakenInSelectedBranch && (
                       <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">

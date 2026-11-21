@@ -76,6 +76,13 @@ mock.module('react-native-svg', () => ({
   Rect: 'Rect',
   Line: 'Line',
   default: 'Svg',
+  Polyline: 'Polyline',
+  Polygon: 'Polygon',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -101,10 +108,11 @@ describe('Billing & Cashier Station Feature Suite', () => {
       expect(CASHIER_MODE_OPTIONS.map((o) => o.id)).toEqual(['ClinicDesk', 'CashierCounter']);
     });
 
-    test('1.2 Renders "Billing & Cashier Station" card with mode selection radios', () => {
-      const html = renderToStaticMarkup(
+    test('1.2 Renders "Billing & Cashier Station" card with mode selection radios and dirty-only Save button', () => {
+      const cleanHtml = renderToStaticMarkup(
         React.createElement(CashierStationSettingsCard, {
           cashierMode: 'ClinicDesk',
+          savedCashierMode: 'ClinicDesk',
           onChangeCashierMode: () => {},
           onSave: async () => {},
           saving: false,
@@ -112,12 +120,24 @@ describe('Billing & Cashier Station Feature Suite', () => {
         })
       );
 
-      expect(html).toContain('Billing &amp; Cashier Station');
-      expect(html).toContain('Clinic Desk Collection');
-      expect(html).toContain('Centralized Cashier Counter');
-      expect(html).toContain('Standalone / In-Clinic');
-      expect(html).toContain('Hospital / Multi-Department');
-      expect(html).toContain('Save billing station preferences');
+      expect(cleanHtml).toContain('Billing &amp; Cashier Station');
+      expect(cleanHtml).toContain('Clinic Desk Collection');
+      expect(cleanHtml).toContain('Centralized Cashier Counter');
+      expect(cleanHtml).toContain('Standalone / In-Clinic');
+      expect(cleanHtml).toContain('Hospital / Multi-Department');
+      expect(cleanHtml).not.toContain('Save billing station preferences');
+
+      const dirtyHtml = renderToStaticMarkup(
+        React.createElement(CashierStationSettingsCard, {
+          cashierMode: 'CashierCounter',
+          savedCashierMode: 'ClinicDesk',
+          onChangeCashierMode: () => {},
+          onSave: async () => {},
+          saving: false,
+          showSkeletons: false,
+        })
+      );
+      expect(dirtyHtml).toContain('Save billing station preferences');
     });
 
     test('1.3 Highlights CashierCounter when configured', () => {
@@ -885,6 +905,35 @@ describe('Billing & Cashier Station Feature Suite', () => {
       expect(receipts[0].paymentNumber).toBe('OR-20261021-001');
       expect(receipts[1].paymentNumber).toBe('OR-20261021-002');
       expect(receipts.reduce((sum, r) => sum + r.amount, 0)).toBe(net);
+    });
+
+    test('8.2 Partial payment collection clamps tendered cash to amountToCollect and leaves remaining balance in unsettled accounts', () => {
+      const netTotal = 1500;
+      const previousPayments = 0;
+      const balanceDue = netTotal - previousPayments;
+
+      // Cashier collects partial payment of 500
+      const isPartial = true;
+      const partialAmount = 500;
+      const amountToCollect = isPartial ? Math.min(balanceDue, partialAmount) : balanceDue;
+      expect(amountToCollect).toBe(500);
+
+      // Customer tenders 500 cash
+      const cashTendered = 500;
+      const changeDue = Math.max(0, cashTendered - amountToCollect);
+      expect(changeDue).toBe(0);
+
+      // Remaining balance
+      const remainingBalance = balanceDue - amountToCollect;
+      expect(remainingBalance).toBe(1000);
+
+      // Subsequent payment settling the remaining 1000
+      const subsequentBalanceDue = remainingBalance;
+      const subsequentAmountToCollect = subsequentBalanceDue;
+      const subsequentTendered = 1000;
+      expect(subsequentAmountToCollect).toBe(1000);
+      expect(subsequentTendered - subsequentAmountToCollect).toBe(0);
+      expect(subsequentBalanceDue - subsequentAmountToCollect).toBe(0);
     });
   });
 });

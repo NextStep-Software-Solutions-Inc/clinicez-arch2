@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
 import { db, flushDatabaseSnapshot } from '@db/index';
 import { patients } from '@db/schema/patients';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
@@ -142,6 +142,11 @@ export default function ContactInfoScreen() {
       };
 
       const now = new Date();
+      if (userId) {
+        await db
+          .delete(patients)
+          .where(and(eq(patients.clerkUserId, userId), ne(patients.id, patientId)));
+      }
       if (existing) {
         await db
           .update(patients)
@@ -194,6 +199,7 @@ export default function ContactInfoScreen() {
         if (serverDemo) {
           await upsertPatientSummary({
             ...serverDemo,
+            id: patientId,
             firstName,
             lastName,
             mobile: payload.mobile,

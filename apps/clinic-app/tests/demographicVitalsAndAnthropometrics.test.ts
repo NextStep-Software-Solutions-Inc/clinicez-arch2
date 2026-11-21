@@ -8,8 +8,8 @@ import type {
 
 describe('Demographic Vitals & Anthropometrics Architecture', () => {
   describe('1. Demographic Cohort & Age Bracket Resolution', () => {
-    const resolveCohort = (patient: { age: number; dateOfBirth?: string; gender?: string }) => {
-      const female = (patient.gender || '').toLowerCase().startsWith('f');
+    const resolveCohort = (patient: { age: number; dateOfBirth?: string; sex?: string }) => {
+      const female = (patient.sex || '').toLowerCase().startsWith('f');
       let years = patient.age;
       let months = patient.age * 12;
 
@@ -43,7 +43,7 @@ describe('Demographic Vitals & Anthropometrics Architecture', () => {
       const infant = resolveCohort({
         age: 1,
         dateOfBirth: '2025-10-16', // exactly 12 months on 2026-10-16
-        gender: 'Male',
+        sex: 'Male',
       });
       expect(infant.isInfant).toBe(true);
       expect(infant.isUnderFive).toBe(true);
@@ -56,7 +56,7 @@ describe('Demographic Vitals & Anthropometrics Architecture', () => {
       const child = resolveCohort({
         age: 3,
         dateOfBirth: '2023-04-16', // 42 months on 2026-10-16
-        gender: 'Female',
+        sex: 'Female',
       });
       expect(child.isInfant).toBe(false);
       expect(child.isUnderFive).toBe(true);
@@ -70,7 +70,7 @@ describe('Demographic Vitals & Anthropometrics Architecture', () => {
       const adult = resolveCohort({
         age: 35,
         dateOfBirth: '1991-05-10',
-        gender: 'Female',
+        sex: 'Female',
       });
       expect(adult.isInfant).toBe(false);
       expect(adult.isUnderFive).toBe(false);
@@ -84,7 +84,7 @@ describe('Demographic Vitals & Anthropometrics Architecture', () => {
       const senior = resolveCohort({
         age: 65,
         dateOfBirth: '1961-02-15',
-        gender: 'Male',
+        sex: 'Male',
       });
       expect(senior.isAdult).toBe(true);
       expect(senior.isSenior).toBe(true);

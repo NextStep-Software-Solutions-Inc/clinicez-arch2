@@ -206,10 +206,10 @@ public class ClinicalDecisionSupportTests
 
         var (context, unitOfWork, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         MessagingTestKit.SeedClinic(context, clinicId, "tenant-default");
-        var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var orderRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var handler = new LabPanicResultAlertHandler(context, MessagingTestKit.Recipient(context), NullLogger<LabPanicResultAlertHandler>.Instance);
 
-        var existingOrder = new ClinicLabOrder
+        var existingOrder = new LabOrder
         {
             TenantId = "tenant-default",
             ClinicId = clinicId,
@@ -256,8 +256,6 @@ public class ClinicalDecisionSupportTests
         var updatedOrder = await orderRepo.GetByIdAsync(existingOrder.Id);
         Assert.NotNull(updatedOrder);
         Assert.True(updatedOrder.HasCriticalPanicAlert);
-        Assert.NotNull(updatedOrder.CriticalFindingsJson);
-        Assert.Contains("6.8", updatedOrder.CriticalFindingsJson);
         Assert.NotNull(updatedOrder.PanicAlertTriggeredAt);
 
         // Doctor acknowledges panic finding

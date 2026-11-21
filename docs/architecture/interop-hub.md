@@ -1,10 +1,10 @@
 # Interop hub
 
-The hub is the only way anything crosses a service or cell boundary in Clinic EZ. Services exchange [`InteropEnvelope`](../../packages/shared-dotnet/Interop/InteropEnvelope.cs) messages through HTTPS mailboxes held in PostgreSQL. Everybody who calls the hub calls it **outbound**, so an on-premise site needs no inbound port.
+The hub is the only way anything crosses a service or cell boundary in Clinic EZ. **Direct inter-service HTTP communication is strictly forbidden across all services except `portal <-> patient`**. Every facility service (`clinic-api`, `laboratory-api`, `pharmacy-api`, `organization-api`, `billing-api`) runs in outbound-only on-premise Edge Cells (`Hub:Mode=Local`, zero inbound ports) and MUST communicate exclusively via `services/interop-hub`. Services exchange [`InteropEnvelope`](../../packages/shared-dotnet/Interop/InteropEnvelope.cs) messages through HTTPS mailboxes held in PostgreSQL. Everybody who calls the hub calls it **outbound**, so an on-premise site needs no inbound port.
 
 This document explains the model (mailboxes, cells, routing, delivery, federation, security). Endpoint tables, configuration keys and operations are in the [hub README](../../services/interop-hub/README.md); the SDK side is in [platform-contract.md](platform-contract.md).
 
-> **What replaced what.** The RabbitMQ broker is gone: its job (addressing, mailbox, ack, retry, TTL) is done by hub mailboxes in Postgres. MassTransit (bus, consumers, EF outbox/inbox) is gone: it is replaced by the `ClinicEz.Shared.Interop` SDK (envelope, EF outbox/inbox tables `interop_outbox`/`interop_inbox`, relay, inbox poller, `IInteropHandler<T>`). `RABBITMQ_*` settings became `Messaging__*`. Direct service-to-service HTTP and webhooks (clinic to patient-api, portal to clinic, facilities reading the portal database) are replaced by envelopes. `scripts/check-no-broker.ps1` fails the build if a broker reappears.
+> **What replaced what.** The RabbitMQ broker is gone: its job (addressing, mailbox, ack, retry, TTL) is done by hub mailboxes in Postgres. MassTransit (bus, consumers, EF outbox/inbox) is gone: it is replaced by the `ClinicEz.Shared.Interop` SDK (envelope, EF outbox/inbox tables `interop_outbox`/`interop_inbox`, relay, inbox poller, `IInteropHandler<T>`). `RABBITMQ_*` settings became `Messaging__*`. Direct service-to-service HTTP and webhooks (clinic to patient-api, portal to clinic, facilities reading the portal database) are replaced by envelopes. The only permitted direct HTTP link in the entire architecture is between the central cloud control plane and patient plane (`portal <-> patient`). Furthermore, Next.js BFF proxy routes (`src/app/api/...`) over `portal-api` or `patient-api` are strictly forbidden in `apps/portal-web`. `scripts/check-no-broker.ps1` fails the build if a broker reappears.
 
 ## Topology
 
@@ -31,6 +31,14 @@ flowchart LR
 ```
 
 One binary, two modes (`Hub:Mode`): `Cloud` is the authority (client auth, directory, routing policy, cross-tenant links, claims, mailboxes); `Local` serves the same wire API on the LAN, keeps same-cell traffic on the LAN, queues everything else for the cloud and pulls the site's cell inbox.
+
+### Service Boundaries and Edge Cell Rationale
+
+ClinicEZ enforces strict physical and network boundaries between deployment planes:
+1. **Zero Inbound Ports on Edge Cells**: Every facility service (`clinic-api`, `laboratory-api`, `pharmacy-api`, `organization-api`, `billing-api`) can run in on-premise Edge Cells (`Hub:Mode=Local`). To preserve enterprise network security and operate reliably behind hospital firewalls, NATs, and transient WAN outages, Edge Cells open **zero inbound ports** and communicate outbound-only over HTTPS to the Interop Hub.
+2. **Direct Inter-Service HTTP Prohibition**: Direct inter-service HTTP calls are strictly forbidden across all microservices. Services must never bypass the Hub to invoke peer APIs directly.
+3. **Sole Direct HTTP Exception (`portal <-> patient`)**: Direct HTTP communication is permitted strictly between `portal-api` (Control Plane) and `patient-api` (Patient Plane) within the cloud control plane.
+4. **Zero Next.js BFF Proxy Routes**: `apps/portal-web` is strictly prohibited from introducing Next.js BFF API proxy routes (`src/app/api/...`) over `portal-api` or `patient-api`. Client web applications connect directly to APIs using Clerk bearer tokens.
 
 ## Cells and mailboxes
 
@@ -63,7 +71,7 @@ Every endpoint except `/health*` requires `X-Hub-Client` and `X-Hub-Secret`. A w
 | `EdgeCell` | Facility services of an edge site (against the local hub) and the local hub's upstream client (service `cell`, against the cloud) | Facilities of its own (edge) cell | Its own service mailbox; `/v1/cell-inbox` |
 | `ControlPlane` | portal-api | The portal or the hub only. Only kind that may address the hub (`directory.*`) and call the admin API | Its service mailbox |
 | `PatientPlane` | patient-api | Patients, or `ControlPlane` with service `patient`. Trusted relay for patients | Its service mailbox; sees only `Public` facilities in the directory |
-| `PlatformService` | philhealth-proxy (cloud cell only) | Only its own service party (`ControlPlane` with service `philhealth`) | Its service mailbox (`{cloud}:philhealth`); no directory |
+| `PlatformService` | `philhealth-proxy` and `media-broker` (cloud cell only) | Only its own service party (`ControlPlane` with service `philhealth` or `media`) | Its service mailbox (`{cloud}:philhealth` or `{cloud}:media`); no directory |
 
 A message is rejected if `From` is not something the sending client may speak for ([`OwnershipValidator`](../../services/interop-hub/ClinicEz.Interop.Application/Routing/RoutingPolicy.cs)): that is the hub's anti-forgery check. A service handler must still check that the sender is allowed to send *that type*.
 
@@ -85,7 +93,7 @@ Client secrets prove *which client is calling*; a **signature proves the envelop
 
 [`RoutingPolicy`](../../services/interop-hub/ClinicEz.Interop.Application/Routing/RoutingPolicy.cs) decides `Reject`, `Deliver` (into a mailbox) or `Forward` (Local mode, to the cloud).
 
-**Control-plane targets** (`Party{ControlPlane, Service}`) are routed by service into the cloud cell: `portal` (the default) and `patient` may be addressed by every client kind (the portal feeding patient-api, a facility asking the patient plane to redeem a share) and land in `{cloud}:portal` and `{cloud}:patient`. `clinic`, `laboratory`, `pharmacy`, `organization` and `billing` may be addressed only by `ControlPlane` and `PatientPlane` clients; a facility client is rejected (`Facility clients may only address the 'portal' and 'patient' control-plane services`). The platform service `philhealth` may be addressed by every client but only with the message types of [Platform services](#platform-services). Any other service is rejected. `hub` is not a mailbox: it is the directory feed, open to `ControlPlane` clients only.
+**Control-plane targets** (`Party{ControlPlane, Service}`) are routed by service into the cloud cell: `portal` (the default) and `patient` may be addressed by every client kind (the portal feeding patient-api, a facility asking the patient plane to redeem a share) and land in `{cloud}:portal` and `{cloud}:patient`. `clinic`, `laboratory`, `pharmacy`, `organization`, `billing` and `comms` may be addressed only by `ControlPlane` and `PatientPlane` clients; a facility client is rejected (`Facility clients may only address the 'portal' and 'patient' control-plane services`). The platform services `philhealth` and `media` may be addressed by every client but only with the message types of [Platform services](#platform-services). Any other service is rejected. `hub` is not a mailbox: it is the directory feed, open to `ControlPlane` clients only. In addition, facility-originated `comms.*` envelopes are strictly single-tenant: `RoutingPolicy.AuthorizeAsync` rejects any cross-tenant `comms.*` envelope unconditionally, even when an active cross-tenant link or correlation exists.
 
 **Unknown facility types.** A facility whose type has no default service in this hub build (for example a type added to the platform before the hub was redeployed) is routed by `To.Service` when the sender names one; otherwise the message is rejected with a reason starting `unknown_facility_type`. Claim redemption answers `400` with the same reason. The hub never answers `500` for it. All enums (facility type, client kind, scopes, link status, ...) are **strict strings** on the wire and in the database: `StrictJsonStringEnumConverter` accepts only the member names, a numeric value or a type name this build does not know is a `400` at deserialization (an unparseable envelope or request), never a silent fallback. A newly added facility type therefore needs the hub build that knows it (see [platform-contract.md](platform-contract.md)); `unknown_facility_type` covers a *known* name without a default service.
 
@@ -105,7 +113,7 @@ Client secrets prove *which client is calling*; a **signature proves the envelop
 
 4. `ControlPlane` and `PatientPlane` senders are trusted relays and are not link-checked.
 5. A link authorised on the way in records a conversation entry, which is what later lets the other side reply.
-6. Limits: `Hub:MaxEnvelopeBytes` (1 MiB) per envelope, `Hub:MaxSendBatch` (100) per request, expired envelopes rejected, required fields validated. Each envelope in a batch gets its own verdict; **a rejection is final** (the SDK dead-letters its outbox row and never retries it).
+6. Limits: `Hub:MaxEnvelopeBytes` (8 MiB) per envelope, `Hub:MaxSendBatch` (100) per request, expired envelopes rejected, required fields validated. Each envelope in a batch gets its own verdict; **a rejection is final** (the SDK dead-letters its outbox row and never retries it).
 
 Directory visibility (`GET /v1/directory/facilities`): a caller sees its own workspace's facilities, `Public` facilities, and `Network` facilities it has an `Active` link to. `Private` facilities are visible only inside their workspace.
 
@@ -113,17 +121,25 @@ Directory visibility (`GET /v1/directory/facilities`): a caller sees its own wor
 
 ### Platform services
 
-A platform service is a cloud-cell service that is neither a facility service nor the portal. Today there is one: the **PhilHealth proxy** (`philhealth`, `Party.PhilHealth` = `Party{ControlPlane, Service="philhealth"}`), which holds facilities' PhilHealth credentials and talks to PhilHealth. It is a hub client of kind `PlatformService` (service must be `philhealth`, cell must be the cloud cell; created through the admin API or `Hub:Bootstrap:Clients:N:Kind=PlatformService`) and reads `{cloud}:philhealth`. A `PlatformService` client may send only as its own service party and cannot read the directory.
+A platform service is a cloud-cell service that is neither a facility service nor the portal. Today there are two:
+- **PhilHealth proxy** (`philhealth`, `Party.PhilHealth` = `Party{ControlPlane, Service="philhealth"}`), which holds facilities' PhilHealth credentials and talks to PhilHealth (`{cloud}:philhealth`).
+- **Media broker** (`media`, `Party.Media` = `Party{ControlPlane, Service="media"}`), which enforces monthly participant-minute quotas, mints zero-PHI WebRTC/LiveKit room tokens for cloud and edge cells, and reports usage back to `portal-api` (`{cloud}:media`).
 
-Every client may *address* `philhealth`, but [`PlatformMessageRules`](../../services/interop-hub/ClinicEz.Interop.Application/Routing/PlatformMessageRules.cs) restricts what, in the routing step of both the cloud and a local hub:
+Each is a hub client of kind `PlatformService` (cell must be the cloud cell; created through the admin API or `Hub:Bootstrap:Clients:N:Kind=PlatformService`). A `PlatformService` client may send only as its own service party and cannot read the directory.
+
+Every client may *address* `philhealth` or `media`, but [`PlatformMessageRules`](../../services/interop-hub/ClinicEz.Interop.Application/Routing/PlatformMessageRules.cs) restricts what, in the routing step of both the cloud and a local hub:
 
 | Type | May be sent by | To |
 |---|---|---|
 | `philhealth.request` | a facility client (`CloudService` / `EdgeCell`), `From` a facility | `Party.PhilHealth` |
-| `philhealth.response` | the proxy | a facility (the requester) |
-| `philhealth.config.requested`, `philhealth.config.upsert.requested` | the proxy | `Party.Portal` |
+| `philhealth.response` | the PhilHealth proxy | a facility (the requester) |
+| `philhealth.config.requested`, `philhealth.config.upsert.requested` | the PhilHealth proxy | `Party.Portal` |
 | `philhealth.config.responded`, `philhealth.config.upsert.responded` | the portal | `Party.PhilHealth` |
-| anything else | nobody: only `philhealth.*` may be addressed to the proxy, and the proxy may send nothing else | |
+| `media.room.requested` | a facility client (`CloudService` / `EdgeCell`), `From` a facility | `Party.Media` |
+| `media.room.responded` | the media broker | a facility (the requester, e.g. `To.Service = comms`) |
+| `media.entitlement.updated` | the portal | `Party.Media` |
+| `media.usage.recorded` | the media broker | `Party.Portal` |
+| anything else | nobody: only `philhealth.*` may go to/from `philhealth`, and only `media.*` may go to/from `media` | |
 
 So a facility can neither ask the portal for credentials nor receive them, and a facility or the portal cannot pose as the proxy (the ownership check pins each client's `From`). The proxy's reply to a facility needs no link (it is the platform answering a request, like any reply) and reaches an edge facility through the cell-inbox; a facility in an edge cell reaches the proxy through its local hub, which forwards `philhealth.request` upstream like any other control-plane target. Tenant and facility the proxy acts for are always the verified `From` of the request. The SDK pattern behind these messages is described in [`platform-contract.md`](platform-contract.md#request-reply); expected latency is a few hundred milliseconds on a healthy link because both sides long-poll.
 ### Cross-tenant lab order (clinic to lab and the result back)

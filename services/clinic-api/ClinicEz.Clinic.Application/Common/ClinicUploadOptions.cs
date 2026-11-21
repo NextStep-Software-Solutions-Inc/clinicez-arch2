@@ -2,17 +2,17 @@ namespace ClinicEz.Clinic.Application.Common;
 
 /// <summary>
 /// Settings for results uploaded against a lab order by an external lab or the patient. Bound from the
-/// <c>Clinic</c> configuration section (<c>Clinic__PublicUploadBaseUrl</c> in the environment).
+/// <c>Clinic</c> configuration section (<c>Clinic__PortalBaseUrl</c> in the environment) or <c>PORTAL_BASE_URL</c>.
 /// </summary>
 public sealed class ClinicUploadOptions
 {
     public const string SectionName = "Clinic";
 
     /// <summary>
-    /// Public, absolute base URL of the upload page; a slip links to <c>{PublicUploadBaseUrl}/{token}</c>. Required
-    /// to issue a lab order: there is no sensible default because only the deployment knows its public address.
+    /// Public, absolute base URL of the portal web app (e.g. https://portal.example.com).
+    /// The upload dropzone URL is automatically constructed as <c>{PortalBaseUrl}/upload/lab/{token}</c>.
     /// </summary>
-    public string? PublicUploadBaseUrl { get; set; }
+    public string? PortalBaseUrl { get; set; }
 
     public long UploadMaxBytes { get; set; } = 10 * 1024 * 1024;
 

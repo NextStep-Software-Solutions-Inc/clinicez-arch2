@@ -4,7 +4,6 @@ import {
   StyleSheet,
   Image,
   Platform,
-  Pressable,
 } from 'react-native';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
@@ -505,20 +504,15 @@ export default function LogoCropModal({
         {/* Zoom & Alignment Controls */}
         <View style={styles.controlsCard}>
           <View style={styles.zoomControlRow}>
-            <Pressable
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="zoomOut"
+              iconOnly
               onPress={handleZoomOut}
               disabled={zoom <= 0.5}
-              accessibilityRole="button"
               accessibilityLabel="Zoom out"
-              style={({ pressed, hovered }: any) => [
-                styles.iconButton,
-                hovered && styles.iconButtonHover,
-                pressed && styles.iconButtonPressed,
-                zoom <= 0.5 && styles.iconButtonDisabled,
-              ]}
-            >
-              <Icon name="zoomOut" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+            />
 
             <View style={styles.zoomTrack}>
               <View
@@ -529,20 +523,15 @@ export default function LogoCropModal({
               />
             </View>
 
-            <Pressable
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="zoomIn"
+              iconOnly
               onPress={handleZoomIn}
               disabled={zoom >= 4}
-              accessibilityRole="button"
               accessibilityLabel="Zoom in"
-              style={({ pressed, hovered }: any) => [
-                styles.iconButton,
-                hovered && styles.iconButtonHover,
-                pressed && styles.iconButtonPressed,
-                zoom >= 4 && styles.iconButtonDisabled,
-              ]}
-            >
-              <Icon name="zoomIn" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+            />
 
             <View style={styles.zoomBadge}>
               <ThemedText variant="captionBold" color={theme.colors.text}>
@@ -684,25 +673,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
   },
-  iconButton: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconButtonHover: {
-    backgroundColor: theme.colors.surfaceHighlight,
-  },
-  iconButtonPressed: {
-    opacity: 0.8,
-  },
-  iconButtonDisabled: {
-    opacity: 0.4,
-  },
   zoomTrack: {
     flex: 1,
     height: theme.spacing.sm,
@@ -746,7 +716,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: theme.radii.md,
-    backgroundColor: 'transparent',
+    backgroundColor: theme.colors.transparent,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
     overflow: 'hidden',

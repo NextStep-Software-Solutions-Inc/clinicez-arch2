@@ -8,7 +8,11 @@ import type {
   CalendarTimeSlot,
   ExtendedAppointmentItem,
 } from './types';
-import { evaluateDoctorAvailabilityForSlot } from './calendarUtils';
+import {
+  evaluateDoctorAvailabilityForSlot,
+  getAppointmentLocalDateTime,
+  isTimeInSlotWindow,
+} from './calendarUtils';
 
 export interface DoctorTimelineColumnProps {
   doctor: DoctorShiftOverlay;
@@ -82,12 +86,16 @@ export function DoctorTimelineColumn({
           slot.timeStr,
           doctor
         );
-        const appt = appointments.find(
-          (a) =>
-            a.doctorId === doctor.doctorId &&
-            a.scheduledAt.startsWith(dateString) &&
-            a.scheduledAt.includes(`T${slot.timeStr}:`)
-        );
+        const slotAppts = appointments.filter((a) => {
+          const isDocMatch =
+            doctor.doctorId === 'unassigned'
+              ? !a.doctorId || a.doctorId === 'unassigned'
+              : a.doctorId === doctor.doctorId;
+          if (!isDocMatch) return false;
+          const local = getAppointmentLocalDateTime(a.scheduledAt);
+          return local.dateStr === dateString && isTimeInSlotWindow(local.timeStr, slot.timeStr);
+        });
+        const appt = slotAppts[0];
 
         let slotBg: string = theme.colors.surface;
         if (avail.status === 'Leave') {
@@ -129,12 +137,15 @@ export function DoctorTimelineColumn({
               pressed && avail.isAvailable && !appt && styles.pressed,
             ]}
           >
-            {appt ? (
-              <AppointmentCard
-                appointment={appt}
-                variant="timeline"
-                onSelect={onSelectAppointment}
-              />
+            {slotAppts.length > 0 ? (
+              slotAppts.map((slotAppt) => (
+                <AppointmentCard
+                  key={slotAppt.id}
+                  appointment={slotAppt}
+                  variant="timeline"
+                  onSelect={onSelectAppointment}
+                />
+              ))
             ) : avail.status === 'Break' ? (
               <View style={styles.overlayWrapper}>
                 <ThemedText

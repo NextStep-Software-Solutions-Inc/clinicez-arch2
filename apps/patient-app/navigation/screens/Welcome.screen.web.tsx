@@ -8,6 +8,7 @@ import Button from '@ui/Button';
 import Card from '@ui/Card';
 import Badge from '@ui/Badge';
 import { AppIcon, type IconName } from '@ui/Icon';
+import ClinicEzLogo from '@ui/ClinicEzLogo';
 
 interface FeatureCardProps {
   icon: IconName;
@@ -73,26 +74,7 @@ export default function WelcomeScreenWeb() {
     >
       {/* Top Header Bar */}
       <View style={[styles.header, { marginBottom: spacing['3xl'] }]}>
-        <View style={[styles.brandRow, { gap: spacing.md }]}>
-          <View
-            style={[
-              styles.logoBadge,
-              {
-                backgroundColor: colors.primary,
-                borderRadius: radii.sm,
-                paddingHorizontal: spacing.md,
-                paddingVertical: spacing.xs,
-              },
-            ]}
-          >
-            <ThemedText variant="smallBold" color="onPrimary" style={styles.logoText}>
-              CLINIC EZ
-            </ThemedText>
-          </View>
-          <ThemedText variant="smallBold" color="textMuted">
-            Patient Portal
-          </ThemedText>
-        </View>
+        <ClinicEzLogo size={36} subtitle="Patient Portal" />
 
         <Pressable
           onPress={handleDirectLogin}

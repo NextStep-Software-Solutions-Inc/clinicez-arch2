@@ -15,9 +15,9 @@ public record GetActivePanicAlertsQuery : IRequest<List<ClinicLabOrderDto>>;
 
 public class GetActivePanicAlertsQueryHandler : IRequestHandler<GetActivePanicAlertsQuery, List<ClinicLabOrderDto>>
 {
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
 
-    public GetActivePanicAlertsQueryHandler(IRepository<ClinicLabOrder> orderRepo)
+    public GetActivePanicAlertsQueryHandler(IRepository<LabOrder> orderRepo)
     {
         _orderRepo = orderRepo;
     }

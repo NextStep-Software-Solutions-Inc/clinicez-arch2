@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { apiClient } from "@/transport/apiClient";
 import { useBillingInfo } from "@/hooks/useBilling";
@@ -18,13 +19,8 @@ import type { FacilityDeploymentMode } from "@/services/tenant.service";
 import { toastApiError } from "@/lib/apiToast";
 import Link from "next/link";
 import { toast } from "sonner";
-import {
-  PHILIPPINE_REGIONS,
-  FACILITY_CLASSIFICATIONS,
-  PhilippineRegion,
-  PhilippineProvince,
-  PhilippineCity,
-} from "@/constants/philippine-addresses";
+import { FACILITY_CLASSIFICATIONS } from "@/constants/facility-classifications";
+import { locationService, type PsgcLocationDto } from "@/services/location.service";
 import { cn } from "@/lib/utils";
 import {
   IconBuildingHospital,
@@ -149,7 +145,7 @@ export default function FacilityOnboardingWizard({
   const [isSlugCustomized, setIsSlugCustomized] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
   const [isCheckingSlug, setIsCheckingSlug] = useState(false);
-  const slugCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const slugCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // If selected branch already has the current facility type, auto-switch to first free slot
   useEffect(() => {
@@ -172,22 +168,19 @@ export default function FacilityOnboardingWizard({
   const [operatingHours, setOperatingHours] = useState("");
 
   // Geolocation & Address
+  const [regions, setRegions] = useState<PsgcLocationDto[]>([]);
   const [selectedRegionCode, setSelectedRegionCode] = useState("");
+  const [selectedRegionName, setSelectedRegionName] = useState("");
+  const [provinceOptions, setProvinceOptions] = useState<PsgcLocationDto[]>([]);
   const [selectedProvinceName, setSelectedProvinceName] = useState("");
+  const [cityOptions, setCityOptions] = useState<PsgcLocationDto[]>([]);
   const [selectedCityName, setSelectedCityName] = useState("");
+  const [barangayOptions, setBarangayOptions] = useState<PsgcLocationDto[]>([]);
   const [selectedBarangay, setSelectedBarangay] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [streetAddress, setStreetAddress] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [contactEmail, setContactEmail] = useState("");
-
-  // Address Cascading Lookups
-  const activeRegion: PhilippineRegion | undefined = PHILIPPINE_REGIONS.find((r) => r.code === selectedRegionCode);
-  const provinceOptions: PhilippineProvince[] = activeRegion?.provinces || [];
-  const activeProvince: PhilippineProvince | undefined = provinceOptions.find((p) => p.name === selectedProvinceName);
-  const cityOptions: PhilippineCity[] = activeProvince?.cities || [];
-  const activeCity: PhilippineCity | undefined = cityOptions.find((c) => c.name === selectedCityName);
-  const barangayOptions: string[] = activeCity?.barangays || [];
 
   // Existing facilities for unique name and slug validation
   const [existingFacilities, setExistingFacilities] = useState<Array<{ id: string; name: string; slug?: string }>>([]);
@@ -346,22 +339,46 @@ export default function FacilityOnboardingWizard({
     }
   }, [normalizedFacilityType, classification]);
 
-  // Sync city zip code
+  // Load PSGC regions
   useEffect(() => {
-    if (activeCity?.zipCode && !zipCode) {
-      setZipCode(activeCity.zipCode);
-    }
-  }, [activeCity, zipCode]);
+    let isMounted = true;
+    locationService.getRegions().then((data) => {
+      if (isMounted && data) {
+        setRegions(data);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleRegionChange = (newCode: string) => {
     setSelectedRegionCode(newCode);
+    const reg = regions.find((r) => r.psgcCode === newCode || r.name === newCode);
+    setSelectedRegionName(reg?.name || newCode);
     setSelectedProvinceName("");
     setSelectedCityName("");
     setSelectedBarangay("");
     setZipCode("");
-    const reg = PHILIPPINE_REGIONS.find((r) => r.code === newCode);
-    if (reg && reg.provinces.length === 1) {
-      setSelectedProvinceName(reg.provinces[0].name);
+    setProvinceOptions([]);
+    setCityOptions([]);
+    setBarangayOptions([]);
+
+    if (newCode) {
+      locationService.getProvinces(newCode).then((provs) => {
+        setProvinceOptions(provs);
+        if (provs.length === 1) {
+          setSelectedProvinceName(provs[0].name);
+          locationService.getCities(provs[0].psgcCode, newCode).then((cities) => {
+            setCityOptions(cities);
+          });
+        }
+      });
+      locationService.getCities(undefined, newCode).then((cities) => {
+        if (cities.length > 0) {
+          setCityOptions(cities);
+        }
+      });
     }
   };
 
@@ -370,16 +387,33 @@ export default function FacilityOnboardingWizard({
     setSelectedCityName("");
     setSelectedBarangay("");
     setZipCode("");
+    setCityOptions([]);
+    setBarangayOptions([]);
+
+    if (newProv) {
+      const prov = provinceOptions.find((p) => p.name === newProv);
+      locationService.getCities(prov?.psgcCode, selectedRegionCode).then((cities) => {
+        setCityOptions(cities);
+      });
+    }
   };
 
   const handleCityChange = (newCity: string) => {
     setSelectedCityName(newCity);
     setSelectedBarangay("");
+    setBarangayOptions([]);
+
     const city = cityOptions.find((c) => c.name === newCity);
-    if (city) {
+    if (city?.zipCode) {
       setZipCode(city.zipCode);
     } else {
       setZipCode("");
+    }
+
+    if (city?.psgcCode) {
+      locationService.getBarangays(city.psgcCode).then((brgys) => {
+        setBarangayOptions(brgys);
+      });
     }
   };
 
@@ -525,7 +559,7 @@ export default function FacilityOnboardingWizard({
         philHealthAccreditationNumber: (philHealthAccreditationNumber || selectedBranch?.philHealthAccreditationNumber || "").trim() || undefined,
         taxIdentificationNumber: taxIdentificationNumber.trim() || undefined,
         operatingHours: operatingHours.trim() || undefined,
-        region: selectedRegionCode || selectedBranch?.region || undefined,
+        region: selectedRegionName || selectedRegionCode || selectedBranch?.region || undefined,
         province: selectedProvinceName || selectedBranch?.province || undefined,
         city: selectedCityName || selectedBranch?.city || undefined,
         barangay: selectedBarangay || selectedBranch?.barangay || undefined,
@@ -545,7 +579,7 @@ export default function FacilityOnboardingWizard({
         showEdge(facilityName, result.hubCredentials);
       } else if (result.hubOnboardingPending) {
         toast.warning(
-          "The hub could not be reached, so no credentials were issued yet. Open Settings → Facilities and use \"Rotate hub credentials\" for this facility.",
+          "The hub could not be reached, so no credentials were issued yet. Open the facility's Settings → Deployment & Network tab under Branches & Locations and use \"Rotate hub credentials\".",
         );
       }
 
@@ -673,20 +707,20 @@ export default function FacilityOnboardingWizard({
                       )}
                     </div>
                     {!targetBranch && availableBranches.length > 1 && (
-                      <select
+                      <SelectField
+                        ariaLabel="Target physical branch"
                         value={selectedBranch.id}
-                        onChange={(e) => {
-                          const b = availableBranches.find((item) => item.id === e.target.value);
+                        onValueChange={(nextId) => {
+                          const b = availableBranches.find((item) => item.id === nextId);
                           if (b) setSelectedBranch(b);
                         }}
-                        className="text-xs h-7 px-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 font-medium"
-                      >
-                        {availableBranches.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </select>
+                        size="sm"
+                        className="h-7 w-fit min-w-44 rounded-lg px-2"
+                        options={availableBranches.map((b) => ({
+                          value: b.id,
+                          label: b.name,
+                        }))}
+                      />
                     )}
                   </div>
 
@@ -700,7 +734,7 @@ export default function FacilityOnboardingWizard({
                     {selectedBranch.isPhilHealthAccredited ? (
                       <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
                         <IconShieldCheck className="h-3.5 w-3.5 shrink-0" />
-                        PhilHealth Accredited (PMCC: {selectedBranch.philHealthPmccNumber || selectedBranch.philHealthAccreditationNumber})
+                        PhilHealth Accredited (Clinic No.: {selectedBranch.philHealthPmccNumber || selectedBranch.philHealthAccreditationNumber})
                       </span>
                     ) : (
                       <span className="text-slate-400">Standard Accreditation</span>
@@ -721,21 +755,20 @@ export default function FacilityOnboardingWizard({
                   <p className="text-[11px] text-amber-800 dark:text-amber-300">
                     Every facility belongs to a physical branch location. Address and statutory credentials will be inherited automatically.
                   </p>
-                  <select
+                  <SelectField
+                    ariaLabel="Choose target physical branch"
                     value=""
-                    onChange={(e) => {
-                      const b = availableBranches.find((item) => item.id === e.target.value);
+                    onValueChange={(nextId) => {
+                      const b = availableBranches.find((item) => item.id === nextId);
                       if (b) setSelectedBranch(b);
                     }}
-                    className="w-full text-xs h-9 px-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200"
-                  >
-                    <option value="">-- Choose Target Branch --</option>
-                    {availableBranches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} ({b.city || "Main Location"})
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="-- Choose Target Branch --"
+                    className="border-amber-300 dark:border-amber-800"
+                    options={availableBranches.map((b) => ({
+                      value: b.id,
+                      label: `${b.name} (${b.city || "Main Location"})`,
+                    }))}
+                  />
                 </div>
               ) : (
                 <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 space-y-2">
@@ -1096,7 +1129,7 @@ export default function FacilityOnboardingWizard({
               <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-start gap-3">
                 <IconMapPin className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                 <div className="text-xs text-blue-900 dark:text-blue-300 leading-relaxed">
-                  Philippine Standard Geographic Code (PSGC) compliant location mapping.
+                  Select the region, province, city/municipality, and barangay of this facility.
                 </div>
               </div>
 
@@ -1105,39 +1138,33 @@ export default function FacilityOnboardingWizard({
                   <Label htmlFor="reg-select" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Administrative Region <span className="text-rose-500">*</span>
                   </Label>
-                  <select
+                  <SelectField
                     id="reg-select"
                     value={selectedRegionCode}
-                    onChange={(e) => handleRegionChange(e.target.value)}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  >
-                    <option value="">-- Select Administrative Region --</option>
-                    {PHILIPPINE_REGIONS.map((r) => (
-                      <option key={r.code} value={r.code}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={handleRegionChange}
+                    placeholder="-- Select Administrative Region --"
+                    options={regions.map((r) => ({
+                      value: r.psgcCode,
+                      label: r.name,
+                    }))}
+                  />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="prov-select" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Province <span className="text-rose-500">*</span>
                   </Label>
-                  <select
+                  <SelectField
                     id="prov-select"
                     value={selectedProvinceName}
-                    onChange={(e) => handleProvinceChange(e.target.value)}
+                    onValueChange={handleProvinceChange}
                     disabled={!selectedRegionCode}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                  >
-                    <option value="">{selectedRegionCode ? "-- Select Province --" : "-- Select Region First --"}</option>
-                    {provinceOptions.map((p) => (
-                      <option key={p.name} value={p.name}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={selectedRegionCode ? "-- Select Province --" : "-- Select Region First --"}
+                    options={provinceOptions.map((p) => ({
+                      value: p.name,
+                      label: p.name,
+                    }))}
+                  />
                 </div>
               </div>
 
@@ -1146,40 +1173,34 @@ export default function FacilityOnboardingWizard({
                   <Label htmlFor="city-select" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     City / Municipality <span className="text-rose-500">*</span>
                   </Label>
-                  <select
+                  <SelectField
                     id="city-select"
                     value={selectedCityName}
-                    onChange={(e) => handleCityChange(e.target.value)}
-                    disabled={!selectedProvinceName}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                  >
-                    <option value="">{selectedProvinceName ? "-- Select City / Municipality --" : "-- Select Province First --"}</option>
-                    {cityOptions.map((c) => (
-                      <option key={c.name} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={handleCityChange}
+                    disabled={!selectedRegionCode}
+                    placeholder={selectedRegionCode ? "-- Select City / Municipality --" : "-- Select Region First --"}
+                    options={cityOptions.map((c) => ({
+                      value: c.name,
+                      label: c.name,
+                    }))}
+                  />
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-1">
                   <Label htmlFor="brgy-select" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Barangay <span className="text-rose-500">*</span>
                   </Label>
-                  <select
+                  <SelectField
                     id="brgy-select"
                     value={selectedBarangay}
-                    onChange={(e) => setSelectedBarangay(e.target.value)}
+                    onValueChange={setSelectedBarangay}
                     disabled={!selectedCityName}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                  >
-                    <option value="">{selectedCityName ? "-- Select Barangay --" : "-- Select City First --"}</option>
-                    {barangayOptions.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={selectedCityName ? "-- Select Barangay --" : "-- Select City First --"}
+                    options={barangayOptions.map((b) => ({
+                      value: b.name,
+                      label: b.name,
+                    }))}
+                  />
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-1">

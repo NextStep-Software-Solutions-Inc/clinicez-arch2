@@ -16,6 +16,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import * as Sharing from 'expo-sharing';
 import { dialog } from '@utils/dialog';
 import { useProfileSync } from 'hooks/useProfileSync';
+import EmptyState from '@ui/EmptyState';
+import { RecordSkeletonList } from 'components/records/RecordSkeletonList';
 
 export default function LabResultsScreen() {
   const patientId = usePatientId();
@@ -24,71 +26,23 @@ export default function LabResultsScreen() {
   const { isDesktop } = useBreakpoint();
 
   const [records, setRecords] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [reportModalVisible, setReportModalVisible] = useState(false);
 
   const load = useCallback(() => {
+    setIsLoading(true);
     db.select()
       .from(labResults)
       .where(eq(labResults.patientId, patientId))
       .orderBy(desc(labResults.dateResulted))
       .then((data) => {
-        if (data && data.length > 0) {
-          setRecords(data);
-        } else {
-          // Seeded realistic diagnostic tests for outpatient review
-          setRecords([
-            {
-              id: 'lab-001',
-              patientId,
-              testName: 'Complete Blood Count (CBC) with Platelet Count',
-              category: 'Hematology',
-              dateOrdered: '2026-09-30',
-              dateResulted: '2026-09-30 11:45',
-              componentParameter: 'Hemoglobin (Hgb)',
-              resultValue: '14.2',
-              unit: 'g/dL',
-              referenceRange: '13.5 - 17.5 g/dL',
-              flag: 'Normal',
-              laboratory: 'Metro Health Diagnostic Lab (Clinic EZ Partner)',
-              orderingPhysician: 'Dr. Roberto Cruz, MD',
-              pathologist: 'Dr. Evelyn Lim, MD, FPSP (PRC-0078912)',
-              medtech: 'Mark Joshua Bautista, RMT (PRC-0091823)',
-              reportNumber: 'LAB-20260930-0019',
-              components: [
-                { parameter: 'White Blood Cells (WBC)', value: '7.8', unit: 'x10^9/L', range: '4.5 - 11.0', flag: 'Normal' },
-                { parameter: 'Hemoglobin (Hgb)', value: '14.2', unit: 'g/dL', range: '13.5 - 17.5', flag: 'Normal' },
-                { parameter: 'Hematocrit (Hct)', value: '42.6', unit: '%', range: '41.0 - 53.0', flag: 'Normal' },
-                { parameter: 'Platelet Count', value: '245', unit: 'x10^9/L', range: '150 - 450', flag: 'Normal' },
-                { parameter: 'Neutrophils', value: '62', unit: '%', range: '50 - 70', flag: 'Normal' },
-                { parameter: 'Lymphocytes', value: '30', unit: '%', range: '20 - 40', flag: 'Normal' },
-              ],
-            },
-            {
-              id: 'lab-002',
-              patientId,
-              testName: 'Fasting Blood Sugar (FBS)',
-              category: 'Clinical Chemistry',
-              dateOrdered: '2026-09-30',
-              dateResulted: '2026-09-30 11:50',
-              componentParameter: 'Glucose (Fasting)',
-              resultValue: '108.4',
-              unit: 'mg/dL',
-              referenceRange: '70.0 - 99.0 mg/dL',
-              flag: 'Abnormal High',
-              laboratory: 'Metro Health Diagnostic Lab (Clinic EZ Partner)',
-              orderingPhysician: 'Dr. Roberto Cruz, MD',
-              pathologist: 'Dr. Evelyn Lim, MD, FPSP (PRC-0078912)',
-              medtech: 'Mark Joshua Bautista, RMT (PRC-0091823)',
-              reportNumber: 'LAB-20260930-0020',
-              components: [
-                { parameter: 'Fasting Blood Glucose', value: '108.4', unit: 'mg/dL', range: '70.0 - 99.0', flag: 'High' },
-              ],
-            },
-          ]);
-        }
+        setRecords(data ?? []);
       })
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => {
+        setIsLoading(false);
+      });
   }, [patientId]);
 
   useEffect(() => {
@@ -108,47 +62,60 @@ export default function LabResultsScreen() {
       dialog.alert('Notice', 'Sharing is not available on this device platform.');
       return;
     }
-    dialog.alert('Export PDF Report', 'Official sealed diagnostic laboratory certificate exported for sharing.');
+    if (selectedReport?.pdfUri || selectedReport?.fileUri) {
+      await Sharing.shareAsync(selectedReport.pdfUri || selectedReport.fileUri);
+    } else {
+      dialog.alert('Share Report', 'Diagnostic laboratory report ready for local export and sharing.');
+    }
   };
 
   return (
     <Screen width="content" scroll={false} padded={false}>
-      <FlatList
-        key={isDesktop ? 'grid-2' : 'list-1'}
-        numColumns={isDesktop ? 2 : 1}
-        data={records}
-        keyExtractor={(item) => item.id}
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={[
-          styles.content,
-          { padding: spacing.lg, paddingBottom: spacing['4xl'], gap: spacing.md },
-        ]}
-        columnWrapperStyle={isDesktop ? { gap: spacing.md } : undefined}
-        ListHeaderComponent={
-          <View
-            style={[
-              styles.headerBanner,
-              {
-                backgroundColor: colors.successBg,
-                borderColor: colors.successBorder,
-                borderRadius: radii.lg,
-                padding: spacing.md,
-                gap: spacing.xs,
-              },
-            ]}
-          >
-            <View style={styles.bannerHeaderRow}>
-              <AppIcon name="lab" color={colors.successText} size={20} />
-              <ThemedText variant="title" style={{ color: colors.successText, fontWeight: '700' }}>
-                Official Diagnostic Laboratory Results
+      {isLoading ? (
+        <RecordSkeletonList count={3} />
+      ) : (
+        <FlatList
+          key={isDesktop ? 'grid-2' : 'list-1'}
+          numColumns={isDesktop ? 2 : 1}
+          data={records}
+          keyExtractor={(item) => item.id}
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerStyle={[
+            styles.content,
+            { padding: spacing.lg, paddingBottom: spacing['4xl'], gap: spacing.md },
+          ]}
+          columnWrapperStyle={isDesktop ? { gap: spacing.md } : undefined}
+          ListHeaderComponent={
+            <View
+              style={[
+                styles.headerBanner,
+                {
+                  backgroundColor: colors.successBg,
+                  borderColor: colors.successBorder,
+                  borderRadius: radii.lg,
+                  padding: spacing.md,
+                  gap: spacing.xs,
+                },
+              ]}
+            >
+              <View style={styles.bannerHeaderRow}>
+                <AppIcon name="lab" color={colors.successText} size={20} />
+                <ThemedText variant="title" style={{ color: colors.successText, fontWeight: '700' }}>
+                  Official Diagnostic Laboratory Results
+                </ThemedText>
+              </View>
+              <ThemedText variant="caption" style={{ color: colors.textSecondary, lineHeight: 18 }}>
+                Signed and verified clinical laboratory reports ordered by your healthcare providers. View analyte findings, reference ranges, and export certified PDF records.
               </ThemedText>
             </View>
-            <ThemedText variant="caption" style={{ color: colors.textSecondary, lineHeight: 18 }}>
-              Signed and verified clinical laboratory reports ordered by your healthcare providers. View analyte findings, reference ranges, and export certified PDF records.
-            </ThemedText>
-          </View>
-        }
-        ListEmptyComponent={<ProfileSectionHeader title="" description="No lab results recorded yet." />}
+          }
+          ListEmptyComponent={
+            <EmptyState
+              icon="clipboard"
+              title="No Diagnostic Results"
+              message="No verified diagnostic laboratory or imaging results recorded yet."
+            />
+          }
         renderItem={({ item }) => {
           const isCritical = item.flag?.toLowerCase().includes('panic') || item.flag?.toLowerCase().includes('critical');
           const isAbnormal = item.flag?.toLowerCase().includes('high') || item.flag?.toLowerCase().includes('low') || item.flag?.toLowerCase().includes('abnormal');
@@ -219,9 +186,9 @@ export default function LabResultsScreen() {
                 <ProfileReadOnlyField label="Result Date" value={item.dateResulted} />
                 <ProfileReadOnlyField
                   label="Accredited Laboratory"
-                  value={item.laboratory ?? 'Metro Health Diagnostic Center'}
+                  value={item.laboratory ?? 'Accredited Diagnostic Facility'}
                 />
-                <ProfileReadOnlyField label="Ordering Physician" value={item.orderingPhysician ?? 'Dr. Roberto Cruz, MD'} />
+                <ProfileReadOnlyField label="Ordering Physician" value={item.orderingPhysician ?? 'Attending Physician'} />
               </View>
 
               {/* Actions */}
@@ -249,6 +216,7 @@ export default function LabResultsScreen() {
           );
         }}
       />
+      )}
 
       {/* Official Diagnostic Report Modal */}
       <Modal visible={reportModalVisible} transparent animationType="slide">
@@ -290,13 +258,7 @@ export default function LabResultsScreen() {
               {/* Header Letterhead */}
               <View style={[styles.reportHeader, { borderBottomColor: colors.borderLight, paddingBottom: spacing.sm }]}>
                 <ThemedText variant="title" style={{ color: colors.text, textAlign: 'center', fontWeight: '800' }}>
-                  METRO HEALTH DIAGNOSTIC LABORATORY
-                </ThemedText>
-                <ThemedText variant="caption" style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 2 }}>
-                  DOH Accreditation No. 04-CL-2026-0819 • PhilHealth Konsulta Accredited
-                </ThemedText>
-                <ThemedText variant="caption" style={{ color: colors.textSecondary, textAlign: 'center' }}>
-                  Medical Arts Bldg, San Pedro, Laguna • Contact: (02) 8912-3456
+                  {selectedReport?.laboratory || 'ACCREDITED DIAGNOSTIC LABORATORY'}
                 </ThemedText>
                 <View style={[styles.divider, { backgroundColor: colors.borderLight, marginVertical: spacing.sm }]} />
                 <ThemedText variant="caption" style={{ color: colors.primary, letterSpacing: 1, textTransform: 'uppercase', fontWeight: '800' }}>
@@ -306,11 +268,11 @@ export default function LabResultsScreen() {
                   <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
                     Report No:{' '}
                     <ThemedText variant="caption" style={{ color: colors.primary, fontWeight: '700' }}>
-                      {selectedReport?.reportNumber || 'LAB-20260930-0019'}
+                      {selectedReport?.reportNumber || '—'}
                     </ThemedText>
                   </ThemedText>
                   <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
-                    Date: {selectedReport?.dateResulted || '2026-09-30'}
+                    Date: {selectedReport?.dateResulted || '—'}
                   </ThemedText>
                 </View>
               </View>
@@ -333,7 +295,7 @@ export default function LabResultsScreen() {
                     Ordering Physician:
                   </ThemedText>
                   <ThemedText variant="caption" style={{ color: colors.text, fontWeight: '600' }}>
-                    {selectedReport?.orderingPhysician || 'Dr. Roberto Cruz, MD'}
+                    {selectedReport?.orderingPhysician || 'Attending Physician'}
                   </ThemedText>
                 </View>
                 <View style={styles.infoRow}>
@@ -341,7 +303,7 @@ export default function LabResultsScreen() {
                     Specimen / Test:
                   </ThemedText>
                   <ThemedText variant="caption" style={{ color: colors.text, fontWeight: '600' }}>
-                    {selectedReport?.testName}
+                    {selectedReport?.testName || 'Diagnostic Laboratory Test'}
                   </ThemedText>
                 </View>
                 <View style={styles.infoRow}>
@@ -461,11 +423,13 @@ export default function LabResultsScreen() {
                     Registered Medical Technologist
                   </ThemedText>
                   <ThemedText variant="caption" style={{ color: colors.text, textAlign: 'center', marginTop: 2, fontWeight: '700' }}>
-                    {selectedReport?.medtech || 'Mark Joshua Bautista, RMT'}
+                    {selectedReport?.medtech || 'Attending Medical Technologist'}
                   </ThemedText>
-                  <ThemedText variant="caption" style={{ color: colors.textSecondary, marginTop: 1 }}>
-                    PRC License No. 0091823
-                  </ThemedText>
+                  {selectedReport?.medtechPrcLicense ? (
+                    <ThemedText variant="caption" style={{ color: colors.textSecondary, marginTop: 1 }}>
+                      PRC License No. {selectedReport.medtechPrcLicense}
+                    </ThemedText>
+                  ) : null}
                   <View style={[styles.sigStatusRow, { marginTop: spacing.xs }]}>
                     <AppIcon name="check" size={14} color={colors.successText} />
                     <ThemedText variant="caption" style={{ color: colors.successText, marginLeft: 4, fontWeight: '700' }}>
@@ -488,11 +452,13 @@ export default function LabResultsScreen() {
                     Pathologist / Laboratory Director
                   </ThemedText>
                   <ThemedText variant="caption" style={{ color: colors.text, textAlign: 'center', marginTop: 2, fontWeight: '700' }}>
-                    {selectedReport?.pathologist || 'Dr. Evelyn Lim, MD, FPSP'}
+                    {selectedReport?.pathologist || 'Attending Pathologist'}
                   </ThemedText>
-                  <ThemedText variant="caption" style={{ color: colors.textSecondary, marginTop: 1 }}>
-                    PRC License No. 0078912
-                  </ThemedText>
+                  {selectedReport?.pathologistPrcLicense ? (
+                    <ThemedText variant="caption" style={{ color: colors.textSecondary, marginTop: 1 }}>
+                      PRC License No. {selectedReport.pathologistPrcLicense}
+                    </ThemedText>
+                  ) : null}
                   <View style={[styles.sigStatusRow, { marginTop: spacing.xs }]}>
                     <AppIcon name="check" size={14} color={colors.successText} />
                     <ThemedText variant="caption" style={{ color: colors.successText, marginLeft: 4, fontWeight: '700' }}>

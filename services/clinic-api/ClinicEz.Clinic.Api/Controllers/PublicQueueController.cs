@@ -28,14 +28,18 @@ public sealed class PublicQueueController : ControllerBase
     /// Excludes all Protected Health Information (PHI).
     /// </summary>
     [HttpGet("display")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<ActionResult<ApiResponse<PublicQueueDisplayDto>>> GetPublicQueueDisplay(
         [FromQuery] Guid? clinicId,
         [FromQuery] string? tenantSlug,
         [FromQuery] string? facilitySlug,
         [FromQuery] DateOnly? date,
+        [FromQuery] string? pin,
+        [FromHeader(Name = "X-Queue-Pin")] string? headerPin,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetPublicQueueDisplayQuery(clinicId, tenantSlug, facilitySlug, date), ct);
+        var effectivePin = !string.IsNullOrWhiteSpace(headerPin) ? headerPin : pin;
+        var result = await _sender.Send(new GetPublicQueueDisplayQuery(clinicId, tenantSlug, facilitySlug, date, effectivePin), ct);
         if (result == null)
         {
             return NotFound(ApiResponse<PublicQueueDisplayDto>.Fail("Clinic not found for public TV display."));

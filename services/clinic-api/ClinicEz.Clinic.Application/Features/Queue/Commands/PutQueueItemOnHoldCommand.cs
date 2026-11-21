@@ -32,7 +32,7 @@ public sealed class PutQueueItemOnHoldCommandHandler : IRequestHandler<PutQueueI
     public async Task<QueueItemDto> Handle(PutQueueItemOnHoldCommand request, CancellationToken cancellationToken)
     {
         var item = await _queueRepository.Query(q => q.Id == request.Id && q.ClinicId == _clinicContext.ClinicId)
-            .Include(q => q.TriageVitals)
+            .Include(q => q.PatientVitals)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (item == null)
@@ -47,30 +47,6 @@ public sealed class PutQueueItemOnHoldCommandHandler : IRequestHandler<PutQueueI
         _queueRepository.Update(item);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        string? vitalsSummary = item.TriageVitals != null
-            ? $"BP: {item.TriageVitals.SystolicBp}/{item.TriageVitals.DiastolicBp} • HR: {item.TriageVitals.HeartRateBpm}"
-            : null;
-
-        return new QueueItemDto(
-            item.Id,
-            item.TenantId,
-            item.ClinicId,
-            item.QueueNumber,
-            item.SequenceNumber,
-            item.QueueDate,
-            item.PatientId,
-            item.PatientName,
-            item.AppointmentId,
-            item.DoctorId,
-            item.DoctorName,
-            item.Priority,
-            item.Status,
-            item.CheckInTime,
-            item.CalledTime,
-            item.CompletedTime,
-            item.ChiefComplaint,
-            item.TriageVitals != null,
-            vitalsSummary,
-            item.RoomOrStation);
+        return item.ToDto();
     }
 }

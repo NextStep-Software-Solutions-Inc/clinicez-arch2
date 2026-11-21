@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSignIn } from "@clerk/nextjs";
@@ -14,11 +14,31 @@ import {
   AlertCircle, 
   CheckCircle2, 
   KeyRound, 
-  ArrowLeft 
+  ArrowLeft,
+  ShieldCheck,
+  Smartphone,
+  RotateCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type AuthStep = "sign-in" | "forgot-password" | "reset-password" | "second-factor";
+type SecondFactorStrategy = "totp" | "phone_code" | "email_code" | "backup_code";
+
+interface SecondFactorDescriptor {
+  strategy: string;
+  safeIdentifier?: string;
+  phoneNumberId?: string;
+  emailAddressId?: string;
+  primary?: boolean;
+  default?: boolean;
+}
+
+const SECOND_FACTOR_LABELS: Record<SecondFactorStrategy, string> = {
+  totp: "Authenticator App",
+  phone_code: "SMS Code",
+  email_code: "Email Code",
+  backup_code: "Backup Code",
+};
 
 export function CustomSignInForm() {
   const router = useRouter();
@@ -37,8 +57,13 @@ export function CustomSignInForm() {
   const [newPassword, setNewPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
 
-  // 2FA state
+  // 2FA / MFA state
   const [secondFactorCode, setSecondFactorCode] = useState("");
+  const [secondFactorStrategy, setSecondFactorStrategy] = useState<SecondFactorStrategy>("totp");
+  const [availableSecondFactors, setAvailableSecondFactors] = useState<SecondFactorStrategy[]>(["totp"]);
+  const [secondFactorTarget, setSecondFactorTarget] = useState<string | null>(null);
+  const [isResendingSecondFactor, setIsResendingSecondFactor] = useState(false);
+  const autoEnteredSignInIdRef = useRef<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSocialLoading, setIsSocialLoading] = useState(false);
@@ -53,6 +78,12 @@ export function CustomSignInForm() {
       if (code === "form_identifier_not_found" || code === "form_password_incorrect") {
         return "Incorrect email or password. Please check your credentials.";
       }
+      if (code === "form_code_incorrect") {
+        return "The verification code is incorrect. Please check and try again.";
+      }
+      if (code === "verification_expired") {
+        return "The verification code has expired. Please request a new code.";
+      }
       if (code === "too_many_attempts") {
         return "Too many failed attempts. Please wait a moment before trying again.";
       }
@@ -63,6 +94,108 @@ export function CustomSignInForm() {
     }
     return err?.message || "Something went wrong. Please try again.";
   };
+
+  const findFactorForStrategy = (
+    factors: SecondFactorDescriptor[] | null | undefined,
+    strategy: SecondFactorStrategy
+  ): SecondFactorDescriptor | undefined => {
+    if (!factors || factors.length === 0) return undefined;
+    const matches = factors.filter((f) => f && f.strategy === strategy);
+    if (matches.length === 0) return undefined;
+    return (
+      matches.find((f) => f.default === true) ??
+      matches.find((f) => f.primary === true) ??
+      matches[0]
+    );
+  };
+
+  const getSafeIdentifierForStrategy = (
+    factors: SecondFactorDescriptor[] | null | undefined,
+    strategy: SecondFactorStrategy
+  ): string | null => {
+    const match = findFactorForStrategy(factors, strategy);
+    return match?.safeIdentifier ?? null;
+  };
+
+  const prepareSecondFactorForStrategy = async (
+    signInResource: NonNullable<typeof signIn>,
+    factors: SecondFactorDescriptor[] | null | undefined,
+    strategy: "phone_code" | "email_code"
+  ) => {
+    const factor = findFactorForStrategy(factors, strategy);
+    if (strategy === "phone_code") {
+      await signInResource.prepareSecondFactor({
+        strategy: "phone_code",
+        ...(factor?.phoneNumberId ? { phoneNumberId: factor.phoneNumberId } : {}),
+      });
+    } else {
+      await signInResource.prepareSecondFactor({
+        strategy: "email_code",
+        ...(factor?.emailAddressId ? { emailAddressId: factor.emailAddressId } : {}),
+      });
+    }
+  };
+
+  const enterSecondFactorStep = async (signInResource: NonNullable<typeof signIn>) => {
+    const rawFactors = (signInResource.supportedSecondFactors ?? []) as SecondFactorDescriptor[];
+    const statusStr = signInResource.status as string | null;
+    const priorityOrder: SecondFactorStrategy[] =
+      statusStr === "needs_client_trust"
+        ? ["email_code", "totp", "phone_code", "backup_code"]
+        : ["totp", "phone_code", "email_code", "backup_code"];
+
+    const supportedSet = new Set<SecondFactorStrategy>();
+    for (const factor of rawFactors) {
+      if (
+        factor.strategy === "totp" ||
+        factor.strategy === "phone_code" ||
+        factor.strategy === "email_code" ||
+        factor.strategy === "backup_code"
+      ) {
+        supportedSet.add(factor.strategy);
+      }
+    }
+
+    const orderedStrategies = priorityOrder.filter((s) => supportedSet.has(s));
+    const fallbackStrategy: SecondFactorStrategy =
+      statusStr === "needs_client_trust" ? "email_code" : "totp";
+    const resolvedStrategies: SecondFactorStrategy[] =
+      orderedStrategies.length > 0 ? orderedStrategies : [fallbackStrategy];
+    const initialStrategy = resolvedStrategies[0];
+
+    autoEnteredSignInIdRef.current = signInResource.id || "active-mfa";
+    setAvailableSecondFactors(resolvedStrategies);
+    setSecondFactorStrategy(initialStrategy);
+    setSecondFactorTarget(getSafeIdentifierForStrategy(rawFactors, initialStrategy));
+    setSecondFactorCode("");
+    setStep("second-factor");
+
+    if (initialStrategy === "phone_code" || initialStrategy === "email_code") {
+      try {
+        await prepareSecondFactorForStrategy(signInResource, rawFactors, initialStrategy);
+      } catch (err: any) {
+        setError(getErrorMessage(err));
+      }
+    }
+  };
+
+  // Detect second-factor requirement when returning from OAuth SSO callback
+  useEffect(() => {
+    if (
+      isLoaded &&
+      signIn &&
+      step === "sign-in" &&
+      (signIn.status === "needs_second_factor" ||
+        (signIn.status as string | null) === "needs_client_trust")
+    ) {
+      const signInKey = signIn.id || "active-mfa";
+      if (autoEnteredSignInIdRef.current === signInKey) {
+        return;
+      }
+      autoEnteredSignInIdRef.current = signInKey;
+      void enterSecondFactorStep(signIn);
+    }
+  }, [isLoaded, signIn, step]);
 
   // Primary Email + Password Sign In
   const handleSignIn = async (e: React.FormEvent) => {
@@ -90,8 +223,11 @@ export function CustomSignInForm() {
       if (result.status === "complete") {
         await setActive({ session: result.createdSessionId });
         router.push(redirectUrl);
-      } else if (result.status === "needs_second_factor") {
-        setStep("second-factor");
+      } else if (
+        result.status === "needs_second_factor" ||
+        (result.status as string | null) === "needs_client_trust"
+      ) {
+        await enterSecondFactorStep(result);
       } else if (result.status === "needs_first_factor") {
         setError("Additional authentication required. Please try again.");
       } else {
@@ -178,6 +314,12 @@ export function CustomSignInForm() {
       if (result.status === "complete") {
         await setActive({ session: result.createdSessionId });
         router.push(redirectUrl);
+      } else if (
+        result.status === "needs_second_factor" ||
+        (result.status as string | null) === "needs_client_trust"
+      ) {
+        setSuccessMessage(null);
+        await enterSecondFactorStep(result);
       } else {
         setError("Password reset incomplete. Please try again.");
       }
@@ -185,6 +327,71 @@ export function CustomSignInForm() {
       setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSwitchSecondFactorStrategy = async (nextStrategy: SecondFactorStrategy) => {
+    if (
+      !isLoaded ||
+      !signIn ||
+      nextStrategy === secondFactorStrategy ||
+      isLoading ||
+      isResendingSecondFactor
+    ) {
+      return;
+    }
+
+    setError(null);
+    setSuccessMessage(null);
+    setSecondFactorCode("");
+    setSecondFactorStrategy(nextStrategy);
+
+    const rawFactors = (signIn.supportedSecondFactors ?? []) as SecondFactorDescriptor[];
+    setSecondFactorTarget(getSafeIdentifierForStrategy(rawFactors, nextStrategy));
+
+    if (nextStrategy === "phone_code" || nextStrategy === "email_code") {
+      setIsResendingSecondFactor(true);
+      try {
+        await prepareSecondFactorForStrategy(signIn, rawFactors, nextStrategy);
+        setSuccessMessage(
+          nextStrategy === "phone_code"
+            ? "A verification code has been sent via SMS."
+            : "A verification code has been sent to your email."
+        );
+      } catch (err: any) {
+        setError(getErrorMessage(err));
+      } finally {
+        setIsResendingSecondFactor(false);
+      }
+    }
+  };
+
+  const handleResendSecondFactor = async () => {
+    if (
+      !isLoaded ||
+      !signIn ||
+      (secondFactorStrategy !== "phone_code" && secondFactorStrategy !== "email_code") ||
+      isResendingSecondFactor
+    ) {
+      return;
+    }
+
+    setIsResendingSecondFactor(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const rawFactors = (signIn.supportedSecondFactors ?? []) as SecondFactorDescriptor[];
+      await prepareSecondFactorForStrategy(signIn, rawFactors, secondFactorStrategy);
+      setSuccessMessage(
+        secondFactorStrategy === "phone_code"
+          ? "A fresh verification code has been sent via SMS."
+          : "A fresh verification code has been sent to your email."
+      );
+    } catch (err: any) {
+      setError(getErrorMessage(err));
+    } finally {
+      setIsResendingSecondFactor(false);
     }
   };
 
@@ -203,7 +410,7 @@ export function CustomSignInForm() {
 
     try {
       const result = await signIn.attemptSecondFactor({
-        strategy: "totp",
+        strategy: secondFactorStrategy,
         code: secondFactorCode.trim(),
       });
 
@@ -523,31 +730,75 @@ export function CustomSignInForm() {
         </div>
       )}
 
-      {/* STEP 4: Two-Factor / 2FA Screen */}
+      {/* STEP 4: Two-Factor / MFA Screen */}
       {step === "second-factor" && (
         <div className="space-y-6 animate-in fade-in duration-300">
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-foreground">
-              Two-Factor Authentication
+              {secondFactorStrategy === "totp" && "Two-Factor Authentication"}
+              {secondFactorStrategy === "phone_code" && "SMS Verification Code"}
+              {secondFactorStrategy === "email_code" && "Email Verification Code"}
+              {secondFactorStrategy === "backup_code" && "Backup Code Verification"}
             </h2>
             <p className="text-sm text-muted-foreground mt-1.5">
-              Enter the 6-digit authentication code from your authenticator app to complete sign in.
+              {secondFactorStrategy === "totp" &&
+                "Enter the 6-digit authentication code from your authenticator app to complete sign in."}
+              {secondFactorStrategy === "phone_code" &&
+                `Enter the 6-digit verification code sent via SMS${secondFactorTarget ? ` to ${secondFactorTarget}` : ""} to complete sign in.`}
+              {secondFactorStrategy === "email_code" &&
+                `Enter the 6-digit verification code sent${secondFactorTarget ? ` to ${secondFactorTarget}` : " to your email"} to complete sign in.`}
+              {secondFactorStrategy === "backup_code" &&
+                "Enter one of your single-use recovery backup codes to complete sign in."}
             </p>
           </div>
 
           <form onSubmit={handleSecondFactor} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Security Code
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  {secondFactorStrategy === "backup_code" ? "Recovery Backup Code" : "Security Code"}
+                </label>
+                {(secondFactorStrategy === "phone_code" || secondFactorStrategy === "email_code") && (
+                  <button
+                    type="button"
+                    onClick={handleResendSecondFactor}
+                    disabled={isResendingSecondFactor || isLoading}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    <RotateCw className={`h-3 w-3 ${isResendingSecondFactor ? "animate-spin" : ""}`} />
+                    <span>Resend code</span>
+                  </button>
+                )}
+              </div>
               <div className="relative">
-                <KeyRound className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground" />
+                {secondFactorStrategy === "totp" && (
+                  <ShieldCheck className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground" />
+                )}
+                {secondFactorStrategy === "phone_code" && (
+                  <Smartphone className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground" />
+                )}
+                {secondFactorStrategy === "email_code" && (
+                  <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground" />
+                )}
+                {secondFactorStrategy === "backup_code" && (
+                  <KeyRound className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground" />
+                )}
                 <input
                   type="text"
                   autoFocus
+                  inputMode={secondFactorStrategy === "backup_code" ? "text" : "numeric"}
+                  autoComplete={secondFactorStrategy === "backup_code" ? "off" : "one-time-code"}
+                  maxLength={secondFactorStrategy === "backup_code" ? 32 : 6}
                   value={secondFactorCode}
-                  onChange={(e) => setSecondFactorCode(e.target.value)}
-                  placeholder="123456"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (secondFactorStrategy === "backup_code") {
+                      setSecondFactorCode(val);
+                    } else {
+                      setSecondFactorCode(val.replace(/\D/g, "").slice(0, 6));
+                    }
+                  }}
+                  placeholder={secondFactorStrategy === "backup_code" ? "Enter backup code" : "123456"}
                   className="w-full rounded-xl border border-input bg-background/80 px-4 py-2.5 pl-10 text-sm text-foreground tracking-widest placeholder:tracking-normal placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                   required
                 />
@@ -556,7 +807,7 @@ export function CustomSignInForm() {
 
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || isResendingSecondFactor || !secondFactorCode.trim()}
               className="w-full h-11 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm shadow-md shadow-primary/25 transition-all mt-2 cursor-pointer"
             >
               {isLoading ? (
@@ -569,10 +820,45 @@ export function CustomSignInForm() {
               )}
             </Button>
 
+            {availableSecondFactors.length > 1 && (
+              <div className="pt-2 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">
+                  Use another verification method
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {availableSecondFactors.map((strategy) => {
+                    const isActive = strategy === secondFactorStrategy;
+                    return (
+                      <button
+                        key={strategy}
+                        type="button"
+                        disabled={isActive || isLoading || isResendingSecondFactor}
+                        onClick={() => handleSwitchSecondFactorStrategy(strategy)}
+                        className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                          isActive
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border bg-background hover:bg-muted/60 text-foreground"
+                        } disabled:opacity-60`}
+                      >
+                        {strategy === "totp" && <ShieldCheck className="h-3.5 w-3.5 shrink-0" />}
+                        {strategy === "phone_code" && <Smartphone className="h-3.5 w-3.5 shrink-0" />}
+                        {strategy === "email_code" && <Mail className="h-3.5 w-3.5 shrink-0" />}
+                        {strategy === "backup_code" && <KeyRound className="h-3.5 w-3.5 shrink-0" />}
+                        <span>{SECOND_FACTOR_LABELS[strategy]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={() => {
+                autoEnteredSignInIdRef.current = signIn?.id || "active-mfa";
                 setError(null);
+                setSuccessMessage(null);
+                setSecondFactorCode("");
                 setStep("sign-in");
               }}
               className="w-full text-center text-xs font-medium text-muted-foreground hover:text-foreground pt-2 cursor-pointer"

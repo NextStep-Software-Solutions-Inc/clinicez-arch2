@@ -11,5 +11,5 @@ public interface ISampleDocumentGenerator
         string docType,
         bool wetSignature,
         string? paperSize,
-        ClinicSettings settings);
+        FacilitySettings settings);
 }

@@ -1,48 +1,173 @@
 // token-guard:ignore-file
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 (globalThis as any).__DEV__ = true;
+
+function flattenStyleProp(style: any): Record<string, string | number> | undefined {
+  if (!style) return undefined;
+  const resolved =
+    typeof style === 'function' ? style({ pressed: false, hovered: false }) : style;
+  const acc: Record<string, string | number> = {};
+  const walk = (item: any) => {
+    if (!item || typeof item !== 'object') return;
+    if (Array.isArray(item)) {
+      for (const sub of item) walk(sub);
+      return;
+    }
+    for (const [k, v] of Object.entries(item)) {
+      if (k === 'transform' && Array.isArray(v)) {
+        const parts = v
+          .map((entry: any) =>
+            entry && typeof entry === 'object'
+              ? Object.entries(entry)
+                  .map(([fn, val]) =>
+                    typeof val === 'number' && !fn.startsWith('scale')
+                      ? `${fn}(${val}px)`
+                      : `${fn}(${val})`,
+                  )
+                  .join(' ')
+              : '',
+          )
+          .filter(Boolean);
+        if (parts.length > 0) acc.transform = parts.join(' ');
+      } else if (typeof v === 'string' || typeof v === 'number') {
+        acc[k] = v;
+      }
+    }
+  };
+  walk(resolved);
+  return Object.keys(acc).length > 0 ? acc : undefined;
+}
+
+const createMockComponent = (name: string) => {
+  const Comp = ({
+    children,
+    accessibilityLabel,
+    accessibilityRole,
+    accessibilityState,
+    className,
+    dataSet,
+    placeholder,
+    value,
+    onPress,
+    title,
+    source,
+    style,
+    testID,
+  }: any) => {
+    const flatStyle = flattenStyleProp(style);
+    const resolvedChildren =
+      typeof children === 'function' ? children({ pressed: false, hovered: false }) : children;
+    const dataAttrs: Record<string, string> = {};
+    if (dataSet && typeof dataSet === 'object') {
+      for (const [k, v] of Object.entries(dataSet)) {
+        if (v !== undefined && v !== null) {
+          const kebab = k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+          dataAttrs[`data-${kebab}`] = String(v);
+        }
+      }
+    }
+    return React.createElement(
+      'div',
+      {
+        'data-component': name,
+        ...(className ? { className } : {}),
+        ...dataAttrs,
+        ...(testID ? { 'data-testid': testID } : {}),
+        ...(accessibilityLabel ? { accessibilitylabel: accessibilityLabel } : {}),
+        ...(accessibilityRole ? { role: accessibilityRole } : {}),
+        ...(accessibilityState?.selected !== undefined
+          ? { 'aria-selected': String(accessibilityState.selected) }
+          : {}),
+        ...(placeholder ? { 'data-placeholder': placeholder } : {}),
+        ...(value !== undefined ? { 'data-value': String(value) } : {}),
+        ...(title ? { title } : {}),
+        ...(source?.uri ? { 'data-src': source.uri } : {}),
+        ...(flatStyle ? { style: flatStyle } : {}),
+        onClick: onPress,
+      },
+      resolvedChildren,
+    );
+  };
+  Comp.displayName = name;
+  return Comp;
+};
 
 // Mock React Native modules for Bun environment
 mock.module('react-native', () => ({
   Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
-  StyleSheet: { create: (s: any) => s },
-  View: 'View',
-  Pressable: 'Pressable',
-  ScrollView: 'ScrollView',
-  TextInput: 'TextInput',
-  Text: 'Text',
-  ActivityIndicator: 'ActivityIndicator',
-  Modal: 'Modal',
-  KeyboardAvoidingView: 'KeyboardAvoidingView',
-  FlatList: 'FlatList',
-  SectionList: 'SectionList',
-  Switch: 'Switch',
-  TouchableOpacity: 'TouchableOpacity',
-  TouchableHighlight: 'TouchableHighlight',
-  Image: 'Image',
+  StyleSheet: {
+    create: (s: any) => s,
+    flatten: (input: any): any => {
+      const acc: Record<string, any> = {};
+      const walk = (item: any) => {
+        if (!item) return;
+        if (Array.isArray(item)) {
+          for (const sub of item) walk(sub);
+        } else if (typeof item === 'object') {
+          Object.assign(acc, item);
+        }
+      };
+      walk(input);
+      return acc;
+    },
+    absoluteFillObject: {},
+  },
+  View: createMockComponent('View'),
+  Pressable: createMockComponent('Pressable'),
+  ScrollView: createMockComponent('ScrollView'),
+  RefreshControl: createMockComponent('RefreshControl'),
+  TextInput: createMockComponent('TextInput'),
+  Text: createMockComponent('Text'),
+  ActivityIndicator: createMockComponent('ActivityIndicator'),
+  Modal: createMockComponent('Modal'),
+  KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
+  FlatList: createMockComponent('FlatList'),
+  SectionList: createMockComponent('SectionList'),
+  Switch: createMockComponent('Switch'),
+  TouchableOpacity: createMockComponent('TouchableOpacity'),
+  TouchableHighlight: createMockComponent('TouchableHighlight'),
+  Image: createMockComponent('Image'),
   Dimensions: {
     get: () => ({ width: 1024, height: 768 }),
     addEventListener: () => ({ remove: () => {} }),
   },
   useWindowDimensions: () => ({ width: 1024, height: 768 }),
   Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
-  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
   Touchable: { Mixin: {} },
   TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
   NativeModules: {},
+  NativeEventEmitter: class {
+    addListener() {
+      return { remove: () => {} };
+    }
+    removeAllListeners() {}
+  },
   Animated: {
     Value: class {
       constructor(public val: any) {}
-      setValue(val: any) { this.val = val; }
-      interpolate() { return this; }
+      setValue(val: any) {
+        this.val = val;
+      }
+      interpolate() {
+        return this;
+      }
     },
     timing: () => ({ start: (cb?: any) => cb && cb() }),
+    sequence: () => ({ start: (cb?: any) => cb && cb() }),
+    loop: () => ({ start: (cb?: any) => cb && cb() }),
     spring: () => ({ start: (cb?: any) => cb && cb() }),
-    View: 'Animated.View',
-    Text: 'Animated.Text',
+    View: createMockComponent('Animated.View'),
+    Text: createMockComponent('Animated.Text'),
   },
+  Easing: { linear: (t: number) => t, inOut: () => (t: number) => t, ease: (t: number) => t },
+  PanResponder: { create: (config: any) => ({ panHandlers: {}, ...config }) },
+  processColor: (c: any) => c,
+  Vibration: { vibrate: () => {}, cancel: () => {} },
   Alert: {
     alert: () => {},
   },
@@ -53,18 +178,19 @@ mock.module('expo-crypto', () => ({
 }));
 
 mock.module('react-native-svg', () => ({
-  Svg: 'Svg',
-  Path: 'Path',
-  Circle: 'Circle',
-  Rect: 'Rect',
-  Line: 'Line',
-  default: 'Svg',
+  Svg: createMockComponent('Svg'),
+  Path: createMockComponent('Path'),
+  Circle: createMockComponent('Circle'),
+  Rect: createMockComponent('Rect'),
+  Line: createMockComponent('Line'),
+  default: createMockComponent('Svg'),
   Defs: ({ children }: any) => children,
   LinearGradient: ({ children }: any) => children,
   Stop: () => null,
   G: ({ children }: any) => children,
   Text: ({ children }: any) => children,
-  Polyline: 'Polyline',
+  Polyline: createMockComponent('Polyline'),
+  Polygon: createMockComponent('Polygon'),
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -73,6 +199,7 @@ mock.module('../constants/fonts', () => ({
 }));
 
 const {
+  default: PatientSummarySpine,
   evaluateBloodPressure,
   evaluateHeartRate,
   evaluateRespiratoryRate,
@@ -416,7 +543,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
       patientAllergiesRaw?: string;
       patientAlerts?: string;
       demoAlerts?: string;
-      gender?: string;
+      sex?: string;
       chartReproductiveApplicable?: boolean;
       reproductiveHistory?: {
         isApplicable?: boolean;
@@ -468,7 +595,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
           : undefined;
 
       const isPregnant = evaluatePregnancyStatus({
-        gender: params.gender,
+        sex: params.sex,
         alerts: alertsStr,
         reproductiveHistory: repHistory,
         problems: params.problems,
@@ -571,7 +698,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('8.4 Pregnancy alert fires when clinical alerts indicate active gestation', () => {
       const alerts = extractRedAlerts({
-        gender: 'Female',
+        sex: 'Female',
         demoAlerts: 'Active Pregnancy (G2P1 28wks gestation)',
       });
       expect(alerts.some((a) => a.title === 'PREGNANCY / OB ALERT')).toBe(true);
@@ -580,13 +707,13 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
     test('8.5 Identifies reproductive history isApplicable precision behavior', () => {
       // Under refined logic, chart.reproductiveHistory.isApplicable alone does NOT flag pregnancy alert
       const alertsWithReproductive = extractRedAlerts({
-        gender: 'Female',
+        sex: 'Female',
         chartReproductiveApplicable: true,
       });
       expect(alertsWithReproductive.some((a) => a.title === 'PREGNANCY / OB ALERT')).toBe(false);
 
       const alertsWithoutReproductive = extractRedAlerts({
-        gender: 'Female',
+        sex: 'Female',
         chartReproductiveApplicable: false,
       });
       expect(alertsWithoutReproductive.some((a) => a.title === 'PREGNANCY / OB ALERT')).toBe(false);
@@ -649,7 +776,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.2 Scenario 1: Baseline Post-Menarche Female with isApplicable only evaluates to false', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         reproductiveHistory: { isApplicable: true },
       });
       expect(result).toBe(false);
@@ -657,7 +784,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.3 Scenario 2: Menopausal Female explicitly excludes active pregnancy', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         reproductiveHistory: { isApplicable: true, isMenopausal: true },
       });
       expect(result).toBe(false);
@@ -665,7 +792,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.4 Scenario 3: Elderly Menopausal by recorded Menopause Age excludes active pregnancy', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         reproductiveHistory: { menopauseAge: 51 },
       });
       expect(result).toBe(false);
@@ -673,7 +800,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.5 Scenario 4: Explicitly Negative Pregnancy in Alerts excludes active pregnancy', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         alerts: 'Pregnancy test: negative',
       });
       expect(result).toBe(false);
@@ -681,7 +808,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.6 Scenario 5: Explicitly Negative Pregnancy in Remarks excludes active pregnancy', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         reproductiveHistory: { remarks: 'Patient confirmed not pregnant' },
       });
       expect(result).toBe(false);
@@ -689,7 +816,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.7 Scenario 6: Male Patient with Misplaced Alert unconditionally excludes active pregnancy', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Male',
+        sex: 'Male',
         alerts: 'Pregnancy protocol',
       });
       expect(result).toBe(false);
@@ -697,7 +824,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.8 Scenario 7: Active Pregnancy via Alerts triggers alert', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         alerts: 'Active Pregnancy (G2P1 28wks gestation)',
       });
       expect(result).toBe(true);
@@ -705,7 +832,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.9 Scenario 8: Active Pregnancy via Remarks triggers alert', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         reproductiveHistory: { remarks: 'Confirmed intrauterine pregnancy, EDD Dec 2026' },
       });
       expect(result).toBe(true);
@@ -713,7 +840,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.10 Scenario 9: Active Pregnancy via ICD-10 Z34.0 triggers alert', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         problems: [
           {
             id: 'p1',
@@ -733,7 +860,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.11 Scenario 10: Active Pregnancy via ICD-10 Z33.1 triggers alert', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         problems: [
           {
             id: 'p2',
@@ -753,7 +880,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.12 Scenario 11: Active Pregnancy via ICD-10 O24.4 triggers alert', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         problems: [
           {
             id: 'p3',
@@ -773,7 +900,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.13 Scenario 12: Resolved Pregnancy Problem does NOT trigger alert', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         problems: [
           {
             id: 'p4',
@@ -831,6 +958,118 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
       expect(isMobilityAssist('Wheelchair / Mobility Assist')).toBe(true);
       expect(isMobilityAssist('Requires wheelchair')).toBe(true);
       expect(isMobilityAssist('Mobility assistance needed')).toBe(true);
+    });
+  });
+
+  describe('11. Vitals Action Button Deduplication & Refresh Icon Spin Behavior', () => {
+    test('11.1 PatientSummarySpine renders strictly 1 "Record Vitals" button when no vitals exist', () => {
+      const basePatient = {
+        id: 'p-1',
+        clinicId: 'c-1',
+        tenantId: 't-1',
+        patientCode: 'CE-2026-0001',
+        fullName: 'Juan Dela Cruz',
+        firstName: 'Juan',
+        lastName: 'Dela Cruz',
+        age: 35,
+        contactNumber: '09171234567',
+        dateOfBirth: '1991-01-01',
+        sex: 'Male',
+        createdAt: '2026-01-01T00:00:00Z',
+      };
+
+      const spineMarkup = renderToStaticMarkup(
+        React.createElement(PatientSummarySpine, {
+          variant: 'workstation',
+          patient: basePatient,
+          chart: null,
+          vitals: null,
+          loading: false,
+          onPressRecordVitals: () => {},
+          onPressRefresh: () => {},
+        })
+      );
+
+      // Exactly 1 Pressable button with accessibilitylabel="Record Vitals"
+      const buttonMatches = spineMarkup.match(/accessibilitylabel="Record Vitals"/gi) || [];
+      expect(buttonMatches.length).toBe(1);
+      // Visible string appears once as accessibilityLabel and once as text inside the single button
+      const recordVitalsMatches = spineMarkup.match(/Record Vitals/g) || [];
+      expect(recordVitalsMatches.length).toBe(2);
+      expect(spineMarkup).toContain('No triage vitals recorded for today.');
+    });
+
+    test('11.2 PatientSummarySpine renders strictly 1 "Update Vitals" button when vitals exist', () => {
+      const basePatient = {
+        id: 'p-1',
+        clinicId: 'c-1',
+        tenantId: 't-1',
+        patientCode: 'CE-2026-0001',
+        fullName: 'Juan Dela Cruz',
+        firstName: 'Juan',
+        lastName: 'Dela Cruz',
+        age: 35,
+        contactNumber: '09171234567',
+        dateOfBirth: '1991-01-01',
+        sex: 'Male',
+        createdAt: '2026-01-01T00:00:00Z',
+      };
+
+      const spineMarkup = renderToStaticMarkup(
+        React.createElement(PatientSummarySpine, {
+          variant: 'workstation',
+          patient: basePatient,
+          chart: null,
+          vitals: {
+            id: 'v-1',
+            queueItemId: 'q-1',
+            systolicBp: 120,
+            diastolicBp: 80,
+            recordedAt: '2026-10-26T08:00:00Z',
+          } as any,
+          loading: false,
+          onPressRecordVitals: () => {},
+          onPressRefresh: () => {},
+        })
+      );
+
+      const buttonMatches = spineMarkup.match(/accessibilitylabel="Update Vitals"/gi) || [];
+      expect(buttonMatches.length).toBe(1);
+      const updateVitalsMatches = spineMarkup.match(/Update Vitals/g) || [];
+      expect(updateVitalsMatches.length).toBe(2);
+      const recordVitalsMatches = spineMarkup.match(/Record Vitals/g) || [];
+      expect(recordVitalsMatches.length).toBe(0);
+    });
+
+    test('11.3 PatientSummarySpine refresh button renders spin glyph when loading is true', () => {
+      const basePatient = {
+        id: 'p-1',
+        clinicId: 'c-1',
+        tenantId: 't-1',
+        patientCode: 'CE-2026-0001',
+        fullName: 'Juan Dela Cruz',
+        firstName: 'Juan',
+        lastName: 'Dela Cruz',
+        age: 35,
+        contactNumber: '09171234567',
+        dateOfBirth: '1991-01-01',
+        sex: 'Male',
+        createdAt: '2026-01-01T00:00:00Z',
+      };
+
+      const spineMarkup = renderToStaticMarkup(
+        React.createElement(PatientSummarySpine, {
+          variant: 'workstation',
+          patient: basePatient,
+          chart: null,
+          vitals: null,
+          loading: true,
+          onPressRefresh: () => {},
+        })
+      );
+
+      expect(spineMarkup).toContain('Refresh patient chart');
+      expect(spineMarkup).toContain('clinicez-spin-glyph');
     });
   });
 });

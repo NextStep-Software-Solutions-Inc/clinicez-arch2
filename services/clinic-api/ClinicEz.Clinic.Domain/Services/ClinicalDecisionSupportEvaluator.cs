@@ -1,4 +1,5 @@
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -108,7 +109,7 @@ public static class ClinicalDecisionSupportEvaluator
         double? egfrMlMin = null,
         double? serumPotassiumMmolL = null,
         IEnumerable<PatientAllergy>? structuredAllergies = null,
-        IEnumerable<PatientProblem>? activeProblems = null)
+        IEnumerable<PatientMedicalHistory>? activeProblems = null)
     {
         var alerts = new List<CdsAlert>();
         var candidateList = candidates.ToList();
@@ -323,10 +324,11 @@ public static class ClinicalDecisionSupportEvaluator
                 {
                     // Peptic Ulcer Disease (K25-K28)
                     var pud = problemList.FirstOrDefault(p =>
+                        p.Icd10Code != null && (
                         p.Icd10Code.StartsWith("K25", StringComparison.OrdinalIgnoreCase) ||
                         p.Icd10Code.StartsWith("K26", StringComparison.OrdinalIgnoreCase) ||
                         p.Icd10Code.StartsWith("K27", StringComparison.OrdinalIgnoreCase) ||
-                        p.Icd10Code.StartsWith("K28", StringComparison.OrdinalIgnoreCase));
+                        p.Icd10Code.StartsWith("K28", StringComparison.OrdinalIgnoreCase)));
 
                     if (pud != null)
                     {
@@ -347,7 +349,7 @@ public static class ClinicalDecisionSupportEvaluator
 
                     // Chronic Kidney Disease (N18)
                     var ckd = problemList.FirstOrDefault(p =>
-                        p.Icd10Code.StartsWith("N18", StringComparison.OrdinalIgnoreCase));
+                        p.Icd10Code != null && p.Icd10Code.StartsWith("N18", StringComparison.OrdinalIgnoreCase));
 
                     if (ckd != null)
                     {
@@ -371,8 +373,9 @@ public static class ClinicalDecisionSupportEvaluator
                 {
                     // Asthma (J45) or COPD (J44)
                     var airway = problemList.FirstOrDefault(p =>
+                        p.Icd10Code != null && (
                         p.Icd10Code.StartsWith("J45", StringComparison.OrdinalIgnoreCase) ||
-                        p.Icd10Code.StartsWith("J44", StringComparison.OrdinalIgnoreCase));
+                        p.Icd10Code.StartsWith("J44", StringComparison.OrdinalIgnoreCase)));
 
                     if (airway != null)
                     {
@@ -383,7 +386,7 @@ public static class ClinicalDecisionSupportEvaluator
                             Severity = CdsAlertSeverity.Critical,
                             RuleType = "DrugDisease",
                             Title = "Contraindication: Beta-Blocker in Bronchospastic Disease",
-                            ClinicalMechanism = $"{drugName} causes beta-2 receptor blockade, triggering severe bronchospasm in asthma and COPD ({airway.Icd10Code} - {airway.ProblemTitle}).",
+                            ClinicalMechanism = $"{drugName} causes beta-2 receptor blockade, triggering severe bronchospasm in asthma and COPD ({airway.Icd10Code} - {airway.ConditionTitle}).",
                             Recommendation = "Discontinue non-selective beta-blocker. Switch to cardioselective beta-1 blocker with caution.",
                             OffendingDrug = drugName,
                             RequiresOverrideReason = true,

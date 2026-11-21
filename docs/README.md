@@ -10,6 +10,7 @@
 | [Data ownership](architecture/data-ownership.md) | System of record per data class, what crosses the hub, retention, consent sharing and privacy notes. |
 | [Billing](architecture/billing.md) | Per-cell cashiering, the consolidated visit bill and the finance rollup to the workspace. |
 | [Edge cell](architecture/edge-cell.md) | The single-tenant on-premise cell: components, offline behaviour, credentials, upgrade channel. |
+| [RBAC & Archetypes](architecture/rbac-archetypes.md) | Archetype-constrained hierarchical RBAC, statutory permission ceilings, and role-mapping case studies. |
 
 ## Operations
 

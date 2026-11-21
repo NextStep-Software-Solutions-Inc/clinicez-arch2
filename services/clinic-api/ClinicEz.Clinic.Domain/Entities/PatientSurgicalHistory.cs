@@ -4,48 +4,37 @@ using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class PatientSurgicalHistory : BaseEntity
+public sealed class PatientSurgicalHistory : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
     public Guid PatientId { get; set; }
-    public ClinicPatient? Patient { get; set; }
+    public Patient? Patient { get; set; }
 
     /// <summary>
     /// Name or description of the surgical procedure performed (e.g. "Appendectomy", "Cholecystectomy").
     /// </summary>
     public required string ProcedureName { get; set; }
 
-    [NotMapped]
-    public string SurgicalProcedureName
-    {
-        get => ProcedureName;
-        set => ProcedureName = value;
-    }
+    public string? ProcedureCode { get; set; }
 
     /// <summary>
-    /// Date when the surgery occurred.
+    /// Date when the surgery occurred. Nullable when exact day/month is unknown.
     /// </summary>
-    public DateOnly SurgeryDate { get; set; }
+    public DateOnly? SurgeryDate { get; set; }
 
-    [NotMapped]
-    public DateOnly OperationDate
-    {
-        get => SurgeryDate;
-        set => SurgeryDate = value;
-    }
+    /// <summary>
+    /// Approximate or exact year of surgery when specific DateOnly is not recalled.
+    /// </summary>
+    public int? SurgeryYear { get; set; }
+
+    public string? BodySite { get; set; }
+    public string? Laterality { get; set; }
+    public string? SurgeonName { get; set; }
+    public string? AnesthesiaType { get; set; }
 
     /// <summary>
     /// Name of the hospital or surgical facility where the procedure was performed.
     /// </summary>
     public string? HospitalName { get; set; }
-
-    [NotMapped]
-    public string? FacilityName
-    {
-        get => HospitalName;
-        set => HospitalName = value;
-    }
 
     /// <summary>
     /// Operative findings or pathology report notes.

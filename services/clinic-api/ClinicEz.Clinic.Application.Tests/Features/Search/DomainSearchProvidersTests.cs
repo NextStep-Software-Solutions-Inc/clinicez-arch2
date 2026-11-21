@@ -42,10 +42,10 @@ public class DomainSearchProvidersTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
-        var patientA = new ClinicPatient
+        var patientA = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -59,7 +59,7 @@ public class DomainSearchProvidersTests
             PhilHealthNumber = "12-345678901-2"
         };
 
-        var patientB = new ClinicPatient
+        var patientB = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-b",
@@ -71,7 +71,7 @@ public class DomainSearchProvidersTests
             DateOfBirth = new DateOnly(1990, 8, 15)
         };
 
-        var softDeleted = new ClinicPatient
+        var softDeleted = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -105,14 +105,194 @@ public class DomainSearchProvidersTests
     }
 
     [Fact]
+    public async Task PatientSearchProvider_MatchesClinicEzIdExactPartialAndUnhyphenated_AndIncludesClinicEzIdInSubtitle()
+    {
+        // Arrange
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var provider = new PatientSearchProvider(patientRepo);
+
+        var patientA = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientCode = "PAT-2026-00010",
+            FirstName = "Juan",
+            LastName = "Dela Cruz",
+            ClinicEzId = "CE-WDP9-FMBJ",
+            ContactNumber = "09170001122",
+            DateOfBirth = new DateOnly(1995, 2, 14)
+        };
+
+        var patientB = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-b",
+            ClinicId = _clinicIdB, // Different clinic tenant
+            PatientCode = "PAT-2026-00020",
+            FirstName = "Pedro",
+            LastName = "Dela Cruz",
+            ClinicEzId = "CE-WDP9-FMBJ",
+            ContactNumber = "09180001122",
+            DateOfBirth = new DateOnly(1992, 3, 10)
+        };
+
+        var patientNoClinicEzId = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientCode = "PAT-2026-00030",
+            FirstName = "Elena",
+            LastName = "Ramos",
+            ClinicEzId = null,
+            ContactNumber = "09190001122",
+            DateOfBirth = new DateOnly(1990, 10, 5)
+        };
+
+        context.Patients.AddRange(patientA, patientB, patientNoClinicEzId);
+        await context.SaveChangesAsync();
+
+        // 1. Exact ClinicEzId match in Clinic A
+        var exactResults = await provider.SearchAsync("CE-WDP9-FMBJ", _clinicIdA, 10, CancellationToken.None);
+        exactResults.Should().HaveCount(1);
+        exactResults[0].Id.Should().Be(patientA.Id.ToString());
+        exactResults[0].Subtitle.Should().Be("PAT-2026-00010 • CE-WDP9-FMBJ • DOB: 1995-02-14 • 09170001122");
+
+        // 2. Partial ClinicEzId match in Clinic A
+        var partialResults = await provider.SearchAsync("WDP9", _clinicIdA, 10, CancellationToken.None);
+        partialResults.Should().HaveCount(1);
+        partialResults[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 3. Unhyphenated ClinicEzId (lowercase) in Clinic A
+        var unhyphenatedLower = await provider.SearchAsync("cewdp9fmbj", _clinicIdA, 10, CancellationToken.None);
+        unhyphenatedLower.Should().HaveCount(1);
+        unhyphenatedLower[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 4. Unhyphenated ClinicEzId (uppercase) in Clinic A
+        var unhyphenatedUpper = await provider.SearchAsync("CEWDP9FMBJ", _clinicIdA, 10, CancellationToken.None);
+        unhyphenatedUpper.Should().HaveCount(1);
+        unhyphenatedUpper[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 5. Strict Tenant Isolation: Searching Clinic B with the same ClinicEzId returns only Clinic B's patient
+        var clinicBResults = await provider.SearchAsync("CE-WDP9-FMBJ", _clinicIdB, 10, CancellationToken.None);
+        clinicBResults.Should().HaveCount(1);
+        clinicBResults[0].Id.Should().Be(patientB.Id.ToString());
+        clinicBResults[0].Subtitle.Should().Be("PAT-2026-00020 • CE-WDP9-FMBJ • DOB: 1992-03-10 • 09180001122");
+
+        // 6. Subtitle fallback when ClinicEzId is null
+        var noClinicEzIdResults = await provider.SearchAsync("Ramos", _clinicIdA, 10, CancellationToken.None);
+        noClinicEzIdResults.Should().HaveCount(1);
+        noClinicEzIdResults[0].Id.Should().Be(patientNoClinicEzId.Id.ToString());
+        noClinicEzIdResults[0].Subtitle.Should().Be("PAT-2026-00030 • DOB: 1990-10-05 • 09190001122");
+    }
+
+    [Fact]
+    public async Task PatientSearchProvider_MatchesCompoundAndInvertedNames_WithSuffixInTitle_AndPreservesTenantIsolation()
+    {
+        // Arrange
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var provider = new PatientSearchProvider(patientRepo);
+
+        var patientA = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientCode = "PAT-2026-00050",
+            FirstName = "Ely An",
+            LastName = "Maureal",
+            MiddleName = "Santos",
+            Suffix = "Jr.",
+            ClinicEzId = "CE-WDP9-FMBJ",
+            ContactNumber = "09175554433",
+            DateOfBirth = new DateOnly(1993, 7, 21)
+        };
+
+        var patientB = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-b",
+            ClinicId = _clinicIdB, // Tenant isolation check
+            PatientCode = "PAT-2026-00051",
+            FirstName = "Ely An",
+            LastName = "Maureal",
+            MiddleName = "Santos",
+            Suffix = "Jr.",
+            ClinicEzId = "CE-WDP9-FMBJ",
+            ContactNumber = "09185554433",
+            DateOfBirth = new DateOnly(1993, 7, 21)
+        };
+
+        context.Patients.AddRange(patientA, patientB);
+        await context.SaveChangesAsync();
+
+        // 1. Compound Given Name: "Ely An"
+        var compoundFirst = await provider.SearchAsync("Ely An", _clinicIdA, 10, CancellationToken.None);
+        compoundFirst.Should().HaveCount(1);
+        compoundFirst[0].Id.Should().Be(patientA.Id.ToString());
+        compoundFirst[0].Title.Should().Be("Maureal, Ely An Santos Jr.");
+
+        // 2. Full Name: "Ely An Maureal"
+        var fullName = await provider.SearchAsync("Ely An Maureal", _clinicIdA, 10, CancellationToken.None);
+        fullName.Should().HaveCount(1);
+        fullName[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 3. Full Name with Middle: "Ely An Santos Maureal"
+        var fullWithMiddle = await provider.SearchAsync("Ely An Santos Maureal", _clinicIdA, 10, CancellationToken.None);
+        fullWithMiddle.Should().HaveCount(1);
+        fullWithMiddle[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 4. Inverted Name with Comma: "Maureal, Ely An"
+        var invertedComma = await provider.SearchAsync("Maureal, Ely An", _clinicIdA, 10, CancellationToken.None);
+        invertedComma.Should().HaveCount(1);
+        invertedComma[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 5. Inverted Name without Comma: "Maureal Ely An"
+        var invertedNoComma = await provider.SearchAsync("Maureal Ely An", _clinicIdA, 10, CancellationToken.None);
+        invertedNoComma.Should().HaveCount(1);
+        invertedNoComma[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 6. Inverted Name with Middle: "Maureal, Ely An Santos" & "Maureal Ely An Santos"
+        var invertedMiddleComma = await provider.SearchAsync("Maureal, Ely An Santos", _clinicIdA, 10, CancellationToken.None);
+        invertedMiddleComma.Should().HaveCount(1);
+        invertedMiddleComma[0].Id.Should().Be(patientA.Id.ToString());
+
+        var invertedMiddleNoComma = await provider.SearchAsync("Maureal Ely An Santos", _clinicIdA, 10, CancellationToken.None);
+        invertedMiddleNoComma.Should().HaveCount(1);
+        invertedMiddleNoComma[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 7. Middle name: "Santos"
+        var middleResults = await provider.SearchAsync("Santos", _clinicIdA, 10, CancellationToken.None);
+        middleResults.Should().HaveCount(1);
+        middleResults[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 8. Suffix: "Jr." and "Jr"
+        var suffixDotResults = await provider.SearchAsync("Jr.", _clinicIdA, 10, CancellationToken.None);
+        suffixDotResults.Should().HaveCount(1);
+        suffixDotResults[0].Id.Should().Be(patientA.Id.ToString());
+
+        var suffixNoDotResults = await provider.SearchAsync("Jr", _clinicIdA, 10, CancellationToken.None);
+        suffixNoDotResults.Should().HaveCount(1);
+        suffixNoDotResults[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 9. Preserves Tenant Isolation: Clinic B sees Patient B, not Patient A
+        var bResults = await provider.SearchAsync("Ely An Maureal", _clinicIdB, 10, CancellationToken.None);
+        bResults.Should().HaveCount(1);
+        bResults[0].Id.Should().Be(patientB.Id.ToString());
+    }
+
+    [Fact]
     public async Task PatientSearchProvider_ResolvesAlertSeniorAndPwdBadges()
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
-        var alertPatient = new ClinicPatient
+        var alertPatient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -120,11 +300,21 @@ public class DomainSearchProvidersTests
             PatientCode = "PAT-ALERT",
             FirstName = "Alert",
             LastName = "Patient",
-            ContactNumber = "09170000001",
-            Alerts = "Severe Penicillin Allergy"
+            ContactNumber = "09170000001"
         };
+        alertPatient.Alerts.Add(new PatientAlert
+        {
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientId = alertPatient.Id,
+            Category = PatientAlertCategory.ClinicalSafety,
+            Code = "ALLERGY",
+            Title = "Severe Penicillin Allergy",
+            Severity = PatientAlertSeverity.Critical,
+            Status = PatientAlertStatus.Active
+        });
 
-        var seniorPatient = new ClinicPatient
+        var seniorPatient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -136,7 +326,7 @@ public class DomainSearchProvidersTests
             SeniorCitizenId = "OSCA-12345"
         };
 
-        var pwdPatient = new ClinicPatient
+        var pwdPatient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -274,6 +464,75 @@ public class DomainSearchProvidersTests
         results[0].RouteParams.Should().ContainKey("appointmentId").WhoseValue.Should().Be(appt1.Id.ToString());
     }
 
+    [Fact]
+    public async Task AppointmentSearchProvider_MapsNoShowAndTerminalStatusBadges()
+    {
+        // Arrange
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var provider = new AppointmentSearchProvider(apptRepo);
+
+        var noShowAppt = new Appointment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientName = "BadgeTest NoShowPatient",
+            DoctorName = "Dr. Santos",
+            Reason = "Annual Wellness",
+            ServiceType = "Consultation",
+            ScheduledAt = DateTime.UtcNow.AddDays(-1),
+            Status = AppointmentStatus.NoShow
+        };
+
+        var completedAppt = new Appointment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientName = "BadgeTest CompletedPatient",
+            DoctorName = "Dr. Santos",
+            Reason = "Lab Review",
+            ServiceType = "Consultation",
+            ScheduledAt = DateTime.UtcNow.AddHours(-3),
+            Status = AppointmentStatus.Completed
+        };
+
+        var cancelledAppt = new Appointment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientName = "BadgeTest CancelledPatient",
+            DoctorName = "Dr. Santos",
+            Reason = "Vaccination",
+            ServiceType = "Consultation",
+            ScheduledAt = DateTime.UtcNow.AddDays(2),
+            Status = AppointmentStatus.Cancelled
+        };
+
+        context.Appointments.AddRange(noShowAppt, completedAppt, cancelledAppt);
+        await context.SaveChangesAsync();
+
+        // Act
+        var results = await provider.SearchAsync("BadgeTest", _clinicIdA, 10, CancellationToken.None);
+
+        // Assert
+        results.Should().HaveCount(3);
+
+        var noShowResult = results.Single(r => r.Id == noShowAppt.Id.ToString());
+        noShowResult.BadgeText.Should().Be("No Show");
+        noShowResult.BadgeVariant.Should().Be(SearchBadgeVariant.Neutral);
+
+        var completedResult = results.Single(r => r.Id == completedAppt.Id.ToString());
+        completedResult.BadgeText.Should().Be("Completed");
+        completedResult.BadgeVariant.Should().Be(SearchBadgeVariant.Routine);
+
+        var cancelledResult = results.Single(r => r.Id == cancelledAppt.Id.ToString());
+        cancelledResult.BadgeText.Should().Be("Cancelled");
+        cancelledResult.BadgeVariant.Should().Be(SearchBadgeVariant.Neutral);
+    }
+
     // ==========================================
     // 4. QueueSearchProvider Tests
     // ==========================================
@@ -335,10 +594,10 @@ public class DomainSearchProvidersTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var provider = new LabOrderSearchProvider(labRepo);
 
-        var panicOrder = new ClinicLabOrder
+        var panicOrder = new LabOrder
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -348,13 +607,13 @@ public class DomainSearchProvidersTests
             PatientName = "Apolinario Mabini",
             HasCriticalPanicAlert = true,
             Status = LabOrderStatus.Ordered,
-            Items = new List<ClinicLabOrderItem>
+            Items = new List<LabOrderItem>
             {
                 new() { TestName = "Potassium Serum", Category = "Chemistry" }
             }
         };
 
-        var routineOrder = new ClinicLabOrder
+        var routineOrder = new LabOrder
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -364,7 +623,7 @@ public class DomainSearchProvidersTests
             PatientName = "Melchora Aquino",
             HasCriticalPanicAlert = false,
             Status = LabOrderStatus.Completed,
-            Items = new List<ClinicLabOrderItem>
+            Items = new List<LabOrderItem>
             {
                 new() { TestName = "Complete Blood Count (CBC)", Category = "Hematology" }
             }
@@ -457,6 +716,17 @@ public class DomainSearchProvidersTests
         feeResults.Should().HaveCount(1);
         feeResults[0].BadgeText.Should().Be("Paid");
         feeResults[0].BadgeVariant.Should().Be(SearchBadgeVariant.Routine);
+
+        // Search by keyword "unpaid" or "unsettled"
+        var unpaidResults = await provider.SearchAsync("unpaid", _clinicIdA, 10, CancellationToken.None);
+        unpaidResults.Should().HaveCount(1);
+        unpaidResults[0].Id.Should().Be(unpaidInvoice.Id.ToString());
+        unpaidResults[0].BadgeText.Should().Be("Bal: ₱1,500");
+        unpaidResults[0].RouteParams.Should().ContainKey("patientId");
+
+        var balanceResults = await provider.SearchAsync("balance", _clinicIdA, 10, CancellationToken.None);
+        balanceResults.Should().HaveCount(1);
+        balanceResults[0].Id.Should().Be(unpaidInvoice.Id.ToString());
     }
 
     // ==========================================
@@ -467,14 +737,14 @@ public class DomainSearchProvidersTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var provider = new SettingSearchProvider(roomRepo, serviceRepo, staffRepo, settingsRepo);
 
-        var room = new ClinicRoom
+        var room = new Room
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -484,7 +754,7 @@ public class DomainSearchProvidersTests
             Type = ClinicRoomType.Consultation
         };
 
-        var service = new ClinicServiceItem
+        var service = new ServiceItem
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -507,7 +777,7 @@ public class DomainSearchProvidersTests
             Specialty = "Pediatrics"
         };
 
-        var facilitySettings = new ClinicSettings
+        var facilitySettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -518,10 +788,10 @@ public class DomainSearchProvidersTests
             PlanTier = "Growth"
         };
 
-        context.ClinicRooms.Add(room);
+        context.Rooms.Add(room);
         context.ServiceItems.Add(service);
         context.StaffMembers.Add(staff);
-        context.ClinicSettings.Add(facilitySettings);
+        context.Settings.Add(facilitySettings);
         await context.SaveChangesAsync();
 
         // Act - search by keyword "Pediatric"

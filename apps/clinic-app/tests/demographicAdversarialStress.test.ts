@@ -136,7 +136,7 @@ describe('Adversarial Demographic Stress Suite', () => {
     fullName: 'Consuelo Alcantara Villaruel Sr.',
     dateOfBirth: '1970-07-07',
     age: 56,
-    gender: 'Female',
+    sex: 'Female',
     civilStatus: 'Widowed',
     contactNumber: '+63 917 555 1234',
     email: 'consuelo.v@example.com',
@@ -168,17 +168,10 @@ describe('Adversarial Demographic Stress Suite', () => {
       middleName: 'Alcantara',
       suffix: 'Sr.',
       dateOfBirth: '1970-07-07',
-      gender: 'Female',
+      sex: 'Female',
       civilStatus: 'Widowed',
       contactNumber: '+63 917 555 1234',
       email: 'consuelo.v@example.com',
-      addressLine: '12 Emerald St, Villa Verde',
-      barangay: 'San Antonio',
-      city: 'Pasig City',
-      province: 'Metro Manila',
-      emergencyContactName: 'Rodrigo Villaruel',
-      emergencyContactPhone: '+63 918 555 4321',
-      emergencyContactRelationship: 'Son',
       philHealthNumber: '12-345678901-8',
       seniorCitizenId: 'SC-PASIG-2026-99',
       pwdId: 'PWD-PASIG-2026-11',
@@ -186,7 +179,16 @@ describe('Adversarial Demographic Stress Suite', () => {
       allergies: 'Penicillin, Shellfish',
       chronicConditions: 'Type 2 Diabetes, Hypertension',
       alerts: 'Fall Risk, Hard of Hearing',
-      customFields: { classification: 'General' },
+      customFields: {
+        primary_address_line: '12 Emerald St, Villa Verde',
+        primary_barangay: 'San Antonio',
+        primary_city: 'Pasig City',
+        primary_province: 'Metro Manila',
+        emergency_contact_name: 'Rodrigo Villaruel',
+        emergency_contact_phone: '+63 918 555 4321',
+        emergency_contact_relationship: 'Son',
+        classification: 'General',
+      },
       verificationStatus: 'Verified',
     };
 
@@ -195,23 +197,35 @@ describe('Adversarial Demographic Stress Suite', () => {
     expect(updated).not.toBeNull();
     expect(lastPutUrl).toBe(`/patients/${basePatient.id}`);
 
-    // Verify all 23 properties
+    // Verify properties
     expect(lastPutPayload.firstName).toBe('Consuelo');
     expect(lastPutPayload.lastName).toBe('Villaruel');
     expect(lastPutPayload.middleName).toBe('Alcantara');
     expect(lastPutPayload.suffix).toBe('Sr.');
     expect(lastPutPayload.dateOfBirth).toBe('1970-07-07');
-    expect(lastPutPayload.gender).toBe('Female');
+    expect(lastPutPayload.sex).toBe('Female');
     expect(lastPutPayload.civilStatus).toBe('Widowed');
     expect(lastPutPayload.contactNumber).toBe('+63 917 555 1234');
     expect(lastPutPayload.email).toBe('consuelo.v@example.com');
-    expect(lastPutPayload.addressLine).toBe('12 Emerald St, Villa Verde');
-    expect(lastPutPayload.barangay).toBe('San Antonio');
-    expect(lastPutPayload.city).toBe('Pasig City');
-    expect(lastPutPayload.province).toBe('Metro Manila');
-    expect(lastPutPayload.emergencyContactName).toBe('Rodrigo Villaruel');
-    expect(lastPutPayload.emergencyContactPhone).toBe('+63 918 555 4321');
-    expect(lastPutPayload.emergencyContactRelationship).toBe('Son');
+
+    // Unified customFields assertions: address & emergency contact must NOT be top-level
+    expect(lastPutPayload.addressLine).toBeUndefined();
+    expect(lastPutPayload.barangay).toBeUndefined();
+    expect(lastPutPayload.city).toBeUndefined();
+    expect(lastPutPayload.province).toBeUndefined();
+    expect(lastPutPayload.emergencyContactName).toBeUndefined();
+    expect(lastPutPayload.emergencyContactPhone).toBeUndefined();
+    expect(lastPutPayload.emergencyContactRelationship).toBeUndefined();
+
+    expect(lastPutPayload.customFields.primary_address_line).toBe('12 Emerald St, Villa Verde');
+    expect(lastPutPayload.customFields.primary_barangay).toBe('San Antonio');
+    expect(lastPutPayload.customFields.primary_city).toBe('Pasig City');
+    expect(lastPutPayload.customFields.primary_province).toBe('Metro Manila');
+    expect(lastPutPayload.customFields.emergency_contact_name).toBe('Rodrigo Villaruel');
+    expect(lastPutPayload.customFields.emergency_contact_phone).toBe('+63 918 555 4321');
+    expect(lastPutPayload.customFields.emergency_contact_relationship).toBe('Son');
+    expect(lastPutPayload.customFields.classification).toBe('General');
+
     expect(lastPutPayload.philHealthNumber).toBe('12-345678901-8');
     expect(lastPutPayload.seniorCitizenId).toBe('SC-PASIG-2026-99');
     expect(lastPutPayload.pwdId).toBe('PWD-PASIG-2026-11');
@@ -221,18 +235,34 @@ describe('Adversarial Demographic Stress Suite', () => {
     expect(lastPutPayload.alerts).toBe('Fall Risk, Hard of Hearing');
   });
 
-  test('ADV-2: Gender selection correctly handles all 3 values (Male, Female, Other)', async () => {
-    for (const g of ['Male', 'Female', 'Other'] as const) {
+  test('ADV-2: Sex selection handles PhilHealth-specified values (Male, Female) and strips legacy Intersex/Unknown options', async () => {
+    const { filterPhilHealthSexLabels, parsePhilHealthSexInput } = await import('../utils/philhealthSex');
+
+    expect(
+      filterPhilHealthSexLabels([
+        { code: 'MALE', label: 'Male', philHealthCode: 'M', philHealthLibrary: 'lib_sex' },
+        { code: 'FEMALE', label: 'Female', philHealthCode: 'F', philHealthLibrary: 'lib_sex' },
+        { code: 'INTERSEX', label: 'Intersex', philHealthCode: null, philHealthLibrary: 'lib_sex' },
+        { code: 'UNKNOWN', label: 'Unknown', philHealthCode: null, philHealthLibrary: 'lib_sex' },
+      ]),
+    ).toEqual(['Male', 'Female']);
+
+    expect(parsePhilHealthSexInput('Intersex')).toBeNull();
+    expect(parsePhilHealthSexInput('Unknown')).toBeNull();
+    expect(parsePhilHealthSexInput('M')).toBe('Male');
+    expect(parsePhilHealthSexInput('F')).toBe('Female');
+
+    for (const g of ['Male', 'Female'] as const) {
       const payload: RegisterPatientPayload = {
         firstName: 'Alex',
         lastName: 'Santos',
         dateOfBirth: '1992-02-02',
-        gender: g,
+        sex: g,
         contactNumber: '0917-111-2222',
       };
       const [res, err] = await clinicService.updatePatient('pat-gender-test', payload);
       expect(err).toBeNull();
-      expect(lastPutPayload.gender).toBe(g);
+      expect(lastPutPayload.sex).toBe(g);
     }
   });
 
@@ -242,7 +272,7 @@ describe('Adversarial Demographic Stress Suite', () => {
         firstName: 'Corazon',
         lastName: 'Aquino',
         dateOfBirth: '1960-01-01',
-        gender: 'Female',
+        sex: 'Female',
         civilStatus: cs,
         contactNumber: '0917-222-3333',
       };
@@ -258,7 +288,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       firstName: 'Dr. Gregory',
       lastName: 'House',
       dateOfBirth: '1965-06-11',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0917-444-5555',
       customFields: {
         classification: 'Employee',
@@ -277,7 +307,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       firstName: 'Peter',
       lastName: 'Parker',
       dateOfBirth: '2005-08-10',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0917-666-7777',
       customFields: {
         classification: 'Student',
@@ -300,7 +330,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       firstName: 'John',
       lastName: 'Doe',
       dateOfBirth: '1988-04-12',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0917-888-9999',
       customFields: {
         classification: 'General',
@@ -317,7 +347,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       firstName: 'Ramon',
       lastName: 'Magsaysay',
       dateOfBirth: '1955-08-31',
-      gender: 'Male',
+      sex: 'Male',
       civilStatus: 'Married',
       contactNumber: '0917-999-0000',
       sendToTriage: true,
@@ -329,7 +359,7 @@ describe('Adversarial Demographic Stress Suite', () => {
     const [registered, err] = await clinicService.registerPatient(walkInPayload);
     expect(err).toBeNull();
     expect(lastPostUrl).toBe('/patients');
-    expect(lastPostPayload.gender).toBe('Male');
+    expect(lastPostPayload.sex).toBe('Male');
     expect(lastPostPayload.civilStatus).toBe('Married');
     expect(lastPostPayload.sendToTriage).toBe(true);
     expect(lastPostPayload.priority).toBe('Urgent');
@@ -347,7 +377,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       fullName: 'Sam Smith',
       dateOfBirth: '1992-05-19',
       age: 33,
-      gender: 'Other',
+      sex: 'Female',
       civilStatus: 'Separated',
       contactNumber: '0917-000-0000',
       createdAt: '2026-01-01T00:00:00Z',
@@ -360,7 +390,80 @@ describe('Adversarial Demographic Stress Suite', () => {
       onSaved: () => {},
     });
 
-    expect(element.props.patient.gender).toBe('Other');
+    expect(element.props.patient.sex).toBe('Female');
     expect(element.props.patient.civilStatus).toBe('Separated');
+  });
+
+  test('ADV-7: Structured allergies and explicit alert/allergy clearing are preserved in update payload', async () => {
+    const structuredUpdatePayload: RegisterPatientPayload = {
+      firstName: 'Clarisse',
+      lastName: 'Alvarado',
+      dateOfBirth: '1977-06-04',
+      sex: 'Female',
+      contactNumber: '0917-123-4567',
+      allergies: 'Amoxicillin (Medication - STAT)',
+      structuredAllergies: [
+        {
+          category: 'Medication',
+          allergen: 'Amoxicillin',
+          allergenDrugCode: 'AMX500',
+          severity: 'LifeThreatening',
+          reactionManifestation: 'Airway edema',
+          isAnaphylactic: true,
+        },
+      ],
+      alerts: '',
+      medicalHistories: [],
+    };
+
+    const [, err] = await clinicService.updatePatient('pat-structured-01', structuredUpdatePayload);
+    expect(err).toBeNull();
+    expect(lastPutPayload.structuredAllergies).toHaveLength(1);
+    expect(lastPutPayload.structuredAllergies[0].allergen).toBe('Amoxicillin');
+    expect(lastPutPayload.structuredAllergies[0].isAnaphylactic).toBe(true);
+    expect(lastPutPayload.alerts).toBe('');
+    expect(lastPutPayload.medicalHistories).toEqual([]);
+  });
+
+  test('ADV-8: reconcileChartWithPatient syncs structuredAllergies and cleared alerts onto PatientChart', async () => {
+    const { reconcileChartWithPatient } = await import('../components/chart/PatientSummarySpine');
+    const staleChart: any = {
+      patientId: 'pat-1',
+      patientName: 'Alvarado, Clarisse',
+      allergies: [
+        {
+          id: 'old-allergy',
+          clinicId: 'c1',
+          patientId: 'pat-1',
+          category: 'Medication',
+          allergen: 'Penicillin',
+          severity: 'Moderate',
+          isAnaphylactic: false,
+          status: 'Active',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+      demographics: {
+        patientName: 'Alvarado, Clarisse',
+        patientCode: 'PAT-2026-01047',
+        age: 49,
+        dob: '1977-06-04',
+        sex: 'Female',
+        contactNumber: '09171234567',
+        alerts: 'Fall Risk',
+      },
+    };
+
+    const updatedPatient: ClinicPatient = {
+      ...basePatient,
+      id: 'pat-1',
+      alerts: undefined,
+      structuredAllergies: [],
+    };
+    (updatedPatient as any).alerts = null;
+
+    const reconciled = reconcileChartWithPatient(staleChart, updatedPatient);
+    expect(reconciled.allergies).toEqual([]);
+    expect(reconciled.demographics?.alerts).toBeUndefined();
   });
 });

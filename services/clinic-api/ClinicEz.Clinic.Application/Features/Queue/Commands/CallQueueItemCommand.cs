@@ -25,7 +25,7 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly Features.Queue.Services.IQueueNotificationDispatcher? _notificationDispatcher;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
     private readonly IRepository<StaffMember>? _staffRepository;
 
     public CallQueueItemCommandHandler(
@@ -33,7 +33,7 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         Features.Queue.Services.IQueueNotificationDispatcher? notificationDispatcher = null,
-        IRepository<ClinicRoom>? roomRepository = null,
+        IRepository<Room>? roomRepository = null,
         IRepository<StaffMember>? staffRepository = null)
     {
         _queueRepository = queueRepository;
@@ -47,7 +47,7 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
     public CallQueueItemCommandHandler(
         IRepository<QueueItem> queueRepository,
         IRepository<StaffMember> staffRepository,
-        IRepository<ClinicRoom> roomRepository,
+        IRepository<Room> roomRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
         : this(queueRepository, unitOfWork, clinicContext, null, roomRepository, staffRepository)
@@ -57,12 +57,27 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
     public async Task<QueueItemDto> Handle(CallQueueItemCommand request, CancellationToken cancellationToken)
     {
         var item = await _queueRepository.Query(q => q.Id == request.Id && q.ClinicId == _clinicContext.ClinicId)
-            .Include(q => q.TriageVitals)
+            .Include(q => q.PatientVitals)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (item == null)
         {
             throw new NotFoundException($"Queue item '{request.Id}' was not found in this clinic.");
+        }
+
+        if (item.Status == QueueStatus.InConsultation)
+        {
+            if (item.DoctorId.HasValue && request.DoctorId.HasValue && item.DoctorId.Value != request.DoctorId.Value)
+            {
+                var assignedDoc = !string.IsNullOrWhiteSpace(item.DoctorName) ? item.DoctorName : "another healthcare provider";
+                var roomInfo = !string.IsNullOrWhiteSpace(item.RoomOrStation) ? $" in {item.RoomOrStation}" : "";
+                throw new ConflictException($"This patient has already been called by {assignedDoc}{roomInfo}.");
+            }
+        }
+
+        if (item.Status == QueueStatus.Completed || item.Status == QueueStatus.Cancelled || item.Status == QueueStatus.NoShow)
+        {
+            throw new InvalidOperationException($"Cannot call a patient whose visit is {item.Status}.");
         }
 
         item.Status = QueueStatus.InConsultation;
@@ -144,7 +159,7 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
         item.UpdatedAt = DateTime.UtcNow;
         item.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Doctor";
 
-        if (_notificationDispatcher != null)
+        if (_notificationDispatcher != null && !item.IsDirectVisit)
         {
             await _notificationDispatcher.DispatchCalledAlertAsync(item, item.DoctorName, item.RoomOrStation, cancellationToken);
             await _notificationDispatcher.EvaluateAndDispatchApproachingAlertsAsync(item.ClinicId, item.QueueDate, cancellationToken);
@@ -153,32 +168,7 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
         _queueRepository.Update(item);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        string? vitalsSummary = item.TriageVitals != null
-            ? $"BP: {item.TriageVitals.SystolicBp}/{item.TriageVitals.DiastolicBp}, HR: {item.TriageVitals.HeartRateBpm}"
-            : null;
-
-        return new QueueItemDto(
-            item.Id,
-            item.TenantId,
-            item.ClinicId,
-            item.QueueNumber,
-            item.SequenceNumber,
-            item.QueueDate,
-            item.PatientId,
-            item.PatientName,
-            item.AppointmentId,
-            item.DoctorId,
-            item.DoctorName,
-            item.Priority,
-            item.Status,
-            item.CheckInTime,
-            item.CalledTime,
-            item.CompletedTime,
-            item.ChiefComplaint,
-            item.TriageVitals != null,
-            vitalsSummary,
-            item.RoomOrStation,
-            item.RoomId);
+        return item.ToDto();
     }
 }
 
@@ -190,17 +180,29 @@ public sealed class CompleteQueueItemCommandHandler : IRequestHandler<CompleteQu
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly Features.Queue.Services.IQueueNotificationDispatcher? _notificationDispatcher;
+    private readonly IRepository<ConsultationEncounter>? _consultationRepository;
+    private readonly IRepository<MedicalCertificate>? _medCertRepository;
+    private readonly IRepository<ReferralLetter>? _referralRepository;
+    private readonly IRepository<LabOrder>? _labOrderRepository;
 
     public CompleteQueueItemCommandHandler(
         IRepository<QueueItem> queueRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        Features.Queue.Services.IQueueNotificationDispatcher? notificationDispatcher = null)
+        Features.Queue.Services.IQueueNotificationDispatcher? notificationDispatcher = null,
+        IRepository<ConsultationEncounter>? consultationRepository = null,
+        IRepository<MedicalCertificate>? medCertRepository = null,
+        IRepository<ReferralLetter>? referralRepository = null,
+        IRepository<LabOrder>? labOrderRepository = null)
     {
         _queueRepository = queueRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _notificationDispatcher = notificationDispatcher;
+        _consultationRepository = consultationRepository;
+        _medCertRepository = medCertRepository;
+        _referralRepository = referralRepository;
+        _labOrderRepository = labOrderRepository;
     }
 
     public async Task<bool> Handle(CompleteQueueItemCommand request, CancellationToken cancellationToken)
@@ -211,6 +213,34 @@ public sealed class CompleteQueueItemCommandHandler : IRequestHandler<CompleteQu
         if (item == null)
         {
             throw new NotFoundException($"Queue item '{request.Id}' was not found in this clinic.");
+        }
+
+        if (item.VisitType.IsPhysicianConsultation())
+        {
+            var hasUnsignedEncounter = _consultationRepository != null &&
+                await _consultationRepository
+                    .Query(c => c.ClinicId == _clinicContext.ClinicId && c.QueueItemId == item.Id && !c.IsSigned)
+                    .AnyAsync(cancellationToken);
+
+            var hasUnsignedMedCert = _medCertRepository != null &&
+                await _medCertRepository
+                    .Query(m => m.ClinicId == _clinicContext.ClinicId && m.QueueItemId == item.Id && !m.IsSigned)
+                    .AnyAsync(cancellationToken);
+
+            var hasUnsignedReferral = _referralRepository != null &&
+                await _referralRepository
+                    .Query(r => r.ClinicId == _clinicContext.ClinicId && r.QueueItemId == item.Id && !r.IsSigned)
+                    .AnyAsync(cancellationToken);
+
+            var hasUnsignedLabOrder = _labOrderRepository != null &&
+                await _labOrderRepository
+                    .Query(o => o.ClinicId == _clinicContext.ClinicId && o.QueueItemId == item.Id && !o.IsSigned && o.Status != LabOrderStatus.Cancelled)
+                    .AnyAsync(cancellationToken);
+
+            if (hasUnsignedEncounter || hasUnsignedMedCert || hasUnsignedReferral || hasUnsignedLabOrder)
+            {
+                throw new BadRequestException("Cannot complete a consultation visit while an unsigned consultation encounter or staged clinical order is pending physician sign-off.");
+            }
         }
 
         item.Status = QueueStatus.Completed;

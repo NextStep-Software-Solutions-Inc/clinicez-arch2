@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using ClinicEz.Shared.Interfaces;
 using ClinicEz.Shared.Interop.Persistence;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using ClinicEz.Patient.Domain.Common;
 using ClinicEz.Patient.Domain.Entities;
@@ -9,7 +10,7 @@ namespace ClinicEz.Patient.Infrastructure.Persistence;
 
 using Patient = ClinicEz.Patient.Domain.Entities.Patient;
 
-public sealed class ApplicationDbContext : DbContext, IInteropDbContext
+public sealed class ApplicationDbContext : DbContext, IInteropDbContext, IDataProtectionKeyContext
 {
     private readonly ICurrentUserService? _currentUserService;
 
@@ -23,7 +24,6 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
 
     // ── Patient identity & profile ──────────────────────────────────────────
     public DbSet<Patient> Patients => Set<Patient>();
-    public DbSet<PatientStorageProfile> PatientStorageProfiles => Set<PatientStorageProfile>();
     public DbSet<PatientGovernmentId> PatientGovernmentIds => Set<PatientGovernmentId>();
     public DbSet<PatientAddress> PatientAddresses => Set<PatientAddress>();
     public DbSet<EmergencyContact> EmergencyContacts => Set<EmergencyContact>();
@@ -31,6 +31,7 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
     // ── Medical history (patient self-entry) ────────────────────────────────
     public DbSet<PatientAllergy> PatientAllergies => Set<PatientAllergy>();
     public DbSet<PatientMedication> PatientMedications => Set<PatientMedication>();
+    public DbSet<PatientMedicationLog> PatientMedicationLogs => Set<PatientMedicationLog>();
     public DbSet<PatientSurgicalHistory> PatientSurgicalHistories => Set<PatientSurgicalHistory>();
     public DbSet<PatientPastIllness> PatientPastIllnesses => Set<PatientPastIllness>();
     public DbSet<PatientChronicCondition> PatientChronicConditions => Set<PatientChronicCondition>();
@@ -75,7 +76,6 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
     public DbSet<ShareCodeFailure> ShareCodeFailures => Set<ShareCodeFailure>();
 
     // ── Files & Appointments ────────────────────────────────────────────────
-    public DbSet<FileFolder> FileFolders => Set<FileFolder>();
     public DbSet<FileRecord> FileRecords => Set<FileRecord>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
 
@@ -83,6 +83,7 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
     public DbSet<OrganizationRole> OrganizationRoles => Set<OrganizationRole>();
     public DbSet<Clinic> Clinics => Set<Clinic>();
     public DbSet<ClinicOrganizationLink> ClinicOrganizationLinks => Set<ClinicOrganizationLink>();
+    public DbSet<Practitioner> Practitioners => Set<Practitioner>();
     public DbSet<ClinicHealthcareProvider> ClinicHealthcareProviders => Set<ClinicHealthcareProvider>();
     public DbSet<ProviderAvailability> ProviderAvailabilities => Set<ProviderAvailability>();
     public DbSet<ClinicService> ClinicServices => Set<ClinicService>();
@@ -99,9 +100,17 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
 
+    // ── Patient Communications & Unified Inbox ──────────────────────────────
+    public DbSet<PatientConversation> PatientConversations => Set<PatientConversation>();
+    public DbSet<PatientMessage> PatientMessages => Set<PatientMessage>();
+    public DbSet<PatientMessageAttachment> PatientMessageAttachments => Set<PatientMessageAttachment>();
+    public DbSet<PatientEligibilityGrant> PatientEligibilityGrants => Set<PatientEligibilityGrant>();
+    public DbSet<PatientCallSession> PatientCallSessions => Set<PatientCallSession>();
+
     // ── Interop hub outbox / inbox ──────────────────────────────────────────
     public DbSet<InteropOutboxMessage> InteropOutbox => Set<InteropOutboxMessage>();
     public DbSet<InteropInboxMessage> InteropInbox => Set<InteropInboxMessage>();
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -143,7 +152,19 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
         base.OnModelCreating(modelBuilder);
     }
 
+    public override int SaveChanges()
+    {
+        OnBeforeSaveChanges();
+        return base.SaveChanges();
+    }
+
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        OnBeforeSaveChanges();
+        return await base.SaveChangesAsync(cancellationToken);
+    }
+
+    private void OnBeforeSaveChanges()
     {
         var utcNow = DateTime.UtcNow;
         var actor = _currentUserService?.UserId ?? "system";
@@ -164,8 +185,6 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
                     break;
             }
         }
-
-        return await base.SaveChangesAsync(cancellationToken);
     }
 }
 

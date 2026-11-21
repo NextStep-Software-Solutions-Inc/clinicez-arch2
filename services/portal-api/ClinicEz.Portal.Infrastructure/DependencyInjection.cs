@@ -10,6 +10,7 @@ using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Application.Features.Admin.Consumers;
 using ClinicEz.Portal.Application.Features.Admin.Services;
 using ClinicEz.Portal.Application.Features.Billing;
+using ClinicEz.Portal.Application.Features.DirectoryVerification;
 using ClinicEz.Portal.Application.Features.Entitlements;
 using ClinicEz.Portal.Application.Features.Finance;
 using ClinicEz.Portal.Application.Features.Licensing;
@@ -19,7 +20,9 @@ using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Infrastructure.Hub;
+using ClinicEz.Portal.Infrastructure.Messaging.Handlers;
 using ClinicEz.Portal.Infrastructure.Notifications;
+using ClinicEz.Portal.Infrastructure.Options;
 using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Portal.Infrastructure.Persistence.Interceptors;
 using ClinicEz.Portal.Infrastructure.Persistence.Repositories;
@@ -30,6 +33,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ClinicEz.Portal.Infrastructure.Xendit;
 
@@ -86,6 +90,7 @@ public static class DependencyInjection
         services.AddOptions<BillingOptions>().Bind(configuration.GetSection(BillingOptions.SectionName));
         services.AddOptions<LicenseOptions>().Bind(configuration.GetSection(LicenseOptions.SectionName));
         services.AddOptions<ClinicEz.Portal.Application.Features.PublicUploads.LabUploadOptions>().Bind(configuration.GetSection(ClinicEz.Portal.Application.Features.PublicUploads.LabUploadOptions.SectionName));
+        services.Configure<Options.R2Options>(configuration.GetSection(Options.R2Options.SectionName));
         services.AddScoped<IEntitlementService, EntitlementService>();
         services.AddScoped<IEntitlementGuard, EntitlementGuard>();
         services.AddScoped<ISubscriptionService, SubscriptionService>();
@@ -96,6 +101,8 @@ public static class DependencyInjection
         services.AddScoped<IOrphanTenancyCleanupJob, OrphanTenancyCleanupJob>();
         services.AddScoped<ClinicEz.Portal.Application.Features.Ownership.IOwnershipPolicy, ClinicEz.Portal.Application.Features.Ownership.OwnershipPolicy>();
         services.AddScoped<IClerkMetadataSync, ClerkMetadataSync>();
+        services.AddScoped<IClerkPasswordService, ClerkPasswordService>();
+        services.AddScoped<IClerkUserLookup, ClerkUserLookup>();
         // The key ring protects the PhilHealth credentials stored per branch, so it is persisted to the database via EF Core.
         services.AddPersistentDataProtection<ApplicationDbContext>(configuration, env, "ClinicEz.Portal");
 
@@ -118,6 +125,36 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
         services.AddScoped<IFacilityProvisioningReconciliationJob, FacilityProvisioningReconciliationJob>();
+        services.AddScoped<IPrcExpirySweeperJob, PrcExpirySweeperJob>();
+        services.TryAddSingleton<LocalPortalEvidenceStorageService>();
+        services.AddSingleton<IPortalEvidenceStorageService>(sp =>
+        {
+            var r2Options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Options.R2Options>>();
+            var localFallback = sp.GetRequiredService<LocalPortalEvidenceStorageService>();
+            if (r2Options.Value.IsConfigured())
+            {
+                return new R2PortalEvidenceStorageService(
+                    r2Options,
+                    sp.GetRequiredService<ILogger<R2PortalEvidenceStorageService>>(),
+                    localFallback);
+            }
+
+            var env = sp.GetService<Microsoft.Extensions.Hosting.IHostEnvironment>();
+            var logger = sp.GetRequiredService<ILogger<R2PortalEvidenceStorageService>>();
+            if (env?.IsProduction() == true)
+            {
+                logger.LogWarning(
+                    "Cloudflare R2 credentials (R2:AccountId, R2:AccessKeyId, R2:SecretAccessKey) are not configured; falling back to local disk verification storage.");
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Cloudflare R2 credentials are not configured; using LocalPortalEvidenceStorageService for verification evidence.");
+            }
+
+            return localFallback;
+        });
+        services.AddScoped<IDirectoryVerificationSyncService, DirectoryVerificationSyncService>();
 
         // Outbound webhooks: no redirects, no proxy, and every connection is checked against private/reserved ranges.
         services.AddHttpClient(ClinicEz.Portal.Infrastructure.Webhooks.WebhookDeliveryJob.HttpClientName, client =>
@@ -141,18 +178,33 @@ public static class DependencyInjection
             .Handle<BillingInvoicePaidPayload, BillingInvoicePaidHandler>(InteropTypes.BillingInvoicePaid)
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
             .Handle<NotificationEmailRequestedPayload, NotificationEmailRequestedHandler>(InteropTypes.NotificationEmailRequested)
+            .Handle<FacilityJoinSettingsUpdatedPayload, FacilityJoinSettingsUpdatedHandler>(InteropTypes.FacilityJoinSettingsUpdated)
+            .Handle<DocumentAttestationPublishedPayload, DocumentAttestationPublishedHandler>(InteropTypes.DocumentAttestationPublished)
+            .Handle<QueueBoardUpdatedPayload, QueueBoardUpdatedHandler>(InteropTypes.QueueBoardUpdated)
+            .Handle<FacilityVerificationRequestedPayload, FacilityVerificationRequestedHandler>(InteropTypes.FacilityVerificationRequested)
+            .Handle<FacilityVerificationWithdrawnPayload, FacilityVerificationWithdrawnHandler>(InteropTypes.FacilityVerificationWithdrawn)
+            .Handle<PractitionerVerificationRequestedPayload, PractitionerVerificationRequestedHandler>(InteropTypes.PractitionerVerificationRequested)
+            .Handle<GuestTeleconsultInviteIssuedPayload, GuestTeleconsultInviteIssuedHandler>(InteropTypes.GuestTeleconsultInviteIssued)
+            .Handle<GuestTeleconsultInviteRevokedPayload, GuestTeleconsultInviteRevokedHandler>(InteropTypes.GuestTeleconsultInviteRevoked)
+            .Handle<MediaUsageRecordedPayload, MediaUsageRecordedHandler>(InteropTypes.MediaUsageRecorded)
             .Respond<PhilHealthConfigRequestedPayload, PhilHealthConfigRespondedPayload, PhilHealthConfigRequestedResponder>(
                 InteropTypes.PhilHealthConfigRequested, InteropTypes.PhilHealthConfigResponded)
             .Respond<PhilHealthConfigPayload, PhilHealthConfigUpsertRespondedPayload, PhilHealthConfigUpsertRequestedResponder>(
                 InteropTypes.PhilHealthConfigUpsertRequested, InteropTypes.PhilHealthConfigUpsertResponded)
-            .HandleReply(InteropTypes.YakapTransmittalResponded));
+            .Respond<FacilityVerificationUpdateRequestedPayload, VerificationUpdateRespondedPayload, FacilityVerificationUpdateRequestedResponder>(
+                InteropTypes.FacilityVerificationUpdateRequested, InteropTypes.FacilityVerificationUpdateResponded)
+            .Respond<PractitionerVerificationUpdateRequestedPayload, VerificationUpdateRespondedPayload, PractitionerVerificationUpdateRequestedResponder>(
+                InteropTypes.PractitionerVerificationUpdateRequested, InteropTypes.PractitionerVerificationUpdateResponded)
+            .HandleReply(InteropTypes.YakapSubmissionResponded)
+            .HandleReply(InteropTypes.VerificationEvidenceResponded));
 
         // The PhilHealth proxy asks the portal for the credentials it holds; the key ring protects them at rest.
         services.AddSingleton<IPhilHealthSecretProtector, ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSecretProtector>();
-        services.AddHttpClient<IPhilHealthSoapTester, ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester>(client =>
+        services.AddHttpClient<IPhilHealthPcapiTester, ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthPcapiTester>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(20);
         });
+        services.AddSingleton<IPsgcLocationService, ClinicEz.Portal.Infrastructure.Locations.PsgcLocationService>();
 
         // Hub directory feed and onboarding
         services.AddOptions<HubOptions>().Bind(configuration.GetSection(HubOptions.Section));
@@ -172,8 +224,10 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(SmtpOptions.SectionName))
             .ValidateOnStart();
         services.AddSingleton<IEmailTemplateRenderer, EmailTemplateRenderer>();
-        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IEmailDispatchJob, EmailDispatchJob>();
+        services.AddScoped<INotificationService, HangfireNotificationService>();
         services.AddScoped<IStaffInvitationNotifier, StaffInvitationNotifier>();
+        services.AddScoped<IAdminInvitationNotifier, AdminInvitationNotifier>();
         services.AddScoped<IFrontendUrlProvider, FrontendUrlProvider>();
         services.AddScoped<IEmailSender>(sp => sp.GetRequiredService<IOptions<SmtpOptions>>().Value.Mode == SmtpMode.Log
             ? ActivatorUtilities.CreateInstance<LogEmailSender>(sp)

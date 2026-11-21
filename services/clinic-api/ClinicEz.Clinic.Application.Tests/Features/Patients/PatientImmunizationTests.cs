@@ -34,9 +34,9 @@ public class PatientImmunizationTests
         _clinicContext.StaffId.Returns(Guid.NewGuid());
     }
 
-    private ClinicPatient SeedPatient(ApplicationDbContext db, Guid? syncPatientId = null)
+    private Patient SeedPatient(ApplicationDbContext db, Guid? syncPatientId = null)
     {
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = TenantId,
@@ -44,10 +44,10 @@ public class PatientImmunizationTests
             PatientCode = "PAT-001",
             FirstName = "Juan",
             LastName = "Dela Cruz",
-            Gender = "Male",
+            Sex = BiologicalSex.Male,
             DateOfBirth = new DateOnly(2020, 1, 1),
             ContactNumber = "09171234567",
-            SyncPatientId = syncPatientId
+            CloudPatientId = syncPatientId
         };
         db.Patients.Add(patient);
         db.SaveChanges();
@@ -62,7 +62,7 @@ public class PatientImmunizationTests
         var syncId = Guid.NewGuid();
         var patient = SeedPatient(db, syncId);
 
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(db, sieve);
         var publisher = new ImmunizationEventPublisher(
             new InteropPublisher(db), MessagingTestKit.Addresses(db), NullLogger<ImmunizationEventPublisher>.Instance);
@@ -145,12 +145,56 @@ public class PatientImmunizationTests
     }
 
     [Fact]
+    public async Task AdministerVaccine_OralRoute_AllowsNullSiteAndNormalizesInjectionSiteToNull()
+    {
+        var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patient = SeedPatient(db);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
+        var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(db, sieve);
+        var publisher = Substitute.For<IImmunizationEventPublisher>();
+        var handler = new AdministerVaccineCommandHandler(patientRepo, immRepo, uow, _clinicContext, publisher);
+        var validator = new AdministerVaccineValidator();
+        var todayManila = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8));
+
+        var oralCmd = new AdministerVaccineCommand(
+            PatientId: patient.Id,
+            ConsultationEncounterId: null,
+            PhilHealthLibrary: "lib_immchild",
+            PhilHealthCode: "C02",
+            VaccineName: "OPV 1",
+            BrandName: null,
+            Manufacturer: null,
+            LotBatchNumber: "OPV-BATCH-2026",
+            ExpirationDate: todayManila.AddMonths(6),
+            DoseSequence: 1,
+            IsSeriesCompleted: false,
+            Route: "Oral (PO)",
+            InjectionSite: null,
+            AdministeredAtUtc: DateTime.UtcNow,
+            AdministeredByStaffId: Guid.NewGuid(),
+            AdministeredByStaffName: "Nurse Maria",
+            AdministeredByPrcLicense: null,
+            Remarks: null);
+
+        validator.Validate(oralCmd).IsValid.Should().BeTrue();
+        var result = await handler.Handle(oralCmd, CancellationToken.None);
+        result.Route.Should().Be("Oral (PO)");
+        result.InjectionSite.Should().BeNull();
+
+        var parenteralMissingSite = oralCmd with { Route = "Intramuscular (IM)", InjectionSite = null };
+        validator.Validate(parenteralMissingSite).IsValid.Should().BeFalse();
+
+        var parenteralOralSite = oralCmd with { Route = "Intramuscular (IM)", InjectionSite = "Oral" };
+        validator.Validate(parenteralOralSite).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task RecordHistoricalImmunization_ValidPastDate_CreatesHistoricalRecord()
     {
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var patient = SeedPatient(db);
 
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(db, sieve);
 
         var handler = new RecordHistoricalImmunizationCommandHandler(patientRepo, immRepo, uow, _clinicContext);

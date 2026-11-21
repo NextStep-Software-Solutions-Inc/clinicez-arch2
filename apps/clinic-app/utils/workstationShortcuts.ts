@@ -11,7 +11,7 @@ export const ROUTE_MAP: Record<string, string> = {
   '3': 'Consultations',
   '4': 'Appointments',
   '5': 'Billing',
-  '6': 'Yakap',
+  '6': 'Tools',
   '7': 'Settings',
 };
 

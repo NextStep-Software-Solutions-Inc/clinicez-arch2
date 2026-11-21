@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Documents/Fonts/*.ttf" />
+    <EmbeddedResource Include="Locations/Data/psgc_locations.tsv.gz" LogicalName="ClinicEz.Shared.Locations.Data.psgc_locations.tsv.gz" />
   </ItemGroup>
 
 

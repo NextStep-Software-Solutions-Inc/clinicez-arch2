@@ -32,7 +32,7 @@ public class ChallengerM2_M3_2_StressTests
         _clinicContext.TenantId.Returns(_testTenantId);
     }
 
-    private static (ISender sender, IRepository<ClinicSettings> settingsRepo) SetupMocksWithDefaults(DateTime? baseDate = null)
+    private static (ISender sender, IRepository<FacilitySettings> settingsRepo) SetupMocksWithDefaults(DateTime? baseDate = null)
     {
         var refDate = baseDate ?? DateTime.UtcNow.Date;
         var sender = Substitute.For<ISender>();
@@ -40,7 +40,7 @@ public class ChallengerM2_M3_2_StressTests
         clinicContext.ClinicId.Returns(Guid.NewGuid());
         clinicContext.TenantId.Returns("tenant-stress");
         var (context, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var eodDto = new DailyEodReportDto(
             refDate, "tenant-stress", Guid.NewGuid(), 0, 0, 0, 0, 0,
@@ -292,17 +292,17 @@ public class ChallengerM2_M3_2_StressTests
     {
         // Set up real database context
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultationRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procedureRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var procedureRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         // Seed clinic settings with TIN
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,

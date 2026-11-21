@@ -1,5 +1,7 @@
 using System;
+using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
@@ -15,12 +17,12 @@ public sealed record GetPatientMedicalHistoryQuery(Guid PatientId) : IRequest<Pa
 
 public sealed class GetPatientMedicalHistoryQueryHandler : IRequestHandler<GetPatientMedicalHistoryQuery, PatientMedicalHistoryResultDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<PatientPastMedicalHistory> _medicalRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<PatientMedicalHistory> _medicalRepo;
 
     public GetPatientMedicalHistoryQueryHandler(
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<PatientPastMedicalHistory> medicalRepo)
+        IRepository<Patient> patientRepo,
+        IRepository<PatientMedicalHistory> medicalRepo)
     {
         _patientRepo = patientRepo;
         _medicalRepo = medicalRepo;
@@ -36,7 +38,7 @@ public sealed class GetPatientMedicalHistoryQueryHandler : IRequestHandler<GetPa
             throw new NotFoundException($"Patient with id {request.PatientId} not found.");
         }
 
-        var entries = await _medicalRepo.Query(m => m.PatientId == request.PatientId)
+        var entries = await _medicalRepo.Query(m => m.PatientId == request.PatientId && m.Category == MedicalHistoryCategory.MedicalHistory)
             .OrderBy(m => m.ConditionTitle)
             .ToListAsync(cancellationToken);
 
@@ -48,10 +50,45 @@ public sealed class GetPatientMedicalHistoryQueryHandler : IRequestHandler<GetPa
             e.Icd10Code,
             e.SpecificDescription,
             e.OnsetDate,
-            e.IsResolved,
+            e.Status == ProblemStatus.Resolved,
             e.ClinicalNotes,
-            e.CreatedAt)).ToList();
+            e.UpdatedAt ?? e.CreatedAt)).ToList();
 
-        return new PatientMedicalHistoryResultDto(dtos, patient.PersonalMedicalHistoryNotes);
+        string? savedNotes = ReadCustomString(patient, "personal_medical_history_notes");
+        DateTime? customUpdatedAt = ReadCustomTimestamp(patient, "personal_medical_history_updated_at");
+        DateTime? maxItemUpdated = entries.Count > 0 ? entries.Max(e => e.UpdatedAt ?? e.CreatedAt) : null;
+        DateTime? resolvedUpdatedAt = customUpdatedAt.HasValue && maxItemUpdated.HasValue
+            ? (customUpdatedAt.Value > maxItemUpdated.Value ? customUpdatedAt : maxItemUpdated)
+            : (customUpdatedAt ?? maxItemUpdated);
+
+        return new PatientMedicalHistoryResultDto(
+            dtos,
+            string.IsNullOrWhiteSpace(savedNotes) ? null : savedNotes,
+            resolvedUpdatedAt);
+    }
+
+    private static string? ReadCustomString(Patient patient, string key)
+    {
+        if (patient.CustomFields == null || !patient.CustomFields.TryGetValue(key, out var raw) || raw == null)
+        {
+            return null;
+        }
+        if (raw is JsonElement je)
+        {
+            return je.ValueKind == JsonValueKind.Null ? null : je.ToString();
+        }
+        return raw.ToString();
+    }
+
+    private static DateTime? ReadCustomTimestamp(Patient patient, string key)
+    {
+        var raw = ReadCustomString(patient, key);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+        return DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
+            ? parsed
+            : null;
     }
 }

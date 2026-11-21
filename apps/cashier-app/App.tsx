@@ -6,6 +6,9 @@ import { AuthGate } from './components/AuthGate';
 import { ConnectionGate } from './components/ConnectionGate';
 import { VercelInsights } from './components/analytics/VercelInsights';
 import { loadRuntimeConfig } from './services/runtimeConfig';
+import { CashierCommsProvider } from './context/CashierCommsContext';
+import CashierChatModal from './components/CashierChatModal';
+import { CashierChatTrigger } from './components/CashierChatTrigger';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -21,7 +24,11 @@ export default function App() {
       <StatusBar style="auto" />
       <ConnectionGate>
         <AuthGate>
-          <Navigation />
+          <CashierCommsProvider>
+            <Navigation />
+            <CashierChatTrigger />
+            <CashierChatModal />
+          </CashierCommsProvider>
         </AuthGate>
       </ConnectionGate>
       <VercelInsights />

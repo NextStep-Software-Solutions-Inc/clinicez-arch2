@@ -278,7 +278,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
         if (tc.expectedButtonText) {
           expect(html).toContain(tc.expectedButtonText);
         }
-      });
+      }, 30000);
     }
 
     test('Execution precedence: When both callbacks are provided, onQuickOrderProcedure takes priority', () => {

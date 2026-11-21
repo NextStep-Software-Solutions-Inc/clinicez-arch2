@@ -5,9 +5,12 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Documents.Security;
 using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace ClinicEz.Clinic.Application.Features.Prescriptions.Queries;
 
@@ -16,23 +19,26 @@ public record GetPrescriptionSlipQuery(Guid? ConsultationId = null, string? Pres
 public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSlipQuery, PrescriptionSlipDto>
 {
     private readonly IRepository<ConsultationEncounter> _encounterRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<StaffMember> _staffRepo;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IConfiguration? _configuration;
 
     public GetPrescriptionSlipQueryHandler(
         IRepository<ConsultationEncounter> encounterRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<StaffMember> staffRepo,
-        IRepository<ClinicSettings> settingsRepo,
-        IUnitOfWork unitOfWork)
+        IRepository<FacilitySettings> settingsRepo,
+        IUnitOfWork unitOfWork,
+        IConfiguration? configuration = null)
     {
         _encounterRepo = encounterRepo;
         _patientRepo = patientRepo;
         _staffRepo = staffRepo;
         _settingsRepo = settingsRepo;
         _unitOfWork = unitOfWork;
+        _configuration = configuration;
     }
 
     public async Task<PrescriptionSlipDto> Handle(GetPrescriptionSlipQuery request, CancellationToken cancellationToken)
@@ -59,6 +65,11 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
             throw new NotFoundException("Clinical consultation or electronic prescription was not found.");
         }
 
+        if (!encounter.IsSigned)
+        {
+            throw new BadRequestException("Prescription is pending physician sign-off and is not valid until the consultation encounter is signed.");
+        }
+
         var patient = await _patientRepo.GetByIdAsync(encounter.PatientId, cancellationToken);
         var staffDoctor = await _staffRepo.Query(s => s.Id == encounter.DoctorId).FirstOrDefaultAsync(cancellationToken);
         var settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
@@ -72,7 +83,7 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
 
         if (string.IsNullOrWhiteSpace(encounter.RxPublicVerificationToken))
         {
-            encounter.RxPublicVerificationToken = Guid.NewGuid().ToString("N");
+            encounter.RxPublicVerificationToken = $"{encounter.ClinicId:N}.{Guid.NewGuid():N}";
             needsUpdate = true;
         }
 
@@ -83,8 +94,10 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
         }
 
         var token = encounter.RxPublicVerificationToken;
-        var uploadUrl = $"/api/v1/public/rx-verify/{token}";
-        var qrPayload = $"CLINICEZ:RX:{encounter.PrescriptionNumber}:{token}";
+        var portalBase = VerificationUrlResolver.Resolve(_configuration);
+        var rxVerifyUrl = PublicRoutes.VerifyRx(token!, portalBase);
+        var uploadUrl = rxVerifyUrl;
+        var qrPayload = rxVerifyUrl;
 
         var patientAge = patient != null ? Math.Max(0, DateTime.UtcNow.Year - patient.DateOfBirth.Year) : 35;
 
@@ -103,9 +116,9 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
             encounter.PatientId,
             encounter.PatientName,
             patientAge,
-            patient?.Gender.ToString() ?? "Unknown",
+            patient?.Sex.ToString() ?? "Unknown",
             patient?.PhilHealthNumber,
-            patient?.Allergies,
+            patient?.Allergies != null && patient.Allergies.Count > 0 ? string.Join(", ", patient.Allergies.Select(a => a.Allergen)) : null,
             encounter.Assessment,
             encounter.Plan,
             encounter.Prescriptions.Select(p => new PrescriptionSlipItemDto(
@@ -119,7 +132,9 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
                 p.DurationDays,
                 p.Refills,
                 p.IsDangerousDrug,
-                p.Remarks
+                p.Remarks,
+                p.IsClinicDispensed,
+                p.ClinicDispensedQuantity
             )).ToList(),
             token,
             uploadUrl,
@@ -133,7 +148,8 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
             encounter.RxDispensedAt,
             encounter.RxNotes,
             RxPharmacyStatusDto.From(encounter),
-            patient?.DateOfBirth
+            patient?.DateOfBirth,
+            encounter.DoctorId
         );
     }
 }

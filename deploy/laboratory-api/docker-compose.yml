@@ -52,6 +52,7 @@ services:
       # Hangfire dashboard Basic Auth password. Empty denies the dashboard to everyone (there is no default).
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
+      - Verification__BaseUrl=${PORTAL_BASE_URL:-}
       # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
       - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
       # Signs this service's facility-local session tokens: a long random secret (at least 32 characters), required.
@@ -59,6 +60,7 @@ services:
       - Jwt__KeyDirectory=/app/keys
       # HMAC key of the document digests (verification QR codes): a long random secret, required, no built-in fallback.
       - Documents__SigningKey=${DOCUMENT_SIGNING_KEY:?DOCUMENT_SIGNING_KEY must be set}
+      - MediatR__LicenseKey=${MEDIATR_LICENSE_KEY:-}
     volumes:
       - laboratory-api-keys:/app/keys
     restart: unless-stopped

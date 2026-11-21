@@ -17,20 +17,20 @@ namespace ClinicEz.Clinic.Application.Features.Settings.Search;
 /// </summary>
 public sealed class SettingSearchProvider : ISearchProvider
 {
-    private readonly IRepository<ClinicRoom> _roomRepo;
-    private readonly IRepository<ClinicServiceItem> _serviceRepo;
+    private readonly IRepository<Room> _roomRepo;
+    private readonly IRepository<ServiceItem> _serviceRepo;
     private readonly IRepository<StaffMember> _staffRepo;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
 
     public string Category => "Settings";
     public int Priority => 70;
     public string? RequiredPermission => ClinicPermissions.SettingsRead;
 
     public SettingSearchProvider(
-        IRepository<ClinicRoom> roomRepo,
-        IRepository<ClinicServiceItem> serviceRepo,
+        IRepository<Room> roomRepo,
+        IRepository<ServiceItem> serviceRepo,
         IRepository<StaffMember> staffRepo,
-        IRepository<ClinicSettings> settingsRepo)
+        IRepository<FacilitySettings> settingsRepo)
     {
         _roomRepo = roomRepo ?? throw new ArgumentNullException(nameof(roomRepo));
         _serviceRepo = serviceRepo ?? throw new ArgumentNullException(nameof(serviceRepo));

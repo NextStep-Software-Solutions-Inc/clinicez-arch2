@@ -14,5 +14,6 @@ public record ClinicServiceItemDto(
     bool IsActive,
     string? PhilHealthCode = null,
     string? PhilHealthDescription = null,
-    bool IsPhilHealthFormulary = false
+    bool IsPhilHealthFormulary = false,
+    bool IsNurseOrderable = false
 );

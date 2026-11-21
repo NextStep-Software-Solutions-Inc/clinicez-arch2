@@ -10,9 +10,13 @@ public record AppointmentBookedEvent
     public Guid? RescheduledAppointmentId { get; init; }
     public Guid PatientId { get; init; }
     public Guid ClinicId { get; init; }
+    public Guid? ProviderId { get; init; }
+    public string? ProviderName { get; init; }
+    public Guid? CanonicalProviderId { get; init; }
     public string? TenantId { get; init; }
     public DateOnly? PreferredDate { get; init; }
     public string? PreferredTime { get; init; }
+    public string? AppointmentType { get; init; }
     public string? Reason { get; init; }
     public string? Notes { get; init; }
     public string ShareFieldsJson { get; init; } = "[]";

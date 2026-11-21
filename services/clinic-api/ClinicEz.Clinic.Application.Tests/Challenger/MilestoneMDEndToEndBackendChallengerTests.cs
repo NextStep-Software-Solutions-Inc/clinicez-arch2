@@ -68,15 +68,15 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
         var (contextA, uowA, sieveA) = TestDbHelper.CreateSharedTestContext(dbName, _clinicContextA);
         var (contextB, uowB, sieveB) = TestDbHelper.CreateSharedTestContext(dbName, _clinicContextB);
 
-        var patientRepoA = TestDbHelper.CreateRepository<ClinicPatient>(contextA, sieveA);
+        var patientRepoA = TestDbHelper.CreateRepository<Patient>(contextA, sieveA);
         var toothRepoA = TestDbHelper.CreateRepository<DentalToothRecord>(contextA, sieveA);
-        var procRepoA = TestDbHelper.CreateRepository<ClinicalProcedure>(contextA, sieveA);
+        var procRepoA = TestDbHelper.CreateRepository<Procedure>(contextA, sieveA);
 
-        var patientRepoB = TestDbHelper.CreateRepository<ClinicPatient>(contextB, sieveB);
+        var patientRepoB = TestDbHelper.CreateRepository<Patient>(contextB, sieveB);
 
         // Seed Patient in Tenant B ONLY
         var tenantBPatientId = Guid.NewGuid();
-        await patientRepoB.AddAsync(new ClinicPatient
+        await patientRepoB.AddAsync(new Patient
         {
             Id = tenantBPatientId,
             TenantId = TenantBId,
@@ -123,17 +123,17 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
         var (contextA, uowA, sieveA) = TestDbHelper.CreateSharedTestContext(dbName, _clinicContextA);
         var (contextB, uowB, sieveB) = TestDbHelper.CreateSharedTestContext(dbName, _clinicContextB);
 
-        var patientRepoA = TestDbHelper.CreateRepository<ClinicPatient>(contextA, sieveA);
+        var patientRepoA = TestDbHelper.CreateRepository<Patient>(contextA, sieveA);
         var toothRepoA = TestDbHelper.CreateRepository<DentalToothRecord>(contextA, sieveA);
 
-        var patientRepoB = TestDbHelper.CreateRepository<ClinicPatient>(contextB, sieveB);
+        var patientRepoB = TestDbHelper.CreateRepository<Patient>(contextB, sieveB);
         var toothRepoB = TestDbHelper.CreateRepository<DentalToothRecord>(contextB, sieveB);
 
         var patientAId = Guid.NewGuid();
         var patientBId = Guid.NewGuid();
 
         // Seed Patient A in Clinic A
-        await patientRepoA.AddAsync(new ClinicPatient
+        await patientRepoA.AddAsync(new Patient
         {
             Id = patientAId,
             TenantId = TenantAId,
@@ -145,7 +145,7 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
         }, CancellationToken.None);
 
         // Seed Patient B in Clinic B
-        await patientRepoB.AddAsync(new ClinicPatient
+        await patientRepoB.AddAsync(new Patient
         {
             Id = patientBId,
             TenantId = TenantBId,
@@ -203,11 +203,11 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var sender = Substitute.For<ISender>();
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = TenantAId,
@@ -250,11 +250,11 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var sender = Substitute.For<ISender>();
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = TenantAId,
@@ -295,11 +295,11 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = TenantAId,

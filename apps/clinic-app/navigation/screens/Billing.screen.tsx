@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -28,6 +28,13 @@ import {
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useClinic } from '../../context/ClinicContext';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
+import {
+  parseConfiguredSearchFields,
+} from '../../components/patient/PatientSearchResultRow';
+import { computePatientLocation } from '../../utils/patientLocation';
+// PatientSearchResultRow-aligned search display field configuration
+import type { ClinicCustomFieldDefinition } from '../../services/clinicService';
 import { useStaff } from '../../context/StaffContext';
 import { openDocument, openDocumentBlob } from '../../services/documentOpener';
 import {
@@ -39,6 +46,13 @@ import {
   InvoiceRecord,
   ClinicSettingsRecord,
   ClinicPatient,
+  HealthScreeningRecord,
+  PatientPhilHealthCoverageDto,
+  VisitWorkflowMode,
+  getManilaTodayStr,
+  formatClinicDate,
+  formatClinicDateTime,
+  formatClinicTime,
 } from '../../services/clinicService';
 import {
   printReceiptDialog,
@@ -57,7 +71,7 @@ import {
 export type LineItemForm = BillingLineItem;
 export { consolidateLineItems };
 
-type BillingTab = 'active' | 'unsettled' | 'paid';
+export type BillingMode = 'queue' | 'unsettled' | 'paid' | 'registry' | 'retail';
 
 /** The patient being billed: either a queue entry or a patient opened from another screen. */
 interface BillingPatient {
@@ -66,15 +80,21 @@ interface BillingPatient {
   patientName: string;
   queueItemId?: string;
   queueNumber?: string;
+  visitType?: string;
+  visitWorkflowMode?: VisitWorkflowMode;
+  isDirectVisit?: boolean;
   doctorId?: string;
   doctorName?: string;
   isAlreadyBilled?: boolean;
   existingInvoiceNumber?: string;
   hasOpenSoa?: boolean;
   activeInvoice?: InvoiceRecord;
+  hasAddOnUnbilled?: boolean;
+  addOnUnbilledCount?: number;
   isPromissory?: boolean;
   promissoryDueDate?: string;
   promissoryReason?: string;
+  isWalkInRetail?: boolean;
 }
 
 interface Remittance {
@@ -121,22 +141,14 @@ function formatPeso(value?: number | null): string {
   return `₱${(value ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function getManilaTodayStr(): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
-  } catch {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-}
 
 function toBillingPatient(
   item: PatientQueueItem,
-  billedMap?: Map<string, string>,
-  openSoaMap?: Map<string, InvoiceRecord>
+  paidByQueueId?: Map<string, string>,
+  openSoaByQueueId?: Map<string, InvoiceRecord>
 ): BillingPatient {
-  const openInv = openSoaMap?.get(item.id) || openSoaMap?.get(item.patientId);
-  const paidInvNum = billedMap?.get(item.id) || billedMap?.get(item.patientId);
+  const openInv = item.id ? openSoaByQueueId?.get(item.id) : undefined;
+  const paidInvNum = item.id ? paidByQueueId?.get(item.id) : undefined;
   const isPromissory = Boolean(
     openInv?.notes?.includes('[PROMISSORY NOTE]') ||
     openInv?.notes?.toLowerCase().includes('promissory note')
@@ -147,6 +159,9 @@ function toBillingPatient(
     patientName: item.patientName,
     queueItemId: item.id,
     queueNumber: item.queueNumber,
+    visitType: item.visitType,
+    visitWorkflowMode: item.visitWorkflowMode,
+    isDirectVisit: Boolean(item.isDirectVisit || item.queueNumber?.startsWith('DV-')),
     doctorId: item.doctorId,
     doctorName: item.doctorName,
     hasOpenSoa: Boolean(openInv),
@@ -163,14 +178,46 @@ export default function BillingScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= theme.breakpoints.desktop;
 
-  const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead } = useClinic();
+  const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead, settings } = useClinic();
   const { current: currentStaff, currentName } = useStaff();
 
-  const [activeTab, setActiveTab] = useState<BillingTab>('active');
+  const [billingMode, setBillingMode] = usePersistedTab<BillingMode>({
+    storageKey: 'clinicez_billing_mode',
+    allowedValues: ['queue', 'unsettled', 'paid', 'registry', 'retail'],
+    defaultValue: 'queue',
+    routeParam: (route?.params as any)?.mode,
+    queryParam: 'mode',
+    queryParamAliases: ['tab'],
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('billing'),
+  });
+  const [walkInCustomerName, setWalkInCustomerName] = useState('');
+  const [walkInCustomerTouched, setWalkInCustomerTouched] = useState(false);
+  const [registrySearch, setRegistrySearch] = useState('');
+  const [registryResults, setRegistryResults] = useState<ClinicPatient[]>([]);
+  const [isSearchingRegistry, setIsSearchingRegistry] = useState(false);
+  const [hasSearchedRegistry, setHasSearchedRegistry] = useState(false);
+  const [isRegistrySearchExpanded, setIsRegistrySearchExpanded] = useState(false);
   const [services, setServices] = useState<ClinicServiceItem[]>([]);
   const [patients, setPatients] = useState<BillingPatient[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [clinicSettings, setClinicSettings] = useState<ClinicSettingsRecord | null>(null);
+  const [customFieldDefs, setCustomFieldDefs] = useState<ClinicCustomFieldDefinition[]>([]);
+
+  useEffect(() => {
+    clinicService.getCustomFields('ClinicPatient').then(([defs]) => {
+      if (defs) setCustomFieldDefs(defs);
+    });
+  }, []);
+
+  const configuredSearchFields = useMemo(
+    () =>
+      parseConfiguredSearchFields(
+        settings?.patientSearchDisplayFieldsJson ?? clinicSettings?.patientSearchDisplayFieldsJson
+      ),
+    [settings?.patientSearchDisplayFieldsJson, clinicSettings?.patientSearchDisplayFieldsJson]
+  );
   const [selectedPatient, setSelectedPatient] = useState<BillingPatient | null>(null);
   const [activeInvoice, setActiveInvoice] = useState<InvoiceRecord | null>(null);
   const [allowDuplicate, setAllowDuplicate] = useState(false);
@@ -189,6 +236,8 @@ export default function BillingScreen() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash');
   const [cashTendered, setCashTendered] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
+  const [isPartialPayment, setIsPartialPayment] = useState(false);
+  const [partialAmount, setPartialAmount] = useState('');
 
   // Status
   const [isProcessing, setIsProcessing] = useState(false);
@@ -196,6 +245,10 @@ export default function BillingScreen() {
   const [lastReceipt, setLastReceipt] = useState<ReceiptSummary | null>(null);
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
   const [currentPatientProfile, setCurrentPatientProfile] = useState<ClinicPatient | null>(null);
+  const [selectedHealthScreening, setSelectedHealthScreening] = useState<HealthScreeningRecord | null>(null);
+  const [yakapCoverage, setYakapCoverage] = useState<PatientPhilHealthCoverageDto | null>(null);
+  const [trackYakapCoPayment, setTrackYakapCoPayment] = useState(false);
+  const [yakapCoPaymentAmount, setYakapCoPaymentAmount] = useState('');
   const handledParamPatientRef = useRef<string | null>(null);
 
   // Defer / Promissory Note Modal State
@@ -225,13 +278,15 @@ export default function BillingScreen() {
       [eodData, eodErr],
       [invoicesTodayData, invErr],
       [openDraftsData, draftErr],
+      [openPartialData],
       [settingsData],
     ] = await Promise.all([
       clinicService.getServices(),
-      clinicService.getQueue({ view: 'All' }),
-      clinicService.getDailyEodReport(),
+      clinicService.getQueue({ date: todayStr, view: 'All' }),
+      clinicService.getDailyEodReport(todayStr),
       clinicService.getInvoices(todayStr),
       clinicService.getInvoices(undefined, undefined, 'Draft'),
+      clinicService.getInvoices(undefined, undefined, 'PartiallyPaid'),
       clinicService.getSettings(),
     ]);
 
@@ -250,28 +305,31 @@ export default function BillingScreen() {
     const invoiceMap = new Map<string, InvoiceRecord>();
     for (const inv of (invoicesTodayData ?? [])) invoiceMap.set(inv.id, inv);
     for (const inv of (openDraftsData ?? [])) invoiceMap.set(inv.id, inv);
+    for (const inv of (openPartialData ?? [])) invoiceMap.set(inv.id, inv);
     const allInvoices = Array.from(invoiceMap.values());
     setInvoices(allInvoices);
     if (settingsData) setClinicSettings(settingsData);
 
-    const billedMap = new Map<string, string>();
-    const openSoaMap = new Map<string, InvoiceRecord>();
+    const openSoaByQueueId = new Map<string, InvoiceRecord>();
+    const paidByQueueId = new Map<string, string>();
 
     for (const inv of allInvoices) {
-      if (inv.status === 'Voided') continue;
+      if (inv.status === 'Voided' || !inv.queueItemId) continue;
       if (inv.status === 'Draft' || inv.status === 'PartiallyPaid') {
-        if (inv.queueItemId) openSoaMap.set(inv.queueItemId, inv);
-        if (inv.patientId) openSoaMap.set(inv.patientId, inv);
+        openSoaByQueueId.set(inv.queueItemId, inv);
       } else if (inv.status === 'Paid') {
-        if (inv.queueItemId) billedMap.set(inv.queueItemId, inv.invoiceNumber);
-        if (inv.patientId) billedMap.set(inv.patientId, inv.invoiceNumber);
+        paidByQueueId.set(inv.queueItemId, inv.invoiceNumber);
       }
     }
 
     if (qErr) {
       errors.queue = qErr.message || 'Unable to load today\'s queue.';
     } else {
-      setPatients((queueData ?? []).map((item) => toBillingPatient(item, billedMap, openSoaMap)));
+      setPatients(
+        (queueData ?? []).map((item) =>
+          toBillingPatient(item, paidByQueueId, openSoaByQueueId)
+        )
+      );
     }
 
     if (eodErr || !eodData) {
@@ -303,6 +361,14 @@ export default function BillingScreen() {
     setSelectedPatient(p);
     setLastReceipt(null);
     setAllowDuplicate(false);
+    setIsPartialPayment(false);
+    setPartialAmount('');
+    setCashTendered('');
+    setReferenceNumber('');
+    setSelectedHealthScreening(null);
+    setYakapCoverage(null);
+    setTrackYakapCoPayment(false);
+    setYakapCoPaymentAmount('');
 
     let initialItems: LineItemForm[] = [];
 
@@ -329,9 +395,11 @@ export default function BillingScreen() {
     }
 
     // Auto-detect and prefill Senior Citizen or PWD ID from patient profile
+    let loadedPatientProfile: ClinicPatient | null = null;
     try {
       const [patientData] = await clinicService.getPatientById(p.patientId);
       if (patientData) {
+        loadedPatientProfile = patientData;
         setCurrentPatientProfile(patientData);
         if (!p.activeInvoice) {
           if (patientData.seniorCitizenId) {
@@ -347,41 +415,78 @@ export default function BillingScreen() {
       // Non-fatal if demographic lookup fails
     }
 
-    // Do NOT auto-rehydrate procedures if the patient has already been billed and settled today
-    if (p.isAlreadyBilled && !p.hasOpenSoa) {
-      return;
-    }
-
-    // Collect all items already billed and paid today for this patient to prevent double-billing
-    const paidInvoicesTodayForPatient = invoices.filter(
-      (inv) => inv.patientId === p.patientId && inv.status === 'Paid'
+    // Scope paid invoices strictly to this visit when queueItemId is present
+    const paidInvoicesForVisit = invoices.filter((inv) =>
+      p.queueItemId
+        ? inv.queueItemId === p.queueItemId && inv.status === 'Paid'
+        : inv.patientId === p.patientId && inv.status === 'Paid'
     );
-    const alreadyPaidItemCodes = new Set<string>();
-    const alreadyPaidItemNames = new Set<string>();
-    for (const paidInv of paidInvoicesTodayForPatient) {
+    const paidItemCodeCounts = new Map<string, number>();
+    const paidItemNameCounts = new Map<string, number>();
+    for (const paidInv of paidInvoicesForVisit) {
       for (const item of paidInv.lineItems || []) {
-        if (item.itemCode) alreadyPaidItemCodes.add(item.itemCode.toLowerCase());
-        if (item.description) alreadyPaidItemNames.add(item.description.toLowerCase());
+        if (item.itemCode) {
+          const k = item.itemCode.toLowerCase();
+          paidItemCodeCounts.set(k, (paidItemCodeCounts.get(k) || 0) + (item.quantity || 1));
+        }
+        if (item.description) {
+          const k = item.description.toLowerCase();
+          paidItemNameCounts.set(k, (paidItemNameCounts.get(k) || 0) + (item.quantity || 1));
+        }
       }
     }
 
-    // Auto-rehydrate any unbilled in-clinic procedures or consultations for today
+    // Auto-rehydrate any unbilled in-clinic procedures, consultations, health screenings, or screening labs for this visit
     try {
-      const [[procsData], [consultsData]] = await Promise.all([
+      const shouldCheckScreening = Boolean(p.queueItemId || p.visitType === 'PreventiveHealthAssessment');
+      const [[procsData], [consultsData], [screeningsData], [labOrdersData]] = await Promise.all([
         clinicService.getProcedures(p.patientId),
         clinicService.getConsultations(p.patientId),
+        shouldCheckScreening
+          ? clinicService.getPatientHealthScreenings(p.patientId, p.queueItemId)
+          : Promise.resolve([null, null] as const),
+        shouldCheckScreening
+          ? clinicService.getLabOrders(p.patientId, undefined, undefined, { includeUnsigned: true })
+          : Promise.resolve([null, null] as const),
       ]);
 
       const updatedItems = [...initialItems];
       let addedCount = 0;
 
-      // Ensure consultation service fee is present if not already billed
+      const draftCodeCounts = new Map<string, number>();
+      const draftNameCounts = new Map<string, number>();
+      for (const item of initialItems) {
+        if (item.code) {
+          const k = item.code.toLowerCase();
+          draftCodeCounts.set(k, (draftCodeCounts.get(k) || 0) + (item.qty || 1));
+        }
+        if (item.name) {
+          const k = item.name.toLowerCase();
+          draftNameCounts.set(k, (draftNameCounts.get(k) || 0) + (item.qty || 1));
+        }
+      }
+
+      const visitConsultations = p.queueItemId
+        ? (consultsData ?? []).filter((c) => c.queueItemId === p.queueItemId)
+        : [];
+      const isConsultationVisit =
+        visitConsultations.length > 0 ||
+        (Boolean(p.doctorId) && p.visitType !== 'PreventiveHealthAssessment');
+
+      // Ensure consultation service fee is present if not already billed on THIS visit
       const hasConsultationItem = updatedItems.some(
         (i) => i.category?.toLowerCase() === 'consultation' || i.name.toLowerCase().includes('consultation')
       );
-      const isConsultationPaid = Array.from(alreadyPaidItemNames).some(name => name.includes('consultation'));
+      const isConsultationPaidOnVisit = Array.from(paidItemNameCounts.keys()).some((name) =>
+        name.includes('consultation')
+      );
 
-      if (!hasConsultationItem && !isConsultationPaid && (p.doctorId || (consultsData && consultsData.length > 0))) {
+      if (
+        !hasConsultationItem &&
+        !isConsultationPaidOnVisit &&
+        !p.isAlreadyBilled &&
+        isConsultationVisit
+      ) {
         const consultSvc = services.find(
           (s) => s.category?.toLowerCase() === 'consultation' || s.name.toLowerCase().includes('consultation')
         );
@@ -399,50 +504,306 @@ export default function BillingScreen() {
         addedCount++;
       }
 
-      // Check for ordered in-clinic procedures not yet in line items and not already paid
-      if (procsData && procsData.length > 0) {
-        for (const proc of procsData) {
-          if (proc.status === 'Cancelled') continue;
-          const alreadyBilled = updatedItems.some(
-            (i) => i.name.toLowerCase() === proc.procedureName.toLowerCase() ||
-                   (proc.procedureCode && i.code === proc.procedureCode)
-          );
-          const isProcPaid =
-            alreadyPaidItemNames.has(proc.procedureName.toLowerCase()) ||
-            (proc.procedureCode && alreadyPaidItemCodes.has(proc.procedureCode.toLowerCase()));
+      // Resolve Health Screening episode for this visit (exclude Cancelled and EscalatedToConsultation)
+      const visitScreening = (screeningsData ?? []).find(
+        (s) =>
+          s.status !== 'Cancelled' &&
+          s.status !== 'EscalatedToConsultation' &&
+          (!p.queueItemId || s.queueItemId === p.queueItemId)
+      ) ?? null;
+      setSelectedHealthScreening(visitScreening);
 
-          if (!alreadyBilled && !isProcPaid) {
-            const matchedSvc = services.find(
-              (s) => s.name.toLowerCase() === proc.procedureName.toLowerCase() ||
-                     (proc.procedureCode && s.code === proc.procedureCode)
-            );
+      const isYakapScreeningVisit =
+        visitScreening?.workflowMode === 'YakapAvailment' ||
+        (p.visitWorkflowMode === 'YakapAvailment' && p.visitType === 'PreventiveHealthAssessment');
+
+      const activeCatalog = services.filter((s) => s.isActive !== false);
+      const effectiveSettings = clinicSettings ?? settings;
+
+      if (isYakapScreeningVisit) {
+        const [covData] = await clinicService.getPatientPhilHealthCoverage(p.patientId);
+        if (covData) {
+          setYakapCoverage(covData);
+        }
+        if (!p.activeInvoice && !p.isAlreadyBilled) {
+          const hasExistingYakapItem = updatedItems.some(
+            (i) => i.code?.toUpperCase() === 'YAKAP-FPE'
+          );
+          if (!hasExistingYakapItem && updatedItems.length === 0) {
             updatedItems.push({
-              id: `proc-${proc.id || Date.now()}-${Math.random()}`,
-              code: proc.procedureCode || matchedSvc?.code || '',
-              name: proc.procedureName,
-              category: proc.category || matchedSvc?.category || 'Procedure',
-              price: matchedSvc?.standardPrice ?? 0,
+              id: `yakap-fpe-${visitScreening?.id || p.queueItemId || Date.now()}`,
+              code: 'YAKAP-FPE',
+              name: 'PhilHealth Annual Health Checkup',
+              category: 'Preventive',
+              price: 0,
               qty: 1,
-              doctorId: proc.orderedByDoctorId || p.doctorId,
-              doctorName: proc.orderedByDoctorName || p.doctorName,
+              doctorId: visitScreening?.examinedByDoctorId || p.doctorId,
+              doctorName: visitScreening?.examinedByDoctorName || p.doctorName,
+            });
+          }
+          setDiscountType('PhilHealthKonsulta');
+          setDiscountId(covData?.philHealthNumber || loadedPatientProfile?.philHealthNumber || '');
+          setPaymentMethod('PhilHealthKonsulta');
+          setReferenceNumber(
+            visitScreening?.profilingTransNo ||
+            covData?.currentYearFpeStatus?.profilingTransNo ||
+            visitScreening?.philHealthAtc ||
+            ''
+          );
+          if (updatedItems.length > 0) {
+            setLineItems(consolidateLineItems(updatedItems));
+          }
+        }
+      } else if (visitScreening && visitScreening.workflowMode === 'Regular') {
+        const preferredCode = (effectiveSettings?.defaultHealthScreeningServiceCode || 'HEALTH-SCREEN')
+          .trim()
+          .toUpperCase();
+        const screeningSvc =
+          (visitScreening.serviceItemId
+            ? activeCatalog.find((s) => s.id === visitScreening.serviceItemId)
+            : undefined) ||
+          (effectiveSettings?.defaultHealthScreeningServiceItemId
+            ? activeCatalog.find((s) => s.id === effectiveSettings.defaultHealthScreeningServiceItemId)
+            : undefined) ||
+          activeCatalog.find((s) => s.code?.trim().toUpperCase() === preferredCode) ||
+          activeCatalog.find((s) => s.code?.trim().toUpperCase() === 'HEALTH-SCREEN') ||
+          activeCatalog.find((s) => s.name.toLowerCase().includes('health screening'));
+
+        const screeningCode = screeningSvc?.code || preferredCode || 'HEALTH-SCREEN';
+        const screeningName = screeningSvc?.name || 'Health Screening & Assessment';
+        const codeKey = screeningCode.toLowerCase();
+        const nameKey = screeningName.toLowerCase();
+        const draftCodeRem = draftCodeCounts.get(codeKey) || 0;
+        const draftNameRem = draftNameCounts.get(nameKey) || 0;
+        const paidCodeRem = paidItemCodeCounts.get(codeKey) || 0;
+        const paidNameRem = paidItemNameCounts.get(nameKey) || 0;
+
+        if (draftCodeRem > 0 || draftNameRem > 0) {
+          if (draftCodeRem > 0) draftCodeCounts.set(codeKey, draftCodeRem - 1);
+          if (draftNameRem > 0) draftNameCounts.set(nameKey, draftNameRem - 1);
+        } else if (paidCodeRem > 0 || paidNameRem > 0) {
+          if (paidCodeRem > 0) paidItemCodeCounts.set(codeKey, paidCodeRem - 1);
+          if (paidNameRem > 0) paidItemNameCounts.set(nameKey, paidNameRem - 1);
+        } else {
+          updatedItems.push({
+            id: `screening-${visitScreening.id}`,
+            code: screeningCode,
+            name: screeningName,
+            category: screeningSvc?.category || 'Consultation',
+            price: screeningSvc?.standardPrice ?? 0,
+            qty: 1,
+            doctorId: visitScreening.examinedByDoctorId || p.doctorId,
+            doctorName: visitScreening.examinedByDoctorName || p.doctorName,
+          });
+          addedCount++;
+        }
+      }
+
+      // Check ordered screening labs tied to this visit (Regular screening / PreventiveHealthAssessment)
+      if (!isYakapScreeningVisit && labOrdersData && labOrdersData.length > 0 && (visitScreening || p.visitType === 'PreventiveHealthAssessment')) {
+        const visitLabOrders = labOrdersData.filter(
+          (lo) => lo.status !== 'Cancelled' && (!p.queueItemId || lo.queueItemId === p.queueItemId)
+        );
+        for (const lo of visitLabOrders) {
+          for (const labItem of lo.items || []) {
+            if (labItem.status === 'Cancelled' || (labItem as any).isDoneOutsideFacility) continue;
+            const rawTestCode = ((labItem as any).testCode || '').trim();
+            const matchedSvc = activeCatalog.find(
+              (s) =>
+                (rawTestCode && s.code?.toLowerCase() === rawTestCode.toLowerCase()) ||
+                s.name.toLowerCase() === labItem.testName.toLowerCase()
+            );
+            const codeKey = (rawTestCode || matchedSvc?.code || '').toLowerCase();
+            const nameKey = labItem.testName.toLowerCase();
+
+            const draftCodeRem = codeKey ? (draftCodeCounts.get(codeKey) || 0) : 0;
+            const draftNameRem = draftNameCounts.get(nameKey) || 0;
+            if (draftCodeRem > 0 || draftNameRem > 0) {
+              if (codeKey && draftCodeRem > 0) draftCodeCounts.set(codeKey, draftCodeRem - 1);
+              if (draftNameRem > 0) draftNameCounts.set(nameKey, draftNameRem - 1);
+              continue;
+            }
+
+            const paidCodeRem = codeKey ? (paidItemCodeCounts.get(codeKey) || 0) : 0;
+            const paidNameRem = paidItemNameCounts.get(nameKey) || 0;
+            if (paidCodeRem > 0 || paidNameRem > 0) {
+              if (codeKey && paidCodeRem > 0) paidItemCodeCounts.set(codeKey, paidCodeRem - 1);
+              if (paidNameRem > 0) paidItemNameCounts.set(nameKey, paidNameRem - 1);
+              continue;
+            }
+
+            updatedItems.push({
+              id: `lab-${labItem.id || Date.now()}-${Math.random()}`,
+              code: rawTestCode || matchedSvc?.code || '',
+              name: labItem.testName,
+              category: labItem.category || matchedSvc?.category || 'Diagnostic',
+              price: (labItem as any).diagnosticFee ?? matchedSvc?.standardPrice ?? 0,
+              qty: 1,
+              doctorId: lo.orderedByDoctorId || visitScreening?.examinedByDoctorId || p.doctorId,
+              doctorName: lo.orderedByDoctorName || visitScreening?.examinedByDoctorName || p.doctorName,
             });
             addedCount++;
           }
         }
       }
 
+      // Check for ordered in-clinic procedures not yet in line items and not already paid for this visit
+      if (procsData && procsData.length > 0) {
+        const visitProcedures = procsData.filter((proc) => {
+          if (proc.status === 'Cancelled') return false;
+          if (p.queueItemId) {
+            return proc.queueItemId === p.queueItemId;
+          }
+          return false;
+        });
+
+        for (const proc of visitProcedures) {
+          const codeKey = proc.procedureCode?.toLowerCase();
+          const nameKey = proc.procedureName.toLowerCase();
+
+          const draftCodeRem = codeKey ? (draftCodeCounts.get(codeKey) || 0) : 0;
+          const draftNameRem = draftNameCounts.get(nameKey) || 0;
+          if (draftCodeRem > 0 || draftNameRem > 0) {
+            if (codeKey && draftCodeRem > 0) draftCodeCounts.set(codeKey, draftCodeRem - 1);
+            if (draftNameRem > 0) draftNameCounts.set(nameKey, draftNameRem - 1);
+            continue;
+          }
+
+          const paidCodeRem = codeKey ? (paidItemCodeCounts.get(codeKey) || 0) : 0;
+          const paidNameRem = paidItemNameCounts.get(nameKey) || 0;
+          if (paidCodeRem > 0 || paidNameRem > 0) {
+            if (codeKey && paidCodeRem > 0) paidItemCodeCounts.set(codeKey, paidCodeRem - 1);
+            if (paidNameRem > 0) paidItemNameCounts.set(nameKey, paidNameRem - 1);
+            continue;
+          }
+
+          const matchedSvc = services.find(
+            (s) =>
+              s.name.toLowerCase() === proc.procedureName.toLowerCase() ||
+              (proc.procedureCode && s.code === proc.procedureCode)
+          );
+          updatedItems.push({
+            id: `proc-${proc.id || Date.now()}-${Math.random()}`,
+            code: proc.procedureCode || matchedSvc?.code || '',
+            name: proc.procedureName,
+            category: proc.category || matchedSvc?.category || 'Procedure',
+            price: matchedSvc?.standardPrice ?? 0,
+            qty: 1,
+            doctorId: proc.orderedByDoctorId || p.doctorId,
+            doctorName: proc.orderedByDoctorName || p.doctorName,
+          });
+          addedCount++;
+        }
+      }
+
       if (addedCount > 0) {
         setLineItems(consolidateLineItems(updatedItems));
-        notify.info(`Auto-populated ${addedCount} consultation & procedure service(s) for ${p.patientName}.`);
+        if (p.isAlreadyBilled) {
+          setSelectedPatient((prev) =>
+            prev ? { ...prev, hasAddOnUnbilled: true, addOnUnbilledCount: addedCount } : prev
+          );
+          setAllowDuplicate(true);
+          notify.info(
+            `Detected ${addedCount} add-on unbilled item(s) for ${p.patientName}. Supplemental invoice enabled.`
+          );
+        } else {
+          notify.info(`Auto-populated ${addedCount} visit service(s) for ${p.patientName}.`);
+        }
       }
     } catch {
-      // Non-fatal if procedure lookup fails
+      // Non-fatal if procedure or screening lookup fails
     }
-  }, [services, clinicSettings, invoices]);
+  }, [services, clinicSettings, settings, invoices]);
+
+  const handleSelectRegistryPatient = useCallback(async (patient: ClinicPatient) => {
+    const openInv = invoices.find(
+      (inv) => inv.patientId === patient.id && (inv.status === 'Draft' || inv.status === 'PartiallyPaid')
+    );
+    const paidInv = invoices.find((inv) => inv.patientId === patient.id && inv.status === 'Paid');
+    const bp: BillingPatient = {
+      key: `registry-${patient.id}`,
+      patientId: patient.id,
+      patientName: patient.fullName || `${patient.firstName} ${patient.lastName}`,
+      hasOpenSoa: Boolean(openInv),
+      activeInvoice: openInv,
+      isAlreadyBilled: !openInv && Boolean(paidInv),
+      existingInvoiceNumber: openInv ? openInv.invoiceNumber : paidInv?.invoiceNumber,
+    };
+    await handleSelectPatient(bp);
+    setIsRegistrySearchExpanded(false);
+  }, [invoices, handleSelectPatient]);
+
+  const handleSearchRegistry = useCallback(async () => {
+    if (!registrySearch.trim()) return;
+    setIsSearchingRegistry(true);
+    setHasSearchedRegistry(true);
+    try {
+      const [res, err] = await clinicService.getPatients(registrySearch.trim());
+      if (err || !res) {
+        setRegistryResults([]);
+      } else {
+        setRegistryResults(res);
+      }
+    } catch {
+      setRegistryResults([]);
+    } finally {
+      setIsSearchingRegistry(false);
+    }
+  }, [registrySearch]);
+
+  const handleClearRegistrySearch = useCallback(() => {
+    setRegistrySearch('');
+    setRegistryResults([]);
+    setHasSearchedRegistry(false);
+  }, []);
+
+  useEffect(() => {
+    const term = registrySearch.trim();
+    if (term.length < 2) {
+      if (term.length === 0 && hasSearchedRegistry) {
+        setRegistryResults([]);
+        setHasSearchedRegistry(false);
+      }
+      return;
+    }
+    const timer = setTimeout(() => {
+      handleSearchRegistry();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [registrySearch, handleSearchRegistry, hasSearchedRegistry]);
+
+  const handleSelectUnsettledInvoice = useCallback((inv: InvoiceRecord) => {
+    const isPromissory = Boolean(
+      inv.notes?.includes('[PROMISSORY NOTE]') ||
+      inv.notes?.toLowerCase().includes('promissory') ||
+      (inv as any).isDeferred
+    );
+    const p: BillingPatient = {
+      key: `unsettled-${inv.id}`,
+      patientId: inv.patientId || '',
+      patientName: inv.patientName,
+      queueItemId: inv.queueItemId,
+      hasOpenSoa: true,
+      activeInvoice: inv,
+      isAlreadyBilled: false,
+      existingInvoiceNumber: inv.invoiceNumber,
+      isPromissory,
+    };
+    handleSelectPatient(p);
+    setBillingMode('queue');
+  }, [handleSelectPatient]);
 
   useEffect(() => {
     if (loading) return;
-    const params = route.params as { patientId?: string; patientName?: string } | undefined;
+    const params = route.params as { patientId?: string; patientName?: string; invoiceId?: string } | undefined;
+    if (params?.invoiceId && handledParamPatientRef.current !== params.invoiceId) {
+      handledParamPatientRef.current = params.invoiceId;
+      const matchedInv = invoices.find((x) => x.id === params.invoiceId);
+      if (matchedInv) {
+        handleSelectUnsettledInvoice(matchedInv);
+        return;
+      }
+    }
     if (params?.patientId && handledParamPatientRef.current !== params.patientId) {
       handledParamPatientRef.current = params.patientId;
       const p = patients.find((x) => x.patientId === params.patientId);
@@ -467,7 +828,7 @@ export default function BillingScreen() {
         handleSelectPatient(newP);
       }
     }
-  }, [route.params, patients, loading, invoices, handleSelectPatient]);
+  }, [route.params, patients, loading, invoices, handleSelectPatient, handleSelectUnsettledInvoice]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -490,12 +851,20 @@ export default function BillingScreen() {
   }
   const discountAmount = Math.round(grossAmount * (discountPercentage / 100));
   const netAmount = Math.max(0, grossAmount - discountAmount);
+  const previousPayments = activeInvoice?.amountPaid ?? 0;
+  const balanceDue = Math.max(0, netAmount - previousPayments);
+
+  const parsedPartial = parseFloat(partialAmount);
+  const amountToCollect =
+    isPartialPayment && !isNaN(parsedPartial) && parsedPartial > 0
+      ? Math.min(balanceDue, parsedPartial)
+      : balanceDue;
 
   const tenderedVal = parseFloat(cashTendered) || 0;
-  const changeDue = paymentMethod === 'Cash' ? Math.max(0, tenderedVal - netAmount) : 0;
+  const changeDue = paymentMethod === 'Cash' ? Math.max(0, tenderedVal - amountToCollect) : 0;
 
   const patientChoices =
-    selectedPatient && !patients.some((p) => p.key === selectedPatient.key)
+    selectedPatient && !selectedPatient.isWalkInRetail && !patients.some((p) => p.key === selectedPatient.key)
       ? [selectedPatient, ...patients]
       : patients;
 
@@ -607,22 +976,6 @@ export default function BillingScreen() {
     notify.success(`Added ${name} with clinician attribution.`);
   };
 
-  const handleSelectUnsettledInvoice = (inv: InvoiceRecord) => {
-    const p: BillingPatient = {
-      key: `unsettled-${inv.id}`,
-      patientId: inv.patientId,
-      patientName: inv.patientName,
-      queueItemId: inv.queueItemId,
-      hasOpenSoa: true,
-      activeInvoice: inv,
-      isAlreadyBilled: false,
-      existingInvoiceNumber: inv.invoiceNumber,
-      isPromissory: true,
-    };
-    handleSelectPatient(p);
-    setActiveTab('active');
-  };
-
   const handleDeferPayment = async () => {
     if (!selectedPatient) return;
     if (lineItems.length === 0) {
@@ -691,7 +1044,7 @@ export default function BillingScreen() {
       setActiveInvoice(null);
       setLineItems([]);
       await loadInitialData();
-      setActiveTab('unsettled');
+      setBillingMode('unsettled');
     } catch (err: any) {
       Alert.alert('Promissory note failed', err?.message || 'Unable to log promissory note.');
     } finally {
@@ -721,6 +1074,7 @@ export default function BillingScreen() {
       setDiscountId(currentPatientProfile?.pwdId || '');
     } else if (type === 'PhilHealthKonsulta') {
       setDiscountId(currentPatientProfile?.philHealthNumber || '');
+      setPaymentMethod('PhilHealthKonsulta');
     } else {
       setDiscountId('');
     }
@@ -736,7 +1090,7 @@ export default function BillingScreen() {
     if (!target) return;
     const invId = 'invoiceId' in target ? target.invoiceId : ('id' in target ? target.id : undefined);
     if (invId) {
-      openDocument(clinicService.getInvoicePdfUrl(invId));
+      openDocument(clinicService.getReceiptPdfUrl(invId));
       return;
     }
     handlePrintProfessionalReceipt(target);
@@ -744,11 +1098,6 @@ export default function BillingScreen() {
 
   const handlePrintProfessionalReceipt = (receipt?: ReceiptSummary | InvoiceRecord) => {
     if (receipt) {
-      const invId = 'invoiceId' in receipt ? receipt.invoiceId : ('id' in receipt ? receipt.id : undefined);
-      if (invId) {
-        openDocument(clinicService.getInvoicePdfUrl(invId));
-        return;
-      }
       if ('items' in receipt && Array.isArray((receipt as any).items)) {
         printProfessionalReceipt(receipt as ReceiptSummary, printLetterhead);
       } else {
@@ -761,8 +1110,8 @@ export default function BillingScreen() {
           patientId: inv.patientId,
           cashierName: payment?.receivedByStaffName || inv.billedByStaffName || currentName,
           paidAt: payment?.paymentDate
-            ? new Date(payment.paymentDate).toLocaleString('en-PH')
-            : new Date(inv.invoiceDate).toLocaleString('en-PH'),
+            ? formatClinicDateTime(payment.paymentDate)
+            : formatClinicDateTime(inv.invoiceDate),
           paymentMethod: payment?.method || 'Cash',
           referenceNumber: payment?.referenceNumber,
           grossAmount: inv.grossAmount,
@@ -799,8 +1148,8 @@ export default function BillingScreen() {
       patientId: inv.patientId,
       cashierName: payment?.receivedByStaffName || inv.billedByStaffName || currentName,
       paidAt: payment?.paymentDate
-        ? new Date(payment.paymentDate).toLocaleString('en-PH')
-        : new Date(inv.invoiceDate).toLocaleString('en-PH'),
+        ? formatClinicDateTime(payment.paymentDate)
+        : formatClinicDateTime(inv.invoiceDate),
       paymentMethod: payment?.method || 'Cash',
       referenceNumber: payment?.referenceNumber,
       grossAmount: inv.grossAmount,
@@ -885,13 +1234,32 @@ export default function BillingScreen() {
       return;
     }
 
-    if ((discountType === 'SeniorCitizen' || discountType === 'Pwd') && !discountId.trim()) {
-      notify.error('Enter the Senior OSCA ID or PWD ID number to apply the 20% statutory discount.');
+    if ((discountType === 'SeniorCitizen' || discountType === 'Pwd') && discountId.trim().length < 3) {
+      notify.error('Enter a valid Senior OSCA ID or PWD ID number (at least 3 characters) to apply the 20% statutory discount.');
       return;
     }
 
-    if (paymentMethod === 'Cash' && tenderedVal < netAmount) {
-      notify.error(`Insufficient cash tendered. Net amount is ${formatPeso(netAmount)}.`);
+    if (amountToCollect <= 0 && balanceDue > 0) {
+      notify.error('No outstanding balance to collect.');
+      return;
+    }
+
+    if (paymentMethod === 'PhilHealthKonsulta' && !referenceNumber.trim()) {
+      notify.error('Enter a valid PhilHealth claim or transaction reference number to settle this account.');
+      return;
+    }
+
+    if (paymentMethod === 'Cash' && tenderedVal < amountToCollect) {
+      notify.error(`Insufficient cash tendered. Amount to collect is ${formatPeso(amountToCollect)}.`);
+      return;
+    }
+
+    const isRetail = billingMode === 'retail' || Boolean(selectedPatient.isWalkInRetail);
+    const effWalkInName = isRetail ? walkInCustomerName.trim() : selectedPatient.patientName;
+
+    if (isRetail && !effWalkInName) {
+      setWalkInCustomerTouched(true);
+      notify.error('Customer name is required for Walk-In Retail POS.');
       return;
     }
 
@@ -907,7 +1275,11 @@ export default function BillingScreen() {
       const [updatedInvoice, updateErr] = await clinicService.updateInvoice(activeInvoice.id, {
         discountType,
         discountIdNumber: discountId,
-        notes: `Settled via ${paymentMethod}`,
+        notes: isPartialPayment && amountToCollect < balanceDue
+          ? `Partial payment via ${paymentMethod}`
+          : isRetail
+          ? `Retail POS sale via ${paymentMethod}`
+          : `Settled via ${paymentMethod}`,
         lineItems: lineItems.map(l => ({
           itemCode: l.code,
           description: l.name,
@@ -925,7 +1297,7 @@ export default function BillingScreen() {
         return;
       }
     } else {
-      if (selectedPatient.isAlreadyBilled && !allowDuplicate) {
+      if (selectedPatient.isAlreadyBilled && !allowDuplicate && !isRetail && !selectedPatient.hasAddOnUnbilled) {
         setIsProcessing(false);
         Alert.alert(
           'Duplicate invoice blocked',
@@ -935,14 +1307,20 @@ export default function BillingScreen() {
       }
 
       const invoicePayload = {
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
+        patientId: isRetail ? undefined : selectedPatient.patientId,
+        patientName: effWalkInName,
+        isWalkInRetail: isRetail,
+        walkInCustomerName: isRetail ? effWalkInName : undefined,
         queueItemId: selectedPatient.queueItemId,
         attendingDoctorId: selectedPatient.doctorId,
         discountType,
         discountIdNumber: discountId,
-        notes: `Settled via ${paymentMethod}`,
-        allowDuplicate,
+        notes: isPartialPayment && amountToCollect < balanceDue
+          ? `Partial payment via ${paymentMethod}`
+          : isRetail
+          ? `Retail POS sale via ${paymentMethod}`
+          : `Settled via ${paymentMethod}`,
+        allowDuplicate: isRetail ? true : (allowDuplicate || Boolean(selectedPatient.hasAddOnUnbilled)),
         lineItems: lineItems.map(l => ({
           serviceItemId: undefined,
           itemCode: l.code,
@@ -967,12 +1345,17 @@ export default function BillingScreen() {
       orNumber = invoice.invoiceNumber;
     }
 
-    if (netAmount > 0) {
+    if (amountToCollect > 0 || balanceDue === 0) {
+      const isPartial = isPartialPayment && amountToCollect < balanceDue;
       const [paidInvoice, payErr] = await clinicService.recordPayment(invoiceToPayId, {
-        amount: netAmount,
+        amount: amountToCollect,
         method: paymentMethod,
-        referenceNumber: referenceNumber || undefined,
-        notes: `Received from ${selectedPatient.patientName} by ${currentName}`,
+        referenceNumber: referenceNumber?.trim() || undefined,
+        notes: isPartial
+          ? `Partial payment received from ${effWalkInName} by ${currentName}`
+          : balanceDue === 0
+          ? `Settled (₱0.00 / 100% discount / ${paymentMethod}) by ${currentName}${referenceNumber ? ` [Ref: ${referenceNumber.trim()}]` : ''}`
+          : `Received from ${effWalkInName} by ${currentName}`,
       });
 
       if (payErr || !paidInvoice) {
@@ -1009,25 +1392,39 @@ export default function BillingScreen() {
       invoiceId: invoiceToPayId,
       orNumber,
       invoiceNumber: activeInvoice?.invoiceNumber,
-      patientName: selectedPatient.patientName,
-      patientId: selectedPatient.patientId,
+      patientName: effWalkInName,
+      patientId: isRetail ? undefined : selectedPatient.patientId,
       cashierName: currentName,
-      paidAt: new Date().toLocaleString('en-PH'),
+      paidAt: formatClinicDateTime(new Date()),
       paymentMethod,
       referenceNumber: referenceNumber || undefined,
       grossAmount,
       discountType,
       discountIdNumber: discountId,
       discountAmount,
-      netAmount,
+      netAmount: amountToCollect,
       cashTendered: paymentMethod === 'Cash' ? tenderedVal : undefined,
       change: changeDue,
       items: receiptItems,
     });
     setReceiptModalVisible(true);
 
+    if (isPartialPayment && amountToCollect < balanceDue) {
+      const remaining = Math.max(0, balanceDue - amountToCollect);
+      notify.success(`Partial payment of ${formatPeso(amountToCollect)} recorded. Remaining balance: ${formatPeso(remaining)}.`);
+    } else if (balanceDue === 0) {
+      notify.success(`PhilHealth / zero-balance settlement recorded. Official receipt #${orNumber} issued.`);
+    } else {
+      notify.success(`Payment of ${formatPeso(amountToCollect)} recorded. Invoice settled.`);
+    }
+
+    // Auto-complete linked queue ticket on full payment settlement (F13)
+    if ((!isPartialPayment || amountToCollect >= balanceDue || balanceDue === 0) && selectedPatient?.queueItemId) {
+      clinicService.completeQueueItem(selectedPatient.queueItemId).catch(() => {});
+    }
+
     // Persist Senior Citizen / PWD ID to patient profile in background if updated
-    if (currentPatientProfile && selectedPatient) {
+    if (currentPatientProfile && selectedPatient && !selectedPatient.isWalkInRetail) {
       const seniorIdChanged =
         discountType === 'SeniorCitizen' &&
         discountId.trim() &&
@@ -1066,15 +1463,35 @@ export default function BillingScreen() {
     notify.success(`Payment recorded. Official receipt #${orNumber} issued.`);
 
     // Reset billing form to prevent accidental duplicate submission
-    setSelectedPatient(null);
-    setActiveInvoice(null);
-    setCurrentPatientProfile(null);
-    setLineItems([]);
-    setCashTendered('');
-    setReferenceNumber('');
-    setDiscountId('');
-    setDiscountType('None');
-    setAllowDuplicate(false);
+    if (isRetail) {
+      setLineItems([]);
+      setCashTendered('');
+      setReferenceNumber('');
+      setDiscountId('');
+      setDiscountType('None');
+      setWalkInCustomerName('');
+      setWalkInCustomerTouched(false);
+      setSelectedPatient({
+        key: 'retail-walk-in',
+        patientId: '',
+        patientName: '',
+        isWalkInRetail: true,
+      });
+    } else {
+      setSelectedPatient(null);
+      setActiveInvoice(null);
+      setCurrentPatientProfile(null);
+      setSelectedHealthScreening(null);
+      setYakapCoverage(null);
+      setTrackYakapCoPayment(false);
+      setYakapCoPaymentAmount('');
+      setLineItems([]);
+      setCashTendered('');
+      setReferenceNumber('');
+      setDiscountId('');
+      setDiscountType('None');
+      setAllowDuplicate(false);
+    }
 
     // Clear route param so subsequent loadInitialData does NOT re-select this patient!
     handledParamPatientRef.current = null;
@@ -1139,21 +1556,17 @@ export default function BillingScreen() {
   );
 
   const activePatients = patientChoices.filter(
-    (p) => (!p.isAlreadyBilled || p.hasOpenSoa) && !p.isPromissory
+    (p) => !p.isWalkInRetail && (!p.isAlreadyBilled || p.hasOpenSoa || p.hasAddOnUnbilled) && !p.isPromissory
   );
-  const patientsToBill = selectedPatient && !activePatients.some((p) => p.key === selectedPatient.key)
+  const patientsToBill = selectedPatient && !activePatients.some((p) => p.key === selectedPatient.key) && !selectedPatient.isWalkInRetail
     ? [selectedPatient, ...activePatients]
     : activePatients;
   const paidInvoicesToday = invoices.filter((i) => i.status === 'Paid');
-  const unsettledInvoices = invoices.filter(
-    (i) =>
-      i.status !== 'Paid' &&
-      i.status !== 'Voided' &&
-      (Boolean(i.notes?.includes('[PROMISSORY NOTE]')) ||
-        Boolean(i.notes?.toLowerCase().includes('promissory')) ||
-        Boolean((i as any).isDeferred) ||
-        patientChoices.some((p) => p.isPromissory && (p.activeInvoice?.id === i.id || p.patientId === i.patientId))),
-  );
+  const unsettledInvoices = invoices.filter((i) => {
+    if (i.status === 'Paid' || i.status === 'Voided') return false;
+    const balance = i.balanceDue ?? Math.max(0, i.netAmount - (i.amountPaid ?? 0));
+    return balance > 0;
+  });
 
   const renderPatientSelector = () => (
     <Card>
@@ -1172,14 +1585,20 @@ export default function BillingScreen() {
         <View style={styles.chipRow}>
           {patientsToBill.map(p => {
             const isSelected = selectedPatient?.key === p.key;
-            const statusTag = p.hasOpenSoa ? ' (SOA Ready)' : '';
+            const statusTag = p.hasOpenSoa
+              ? ' (SOA Ready)'
+              : p.hasAddOnUnbilled
+              ? ' (Add-on Unbilled)'
+              : '';
+            const isDv = p.isDirectVisit || p.queueNumber?.startsWith('DV-');
+            const queueLabel = p.queueNumber ? (isDv ? `Direct • ${p.queueNumber}` : p.queueNumber) : null;
             return (
               <Button
                 key={p.key}
                 size="sm"
                 variant={isSelected ? 'primary' : p.hasOpenSoa ? 'secondary' : 'outline'}
                 title={
-                  (p.queueNumber ? `${p.queueNumber} · ${p.patientName}` : p.patientName) + statusTag
+                  (queueLabel ? `${queueLabel} · ${p.patientName}` : p.patientName) + statusTag
                 }
                 onPress={() => handleSelectPatient(p)}
               />
@@ -1207,8 +1626,8 @@ export default function BillingScreen() {
             const payment = inv.payments?.[0];
             const receiptOr = payment?.paymentNumber || inv.invoiceNumber;
             const payTime = payment?.paymentDate
-              ? new Date(payment.paymentDate).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
-              : new Date(inv.invoiceDate).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+              ? formatClinicTime(payment.paymentDate)
+              : formatClinicTime(inv.invoiceDate);
             return (
               <View key={inv.id} style={styles.billedRow}>
                 <View style={styles.flexFill}>
@@ -1373,6 +1792,54 @@ export default function BillingScreen() {
     </Modal>
   );
 
+  const isSelectedYakapScreening = Boolean(
+    selectedHealthScreening?.workflowMode === 'YakapAvailment' ||
+      (selectedPatient?.visitWorkflowMode === 'YakapAvailment' &&
+        selectedPatient?.visitType === 'PreventiveHealthAssessment')
+  );
+
+  const activeYakapEnlistment = useMemo(() => {
+    if (!yakapCoverage?.enlistments?.length) return null;
+    const fpeEnlistmentId = yakapCoverage.currentYearFpeStatus?.enlistmentId;
+    return (
+      (fpeEnlistmentId
+        ? yakapCoverage.enlistments.find((e) => e.id === fpeEnlistmentId)
+        : undefined) || yakapCoverage.enlistments[0]
+    );
+  }, [yakapCoverage]);
+
+  const upsertYakapCoPaymentLineItem = (enabled: boolean, rawAmount: string) => {
+    const parsed = Math.max(0, parseFloat(rawAmount) || 0);
+    setLineItems((prev) => {
+      const withoutCopay = prev.filter((item) => item.code !== 'YAKAP-COPAY');
+      if (!enabled || parsed <= 0) {
+        return withoutCopay;
+      }
+      return [
+        ...withoutCopay,
+        {
+          id: 'yakap-copay',
+          code: 'YAKAP-COPAY',
+          name: 'PhilHealth Annual Checkup Optional Co-Payment',
+          category: 'Co-Payment',
+          price: parsed,
+          qty: 1,
+          doctorId: selectedHealthScreening?.examinedByDoctorId || selectedPatient?.doctorId,
+          doctorName: selectedHealthScreening?.examinedByDoctorName || selectedPatient?.doctorName,
+        },
+      ];
+    });
+    if (enabled && parsed > 0) {
+      setDiscountType('None');
+      if (paymentMethod === 'PhilHealthKonsulta') {
+        setPaymentMethod('Cash');
+      }
+    } else {
+      setDiscountType('PhilHealthKonsulta');
+      setPaymentMethod('PhilHealthKonsulta');
+    }
+  };
+
   const renderInvoiceItems = () => (
     <Card>
       <CardHeader
@@ -1380,6 +1847,86 @@ export default function BillingScreen() {
         icon="receipt"
         rightAction={<Badge label={`${lineItems.length}`} variant="neutral" />}
       />
+
+      {isSelectedYakapScreening && (
+        <View style={styles.yakapCoveredBanner} testID="billing-yakap-fpe-banner">
+          <View style={styles.yakapCoveredHeader}>
+            <Badge
+              label="PhilHealth Annual Checkup Covered (₱0.00)"
+              variant="success"
+              size="sm"
+              icon="shieldCheck"
+            />
+            {selectedHealthScreening?.profilingTransNo || yakapCoverage?.currentYearFpeStatus?.profilingTransNo ? (
+              <Badge
+                label={`Ref: ${selectedHealthScreening?.profilingTransNo || yakapCoverage?.currentYearFpeStatus?.profilingTransNo}`}
+                variant="primary"
+                size="sm"
+              />
+            ) : null}
+          </View>
+          <ThemedText variant="caption" color={theme.colors.successText}>
+            PhilHealth Annual Checkup is fully covered (₱0.00).
+            {selectedHealthScreening?.philHealthAtc
+              ? ` Visit Code: ${selectedHealthScreening.philHealthAtc}.`
+              : selectedHealthScreening?.isWalkedIn
+              ? ' Walk-In.'
+              : ''}
+          </ThemedText>
+          {activeYakapEnlistment?.hasCoPayment ? (
+            <ThemedText variant="captionBold" color={theme.colors.successText}>
+              Enlistment Co-Payment Logged: {formatPeso(activeYakapEnlistment.coPaymentAmount ?? 0)}
+              {activeYakapEnlistment.coPaymentBalance != null
+                ? ` · Balance: ${formatPeso(activeYakapEnlistment.coPaymentBalance)}`
+                : ''}
+              {activeYakapEnlistment.coPaymentDate
+                ? ` · Date: ${formatClinicDate(activeYakapEnlistment.coPaymentDate)}`
+                : ''}
+            </ThemedText>
+          ) : null}
+          <View style={styles.yakapCopayRow}>
+            <Button
+              size="xs"
+              variant={trackYakapCoPayment ? 'primary' : 'outline'}
+              icon={trackYakapCoPayment ? 'check' : 'plus'}
+              title={trackYakapCoPayment ? 'Optional Co-Payment Enabled' : 'Track Optional Co-Payment'}
+              testID="yakap-copay-toggle"
+              onPress={() => {
+                const next = !trackYakapCoPayment;
+                setTrackYakapCoPayment(next);
+                if (!next) {
+                  setYakapCoPaymentAmount('');
+                  upsertYakapCoPaymentLineItem(false, '0');
+                } else {
+                  const defaultAmt =
+                    yakapCoPaymentAmount ||
+                    (activeYakapEnlistment?.coPaymentBalance && activeYakapEnlistment.coPaymentBalance > 0
+                      ? String(activeYakapEnlistment.coPaymentBalance)
+                      : '');
+                  setYakapCoPaymentAmount(defaultAmt);
+                  if (defaultAmt) {
+                    upsertYakapCoPaymentLineItem(true, defaultAmt);
+                  }
+                }
+              }}
+            />
+            {trackYakapCoPayment ? (
+              <View style={styles.yakapCopayInputWrap}>
+                <Input
+                  label="Optional Co-Payment (₱)"
+                  keyboardType="numeric"
+                  placeholder="0.00"
+                  value={yakapCoPaymentAmount}
+                  onChangeText={(val) => {
+                    setYakapCoPaymentAmount(val);
+                    upsertYakapCoPaymentLineItem(true, val);
+                  }}
+                />
+              </View>
+            ) : null}
+          </View>
+        </View>
+      )}
 
       {activeInvoice && (
         <View style={styles.soaHeaderBanner}>
@@ -1414,21 +1961,35 @@ export default function BillingScreen() {
         <View style={styles.soaHeaderBanner}>
           <Icon name="receipt" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
           <View style={styles.flexFill}>
-            <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-              Draft Statement of Account
-            </ThemedText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+                {selectedPatient?.isWalkInRetail
+                  ? 'Walk-In Retail Cart'
+                  : selectedPatient?.hasAddOnUnbilled
+                  ? 'Supplemental Statement of Account'
+                  : 'Draft Statement of Account'}
+              </ThemedText>
+              {selectedPatient?.hasAddOnUnbilled && (
+                <Badge label="Add-on Unbilled" variant="warning" size="sm" />
+              )}
+            </View>
             <ThemedText variant="caption" color={theme.colors.primaryDark}>
-              {selectedPatient?.doctorName ? `Attending: Dr. ${selectedPatient.doctorName} • ` : ''}
-              Auto-populated from today's encounter &amp; procedures
+              {selectedPatient?.isWalkInRetail
+                ? `Customer: ${selectedPatient.patientName || '(Name required)'} • OTC medicines & supplies`
+                : selectedPatient?.hasAddOnUnbilled
+                ? `${selectedPatient?.doctorName ? `Attending: Dr. ${selectedPatient.doctorName} • ` : ''}Add-on unbilled procedures for ${selectedPatient.queueNumber || 'this encounter'}`
+                : `${selectedPatient?.doctorName ? `Attending: Dr. ${selectedPatient.doctorName} • ` : ''}Auto-populated from today's encounter & procedures`}
             </ThemedText>
           </View>
-          <Button
-            size="sm"
-            variant="outline"
-            icon="fileText"
-            title="Print SOA (PDF)"
-            onPress={handlePrintInvoicePdf}
-          />
+          {!selectedPatient?.isWalkInRetail && (
+            <Button
+              size="sm"
+              variant="outline"
+              icon="fileText"
+              title="Print SOA (PDF)"
+              onPress={handlePrintInvoicePdf}
+            />
+          )}
         </View>
       )}
 
@@ -1460,37 +2021,37 @@ export default function BillingScreen() {
               </ThemedText>
             </View>
             <View style={styles.qtyStepperRow}>
-              <Pressable
+              <Button
+                variant="ghost"
+                size="xs"
+                icon="minus"
+                iconOnly
                 onPress={() => handleUpdateQty(item.id, item.qty - 1)}
-                style={styles.qtyBtn}
-                accessibilityRole="button"
                 accessibilityLabel={`Decrease quantity of ${item.name}`}
-              >
-                <Icon name="minus" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-              </Pressable>
+              />
               <ThemedText variant="bodyBold" style={styles.qtyText}>
                 {item.qty}
               </ThemedText>
-              <Pressable
+              <Button
+                variant="ghost"
+                size="xs"
+                icon="plus"
+                iconOnly
                 onPress={() => handleUpdateQty(item.id, item.qty + 1)}
-                style={styles.qtyBtn}
-                accessibilityRole="button"
                 accessibilityLabel={`Increase quantity of ${item.name}`}
-              >
-                <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-              </Pressable>
+              />
             </View>
             <ThemedText variant="bodyBold" color={theme.colors.primary}>
               {formatPeso(item.price * item.qty)}
             </ThemedText>
-            <Pressable
+            <Button
+              variant="dangerGhost"
+              size="xs"
+              icon="close"
+              iconOnly
               onPress={() => handleRemoveItem(item.id)}
-              style={styles.removeBtn}
-              accessibilityRole="button"
               accessibilityLabel={`Remove ${item.name}`}
-            >
-              <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+            />
           </View>
         ))
       )}
@@ -1528,15 +2089,24 @@ export default function BillingScreen() {
           />
         ) : (
           <View style={styles.chipRow}>
-            {services.map(svc => (
-              <Button
+            {services.map((svc) => (
+              <Pressable
                 key={svc.id}
-                size="sm"
-                variant="outline"
-                icon="plus"
-                title={`${svc.name} · ${formatPeso(svc.standardPrice)}`}
+                style={styles.servicePriceChip}
                 onPress={() => handleAddService(svc)}
-              />
+                accessibilityRole="button"
+                accessibilityLabel={`Add service ${svc.name} for ${formatPeso(svc.standardPrice)}`}
+              >
+                <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                <ThemedText variant="smallBold" color={theme.colors.text}>
+                  {svc.name}
+                </ThemedText>
+                <View style={styles.servicePriceBadge}>
+                  <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                    {formatPeso(svc.standardPrice)}
+                  </ThemedText>
+                </View>
+              </Pressable>
             ))}
           </View>
         )}
@@ -1588,13 +2158,87 @@ export default function BillingScreen() {
 
       {paymentMethod === 'Cash' ? (
         <>
+          {balanceDue > 0 && (
+            <View style={styles.paymentModeSegment}>
+              <Pressable
+                style={[styles.paymentModeTab, !isPartialPayment && styles.paymentModeTabActive]}
+                onPress={() => {
+                  setIsPartialPayment(false);
+                  setPartialAmount('');
+                }}
+              >
+                <ThemedText
+                  variant={!isPartialPayment ? 'bodyBold' : 'body'}
+                  color={!isPartialPayment ? theme.colors.primary : theme.colors.textSecondary}
+                >
+                  Full Payment ({formatPeso(balanceDue)})
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.paymentModeTab, isPartialPayment && styles.paymentModeTabActive]}
+                onPress={() => {
+                  setIsPartialPayment(true);
+                  setPartialAmount((balanceDue / 2).toFixed(2));
+                }}
+              >
+                <ThemedText
+                  variant={isPartialPayment ? 'bodyBold' : 'body'}
+                  color={isPartialPayment ? theme.colors.primary : theme.colors.textSecondary}
+                >
+                  Partial Payment
+                </ThemedText>
+              </Pressable>
+            </View>
+          )}
+
+          {isPartialPayment && (
+            <View style={styles.partialPayBox}>
+              <Input
+                label="Partial amount to collect now"
+                keyboardType="numeric"
+                placeholder={balanceDue.toFixed(2)}
+                value={partialAmount}
+                onChangeText={setPartialAmount}
+              />
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Remaining balance after this payment: {formatPeso(Math.max(0, balanceDue - amountToCollect))}
+              </ThemedText>
+            </View>
+          )}
+
           <Input
             label="Cash tendered"
             keyboardType="numeric"
-            placeholder={netAmount.toFixed(2)}
+            placeholder={amountToCollect.toFixed(2)}
             value={cashTendered}
             onChangeText={setCashTendered}
           />
+          <View style={styles.fastCashRow}>
+            <Button
+              size="sm"
+              variant={cashTendered === amountToCollect.toFixed(2) ? 'primary' : 'secondary'}
+              title="Exact"
+              onPress={() => setCashTendered(amountToCollect.toFixed(2))}
+            />
+            <Button
+              size="sm"
+              variant={cashTendered === '100' ? 'primary' : 'secondary'}
+              title="₱100"
+              onPress={() => setCashTendered('100')}
+            />
+            <Button
+              size="sm"
+              variant={cashTendered === '500' ? 'primary' : 'secondary'}
+              title="₱500"
+              onPress={() => setCashTendered('500')}
+            />
+            <Button
+              size="sm"
+              variant={cashTendered === '1000' ? 'primary' : 'secondary'}
+              title="₱1,000"
+              onPress={() => setCashTendered('1000')}
+            />
+          </View>
           <View style={styles.summaryRow}>
             <ThemedText variant="body" color={theme.colors.textSecondary}>
               Change due
@@ -1605,12 +2249,62 @@ export default function BillingScreen() {
           </View>
         </>
       ) : (
-        <Input
-          label="Transaction or reference number"
-          placeholder="Reference or approval number"
-          value={referenceNumber}
-          onChangeText={setReferenceNumber}
-        />
+        <>
+          {balanceDue > 0 && (
+            <View style={styles.paymentModeSegment}>
+              <Pressable
+                style={[styles.paymentModeTab, !isPartialPayment && styles.paymentModeTabActive]}
+                onPress={() => {
+                  setIsPartialPayment(false);
+                  setPartialAmount('');
+                }}
+              >
+                <ThemedText
+                  variant={!isPartialPayment ? 'bodyBold' : 'body'}
+                  color={!isPartialPayment ? theme.colors.primary : theme.colors.textSecondary}
+                >
+                  Full Payment ({formatPeso(balanceDue)})
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.paymentModeTab, isPartialPayment && styles.paymentModeTabActive]}
+                onPress={() => {
+                  setIsPartialPayment(true);
+                  setPartialAmount((balanceDue / 2).toFixed(2));
+                }}
+              >
+                <ThemedText
+                  variant={isPartialPayment ? 'bodyBold' : 'body'}
+                  color={isPartialPayment ? theme.colors.primary : theme.colors.textSecondary}
+                >
+                  Partial Payment
+                </ThemedText>
+              </Pressable>
+            </View>
+          )}
+
+          {isPartialPayment && (
+            <View style={styles.partialPayBox}>
+              <Input
+                label="Partial amount to collect now"
+                keyboardType="numeric"
+                placeholder={balanceDue.toFixed(2)}
+                value={partialAmount}
+                onChangeText={setPartialAmount}
+              />
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Remaining balance after this payment: {formatPeso(Math.max(0, balanceDue - amountToCollect))}
+              </ThemedText>
+            </View>
+          )}
+
+          <Input
+            label="Transaction or reference number"
+            placeholder="Reference or approval number"
+            value={referenceNumber}
+            onChangeText={setReferenceNumber}
+          />
+        </>
       )}
     </Card>
   );
@@ -1639,27 +2333,65 @@ export default function BillingScreen() {
           {formatPeso(netAmount)}
         </ThemedText>
       </View>
+      {previousPayments > 0 && (
+        <>
+          <View style={styles.summaryRow}>
+            <ThemedText variant="body" color={theme.colors.successText}>
+              Previously paid
+            </ThemedText>
+            <ThemedText variant="bodyBold" color={theme.colors.successText}>
+              -{formatPeso(previousPayments)}
+            </ThemedText>
+          </View>
+          <View style={[styles.summaryRow, styles.netRow]}>
+            <ThemedText variant="h3">Remaining balance due</ThemedText>
+            <ThemedText variant="title" color={theme.colors.emergencyText}>
+              {formatPeso(balanceDue)}
+            </ThemedText>
+          </View>
+        </>
+      )}
 
       {selectedPatient?.isAlreadyBilled && !activeInvoice && (
-        <View style={styles.duplicateWarningBox}>
-          <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
-          <View style={styles.flexFill}>
-            <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
-              Patient Already Billed & Settled
-            </ThemedText>
-            <ThemedText variant="caption" color={theme.colors.emergencyText}>
-              Invoice #{selectedPatient.existingInvoiceNumber} was already issued and paid for this encounter today.
-            </ThemedText>
-            <Pressable
-              onPress={() => setAllowDuplicate((prev) => !prev)}
-              style={styles.overrideCheck}
-            >
-              <ThemedText variant="captionBold" color={allowDuplicate ? theme.colors.emergencyText : theme.colors.primary}>
-                {allowDuplicate ? '[Authorized] Additional billing permitted' : 'Authorize additional / duplicate invoice'}
+        selectedPatient.hasAddOnUnbilled ? (
+          <View style={[styles.duplicateWarningBox, { borderColor: theme.colors.warningBorder, backgroundColor: theme.colors.warningBg }]}>
+            <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.warningText} />
+            <View style={styles.flexFill}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <ThemedText variant="bodyBold" color={theme.colors.warningText}>
+                  Add-On Unbilled Procedures
+                </ThemedText>
+                <Badge label="Add-on Unbilled" variant="warning" size="sm" />
+              </View>
+              <ThemedText variant="caption" color={theme.colors.warningText}>
+                Invoice #{selectedPatient.existingInvoiceNumber} was settled earlier. Newly ordered procedures ({selectedPatient.addOnUnbilledCount || lineItems.length}) can be billed as a supplemental invoice.
               </ThemedText>
-            </Pressable>
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.duplicateWarningBox}>
+            <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
+            <View style={styles.flexFill}>
+              <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
+                Patient Already Billed & Settled
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.emergencyText}>
+                Invoice #{selectedPatient.existingInvoiceNumber} was already issued and paid for this encounter today.
+              </ThemedText>
+              <Button
+                variant={allowDuplicate ? 'dangerOutline' : 'outline'}
+                size="xs"
+                title={
+                  allowDuplicate
+                    ? '[Authorized] Additional billing permitted'
+                    : 'Authorize additional / duplicate invoice'
+                }
+                onPress={() => setAllowDuplicate((prev) => !prev)}
+                style={styles.overrideCheck}
+              />
+            </View>
+          </View>
+        )
       )}
 
       <View style={styles.settleActionRow}>
@@ -1668,20 +2400,40 @@ export default function BillingScreen() {
           size="lg"
           icon="check"
           title={
-            activeInvoice
-              ? `Settle SOA · ${formatPeso(netAmount)}`
-              : `Collect & Issue Receipt · ${formatPeso(netAmount)}`
+            isPartialPayment && amountToCollect < balanceDue
+              ? `Collect Partial · ${formatPeso(amountToCollect)}`
+              : balanceDue === 0
+              ? paymentMethod === 'PhilHealthKonsulta'
+                ? `Settle & Issue PhilHealth Clearance · ₱0.00`
+                : `Settle Balance · ₱0.00`
+              : activeInvoice
+              ? `Settle Balance · ${formatPeso(amountToCollect)}`
+              : `Collect & Issue Receipt · ${formatPeso(amountToCollect)}`
           }
           loading={isProcessing}
           disabled={
             !selectedPatient ||
+            (Boolean(selectedPatient.isWalkInRetail || billingMode === 'retail') && !walkInCustomerName.trim()) ||
             lineItems.length === 0 ||
-            (Boolean(selectedPatient.isAlreadyBilled) && !activeInvoice && !allowDuplicate)
+            (amountToCollect <= 0 && balanceDue > 0) ||
+            (isPartialPayment && amountToCollect <= 0) ||
+            (paymentMethod === 'PhilHealthKonsulta' && balanceDue === 0 && !referenceNumber.trim()) ||
+            (Boolean(selectedPatient.isAlreadyBilled) && !activeInvoice && !allowDuplicate && !selectedPatient.hasAddOnUnbilled && !selectedPatient.isWalkInRetail)
           }
           onPress={handleSettlePayment}
           style={styles.settlePrimaryButton}
         />
-        {selectedPatient && lineItems.length > 0 && (
+        {Boolean(selectedPatient?.isWalkInRetail || billingMode === 'retail') && !walkInCustomerName.trim() && (
+          <ThemedText variant="caption" color={theme.colors.emergencyText} style={styles.settleHelperText}>
+            Enter customer name to collect payment and issue receipt.
+          </ThemedText>
+        )}
+        {paymentMethod === 'PhilHealthKonsulta' && balanceDue === 0 && !referenceNumber.trim() && (
+          <ThemedText variant="caption" color={theme.colors.emergencyText} style={styles.settleHelperText}>
+            Enter the PhilHealth transaction or claim number above to enable settlement.
+          </ThemedText>
+        )}
+        {selectedPatient && !selectedPatient.isWalkInRetail && lineItems.length > 0 && (
           <Button
             variant="outline"
             size="md"
@@ -1702,81 +2454,403 @@ export default function BillingScreen() {
     </Card>
   );
 
-  const renderTabBar = () => (
-    <View style={styles.tabBar}>
+  const renderModeSwitcher = () => (
+    <View style={styles.modeSegment}>
       <Pressable
-        style={[styles.tabButton, activeTab === 'active' && styles.tabButtonActive]}
-        onPress={() => setActiveTab('active')}
+        style={[styles.modeTab, billingMode === 'queue' && styles.modeTabActive]}
+        onPress={() => {
+          setBillingMode('queue');
+          if (selectedPatient?.isWalkInRetail) {
+            setSelectedPatient(null);
+            setLineItems([]);
+            setActiveInvoice(null);
+          }
+        }}
         accessibilityRole="tab"
-        accessibilityState={{ selected: activeTab === 'active' }}
+        accessibilityState={{ selected: billingMode === 'queue' }}
       >
         <Icon
           name="clock"
           size={theme.sizes.iconSm}
-          color={activeTab === 'active' ? theme.colors.primary : theme.colors.textSecondary}
+          color={billingMode === 'queue' ? theme.colors.primary : theme.colors.textSecondary}
         />
         <ThemedText
-          variant={activeTab === 'active' ? 'bodyBold' : 'body'}
-          color={activeTab === 'active' ? theme.colors.primary : theme.colors.textSecondary}
+          variant={billingMode === 'queue' ? 'bodyBold' : 'body'}
+          color={billingMode === 'queue' ? theme.colors.primary : theme.colors.textSecondary}
         >
-          Active Queue
+          Today's Queue
         </ThemedText>
         <Badge
           label={`${activePatients.length}`}
-          variant={activeTab === 'active' ? 'primary' : 'neutral'}
+          variant={billingMode === 'queue' ? 'primary' : 'neutral'}
           size="sm"
         />
       </Pressable>
 
       <Pressable
-        style={[styles.tabButton, activeTab === 'unsettled' && styles.tabButtonActive]}
-        onPress={() => setActiveTab('unsettled')}
+        style={[styles.modeTab, billingMode === 'unsettled' && styles.modeTabActive]}
+        onPress={() => {
+          setBillingMode('unsettled');
+          if (selectedPatient?.isWalkInRetail) {
+            setSelectedPatient(null);
+            setLineItems([]);
+            setActiveInvoice(null);
+          }
+        }}
         accessibilityRole="tab"
-        accessibilityState={{ selected: activeTab === 'unsettled' }}
+        accessibilityState={{ selected: billingMode === 'unsettled' }}
       >
         <Icon
           name="alertCircle"
           size={theme.sizes.iconSm}
-          color={activeTab === 'unsettled' ? theme.colors.emergencyText : theme.colors.textSecondary}
+          color={billingMode === 'unsettled' ? theme.colors.emergencyText : theme.colors.textSecondary}
         />
         <ThemedText
-          variant={activeTab === 'unsettled' ? 'bodyBold' : 'body'}
-          color={activeTab === 'unsettled' ? theme.colors.emergencyText : theme.colors.textSecondary}
+          variant={billingMode === 'unsettled' ? 'bodyBold' : 'body'}
+          color={billingMode === 'unsettled' ? theme.colors.emergencyText : theme.colors.textSecondary}
         >
           Unsettled / Promissory
         </ThemedText>
         <Badge
           label={`${unsettledInvoices.length}`}
-          variant={activeTab === 'unsettled' ? 'emergency' : 'neutral'}
+          variant={billingMode === 'unsettled' ? 'emergency' : 'neutral'}
           size="sm"
         />
       </Pressable>
 
       <Pressable
-        style={[styles.tabButton, activeTab === 'paid' && styles.tabButtonActive]}
-        onPress={() => setActiveTab('paid')}
+        style={[styles.modeTab, billingMode === 'paid' && styles.modeTabActive]}
+        onPress={() => {
+          setBillingMode('paid');
+          if (selectedPatient?.isWalkInRetail) {
+            setSelectedPatient(null);
+            setLineItems([]);
+            setActiveInvoice(null);
+          }
+        }}
         accessibilityRole="tab"
-        accessibilityState={{ selected: activeTab === 'paid' }}
+        accessibilityState={{ selected: billingMode === 'paid' }}
       >
         <Icon
           name="checkCircle"
           size={theme.sizes.iconSm}
-          color={activeTab === 'paid' ? theme.colors.successText : theme.colors.textSecondary}
+          color={billingMode === 'paid' ? theme.colors.successText : theme.colors.textSecondary}
         />
         <ThemedText
-          variant={activeTab === 'paid' ? 'bodyBold' : 'body'}
-          color={activeTab === 'paid' ? theme.colors.successText : theme.colors.textSecondary}
+          variant={billingMode === 'paid' ? 'bodyBold' : 'body'}
+          color={billingMode === 'paid' ? theme.colors.successText : theme.colors.textSecondary}
         >
           Billed & Paid Today
         </ThemedText>
         <Badge
           label={`${paidInvoicesToday.length}`}
-          variant={activeTab === 'paid' ? 'success' : 'neutral'}
+          variant={billingMode === 'paid' ? 'success' : 'neutral'}
           size="sm"
         />
       </Pressable>
+
+      <Pressable
+        style={[styles.modeTab, billingMode === 'registry' && styles.modeTabActive]}
+        onPress={() => {
+          setBillingMode('registry');
+          if (selectedPatient?.isWalkInRetail) {
+            setSelectedPatient(null);
+            setLineItems([]);
+            setActiveInvoice(null);
+          }
+        }}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: billingMode === 'registry' }}
+      >
+        <Icon
+          name="search"
+          size={theme.sizes.iconSm}
+          color={billingMode === 'registry' ? theme.colors.primary : theme.colors.textSecondary}
+        />
+        <ThemedText
+          variant={billingMode === 'registry' ? 'bodyBold' : 'body'}
+          color={billingMode === 'registry' ? theme.colors.primary : theme.colors.textSecondary}
+        >
+          Patient Registry Search
+        </ThemedText>
+      </Pressable>
+
+      <Pressable
+        style={[styles.modeTab, billingMode === 'retail' && styles.modeTabActive]}
+        onPress={() => {
+          setBillingMode('retail');
+          setSelectedPatient({
+            key: 'retail-walk-in',
+            patientId: '',
+            patientName: walkInCustomerName.trim(),
+            isWalkInRetail: true,
+          });
+          setActiveInvoice(null);
+          setCurrentPatientProfile(null);
+          setSelectedHealthScreening(null);
+          setYakapCoverage(null);
+          setTrackYakapCoPayment(false);
+          setYakapCoPaymentAmount('');
+        }}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: billingMode === 'retail' }}
+      >
+        <Icon
+          name="pill"
+          size={theme.sizes.iconSm}
+          color={billingMode === 'retail' ? theme.colors.primary : theme.colors.textSecondary}
+        />
+        <ThemedText
+          variant={billingMode === 'retail' ? 'bodyBold' : 'body'}
+          color={billingMode === 'retail' ? theme.colors.primary : theme.colors.textSecondary}
+        >
+          Walk-In Retail POS
+        </ThemedText>
+      </Pressable>
     </View>
   );
+
+  const renderRetailCustomerCard = () => {
+    const isNameMissing = !walkInCustomerName.trim();
+    return (
+      <Card>
+        <CardHeader title="Walk-In Customer" icon="patient" />
+        <Input
+          label="Customer Name *"
+          placeholder="Enter customer name"
+          value={walkInCustomerName}
+          onChangeText={(text) => {
+            setWalkInCustomerName(text);
+            setWalkInCustomerTouched(true);
+            setSelectedPatient((prev) =>
+              prev?.isWalkInRetail
+                ? { ...prev, patientName: text.trim() }
+                : prev
+            );
+          }}
+          onBlur={() => setWalkInCustomerTouched(true)}
+          helperText="Customer name is required for walk-in retail transactions."
+          error={walkInCustomerTouched && isNameMissing ? 'Customer name is required.' : undefined}
+        />
+      </Card>
+    );
+  };
+
+  const renderRegistrySearch = () => {
+    const isPatientSelected = selectedPatient && !selectedPatient.isWalkInRetail;
+
+    return (
+      <>
+        {isPatientSelected && (
+          <Card style={styles.activePatientCard}>
+            <View style={styles.activePatientRow}>
+              <View style={[styles.flexFill, styles.activePatientDetails]}>
+                <View style={styles.registryResultHeader}>
+                  <Icon name="checkCircle" size={theme.sizes.iconMd} color={theme.colors.successText} />
+                  <ThemedText variant="h3" color={theme.colors.text}>
+                    {selectedPatient.patientName}
+                  </ThemedText>
+                  {(selectedPatient.isDirectVisit || selectedPatient.queueNumber?.startsWith('DV-')) && (
+                    <Badge label={`Direct • ${selectedPatient.queueNumber || 'DV'}`} variant="routine" size="sm" />
+                  )}
+                  {selectedPatient.hasAddOnUnbilled && (
+                    <Badge label="Add-on Unbilled" variant="warning" size="sm" />
+                  )}
+                  {currentPatientProfile?.patientCode && (
+                    <Badge label={`Code: ${currentPatientProfile.patientCode}`} variant="neutral" size="sm" />
+                  )}
+                  {currentPatientProfile?.philHealthNumber && (
+                    <Badge label="PhilHealth" variant="success" size="sm" />
+                  )}
+                  {currentPatientProfile?.seniorCitizenId && (
+                    <Badge label="Senior" variant="warning" size="sm" />
+                  )}
+                  {currentPatientProfile?.pwdId && (
+                    <Badge label="PWD" variant="info" size="sm" />
+                  )}
+                  {selectedPatient.hasOpenSoa && (
+                    <Badge label="Open SOA" variant="emergency" size="sm" />
+                  )}
+                </View>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  DOB: {currentPatientProfile?.dateOfBirth || 'N/A'} • Contact: {currentPatientProfile?.contactNumber || 'N/A'}
+                  {currentPatientProfile?.philHealthNumber ? ` • PIN: ${currentPatientProfile.philHealthNumber}` : ''}
+                </ThemedText>
+              </View>
+              <Button
+                size="sm"
+                variant="outline"
+                icon="search"
+                title={isRegistrySearchExpanded ? 'Hide Search' : 'Change Patient'}
+                onPress={() => setIsRegistrySearchExpanded((prev) => !prev)}
+              />
+            </View>
+          </Card>
+        )}
+
+        {(!isPatientSelected || isRegistrySearchExpanded) && (
+          <Card>
+            <CardHeader
+              title="Search Patient Registry"
+              icon="search"
+              rightAction={
+                registryResults.length > 0 ? (
+                  <Badge label={`${registryResults.length} found`} variant="neutral" size="sm" />
+                ) : undefined
+              }
+            />
+            <View style={styles.registrySearchRow}>
+              <View style={styles.flexFill}>
+                <Input
+                  label="Patient Name / MRN / Mobile / PhilHealth"
+                  placeholder="Type name, MRN, phone, or PhilHealth #..."
+                  value={registrySearch}
+                  onChangeText={setRegistrySearch}
+                  onSubmitEditing={handleSearchRegistry}
+                  rightIcon={registrySearch.trim().length > 0 ? 'x' : undefined}
+                  onRightIconPress={handleClearRegistrySearch}
+                />
+              </View>
+              <Button
+                size="md"
+                variant="primary"
+                icon="search"
+                title="Search"
+                loading={isSearchingRegistry}
+                onPress={handleSearchRegistry}
+                style={styles.registrySearchBtn}
+              />
+            </View>
+
+            {isSearchingRegistry ? (
+              <SkeletonList rows={3} rowHeight={theme.sizes.controlMd} />
+            ) : hasSearchedRegistry && registryResults.length === 0 ? (
+              <EmptyState
+                icon="search"
+                title="No patients found"
+                description="Try searching with a different name, MRN, PhilHealth #, or phone number."
+              />
+            ) : registryResults.length > 0 ? (
+              <ScrollView
+                style={styles.registryResultsScroll}
+                contentContainerStyle={styles.registryResultsList}
+                nestedScrollEnabled
+              >
+                {registryResults.map((patient) => {
+                  const isSelected = selectedPatient?.patientId === patient.id;
+                  const displayName =
+                    patient.fullName || `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Unnamed Patient';
+                  const openInv = invoices.find(
+                    (inv) => inv.patientId === patient.id && (inv.status === 'Draft' || inv.status === 'PartiallyPaid')
+                  );
+                  const paidInv = invoices.find((inv) => inv.patientId === patient.id && inv.status === 'Paid');
+                  const inQueue = patients.find((p) => p.patientId === patient.id && !p.isAlreadyBilled);
+
+                  const details: string[] = [];
+                  for (const key of configuredSearchFields) {
+                    switch (key) {
+                      case 'age':
+                        if (patient.age != null) details.push(`${patient.age}y`);
+                        break;
+                      case 'dateOfBirth':
+                        if (patient.dateOfBirth) details.push(`DOB: ${patient.dateOfBirth}`);
+                        break;
+                      case 'sex':
+                      case 'gender': {
+                        const sex = patient.sex || (patient as any).gender;
+                        if (sex) details.push(sex);
+                        break;
+                      }
+                      case 'contactNumber':
+                        if (patient.contactNumber) details.push(patient.contactNumber);
+                        break;
+                      case 'philHealthNumber':
+                        if (patient.philHealthNumber) details.push(`PIN: ${patient.philHealthNumber}`);
+                        break;
+                      case 'bloodType':
+                        if (patient.bloodType) details.push(`Blood: ${patient.bloodType}`);
+                        break;
+                      case 'civilStatus':
+                        if (patient.civilStatus) details.push(patient.civilStatus);
+                        break;
+                      case 'barangay': {
+                        const loc = computePatientLocation(patient);
+                        if (loc) details.push(loc);
+                        break;
+                      }
+                      case 'patientCode':
+                        // Handled in header badge cluster when configured
+                        break;
+                      default: {
+                        const customDef = customFieldDefs.find((d) => d.fieldKey === key || `meta:${d.fieldKey}` === key);
+                        const actualKey = key.startsWith('meta:') ? key.slice(5) : key;
+                        const rawVal = patient.customFields?.[actualKey];
+                        if (rawVal != null && String(rawVal).trim() !== '') {
+                          details.push(`${customDef?.label || actualKey}: ${String(rawVal)}`);
+                        }
+                        break;
+                      }
+                    }
+                  }
+
+                  return (
+                    <Pressable
+                      key={patient.id}
+                      onPress={() => handleSelectRegistryPatient(patient)}
+                      style={({ pressed }) => [
+                        styles.registryResultItem,
+                        pressed && styles.registryResultItemPressed,
+                        isSelected && styles.registryResultItemSelected,
+                      ]}
+                    >
+                      <View style={styles.flexFill}>
+                        <View style={styles.registryResultHeader}>
+                          <ThemedText variant="bodyBold" color={theme.colors.text}>
+                            {displayName}
+                          </ThemedText>
+                          {configuredSearchFields.includes('patientCode') && patient.patientCode && (
+                            <Badge label={`Code: ${patient.patientCode}`} variant="neutral" size="sm" />
+                          )}
+                          {configuredSearchFields.includes('philHealthNumber') && patient.philHealthNumber && <Badge label="PhilHealth" variant="success" size="sm" />}
+                          {patient.seniorCitizenId && <Badge label="Senior" variant="warning" size="sm" />}
+                          {patient.pwdId && <Badge label="PWD" variant="info" size="sm" />}
+                          {openInv && (
+                            <Badge
+                              label={`Open SOA · ${formatPeso(openInv.balanceDue ?? openInv.netAmount)}`}
+                              variant="emergency"
+                              size="sm"
+                            />
+                          )}
+                          {paidInv && !openInv && <Badge label="Paid Today" variant="neutral" size="sm" />}
+                          {inQueue?.queueNumber && <Badge label={`Queue #${inQueue.queueNumber}`} variant="info" size="sm" />}
+                        </View>
+                        {details.length > 0 && (
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            {details.join(' • ')}
+                          </ThemedText>
+                        )}
+                      </View>
+                      <Button
+                        size="sm"
+                        variant={isSelected ? 'primary' : 'outline'}
+                        title={isSelected ? 'Selected' : 'Load SOA / Bill'}
+                        onPress={() => handleSelectRegistryPatient(patient)}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.registrySearchHint}>
+                Enter patient name, MRN, mobile number, or PhilHealth # and tap Search to retrieve their chart and Statement of Account.
+              </ThemedText>
+            )}
+          </Card>
+        )}
+      </>
+    );
+  };
+
 
   const renderUnsettledPromissory = () => (
     <Card>
@@ -1789,7 +2863,7 @@ export default function BillingScreen() {
         <EmptyState
           icon="checkCircle"
           title="No unsettled or promissory accounts"
-          description="Patients with deferred payments or promissory notes will appear here for collection."
+          description="Patients with open balances, deferred payments, or promissory notes will appear here for collection."
         />
       ) : (
         <View style={styles.unsettledList}>
@@ -1797,6 +2871,11 @@ export default function BillingScreen() {
             const dueDateMatch = inv.notes?.match(/due on ([^.]+)\./i);
             const dueDate = dueDateMatch?.[1];
             const balance = inv.balanceDue ?? Math.max(0, inv.netAmount - (inv.amountPaid ?? 0));
+            const isPromissory = Boolean(
+              inv.notes?.includes('[PROMISSORY NOTE]') ||
+              inv.notes?.toLowerCase().includes('promissory') ||
+              (inv as any).isDeferred
+            );
             return (
               <View key={inv.id} style={styles.unsettledRow}>
                 <View style={styles.flexFill}>
@@ -1805,6 +2884,13 @@ export default function BillingScreen() {
                       {inv.patientName}
                     </ThemedText>
                     <Badge label={`SOA #${inv.invoiceNumber}`} variant="warning" size="sm" />
+                    {isPromissory ? (
+                      <Badge label="Promissory" variant="emergency" size="sm" />
+                    ) : inv.status === 'PartiallyPaid' ? (
+                      <Badge label="Partially Paid" variant="warning" size="sm" />
+                    ) : (
+                      <Badge label="Unsettled SOA" variant="neutral" size="sm" />
+                    )}
                     {dueDate && (
                       <Badge label={`Due: ${dueDate}`} variant="emergency" size="sm" />
                     )}
@@ -1956,9 +3042,9 @@ export default function BillingScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
       >
         {renderTotals()}
-        {renderTabBar()}
+        {renderModeSwitcher()}
 
-        {activeTab === 'active' && (
+        {billingMode === 'queue' && (
           <View style={[styles.columns, isWide && styles.columnsWide]}>
             <View style={[styles.column, isWide && styles.mainColumn]}>
               {renderPatientSelector()}
@@ -1972,7 +3058,7 @@ export default function BillingScreen() {
           </View>
         )}
 
-        {activeTab === 'unsettled' && (
+        {billingMode === 'unsettled' && (
           <View style={[styles.columns, isWide && styles.columnsWide]}>
             <View style={[styles.column, isWide && styles.mainColumn]}>
               {renderUnsettledPromissory()}
@@ -1986,9 +3072,54 @@ export default function BillingScreen() {
           </View>
         )}
 
-        {activeTab === 'paid' && (
+        {billingMode === 'paid' && (
           <View style={styles.columns}>
             {renderBilledAndPaidToday()}
+          </View>
+        )}
+
+        {billingMode === 'registry' && (
+          <View style={[styles.columns, isWide && styles.columnsWide]}>
+            <View style={[styles.column, isWide && styles.mainColumn]}>
+              {renderRegistrySearch()}
+              {selectedPatient && !selectedPatient.isWalkInRetail && (
+                <>
+                  {renderInvoiceItems()}
+                  {renderDiscounts()}
+                </>
+              )}
+            </View>
+            <View style={[styles.column, isWide && styles.sideColumn]}>
+              {selectedPatient && !selectedPatient.isWalkInRetail ? (
+                <>
+                  {renderPayment()}
+                  {renderTotalsAndSettle()}
+                </>
+              ) : (
+                <Card>
+                  <CardHeader title="Cashier Station" icon="billing" />
+                  <EmptyState
+                    icon="search"
+                    title="No Patient Selected"
+                    description="Search the master patient registry and select a patient to review their Statement of Account or bill clinical services."
+                  />
+                </Card>
+              )}
+            </View>
+          </View>
+        )}
+
+        {billingMode === 'retail' && (
+          <View style={[styles.columns, isWide && styles.columnsWide]}>
+            <View style={[styles.column, isWide && styles.mainColumn]}>
+              {renderRetailCustomerCard()}
+              {renderInvoiceItems()}
+              {renderDiscounts()}
+            </View>
+            <View style={[styles.column, isWide && styles.sideColumn]}>
+              {renderPayment()}
+              {renderTotalsAndSettle()}
+            </View>
           </View>
         )}
       </ScrollView>
@@ -2060,10 +3191,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
   },
-  removeBtn: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-  },
   catalogSection: {
     gap: theme.spacing.sm,
   },
@@ -2091,7 +3218,7 @@ const styles = StyleSheet.create({
   },
   overrideCheck: {
     marginTop: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
+    alignSelf: 'flex-start',
   },
   soaHeaderBanner: {
     flexDirection: 'row',
@@ -2208,6 +3335,33 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceMuted,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
+    ...theme.shadows.brandSubtle,
+  },
+  paymentModeSegment: {
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceMuted,
+    padding: theme.spacing.xs,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    marginBottom: theme.spacing.sm,
+  },
+  paymentModeTab: {
+    flex: 1,
+    paddingVertical: theme.spacing.xs,
+    alignItems: 'center',
+    borderRadius: theme.radii.xs,
+  },
+  paymentModeTabActive: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    ...theme.shadows.brandSubtle,
+  },
+  partialPayBox: {
+    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
   },
   qtyStepperRow: {
     flexDirection: 'row',
@@ -2219,9 +3373,6 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderLight,
     paddingHorizontal: theme.spacing.xs,
     paddingVertical: 2,
-  },
-  qtyBtn: {
-    padding: theme.spacing.xs,
   },
   qtyText: {
     minWidth: 20,
@@ -2283,5 +3434,156 @@ const styles = StyleSheet.create({
   settleDeferButton: {
     width: '100%',
     justifyContent: 'center',
+  },
+  servicePriceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.sm,
+  },
+  servicePriceBadge: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 1,
+    borderRadius: theme.radii.xs,
+  },
+  modeSegment: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  modeTab: {
+    flexGrow: 1,
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.sm,
+  },
+  modeTabActive: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+  },
+  fastCashRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
+  },
+  registrySearchRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  registrySearchBtn: {
+    height: theme.sizes.controlMd,
+    minHeight: theme.sizes.controlMd,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  registryResultsList: {
+    gap: theme.spacing.sm,
+  },
+  registryResultsScroll: {
+    maxHeight: 280,
+  },
+  registryResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
+  registryResultItemSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primarySubtle,
+  },
+  registryResultItemPressed: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.primaryBorder,
+  },
+  activePatientCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.primaryBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  activePatientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
+  activePatientDetails: {
+    gap: theme.spacing.xs,
+  },
+  settleHelperText: {
+    textAlign: 'center',
+    marginTop: theme.spacing.xs,
+  },
+  registryResultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  registrySearchHint: {
+    paddingVertical: theme.spacing.sm,
+    fontStyle: 'italic',
+  },
+  yakapCoveredBanner: {
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  yakapCoveredHeader: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  yakapCopayRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+  },
+  yakapCopayInputWrap: {
+    minWidth: 160,
+    flex: 1,
   },
 });

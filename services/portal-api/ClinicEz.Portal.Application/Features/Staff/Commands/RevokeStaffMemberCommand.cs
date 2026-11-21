@@ -11,7 +11,8 @@ namespace ClinicEz.Portal.Application.Features.Staff.Commands;
 
 public record RevokeStaffMemberCommand(
     string TenantSlug,
-    Guid StaffMemberId
+    Guid StaffMemberId,
+    string? CurrentUserId = null
 ) : IRequest<bool>;
 
 public class RevokeStaffMemberCommandValidator : AbstractValidator<RevokeStaffMemberCommand>
@@ -42,14 +43,18 @@ public class RevokeStaffMemberCommandHandler(
             throw new InvalidOperationException("The primary workspace owner cannot be revoked or removed.");
         }
 
-        var profiles = await context.StaffMembers
-            .Where(s => s.WorkspaceMemberId == member.Id)
-            .ToListAsync(cancellationToken);
-        context.StaffMembers.RemoveRange(profiles);
-        context.WorkspaceMembers.Remove(member);
+        if (!string.IsNullOrWhiteSpace(request.CurrentUserId) &&
+            !string.IsNullOrWhiteSpace(member.UserId) &&
+            string.Equals(member.UserId.Trim(), request.CurrentUserId.Trim(), StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("You cannot revoke your own workspace access.");
+        }
 
-        var currentMemberCount = await context.WorkspaceMembers.CountAsync(m => m.TenantId == tenant.Id, cancellationToken);
-        tenant.StaffAccountsCount = Math.Max(1, currentMemberCount - 1);
+        member.Status = MemberStatus.Revoked;
+
+        var currentMemberCount = await context.WorkspaceMembers.CountAsync(
+            m => m.TenantId == tenant.Id && m.Status != MemberStatus.Revoked && m.Status != MemberStatus.Suspended, cancellationToken);
+        tenant.StaffAccountsCount = Math.Max(1, currentMemberCount);
 
         await context.SaveChangesAsync(cancellationToken);
 

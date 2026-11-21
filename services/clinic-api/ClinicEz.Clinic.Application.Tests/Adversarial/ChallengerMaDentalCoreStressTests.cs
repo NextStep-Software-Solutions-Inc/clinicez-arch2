@@ -221,7 +221,7 @@ public class ChallengerMaDentalCoreStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var patientId = Guid.NewGuid();
 
@@ -269,12 +269,12 @@ public class ChallengerMaDentalCoreStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
 
         // Patient registered under Clinic A
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantIdA,
@@ -331,11 +331,11 @@ public class ChallengerMaDentalCoreStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantIdA,
@@ -385,11 +385,11 @@ public class ChallengerMaDentalCoreStressTests
         // Arrange (Child aged 9 with mixed dentition: adult incisors/first molars and deciduous canines/premolars)
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantIdA,
@@ -438,11 +438,11 @@ public class ChallengerMaDentalCoreStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var sender = Substitute.For<ISender>();
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantIdA,
@@ -489,7 +489,7 @@ public class ChallengerMaDentalCoreStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var patientId = Guid.NewGuid();
 
@@ -502,7 +502,7 @@ public class ChallengerMaDentalCoreStressTests
         await toothRepo.AddAsync(new DentalToothRecord { TenantId = _tenantIdA, ClinicId = _clinicIdA, PatientId = patientId, ToothNumber = 16, Status = ToothStatus.ForExtraction }, CancellationToken.None);
 
         // Procedure 1: Explicit Dental Category with ToothNumber & ToothSurface
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantIdA,
             ClinicId = _clinicIdA,
@@ -517,7 +517,7 @@ public class ChallengerMaDentalCoreStressTests
         }, CancellationToken.None);
 
         // Procedure 2: General Surgery with ToothNumber
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantIdA,
             ClinicId = _clinicIdA,
@@ -532,7 +532,7 @@ public class ChallengerMaDentalCoreStressTests
         }, CancellationToken.None);
 
         // Procedure 3: Medical Nebulization without ToothNumber
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantIdA,
             ClinicId = _clinicIdA,

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -23,10 +23,11 @@ import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
 import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
 import { dialog } from '@utils/dialog';
+import { useEhrOptions } from 'hooks/useEhrOptions';
 
-type PhilhealthCategory = 'MM' | 'DD';
-type DisabilityType = 'Physical' | 'Sensory' | 'Intellectual' | 'Psychosocial';
-type HmoPlanType = 'Individual' | 'Group' | 'Family';
+type PhilhealthCategory = 'MM' | 'DD' | string;
+type DisabilityType = 'Physical' | 'Sensory' | 'Intellectual' | 'Psychosocial' | string;
+type HmoPlanType = 'Individual' | 'Group' | 'Family' | string;
 
 interface Mod11Result {
   isValid: boolean;
@@ -101,31 +102,6 @@ type FormValues = {
   hmoCoverageEnd: string;
 };
 
-const PHILHEALTH_CATEGORY_OPTIONS = [
-  { label: 'MM - Member', value: 'MM' },
-  { label: 'DD - Dependent', value: 'DD' },
-];
-
-const SPONSOR_RELATIONSHIP_OPTIONS = [
-  { label: 'Child (C)', value: 'C' },
-  { label: 'Spouse (S)', value: 'S' },
-  { label: 'Parent (P)', value: 'P' },
-  { label: 'Disabled Dependent (D)', value: 'D' },
-];
-
-const DISABILITY_TYPE_OPTIONS = [
-  { label: 'Physical', value: 'Physical' },
-  { label: 'Sensory', value: 'Sensory' },
-  { label: 'Intellectual', value: 'Intellectual' },
-  { label: 'Psychosocial', value: 'Psychosocial' },
-];
-
-const HMO_PLAN_TYPE_OPTIONS = [
-  { label: 'Individual', value: 'Individual' },
-  { label: 'Family', value: 'Family' },
-  { label: 'Group', value: 'Group' },
-];
-
 const formatPhilhealthId = (value: string) => {
   const digits = value.replace(/\D/g, '').slice(0, 12);
   let res = '';
@@ -163,6 +139,11 @@ export default function GovernmentIdsScreen() {
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState<'philhealth' | 'disability' | 'hmoPlan' | 'sponsorRel' | null>(null);
 
+  const { selectOptions: philhealthCategoryOptions } = useEhrOptions('patient_type');
+  const { selectOptions: sponsorRelationshipOptions } = useEhrOptions('guardian_relationship');
+  const { selectOptions: disabilityTypeOptions } = useEhrOptions('disability_type');
+  const { selectOptions: hmoPlanTypeOptions } = useEhrOptions('hmo_plan_type');
+
   const { control, handleSubmit, reset, watch, formState: { isDirty } } = useForm<FormValues>({
     defaultValues: {
       philhealthId: '', philhealthCategory: '',
@@ -182,13 +163,19 @@ export default function GovernmentIdsScreen() {
   const mod11Status = useMemo(() => validatePhilHealthPinMod11(philhealthId || ''), [philhealthId]);
 
   const [hasRecord, setHasRecord] = useState(false);
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
 
   const load = useCallback(async () => {
+    if (!patientId || isDirtyRef.current) return;
     try {
-      const row = await db.query.patientGovernmentIds.findFirst({
-        where: eq(patientGovernmentIds.patientId, patientId),
-      });
-      if (row) {
+      const rows = await db
+        .select()
+        .from(patientGovernmentIds)
+        .where(eq(patientGovernmentIds.patientId, patientId))
+        .limit(1);
+      const row = rows[0];
+      if (row && !isDirtyRef.current) {
         setHasRecord(true);
         reset({
           philhealthId: row.philhealthId ?? '',
@@ -265,11 +252,18 @@ export default function GovernmentIdsScreen() {
         hmoCoverageEnd: data.hmoCoverageEnd,
       };
 
-      if (hasRecord) {
+      const existingRows = await db
+        .select({ id: patientGovernmentIds.id })
+        .from(patientGovernmentIds)
+        .where(eq(patientGovernmentIds.patientId, patientId))
+        .limit(1);
+
+      if (hasRecord || existingRows.length > 0) {
         await db
           .update(patientGovernmentIds)
           .set({ ...payload, patientId, updatedAt: new Date() })
           .where(eq(patientGovernmentIds.patientId, patientId));
+        setHasRecord(true);
       } else {
         await db.insert(patientGovernmentIds).values({
           id: randomUUID(),
@@ -350,14 +344,14 @@ export default function GovernmentIdsScreen() {
           <Controller control={control} name="philhealthCategory" render={({ field }) => (
             <ProfileFormField
               label="Category"
-              value={PHILHEALTH_CATEGORY_OPTIONS.find(o => o.value === field.value)?.label || ''}
+              value={philhealthCategoryOptions.find(o => o.value === field.value || o.label === field.value)?.label || field.value || ''}
               onPressIn={() => setModal('philhealth')}
               placeholder="Select category"
               picker
             />
           )} />
 
-          {philhealthCategory === 'DD' && (
+          {(philhealthCategory === 'DD' || philhealthCategory === 'DEPENDENT' || philhealthCategory === 'Dependent') && (
             <View style={[styles.sponsorCard, { backgroundColor: colors.successBg, borderColor: colors.successBorder, borderRadius: radii.md, padding: spacing.md }]}>
               <ThemedText variant="bodyBold">Principal Member / Sponsor Credentials</ThemedText>
               <ThemedText variant="small" color="textSecondary" style={{ marginTop: spacing.xs, marginBottom: spacing.md }}>
@@ -378,7 +372,7 @@ export default function GovernmentIdsScreen() {
               <Controller control={control} name="sponsorRelationship" render={({ field }) => (
                 <ProfileFormField
                   label="Relationship to Member *"
-                  value={SPONSOR_RELATIONSHIP_OPTIONS.find(o => o.value === field.value)?.label || ''}
+                  value={sponsorRelationshipOptions.find(o => o.value === field.value || o.label === field.value)?.label || field.value || ''}
                   onPressIn={() => setModal('sponsorRel')}
                   placeholder="Select relationship"
                   picker
@@ -468,7 +462,7 @@ export default function GovernmentIdsScreen() {
               <Controller control={control} name="disabilityType" render={({ field }) => (
                 <ProfileFormField
                   label="Disability Type"
-                  value={DISABILITY_TYPE_OPTIONS.find(o => o.value === field.value)?.label || ''}
+                  value={disabilityTypeOptions.find(o => o.value === field.value || o.label === field.value)?.label || field.value || ''}
                   onPressIn={() => setModal('disability')}
                   placeholder="Select type"
                   picker
@@ -489,7 +483,7 @@ export default function GovernmentIdsScreen() {
           <Controller control={control} name="hmoPlanType" render={({ field }) => (
             <ProfileFormField
               label="Plan Type"
-              value={HMO_PLAN_TYPE_OPTIONS.find(o => o.value === field.value)?.label || ''}
+              value={hmoPlanTypeOptions.find(o => o.value === field.value || o.label === field.value)?.label || field.value || ''}
               onPressIn={() => setModal('hmoPlan')}
               placeholder="Select plan type"
               picker
@@ -508,16 +502,16 @@ export default function GovernmentIdsScreen() {
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />
 
         <Controller control={control} name="philhealthCategory" render={({ field }) => (
-          <ProfileSelectModal visible={modal === 'philhealth'} title="PhilHealth Category" options={PHILHEALTH_CATEGORY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
+          <ProfileSelectModal visible={modal === 'philhealth'} title="PhilHealth Category" options={philhealthCategoryOptions} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
         )} />
         <Controller control={control} name="sponsorRelationship" render={({ field }) => (
-          <ProfileSelectModal visible={modal === 'sponsorRel'} title="Relationship to Sponsor" options={SPONSOR_RELATIONSHIP_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
+          <ProfileSelectModal visible={modal === 'sponsorRel'} title="Relationship to Sponsor" options={sponsorRelationshipOptions} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
         )} />
         <Controller control={control} name="disabilityType" render={({ field }) => (
-          <ProfileSelectModal visible={modal === 'disability'} title="Disability Type" options={DISABILITY_TYPE_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
+          <ProfileSelectModal visible={modal === 'disability'} title="Disability Type" options={disabilityTypeOptions} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
         )} />
         <Controller control={control} name="hmoPlanType" render={({ field }) => (
-          <ProfileSelectModal visible={modal === 'hmoPlan'} title="HMO Plan Type" options={HMO_PLAN_TYPE_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
+          <ProfileSelectModal visible={modal === 'hmoPlan'} title="HMO Plan Type" options={hmoPlanTypeOptions} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
         )} />
       </KeyboardAvoidingView>
     </Screen>

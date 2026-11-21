@@ -17,6 +17,7 @@ import { parseRuntimeSettings, pickSetting, SettingName, SettingValues } from '.
  */
 const SERVER_URL_KEY = 'clinicez.serverUrl';
 const DEFAULT_OFFLINE_GRACE_HOURS = 12;
+export const DEFAULT_WEB_IDLE_TIMEOUT_MINUTES = 30;
 
 /** Values published at run time by the web host (`/config.json`); empty on native and when the file is absent. */
 export type RuntimeConfig = SettingValues;
@@ -29,14 +30,17 @@ const isNative = Platform.OS !== 'web';
  * Build-time values. Each must stay a literal `process.env.EXPO_PUBLIC_*` read so Metro can inline it.
  */
 const BUILD_SETTINGS: SettingValues = {
-  EXPO_PUBLIC_CLINIC_API_URL: process.env.EXPO_PUBLIC_CLINIC_API_URL,
-  EXPO_PUBLIC_BASE_DOMAIN: process.env.EXPO_PUBLIC_BASE_DOMAIN,
-  EXPO_PUBLIC_SERVICE_SUBDOMAIN: process.env.EXPO_PUBLIC_SERVICE_SUBDOMAIN,
-  EXPO_PUBLIC_SERVICE_SUBDOMAINS: process.env.EXPO_PUBLIC_SERVICE_SUBDOMAINS,
-  EXPO_PUBLIC_API_URL_TEMPLATE: process.env.EXPO_PUBLIC_API_URL_TEMPLATE,
-  EXPO_PUBLIC_PORTAL_URL: process.env.EXPO_PUBLIC_PORTAL_URL,
-  EXPO_PUBLIC_STORAGE_PUBLIC_URL: process.env.EXPO_PUBLIC_STORAGE_PUBLIC_URL,
-  EXPO_PUBLIC_OFFLINE_GRACE_HOURS: process.env.EXPO_PUBLIC_OFFLINE_GRACE_HOURS,
+  get EXPO_PUBLIC_CLINIC_API_URL() { return process.env.EXPO_PUBLIC_CLINIC_API_URL; },
+  get EXPO_PUBLIC_COMMS_API_URL() { return process.env.EXPO_PUBLIC_COMMS_API_URL; },
+  get EXPO_PUBLIC_BASE_DOMAIN() { return process.env.EXPO_PUBLIC_BASE_DOMAIN; },
+  get EXPO_PUBLIC_SERVICE_SUBDOMAIN() { return process.env.EXPO_PUBLIC_SERVICE_SUBDOMAIN; },
+  get EXPO_PUBLIC_SERVICE_SUBDOMAINS() { return process.env.EXPO_PUBLIC_SERVICE_SUBDOMAINS; },
+  get EXPO_PUBLIC_API_URL_TEMPLATE() { return process.env.EXPO_PUBLIC_API_URL_TEMPLATE; },
+  get EXPO_PUBLIC_PORTAL_URL() { return process.env.EXPO_PUBLIC_PORTAL_URL; },
+  get EXPO_PUBLIC_STORAGE_PUBLIC_URL() { return process.env.EXPO_PUBLIC_STORAGE_PUBLIC_URL; },
+  get EXPO_PUBLIC_OFFLINE_GRACE_HOURS() { return process.env.EXPO_PUBLIC_OFFLINE_GRACE_HOURS; },
+  get EXPO_PUBLIC_ENABLE_COMMS() { return process.env.EXPO_PUBLIC_ENABLE_COMMS; },
+  get EXPO_PUBLIC_IDLE_TIMEOUT_MINUTES() { return process.env.EXPO_PUBLIC_IDLE_TIMEOUT_MINUTES; },
 };
 
 /** One setting, resolved the same way on every deployment: runtime (on-prem `config.json`) first, then build-time. */
@@ -165,17 +169,37 @@ export function getPortalBaseUrl(): string {
   if (configured) return configured.replace(/\/+$/, '');
 
   const baseDomain = getSetting('EXPO_PUBLIC_BASE_DOMAIN');
-  if (baseDomain) return `https://${baseDomain}`.replace(/\/+$/, '');
+  if (baseDomain) {
+    const cleanBase = baseDomain.replace(/^\.+/, '').replace(/\/+$/, '');
+    const portalHost = cleanBase.startsWith('portal.') ? cleanBase : `portal.${cleanBase}`;
+    return `https://${portalHost}`;
+  }
 
   if (typeof window !== 'undefined' && window.location?.hostname) {
     const match = window.location.hostname.toLowerCase().match(buildServiceHostRegex());
     if (match) {
       const { protocol, port } = window.location;
-      return `${protocol}//${match[3]}${port ? `:${port}` : ''}`;
+      const host = match[3].startsWith('portal.') ? match[3] : `portal.${match[3]}`;
+      return `${protocol}//${host}${port ? `:${port}` : ''}`;
     }
     if (window.location.origin) return window.location.origin.replace(/\/+$/, '');
   }
 
   const defaultHost = ['portal', 'clinicez', 'ph'].join('.');
   return `https://${defaultHost}`;
+}
+
+/** Whether real-time clinic communications (chat drawer) is enabled for this deployment. Defaults to true. */
+export function isCommsEnabled(): boolean {
+  const setting = getSetting('EXPO_PUBLIC_ENABLE_COMMS');
+  if (setting === 'false' || setting === '0') return false;
+  return true;
+}
+
+/** Inactivity auto-logout threshold in minutes for web workstations (`0` disables the timer). */
+export function getWebIdleTimeoutMinutes(): number {
+  const raw = getSetting('EXPO_PUBLIC_IDLE_TIMEOUT_MINUTES');
+  if (raw === undefined) return DEFAULT_WEB_IDLE_TIMEOUT_MINUTES;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_WEB_IDLE_TIMEOUT_MINUTES;
 }

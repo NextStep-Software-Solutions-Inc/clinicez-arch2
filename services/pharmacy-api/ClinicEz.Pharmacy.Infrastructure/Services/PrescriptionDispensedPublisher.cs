@@ -3,6 +3,7 @@ using ClinicEz.Pharmacy.Application.Common.Interfaces;
 using ClinicEz.Pharmacy.Domain.Entities;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
 using Microsoft.Extensions.Logging;
 
@@ -59,6 +60,24 @@ public class PrescriptionDispensedPublisher : IPrescriptionDispensedPublisher
                     Status = "Dispensed",
                     Body = JsonSerializer.SerializeToElement(payload, InteropJson.Options)
                 });
+        }
+
+        if (order.PatientId != Guid.Empty)
+        {
+            var grantId = CommsGrantIdGenerator.Create(order.TenantId, order.PharmacyId.ToString(), "Prescription", order.Id.ToString());
+            var commsTo = Party.ForFacility(order.TenantId, order.PharmacyId.ToString(), FacilityType.Pharmacy, service: InteropServices.Comms);
+            var grantPayload = new CommsEligibilityGrantedPayload(
+                GrantId: grantId,
+                TenantId: order.TenantId,
+                FacilityId: order.PharmacyId.ToString(),
+                FacilityType: "Pharmacy",
+                PatientId: order.PatientId,
+                ContextType: "Prescription",
+                ContextId: order.Id.ToString(),
+                WindowStartUtc: DateTime.UtcNow,
+                WindowEndUtc: DateTime.UtcNow.AddDays(14),
+                Version: 1);
+            _publisher.Enqueue(InteropTypes.CommsEligibilityGranted, from, commsTo, correlationId: grantId, grantPayload);
         }
     }
 }

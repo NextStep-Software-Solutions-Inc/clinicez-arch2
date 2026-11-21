@@ -86,6 +86,10 @@ mock.module('react-native-svg', () => ({
   Text: createMockComponent('SvgText'),
   G: createMockComponent('G'),
   default: createMockComponent('Svg'),
+  Polygon: createMockComponent('Polygon'),
+  Defs: createMockComponent('Defs'),
+  LinearGradient: createMockComponent('LinearGradient'),
+  Stop: createMockComponent('Stop'),
 }));
 
 mock.module('expo-crypto', () => ({

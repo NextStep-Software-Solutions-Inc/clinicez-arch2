@@ -37,6 +37,14 @@ public interface IApplicationDbContext
     DbSet<SystemSetting> SystemSettings { get; }
     DbSet<PortalNotification> PortalNotifications { get; }
     DbSet<NewsletterSubscriber> NewsletterSubscribers { get; }
+    DbSet<DocumentAttestation> DocumentAttestations { get; }
+    DbSet<FacilityQueueBoard> FacilityQueueBoards { get; }
+    DbSet<Practitioner> Practitioners { get; }
+    DbSet<PractitionerAffiliation> PractitionerAffiliations { get; }
+    DbSet<FacilityVerificationRequest> FacilityVerificationRequests { get; }
+    DbSet<PractitionerVerificationRequest> PractitionerVerificationRequests { get; }
+    DbSet<WorkspaceTeleconsultBilling> WorkspaceTeleconsultBillings { get; }
+    DbSet<TeleconsultUsageRecord> TeleconsultUsageRecords { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

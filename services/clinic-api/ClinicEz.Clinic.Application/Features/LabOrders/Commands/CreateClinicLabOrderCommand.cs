@@ -26,13 +26,14 @@ public record CreateClinicLabOrderCommand(
     string? Notes = null,
     List<CreateLabOrderItemRequest>? Items = null,
     string? TargetFacilityId = null,
-    string? TargetTenantId = null
+    string? TargetTenantId = null,
+    Guid? QueueItemId = null
 ) : IRequest<ClinicLabOrderDto>;
 
 public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLabOrderCommand, ClinicLabOrderDto>
 {
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<StaffMember> _staffRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
@@ -41,10 +42,13 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
     private readonly IUploadGrantService _uploadGrants;
     private readonly IClaimSlipService _claims;
     private readonly IPatientDocumentPublisher _documents;
+    private readonly IRepository<ServiceItem>? _serviceRepo;
+    private readonly IRepository<ConsultationEncounter>? _encounterRepo;
+    private readonly IRepository<QueueItem>? _queueRepo;
 
     public CreateClinicLabOrderCommandHandler(
-        IRepository<ClinicLabOrder> orderRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<LabOrder> orderRepo,
+        IRepository<Patient> patientRepo,
         IRepository<StaffMember> staffRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
@@ -52,7 +56,10 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         ILabRequisitionPublisher requisitionPublisher,
         IUploadGrantService uploadGrants,
         IClaimSlipService claims,
-        IPatientDocumentPublisher documents)
+        IPatientDocumentPublisher documents,
+        IRepository<ServiceItem>? serviceRepo = null,
+        IRepository<ConsultationEncounter>? encounterRepo = null,
+        IRepository<QueueItem>? queueRepo = null)
     {
         _orderRepo = orderRepo;
         _patientRepo = patientRepo;
@@ -64,6 +71,9 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         _uploadGrants = uploadGrants;
         _claims = claims;
         _documents = documents;
+        _serviceRepo = serviceRepo;
+        _encounterRepo = encounterRepo;
+        _queueRepo = queueRepo;
     }
 
     public async Task<ClinicLabOrderDto> Handle(CreateClinicLabOrderCommand request, CancellationToken cancellationToken)
@@ -94,6 +104,37 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             targetFacilityId = parsedTarget;
         }
 
+        bool isDoctorOrder = false;
+        if (request.OrderedByDoctorId is { } doctorId && doctorId != Guid.Empty)
+        {
+            var doctor = await _staffRepo.Query(s => s.Id == doctorId && s.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (doctor != null && !string.IsNullOrWhiteSpace(doctor.PrcLicenseNumber))
+            {
+                isDoctorOrder = true;
+            }
+        }
+
+        if (!isRouted && !isDoctorOrder && _serviceRepo != null)
+        {
+            var testNames = request.Items != null && request.Items.Any()
+                ? request.Items.Select(i => i.TestName.Trim()).ToList()
+                : new List<string> { "Complete Blood Count (CBC) with Platelet" };
+
+            foreach (var testName in testNames)
+            {
+                var testUpper = testName.ToUpperInvariant();
+                var serviceItem = await _serviceRepo.Query(s => s.ClinicId == _clinicContext.ClinicId &&
+                    (s.Code.ToUpper() == testUpper || s.Name.ToUpper() == testUpper))
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (serviceItem == null || !serviceItem.IsNurseOrderable)
+                {
+                    throw new BadRequestException($"Only laboratory tests flagged as nurse-orderable in the clinic catalog can be ordered by non-doctor staff. Doctor order required for '{testName}'.");
+                }
+            }
+        }
+
         var today = DateTime.UtcNow.Date;
         var tomorrow = today.AddDays(1);
         var todayCount = await _orderRepo.Query(o => o.OrderDate >= today && o.OrderDate < tomorrow)
@@ -102,16 +143,19 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         var dateTag = today.ToString("yyyyMMdd");
         var orderNumber = $"LAB-{dateTag}-{(todayCount + 1):D3}";
 
-        var items = new List<ClinicLabOrderItem>();
+        var items = new List<LabOrderItem>();
         if (request.Items != null && request.Items.Any())
         {
             foreach (var item in request.Items)
             {
-                items.Add(new ClinicLabOrderItem
+                items.Add(new LabOrderItem
                 {
                     TestName = item.TestName.Trim(),
                     Category = string.IsNullOrWhiteSpace(item.Category) ? "Diagnostic" : item.Category.Trim(),
                     Instructions = item.Instructions?.Trim(),
+                    IsDoneOutsideFacility = item.IsDoneOutsideFacility ?? isRouted,
+                    DiagnosticFee = item.DiagnosticFee,
+                    TestCode = string.IsNullOrWhiteSpace(item.TestCode) ? null : item.TestCode.Trim(),
                     Status = LabOrderStatus.Ordered
                 });
             }
@@ -119,7 +163,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         else
         {
             // Default CBC request if none specified
-            items.Add(new ClinicLabOrderItem
+            items.Add(new LabOrderItem
             {
                 TestName = "Complete Blood Count (CBC) with Platelet",
                 Category = "Hematology",
@@ -128,7 +172,62 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             });
         }
 
-        var order = new ClinicLabOrder
+        Guid? resolvedConsultationId = request.ConsultationId;
+        Guid? resolvedQueueItemId = request.QueueItemId;
+        bool isPendingConsultationSignOff = false;
+
+        if (resolvedConsultationId.HasValue && _encounterRepo != null)
+        {
+            var encounter = await _encounterRepo
+                .Query(e => e.ClinicId == _clinicContext.ClinicId && e.Id == resolvedConsultationId.Value)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (encounter != null)
+            {
+                resolvedQueueItemId ??= encounter.QueueItemId;
+                if (!encounter.IsSigned)
+                {
+                    isPendingConsultationSignOff = true;
+                }
+            }
+        }
+
+        if (!isPendingConsultationSignOff && resolvedQueueItemId.HasValue && _queueRepo != null)
+        {
+            var queueItem = await _queueRepo
+                .Query(q => q.ClinicId == _clinicContext.ClinicId && q.Id == resolvedQueueItemId.Value)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (queueItem != null && queueItem.VisitType.IsPhysicianConsultation())
+            {
+                if (_encounterRepo != null)
+                {
+                    var linkedConsultation = await _encounterRepo
+                        .Query(c => c.ClinicId == _clinicContext.ClinicId && c.QueueItemId == queueItem.Id)
+                        .OrderByDescending(c => c.EncounterDate)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    if (linkedConsultation != null)
+                    {
+                        resolvedConsultationId ??= linkedConsultation.Id;
+                        if (!linkedConsultation.IsSigned)
+                        {
+                            isPendingConsultationSignOff = true;
+                        }
+                    }
+                    else if (!queueItem.IsDirectVisit)
+                    {
+                        isPendingConsultationSignOff = true;
+                    }
+                }
+                else
+                {
+                    isPendingConsultationSignOff = queueItem.Status != QueueStatus.Completed;
+                }
+            }
+        }
+
+        var order = new LabOrder
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,
@@ -136,7 +235,9 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             OrderNumber = orderNumber,
             PatientId = request.PatientId,
             PatientName = request.PatientName.Trim(),
-            ConsultationId = request.ConsultationId,
+            ConsultationId = resolvedConsultationId,
+            QueueItemId = resolvedQueueItemId,
+            IsSigned = !isPendingConsultationSignOff,
             OrderedByDoctorId = request.OrderedByDoctorId,
             OrderedByDoctorName = request.OrderedByDoctorName?.Trim(),
             OrderDate = DateTime.UtcNow,
@@ -149,6 +250,27 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             Notes = request.Notes?.Trim(),
             Items = items
         };
+
+        if (isPendingConsultationSignOff)
+        {
+            // Validate routed order inputs early without publishing externally until consultation sign-off
+            if (isRouted)
+            {
+                await BuildRequisitionEventAsync(
+                    request,
+                    order,
+                    items,
+                    targetFacilityId,
+                    targetTenantId,
+                    new MintedUploadGrant("pending", "https://pending.local", DateTime.UtcNow.AddDays(7)),
+                    isRouted: true,
+                    cancellationToken);
+            }
+
+            await _orderRepo.AddAsync(order, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return MapToDto(order, results: null, publicUploadUrl: null);
+        }
 
         // The one-time upload link for an external lab; only its hash is stored. Fails fast when the public URL is not configured.
         var upload = await _uploadGrants.MintAsync(order, UploaderKind.ExternalLab, cancellationToken);
@@ -196,8 +318,8 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
     /// </summary>
     private async Task<LabRequisitionIssuedEvent?> BuildRequisitionEventAsync(
         CreateClinicLabOrderCommand request,
-        ClinicLabOrder order,
-        List<ClinicLabOrderItem> items,
+        LabOrder order,
+        List<LabOrderItem> items,
         Guid? targetFacilityId,
         string? targetTenantId,
         MintedUploadGrant upload,
@@ -252,6 +374,17 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             ? request.OrderedByDoctorName.Trim()
             : $"{doctor.Title} {doctor.FirstName} {doctor.LastName}".Trim();
 
+        Guid? resolvedQueueItemId = request.QueueItemId;
+        if (!resolvedQueueItemId.HasValue && request.ConsultationId.HasValue && _encounterRepo != null)
+        {
+            var consultationId = request.ConsultationId.Value;
+            resolvedQueueItemId = await _encounterRepo
+                .Query(e => e.ClinicId == _clinicContext.ClinicId && e.Id == consultationId)
+                .Select(e => e.QueueItemId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        var visitKey = (resolvedQueueItemId ?? request.ConsultationId)?.ToString();
+
         return new LabRequisitionIssuedEvent
         {
             RequisitionId = order.Id,
@@ -260,7 +393,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             OrderingFacilityName = clinic.Name,
             TenantId = clinic.TenantId,
             BranchId = _clinicContext.BranchId?.ToString(),
-            VisitKey = request.ConsultationId?.ToString(),
+            VisitKey = visitKey,
             TargetFacilityId = targetFacilityId?.ToString(),
             TargetTenantId = targetTenantId,
             OrderingDoctor = new OrderingDoctorDto
@@ -273,13 +406,13 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             },
             Patient = new RequisitionPatientDto
             {
-                PatientId = patient.SyncPatientId ?? Guid.Empty,
+                PatientId = patient.CloudPatientId ?? Guid.Empty,
                 FullName = request.PatientName.Trim(),
                 PhilHealthPin = patient.PhilHealthNumber,
                 NationalId = patient.SeniorCitizenId ?? patient.PwdId,
                 DateOfBirth = patient.DateOfBirth.ToString("yyyy-MM-dd"),
                 Age = PatientAge.InYears(patient.DateOfBirth, DateOnly.FromDateTime(DateTime.UtcNow)),
-                Gender = patient.Gender,
+                Gender = patient.Sex.ToString(),
                 ContactNumber = patient.ContactNumber
             },
             Icd10Code = request.ClinicalDiagnosis,
@@ -303,8 +436,8 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
     /// <param name="results">The order's results, when loaded; null renders as none.</param>
     /// <param name="publicUploadUrl">The one-time upload link, only known at the moment a grant is minted.</param>
     public static ClinicLabOrderDto MapToDto(
-        ClinicLabOrder order,
-        IEnumerable<ClinicLabResult>? results = null,
+        LabOrder order,
+        IEnumerable<LabResult>? results = null,
         string? publicUploadUrl = null) => new(
         order.Id,
         order.TenantId ?? string.Empty,
@@ -324,20 +457,22 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             i.TestName,
             i.Category,
             i.Instructions,
-            i.Status
+            i.Status,
+            i.LoincCode,
+            i.IsPhysicianRecommended,
+            i.PatientComplianceCode,
+            i.DiagnosticFee,
+            i.IsDoneOutsideFacility
         )).ToList(),
         publicUploadUrl,
         order.ExternalLabName,
         order.ExternalReportUrl,
-        order.ExternalReportType,
         order.UploadedBy,
-        order.ObservationsJson,
         order.PathologistImpression,
         order.VerifiedByPathologist,
         order.PathologistPrcLicense,
         order.ReportReleasedAt,
         order.HasCriticalPanicAlert,
-        order.CriticalFindingsJson,
         order.PanicAlertTriggeredAt,
         order.PanicAcknowledgedAt,
         order.PanicAcknowledgedBy,
@@ -348,8 +483,25 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         order.PaymentRequired,
         order.LaboratoryName,
         order.ClaimToken,
-        (results ?? Enumerable.Empty<ClinicLabResult>())
+        (results ?? Enumerable.Empty<LabResult>())
             .Select(r => new ClinicLabResultSummaryDto(r.Id, r.Source, r.Verification))
-            .ToList()
+            .ToList(),
+        order.Observations?.Select(o => new LabObservationDto(
+            o.Id,
+            o.LabOrderId,
+            o.LabOrderItemId,
+            o.LoincCode,
+            o.AnalyteCode,
+            o.AnalyteName,
+            o.ValueText,
+            o.NumericValue,
+            o.Unit,
+            o.ReferenceRangeLow,
+            o.ReferenceRangeHigh,
+            o.AbnormalFlag,
+            o.IsCriticalPanic
+        )).ToList(),
+        order.QueueItemId,
+        order.IsSigned
     );
 }

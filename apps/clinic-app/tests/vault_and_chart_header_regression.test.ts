@@ -82,6 +82,9 @@ mock.module('../constants/fonts', () => ({
 
 const { CardHeader } = await import('../components/ui/Card');
 const { default: ExternalDocumentVaultTab } = await import('../components/chart/ExternalDocumentVaultTab');
+const { default: AdministrativeDocumentsTab } = await import('../components/chart/AdministrativeDocumentsTab');
+import fs from 'node:fs';
+import path from 'node:path';
 import type { ClinicPatient, ClinicRecordAttachmentRecord } from '../services/clinicService';
 
 describe('Consultation Chart Header & Vault Regression Tests', () => {
@@ -93,7 +96,7 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
     fullName: 'Maria Dela Cruz',
     firstName: 'Maria',
     lastName: 'Dela Cruz',
-    gender: 'Female',
+    sex: 'Female',
     dateOfBirth: '1995-05-15',
     age: 31,
     contactNumber: '09171234567',
@@ -121,7 +124,7 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
     expect(element.props.truncateSubtitle).toBe(true);
   });
 
-  test('2. ExternalDocumentVaultTab renders filter chips with horizontal non-wrapping structure', () => {
+  test('2. ExternalDocumentVaultTab (Doc Vault) renders inline no-wrap filter chips + right Attach button without extra External/Internal sub-tabs or category sub-filter chips', () => {
     const sampleAttachments: ClinicRecordAttachmentRecord[] = [
       {
         id: 'att-1',
@@ -129,23 +132,27 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
         recordType: 'OutsideChestXRay',
         title: 'Outside Chest X-Ray Film',
         fileName: 'cxr.pdf',
+        fileSizeBytes: 204800,
+        createdAt: '2026-10-15T08:00:00Z',
         storageUri: 'tenants/1/vault/cxr.pdf.cez',
         encryptionAlgorithm: 'AES-256-GCM',
         verificationStatus: 'Pending',
         uploadedAtUtc: '2026-10-15T08:00:00Z',
-      },
+      } as any,
       {
         id: 'att-2',
         patientId: mockPatient.id,
         recordType: 'COR',
         title: 'Certificate of Registration',
         fileName: 'cor.jpg',
+        fileSizeBytes: 102400,
+        createdAt: '2026-10-14T08:00:00Z',
         storageUri: 'tenants/1/vault/cor.jpg.cez',
         encryptionAlgorithm: 'AES-256-GCM',
         verificationStatus: 'Verified',
         verifiedByStaffName: 'Dr. Santos',
         uploadedAtUtc: '2026-10-14T08:00:00Z',
-      },
+      } as any,
     ];
 
     const markup = renderToStaticMarkup(
@@ -155,20 +162,109 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
       })
     );
 
+    // Verify extra External/Internal sub-tabs are absent
+    expect(markup).not.toContain('>External<');
+    expect(markup).not.toContain('>Internal<');
+
     // Verify all status filter chips are rendered
     expect(markup).toContain('All (2)');
     expect(markup).toContain('Pending Review (1)');
     expect(markup).toContain('Verified (1)');
     expect(markup).toContain('Rejected (0)');
 
-    // Verify document type filter chips are rendered
-    expect(markup).toContain('All Records (2)');
-    expect(markup).toContain('Outside Chest X-Ray');
-    expect(markup).toContain('Cert of Registration (COR)');
-    expect(markup).toContain('Outside Labs');
+    // Verify removed sub-filter chips and raw recordType badge are absent
+    expect(markup).not.toContain('All Records');
+    expect(markup).not.toContain('Cert of Registration (COR)');
+    expect(markup).not.toContain('Outside Labs');
+    expect(markup).not.toContain('OutsideChestXRay');
 
     // Verify Attach External Document button is rendered
     expect(markup).toContain('Attach External Document');
+  });
+
+  test('2b. Consultations inline Patient Chart exposes Doc Vault + Admin Vault tabs, and AdministrativeDocumentsTab renders humanized, jargon-free certificates and referrals', () => {
+    const consultationsSource = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx'),
+      'utf8',
+    );
+    expect(consultationsSource).toContain("{ id: 'vault', label: 'Doc Vault', icon: 'folder' }");
+    expect(consultationsSource).toContain("{ id: 'documents', label: 'Admin Vault', icon: 'scroll' }");
+    expect(consultationsSource).toContain("activeChartTab === 'documents'");
+    expect(consultationsSource).toContain('<AdministrativeDocumentsTab');
+
+    const adminVaultMarkup = renderToStaticMarkup(
+      React.createElement(AdministrativeDocumentsTab, {
+        patient: mockPatient,
+        medicalCertificates: [
+          {
+            id: 'mc-1',
+            certificateNumber: 'MC-2026-0001',
+            patientId: mockPatient.id,
+            patientName: mockPatient.fullName,
+            doctorName: 'Dr. Jose Rizal',
+            prcLicenseNumber: '0123456',
+            issueDate: '2026-10-20',
+            diagnosis: 'Upper Respiratory Tract Infection',
+            fitnessStatus: 'UnfitToWork',
+            securityDigest: 'SEC-SHA256-E15C389998570234',
+            isSigned: true,
+            createdAt: '2026-10-20T09:00:00Z',
+          } as any,
+        ],
+        referralLetters: [
+          {
+            id: 'ref-1',
+            referralNumber: 'REF-2026-0001',
+            patientId: mockPatient.id,
+            patientName: mockPatient.fullName,
+            referringDoctorName: 'Rizal',
+            referralDate: '2026-10-21',
+            referredToFacility: 'PGH',
+            referredDepartment: 'Pulmonology',
+            provisionalDiagnosis: 'Community-Acquired Pneumonia',
+            reasonForReferral: 'Specialist evaluation',
+            securityDigest: 'SEC-SHA256-F00BAA1122334455',
+            isSigned: true,
+            createdAt: '2026-10-21T09:00:00Z',
+          } as any,
+        ],
+      })
+    );
+
+    expect(adminVaultMarkup).toContain('Administrative Certificate Vault');
+    expect(adminVaultMarkup).toContain('Issued medical certificates and referral letters available to view or reprint');
+    expect(adminVaultMarkup).not.toContain('Secure cryptographic registry');
+    expect(adminVaultMarkup).not.toContain('Physician Signed');
+    expect(adminVaultMarkup).not.toContain('SHA-256 Sealed');
+    expect(adminVaultMarkup).not.toContain('Seal Digest');
+    expect(adminVaultMarkup).not.toContain('UnfitToWork');
+    expect(adminVaultMarkup).toContain('Unfit to work');
+    expect(adminVaultMarkup).not.toContain('Dr. Dr.');
+    expect(adminVaultMarkup).toContain('Dr. Jose Rizal');
+    expect(adminVaultMarkup).toContain('Dr. Rizal');
+    expect(adminVaultMarkup).toContain('All (2)');
+    expect(adminVaultMarkup).toContain('Certificates (1)');
+    expect(adminVaultMarkup).toContain('Referrals (1)');
+    expect(adminVaultMarkup).toContain('MC-2026-0001');
+    expect(adminVaultMarkup).toContain('REF-2026-0001');
+    expect(adminVaultMarkup).not.toContain('Attach External Document');
+    // Issue #167: Header contains both Issue Certificate and Issue Referral actions
+    expect(adminVaultMarkup).toContain('Issue Certificate');
+    expect(adminVaultMarkup).toContain('Issue Referral');
+  });
+
+  test('2c. Issue #167: Empty Admin Vault renders dual CTAs (Issue Certificate & Issue Referral Letter)', () => {
+    const emptyMarkup = renderToStaticMarkup(
+      React.createElement(AdministrativeDocumentsTab, {
+        patient: mockPatient,
+        medicalCertificates: [],
+        referralLetters: [],
+      })
+    );
+
+    expect(emptyMarkup).toContain('No Issued Administrative Documents');
+    expect(emptyMarkup).toContain('Issue Medical Certificate');
+    expect(emptyMarkup).toContain('Issue Referral Letter');
   });
 
   test('3. ExternalDocumentVaultTab invokes onUploadDocument when Attach External Document is clicked', () => {
@@ -206,5 +302,26 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
     expect(CHART_TAB_DESCRIPTIONS.immunizations).toContain('immunizations');
     expect(CHART_TAB_DESCRIPTIONS.profiles).toContain('profiles');
     expect(CHART_TAB_DESCRIPTIONS.vault).toBe('External document vault, outside imaging films, and clearances');
+  });
+
+  test('5. Issue #167: IssueReferralLetterModal is exported from patient components and AdministrativeDocumentsTab mounts both issuance modals', async () => {
+    const patientIndexSource = fs.readFileSync(
+      path.resolve(__dirname, '../components/patient/index.ts'),
+      'utf8',
+    );
+    expect(patientIndexSource).toContain('IssueReferralLetterModal');
+    expect(patientIndexSource).toContain('IssueReferralLetterModalProps');
+
+    const adminVaultSource = fs.readFileSync(
+      path.resolve(__dirname, '../components/chart/AdministrativeDocumentsTab.tsx'),
+      'utf8',
+    );
+    expect(adminVaultSource).toContain('import IssueReferralLetterModal');
+    expect(adminVaultSource).toContain('<IssueReferralLetterModal');
+    expect(adminVaultSource).toContain('open-issue-referral-btn');
+    expect(adminVaultSource).toContain('open-issue-med-cert-btn');
+    expect(adminVaultSource).toContain("filterType === 'REFERRALS' && filteredReferrals.length === 0");
+    expect(adminVaultSource).toContain('No Referral Letters');
+    expect(adminVaultSource).toContain('empty-filter-issue-referral-btn');
   });
 });

@@ -25,7 +25,7 @@ public class UploadGrantServiceTests
     private readonly Guid _clinicId = Guid.NewGuid();
     private readonly ApplicationDbContext _db = MessagingTestKit.CreateDbContext();
 
-    private ClinicLabOrder SeedOrder(Guid? clinicId = null, string number = "LAB-1")
+    private LabOrder SeedOrder(Guid? clinicId = null, string number = "LAB-1")
     {
         var order = Phase3TestKit.NewLabOrder(clinicId ?? _clinicId, Tenant, Guid.NewGuid(), number);
         _db.LabOrders.Add(order);
@@ -75,9 +75,9 @@ public class UploadGrantServiceTests
 
         foreach (var url in new[] { null, "", "   ", "/relative/upload", "ftp://example.test/up" })
         {
-            var grants = Phase3TestKit.Grants(_db, Phase3TestKit.UploadOptions(o => o.PublicUploadBaseUrl = url));
+            var grants = Phase3TestKit.Grants(_db, Phase3TestKit.UploadOptions(o => o.PortalBaseUrl = url));
             var act = () => grants.MintAsync(order, UploaderKind.ExternalLab, CancellationToken.None);
-            await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*PublicUploadBaseUrl*");
+            await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*PortalBaseUrl*");
         }
     }
 
@@ -120,12 +120,12 @@ public class UploadGrantServiceTests
     }
 
     [Theory]
-    [InlineData("https://x.test/up/", "https://x.test/up")]
-    [InlineData("  http://x.test/up  ", "http://x.test/up")]
+    [InlineData("https://x.test/", "https://x.test/upload/lab")]
+    [InlineData("  http://x.test  ", "http://x.test/upload/lab")]
     public async Task The_Base_Url_Is_Trimmed(string configured, string expected)
     {
         var order = SeedOrder();
-        var grants = Phase3TestKit.Grants(_db, Phase3TestKit.UploadOptions(o => o.PublicUploadBaseUrl = configured));
+        var grants = Phase3TestKit.Grants(_db, Phase3TestKit.UploadOptions(o => o.PortalBaseUrl = configured));
 
         var minted = await grants.MintAsync(order, UploaderKind.Patient, CancellationToken.None);
 
@@ -158,7 +158,7 @@ public class LabResultIntakeTests
     private readonly ApplicationDbContext _db = MessagingTestKit.CreateDbContext();
     private readonly Phase3TestKit.InMemoryFileStore _files = new();
 
-    private async Task<(ClinicLabOrder Order, UploadGrant Grant)> SeedAsync(Action<ClinicUploadOptions>? configure = null)
+    private async Task<(LabOrder Order, UploadGrant Grant)> SeedAsync(Action<ClinicUploadOptions>? configure = null)
     {
         MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
         var patient = Phase3TestKit.NewPatient(_clinicId, Tenant, Guid.NewGuid());
@@ -172,7 +172,7 @@ public class LabResultIntakeTests
         return (order, grant);
     }
 
-    private LabResultSubmission Submission(ClinicLabOrder order, UploadGrant? grant, byte[]? content = null, string contentType = "application/pdf",
+    private LabResultSubmission Submission(LabOrder order, UploadGrant? grant, byte[]? content = null, string contentType = "application/pdf",
         ResultSource source = ResultSource.ExternalLab) =>
         new(_clinicId, order.Id, source, content ?? Pdf, "../../report.pdf", contentType, "Quest Labs", "note", grant);
 
@@ -339,7 +339,7 @@ public class LabResultExternalSubmittedHandlerTests
         new(_db, MessagingTestKit.Recipient(_db), Phase3TestKit.Grants(_db), Phase3TestKit.Intake(_db, _files),
             NullLogger<LabResultExternalSubmittedHandler>.Instance);
 
-    private async Task<(ClinicLabOrder Order, ClinicPatient Patient, string Token)> SeedAsync()
+    private async Task<(LabOrder Order, Patient Patient, string Token)> SeedAsync()
     {
         MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
         var patient = Phase3TestKit.NewPatient(_clinicId, Tenant, Guid.NewGuid());
@@ -351,7 +351,7 @@ public class LabResultExternalSubmittedHandlerTests
         return (order, patient, minted.Token);
     }
 
-    private Task Deliver(ClinicLabOrder order, Party from, string? token, Guid? correlation = null)
+    private Task Deliver(LabOrder order, Party from, string? token, Guid? correlation = null)
     {
         var payload = new ExternalLabResultUploadedEvent
         {
@@ -426,12 +426,12 @@ public class LabResultExternalSubmittedHandlerTests
     {
         var (order, patient, _) = await SeedAsync();
 
-        await Deliver(order, Party.ForPatient(patient.SyncPatientId!.Value.ToString()), null);
+        await Deliver(order, Party.ForPatient(patient.CloudPatientId!.Value.ToString()), null);
 
         var result = await _db.LabResults.IgnoreQueryFilters().SingleAsync();
         result.Source.Should().Be(ResultSource.PatientUploaded);
         result.Verification.Should().Be(VerificationState.Unverified);
-        result.UploadedByPatientId.Should().Be(patient.SyncPatientId);
+        result.UploadedByPatientId.Should().Be(patient.CloudPatientId);
     }
 
     [Fact]
@@ -451,7 +451,7 @@ public class LabResultExternalSubmittedHandlerTests
 
         await Deliver(order, MessagingTestKit.LabParty(), token);
         await Deliver(order, Party.Portal, token, correlation: Guid.NewGuid());
-        await Deliver(order, Party.ForPatient(patient.SyncPatientId!.Value.ToString()), null, correlation: Guid.NewGuid());
+        await Deliver(order, Party.ForPatient(patient.CloudPatientId!.Value.ToString()), null, correlation: Guid.NewGuid());
 
         (await ResultCount()).Should().Be(0);
     }

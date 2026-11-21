@@ -36,7 +36,7 @@ using Xunit;
 
 public class AuditChallengerM2EmpiricalTests
 {
-    private static (ApplicationDbContext context, Guid clinicId, string tenantId, IRepository<ClinicAuditEntry> repo)
+    private static (ApplicationDbContext context, Guid clinicId, string tenantId, IRepository<AuditEntry> repo)
         CreateIsolatedContext(Guid? customClinicId = null)
     {
         var clinicId = customClinicId ?? Guid.NewGuid();
@@ -59,7 +59,7 @@ public class AuditChallengerM2EmpiricalTests
         clinicContext.TenantId.Returns(tenantId);
 
         var context = new ApplicationDbContext(options, config, clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, null!);
+        var repo = TestDbHelper.CreateRepository<AuditEntry>(context, null!);
 
         return (context, clinicId, tenantId, repo);
     }
@@ -89,7 +89,7 @@ public class AuditChallengerM2EmpiricalTests
     {
         // Edge Case B: Single item
         var (context, clinicId, tenantId, repo) = CreateIsolatedContext();
-        await context.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+        await context.AuditEntries.AddAsync(new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -124,7 +124,7 @@ public class AuditChallengerM2EmpiricalTests
 
         for (int i = 0; i < 10; i++)
         {
-            await context.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+            await context.AuditEntries.AddAsync(new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -156,7 +156,7 @@ public class AuditChallengerM2EmpiricalTests
     {
         // Edge Case D: Corrupted cursor string
         var (context, clinicId, tenantId, repo) = CreateIsolatedContext();
-        await context.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+        await context.AuditEntries.AddAsync(new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -190,10 +190,10 @@ public class AuditChallengerM2EmpiricalTests
         var (context, clinicId, tenantId, repo) = CreateIsolatedContext();
         var identicalTimestamp = new DateTime(2026, 10, 17, 10, 0, 0, DateTimeKind.Utc);
 
-        var entries = new List<ClinicAuditEntry>();
+        var entries = new List<AuditEntry>();
         for (int i = 0; i < 15; i++)
         {
-            entries.Add(new ClinicAuditEntry
+            entries.Add(new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -210,7 +210,7 @@ public class AuditChallengerM2EmpiricalTests
                 MetadataJson = "{}"
             });
         }
-        await context.ClinicAuditEntries.AddRangeAsync(entries);
+        await context.AuditEntries.AddRangeAsync(entries);
         await context.SaveChangesAsync();
 
         var handler = new GetAuditLogsQueryHandler(repo);
@@ -239,8 +239,8 @@ public class AuditChallengerM2EmpiricalTests
         var (contextA, _, tenantId, repoA) = CreateIsolatedContext(clinicA);
 
         // Add 3 entries for Clinic A
-        await contextA.ClinicAuditEntries.AddRangeAsync(
-            new ClinicAuditEntry
+        await contextA.AuditEntries.AddRangeAsync(
+            new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -256,7 +256,7 @@ public class AuditChallengerM2EmpiricalTests
                 Description = "Clinic A Entry",
                 MetadataJson = "{}"
             },
-            new ClinicAuditEntry
+            new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,

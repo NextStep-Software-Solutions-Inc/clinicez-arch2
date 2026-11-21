@@ -150,8 +150,8 @@ export const SETTINGS_NAV_ITEMS: SearchItem[] = [
   {
     id: 'setting-philhealth',
     category: 'Settings',
-    title: 'PhilHealth Konsulta & Yakap Config',
-    subtitle: 'Accreditation numbers, PMAC keys, and claims transmittal settings',
+    title: 'PhilHealth & Yakap Config',
+    subtitle: 'Accreditation numbers, access keys, and annual checkup submission settings',
     badgeText: 'PhilHealth',
     badgeVariant: 'urgent',
     targetRoute: 'Settings',
@@ -166,6 +166,16 @@ export const SETTINGS_NAV_ITEMS: SearchItem[] = [
     badgeVariant: 'neutral',
     targetRoute: 'Settings',
     routeParams: { tab: 'license' },
+  },
+  {
+    id: 'setting-teleconsultation',
+    category: 'Settings',
+    title: 'Teleconsultation & Media Vault',
+    subtitle: 'Virtual video consultations, payment policy, consultation fee, recording retention, and consent',
+    badgeText: 'Teleconsult',
+    badgeVariant: 'routine',
+    targetRoute: 'Settings',
+    routeParams: { tab: 'teleconsultation' },
   },
 ];
 
@@ -236,6 +246,22 @@ export function resolveSearchNavigation(item: SearchItem): SearchNavigationResol
       destinationRoute = 'ResultReview';
       destinationParams = {
         orderId: params.orderId || item.id,
+      };
+      break;
+
+    case 'Tools':
+      destinationRoute = 'Tools';
+      destinationParams = {
+        tab: params.tab,
+        tool: params.tool,
+      };
+      break;
+
+    case 'Yakap':
+      destinationRoute = 'Tools';
+      destinationParams = {
+        tab: 'yakap',
+        tool: params.tool || params.tab,
       };
       break;
 

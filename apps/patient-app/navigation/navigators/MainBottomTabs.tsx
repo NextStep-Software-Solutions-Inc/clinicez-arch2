@@ -1,64 +1,170 @@
 import { createBottomTabNavigator, createBottomTabScreen } from '@react-navigation/bottom-tabs';
-import { Platform } from 'react-native';
+import { MaterialSymbol } from '@react-navigation/native';
+import { ColorValue, Platform } from 'react-native';
 import { isLiquidGlassSupported } from '@callstack/liquid-glass';
-import { AppIcon } from '../../components/ui/Icon';
+import { AppIcon, type IconName } from '../../components/ui/Icon';
 
 import HomeStack from './HomeStack';
-import AppointmentsStack from './AppointmentsStack';
 import FilesStack from './FilesStack';
-import ProfileStack from './ProfileStack';
+import AppointmentsStack from './AppointmentsStack';
+import MessagesStack from './MessagesStack';
 
-const getTabIcon = (androidName: string, iosName: string, webName: string) => {
-  if (Platform.OS === 'web') {
-    return ({ color, size }: { color: string; size: number }) => (
-      <AppIcon name={webName} color={color} size={size} />
-    );
+interface TabDefinition {
+  title: string;
+  screen: Parameters<typeof createBottomTabScreen>[0]['screen'];
+  androidSymbol: 'home' | 'monitor_heart' | 'calendar_today' | 'chat_bubble';
+  iosSymbol: 'house.fill' | 'heart.text.square.fill' | 'calendar' | 'bubble.left.fill';
+  webIcon: IconName;
+}
+
+const TAB_DEFINITIONS = {
+  HomeScreen: {
+    title: 'Home',
+    screen: HomeStack,
+    androidSymbol: 'home',
+    iosSymbol: 'house.fill',
+    webIcon: 'home',
+  },
+  RecordsScreen: {
+    title: 'Records',
+    screen: FilesStack,
+    androidSymbol: 'monitor_heart',
+    iosSymbol: 'heart.text.square.fill',
+    webIcon: 'heartPulse',
+  },
+  AppointmentsScreen: {
+    title: 'Appointments',
+    screen: AppointmentsStack,
+    androidSymbol: 'calendar_today',
+    iosSymbol: 'calendar',
+    webIcon: 'calendar',
+  },
+  MessagesScreen: {
+    title: 'Messages',
+    screen: MessagesStack,
+    androidSymbol: 'chat_bubble',
+    iosSymbol: 'bubble.left.fill',
+    webIcon: 'chat',
+  },
+} as const satisfies Record<string, TabDefinition>;
+
+type TabScreenKey = keyof typeof TAB_DEFINITIONS;
+
+let isMaterialSymbolSupported: boolean | null = null;
+let isRoundedVariantSupported: boolean | null = null;
+
+/**
+ * Safely probes native Android host for MaterialSymbols fonts bundled in the APK assets.
+ *
+ * - If host APK has MaterialSymbolsRounded font bundled -> uses rounded variant.
+ * - If host APK only has default Outlined font (e.g. existing installed APK before rebuild)
+ *   -> gracefully falls back to default without throwing "No MaterialSymbols font found for variant: Rounded".
+ * - If host APK has no MaterialSymbols fonts -> falls back to crisp Lucide icon.
+ */
+const checkAndroidSymbolSupport = (): { supported: boolean; rounded: boolean } => {
+  if (Platform.OS !== 'android') return { supported: false, rounded: false };
+  if (isMaterialSymbolSupported !== null && isRoundedVariantSupported !== null) {
+    return {
+      supported: isMaterialSymbolSupported,
+      rounded: isRoundedVariantSupported,
+    };
   }
-  return Platform.select({
-    android: { type: 'materialSymbol', name: androidName },
-    ios: { type: 'sfSymbol', name: iosName },
-  }) as any;
+
+  // 1. Probe if Rounded variant is available in host APK assets
+  try {
+    if (typeof MaterialSymbol?.getImageSource === 'function') {
+      MaterialSymbol.getImageSource({
+        name: 'home',
+        variant: 'rounded',
+        size: 24,
+      });
+      isRoundedVariantSupported = true;
+      isMaterialSymbolSupported = true;
+      return { supported: true, rounded: true };
+    }
+  } catch {
+    isRoundedVariantSupported = false;
+  }
+
+  // 2. Probe if base (Outlined) variant is available in host APK assets
+  try {
+    if (typeof MaterialSymbol?.getImageSource === 'function') {
+      MaterialSymbol.getImageSource({
+        name: 'home',
+        size: 24,
+      });
+      isMaterialSymbolSupported = true;
+      return { supported: true, rounded: false };
+    }
+  } catch {
+    isMaterialSymbolSupported = false;
+  }
+
+  isMaterialSymbolSupported = false;
+  return { supported: false, rounded: false };
+};
+
+const resolveTabIcon = (tab: TabDefinition) => {
+  if (Platform.OS === 'ios') {
+    return {
+      type: 'sfSymbol' as const,
+      name: tab.iosSymbol,
+    };
+  }
+
+  if (Platform.OS === 'android') {
+    const { supported, rounded } = checkAndroidSymbolSupport();
+    if (supported) {
+      return {
+        type: 'materialSymbol' as const,
+        name: tab.androidSymbol,
+        ...(rounded ? { variant: 'rounded' as const } : {}),
+      };
+    }
+  }
+
+  return ({ color, size }: { color: ColorValue; size: number }) => (
+    <AppIcon name={tab.webIcon} color={color} size={size} />
+  );
+};
+
+const createScreen = (key: TabScreenKey) => {
+  const tab = TAB_DEFINITIONS[key];
+  return createBottomTabScreen({
+    screen: tab.screen,
+    options: ({ route }) => {
+      const state = (route as any).state as { index?: number; routes?: Array<{ name: string }> } | undefined;
+      const activeIdx = state?.index ?? (state?.routes ? state.routes.length - 1 : 0);
+      const childRoute = state?.routes?.[activeIdx]?.name;
+      const isViewer = childRoute === 'FileViewerScreen';
+      return {
+        title: tab.title,
+        tabBarIcon: resolveTabIcon(tab),
+        tabBarStyle: isViewer ? { display: 'none' } : undefined,
+      };
+    },
+  });
 };
 
 const MainBottomTabs = createBottomTabNavigator({
-  // Brand-tinted native tabs (replaces the Android Material You / system accent).
+  // Native implementation delivers:
+  // - Android: 100% native Material 3 BottomNavigationView with active pill indicator & ripple
+  // - iOS: 100% native UITabBar with SF Symbols & Liquid Glass translucency
+  // - Web: JavaScript tab bar with crisp Lucide icons
   screenOptions: ({ theme }) => ({
     animation: 'shift',
     tabBarActiveTintColor: theme.colors.primary,
-    tabBarActiveIndicatorColor: `26`,
+    tabBarActiveIndicatorColor:
+      typeof theme.colors.primary === 'string' ? `${theme.colors.primary}26` : undefined,
     tabBarStyle: {
-      backgroundColor: isLiquidGlassSupported ? 'transparent' : undefined,
+      backgroundColor: isLiquidGlassSupported && Platform.OS === 'ios' ? 'transparent' : undefined,
     },
   }),
   screens: {
-    HomeScreen: createBottomTabScreen({
-      screen: HomeStack,
-      options: {
-        title: 'Home',
-        tabBarIcon: getTabIcon('home', 'house.fill', 'home'),
-      },
-    }),
-    AppointmentsScreen: createBottomTabScreen({
-      screen: AppointmentsStack,
-      options: {
-        title: 'My Appointments',
-        tabBarIcon: getTabIcon('heart_check', 'heart.fill', 'heart_check'),
-      },
-    }),
-    FilesScreen: createBottomTabScreen({
-      screen: FilesStack,
-      options: {
-        title: 'My Files',
-        tabBarIcon: getTabIcon('files', 'doc.fill', 'files'),
-      },
-    }),
-    ProfileScreen: createBottomTabScreen({
-      screen: ProfileStack,
-      options: {
-        title: 'My Profile',
-        tabBarIcon: getTabIcon('person', 'person.fill', 'person'),
-      },
-    }),
+    HomeScreen: createScreen('HomeScreen'),
+    RecordsScreen: createScreen('RecordsScreen'),
+    AppointmentsScreen: createScreen('AppointmentsScreen'),
+    MessagesScreen: createScreen('MessagesScreen'),
   },
 });
 

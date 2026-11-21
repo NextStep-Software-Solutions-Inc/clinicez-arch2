@@ -105,5 +105,6 @@ export function UiDensityProvider({ children }: { children: ReactNode }) {
 }
 
 export function useUiDensity(): UiDensityContextValue {
-  return useContext(UiDensityContext);
+  const ctx = useContext(UiDensityContext);
+  return ctx || DEFAULT_VALUE;
 }

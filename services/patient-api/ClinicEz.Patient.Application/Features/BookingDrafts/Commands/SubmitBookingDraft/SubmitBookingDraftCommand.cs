@@ -39,12 +39,15 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
     private readonly SharingOptions _sharingOptions;
     private readonly PatientShareSnapshotBuilder _snapshots;
     private readonly IFileRecordRepository? _fileRepo;
+    private readonly IPatientEncryptionService? _encryptionService;
 
     public SubmitBookingDraftCommandHandler(
         IBookingDraftRepository draftRepo, IClinicRepository clinicRepo, IUnitOfWork uow,
         IClinicMembershipRepository membershipRepo, IInteropPublisher publisher,
         IPatientRepository patientRepo, IPatientAccessRepository accessRepo, IStorageService storage,
-        IOptions<SharingOptions> sharingOptions, PatientShareSnapshotBuilder snapshots, IFileRecordRepository? fileRepo = null)
+        IOptions<SharingOptions> sharingOptions, PatientShareSnapshotBuilder snapshots,
+        IFileRecordRepository? fileRepo = null,
+        IPatientEncryptionService? encryptionService = null)
     {
         _draftRepo = draftRepo; _clinicRepo = clinicRepo; _uow = uow;
         _membershipRepo = membershipRepo;
@@ -55,6 +58,7 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
         _sharingOptions = sharingOptions.Value;
         _snapshots = snapshots;
         _fileRepo = fileRepo;
+        _encryptionService = encryptionService;
     }
 
     public async Task<string?> Handle(SubmitBookingDraftCommand request, CancellationToken cancellationToken)
@@ -70,6 +74,9 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
 
         var clinic = await _clinicRepo.GetByIdAsync(draft.ClinicId, cancellationToken)
             ?? throw new NotFoundException($"Clinic '{draft.ClinicId}' was not found.");
+
+        if (!clinic.SupportsAppointments)
+            throw new ConflictException("Online booking is currently paused for this clinic.");
 
         if (string.IsNullOrWhiteSpace(clinic.TenantId))
             throw new ConflictException($"Clinic '{clinic.Name}' is not registered in the facility directory yet, so it cannot receive bookings.");
@@ -119,11 +126,24 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
         var sections = (SharingScopes)(int)draft.ShareSections & ~SharingScopes.Demographics;
         var sharedContent = sections == SharingScopes.None ? null : await _snapshots.BuildAsync(patient.Id, sections, cancellationToken);
 
+        var selectedProvider = draft.ProviderId.HasValue
+            ? clinic.HealthcareProviders.FirstOrDefault(p => p.Id == draft.ProviderId.Value)
+                ?? clinic.HealthcareProviders.FirstOrDefault(p => p.PractitionerId == draft.ProviderId.Value)
+            : null;
+        var resolvedProviderId = selectedProvider?.Id ?? draft.ProviderId;
+        var resolvedProviderName = !string.IsNullOrWhiteSpace(draft.ProviderName)
+            ? draft.ProviderName.Trim()
+            : selectedProvider?.Name;
+        var resolvedCanonicalProviderId = selectedProvider?.PractitionerId;
+
         var booking = new AppointmentBookedEvent
         {
             DraftId = draft.Id,
             PatientId = request.PatientId,
             ClinicId = clinic.Id,
+            ProviderId = resolvedProviderId,
+            ProviderName = resolvedProviderName,
+            CanonicalProviderId = resolvedCanonicalProviderId,
             TenantId = clinic.TenantId,
             PreferredDate = draft.PreferredDate,
             PreferredTime = draft.PreferredTime,
@@ -187,16 +207,52 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
         return $"PENDING-{draft.Id:N}";
     }
 
-    // Only unencrypted files of a sensible size can be read by the clinic from a link; the rest are listed in the
-    // booking itself (name, type, size) and the clinic asks the patient for them in person.
+    // Attached files are decrypted with patient's PMK and shared with the clinic via FileBase64 (and fallback DownloadUrl).
     private async Task<int> ShareAttachmentsAsync(
         Guid draftId, Guid patientId, Party clinicParty, IReadOnlyList<FileRecord> files, CancellationToken cancellationToken)
     {
         var shared = 0;
         foreach (var file in files.Where(f =>
-                     string.IsNullOrEmpty(f.EncryptionKeyId) && !string.IsNullOrEmpty(f.StorageKey) && f.SizeBytes <= MaxSharedAttachmentBytes))
+                     !string.IsNullOrEmpty(f.StorageKey) && f.SizeBytes <= MaxSharedAttachmentBytes))
         {
             var url = await _storage.GeneratePresignedDownloadUrlAsync(file.StorageKey, AttachmentLinkLifetime, cancellationToken);
+            string? fileBase64 = null;
+
+            if (_encryptionService != null
+                && !string.IsNullOrWhiteSpace(file.WrappedKeyJson)
+                && !string.IsNullOrWhiteSpace(file.EncryptionIvBase64)
+                && !string.IsNullOrWhiteSpace(file.EncryptionTagBase64))
+            {
+                try
+                {
+                    var ciphertext = await _storage.DownloadAsync(file.StorageKey, cancellationToken);
+                    var plaintext = await _encryptionService.DecryptAsync(
+                        ciphertext,
+                        file.EncryptionIvBase64,
+                        file.EncryptionTagBase64,
+                        file.WrappedKeyJson,
+                        patientId,
+                        cancellationToken);
+                    fileBase64 = Convert.ToBase64String(plaintext);
+                }
+                catch
+                {
+                    // Fall back to DownloadUrl reference if decryption or storage download fails
+                }
+            }
+            else
+            {
+                try
+                {
+                    var bytes = await _storage.DownloadAsync(file.StorageKey, cancellationToken);
+                    fileBase64 = Convert.ToBase64String(bytes);
+                }
+                catch
+                {
+                    // Fall back to DownloadUrl reference
+                }
+            }
+
             _publisher.Enqueue(
                 InteropTypes.PatientRecordShared,
                 Party.ForPatient(patientId.ToString()),
@@ -212,7 +268,8 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
                     SizeBytes = file.SizeBytes,
                     DocumentTypeCode = file.DocumentType?.Code,
                     DownloadUrl = url,
-                    ExpiresAtUtc = DateTime.UtcNow.Add(AttachmentLinkLifetime)
+                    ExpiresAtUtc = DateTime.UtcNow.Add(AttachmentLinkLifetime),
+                    FileBase64 = fileBase64
                 });
             shared++;
         }

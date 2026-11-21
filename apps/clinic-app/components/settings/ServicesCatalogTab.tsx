@@ -13,8 +13,14 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
-import { clinicService, ClinicServiceItem } from '../../services/clinicService';
-import { Chip, FieldGroup } from './common';
+import {
+  clinicService,
+  isVerificationConflictError,
+  type ClinicServiceItem,
+  type PlatformVerificationStatus,
+} from '../../services/clinicService';
+import { PENDING_VERIFICATION_BUTTON_LABEL } from '../../utils/directoryVerification';
+import { Chip, FieldGroup, PendingVerificationNote } from './common';
 
 const SERVICE_CATEGORY_LABEL: Record<string, string> = {
   All: 'All Items',
@@ -35,6 +41,8 @@ interface ServicesCatalogTabProps {
   formatPeso: (v: number | undefined | null) => string;
   showAddModal: boolean;
   setShowAddModal: (show: boolean) => void;
+  platformVerificationStatus?: PlatformVerificationStatus;
+  onRefreshVerificationState?: () => Promise<void>;
 }
 
 export default function ServicesCatalogTab({
@@ -46,7 +54,10 @@ export default function ServicesCatalogTab({
   formatPeso,
   showAddModal,
   setShowAddModal,
+  platformVerificationStatus,
+  onRefreshVerificationState,
 }: ServicesCatalogTabProps) {
+  const isPendingFacility = platformVerificationStatus === 'PendingReview';
   const { isCompact } = useBreakpoint();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
@@ -56,6 +67,7 @@ export default function ServicesCatalogTab({
   const [itemCategory, setItemCategory] = useState('Consultation');
   const [itemPrice, setItemPrice] = useState('500');
   const [itemDescription, setItemDescription] = useState('');
+  const [itemPhilHealthCode, setItemPhilHealthCode] = useState('');
   const [savingItem, setSavingItem] = useState(false);
   const [serviceError, setServiceError] = useState<string | null>(null);
 
@@ -70,6 +82,7 @@ export default function ServicesCatalogTab({
   const [editPhilHealthCode, setEditPhilHealthCode] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [seedingDental, setSeedingDental] = useState(false);
 
   const visibleServices =
@@ -80,11 +93,38 @@ export default function ServicesCatalogTab({
   const handleOpenAdd = () => {
     setItemCode(`SVC-${Math.floor(1000 + Math.random() * 9000)}`);
     setItemName('');
-    setItemCategory('Consultation');
+    setItemCategory(selectedCategory !== 'All' ? selectedCategory : 'Consultation');
     setItemPrice('500');
     setItemDescription('');
+    setItemPhilHealthCode('');
     setServiceError(null);
+    setSyncError(null);
     setShowAddModal(true);
+  };
+
+  const syncPendingFacilityAfterMutation = async (
+    setInlineError?: (msg: string) => void,
+  ): Promise<boolean> => {
+    if (!isPendingFacility) return true;
+    const [, syncErr] = await clinicService.updatePendingDirectoryVerification();
+    if (!syncErr) return true;
+
+    if (isVerificationConflictError(syncErr)) {
+      const msg =
+        syncErr.message ||
+        'Verification submission is no longer pending review. Refreshing status.';
+      setInlineError?.(msg);
+      notify.error(msg);
+      await Promise.all([onRefreshServices(), onRefreshVerificationState?.()]);
+      return false;
+    }
+
+    const msg =
+      syncErr.message ||
+      'Service saved locally, but pending verification update failed.';
+    setInlineError?.(msg);
+    notify.error(msg);
+    return false;
   };
 
   const handleCreateService = async () => {
@@ -101,6 +141,7 @@ export default function ServicesCatalogTab({
 
     setSavingItem(true);
     setServiceError(null);
+    setSyncError(null);
 
     const [created, err] = await clinicService.createService({
       code: itemCode.trim().toUpperCase(),
@@ -108,17 +149,34 @@ export default function ServicesCatalogTab({
       category: itemCategory,
       standardPrice: priceNum,
       description: itemDescription.trim() || undefined,
+      philHealthCode: itemPhilHealthCode.trim() || undefined,
+      ...(isPendingFacility ? { skipPendingVerificationSync: true } : {}),
     });
 
-    setSavingItem(false);
-
     if (err || !created) {
+      setSavingItem(false);
       setServiceError(err?.message || 'Could not save the service item.');
       return;
     }
 
     setServices((prev) => [...prev, created]);
+    setItemCode('');
+    setItemName('');
+    setItemPrice('500');
+    setItemDescription('');
+    setItemPhilHealthCode('');
+    setServiceError(null);
     setShowAddModal(false);
+
+    if (isPendingFacility) {
+      const synced = await syncPendingFacilityAfterMutation((msg) => setSyncError(msg));
+      setSavingItem(false);
+      if (!synced) return;
+      notify.success(`Service "${created.name}" saved and pending verification submission updated.`);
+      return;
+    }
+
+    setSavingItem(false);
     notify.success(`Service "${created.name}" added to catalog.`);
   };
 
@@ -131,6 +189,7 @@ export default function ServicesCatalogTab({
     setEditIsActive(item.isActive);
     setEditPhilHealthCode(item.philHealthCode || '');
     setEditError(null);
+    setSyncError(null);
     setShowEditModal(true);
   };
 
@@ -148,6 +207,13 @@ export default function ServicesCatalogTab({
 
     setSavingEdit(true);
     setEditError(null);
+    setSyncError(null);
+
+    const trimmedPhilHealthCode = editPhilHealthCode.trim() || undefined;
+    const preservePhilHealthDescription =
+      trimmedPhilHealthCode && trimmedPhilHealthCode === editingItem.philHealthCode?.trim()
+        ? editingItem.philHealthDescription
+        : undefined;
 
     const [updated, err] = await clinicService.updateService(editingItem.id, {
       name: editName.trim(),
@@ -155,22 +221,37 @@ export default function ServicesCatalogTab({
       standardPrice: priceNum,
       description: editDescription.trim() || undefined,
       isActive: editIsActive,
-      philHealthCode: editPhilHealthCode.trim() || undefined,
+      philHealthCode: trimmedPhilHealthCode,
+      philHealthDescription: preservePhilHealthDescription,
+      isPhilHealthFormulary: Boolean(trimmedPhilHealthCode),
+      ...(isPendingFacility ? { skipPendingVerificationSync: true } : {}),
     });
 
-    setSavingEdit(false);
-
     if (err || !updated) {
+      setSavingEdit(false);
       setEditError(err?.message || 'Could not update the service item.');
       return;
     }
 
     setServices((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    setEditError(null);
+    setEditingItem(null);
     setShowEditModal(false);
+
+    if (isPendingFacility) {
+      const synced = await syncPendingFacilityAfterMutation((msg) => setSyncError(msg));
+      setSavingEdit(false);
+      if (!synced) return;
+      notify.success(`Service "${updated.name}" saved and pending verification submission updated.`);
+      return;
+    }
+
+    setSavingEdit(false);
     notify.success(`Service "${updated.name}" updated successfully.`);
   };
 
   const handleToggleActive = async (item: ClinicServiceItem) => {
+    setSyncError(null);
     const nextActive = !item.isActive;
     const [updated, err] = await clinicService.updateService(item.id, {
       name: item.name,
@@ -179,21 +260,36 @@ export default function ServicesCatalogTab({
       description: item.description,
       isActive: nextActive,
       philHealthCode: item.philHealthCode,
+      philHealthDescription: item.philHealthDescription,
+      isPhilHealthFormulary: item.isPhilHealthFormulary,
+      ...(isPendingFacility ? { skipPendingVerificationSync: true } : {}),
     });
     if (err || !updated) {
       notify.error(err?.message || 'Could not update service status.');
       return;
     }
     setServices((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    if (isPendingFacility) {
+      const synced = await syncPendingFacilityAfterMutation((msg) => setSyncError(msg));
+      if (!synced) return;
+      notify.success(
+        `Service "${item.name}" ${nextActive ? 'activated' : 'deactivated'} and pending verification submission updated.`,
+      );
+      return;
+    }
     notify.success(`Service "${item.name}" ${nextActive ? 'activated' : 'deactivated'}.`);
   };
 
   const handleSeedDentalServices = async () => {
+    if (seedingDental) return;
+    setSyncError(null);
     setSeedingDental(true);
-    const [seeded, err] = await clinicService.seedDentalServices();
-    setSeedingDental(false);
+    const [seeded, err] = await clinicService.seedDentalServices(
+      isPendingFacility ? { skipPendingVerificationSync: true } : undefined,
+    );
 
     if (err || !seeded) {
+      setSeedingDental(false);
       notify.error(err?.message || 'Could not seed dental services.');
       return;
     }
@@ -207,6 +303,16 @@ export default function ServicesCatalogTab({
       const toAdd = seeded.filter((s) => !existingCodes.has(s.code.toUpperCase()));
       return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
     });
+
+    if (isPendingFacility) {
+      const synced = await syncPendingFacilityAfterMutation((msg) => setSyncError(msg));
+      setSeedingDental(false);
+      if (!synced) return;
+      notify.success('Dental services seeded and pending verification submission updated.');
+      return;
+    }
+
+    setSeedingDental(false);
     notify.success('Dental services added to catalog successfully.');
   };
 
@@ -218,18 +324,24 @@ export default function ServicesCatalogTab({
           subtitle="Fees, outpatient consultations, diagnostic procedures, and clinical price lists"
           rightAction={
             <View style={styles.headerActions}>
-              <Button
-                title="Add Dental Services"
-                variant="secondary"
-                icon="plus"
-                loading={seedingDental}
-                onPress={handleSeedDentalServices}
-              />
               <Button title="Add service item" icon="plus" onPress={handleOpenAdd} />
             </View>
           }
         />
         <CardContent>
+          {isPendingFacility ? (
+            <View style={styles.pendingBanner}>
+              <PendingVerificationNote testID="services-pending-helper-note" />
+            </View>
+          ) : null}
+          {syncError ? (
+            <View testID="services-sync-error-banner" style={styles.errorBox}>
+              <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+              <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex1}>
+                {syncError}
+              </ThemedText>
+            </View>
+          ) : null}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -282,7 +394,11 @@ export default function ServicesCatalogTab({
                       <Badge label={item.code} variant="outline" size="sm" />
                       <Badge label={item.category} variant="neutral" size="sm" />
                       {!item.isActive && <Badge label="Inactive" variant="emergency" size="sm" />}
-                      {item.isPhilHealthFormulary && <Badge label="PhilHealth" variant="success" size="sm" />}
+                      {item.philHealthCode?.trim() ? (
+                        <Badge label={`PhilHealth: ${item.philHealthCode.trim()}`} variant="success" size="sm" />
+                      ) : item.isPhilHealthFormulary ? (
+                        <Badge label="PhilHealth" variant="success" size="sm" />
+                      ) : null}
                     </View>
 
                     {item.description ? (
@@ -337,9 +453,16 @@ export default function ServicesCatalogTab({
         subtitle="Define a consultation, clinical procedure, or diagnostic item."
         maxWidth={500}
         footer={
-          <View style={styles.modalFooter}>
-            <Button title="Cancel" variant="ghost" onPress={() => setShowAddModal(false)} disabled={savingItem} />
-            <Button title="Save item" onPress={handleCreateService} loading={savingItem} />
+          <View style={styles.modalFooterWrap}>
+            {isPendingFacility ? <PendingVerificationNote /> : null}
+            <View style={styles.modalFooter}>
+              <Button title="Cancel" variant="ghost" onPress={() => setShowAddModal(false)} disabled={savingItem} />
+              <Button
+                title={isPendingFacility ? PENDING_VERIFICATION_BUTTON_LABEL : 'Save item'}
+                onPress={handleCreateService}
+                loading={savingItem}
+              />
+            </View>
           </View>
         }
       >
@@ -395,6 +518,13 @@ export default function ServicesCatalogTab({
         </FieldGroup>
 
         <Input
+          label="PhilHealth statutory code (optional)"
+          value={itemPhilHealthCode}
+          onChangeText={setItemPhilHealthCode}
+          placeholder="e.g. 93000, 82947"
+        />
+
+        <Input
           label="Notes or instructions (optional)"
           value={itemDescription}
           onChangeText={setItemDescription}
@@ -411,9 +541,16 @@ export default function ServicesCatalogTab({
         subtitle={`Updating ${editingItem?.code || 'service'}`}
         maxWidth={500}
         footer={
-          <View style={styles.modalFooter}>
-            <Button title="Cancel" variant="ghost" onPress={() => setShowEditModal(false)} disabled={savingEdit} />
-            <Button title="Save changes" onPress={handleUpdateService} loading={savingEdit} />
+          <View style={styles.modalFooterWrap}>
+            {isPendingFacility ? <PendingVerificationNote /> : null}
+            <View style={styles.modalFooter}>
+              <Button title="Cancel" variant="ghost" onPress={() => setShowEditModal(false)} disabled={savingEdit} />
+              <Button
+                title={isPendingFacility ? PENDING_VERIFICATION_BUTTON_LABEL : 'Save changes'}
+                onPress={handleUpdateService}
+                loading={savingEdit}
+              />
+            </View>
           </View>
         }
       >
@@ -561,6 +698,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: theme.spacing.sm,
+  },
+  modalFooterWrap: {
+    gap: theme.spacing.xs,
+    alignItems: 'flex-end',
+  },
+  pendingBanner: {
+    marginBottom: theme.spacing.sm,
   },
   formRow: {
     flexDirection: 'row',

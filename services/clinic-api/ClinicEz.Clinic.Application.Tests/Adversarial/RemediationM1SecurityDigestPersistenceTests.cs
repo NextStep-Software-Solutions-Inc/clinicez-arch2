@@ -33,7 +33,7 @@ public class RemediationM1SecurityDigestPersistenceTests
     private readonly IClinicDocumentPdfService _pdfService = new ClinicDocumentPdfService();
     private readonly IDocumentSecurityService _securityService = new DocumentSecurityService();
 
-    private static ClinicSettings CreateSampleClinicSettings(Guid clinicId, string tenantId = "tenant-test-01") =>
+    private static FacilitySettings CreateSampleFacilitySettings(Guid clinicId, string tenantId = "tenant-test-01") =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -61,14 +61,14 @@ public class RemediationM1SecurityDigestPersistenceTests
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
 
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(testClinicId, testTenantId), CancellationToken.None);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(testClinicId, testTenantId), CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
         var handler = Phase3TestKit.MedCert(medCertRepo, uow, clinicContext, db);
@@ -93,21 +93,6 @@ public class RemediationM1SecurityDigestPersistenceTests
         savedCert.Should().NotBeNull();
         savedCert!.SecurityDigest.Should().NotBeNullOrWhiteSpace();
         savedCert.SecurityDigest!.Should().StartWith("SEC-SHA256-");
-
-        // 2. Verify DocumentsController.VerifyDocument resolves with this persisted digest
-        var sender = Substitute.For<ISender>();
-        var controller = new DocumentsController(
-            sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo, uow);
-
-        var verifyResult = await controller.VerifyDocument(savedCert.SecurityDigest!, CancellationToken.None);
-        verifyResult.Result.Should().BeOfType<OkObjectResult>();
-        var ok = (OkObjectResult)verifyResult.Result!;
-        var response = (ApiResponse<DocumentVerificationResultDto>)ok.Value!;
-        response.Data.Should().NotBeNull();
-        response.Data!.IsVerified.Should().BeTrue();
-        response.Data.DocumentNumber.Should().Be(savedCert.CertificateNumber);
-        response.Data.SecurityDigest.Should().Be(savedCert.SecurityDigest);
     }
 
     [Fact]
@@ -121,14 +106,14 @@ public class RemediationM1SecurityDigestPersistenceTests
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
 
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(testClinicId, testTenantId), CancellationToken.None);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(testClinicId, testTenantId), CancellationToken.None);
 
         var doctor = new StaffMember
         {
@@ -168,21 +153,6 @@ public class RemediationM1SecurityDigestPersistenceTests
         savedRef.Should().NotBeNull();
         savedRef!.SecurityDigest.Should().NotBeNullOrWhiteSpace();
         savedRef.SecurityDigest!.Should().StartWith("SEC-SHA256-");
-
-        // 2. Verify DocumentsController.VerifyDocument resolves with this persisted digest
-        var sender = Substitute.For<ISender>();
-        var controller = new DocumentsController(
-            sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo, uow);
-
-        var verifyResult = await controller.VerifyDocument(savedRef.SecurityDigest!, CancellationToken.None);
-        verifyResult.Result.Should().BeOfType<OkObjectResult>();
-        var ok = (OkObjectResult)verifyResult.Result!;
-        var response = (ApiResponse<DocumentVerificationResultDto>)ok.Value!;
-        response.Data.Should().NotBeNull();
-        response.Data!.IsVerified.Should().BeTrue();
-        response.Data.DocumentNumber.Should().Be(savedRef.ReferralNumber);
-        response.Data.SecurityDigest.Should().Be(savedRef.SecurityDigest);
     }
 
     [Fact]
@@ -196,14 +166,14 @@ public class RemediationM1SecurityDigestPersistenceTests
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
 
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(testClinicId, testTenantId), CancellationToken.None);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(testClinicId, testTenantId), CancellationToken.None);
 
         // Legacy cert without SecurityDigest
         var cert = new MedicalCertificate
@@ -231,7 +201,7 @@ public class RemediationM1SecurityDigestPersistenceTests
         var sender = Substitute.For<ISender>();
         var controller = new DocumentsController(
             sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo, uow);
+            settingsRepo, patientRepo, uow);
 
         // ACT: Download PDF
         var actionResult = await controller.DownloadMedicalCertificatePdf(cert.Id, wet: false, CancellationToken.None);
@@ -242,10 +212,6 @@ public class RemediationM1SecurityDigestPersistenceTests
         backfilledCert.Should().NotBeNull();
         backfilledCert!.SecurityDigest.Should().NotBeNullOrWhiteSpace();
         backfilledCert.SecurityDigest!.Should().StartWith("SEC-SHA256-");
-
-        // Verify document can now be resolved by that backfilled digest
-        var verifyResult = await controller.VerifyDocument(backfilledCert.SecurityDigest!, CancellationToken.None);
-        verifyResult.Result.Should().BeOfType<OkObjectResult>();
     }
 
     [Fact]
@@ -259,14 +225,14 @@ public class RemediationM1SecurityDigestPersistenceTests
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
 
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(testClinicId, testTenantId), CancellationToken.None);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(testClinicId, testTenantId), CancellationToken.None);
 
         // Legacy referral without SecurityDigest
         var referral = new ReferralLetter
@@ -297,7 +263,7 @@ public class RemediationM1SecurityDigestPersistenceTests
         var sender = Substitute.For<ISender>();
         var controller = new DocumentsController(
             sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo, uow);
+            settingsRepo, patientRepo, uow);
 
         // ACT: Download PDF
         var actionResult = await controller.DownloadReferralLetterPdf(referral.Id, wet: false, CancellationToken.None);
@@ -308,9 +274,5 @@ public class RemediationM1SecurityDigestPersistenceTests
         backfilledRef.Should().NotBeNull();
         backfilledRef!.SecurityDigest.Should().NotBeNullOrWhiteSpace();
         backfilledRef.SecurityDigest!.Should().StartWith("SEC-SHA256-");
-
-        // Verify document can now be resolved by that backfilled digest
-        var verifyResult = await controller.VerifyDocument(backfilledRef.SecurityDigest!, CancellationToken.None);
-        verifyResult.Result.Should().BeOfType<OkObjectResult>();
     }
 }

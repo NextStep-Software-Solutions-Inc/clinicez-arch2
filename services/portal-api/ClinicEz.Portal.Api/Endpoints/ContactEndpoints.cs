@@ -14,7 +14,10 @@ public sealed class ContactEndpoints : IEndpoint
 
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPost("/contact", async (SendContactMessageCommand command, ISender sender, CancellationToken ct) =>
+        app.MapPost("/contact", async (
+            SendContactMessageCommand command,
+            ISender sender,
+            CancellationToken ct) =>
         {
             var accepted = await sender.Send(command, ct);
             return accepted

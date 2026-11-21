@@ -13,6 +13,8 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Interoperability;
+using ClinicEz.Shared.Persistence;
+using ClinicEz.Shared.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +46,7 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
         services.AddClinicEzDocumentEngine();
+        services.AddPersistentDataProtection<ApplicationDbContext>(configuration, env, "ClinicEz.Laboratory");
 
         // Facility-local authentication (no external identity provider; works offline/LAN).
         // ILabContext must be registered before the dev auto-migration below builds a temporary provider.
@@ -91,7 +94,7 @@ public static class DependencyInjection
             {
                 using var scope = services.BuildServiceProvider().CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                dbContext.Database.Migrate();
+                dbContext.EnsureDevelopmentDatabaseCreatedAndMigrated(env);
             }
             catch (Exception ex)
             {

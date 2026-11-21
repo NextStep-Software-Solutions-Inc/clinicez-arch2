@@ -45,7 +45,7 @@ public sealed class PatientDocumentRepository : IPatientDocumentRepository
     public Task<LabResultReport?> GetLabReportAsync(Guid patientId, Guid reportId, CancellationToken cancellationToken = default) =>
         _context.LabResultReports
             .Include(r => r.Observations)
-            .FirstOrDefaultAsync(r => r.PatientId == patientId && r.ReportId == reportId, cancellationToken);
+            .FirstOrDefaultAsync(r => r.PatientId == patientId && (r.ReportId == reportId || r.Id == reportId), cancellationToken);
 
     public Task<LabResultReport?> GetLabReportForRequisitionAsync(Guid patientId, Guid requisitionId, CancellationToken cancellationToken = default) =>
         _context.LabResultReports

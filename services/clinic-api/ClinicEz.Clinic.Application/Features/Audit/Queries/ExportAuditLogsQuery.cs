@@ -47,11 +47,11 @@ public sealed class ExportAuditLogsQueryValidator : AbstractValidator<ExportAudi
 
 public sealed class ExportAuditLogsQueryHandler : IRequestHandler<ExportAuditLogsQuery, AuditExportResultDto>
 {
-    private readonly IRepository<ClinicAuditEntry> _auditRepo;
+    private readonly IRepository<AuditEntry> _auditRepo;
     private readonly IClinicContext _clinicContext;
 
     public ExportAuditLogsQueryHandler(
-        IRepository<ClinicAuditEntry> auditRepo,
+        IRepository<AuditEntry> auditRepo,
         IClinicContext clinicContext)
     {
         _auditRepo = auditRepo ?? throw new ArgumentNullException(nameof(auditRepo));
@@ -60,7 +60,7 @@ public sealed class ExportAuditLogsQueryHandler : IRequestHandler<ExportAuditLog
 
     public async Task<AuditExportResultDto> Handle(ExportAuditLogsQuery request, CancellationToken cancellationToken)
     {
-        IQueryable<ClinicAuditEntry> query = _auditRepo.Query().AsNoTracking();
+        IQueryable<AuditEntry> query = _auditRepo.Query().AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(request.Category) && !string.Equals(request.Category, "All", StringComparison.OrdinalIgnoreCase))
         {

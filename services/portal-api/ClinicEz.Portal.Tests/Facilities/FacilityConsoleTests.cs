@@ -197,12 +197,16 @@ public class FacilityConsoleTests : IDisposable
         var facility = await _context.Facilities.SingleAsync(f => f.Slug == "metro-urgent");
 
         var licenses = TestSupport.Outbox(_context, InteropTypes.FacilityLicenseIssued);
-        Assert.Equal(2, licenses.Count);
+        Assert.Equal(3, licenses.Count);
         var license = licenses.Single(m => m.To.Service is null);
         var billingLicense = licenses.Single(m => m.To.Service == InteropServices.Billing);
+        var commsLicense = licenses.Single(m => m.To.Service == InteropServices.Comms);
         Assert.Equal(license.To with { Service = InteropServices.Billing }, billingLicense.To);
+        Assert.Equal(license.To with { Service = InteropServices.Comms }, commsLicense.To);
         Assert.Equal(license.CorrelationId, billingLicense.CorrelationId);
+        Assert.Equal(license.CorrelationId, commsLicense.CorrelationId);
         Assert.Equal(license.GetPayload<FacilityCreatedEvent>(), billingLicense.GetPayload<FacilityCreatedEvent>());
+        Assert.Equal(license.GetPayload<FacilityCreatedEvent>(), commsLicense.GetPayload<FacilityCreatedEvent>());
         Assert.Equal(PartyKind.Facility, license.To.Kind);
         Assert.Equal(facility.Id.ToString(), license.To.FacilityId);
         Assert.Equal(_tenantId.ToString(), license.To.TenantId);
@@ -220,7 +224,8 @@ public class FacilityConsoleTests : IDisposable
 
         await handler.Handle(new CreateFacilityCommand(_tenantId.ToString(), FacilityType.Clinic, "Catalog Clinic"), CancellationToken.None);
 
-        var directory = Assert.Single(TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated));
+        var directory = TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated)
+            .Single(m => m.To.Kind == PartyKind.ControlPlane && m.To.Service == InteropServices.Patient);
         Assert.Equal(InteropServices.Patient, directory.To.Service);
         var payload = directory.GetPayload<FacilityCreatedEvent>();
         Assert.Equal("Catalog Clinic", payload.Name);

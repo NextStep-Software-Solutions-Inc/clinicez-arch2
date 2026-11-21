@@ -358,7 +358,7 @@ public class PlanAndEntitlementManagementTests : IDisposable
         var initialToken = facility.LicenseToken;
         Assert.NotNull(initialToken);
 
-        // 2. Update Plan: Add feature.teleconsultation and increase limit.staff from default (20) to 50
+        // 2. Update Plan: Add feature.lis_integration and increase limit.staff from default (20) to 50
         var handler = new UpdateBillingPlanCommandHandler(_context, _publisher);
         var updateCommand = new UpdateBillingPlanCommand
         {
@@ -375,7 +375,7 @@ public class PlanAndEntitlementManagementTests : IDisposable
                 [EntitlementKeys.LimitClinics] = 2,
                 [EntitlementKeys.PoolStaff] = 50
             },
-            EnabledFeatures = [EntitlementKeys.FeatureTeleconsultation, EntitlementKeys.FeatureElectronicPrescriptions]
+            EnabledFeatures = [EntitlementKeys.FeatureLisIntegration, EntitlementKeys.FeatureElectronicPrescriptions]
         };
 
         var updated = await handler.Handle(updateCommand, CancellationToken.None);
@@ -401,7 +401,7 @@ public class PlanAndEntitlementManagementTests : IDisposable
         Assert.NotEmpty(outbox);
         var latestEvent = outbox.Last(e => e.FacilityId == facilityId);
         Assert.Equal(reloadedSub.EntitlementVersion, latestEvent.EntitlementVersion);
-        Assert.Contains(FacilityFeatureKeys.Teleconsultation, latestEvent.EnabledFeatures);
+        Assert.Contains(FacilityFeatureKeys.LisIntegration, latestEvent.EnabledFeatures);
         Assert.Equal(50, latestEvent.MaxStaff);
     }
 

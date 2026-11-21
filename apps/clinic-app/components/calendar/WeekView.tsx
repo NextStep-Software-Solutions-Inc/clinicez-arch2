@@ -11,6 +11,8 @@ import {
   generateDayTimeSlots,
   getManilaTodayStr,
   formatTime12,
+  getAppointmentLocalDateTime,
+  isTimeInSlotWindow,
 } from './calendarUtils';
 
 export function WeekView({
@@ -120,9 +122,10 @@ export function WeekView({
 
               {/* Slotted Rows */}
               {slots.map((slot) => {
-                const appt = col.appointments.find((a) =>
-                  a.scheduledAt.includes(`T${slot.timeStr}:`)
+                const slotAppts = col.appointments.filter((a) =>
+                  isTimeInSlotWindow(getAppointmentLocalDateTime(a.scheduledAt).timeStr, slot.timeStr)
                 );
+                const appt = slotAppts[0];
 
                 return (
                   <Pressable
@@ -145,13 +148,16 @@ export function WeekView({
                       pressed && styles.pressed,
                     ]}
                   >
-                    {appt ? (
-                      <AppointmentCard
-                        appointment={appt}
-                        variant="timeline"
-                        onSelect={onSelectAppointment}
-                      />
-                    ) : null}
+                    {slotAppts.length > 0
+                      ? slotAppts.map((slotAppt) => (
+                          <AppointmentCard
+                            key={slotAppt.id}
+                            appointment={slotAppt}
+                            variant="timeline"
+                            onSelect={onSelectAppointment}
+                          />
+                        ))
+                      : null}
                   </Pressable>
                 );
               })}

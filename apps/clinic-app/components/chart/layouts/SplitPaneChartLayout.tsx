@@ -10,11 +10,12 @@ import {
   ThemedText,
   Badge,
   Icon,
+  Button,
 } from '../../ui';
 import type { IconName } from '../../ui/Icon';
 import { useBreakpoint } from '../../../utils/useBreakpoint';
 import { formatCompressedLongAge } from '../../../utils/age';
-import { formatPhilHealthPin } from '../PatientSummarySpine';
+import { formatPhilHealthPin, formatBloodTypeLabel } from '../PatientSummarySpine';
 import ChartLayoutSwitcher from '../ChartLayoutSwitcher';
 import ChartTabContentView from '../ChartTabContentView';
 import type { ChartLayoutProps, ChartTab } from '../types';
@@ -55,9 +56,16 @@ const SPLIT_NAV_ITEMS: readonly NavItemMeta[] = [
   { tab: 'profiles', label: 'Health Profiles', icon: 'clipboard' },
   {
     tab: 'vault',
-    label: 'Document Vault',
+    label: 'Doc Vault',
     icon: 'folder',
     getCount: (_, attachments) => attachments?.length,
+  },
+  {
+    tab: 'documents',
+    label: 'Admin Vault',
+    icon: 'scroll',
+    getCount: (chart) =>
+      ((chart?.medicalCertificates?.length ?? 0) + (chart?.referralLetters?.length ?? 0)) || undefined,
   },
 ] as const;
 
@@ -80,6 +88,7 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
     onEditDemographics,
     currentLayout,
     onSwitchLayout,
+    loadingChart,
   } = props;
 
   const { isCompact } = useBreakpoint();
@@ -152,8 +161,8 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                       style={styles.identityValue}
                     >
                       {patient.dateOfBirth
-                        ? `${formatCompressedLongAge(patient.dateOfBirth)}, ${patient.gender}`
-                        : `${patient.age ? `${patient.age}Y, ` : ''}${patient.gender}`}
+                        ? `${formatCompressedLongAge(patient.dateOfBirth)}, ${patient.sex}`
+                        : `${patient.age ? `${patient.age}Y, ` : ''}${patient.sex}`}
                     </ThemedText>
                   </View>
 
@@ -180,8 +189,8 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                   ) : (
                     <Badge label="Unverified" variant="warning" size="sm" icon="alert" />
                   )}
-                  {patient.bloodType ? (
-                    <Badge label={`Type ${patient.bloodType}`} variant="neutral" size="sm" icon="droplet" />
+                  {formatBloodTypeLabel(patient.bloodType) ? (
+                    <Badge label={`Type ${formatBloodTypeLabel(patient.bloodType)}`} variant="neutral" size="sm" icon="droplet" />
                   ) : null}
                 </View>
               </View>
@@ -315,42 +324,30 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
 
           {/* Quick Action Footer in Sidebar */}
           <View style={styles.sidebarFooter}>
-            <Pressable
-              onPress={onEditDemographics}
-              style={({ pressed }) => [styles.footerBtn, pressed && styles.footerBtnPressed]}
-              accessibilityRole="button"
+            <Button
+              variant="subtle"
+              size="sm"
+              icon="edit"
+              title="Edit Demographics"
               accessibilityLabel="Edit Patient Information"
-            >
-              <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-              <ThemedText
-                variant="caption"
-                color={theme.colors.textSecondary}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-                style={styles.footerBtnText}
-              >
-                Edit Demographics
-              </ThemedText>
-            </Pressable>
+              numberOfLines={1}
+              onPress={onEditDemographics}
+              style={styles.footerBtn}
+            />
 
             {onRefreshChart ? (
-              <Pressable
-                onPress={onRefreshChart}
-                style={({ pressed }) => [styles.footerBtn, pressed && styles.footerBtnPressed]}
-                accessibilityRole="button"
+              <Button
+                variant="subtle"
+                size="sm"
+                icon="refresh"
+                title="Refresh"
                 accessibilityLabel="Refresh Chart"
-              >
-                <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-                <ThemedText
-                  variant="caption"
-                  color={theme.colors.textSecondary}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                  style={styles.footerBtnText}
-                >
-                  Refresh
-                </ThemedText>
-              </Pressable>
+                numberOfLines={1}
+                loading={loadingChart}
+                disabled={loadingChart}
+                onPress={onRefreshChart}
+                style={styles.footerBtn}
+              />
             ) : null}
           </View>
         </View>
@@ -361,16 +358,32 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
         <View style={styles.canvasContainer}>
           {/* Workstation Top Bar */}
           <View style={styles.canvasHeader}>
-            <View style={styles.canvasHeaderTitle}>
-              <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                Patient Chart
-              </ThemedText>
-              <ThemedText variant="title" color={theme.colors.text}>
-                {activeNavItem?.label || 'Clinical View'}
-              </ThemedText>
-              <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                {patient?.fullName || 'Patient'} • Code: {patient?.patientCode || '—'}
-              </ThemedText>
+            <View style={styles.canvasHeaderLeft}>
+              {props.canGoBackTab && props.onBackTab ? (
+                <Button
+                  variant="subtle"
+                  size="sm"
+                  icon="arrowLeft"
+                  iconOnly
+                  accessibilityLabel={
+                    props.previousTabLabel
+                      ? `Back to ${props.previousTabLabel}`
+                      : 'Back to previous section'
+                  }
+                  onPress={props.onBackTab}
+                />
+              ) : null}
+              <View style={styles.canvasHeaderTitle}>
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                  Patient Chart
+                </ThemedText>
+                <ThemedText variant="title" color={theme.colors.text}>
+                  {activeNavItem?.label || 'Clinical View'}
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  {patient?.fullName || 'Patient'} • Code: {patient?.patientCode || '—'}
+                </ThemedText>
+              </View>
             </View>
 
             <View style={styles.canvasHeaderActions}>
@@ -379,37 +392,36 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                 onSwitchLayout={onSwitchLayout}
               />
 
-              <Pressable
-                onPress={onEditDemographics}
-                hitSlop={8}
-                style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
-                accessibilityRole="button"
+              <Button
+                variant="subtle"
+                size="sm"
+                icon="edit"
+                iconOnly
                 accessibilityLabel="Edit Demographics"
-              >
-                <Icon name="edit" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-              </Pressable>
+                onPress={onEditDemographics}
+              />
 
               {onRefreshChart ? (
-                <Pressable
-                  onPress={onRefreshChart}
-                  hitSlop={8}
-                  style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
-                  accessibilityRole="button"
+                <Button
+                  variant="subtle"
+                  size="sm"
+                  icon="refresh"
+                  iconOnly
                   accessibilityLabel="Refresh patient chart"
-                >
-                  <Icon name="refresh" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-                </Pressable>
+                  loading={loadingChart}
+                  disabled={loadingChart}
+                  onPress={onRefreshChart}
+                />
               ) : null}
 
-              <Pressable
-                onPress={onClose}
-                hitSlop={8}
-                style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
-                accessibilityRole="button"
+              <Button
+                variant="subtle"
+                size="sm"
+                icon="close"
+                iconOnly
                 accessibilityLabel="Close Patient Chart"
-              >
-                <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-              </Pressable>
+                onPress={onClose}
+              />
             </View>
           </View>
 
@@ -628,25 +640,7 @@ const styles = StyleSheet.create({
   },
   footerBtn: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs + 2,
-    paddingHorizontal: theme.spacing.sm,
-    borderRadius: theme.radii.md,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-    backgroundColor: theme.colors.surfaceSubtle,
     minWidth: 0,
-  },
-  footerBtnPressed: {
-    backgroundColor: theme.colors.surfaceHighlight,
-    opacity: 0.85,
-  },
-  footerBtnText: {
-    fontWeight: '600',
-    flexShrink: 1,
   },
   canvasContainer: {
     flex: 1,
@@ -664,26 +658,22 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.borderLight,
     backgroundColor: theme.colors.surface,
   },
+  canvasHeaderLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    minWidth: 0,
+    marginRight: theme.spacing.md,
+  },
   canvasHeaderTitle: {
     flex: 1,
+    minWidth: 0,
   },
   canvasHeaderActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-  },
-  closeBtn: {
-    padding: theme.spacing.xs,
-    borderRadius: theme.radii.md,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-    backgroundColor: theme.colors.surfaceHighlight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeBtnPressed: {
-    backgroundColor: theme.colors.borderLight,
-    opacity: 0.8,
   },
   canvasViewport: {
     flex: 1,

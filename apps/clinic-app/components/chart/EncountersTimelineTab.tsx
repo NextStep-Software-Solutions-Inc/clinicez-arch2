@@ -1,65 +1,205 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, EmptyState } from '../ui';
-import type {
-  ClinicPatient,
-  ConsultationRecord,
+import { ThemedText, Badge, Icon, EmptyState, ErrorState, SkeletonList, Button, type BadgeVariant } from '../ui';
+import { useClinic } from '../../context/ClinicContext';
+import ClinicRecordingPlayerModal from '../teleconsult/ClinicRecordingPlayerModal';
+import {
+  clinicService,
+  type ClinicPatient,
+  type ConsultationRecord,
+  type HealthScreeningRecord,
+  type HealthScreeningType,
+  type HealthScreeningDisposition,
+  type TriageVitals,
+  type NcdRiskAssessment,
+  formatClinicDate,
+  formatClinicTime,
+  formatClinicDateTime,
 } from '../../services/clinicService';
 
 export interface EncountersTimelineTabProps {
   patient?: ClinicPatient | null;
   patientId?: string;
   consultations: ConsultationRecord[];
+  healthScreenings?: HealthScreeningRecord[];
+  vitalsHistory?: TriageVitals[];
+  latestNcdAssessment?: NcdRiskAssessment | null;
   onViewPrescriptionSlip?: (consultation: ConsultationRecord) => void;
   onOpenExternalDispense?: (consultation: ConsultationRecord) => void;
   onRefreshChart?: () => void;
+}
+
+type TimelineEntry =
+  | { kind: 'consultation'; id: string; sortTs: number; data: ConsultationRecord }
+  | { kind: 'screening'; id: string; sortTs: number; data: HealthScreeningRecord };
+
+function getScreeningTypeBadgeLabel(type: HealthScreeningType): string {
+  switch (type) {
+    case 'AnnualPhysicalExam':
+      return 'APE';
+    case 'PreEmployment':
+      return 'Pre-Employment';
+    case 'SchoolPhysical':
+      return 'School Physical';
+    case 'YakapFpe':
+      return 'PhilHealth Checkup';
+    case 'RoutineWellness':
+      return 'Wellness';
+    case 'CommunityScreening':
+      return 'Community Screening';
+    default:
+      return 'Health Screening';
+  }
+}
+
+function getScreeningDispositionBadge(
+  status: HealthScreeningRecord['status'],
+  disposition?: HealthScreeningDisposition | null
+): { label: string; variant: BadgeVariant } {
+  if (status === 'AwaitingDoctor') {
+    return { label: 'Awaiting Doctor PE', variant: 'warning' };
+  }
+  if (status === 'EscalatedToConsultation' || disposition === 'EscalatedToConsultation') {
+    return { label: 'Escalated to MD', variant: 'urgent' };
+  }
+  switch (disposition) {
+    case 'Cleared':
+      return { label: 'Cleared', variant: 'success' };
+    case 'ClearedWithAdvice':
+      return { label: 'Cleared w/ Advice', variant: 'info' };
+    case 'ForWorkup':
+      return { label: 'For Workup', variant: 'warning' };
+    default:
+      return { label: status === 'Completed' ? 'Completed' : 'In Progress', variant: status === 'Completed' ? 'success' : 'neutral' };
+  }
+}
+
+function formatDuration(totalSeconds?: number): string {
+  if (!totalSeconds || totalSeconds < 0) return '00:00';
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = Math.floor(totalSeconds % 60);
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 export default function EncountersTimelineTab({
   patient,
   patientId,
   consultations = [],
+  healthScreenings,
+  vitalsHistory = [],
+  latestNcdAssessment = null,
   onViewPrescriptionSlip,
   onOpenExternalDispense,
   onRefreshChart,
 }: EncountersTimelineTabProps) {
+  const { dateFormat, timeFormat, timeZoneId } = useClinic();
   const [selectedDoctorFilter, setSelectedDoctorFilter] = useState<string>('ALL');
   const [encounterTypeFilter, setEncounterTypeFilter] = useState<'ALL' | 'YAKAP' | 'STANDARD'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [expandedEncounterIds, setExpandedEncounterIds] = useState<Record<string, boolean>>({
-    // Auto-expand the latest encounter by default
-    ...(consultations.length > 0 ? { [consultations[0].id]: true } : {}),
-  });
+  const [fetchedScreenings, setFetchedScreenings] = useState<HealthScreeningRecord[] | null>(null);
+  const [loadingScreenings, setLoadingScreenings] = useState<boolean>(false);
+  const [screeningsError, setScreeningsError] = useState<string | null>(null);
 
-  // Extract unique doctors
+  const effectivePatientId = patientId || patient?.id;
+
+  const loadFallbackScreenings = useMemo(
+    () => async (targetPatientId: string) => {
+      setLoadingScreenings(true);
+      setScreeningsError(null);
+      try {
+        const [rows, err] = await clinicService.getPatientHealthScreenings(targetPatientId);
+        if (err) {
+          setScreeningsError(err.message || 'Unable to load health screenings.');
+        } else {
+          setFetchedScreenings(rows ?? []);
+        }
+      } catch (e: any) {
+        setScreeningsError(e?.message || 'Unable to load health screenings.');
+      } finally {
+        setLoadingScreenings(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (healthScreenings !== undefined || !effectivePatientId) {
+      setFetchedScreenings(null);
+      setScreeningsError(null);
+      setLoadingScreenings(false);
+      return;
+    }
+    let active = true;
+    setLoadingScreenings(true);
+    setScreeningsError(null);
+    clinicService
+      .getPatientHealthScreenings(effectivePatientId)
+      .then(([rows, err]) => {
+        if (!active) return;
+        if (err) {
+          setScreeningsError(err.message || 'Unable to load health screenings.');
+        } else {
+          setFetchedScreenings(rows ?? []);
+        }
+      })
+      .catch((e: any) => {
+        if (!active) return;
+        setScreeningsError(e?.message || 'Unable to load health screenings.');
+      })
+      .finally(() => {
+        if (active) setLoadingScreenings(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [healthScreenings, effectivePatientId]);
+
+  const signedConsultations = useMemo(
+    () => consultations.filter((c) => c.isSigned !== false),
+    [consultations],
+  );
+
+  const activeScreenings = useMemo(
+    () => (healthScreenings ?? fetchedScreenings ?? []).filter((hs) => hs.status !== 'Cancelled'),
+    [healthScreenings, fetchedScreenings],
+  );
+
+  const [expandedEncounterIds, setExpandedEncounterIds] = useState<Record<string, boolean>>({
+    // Auto-expand the latest signed encounter by default
+    ...(signedConsultations.length > 0 ? { [signedConsultations[0].id]: true } : {}),
+  });
+  const [selectedRecordingSession, setSelectedRecordingSession] = useState<{
+    sessionId: string;
+    consultationId?: string;
+  } | null>(null);
+
+  // Extract unique doctors across consultations and screenings
   const doctorsList = useMemo(() => {
     const map = new Map<string, string>();
-    consultations.forEach((c) => {
+    signedConsultations.forEach((c) => {
       if (c.doctorId && c.doctorName) {
         map.set(c.doctorId, c.doctorName);
       }
     });
+    activeScreenings.forEach((hs) => {
+      if (hs.examinedByDoctorId && hs.examinedByDoctorName) {
+        map.set(hs.examinedByDoctorId, hs.examinedByDoctorName);
+      }
+    });
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [consultations]);
+  }, [signedConsultations, activeScreenings]);
 
-  // Filter consultations
-  const filteredConsultations = useMemo(() => {
-    return consultations.filter((c) => {
-      // Doctor filter
-      if (selectedDoctorFilter !== 'ALL' && c.doctorId !== selectedDoctorFilter) {
-        return false;
-      }
-      // Type filter
-      if (encounterTypeFilter === 'YAKAP' && !c.isYakapEligible) {
-        return false;
-      }
-      if (encounterTypeFilter === 'STANDARD' && c.isYakapEligible) {
-        return false;
-      }
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+  // Build chronologically sorted and filtered timeline entries
+  const filteredEntries = useMemo<TimelineEntry[]>(() => {
+    const entries: TimelineEntry[] = [];
+    const q = searchQuery.trim().toLowerCase();
+
+    for (const c of signedConsultations) {
+      if (selectedDoctorFilter !== 'ALL' && c.doctorId !== selectedDoctorFilter) continue;
+      if (encounterTypeFilter === 'YAKAP' && !c.isYakapEligible) continue;
+      if (encounterTypeFilter === 'STANDARD' && c.isYakapEligible) continue;
+      if (q) {
         const matchesDiag = (c.diagnoses || []).some(
           (d) => d.icd10Code?.toLowerCase().includes(q) || d.description?.toLowerCase().includes(q)
         );
@@ -73,12 +213,50 @@ export default function EncountersTimelineTab({
           c.hciCaseNo?.toLowerCase().includes(q) ||
           c.hciTransNo?.toLowerCase().includes(q) ||
           c.soapTransNo?.toLowerCase().includes(q);
-
-        return matchesDiag || matchesDoctor || matchesNotes || matchesCase;
+        if (!matchesDiag && !matchesDoctor && !matchesNotes && !matchesCase) continue;
       }
-      return true;
-    });
-  }, [consultations, selectedDoctorFilter, encounterTypeFilter, searchQuery]);
+      entries.push({
+        kind: 'consultation',
+        id: c.id,
+        sortTs: new Date(c.encounterDate).getTime() || 0,
+        data: c,
+      });
+    }
+
+    for (const hs of activeScreenings) {
+      const isYakapScreening = hs.workflowMode === 'YakapAvailment' || hs.screeningType === 'YakapFpe';
+      if (selectedDoctorFilter !== 'ALL' && hs.examinedByDoctorId !== selectedDoctorFilter) continue;
+      if (encounterTypeFilter === 'YAKAP' && !isYakapScreening) continue;
+      if (encounterTypeFilter === 'STANDARD' && isYakapScreening) continue;
+      if (q) {
+        const typeLabel = getScreeningTypeBadgeLabel(hs.screeningType).toLowerCase();
+        const dispLabel = getScreeningDispositionBadge(hs.status, hs.disposition).label.toLowerCase();
+        const matchesScreening =
+          typeLabel.includes(q) ||
+          dispLabel.includes(q) ||
+          hs.clinicalImpression?.toLowerCase().includes(q) ||
+          hs.preventiveCounselingNotes?.toLowerCase().includes(q) ||
+          hs.nurseScreeningNotes?.toLowerCase().includes(q) ||
+          hs.screenedByNurseName?.toLowerCase().includes(q) ||
+          hs.examinedByDoctorName?.toLowerCase().includes(q) ||
+          hs.profilingTransNo?.toLowerCase().includes(q) ||
+          hs.philHealthAtc?.toLowerCase().includes(q) ||
+          hs.queueNumber?.toLowerCase().includes(q);
+        if (!matchesScreening) continue;
+      }
+      entries.push({
+        kind: 'screening',
+        id: `hs-${hs.id}`,
+        sortTs: new Date(hs.completedAtUtc || hs.screeningDateUtc).getTime() || 0,
+        data: hs,
+      });
+    }
+
+    entries.sort((a, b) => b.sortTs - a.sortTs);
+    return entries;
+  }, [signedConsultations, activeScreenings, selectedDoctorFilter, encounterTypeFilter, searchQuery]);
+
+  const totalEpisodesCount = signedConsultations.length + activeScreenings.length;
 
   const toggleExpand = (id: string) => {
     setExpandedEncounterIds((prev) => ({
@@ -120,7 +298,7 @@ export default function EncountersTimelineTab({
               variant="captionBold"
               color={selectedDoctorFilter === 'ALL' ? theme.colors.onPrimary : theme.colors.textSecondary}
             >
-              All Doctors ({consultations.length})
+              All Doctors ({totalEpisodesCount})
             </ThemedText>
           </Pressable>
           {doctorsList.map((doc) => (
@@ -162,7 +340,7 @@ export default function EncountersTimelineTab({
               color={encounterTypeFilter === 'YAKAP' ? theme.colors.primaryDark : theme.colors.textSecondary}
               style={{ fontWeight: encounterTypeFilter === 'YAKAP' ? '700' : '500' }}
             >
-              PhilHealth Konsulta Only
+              YAKAP
             </ThemedText>
           </Pressable>
           <Pressable
@@ -174,77 +352,456 @@ export default function EncountersTimelineTab({
               color={encounterTypeFilter === 'STANDARD' ? theme.colors.primaryDark : theme.colors.textSecondary}
               style={{ fontWeight: encounterTypeFilter === 'STANDARD' ? '700' : '500' }}
             >
-              Private / Cash
+              Standard
             </ThemedText>
           </Pressable>
         </View>
       </View>
 
       {/* ========================================================================= */}
-      {/* TIMELINE ENCOUNTER CARDS                                                  */}
+      {/* TIMELINE ENCOUNTER & HEALTH SCREENING CARDS                               */}
       {/* ========================================================================= */}
-      {filteredConsultations.length > 0 ? (
+      {screeningsError && effectivePatientId ? (
+        <ErrorState
+          compact
+          title="Unable to load health screenings"
+          message={screeningsError}
+          onRetry={() => void loadFallbackScreenings(effectivePatientId)}
+        />
+      ) : null}
+      {loadingScreenings && filteredEntries.length === 0 ? (
+        <SkeletonList rows={3} />
+      ) : filteredEntries.length > 0 ? (
         <View style={styles.timelineList}>
-          {filteredConsultations.map((enc, idx) => {
-            const isExpanded = Boolean(expandedEncounterIds[enc.id]);
-            const primaryDiag = (enc.diagnoses || []).find((d) => d.isPrimary) || (enc.diagnoses || [])[0];
+          {filteredEntries.map((entry, idx) => {
+            if (entry.kind === 'consultation') {
+              const enc = entry.data;
+              const isExpanded = Boolean(expandedEncounterIds[enc.id]);
+              const orderedDiagnoses = [...(enc.diagnoses || [])]
+                .filter((d) => Boolean(d.description?.trim()))
+                .sort((a, b) => Number(Boolean(b.isPrimary)) - Number(Boolean(a.isPrimary)));
 
-            return (
-              <View key={enc.id} style={styles.timelineItem}>
-                {/* Node Rail */}
-                <View style={styles.railColumn}>
-                  <View style={[styles.nodeCircle, enc.isYakapEligible && styles.nodeCircle_yakap]}>
-                    <Icon
-                      name={enc.isYakapEligible ? 'yakap' : 'consultations'}
-                      size={12}
-                      color={enc.isYakapEligible ? theme.colors.primaryDark : theme.colors.textSecondary}
-                    />
+              return (
+                <View key={enc.id} style={styles.timelineItem}>
+                  {/* Node Rail */}
+                  <View style={styles.railColumn}>
+                    <View style={[styles.nodeCircle, enc.isYakapEligible && styles.nodeCircle_yakap]}>
+                      <Icon
+                        name={enc.isYakapEligible ? 'yakap' : 'consultations'}
+                        size={12}
+                        color={enc.isYakapEligible ? theme.colors.primaryDark : theme.colors.textSecondary}
+                      />
+                    </View>
+                    {idx < filteredEntries.length - 1 ? <View style={styles.railLine} /> : null}
                   </View>
-                  {idx < filteredConsultations.length - 1 ? <View style={styles.railLine} /> : null}
-                </View>
 
-                {/* Encounter Card */}
-                <View style={styles.encounterCard}>
-                  <Pressable onPress={() => toggleExpand(enc.id)} style={styles.cardHeader}>
-                    <View style={styles.cardHeaderLeft}>
-                      <View style={styles.dateAndDoctorRow}>
-                        <ThemedText variant="captionBold" color={theme.colors.text}>
-                          {new Date(enc.encounterDate).toLocaleDateString(undefined, {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                          })}{' '}
-                          • {new Date(enc.encounterDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </ThemedText>
-                        <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                          {enc.doctorName}
-                        </ThemedText>
-                        {enc.doctorPrcLicense ? (
-                          <Badge label={`PRC: ${enc.doctorPrcLicense}`} variant="neutral" size="sm" />
+                  {/* Encounter Card */}
+                  <View style={styles.encounterCard}>
+                    <Pressable onPress={() => toggleExpand(enc.id)} style={styles.cardHeader}>
+                      <View style={styles.cardHeaderLeft}>
+                        <View style={styles.dateAndDoctorRow}>
+                          <ThemedText variant="captionBold" color={theme.colors.text}>
+                            {formatClinicDate(enc.encounterDate, { dateFormat, timeZoneId })} •{' '}
+                            {formatClinicTime(enc.encounterDate, { timeFormat, timeZoneId })}
+                          </ThemedText>
+                          <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                            {enc.doctorName}
+                          </ThemedText>
+                          {enc.doctorPrcLicense ? (
+                            <Badge label={`PRC: ${enc.doctorPrcLicense}`} variant="neutral" size="sm" />
+                          ) : null}
+                        </View>
+
+                        {orderedDiagnoses.length > 0 ? (
+                          <View style={styles.diagRow}>
+                            {orderedDiagnoses.map((diag, diagIdx) => {
+                              const isPrimaryPill = Boolean(diag.isPrimary) || diagIdx === 0;
+                              return (
+                                <View
+                                  key={diag.id || `${enc.id}-hdr-diag-${diagIdx}`}
+                                  style={[
+                                    styles.headerDiagPill,
+                                    !isPrimaryPill && styles.headerDiagPill_secondary,
+                                  ]}
+                                >
+                                  <ThemedText
+                                    variant="captionBold"
+                                    color={isPrimaryPill ? theme.colors.primaryDark : theme.colors.infoText}
+                                    numberOfLines={1}
+                                  >
+                                    {diag.description}
+                                  </ThemedText>
+                                </View>
+                              );
+                            })}
+                          </View>
                         ) : null}
                       </View>
 
-                      {primaryDiag ? (
-                        <View style={styles.diagRow}>
-                          <Badge label={primaryDiag.icd10Code} variant="routine" size="sm" />
-                          <ThemedText variant="bodyBold" color={theme.colors.text} numberOfLines={1}>
-                            {primaryDiag.description}
+                      <View style={styles.cardHeaderRight}>
+                        {(enc as any).recordingStatus || (enc as any).isLegalHold || (enc as any).hasRecording ? (
+                          <Badge
+                            label={
+                              (enc as any).recordingStatus === 'LegalHold' || (enc as any).isLegalHold
+                                ? 'Medico-Legal Hold'
+                                : (enc as any).recordingStatus === 'Purged'
+                                  ? 'Purged'
+                                  : `Recorded • ${formatDuration((enc as any).recordingDurationSeconds ?? 930)}`
+                            }
+                            variant={
+                              (enc as any).recordingStatus === 'LegalHold' || (enc as any).isLegalHold
+                                ? 'emergency'
+                                : (enc as any).recordingStatus === 'Purged'
+                                  ? 'neutral'
+                                  : 'purple'
+                            }
+                            size="sm"
+                            icon="consultations"
+                          />
+                        ) : null}
+                        {enc.rosCategoryLabel || enc.rosCategory ? (
+                          <Badge
+                            label={`ROS: ${enc.rosCategoryLabel || enc.rosCategory}`}
+                            variant="info"
+                            size="sm"
+                          />
+                        ) : null}
+                        {enc.isYakapEligible ? (
+                          <Badge label="YAKAP" variant="purple" size="sm" />
+                        ) : (
+                          <Badge label="Standard" variant="neutral" size="sm" />
+                        )}
+                        {enc.isSigned ? (
+                          <Badge label="Signed" variant="success" size="sm" icon="checkCircle" />
+                        ) : (
+                          <Badge label="Draft" variant="warning" size="sm" />
+                        )}
+                        <Icon
+                          name={isExpanded ? 'chevronUp' : 'chevronDown'}
+                          size={theme.sizes.iconSm}
+                          color={theme.colors.textSecondary}
+                        />
+                      </View>
+                    </Pressable>
+
+                    {/* PhilHealth Statutory Identification Badges */}
+                    {enc.isYakapEligible && (enc.hciCaseNo || enc.hciTransNo || enc.soapTransNo) ? (
+                      <View style={styles.statutoryStrip}>
+                        {enc.hciCaseNo ? (
+                          <ThemedText variant="caption" color={theme.colors.purpleText}>
+                            Case: <ThemedText variant="captionBold" color={theme.colors.purpleText}>{enc.hciCaseNo}</ThemedText>
                           </ThemedText>
+                        ) : null}
+                        {enc.hciTransNo ? (
+                          <ThemedText variant="caption" color={theme.colors.purpleText}>
+                            Trans: <ThemedText variant="captionBold" color={theme.colors.purpleText}>{enc.hciTransNo}</ThemedText>
+                          </ThemedText>
+                        ) : null}
+                        {enc.soapTransNo ? (
+                          <ThemedText variant="caption" color={theme.colors.purpleText}>
+                            SOAP Trans: <ThemedText variant="captionBold" color={theme.colors.purpleText}>{enc.soapTransNo}</ThemedText>
+                          </ThemedText>
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    {/* Expanded SOAP Notes */}
+                    {isExpanded ? (
+                      <View style={styles.cardBody}>
+                        {/* S: Subjective */}
+                        <View style={styles.soapSection}>
+                          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                            SUBJECTIVE (S)
+                          </ThemedText>
+                          <ThemedText variant="body" color={theme.colors.text}>
+                            {enc.subjective || 'No subjective narrative documented.'}
+                          </ThemedText>
+                          {enc.philHealthPainSite ? (
+                            <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                              Pain Site: {enc.philHealthPainSite}
+                            </ThemedText>
+                          ) : null}
+                        </View>
+
+                        {/* O: Objective */}
+                        <View style={styles.soapSection}>
+                          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                            OBJECTIVE (O)
+                          </ThemedText>
+                          <ThemedText variant="body" color={theme.colors.text}>
+                            {enc.objective || 'No objective findings documented.'}
+                          </ThemedText>
+                        </View>
+
+                        {/* A: Assessment */}
+                        <View style={styles.soapSection}>
+                          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                            ASSESSMENT (A)
+                          </ThemedText>
+                          <ThemedText variant="body" color={theme.colors.text}>
+                            {enc.assessment || 'No narrative assessment documented.'}
+                          </ThemedText>
+                          {orderedDiagnoses.length > 0 ? (
+                            <View style={styles.diagPillsRow}>
+                              {orderedDiagnoses.map((d, diagIdx) => {
+                                const isPrimaryPill = Boolean(d.isPrimary) || diagIdx === 0;
+                                return (
+                                  <View
+                                    key={d.id || `${enc.id}-soap-diag-${diagIdx}`}
+                                    style={[styles.diagPill, isPrimaryPill && styles.diagPill_primary]}
+                                  >
+                                    <ThemedText
+                                      variant="captionBold"
+                                      color={isPrimaryPill ? theme.colors.primaryDark : theme.colors.infoText}
+                                    >
+                                      {d.description}
+                                    </ThemedText>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          ) : null}
+                        </View>
+
+                        {/* P: Plan */}
+                        <View style={styles.soapSection}>
+                          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                            PLAN (P)
+                          </ThemedText>
+                          <ThemedText variant="body" color={theme.colors.text}>
+                            {enc.plan || 'No management plan documented.'}
+                          </ThemedText>
+                        </View>
+
+                        {/* Prescriptions & Actions */}
+                        {(enc.prescriptions || []).length > 0 ? (
+                          <View style={styles.prescriptionsBlock}>
+                            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                              Prescribed Medications ({enc.prescriptions.length})
+                            </ThemedText>
+                            {enc.prescriptions.map((rx) => (
+                              <View key={rx.id || rx.genericName} style={styles.rxRow}>
+                                <Icon name="pill" size={14} color={theme.colors.routineText} />
+                                <View style={{ flex: 1 }}>
+                                  <ThemedText variant="captionBold" color={theme.colors.text}>
+                                    {rx.genericName} {rx.dosage || ''} ({rx.form || ''})
+                                  </ThemedText>
+                                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                                    Qty: {rx.quantity} • Sig: {rx.sig}
+                                  </ThemedText>
+                                </View>
+                                {enc.isSigned && rx.isClinicDispensed && rx.clinicDispensedQuantity ? (() => {
+                                  const dispensedQty = Math.min(rx.quantity, Math.max(0, rx.clinicDispensedQuantity));
+                                  const remainingQty = Math.max(0, rx.quantity - dispensedQty);
+                                  return (
+                                    <Badge
+                                      label={
+                                        remainingQty > 0
+                                          ? `Clinic stock: ${dispensedQty}/${rx.quantity} (${remainingQty} ext.)`
+                                          : `Clinic stock: all ${rx.quantity} pcs`
+                                      }
+                                      variant="routine"
+                                      size="xs"
+                                    />
+                                  );
+                                })() : null}
+                              </View>
+                            ))}
+                          </View>
+                        ) : null}
+
+                        {/* Dental Findings & Procedures Summary Section */}
+                        {Boolean(
+                          ((enc as any).dentalFindings && (enc as any).dentalFindings.length > 0) ||
+                          ((enc as any).procedures && (enc as any).procedures.some((p: any) => p.toothNumber != null))
+                        ) && (
+                          <View style={styles.dentalSummaryBlock} testID={`encounter-dental-summary-${enc.id}`}>
+                            <View style={styles.dentalSummaryHeader}>
+                              <Icon name="medical" size={14} color={theme.colors.primaryDark} />
+                              <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                                DENTAL FINDINGS & PROCEDURES
+                              </ThemedText>
+                            </View>
+                            <View style={styles.dentalSummaryContent}>
+                              {(enc as any).dentalFindings?.map((tooth: any, tIdx: number) => {
+                                const toothLabel = `Tooth #${tooth.toothNumber}${tooth.surface ? ` (${tooth.surface})` : ''} - ${tooth.status}`;
+                                return (
+                                  <View key={`dental-finding-${enc.id}-${tIdx}`} style={styles.dentalFindingRow}>
+                                    <Badge
+                                      label={toothLabel}
+                                      variant={tooth.status === 'Healthy' ? 'success' : 'warning'}
+                                      size="sm"
+                                    />
+                                    {tooth.notes ? (
+                                      <ThemedText variant="caption" color={theme.colors.textSecondary} numberOfLines={1}>
+                                        {tooth.notes}
+                                      </ThemedText>
+                                    ) : null}
+                                    {tooth.recordedBy ? (
+                                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                        • Dr. {String(tooth.recordedBy).replace(/^Dr\.\s*/, '')}
+                                      </ThemedText>
+                                    ) : null}
+                                  </View>
+                                );
+                              })}
+                              {(enc as any).procedures
+                                ?.filter((p: any) => p.toothNumber != null)
+                                .map((proc: any, pIdx: number) => (
+                                  <View key={`dental-proc-${enc.id}-${pIdx}`} style={styles.dentalProcRow}>
+                                    <Badge
+                                      label={`Tooth #${proc.toothNumber}${proc.toothSurface ? ` (${proc.toothSurface})` : ''}`}
+                                      variant="purple"
+                                      size="sm"
+                                    />
+                                    <ThemedText variant="captionBold" color={theme.colors.text}>
+                                      {proc.procedureName || proc.name}
+                                    </ThemedText>
+                                    {proc.status ? <Badge label={proc.status} variant="neutral" size="sm" /> : null}
+                                  </View>
+                                ))}
+                            </View>
+                          </View>
+                        )}
+
+                        {/* Action Bar */}
+                        <View style={styles.actionBar}>
+                          {enc.isSigned ? (
+                            <>
+                              {onViewPrescriptionSlip ? (
+                                <Button
+                                  variant="outline"
+                                  size="xs"
+                                  icon="file"
+                                  title="View E-Rx Slip"
+                                  onPress={() => onViewPrescriptionSlip(enc)}
+                                />
+                              ) : null}
+                              {onOpenExternalDispense ? (
+                                <Button
+                                  variant="outline"
+                                  size="xs"
+                                  icon="check"
+                                  title="Log External Dispense"
+                                  onPress={() => onOpenExternalDispense(enc)}
+                                />
+                              ) : null}
+                            </>
+                          ) : (enc.prescriptions || []).length > 0 ? (
+                            <Badge
+                              label="Draft — Sign encounter to validate Rx"
+                              variant="warning"
+                              size="sm"
+                            />
+                          ) : null}
+                        </View>
+
+                        {/* Doctor Credential Snapshot Footer */}
+                        <View style={styles.signingFooter}>
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            Attending Physician: {enc.doctorName}
+                            {enc.doctorPhilHealthPan ? ` • PAN: ${enc.doctorPhilHealthPan}` : ''}
+                            {enc.doctorPtr ? ` • PTR: ${enc.doctorPtr}` : ''}
+                            {enc.doctorS2License ? ` • S2: ${enc.doctorS2License}` : ''}
+                          </ThemedText>
+                          {enc.signedAt ? (
+                            <ThemedText variant="caption" color={theme.colors.textMuted}>
+                              Signed at: {formatClinicDateTime(enc.signedAt, { dateFormat, timeFormat, timeZoneId })}
+                            </ThemedText>
+                          ) : null}
+                        </View>
+
+                        {/* Teleconsultation Recording Action */}
+                        {((enc as any).recordingSessionId || (enc as any).recordingStatus || (enc as any).hasRecording || (enc as any).isTeleconsult) ? (
+                          <View style={styles.recordingActionRow}>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon="consultations"
+                              title="Play Recording"
+                              onPress={() => setSelectedRecordingSession({
+                                sessionId: (enc as any).recordingSessionId || enc.id,
+                                consultationId: enc.id,
+                              })}
+                              style={styles.touchableMinSize}
+                            />
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            }
+
+            const hs = entry.data;
+            const isExpanded = Boolean(expandedEncounterIds[entry.id]);
+            const isYakapScreening = hs.workflowMode === 'YakapAvailment' || hs.screeningType === 'YakapFpe';
+            const typeLabel = getScreeningTypeBadgeLabel(hs.screeningType);
+            const dispBadge = getScreeningDispositionBadge(hs.status, hs.disposition);
+            const matchedVitals =
+              (hs.patientVitalsId ? vitalsHistory.find((v) => v.id === hs.patientVitalsId) : undefined) ??
+              (hs.queueItemId ? vitalsHistory.find((v) => v.queueItemId === hs.queueItemId) : undefined);
+            const vitalsSummaryParts: string[] = [];
+            if (matchedVitals?.systolicBp != null && matchedVitals?.diastolicBp != null) {
+              vitalsSummaryParts.push(`BP ${matchedVitals.systolicBp}/${matchedVitals.diastolicBp}`);
+            }
+            if (matchedVitals?.heartRateBpm != null) vitalsSummaryParts.push(`HR ${matchedVitals.heartRateBpm}`);
+            if (matchedVitals?.temperatureCelsius != null) vitalsSummaryParts.push(`Temp ${matchedVitals.temperatureCelsius}°C`);
+            if (matchedVitals?.oxygenSaturationPercent != null) vitalsSummaryParts.push(`SpO2 ${matchedVitals.oxygenSaturationPercent}%`);
+            if (matchedVitals?.bmi != null) vitalsSummaryParts.push(`BMI ${matchedVitals.bmi}`);
+            const matchedNcd =
+              hs.ncdRiskAssessmentId && latestNcdAssessment?.id === hs.ncdRiskAssessmentId
+                ? latestNcdAssessment
+                : null;
+
+            return (
+              <View key={entry.id} style={styles.timelineItem} testID={`timeline-screening-card-${hs.id}`}>
+                <View style={styles.railColumn}>
+                  <View style={[styles.nodeCircle, isYakapScreening && styles.nodeCircle_yakap]}>
+                    <Icon
+                      name="heartPulse"
+                      size={12}
+                      color={isYakapScreening ? theme.colors.primaryDark : theme.colors.infoText}
+                    />
+                  </View>
+                  {idx < filteredEntries.length - 1 ? <View style={styles.railLine} /> : null}
+                </View>
+
+                <View style={styles.encounterCard}>
+                  <Pressable onPress={() => toggleExpand(entry.id)} style={styles.cardHeader}>
+                    <View style={styles.cardHeaderLeft}>
+                      <View style={styles.dateAndDoctorRow}>
+                        <ThemedText variant="captionBold" color={theme.colors.text}>
+                          {formatClinicDate(hs.completedAtUtc || hs.screeningDateUtc, { dateFormat, timeZoneId })} •{' '}
+                          {formatClinicTime(hs.completedAtUtc || hs.screeningDateUtc, { timeFormat, timeZoneId })}
+                        </ThemedText>
+                        <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                          {hs.examinedByDoctorName || hs.screenedByNurseName || 'Screening Team'}
+                        </ThemedText>
+                        {hs.queueNumber ? (
+                          <Badge label={hs.queueNumber} variant="neutral" size="sm" />
+                        ) : null}
+                      </View>
+                      {vitalsSummaryParts.length > 0 || matchedNcd ? (
+                        <View style={styles.diagRow}>
+                          {vitalsSummaryParts.length > 0 ? (
+                            <Badge label={vitalsSummaryParts.join(' · ')} variant="info" size="sm" />
+                          ) : null}
+                          {matchedNcd ? (
+                            <Badge
+                              label={`WHO/ISH Risk: ${matchedNcd.riskBand}${matchedNcd.calculatedRiskScorePercent != null ? ` (${matchedNcd.calculatedRiskScorePercent}%)` : ''}`}
+                              variant="warning"
+                              size="sm"
+                            />
+                          ) : null}
                         </View>
                       ) : null}
                     </View>
 
                     <View style={styles.cardHeaderRight}>
-                      {enc.isYakapEligible ? (
-                        <Badge label="PhilHealth Konsulta" variant="purple" size="sm" icon="yakap" />
-                      ) : (
-                        <Badge label="Standard Encounter" variant="neutral" size="sm" />
-                      )}
-                      {enc.isSigned ? (
-                        <Badge label="Signed" variant="success" size="sm" icon="checkCircle" />
-                      ) : (
-                        <Badge label="Draft" variant="warning" size="sm" />
-                      )}
+                      <Badge label={typeLabel} variant={isYakapScreening ? 'purple' : 'info'} size="sm" icon="heartPulse" />
+                      <Badge label={dispBadge.label} variant={dispBadge.variant} size="sm" />
                       <Icon
                         name={isExpanded ? 'chevronUp' : 'chevronDown'}
                         size={theme.sizes.iconSm}
@@ -253,201 +810,65 @@ export default function EncountersTimelineTab({
                     </View>
                   </Pressable>
 
-                  {/* PhilHealth Statutory Identification Badges */}
-                  {enc.isYakapEligible && (enc.hciCaseNo || enc.hciTransNo || enc.soapTransNo) ? (
+                  {isYakapScreening && (hs.profilingTransNo || hs.philHealthAtc || hs.isWalkedIn) ? (
                     <View style={styles.statutoryStrip}>
-                      {enc.hciCaseNo ? (
+                      {hs.profilingTransNo ? (
                         <ThemedText variant="caption" color={theme.colors.purpleText}>
-                          Case: <ThemedText variant="captionBold" color={theme.colors.purpleText}>{enc.hciCaseNo}</ThemedText>
+                          PhilHealth Ref No:{' '}
+                          <ThemedText variant="captionBold" color={theme.colors.purpleText}>
+                            {hs.profilingTransNo}
+                          </ThemedText>
                         </ThemedText>
                       ) : null}
-                      {enc.hciTransNo ? (
-                        <ThemedText variant="caption" color={theme.colors.purpleText}>
-                          Trans: <ThemedText variant="captionBold" color={theme.colors.purpleText}>{enc.hciTransNo}</ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.purpleText}>
+                        Visit Code:{' '}
+                        <ThemedText variant="captionBold" color={theme.colors.purpleText}>
+                          {hs.philHealthAtc || (hs.isWalkedIn ? 'Walk-In' : '—')}
                         </ThemedText>
-                      ) : null}
-                      {enc.soapTransNo ? (
-                        <ThemedText variant="caption" color={theme.colors.purpleText}>
-                          SOAP Trans: <ThemedText variant="captionBold" color={theme.colors.purpleText}>{enc.soapTransNo}</ThemedText>
-                        </ThemedText>
-                      ) : null}
+                      </ThemedText>
                     </View>
                   ) : null}
 
-                  {/* Expanded SOAP Notes */}
                   {isExpanded ? (
                     <View style={styles.cardBody}>
-                      {/* S: Subjective */}
-                      <View style={styles.soapSection}>
-                        <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                          SUBJECTIVE (S)
-                        </ThemedText>
-                        <ThemedText variant="body" color={theme.colors.text}>
-                          {enc.subjective || 'No subjective narrative documented.'}
-                        </ThemedText>
-                        {enc.philHealthSignSympCode ? (
-                          <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                            PhilHealth Symptom Code: {enc.philHealthSignSympCode}
-                            {enc.philHealthPainSite ? ` • Pain Site: ${enc.philHealthPainSite}` : ''}
+                      {hs.clinicalImpression ? (
+                        <View style={styles.soapSection}>
+                          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                            CLINICAL IMPRESSION
                           </ThemedText>
-                        ) : null}
-                      </View>
-
-                      {/* O: Objective */}
-                      <View style={styles.soapSection}>
-                        <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                          OBJECTIVE (O)
-                        </ThemedText>
-                        <ThemedText variant="body" color={theme.colors.text}>
-                          {enc.objective || 'No objective findings documented.'}
-                        </ThemedText>
-                      </View>
-
-                      {/* A: Assessment */}
-                      <View style={styles.soapSection}>
-                        <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                          ASSESSMENT (A)
-                        </ThemedText>
-                        <ThemedText variant="body" color={theme.colors.text}>
-                          {enc.assessment || 'No narrative assessment documented.'}
-                        </ThemedText>
-                        {(enc.diagnoses || []).length > 0 ? (
-                          <View style={styles.diagPillsRow}>
-                            {enc.diagnoses.map((d) => (
-                              <View key={d.id || d.icd10Code} style={styles.diagPill}>
-                                <Badge label={d.icd10Code} variant={d.isPrimary ? 'routine' : 'neutral'} size="sm" />
-                                <ThemedText variant="caption" color={theme.colors.text}>
-                                  {d.description}
-                                </ThemedText>
-                              </View>
-                            ))}
-                          </View>
-                        ) : null}
-                      </View>
-
-                      {/* P: Plan */}
-                      <View style={styles.soapSection}>
-                        <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                          PLAN (P)
-                        </ThemedText>
-                        <ThemedText variant="body" color={theme.colors.text}>
-                          {enc.plan || 'No management plan documented.'}
-                        </ThemedText>
-                      </View>
-
-                      {/* Prescriptions & Actions */}
-                      {(enc.prescriptions || []).length > 0 ? (
-                        <View style={styles.prescriptionsBlock}>
-                          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                            Prescribed Medications ({enc.prescriptions.length})
+                          <ThemedText variant="body" color={theme.colors.text}>
+                            {hs.clinicalImpression}
                           </ThemedText>
-                          {enc.prescriptions.map((rx) => (
-                            <View key={rx.id || rx.genericName} style={styles.rxRow}>
-                              <Icon name="pill" size={14} color={theme.colors.routineText} />
-                              <View style={{ flex: 1 }}>
-                                <ThemedText variant="captionBold" color={theme.colors.text}>
-                                  {rx.genericName} {rx.dosage || ''} ({rx.form || ''})
-                                </ThemedText>
-                                <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                                  Qty: {rx.quantity} • Sig: {rx.sig}
-                                </ThemedText>
-                              </View>
-                            </View>
-                          ))}
                         </View>
                       ) : null}
-
-                      {/* Dental Findings & Procedures Summary Section */}
-                      {Boolean(
-                        ((enc as any).dentalFindings && (enc as any).dentalFindings.length > 0) ||
-                        ((enc as any).procedures && (enc as any).procedures.some((p: any) => p.toothNumber != null))
-                      ) && (
-                        <View style={styles.dentalSummaryBlock} testID={`encounter-dental-summary-${enc.id}`}>
-                          <View style={styles.dentalSummaryHeader}>
-                            <Icon name="medical" size={14} color={theme.colors.primaryDark} />
-                            <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                              DENTAL FINDINGS & PROCEDURES
-                            </ThemedText>
-                          </View>
-                          <View style={styles.dentalSummaryContent}>
-                            {(enc as any).dentalFindings?.map((tooth: any, idx: number) => {
-                              const toothLabel = `Tooth #${tooth.toothNumber}${tooth.surface ? ` (${tooth.surface})` : ''} - ${tooth.status}`;
-                              return (
-                                <View key={`dental-finding-${enc.id}-${idx}`} style={styles.dentalFindingRow}>
-                                  <Badge
-                                    label={toothLabel}
-                                    variant={tooth.status === 'Healthy' ? 'success' : 'warning'}
-                                    size="sm"
-                                  />
-                                  {tooth.notes ? (
-                                    <ThemedText variant="caption" color={theme.colors.textSecondary} numberOfLines={1}>
-                                      {tooth.notes}
-                                    </ThemedText>
-                                  ) : null}
-                                  {tooth.recordedBy ? (
-                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                                      • Dr. {String(tooth.recordedBy).replace(/^Dr\.\s*/, '')}
-                                    </ThemedText>
-                                  ) : null}
-                                </View>
-                              );
-                            })}
-                            {(enc as any).procedures
-                              ?.filter((p: any) => p.toothNumber != null)
-                              .map((proc: any, idx: number) => (
-                                <View key={`dental-proc-${enc.id}-${idx}`} style={styles.dentalProcRow}>
-                                  <Badge
-                                    label={`Tooth #${proc.toothNumber}${proc.toothSurface ? ` (${proc.toothSurface})` : ''}`}
-                                    variant="purple"
-                                    size="sm"
-                                  />
-                                  <ThemedText variant="captionBold" color={theme.colors.text}>
-                                    {proc.procedureName || proc.name}
-                                  </ThemedText>
-                                  {proc.status ? <Badge label={proc.status} variant="neutral" size="sm" /> : null}
-                                </View>
-                              ))}
-                          </View>
+                      {hs.preventiveCounselingNotes ? (
+                        <View style={styles.soapSection}>
+                          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                            PREVENTIVE COUNSELING
+                          </ThemedText>
+                          <ThemedText variant="body" color={theme.colors.text}>
+                            {hs.preventiveCounselingNotes}
+                          </ThemedText>
                         </View>
-                      )}
-
-                      {/* Action Bar */}
-                      <View style={styles.actionBar}>
-                        {onViewPrescriptionSlip ? (
-                          <Pressable
-                            onPress={() => onViewPrescriptionSlip(enc)}
-                            style={styles.actionBtn}
-                          >
-                            <Icon name="file" size={14} color={theme.colors.primaryDark} />
-                            <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                              View E-Rx Slip
-                            </ThemedText>
-                          </Pressable>
-                        ) : null}
-                        {onOpenExternalDispense ? (
-                          <Pressable
-                            onPress={() => onOpenExternalDispense(enc)}
-                            style={styles.actionBtn}
-                          >
-                            <Icon name="check" size={14} color={theme.colors.primaryDark} />
-                            <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                              Log External Dispense
-                            </ThemedText>
-                          </Pressable>
-                        ) : null}
-                      </View>
-
-                      {/* Doctor Credential Snapshot Footer */}
+                      ) : null}
+                      {hs.nurseScreeningNotes ? (
+                        <View style={styles.soapSection}>
+                          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                            NURSE SCREENING NOTES
+                          </ThemedText>
+                          <ThemedText variant="body" color={theme.colors.text}>
+                            {hs.nurseScreeningNotes}
+                          </ThemedText>
+                        </View>
+                      ) : null}
                       <View style={styles.signingFooter}>
                         <ThemedText variant="caption" color={theme.colors.textMuted}>
-                          Attending Physician: {enc.doctorName}
-                          {enc.doctorPhilHealthPan ? ` • PAN: ${enc.doctorPhilHealthPan}` : ''}
-                          {enc.doctorPtr ? ` • PTR: ${enc.doctorPtr}` : ''}
-                          {enc.doctorS2License ? ` • S2: ${enc.doctorS2License}` : ''}
+                          {hs.screenedByNurseName ? `Intake Nurse: ${hs.screenedByNurseName}` : 'Health Screening Episode'}
+                          {hs.examinedByDoctorName ? ` • Examining Clinician: ${hs.examinedByDoctorName}` : ''}
                         </ThemedText>
-                        {enc.signedAt ? (
+                        {hs.recommendedFollowUpDate ? (
                           <ThemedText variant="caption" color={theme.colors.textMuted}>
-                            Signed at: {new Date(enc.signedAt).toLocaleString()}
+                            Recommended Follow-up: {formatClinicDate(hs.recommendedFollowUpDate, { dateFormat, timeZoneId })}
                           </ThemedText>
                         ) : null}
                       </View>
@@ -464,11 +885,16 @@ export default function EncountersTimelineTab({
           title="No encounters found"
           description={
             searchQuery
-              ? `No consultation records matched the filter "${searchQuery}".`
+              ? `No encounter or health screening records matched the filter "${searchQuery}".`
               : 'Zero longitudinal SOAP encounter records documented for this patient.'
           }
         />
       )}
+      <ClinicRecordingPlayerModal
+        visible={!!selectedRecordingSession}
+        sessionId={selectedRecordingSession?.sessionId}
+        onClose={() => setSelectedRecordingSession(null)}
+      />
     </ScrollView>
   );
 }
@@ -606,7 +1032,23 @@ const styles = StyleSheet.create({
   diagRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 6,
+  },
+  headerDiagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+  },
+  headerDiagPill_secondary: {
+    backgroundColor: theme.colors.infoBg,
+    borderColor: theme.colors.infoBorder,
   },
   statutoryStrip: {
     flexDirection: 'row',
@@ -635,13 +1077,17 @@ const styles = StyleSheet.create({
   diagPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: theme.colors.surfaceSubtle,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: theme.radii.xs,
+    gap: 5,
+    backgroundColor: theme.colors.infoBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.radii.sm,
     borderWidth: 1,
-    borderColor: theme.colors.borderLight,
+    borderColor: theme.colors.infoBorder,
+  },
+  diagPill_primary: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
   },
   prescriptionsBlock: {
     padding: theme.spacing.sm,
@@ -663,17 +1109,6 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xs,
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
   },
   signingFooter: {
     paddingTop: theme.spacing.xs,
@@ -709,5 +1144,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
     flexWrap: 'wrap',
+  },
+  recordingActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: theme.spacing.sm,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
+  touchableMinSize: {
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
   },
 });

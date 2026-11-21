@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { tenantService } from "@/services/tenant.service";
+import { getTenantWorkspaceUrl } from "@/utils/domain";
 
 interface Membership {
   tenantId: string;
@@ -95,7 +96,14 @@ export function WorkspaceSwitcher({ currentSlug }: WorkspaceSwitcherProps) {
               <DropdownMenuItem
                 key={option.slug}
                 className="flex items-center gap-2"
-                onSelect={() => router.push(`/${option.slug}/dashboard/overview`)}
+                onSelect={() => {
+                  const dest = getTenantWorkspaceUrl(option.slug, "/dashboard/overview");
+                  if (dest.startsWith("http")) {
+                    window.location.assign(dest);
+                  } else {
+                    router.push(dest);
+                  }
+                }}
               >
                 <span className="flex-1 truncate text-sm">{option.name}</span>
                 <RoleChip role={option.role} />

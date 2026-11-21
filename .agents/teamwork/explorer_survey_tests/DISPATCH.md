@@ -1,17 +1,27 @@
-## 2026-10-20T01:57:44Z
+## 2026-11-05T23:59:53Z
+You are Explorer 3, a read-only exploration agent.
 
-You are explorer_survey_tests.
-Your working directory is: /Users/macuser/projects/github/nextstep/clinicez-docs-studio/.agents/teamwork/explorer_survey_tests
-You MUST read the requirements file first: /Users/macuser/projects/github/nextstep/clinicez-docs-studio/.agents/teamwork/ORIGINAL_REQUEST.md
+Working Directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/triage_desk_documentation/.agents/teamwork/explorer_survey_tests/
+Authoritative Request: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/triage_desk_documentation/.agents/teamwork/ORIGINAL_REQUEST.md (MANDATORY: read this first).
+Reference Implementation Plan: /Users/macuser/.gemini/antigravity/brain/35833875-1d06-46ae-9d1c-223b7b36e6a9/clinic_communications_sheet_production_plan.md
+Design Skill: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/triage_desk_documentation/.agents/skills/clinicez-ui-ux-expert/SKILL.md
 
-Mission: Survey the automated test suites and testing infrastructure across the workspace.
-Investigate:
-1. Check the 3 mandatory test suites required by ORIGINAL_REQUEST.md:
-   - `~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~HardenedDocumentGenerationTests"`
-   - `~/.bun/bin/bun test packages/design-tokens/src/tokens.test.ts`
-   - `~/.bun/bin/bun test apps/clinic-app/tests/`
-2. Check existing test files, test runners, frameworks (xUnit, Bun test), fixtures, and mock setups in those directories.
-3. Identify what tests already exist vs. what new tests need to be written (especially `HardenedDocumentGenerationTests`, frontend component tests in `apps/clinic-app/tests/`, and design token tests).
-4. Verify the test command syntax, environment prerequisites, and execution commands.
-5. Identify edge cases, boundary cases, and PDEA S2 scenarios needed for complete 4-tier E2E testing.
-Save your report to `/Users/macuser/projects/github/nextstep/clinicez-docs-studio/.agents/teamwork/explorer_survey_tests/handoff.md` and send a message to parent (me) when complete.
+Scope: Survey design tokens, linting, jargon, and test baseline across `apps/clinic-app` and `packages/comms-sdk`:
+1. Run `cd apps/clinic-app && bun run lint:tokens`. Document current violations and rules. Check for any hardcoded hex colors, raw palette imports, sub-12px font sizes (`< 12px` or `< text-xs`), and emojis.
+2. Search for clinical/developer jargon across both codebases:
+   - `STAT` -> must be `Emergency`
+   - `SLA Breached` -> must be `Response Overdue`
+   - `Disposition` -> must be `Clinical Decision` or `Action`
+   - `INTERNAL NOTE — NEVER DELIVERED TO PATIENT` -> must be `Private Staff Note (Care Team Only)`
+   - `ACK` -> must be `Read Confirmation`
+   - `Scope` -> clean titles (`Patient Request`, `Direct`, `Care Team`, `Facility Channel`)
+   Document every file and line where these terms appear.
+3. Run and document existing test baselines:
+   - `cd packages/comms-sdk && bun test`
+   - `cd apps/clinic-app && bun test tests/challenger_m2_side_sheet_consolidation.test.ts tests/challenger_m2_2_a11y_tokens_visual.test.ts`
+   - Note which tests pass, which fail, and what coverage is missing.
+
+Output:
+Write a comprehensive `handoff.md` in your working directory (.agents/teamwork/explorer_survey_tests/handoff.md) following the standard Handoff Protocol (Observation, Logic Chain, Caveats, Conclusion, Verification Method).
+Update `progress.md` in your directory as you work.
+When finished, send a message to the orchestrator with a summary of findings and the path to your handoff report.

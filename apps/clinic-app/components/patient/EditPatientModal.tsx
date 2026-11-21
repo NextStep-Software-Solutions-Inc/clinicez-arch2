@@ -4,34 +4,172 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  ActivityIndicator,
 } from 'react-native';
-import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl } from '../ui';
+import { ThemedText, TextInput, Input, Icon, Button, Badge, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, PsgcAddressSelector, Select, type SelectOption } from '../ui';
 import { theme } from '../../constants/theme';
-import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition } from '../../services/clinicService';
-import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../custom-fields';
+import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition, type PatientAddressDto, type PatientGuardianDto } from '../../services/clinicService';
+import { DynamicCustomFieldsRenderer, validateCustomFields } from '../custom-fields';
 import { notify, Alert } from '../../utils/feedback';
+import { isSeniorFromDob } from '../../utils/age';
 import {
-  type MemberType,
-  type PrincipalRelationship,
-  PHILHEALTH_RELATIONSHIPS,
-  buildPhilHealthProfileData,
-  extractPhilHealthProfileData,
-} from './memberType';
-import StructuredAllergyIntakeModal, {
-  AllergyPillList,
-  CreateAllergyRequest,
-} from './StructuredAllergyIntakeModal';
-import StructuredMedicalHistoryModal, {
-  MedicalHistoryPillList,
-  MedicalHistoryItem,
-  PHILHEALTH_QUICK_CONDITIONS,
+  PHILHEALTH_SEX_LABELS,
+  filterPhilHealthSexLabels,
+  parsePhilHealthSexInput,
+} from '../../utils/philhealthSex';
+import {
+  mergePatientCustomFields,
+  hasPreviousValue,
+} from './patientCustomFieldsMerger';
+import type { CreateAllergyRequest } from './StructuredAllergyIntakeModal';
+import {
+  type MedicalHistoryItem,
   formatMedicalHistoriesSummary,
   parseChronicConditionsStringToStructured,
 } from './StructuredMedicalHistoryModal';
-import ClinicalAlertsSection from './ClinicalAlertsSection';
+import GuardianSection, {
+  createEmptyGuardianDraft,
+  isMinorFromDob,
+  normalizeGuardianPayload,
+  validateGuardianDraft,
+} from './GuardianSection';
 
 export { parseChronicConditionsStringToStructured };
+
+export const VERIFICATION_STATUS_OPTIONS = [
+  {
+    value: 'Verified',
+    label: 'Verified',
+  },
+  {
+    value: 'PendingVerification',
+    label: 'Pending Verification',
+  },
+  {
+    value: 'Unverified',
+    label: 'Unverified',
+  },
+] as const;
+
+export const LEGACY_PRIMARY_ADDRESS_FIELD_KEYS = new Set([
+  'primary_address_line',
+  'primary_barangay',
+  'primary_city',
+  'primary_province',
+  'primary_postal_code',
+  'secondary_city_province',
+]);
+
+export const BASELINE_PATIENT_CUSTOM_FIELDS: ClinicCustomFieldDefinition[] = [
+  {
+    id: 'default-secondary-address-line',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'secondary_address_line',
+    label: 'Secondary Street Address',
+    dataType: 'Text',
+    category: 'Address',
+    isRequired: false,
+    displayOrder: 1,
+    placeholder: 'Dormitory, Boarding House, Work, or Provincial Street',
+    isActive: true,
+  },
+  {
+    id: 'default-secondary-barangay',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'secondary_barangay',
+    label: 'Secondary Barangay',
+    dataType: 'Text',
+    category: 'Address',
+    isRequired: false,
+    displayOrder: 2,
+    placeholder: 'Barangay',
+    isActive: true,
+  },
+  {
+    id: 'default-secondary-city',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'secondary_city',
+    label: 'Secondary City / Municipality',
+    dataType: 'Text',
+    category: 'Address',
+    isRequired: false,
+    displayOrder: 3,
+    placeholder: 'City / Municipality',
+    isActive: true,
+  },
+  {
+    id: 'default-secondary-province',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'secondary_province',
+    label: 'Secondary Province',
+    dataType: 'Text',
+    category: 'Address',
+    isRequired: false,
+    displayOrder: 4,
+    placeholder: 'Province',
+    isActive: true,
+  },
+  {
+    id: 'default-emergency-contact-name',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'emergency_contact_name',
+    label: 'Contact Person Name',
+    dataType: 'Text',
+    category: 'Emergency Contacts',
+    isRequired: false,
+    displayOrder: 10,
+    placeholder: 'Full Name',
+    isActive: true,
+  },
+  {
+    id: 'default-emergency-contact-phone',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'emergency_contact_phone',
+    label: 'Contact Person Phone',
+    dataType: 'Text',
+    category: 'Emergency Contacts',
+    isRequired: false,
+    displayOrder: 11,
+    placeholder: '0918-123-4567',
+    isActive: true,
+  },
+  {
+    id: 'default-emergency-contact-relationship',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'emergency_contact_relationship',
+    label: 'Relationship to Patient',
+    dataType: 'Select',
+    category: 'Emergency Contacts',
+    isRequired: false,
+    displayOrder: 12,
+    placeholder: 'Select relationship',
+    optionsJson: JSON.stringify([
+      'Parent',
+      'Spouse',
+      'Child',
+      'Sibling',
+      'Guardian',
+      'Relative',
+      'Friend',
+      'Workplace Colleague',
+      'Other',
+    ]),
+    isActive: true,
+  },
+];
 
 export function parseAllergiesStringToStructured(raw?: string | null): CreateAllergyRequest[] {
   if (!raw || !raw.trim()) return [];
@@ -125,76 +263,91 @@ export interface EditPatientModalProps {
   onSaved: (updatedPatient: ClinicPatient) => void;
 }
 
+function extractInitialGuardianFromPatient(patient?: ClinicPatient | null): PatientGuardianDto | null {
+  const existingGuardian =
+    patient?.guardians && patient.guardians.length > 0
+      ? patient.guardians.find((g) => g.isPrimaryGuardian) || patient.guardians[0]
+      : null;
+  if (!existingGuardian) return null;
+  return {
+    id: existingGuardian.id,
+    firstName: existingGuardian.firstName || '',
+    lastName: existingGuardian.lastName || '',
+    middleName: existingGuardian.middleName || '',
+    suffix: existingGuardian.suffix || '',
+    birthDate: existingGuardian.birthDate || '',
+    sex: existingGuardian.sex || '',
+    contactNumber: existingGuardian.contactNumber || '',
+    relationshipCode: existingGuardian.relationshipCode || '',
+    relationshipOtherSpecify: existingGuardian.relationshipOtherSpecify || '',
+    philHealthPin: existingGuardian.philHealthPin || '',
+    isPrimaryGuardian: existingGuardian.isPrimaryGuardian ?? true,
+    isEmergencyContact: existingGuardian.isEmergencyContact ?? true,
+  };
+}
+
 export function EditPatientModal({
   patient,
   visible,
   onClose,
   onSaved,
 }: EditPatientModalProps) {
-  const [firstName, setFirstName] = useState('');
-  const [middleName, setMiddleName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [suffix, setSuffix] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState('');
-  const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
-  const [civilStatus, setCivilStatus] = useState<'Single' | 'Married' | 'Widowed' | 'Separated'>('Single');
-  const [contactNumber, setContactNumber] = useState('');
-  const [email, setEmail] = useState('');
-  const [addressLine, setAddressLine] = useState('');
-  const [barangay, setBarangay] = useState('');
-  const [city, setCity] = useState('');
-  const [province, setProvince] = useState('');
-  const [emergencyContactName, setEmergencyContactName] = useState('');
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
-  const [emergencyContactRelationship, setEmergencyContactRelationship] = useState('');
-  const [philHealthNumber, setPhilHealthNumber] = useState('');
-  const [memberType, setMemberType] = useState<MemberType>('MM');
-  const [principalMemberPin, setPrincipalMemberPin] = useState('');
-  const [principalFullName, setPrincipalFullName] = useState('');
-  const [principalRelationship, setPrincipalRelationship] = useState<PrincipalRelationship>('C');
-  const [principalDob, setPrincipalDob] = useState('');
-  const [isPrincipalPinValid, setIsPrincipalPinValid] = useState<boolean | null>(null);
-  const [seniorCitizenId, setSeniorCitizenId] = useState('');
-  const [pwdId, setPwdId] = useState('');
-  const [bloodType, setBloodType] = useState('');
-  const [structuredAllergies, setStructuredAllergies] = useState<CreateAllergyRequest[]>([]);
-  const [allergyModalVisible, setAllergyModalVisible] = useState(false);
-  const [chronicConditions, setChronicConditions] = useState('');
-  const [structuredMedicalHistories, setStructuredMedicalHistories] = useState<MedicalHistoryItem[]>([]);
-  const [medicalHistoryModalVisible, setMedicalHistoryModalVisible] = useState(false);
-  const [alerts, setAlerts] = useState('');
+  const [firstName, setFirstName] = useState(patient?.firstName || '');
+  const [middleName, setMiddleName] = useState(patient?.middleName || '');
+  const [lastName, setLastName] = useState(patient?.lastName || '');
+  const [suffix, setSuffix] = useState(patient?.suffix || '');
+  const [dateOfBirth, setDateOfBirth] = useState(patient?.dateOfBirth || '');
+  const [sex, setSex] = useState<string>('Male');
+  const [genderIdentity, setGenderIdentity] = useState<string>('');
+  const [civilStatus, setCivilStatus] = useState<string>('Single');
+  const [verificationStatus, setVerificationStatus] = useState<string>(
+    patient?.verificationStatus || 'Verified'
+  );
+  const [sexOptions, setSexOptions] = useState<string[]>([...PHILHEALTH_SEX_LABELS]);
+  const [genderIdentityOptions, setGenderIdentityOptions] = useState<SelectOption[]>([]);
+  const [civilStatusOptions, setCivilStatusOptions] = useState<string[]>([]);
+  const [emergencyRelationshipOptions, setEmergencyRelationshipOptions] = useState<string[]>([]);
 
-  const toggleQuickCondition = (code: string, title: string) => {
-    setStructuredMedicalHistories((prev) => {
-      const exists = prev.some(
-        (c) =>
-          c.philHealthMdiseaseCode === code ||
-          c.conditionTitle.trim().toLowerCase() === title.trim().toLowerCase()
-      );
-      if (exists) {
-        return prev.filter(
-          (c) =>
-            c.philHealthMdiseaseCode !== code &&
-            c.conditionTitle.trim().toLowerCase() !== title.trim().toLowerCase()
-        );
-      } else {
-        return [...prev, { conditionTitle: title, philHealthMdiseaseCode: code }];
+  useEffect(() => {
+    let isMounted = true;
+    clinicService.getOptionSet('sex').then((opts) => {
+      if (isMounted && opts && opts.length > 0) {
+        setSexOptions(filterPhilHealthSexLabels(opts));
       }
     });
-  };
-
-  const quickCodesSet = useMemo(() => new Set(PHILHEALTH_QUICK_CONDITIONS.map((q) => q.code)), []);
-  const quickTitlesSet = useMemo(() => new Set(PHILHEALTH_QUICK_CONDITIONS.map((q) => q.title.toLowerCase())), []);
-
-  const additionalConditions = useMemo(() => {
-    return structuredMedicalHistories.filter(
-      (c) =>
-        (!(c.philHealthMdiseaseCode && quickCodesSet.has(c.philHealthMdiseaseCode)) &&
-         !quickTitlesSet.has(c.conditionTitle.trim().toLowerCase())) ||
-        Boolean(c.clinicalNotes?.trim()) ||
-        Boolean(c.icd10Code?.trim())
-    );
-  }, [structuredMedicalHistories, quickCodesSet, quickTitlesSet]);
+    clinicService.getOptionSet('gender_identity').then((opts) => {
+      if (isMounted && opts && opts.length > 0) {
+        setGenderIdentityOptions(
+          opts.map((o) => ({
+            value: o.code,
+            label: o.label,
+            requiresCustom: Boolean(o.requiresSpecifyText),
+          }))
+        );
+      }
+    });
+    clinicService.getOptionSet('civil_status').then((opts) => {
+      if (isMounted && opts && opts.length > 0) {
+        setCivilStatusOptions(opts.map((o) => o.label));
+      }
+    });
+    clinicService.getOptionSet('guardian_relationship').then((opts) => {
+      if (isMounted && opts && opts.length > 0) {
+        setEmergencyRelationshipOptions(opts.map((o) => o.label));
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+  const [contactNumber, setContactNumber] = useState('');
+  const [email, setEmail] = useState('');
+  const [seniorCitizenId, setSeniorCitizenId] = useState(patient?.seniorCitizenId || '');
+  const [pwdId, setPwdId] = useState(patient?.pwdId || '');
+  const [bloodType, setBloodType] = useState('');
+  const [structuredAllergies, setStructuredAllergies] = useState<CreateAllergyRequest[]>([]);
+  const [structuredMedicalHistories, setStructuredMedicalHistories] = useState<MedicalHistoryItem[]>([]);
+  const [alerts, setAlerts] = useState('');
 
   // Institutional classification
   const [classification, setClassification] = useState<'General' | 'Student' | 'Employee'>('General');
@@ -209,6 +362,18 @@ export function EditPatientModal({
   const [tenantCustomFields, setTenantCustomFields] = useState<ClinicCustomFieldDefinition[]>([]);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
   const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
+  // Address state (PSGC 10-digit cascading address)
+  const [permanentAddress, setPermanentAddress] = useState<PatientAddressDto>({
+    addressType: 'Permanent',
+    isSameAsPermanent: false,
+    streetAddress: '',
+  });
+  const [guardian, setGuardian] = useState<PatientGuardianDto | null>(() =>
+    extractInitialGuardianFromPatient(patient)
+  );
+  const [guardianErrors, setGuardianErrors] = useState<Record<string, string>>({});
+  const [isGuardianPinValid, setIsGuardianPinValid] = useState<boolean | null>(null);
+
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const clearFieldError = (field: string) => {
@@ -220,75 +385,168 @@ export function EditPatientModal({
     });
   };
 
+  const clearGuardianError = (field: string) => {
+    setGuardianErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const isSenior = useMemo(
+    () => isSeniorFromDob(dateOfBirth) || Boolean(seniorCitizenId?.trim()),
+    [dateOfBirth, seniorCitizenId]
+  );
+
+  const effectiveCustomFields = useMemo(() => {
+    const activeTenantFields = tenantCustomFields.filter(
+      (f) => !LEGACY_PRIMARY_ADDRESS_FIELD_KEYS.has(f.fieldKey)
+    );
+    const existingKeys = new Set(activeTenantFields.map((f) => f.fieldKey));
+
+    const hasAnyAddressData = BASELINE_PATIENT_CUSTOM_FIELDS.some(
+      (bf) => bf.category === 'Address' && hasPreviousValue(patient, bf.fieldKey)
+    );
+    const hasAnyEmergencyData = BASELINE_PATIENT_CUSTOM_FIELDS.some(
+      (bf) => bf.category === 'Emergency Contacts' && hasPreviousValue(patient, bf.fieldKey)
+    );
+
+    const missingBaseline = BASELINE_PATIENT_CUSTOM_FIELDS.map((bf) => {
+      if (bf.fieldKey === 'emergency_contact_relationship' && emergencyRelationshipOptions.length > 0) {
+        return { ...bf, options: emergencyRelationshipOptions };
+      }
+      return bf;
+    }).filter((bf) => {
+      if (existingKeys.has(bf.fieldKey)) return false;
+      if (bf.category === 'Address') return hasAnyAddressData;
+      if (bf.category === 'Emergency Contacts') return hasAnyEmergencyData;
+      return hasPreviousValue(patient, bf.fieldKey);
+    });
+    return [...activeTenantFields, ...missingBaseline].sort(
+      (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
+    );
+  }, [tenantCustomFields, emergencyRelationshipOptions, patient]);
+
+  const addressFields = useMemo(() => {
+    return effectiveCustomFields.filter((f) => f.category === 'Address');
+  }, [effectiveCustomFields]);
+
+  const emergencyFields = useMemo(() => {
+    return effectiveCustomFields.filter((f) => f.category === 'Emergency Contacts');
+  }, [effectiveCustomFields]);
+
+  const otherCustomFields = useMemo(() => {
+    return effectiveCustomFields.filter(
+      (f) => f.category !== 'Address' && f.category !== 'Emergency Contacts'
+    );
+  }, [effectiveCustomFields]);
+
+  const renderedCustomFields = useMemo(() => {
+    return [...addressFields, ...emergencyFields, ...otherCustomFields];
+  }, [addressFields, emergencyFields, otherCustomFields]);
+
+  const handleCustomFieldChange = (key: string, val: any) => {
+    setCustomFieldValues((prev) => ({ ...prev, [key]: val }));
+    setCustomFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const staticValues = useMemo(
+    () => ({ sex, civilStatus, dateOfBirth }),
+    [sex, civilStatus, dateOfBirth]
+  );
+
   const [saving, setSaving] = useState(false);
-  const [isPinValid, setIsPinValid] = useState<boolean | null>(null);
+  const [hydratingPatient, setHydratingPatient] = useState(false);
+  const [hydratedPatient, setHydratedPatient] = useState<ClinicPatient | null>(null);
+  const [hasFullClinicalContext, setHasFullClinicalContext] = useState(false);
 
-  useEffect(() => {
-    if (visible) {
-      clinicService.getCustomFields('ClinicPatient').then(([fields]) => {
-        if (fields && fields.length > 0) {
-          setTenantCustomFields(fields);
-        }
-      });
-    }
-  }, [visible]);
+  const applyPatientToForm = (source: ClinicPatient) => {
+    const isFullRecord =
+      Array.isArray(source.pastMedicalHistories) ||
+      Array.isArray(source.structuredAllergies) ||
+      (source.allergies !== undefined && source.allergies !== null) ||
+      (source.chronicConditions !== undefined && source.chronicConditions !== null);
 
-  useEffect(() => {
-    if (!patient) return;
+    setHasFullClinicalContext(isFullRecord);
+    setFirstName(source.firstName || '');
+    setMiddleName(source.middleName || '');
+    setLastName(source.lastName || '');
+    setSuffix(source.suffix || '');
+    setDateOfBirth(source.dateOfBirth || '');
+    setSex(source.sex || 'Male');
+    setGenderIdentity(source.genderIdentity || '');
+    setCivilStatus(source.civilStatus || 'Single');
+    setVerificationStatus(source.verificationStatus || 'Verified');
+    setContactNumber(source.contactNumber || '');
+    setEmail(source.email || '');
+    setSeniorCitizenId(source.seniorCitizenId || '');
+    setPwdId(source.pwdId || '');
+    setBloodType(source.bloodType || '');
 
-    setFirstName(patient.firstName || '');
-    setMiddleName(patient.middleName || '');
-    setLastName(patient.lastName || '');
-    setSuffix(patient.suffix || '');
-    setDateOfBirth(patient.dateOfBirth || '');
-    setGender(
-      patient.gender === 'Female' ? 'Female' : patient.gender === 'Other' ? 'Other' : 'Male'
-    );
-    setCivilStatus(
-      patient.civilStatus === 'Married'
-        ? 'Married'
-        : patient.civilStatus === 'Widowed'
-        ? 'Widowed'
-        : patient.civilStatus === 'Separated'
-        ? 'Separated'
-        : 'Single'
-    );
-    setContactNumber(patient.contactNumber || '');
-    setEmail(patient.email || '');
-    setAddressLine(patient.addressLine || '');
-    setBarangay(patient.barangay || '');
-    setCity(patient.city || '');
-    setProvince(patient.province || '');
-    setEmergencyContactName(patient.emergencyContactName || '');
-    setEmergencyContactPhone(patient.emergencyContactPhone || '');
-    setEmergencyContactRelationship(patient.emergencyContactRelationship || '');
-    setPhilHealthNumber(patient.philHealthNumber || '');
-    const pProfile = extractPhilHealthProfileData(patient.customFields, patient);
-    setMemberType(pProfile.memberType);
-    setPrincipalMemberPin(pProfile.principalPin);
-    setPrincipalFullName(pProfile.principalFullName);
-    setPrincipalRelationship(pProfile.principalRelationship);
-    setPrincipalDob(pProfile.principalDob);
-    setIsPrincipalPinValid(null);
-    setSeniorCitizenId(patient.seniorCitizenId || '');
-    setPwdId(patient.pwdId || '');
-    setBloodType(patient.bloodType || '');
-    const initialAllergies = (patient as any)?.structuredAllergies && Array.isArray((patient as any).structuredAllergies) && (patient as any).structuredAllergies.length > 0
-      ? (patient as any).structuredAllergies
-      : parseAllergiesStringToStructured(patient.allergies);
+    const initialAllergies: CreateAllergyRequest[] = Array.isArray(source.structuredAllergies)
+      ? source.structuredAllergies.map((item) => ({
+          category: (['Medication', 'Food', 'Environmental', 'Biologic', 'Other'].includes(item.category)
+            ? item.category
+            : 'Other') as CreateAllergyRequest['category'],
+          allergen: item.allergen,
+          allergenDrugCode: item.allergenDrugCode ?? null,
+          severity: (['Mild', 'Moderate', 'Severe', 'LifeThreatening'].includes(item.severity)
+            ? item.severity
+            : 'Moderate') as CreateAllergyRequest['severity'],
+          reactionManifestation: item.reactionManifestation ?? null,
+          isAnaphylactic: Boolean(item.isAnaphylactic),
+          onsetDate: item.onsetDate ?? null,
+          notes: item.notes ?? null,
+        }))
+      : parseAllergiesStringToStructured(source.allergies);
     setStructuredAllergies(initialAllergies);
-    const initialConditions: MedicalHistoryItem[] =
-      (patient as any)?.pastMedicalHistories &&
-      Array.isArray((patient as any).pastMedicalHistories) &&
-      (patient as any).pastMedicalHistories.length > 0
-        ? (patient as any).pastMedicalHistories
-        : parseChronicConditionsStringToStructured(patient.chronicConditions);
-    setStructuredMedicalHistories(initialConditions);
-    setChronicConditions(patient.chronicConditions || '');
-    setAlerts(patient.alerts || '');
 
-    const cf = patient.customFields || {};
-    setCustomFieldValues({ ...cf });
+    const initialConditions: MedicalHistoryItem[] = Array.isArray(source.pastMedicalHistories)
+      ? (source.pastMedicalHistories as MedicalHistoryItem[])
+      : parseChronicConditionsStringToStructured(source.chronicConditions);
+    setStructuredMedicalHistories(initialConditions);
+
+    const normalizedAlerts =
+      !isFullRecord && source.alerts === 'Active Safety Alert'
+        ? ''
+        : source.alerts || '';
+    setAlerts(normalizedAlerts);
+
+    const cf = source.customFields || {};
+    const existingPerm = (source.addresses && source.addresses.length > 0)
+      ? source.addresses.find((a) => a.addressType === 'Permanent') || source.addresses[0]
+      : null;
+    setPermanentAddress({
+      addressType: 'Permanent',
+      isSameAsPermanent: false,
+      regionPsgc: existingPerm?.regionPsgc ?? source.regionPsgc ?? null,
+      provincePsgc: existingPerm?.provincePsgc ?? source.provincePsgc ?? null,
+      cityMunicipalityPsgc: existingPerm?.cityMunicipalityPsgc ?? source.cityMunicipalityPsgc ?? null,
+      barangayPsgc: existingPerm?.barangayPsgc ?? source.barangayPsgc ?? null,
+      regionName: existingPerm?.regionName ?? null,
+      provinceName: existingPerm?.provinceName ?? cf['primary_province'] ?? (source as any).province ?? null,
+      cityMunicipalityName: existingPerm?.cityMunicipalityName ?? cf['primary_city'] ?? (source as any).city ?? null,
+      barangayName: existingPerm?.barangayName ?? cf['primary_barangay'] ?? (source as any).barangay ?? null,
+      streetAddress: existingPerm?.streetAddress ?? (source as any).addressLine ?? cf['primary_address_line'] ?? '',
+      zipCode: existingPerm?.zipCode ?? source.zipCode ?? null,
+    });
+    setGuardian(extractInitialGuardianFromPatient(source));
+    setGuardianErrors({});
+    setIsGuardianPinValid(null);
+    const rawAffiliation = cf['affiliation'] || (cf['classification'] === 'Student' ? 'Student' : cf['classification'] === 'Employee' ? 'Employee/Faculty' : cf['classification'] === 'General' ? 'Guest' : undefined);
+    setCustomFieldValues({
+      ...cf,
+      ...(rawAffiliation ? { affiliation: rawAffiliation } : {}),
+      emergency_contact_name: cf['emergency_contact_name'] ?? (source as any).emergencyContactName ?? '',
+      emergency_contact_phone: cf['emergency_contact_phone'] ?? (source as any).emergencyContactPhone ?? '',
+      emergency_contact_relationship: cf['emergency_contact_relationship'] ?? (source as any).emergencyContactRelationship ?? '',
+    });
     setCustomFieldErrors({});
     setFieldErrors({});
     const cls = cf['classification'] || (cf['affiliation'] === 'Student' ? 'Student' : cf['affiliation'] === 'Employee/Faculty' ? 'Employee' : 'General');
@@ -317,7 +575,51 @@ export function EditPatientModal({
       setEmployeeId('');
       setDepartment('');
     }
+  };
+
+  useEffect(() => {
+    if (visible) {
+      clinicService.getCustomFields('ClinicPatient').then(([fields]) => {
+        if (fields && fields.length > 0) {
+          setTenantCustomFields(fields);
+        }
+      });
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    if (!patient) {
+      setHydratedPatient(null);
+      setHasFullClinicalContext(false);
+      return;
+    }
+    setHydratedPatient(patient);
+    applyPatientToForm(patient);
   }, [patient]);
+
+  useEffect(() => {
+    if (!visible || !patient?.id || typeof clinicService.getPatientById !== 'function') {
+      return;
+    }
+
+    let cancelled = false;
+    setHydratingPatient(true);
+    clinicService.getPatientById(patient.id)
+      .then(([fullPatient]) => {
+        if (cancelled || !fullPatient) return;
+        setHydratedPatient(fullPatient);
+        applyPatientToForm(fullPatient);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setHydratingPatient(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, patient?.id]);
 
   const handleSave = async () => {
     if (!patient) return;
@@ -326,6 +628,14 @@ export function EditPatientModal({
       Alert.alert(
         'Missing Required Details',
         'First name, last name, date of birth, and contact phone number are required.'
+      );
+      return;
+    }
+
+    if (!parsePhilHealthSexInput(sex)) {
+      Alert.alert(
+        'Select Biological Sex',
+        'Please select Male or Female (as specified by PhilHealth).'
       );
       return;
     }
@@ -339,117 +649,69 @@ export function EditPatientModal({
       return;
     }
 
-    if (philHealthNumber.trim() && isPinValid === false) {
-      Alert.alert(
-        'Invalid PhilHealth PIN',
-        'Please provide a valid 12-digit PhilHealth Identification Number (Mod-11 check passed) or leave it blank.'
-      );
+    const guardianCheck = validateGuardianDraft(
+      guardian,
+      isMinorFromDob(dateOfBirth),
+      isGuardianPinValid
+    );
+    if (!guardianCheck.isValid) {
+      setGuardianErrors(guardianCheck.errors);
+      Alert.alert('Invalid Legal Guardian Details', guardianCheck.summary);
       return;
     }
 
-    // Defensive validation for dynamic custom fields
-    const staticValues = { gender, civilStatus, dateOfBirth };
-    if (tenantCustomFields.length > 0) {
-      const { isValid, errors } = validateCustomFields(tenantCustomFields, customFieldValues, staticValues);
+    // Defensive validation for rendered demographic custom fields
+    if (renderedCustomFields.length > 0) {
+      const effectivePatient = hydratedPatient || patient;
+      const initialCustomFields = effectivePatient?.customFields || {};
+      const { isValid, errors } = validateCustomFields(
+        renderedCustomFields,
+        customFieldValues,
+        staticValues,
+        {
+          isUpdate: true,
+          initialValues: initialCustomFields,
+        }
+      );
       if (!isValid) {
         setCustomFieldErrors(errors);
-        Alert.alert('Missing Required Custom Fields', Object.values(errors).join('\n'));
+        const errorMessages = Object.values(errors);
+        const hasFormatOrBoundaryError = errorMessages.some((msg) => !msg.endsWith('is required.'));
+        Alert.alert(
+          hasFormatOrBoundaryError ? 'Invalid Custom Fields' : 'Missing Required Custom Fields',
+          errorMessages.join('\n')
+        );
         return;
       }
     }
 
-    setSaving(true);
+    const effectivePatient = hydratedPatient || patient;
 
-    const mergedCustomFields: Record<string, any> = {
-      ...(patient.customFields || {}),
-    };
-
-    if (tenantCustomFields.length > 0) {
-      const cleanCustom = sanitizeCustomFieldsPayload(tenantCustomFields, customFieldValues, staticValues);
-      Object.assign(mergedCustomFields, cleanCustom);
-    } else {
-      mergedCustomFields['classification'] = classification;
-      if (classification === 'Student') {
-        if (studentId.trim()) mergedCustomFields['student_id'] = studentId.trim();
-        else delete mergedCustomFields['student_id'];
-        if (college.trim()) mergedCustomFields['college'] = college.trim();
-        else delete mergedCustomFields['college'];
-        if (program.trim()) mergedCustomFields['program'] = program.trim();
-        else delete mergedCustomFields['program'];
-        if (yearLevel.trim()) mergedCustomFields['year_level'] = yearLevel.trim();
-        else delete mergedCustomFields['year_level'];
-        delete mergedCustomFields['employee_id'];
-        delete mergedCustomFields['department'];
-      } else if (classification === 'Employee') {
-        if (employeeId.trim()) mergedCustomFields['employee_id'] = employeeId.trim();
-        else delete mergedCustomFields['employee_id'];
-        if (department.trim()) mergedCustomFields['department'] = department.trim();
-        else delete mergedCustomFields['department'];
-        delete mergedCustomFields['student_id'];
-        delete mergedCustomFields['college'];
-        delete mergedCustomFields['program'];
-        delete mergedCustomFields['year_level'];
-      } else {
-        delete mergedCustomFields['student_id'];
-        delete mergedCustomFields['college'];
-        delete mergedCustomFields['program'];
-        delete mergedCustomFields['year_level'];
-        delete mergedCustomFields['employee_id'];
-        delete mergedCustomFields['department'];
-      }
-    }
-
-    if (memberType === 'DD') {
-      if (!principalFullName.trim()) {
-        Alert.alert('Missing Details', 'Principal member full name is required for dependents.');
-        return;
-      }
-      if (!principalRelationship) {
-        Alert.alert('Missing Details', 'Relationship to principal member is required.');
-        return;
-      }
-      if (principalMemberPin.trim() && isPrincipalPinValid === false) {
-        Alert.alert('Invalid PIN', 'Principal Member PIN failed Mod-11 verification.');
-        return;
-      }
-      if (principalDob.trim()) {
-        const pDobCheck = validateDateString(principalDob, { boundaryMode: 'pastOrToday' });
-        if (!pDobCheck.isValid) {
-          Alert.alert('Invalid Date of Birth', pDobCheck.errorMessage || 'Principal Date of Birth cannot be in the future.');
-          return;
-        }
-      }
-    }
-
-    mergedCustomFields['member_type'] = memberType;
-    if (memberType === 'DD') {
-      mergedCustomFields['principal_member_pin'] = principalMemberPin.trim();
-      mergedCustomFields['principal_full_name'] = principalFullName.trim();
-      mergedCustomFields['principal_relationship'] = principalRelationship;
-      if (principalDob.trim()) mergedCustomFields['principal_dob'] = principalDob.trim();
-    } else {
-      delete mergedCustomFields['principal_member_pin'];
-      delete mergedCustomFields['principal_full_name'];
-      delete mergedCustomFields['principal_relationship'];
-      delete mergedCustomFields['principal_dob'];
-    }
-
-    mergedCustomFields['philhealth_profile'] = buildPhilHealthProfileData({
-      memberType,
-      patientPin: philHealthNumber,
-      patientFirstName: firstName,
-      patientLastName: lastName,
-      patientMiddleName: middleName,
-      patientDob: dateOfBirth,
-      principalPin: principalMemberPin,
-      principalFullName,
-      principalRelationship,
-      principalDob,
+    const mergedCustomFields = mergePatientCustomFields({
+      patient: effectivePatient,
+      effectiveCustomFields: renderedCustomFields,
+      customFieldValues,
+      staticValues,
+      tenantCustomFieldsCount: tenantCustomFields.length,
+      classification,
+      studentId,
+      college,
+      program,
+      yearLevel,
+      employeeId,
+      department,
+      firstName,
+      lastName,
+      middleName,
+      dateOfBirth,
     });
 
     const allergiesSummary = structuredAllergies.length > 0
       ? structuredAllergies.map((a) => `${a.allergen} (${a.category}${a.isAnaphylactic ? ' - STAT' : ''})`).join(', ')
       : undefined;
+
+    const normalizedGuardian = normalizeGuardianPayload(guardian);
+    const hasAddressInput = Boolean(permanentAddress.regionPsgc || permanentAddress.streetAddress?.trim());
 
     const payload: RegisterPatientPayload = {
       firstName: firstName.trim(),
@@ -457,30 +719,49 @@ export function EditPatientModal({
       middleName: middleName.trim() || undefined,
       suffix: suffix.trim() || undefined,
       dateOfBirth: dateOfBirth.trim(),
-      gender,
+      sex,
+      genderIdentity: genderIdentity.trim(),
       civilStatus,
       contactNumber: contactNumber.trim(),
       email: email.trim() || undefined,
-      addressLine: addressLine.trim() || undefined,
-      barangay: barangay.trim() || undefined,
-      city: city.trim() || undefined,
-      province: province.trim() || undefined,
-      emergencyContactName: emergencyContactName.trim() || undefined,
-      emergencyContactPhone: emergencyContactPhone.trim() || undefined,
-      emergencyContactRelationship: emergencyContactRelationship.trim() || undefined,
-      philHealthNumber: philHealthNumber.trim() || undefined,
+      // Preserve PhilHealth PIN managed in Manage PhilHealth so editing demographics never clears it
+      philHealthNumber: effectivePatient.philHealthNumber || undefined,
       seniorCitizenId: seniorCitizenId.trim() || undefined,
       pwdId: pwdId.trim() || undefined,
       bloodType: bloodType.trim() || undefined,
-      allergies: allergiesSummary,
-      structuredAllergies: structuredAllergies.length > 0 ? structuredAllergies : undefined,
+      allergies: hasFullClinicalContext ? (allergiesSummary ?? '') : allergiesSummary,
+      structuredAllergies: hasFullClinicalContext
+        ? structuredAllergies
+        : structuredAllergies.length > 0
+          ? structuredAllergies
+          : undefined,
       chronicConditions: formatMedicalHistoriesSummary(structuredMedicalHistories) || undefined,
-      alerts: alerts.trim() || undefined,
+      alerts: hasFullClinicalContext ? alerts.trim() : alerts.trim() || undefined,
       customFields: Object.keys(mergedCustomFields).length > 0 ? mergedCustomFields : undefined,
-      verificationStatus: patient.verificationStatus || 'Verified',
-      medicalHistories: structuredMedicalHistories,
+      verificationStatus: verificationStatus || effectivePatient.verificationStatus || 'Verified',
+      medicalHistories: hasFullClinicalContext
+        ? structuredMedicalHistories
+        : structuredMedicalHistories.length > 0
+          ? structuredMedicalHistories
+          : undefined,
+      addresses: hasAddressInput
+        ? [permanentAddress]
+        : effectivePatient.addresses && effectivePatient.addresses.length > 0
+          ? []
+          : undefined,
+      guardians: normalizedGuardian
+        ? [normalizedGuardian]
+        : effectivePatient.guardians && effectivePatient.guardians.length > 0
+          ? []
+          : undefined,
+      regionPsgc: permanentAddress.regionPsgc || undefined,
+      provincePsgc: permanentAddress.provincePsgc || undefined,
+      cityMunicipalityPsgc: permanentAddress.cityMunicipalityPsgc || undefined,
+      barangayPsgc: permanentAddress.barangayPsgc || undefined,
+      zipCode: permanentAddress.zipCode || undefined,
     };
 
+    setSaving(true);
     const [updated, err] = await clinicService.updatePatient(patient.id, payload);
     setSaving(false);
 
@@ -491,6 +772,8 @@ export function EditPatientModal({
       onClose();
     } else {
       const fieldErrorsMap: Record<string, string> = {};
+      const newCustomFieldErrors: Record<string, string> = {};
+
       if (err) {
         if (typeof err.getFieldErrorsMap === 'function') {
           Object.assign(fieldErrorsMap, err.getFieldErrorsMap());
@@ -510,17 +793,46 @@ export function EditPatientModal({
         const phoneErr = err.getFieldError?.('contactNumber') || err.getFieldError?.('phone');
         if (phoneErr) fieldErrorsMap.contactNumber = phoneErr;
 
-        const philErr = err.getFieldError?.('philHealthId') || err.getFieldError?.('philHealthPin') || err.getFieldError?.('philHealthNumber');
-        if (philErr) {
-          fieldErrorsMap.philHealthId = philErr;
-          fieldErrorsMap.philHealthPin = philErr;
-          fieldErrorsMap.philHealthNumber = philErr;
-        }
-
         const emailErr = err.getFieldError?.('email');
         if (emailErr) fieldErrorsMap.email = emailErr;
+
+        // Map custom field errors from err.errors (supporting exact field keys and label fallbacks)
+        if (Array.isArray(err.errors)) {
+          for (const item of err.errors) {
+            if (item.field) {
+              const fieldName = item.field;
+              const matchedCustom = renderedCustomFields.find(
+                (f) => f.fieldKey.toLowerCase() === fieldName.toLowerCase()
+              );
+              if (matchedCustom) {
+                newCustomFieldErrors[matchedCustom.fieldKey] = item.message;
+              }
+            } else if (item.message) {
+              const matchedCustom = renderedCustomFields.find(
+                (f) =>
+                  item.message.toLowerCase().includes(f.label.toLowerCase()) ||
+                  item.message.toLowerCase().includes(f.fieldKey.toLowerCase())
+              );
+              if (matchedCustom) {
+                newCustomFieldErrors[matchedCustom.fieldKey] = item.message;
+              }
+            }
+          }
+        }
+
+        for (const [k, v] of Object.entries(fieldErrorsMap)) {
+          const matched = renderedCustomFields.find(
+            (f) => f.fieldKey.toLowerCase() === k.toLowerCase()
+          );
+          if (matched) {
+            newCustomFieldErrors[matched.fieldKey] = v;
+          }
+        }
       }
       setFieldErrors(fieldErrorsMap);
+      if (Object.keys(newCustomFieldErrors).length > 0) {
+        setCustomFieldErrors((prev) => ({ ...prev, ...newCustomFieldErrors }));
+      }
 
       notify.error(err?.message || 'Failed to update patient demographics.', {
         traceId: err?.traceId,
@@ -529,8 +841,7 @@ export function EditPatientModal({
   };
 
   return (
-    <>
-      <Modal raw visible={visible} animationType="slide" transparent onClose={onClose}>
+    <Modal raw visible={visible} animationType="slide" transparent onClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           {/* Header */}
@@ -543,14 +854,15 @@ export function EditPatientModal({
                 {patient ? `${patient.fullName} (${patient.patientCode})` : 'Update details'}
               </ThemedText>
             </View>
-            <Pressable
-              onPress={onClose}
+            <Button
+              icon="close"
+              iconOnly
+              variant="ghost"
+              size="sm"
               disabled={saving}
-              style={styles.closeBtn}
               accessibilityLabel="Close"
-            >
-              <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+              onPress={onClose}
+            />
           </View>
 
           {/* Form Body */}
@@ -623,7 +935,7 @@ export function EditPatientModal({
             <View style={styles.formRow}>
               <View style={styles.formCol}>
                 <ValidatedDateInput
-                  label="Date of Birth (YYYY-MM-DD)"
+                  label="Date of Birth"
                   required
                   placeholder="YYYY-MM-DD"
                   value={dateOfBirth}
@@ -644,50 +956,129 @@ export function EditPatientModal({
               </View>
             </View>
 
-            {/* Sex / Gender Selector */}
-            <View>
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                Sex / Gender *
-              </ThemedText>
-              <View style={styles.pillRow}>
-                {(['Male', 'Female', 'Other'] as const).map((item) => (
-                  <Pressable
-                    key={item}
-                    style={[styles.pill, gender === item && styles.pillActive]}
-                    onPress={() => setGender(item)}
-                  >
-                    <ThemedText
-                      variant="smallBold"
-                      color={gender === item ? theme.colors.textInverted : theme.colors.textSecondary}
-                    >
-                      {item}
-                    </ThemedText>
-                  </Pressable>
-                ))}
+            {/* Biological Sex & Gender Identity Side-by-Side */}
+            <View style={styles.formRow}>
+              <View style={[styles.formCol, { minWidth: 0 }]}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                  Sex<ThemedText variant="captionBold" color={theme.colors.emergency}> *</ThemedText>
+                </ThemedText>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.pillScroll}
+                  contentContainerStyle={styles.pillScrollRow}
+                >
+                  {sexOptions.map((item) => {
+                    const isSelected = sex.toLowerCase() === item.toLowerCase();
+                    return (
+                      <Pressable
+                        key={item}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: isSelected }}
+                        accessibilityLabel={`Sex: ${item}`}
+                        style={[styles.scrollablePill, isSelected && styles.pillActive]}
+                        onPress={() => setSex(item)}
+                      >
+                        <ThemedText
+                          variant="smallBold"
+                          numberOfLines={1}
+                          color={isSelected ? theme.colors.textInverted : theme.colors.textSecondary}
+                        >
+                          {item}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+              <View style={[styles.formCol, { minWidth: 0 }]}>
+                <Select
+                  label="Gender Identity"
+                  placeholder="Select gender identity"
+                  value={genderIdentity}
+                  options={genderIdentityOptions}
+                  onSelect={setGenderIdentity}
+                  allowClear
+                  allowCustom
+                  modalTitle="Select Gender Identity"
+                />
               </View>
             </View>
 
-            {/* Civil Status Selector */}
-            <View>
+            {/* Civil Status Selector (Horizontally Scrollable) */}
+            <View style={{ gap: theme.spacing.xs }}>
               <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
                 Civil Status
               </ThemedText>
-              <View style={styles.pillRow}>
-                {(['Single', 'Married', 'Widowed', 'Separated'] as const).map((item) => (
-                  <Pressable
-                    key={item}
-                    style={[styles.pill, civilStatus === item && styles.pillActive]}
-                    onPress={() => setCivilStatus(item)}
-                  >
-                    <ThemedText
-                      variant="smallBold"
-                      color={civilStatus === item ? theme.colors.textInverted : theme.colors.textSecondary}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.pillScroll}
+                contentContainerStyle={styles.pillScrollRow}
+              >
+                {civilStatusOptions.map((item) => {
+                  const normCurrent = civilStatus.toLowerCase();
+                  const normItem = item.toLowerCase();
+                  const isSelected =
+                    normCurrent === normItem ||
+                    ((normCurrent === 'cohabiting' || normCurrent === 'commonlaw') &&
+                      normItem.startsWith('cohabiting')) ||
+                    (normCurrent === 'other' && normItem === 'other civil status');
+                  return (
+                    <Pressable
+                      key={item}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`Civil Status: ${item}`}
+                      style={[styles.scrollablePill, isSelected && styles.pillActive]}
+                      onPress={() => setCivilStatus(item)}
                     >
-                      {item}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </View>
+                      <ThemedText
+                        variant="smallBold"
+                        numberOfLines={1}
+                        color={isSelected ? theme.colors.textInverted : theme.colors.textSecondary}
+                      >
+                        {item}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Verification Status Quick Chips */}
+            <View style={{ gap: theme.spacing.xs }}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                Verification Status
+              </ThemedText>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.pillScroll}
+                contentContainerStyle={styles.pillScrollRow}
+              >
+                {VERIFICATION_STATUS_OPTIONS.map((opt) => {
+                  const isSelected = verificationStatus.toLowerCase() === opt.value.toLowerCase();
+                  return (
+                    <Pressable
+                      key={opt.value}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`Verification Status: ${opt.label}`}
+                      style={[styles.scrollablePill, isSelected && styles.pillActive]}
+                      onPress={() => setVerificationStatus(opt.value)}
+                    >
+                      <ThemedText
+                        variant="smallBold"
+                        numberOfLines={1}
+                        color={isSelected ? theme.colors.textInverted : theme.colors.textSecondary}
+                      >
+                        {opt.label}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             </View>
 
             {/* Contact & Address Section */}
@@ -724,232 +1115,93 @@ export function EditPatientModal({
               </View>
             </View>
 
-            <View style={styles.formRow}>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Address Line / Street
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="House / Unit / Street"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={addressLine}
-                  onChangeText={setAddressLine}
-                />
-              </View>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Barangay
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Barangay"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={barangay}
-                  onChangeText={setBarangay}
-                />
-              </View>
-            </View>
-
-            <View style={styles.formRow}>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  City / Municipality
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="City"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={city}
-                  onChangeText={setCity}
-                />
-              </View>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Province
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Province"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={province}
-                  onChangeText={setProvince}
-                />
-              </View>
-            </View>
-
-            {/* Emergency Contact Section */}
-            <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-              Emergency Contact
-            </ThemedText>
-
-            <View style={styles.formRow}>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Contact Person Name
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Full Name"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={emergencyContactName}
-                  onChangeText={setEmergencyContactName}
-                />
-              </View>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Contact Person Phone
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="0918-123-4567"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={emergencyContactPhone}
-                  onChangeText={setEmergencyContactPhone}
-                />
-              </View>
-            </View>
-
-            <View>
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                Relationship to Patient
-              </ThemedText>
-              <TextInput
-                style={styles.textInput}
-                placeholder="e.g. Spouse, Parent, Sibling, Guardian"
-                placeholderTextColor={theme.colors.textMuted}
-                value={emergencyContactRelationship}
-                onChangeText={setEmergencyContactRelationship}
-              />
-            </View>
-
-            {/* Statutory Identifiers */}
-            <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-              Statutory Identifiers
-            </ThemedText>
-
-            <PhilHealthPinInput
-              label="PhilHealth PIN (RA 11223)"
-              value={philHealthNumber}
-              onChangeText={(val) => {
-                setPhilHealthNumber(val);
-                clearFieldError('philHealthId');
-                clearFieldError('philHealthPin');
-                clearFieldError('philHealthNumber');
-              }}
-              onValidityChange={setIsPinValid}
-              error={fieldErrors.philHealthId || fieldErrors.philHealthPin || fieldErrors.philHealthNumber}
+            {/* Home Address (Official 1NF PatientAddress Entity) */}
+            <PsgcAddressSelector
+              value={permanentAddress}
+              onChange={setPermanentAddress}
             />
 
-            {/* PhilHealth Member Type Selector (MM vs DD) */}
-            <View style={{ gap: 4 }}>
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                PhilHealth Member Type *
-              </ThemedText>
-              <SegmentedControl
-                options={[
-                  { value: 'MM', label: 'Member (MM)' },
-                  { value: 'DD', label: 'Dependent (DD)' },
-                ]}
-                value={memberType}
-                onChange={(val) => setMemberType(val as MemberType)}
-              />
-            </View>
-
-            {/* Conditional Principal Sponsor Details Card when DD */}
-            {memberType === 'DD' && (
-              <View style={styles.sponsorCard}>
-                <View style={styles.sponsorHeader}>
-                  <Icon name="shield" size={14} color={theme.colors.primaryDark} />
-                  <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                    Principal Sponsor Details
-                  </ThemedText>
-                  <Badge label="Required for Konsulta" variant="info" size="sm" />
-                </View>
-                <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                  Required for PhilHealth Konsulta dependent registration and statutory encounter claims.
+            {/* Secondary Address (Dynamic Custom Fields) */}
+            {addressFields.length > 0 && (
+              <>
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
+                  Secondary Address
                 </ThemedText>
-
-                <Input
-                  label="Principal Member Full Name *"
-                  placeholder="e.g. Maria Santos"
-                  value={principalFullName}
-                  onChangeText={(val) => {
-                    setPrincipalFullName(val);
-                    clearFieldError('principalFullName');
-                  }}
-                  error={fieldErrors.principalFullName}
+                <DynamicCustomFieldsRenderer
+                  fields={addressFields}
+                  values={customFieldValues}
+                  onChange={handleCustomFieldChange}
+                  errors={customFieldErrors}
+                  staticValues={staticValues}
                 />
-
-                <View style={{ gap: 4 }}>
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                    Relationship to Principal Member *
-                  </ThemedText>
-                  <View style={styles.relationshipGrid}>
-                    {PHILHEALTH_RELATIONSHIPS.map((rel) => {
-                      const isSelected = principalRelationship === rel.code;
-                      return (
-                        <Pressable
-                          key={rel.code}
-                          onPress={() => setPrincipalRelationship(rel.code)}
-                          style={[
-                            styles.relationshipChip,
-                            isSelected && styles.relationshipChip_selected,
-                          ]}
-                          accessibilityRole="radio"
-                          accessibilityState={{ selected: isSelected }}
-                        >
-                          <ThemedText
-                            variant="captionBold"
-                            color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
-                          >
-                            {rel.label}
-                          </ThemedText>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                <View style={styles.formRow}>
-                  <View style={styles.formCol}>
-                    <PhilHealthPinInput
-                      label="Principal Member PIN (RA 11223)"
-                      value={principalMemberPin}
-                      onChangeText={setPrincipalMemberPin}
-                      onValidityChange={setIsPrincipalPinValid}
-                      error={fieldErrors.principalMemberPin}
-                    />
-                  </View>
-                  <View style={styles.formCol}>
-                    <ValidatedDateInput
-                      label="Principal Date of Birth"
-                      value={principalDob}
-                      onChangeText={setPrincipalDob}
-                      boundaryMode="pastOrToday"
-                      placeholder="YYYY-MM-DD"
-                    />
-                  </View>
-                </View>
-              </View>
+              </>
             )}
 
-            <View style={styles.formRow}>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Senior Citizen ID (RA 9994)
+            {/* Legal Guardian (Official 1NF PatientGuardian Entity) */}
+            <GuardianSection
+              guardian={guardian}
+              onChange={setGuardian}
+              patientDateOfBirth={dateOfBirth}
+              errors={guardianErrors}
+              onClearError={clearGuardianError}
+              onPinValidityChange={setIsGuardianPinValid}
+            />
+
+            {/* Emergency Contact (Dynamic Custom Fields) */}
+            {emergencyFields.length > 0 && (
+              <>
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
+                  Emergency Contact
                 </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="SC-SP-2020-001"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={seniorCitizenId}
-                  onChangeText={setSeniorCitizenId}
+                <DynamicCustomFieldsRenderer
+                  fields={emergencyFields}
+                  values={customFieldValues}
+                  onChange={handleCustomFieldChange}
+                  errors={customFieldErrors}
+                  staticValues={staticValues}
                 />
-              </View>
+              </>
+            )}
+
+            {/* Additional Custom Fields (Institutional, Student, Employee, etc.) */}
+            {otherCustomFields.length > 0 && (
+              <>
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
+                  Additional Details
+                </ThemedText>
+                <DynamicCustomFieldsRenderer
+                  fields={otherCustomFields}
+                  values={customFieldValues}
+                  onChange={handleCustomFieldChange}
+                  errors={customFieldErrors}
+                  staticValues={staticValues}
+                />
+              </>
+            )}
+
+            {/* Government IDs (PhilHealth membership is managed via Manage PhilHealth) */}
+            <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
+              Government IDs
+            </ThemedText>
+
+            <View style={styles.formRow}>
+              {isSenior && (
+                <View style={styles.formCol}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                    Senior Citizen ID
+                  </ThemedText>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="SC-SP-2020-001"
+                    placeholderTextColor={theme.colors.textMuted}
+                    value={seniorCitizenId}
+                    onChangeText={setSeniorCitizenId}
+                  />
+                </View>
+              )}
               <View style={styles.formCol}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  PWD ID (RA 10754)
+                  PWD ID
                 </ThemedText>
                 <TextInput
                   style={styles.textInput}
@@ -960,132 +1212,6 @@ export function EditPatientModal({
                 />
               </View>
             </View>
-
-            {/* Institutional & Custom Metadata */}
-            {tenantCustomFields.length > 0 && (
-              <>
-                <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-                  Institutional & Additional Details
-                </ThemedText>
-                <DynamicCustomFieldsRenderer
-                  fields={tenantCustomFields}
-                  values={customFieldValues}
-                  onChange={(key, val) => {
-                    setCustomFieldValues((prev) => ({ ...prev, [key]: val }));
-                    setCustomFieldErrors((prev) => {
-                      const next = { ...prev };
-                      delete next[key];
-                      return next;
-                    });
-                  }}
-                  errors={customFieldErrors}
-                  staticValues={{ gender, civilStatus, dateOfBirth }}
-                />
-              </>
-            )}
-
-            {/* Clinical Summary & Alerts */}
-            <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-              Clinical Summary & Alerts
-            </ThemedText>
-
-            {/* Embedded Structured Allergy Section */}
-            <View style={styles.allergySectionCard}>
-              <View style={styles.allergySectionHeader}>
-                <View style={styles.allergySectionTitleRow}>
-                  <Icon name="emergency" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                    Known Allergies & Anaphylaxis Alerts
-                  </ThemedText>
-                </View>
-                <Button
-                  title="+ Add Allergy"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => setAllergyModalVisible(true)}
-                />
-              </View>
-
-              <AllergyPillList
-                allergies={structuredAllergies}
-                onRemove={(index) => {
-                  setStructuredAllergies((prev) => prev.filter((_, i) => i !== index));
-                }}
-              />
-            </View>
-
-            {/* Section 1: Past Medical History & Chronic Conditions */}
-            <View style={styles.formSectionBox}>
-              <View style={styles.sectionHeaderBetween}>
-                <View style={styles.sectionHeaderLeft}>
-                  <Icon name="medical" size={16} color={theme.colors.primary} />
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                    Past Medical History & Chronic Conditions
-                  </ThemedText>
-                </View>
-                <Button
-                  title="+ Add / Select Condition"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => setMedicalHistoryModalVisible(true)}
-                />
-              </View>
-
-              {/* Quick Chips Row */}
-              <View style={styles.quickChipsRow}>
-                {PHILHEALTH_QUICK_CONDITIONS.map((qc) => {
-                  const isSelected = structuredMedicalHistories.some(
-                    (c) =>
-                      c.philHealthMdiseaseCode === qc.code ||
-                      c.conditionTitle.trim().toLowerCase() === qc.title.trim().toLowerCase()
-                  );
-                  return (
-                    <Pressable
-                      key={qc.code}
-                      style={[styles.quickChip, isSelected && styles.quickChipActive]}
-                      onPress={() => toggleQuickCondition(qc.code, qc.title)}
-                    >
-                      <ThemedText
-                        variant={isSelected ? 'captionBold' : 'caption'}
-                        color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
-                      >
-                        {qc.label}
-                      </ThemedText>
-                      {isSelected ? (
-                        <Icon name="check" size={12} color={theme.colors.primary} />
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {additionalConditions.length > 0 && (
-                <View style={styles.additionalConditionsWrap}>
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ marginBottom: 6 }}>
-                    Additional Documented Conditions:
-                  </ThemedText>
-                  <MedicalHistoryPillList
-                    items={additionalConditions}
-                    onRemove={(index) => {
-                      const target = additionalConditions[index];
-                      setStructuredMedicalHistories((prev) => prev.filter((item) => item !== target));
-                    }}
-                  />
-                </View>
-              )}
-
-              {structuredMedicalHistories.length === 0 && (
-                <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginTop: 2 }}>
-                  No chronic conditions selected (Patient has no known chronic illnesses).
-                </ThemedText>
-              )}
-            </View>
-
-            {/* Section 2: Dedicated Clinical & Safety Alerts */}
-            <ClinicalAlertsSection
-              alerts={alerts}
-              onChangeAlerts={setAlerts}
-            />
           </ScrollView>
 
           {/* Action Footer */}
@@ -1104,29 +1230,12 @@ export function EditPatientModal({
               icon="save"
               loading={saving}
               onPress={handleSave}
-              disabled={saving}
+              disabled={saving || (hydratingPatient && !hasFullClinicalContext)}
             />
           </View>
         </View>
       </View>
     </Modal>
-
-    {/* Structured Allergy Intake Sub-Modal */}
-    <StructuredAllergyIntakeModal
-      visible={visible && allergyModalVisible}
-      onClose={() => setAllergyModalVisible(false)}
-      allergies={structuredAllergies}
-      onChange={setStructuredAllergies}
-    />
-
-    {/* Structured Medical History Intake Sub-Modal */}
-    <StructuredMedicalHistoryModal
-      visible={visible && medicalHistoryModalVisible}
-      onClose={() => setMedicalHistoryModalVisible(false)}
-      conditions={structuredMedicalHistories}
-      onChange={setStructuredMedicalHistories}
-    />
-  </>
   );
 }
 
@@ -1163,9 +1272,6 @@ const styles = StyleSheet.create({
   headerTitleGroup: {
     gap: 2,
   },
-  closeBtn: {
-    padding: theme.spacing.xs,
-  },
   formScroll: {
     flexShrink: 1,
     maxHeight: 520,
@@ -1181,10 +1287,12 @@ const styles = StyleSheet.create({
   },
   formRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: theme.spacing.md,
   },
   formCol: {
     flex: 1,
+    minWidth: 0,
     gap: theme.spacing.xs,
   },
   inputLabel: {
@@ -1204,6 +1312,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.sm,
     marginTop: 2,
+  },
+  pillScroll: {
+    width: '100%',
+    flexGrow: 0,
+  },
+  pillScrollRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingRight: theme.spacing.xs,
+  },
+  scrollablePill: {
+    flexShrink: 0,
+    minHeight: theme.sizes.controlMd,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pill: {
     flex: 1,
@@ -1235,96 +1365,5 @@ const styles = StyleSheet.create({
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
     paddingTop: theme.spacing.md,
-  },
-  allergySectionCard: {
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.sm + 4,
-    backgroundColor: theme.colors.surfaceMuted,
-    gap: theme.spacing.xs,
-  },
-  allergySectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.xs,
-  },
-  allergySectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  formSectionBox: {
-    gap: theme.spacing.xs,
-  },
-  sectionHeaderBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  sectionHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  additionalConditionsWrap: {
-    marginTop: theme.spacing.xs,
-  },
-  quickChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 6,
-  },
-  quickChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderWidth: 1,
-    borderRadius: theme.radii.full || 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 4,
-  },
-  quickChipActive: {
-    borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight,
-  },
-  sponsorCard: {
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderColor: theme.colors.borderLight,
-    borderWidth: 1,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.sm,
-    gap: theme.spacing.xs,
-  },
-  sponsorHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  relationshipGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  relationshipChip: {
-    minHeight: 34,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.borderDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  relationshipChip_selected: {
-    backgroundColor: theme.colors.primaryLight,
-    borderColor: theme.colors.primary,
-    borderWidth: 1.5,
   },
 });

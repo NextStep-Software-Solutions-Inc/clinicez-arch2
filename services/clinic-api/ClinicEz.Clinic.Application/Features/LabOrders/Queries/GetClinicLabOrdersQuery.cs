@@ -17,18 +17,19 @@ namespace ClinicEz.Clinic.Application.Features.LabOrders.Queries;
 public record GetClinicLabOrdersQuery(
     Guid? PatientId = null,
     LabOrderStatus? Status = null,
-    DateTime? Date = null
+    DateTime? Date = null,
+    bool IncludeUnsigned = false
 ) : IRequest<List<ClinicLabOrderDto>>;
 
 public class GetClinicLabOrdersQueryHandler : IRequestHandler<GetClinicLabOrdersQuery, List<ClinicLabOrderDto>>
 {
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
-    private readonly IRepository<ClinicLabResult> _resultRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
+    private readonly IRepository<LabResult> _resultRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetClinicLabOrdersQueryHandler(
-        IRepository<ClinicLabOrder> orderRepo,
-        IRepository<ClinicLabResult> resultRepo,
+        IRepository<LabOrder> orderRepo,
+        IRepository<LabResult> resultRepo,
         IClinicContext clinicContext)
     {
         _orderRepo = orderRepo;
@@ -41,6 +42,11 @@ public class GetClinicLabOrdersQueryHandler : IRequestHandler<GetClinicLabOrders
         var query = _orderRepo.Query()
             .Include(o => o.Items)
             .AsNoTracking();
+
+        if (!request.IncludeUnsigned)
+        {
+            query = query.Where(o => o.IsSigned);
+        }
 
         if (request.PatientId.HasValue)
         {

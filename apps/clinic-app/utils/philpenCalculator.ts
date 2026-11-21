@@ -2,7 +2,7 @@ export type RiskBandType = 'BandA' | 'BandB' | 'BandC' | 'BandD' | 'BandE';
 
 export interface PhilPenInput {
   ageYears?: number;
-  gender?: string;
+  sex?: string;
   isSmoker?: boolean;
   systolicBp?: number;
   diastolicBp?: number;
@@ -55,7 +55,7 @@ export const RISK_BAND_MIDPOINTS: Record<RiskBandType, number> = {
 
 /**
  * Calculates 10-year cardiometabolic CVD risk score aligned with DOH PHILPEN Protocol
- * and PhilHealth Yakap (KonsultaData v1.14) statutory requirements.
+ * and PhilHealth YAKAP 2.0 (PCAPI) statutory requirements.
  */
 export function calculatePhilPenRisk(input: PhilPenInput): PhilPenComputationResult {
   // 1. Crisis & Clinical Override Rules
@@ -96,8 +96,8 @@ export function calculatePhilPenRisk(input: PhilPenInput): PhilPenComputationRes
   else if (age >= 50) points += 3;
   else if (age >= 40) points += 2;
 
-  // Gender & Smoking
-  const isMale = (input.gender?.toLowerCase() || '').startsWith('m');
+  // Sex & Smoking
+  const isMale = (input.sex?.toLowerCase() || '').startsWith('m');
   if (isMale) points += 1;
   if (input.isSmoker) points += 3;
 

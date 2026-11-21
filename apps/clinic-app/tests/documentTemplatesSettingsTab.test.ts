@@ -105,6 +105,13 @@ mock.module('react-native-svg', () => ({
   Rect: 'Rect',
   Line: 'Line',
   default: 'Svg',
+  Polyline: 'Polyline',
+  Polygon: 'Polygon',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
 }));
 
 mock.module('../services/apiClient', () => ({
@@ -252,6 +259,16 @@ describe('DocumentTemplatesSettingsTab — Clinical Document Customization Studi
     expect(markup).toContain('DOH-LTO-04A-2026-0089');
     expect(markup).toContain('PHIC-ACC-2026-9912');
     expect(markup).toContain('Print Sample Test PDF');
+    // Save Changes button is hidden when stationery fields match saved settings (!isDirty && !saving)
+    expect(markup).not.toContain('data-testid="btn-save-settings"');
+
+    const dirtyMarkup = renderToStaticMarkup(
+      React.createElement(DocumentTemplatesSettingsTab, {
+        settings: { ...mockSettings, id: 'new' } as any,
+        showSkeletons: false,
+      })
+    );
+    expect(dirtyMarkup).toContain('data-testid="btn-save-settings"');
   });
 
   test('10. Skeleton UI State: renders skeleton shimmer when loading', async () => {
