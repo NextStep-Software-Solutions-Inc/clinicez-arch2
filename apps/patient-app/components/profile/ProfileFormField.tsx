@@ -14,6 +14,8 @@ interface ProfileFormFieldProps extends Omit<TextInputProps, 'value' | 'onChange
   editable?: boolean;
   /** Marks the field as a tappable picker: disables keyboard but keeps full-opacity styling + chevron */
   picker?: boolean;
+  /** Inline validation error message; also highlights border using the semantic emergency token. */
+  error?: string | null;
   /**
    * Use the BottomSheet-aware input only when this field is rendered inside a BottomSheet.
    * Defaults to automatically inheriting from BottomSheetContext.
@@ -28,16 +30,18 @@ export default function ProfileFormField({
   required = false,
   editable = true,
   picker = false,
+  error,
   useBottomSheetInput,
   multiline = false,
   ...rest
 }: ProfileFormFieldProps) {
-  const { colors, radii, sizes } = useAppTheme();
+  const { colors, radii, sizes, spacing } = useAppTheme();
   const inBottomSheet = useInBottomSheet();
 
-  const isDisabled = !editable && !picker;
+  const isDisabled = !editable;
   const isPickerField = picker || Boolean(rest.onPressIn || (rest as any).onPress);
   const handlePress = () => {
+    if (!editable) return;
     if (rest.onPressIn) (rest.onPressIn as any)();
     if ((rest as any).onPress) (rest as any).onPress();
   };
@@ -56,7 +60,8 @@ export default function ProfileFormField({
         styles.input,
         {
           borderRadius: radii.md,
-          borderColor: colors.border,
+          borderColor: error ? colors.emergency : colors.border,
+          borderWidth: error ? 2 : StyleSheet.hairlineWidth,
           backgroundColor: isDisabled ? colors.background : colors.surface,
           color: colors.text,
         },
@@ -77,18 +82,22 @@ export default function ProfileFormField({
       {isPickerField ? (
         <Pressable
           onPress={handlePress}
+          disabled={!editable}
           style={({ pressed, hovered }: any) => [
             styles.pickerWrapper,
             {
-              borderColor: colors.border,
-              backgroundColor: colors.surface,
+              borderColor: error ? colors.emergency : colors.border,
+              borderWidth: error ? 2 : StyleSheet.hairlineWidth,
+              backgroundColor: isDisabled ? colors.background : colors.surface,
               borderRadius: radii.md,
             },
-            hovered && { backgroundColor: colors.surfaceSubtle },
-            pressed && { opacity: 0.7 },
+            isDisabled && styles.disabled,
+            hovered && editable && { backgroundColor: colors.surfaceSubtle },
+            pressed && editable && { opacity: 0.7 },
           ]}
           accessibilityRole="button"
           accessibilityLabel={label}
+          accessibilityState={{ disabled: isDisabled }}
         >
           <ThemedText
             variant="body"
@@ -102,6 +111,16 @@ export default function ProfileFormField({
       ) : (
         inputEl
       )}
+      {error ? (
+        <ThemedText
+          variant="small"
+          color="emergencyText"
+          style={{ marginTop: spacing.xs }}
+          accessibilityRole="alert"
+        >
+          {error}
+        </ThemedText>
+      ) : null}
     </View>
   );
 }

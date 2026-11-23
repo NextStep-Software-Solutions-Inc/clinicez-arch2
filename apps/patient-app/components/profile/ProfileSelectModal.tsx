@@ -7,6 +7,7 @@ import {
   Animated,
   ScrollView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import ThemedText from '@ui/ThemedText';
 import { AppIcon } from '@ui/Icon';
@@ -24,6 +25,8 @@ interface ProfileSelectModalProps {
   selected: string | undefined | null;
   onSelect: (value: string) => void;
   onClose: () => void;
+  loading?: boolean;
+  emptyText?: string;
 }
 
 export default function ProfileSelectModal({
@@ -33,8 +36,10 @@ export default function ProfileSelectModal({
   selected,
   onSelect,
   onClose,
+  loading = false,
+  emptyText = 'No options available',
 }: ProfileSelectModalProps) {
-  const { colors, radii, sizes, shadows } = useAppTheme();
+  const { colors, radii, sizes, shadows, spacing } = useAppTheme();
   const rootRef = useRef<View>(null);
   const scale = useRef(new Animated.Value(0.92)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -152,34 +157,49 @@ export default function ProfileSelectModal({
             showsVerticalScrollIndicator={true}
             keyboardShouldPersistTaps="handled"
           >
-            {options.map((item) => {
-              const isSelected = item.value === selected;
-              return (
-                <Pressable
-                  key={item.value}
-                  onPress={() => handleSelect(item.value)}
-                  style={({ pressed, hovered }: any) => [
-                    styles.option,
-                    { borderBottomColor: colors.borderLight },
-                    hovered && { backgroundColor: colors.surfaceSubtle },
-                    pressed && { opacity: 0.6 },
-                    isSelected && { backgroundColor: colors.primarySubtle },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={item.label}
-                >
-                  <ThemedText
-                    variant={isSelected ? 'bodyBold' : 'body'}
-                    style={{ color: isSelected ? colors.primary : colors.text, flex: 1 }}
+            {loading ? (
+              <View style={[styles.stateContainer, { gap: spacing.sm }]}>
+                <ActivityIndicator color={colors.primary} size="small" />
+                <ThemedText variant="small" color="textMuted">
+                  Loading options...
+                </ThemedText>
+              </View>
+            ) : options.length === 0 ? (
+              <View style={styles.stateContainer}>
+                <ThemedText variant="body" color="textMuted" style={styles.stateText}>
+                  {emptyText}
+                </ThemedText>
+              </View>
+            ) : (
+              options.map((item) => {
+                const isSelected = item.value === selected;
+                return (
+                  <Pressable
+                    key={item.value}
+                    onPress={() => handleSelect(item.value)}
+                    style={({ pressed, hovered }: any) => [
+                      styles.option,
+                      { borderBottomColor: colors.borderLight },
+                      hovered && { backgroundColor: colors.surfaceSubtle },
+                      pressed && { opacity: 0.6 },
+                      isSelected && { backgroundColor: colors.primarySubtle },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.label}
                   >
-                    {item.label}
-                  </ThemedText>
-                  {isSelected && (
-                    <AppIcon name="check" size={sizes.iconSm} color="primary" />
-                  )}
-                </Pressable>
-              );
-            })}
+                    <ThemedText
+                      variant={isSelected ? 'bodyBold' : 'body'}
+                      style={{ color: isSelected ? colors.primary : colors.text, flex: 1 }}
+                    >
+                      {item.label}
+                    </ThemedText>
+                    {isSelected && (
+                      <AppIcon name="check" size={sizes.iconSm} color="primary" />
+                    )}
+                  </Pressable>
+                );
+              })
+            )}
           </ScrollView>
           <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
           <Pressable
@@ -255,5 +275,14 @@ const styles = StyleSheet.create({
   cancelBtn: {
     paddingVertical: 14,
     alignItems: 'center',
+  },
+  stateContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stateText: {
+    textAlign: 'center',
   },
 });
