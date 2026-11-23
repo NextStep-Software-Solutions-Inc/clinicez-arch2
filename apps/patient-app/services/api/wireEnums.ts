@@ -79,7 +79,7 @@ export const APPOINTMENT_STATUSES = [
 export const appointmentStatusSchema = z.enum(APPOINTMENT_STATUSES);
 export type AppointmentWireStatus = z.infer<typeof appointmentStatusSchema>;
 
-export const MEMBERSHIP_STATUSES = ['Pending', 'Active'] as const;
+export const MEMBERSHIP_STATUSES = ['Pending', 'Active', 'Rejected'] as const;
 export const membershipStatusSchema = z.enum(MEMBERSHIP_STATUSES);
 export type MembershipWireStatus = z.infer<typeof membershipStatusSchema>;
 

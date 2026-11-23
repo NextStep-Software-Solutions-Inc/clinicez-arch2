@@ -206,6 +206,8 @@ export default function OrganizationDetailsScreenWeb() {
             ? `Enrolled as ${organization.membershipRoleName ?? 'member'}.`
             : organization.membershipStatus === 'pending'
             ? `Your request to join as ${organization.membershipRoleName ?? 'member'} is pending approval.`
+            : organization.membershipStatus === 'rejected'
+            ? 'Your previous join request was declined. You can submit a new request.'
             : 'Join to unlock private clinics and member-only services.'}
         </ThemedText>
       </View>
@@ -341,8 +343,8 @@ export default function OrganizationDetailsScreenWeb() {
         name={organization.name}
         logoUrl={organization.logoUrl}
         coverImageUrl={organization.coverImageUrl}
-        badgeLabel={organization.isJoined ? 'Joined' : organization.membershipStatus === 'pending' ? 'Pending Approval' : organization.isPublic ? 'Public' : 'Private'}
-        badgeColor={organization.isJoined ? colors.success : organization.membershipStatus === 'pending' ? colors.warning : organization.isPublic ? colors.primary : colors.textMuted}
+        badgeLabel={organization.isJoined ? 'Joined' : organization.membershipStatus === 'pending' ? 'Pending Approval' : organization.membershipStatus === 'rejected' ? 'Request Declined' : organization.isPublic ? 'Public' : 'Private'}
+        badgeColor={organization.isJoined ? colors.success : organization.membershipStatus === 'pending' ? colors.warning : organization.membershipStatus === 'rejected' ? colors.emergency : organization.isPublic ? colors.primary : colors.textMuted}
       />
 
       {/* Body: Two columns on desktop >= 1024, single column below */}

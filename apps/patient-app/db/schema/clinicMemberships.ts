@@ -10,7 +10,7 @@ export const clinicMemberships = sqliteTable('clinic_memberships', {
     clinicId: text('clinic_id')
         .notNull()
         .references(() => clinics.id, { onDelete: 'cascade' }),
-    status: text('status', { enum: ['pending', 'active'] }).notNull().default('active'),
+    status: text('status', { enum: ['pending', 'active', 'rejected'] }).notNull().default('active'),
     consentPrivacyPolicy: integer('consent_privacy_policy', { mode: 'boolean' }).notNull().default(false),
     consentTermsAndConditions: integer('consent_terms_and_conditions', { mode: 'boolean' }).notNull().default(false),
     consentDataSharing: integer('consent_data_sharing', { mode: 'boolean' }).notNull().default(false),
