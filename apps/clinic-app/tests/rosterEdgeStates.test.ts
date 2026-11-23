@@ -74,10 +74,10 @@ mock.module('react-native', () => ({
         return this;
       }
     },
-    timing: () => ({ start: (cb?: any) => cb && cb() }),
-    sequence: () => ({ start: (cb?: any) => cb && cb() }),
-    loop: () => ({ start: (cb?: any) => cb && cb() }),
-    spring: () => ({ start: (cb?: any) => cb && cb() }),
+    timing: () => ({ start: (cb?: any) => cb && cb(), stop: () => {} }),
+    sequence: () => ({ start: (cb?: any) => cb && cb(), stop: () => {} }),
+    loop: () => ({ start: (cb?: any) => cb && cb(), stop: () => {} }),
+    spring: () => ({ start: (cb?: any) => cb && cb(), stop: () => {} }),
     View: createMockComponent('Animated.View'),
     Text: createMockComponent('Animated.Text'),
   },
@@ -106,9 +106,13 @@ mock.module('../constants/fonts', () => ({
 
 const {
   DoctorRosterCalendarModal,
+  LEAVE_TYPE_OPTIONS,
+  formatLeaveTypeLabel,
   resolveRosterEmptyStateProps,
   resolveSelectedDoctorId,
 } = await import('../components/roster/DoctorRosterCalendarModal');
+
+const { clinicService } = await import('../services/clinicService');
 
 const { resolveSettingsRouteIntent } = await import('../components/settings/types');
 
@@ -407,4 +411,569 @@ describe('Roster and Slot Edge States', () => {
       shouldOpenAddStaff: false,
     });
   });
+
+  test('Issue 244: formatLeaveTypeLabel and LEAVE_TYPE_OPTIONS format SickLeave as "Sick Leave" while preserving API values', () => {
+    const sickLeaveOpt = LEAVE_TYPE_OPTIONS.find((opt) => opt.value === 'SickLeave');
+    expect(sickLeaveOpt).toEqual({ value: 'SickLeave', label: 'Sick Leave' });
+    expect(LEAVE_TYPE_OPTIONS.map((opt) => opt.value)).toEqual([
+      'Vacation',
+      'SickLeave',
+      'CME',
+      'Emergency',
+      'Holiday',
+    ]);
+
+    expect(formatLeaveTypeLabel('SickLeave')).toBe('Sick Leave');
+    expect(formatLeaveTypeLabel('Vacation')).toBe('Vacation');
+    expect(formatLeaveTypeLabel('CME')).toBe('CME');
+    expect(formatLeaveTypeLabel('Emergency')).toBe('Emergency');
+    expect(formatLeaveTypeLabel('Holiday')).toBe('Holiday');
+    expect(formatLeaveTypeLabel('')).toBe('Leave');
+    expect(formatLeaveTypeLabel('   ')).toBe('Leave');
+    expect(formatLeaveTypeLabel(null)).toBe('Leave');
+    expect(formatLeaveTypeLabel(undefined)).toBe('Leave');
+    expect(formatLeaveTypeLabel('StudyLeave')).toBe('StudyLeave');
+  });
+
+  test('Issue 244: DoctorRosterCalendarModal renders "Sick Leave" in selector chips and badges while submitting "SickLeave"', async () => {
+    const origGetTemplates = clinicService.getDoctorScheduleTemplates;
+    const origGetLeaves = clinicService.getDoctorLeaves;
+    const origCreateLeave = clinicService.createDoctorLeave;
+
+    const createPayloads: any[] = [];
+    const doctorLeaves = [
+      {
+        id: 'leave-1',
+        doctorId: 'doc-1',
+        doctorName: 'Maria Santos',
+        startDate: '2026-11-24',
+        endDate: '2026-11-24',
+        leaveType: 'SickLeave',
+        reason: 'Flu recovery',
+        status: 'Approved',
+        createdAt: '2026-11-20T00:00:00Z',
+      },
+    ];
+
+    try {
+      clinicService.getDoctorScheduleTemplates = (async () => [[], null]) as any;
+      clinicService.getDoctorLeaves = (async () => [doctorLeaves, null]) as any;
+      clinicService.createDoctorLeave = (async (_docId: string, payload: any) => {
+        createPayloads.push(payload);
+        return [{ id: 'leave-2', ...payload, status: 'Approved', createdAt: '2026-11-20T01:00:00Z' }, null];
+      }) as any;
+
+      const sampleDoctors: StaffMember[] = [
+        {
+          id: 'doc-1',
+          tenantId: 'tenant-1',
+          clinicId: 'clinic-1',
+          firstName: 'Maria',
+          lastName: 'Santos',
+          role: 'Doctor',
+          isActive: true,
+          createdAt: '2026-10-14T00:00:00Z',
+        },
+      ];
+
+      const harness = createRosterHookHarness((props: any) => DoctorRosterCalendarModal(props), {
+        visible: true,
+        onClose: () => {},
+        doctors: sampleDoctors,
+        initialDoctorId: 'doc-1',
+      });
+      await flushMicrotasks();
+
+      // Switch to Leaves & Blackout Dates tab
+      const leavesTabBtn = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.testID === 'roster-tab-leaves'
+      );
+      expect(leavesTabBtn).not.toBeNull();
+      leavesTabBtn.props.onPress();
+      await flushMicrotasks();
+
+      // Verify SickLeave chip displays "Sick Leave" (not "SickLeave")
+      const sickChip = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.testID === 'leave-type-chip-SickLeave'
+      );
+      expect(sickChip).not.toBeNull();
+      const chipText = collectTreeText(sickChip);
+      expect(chipText).toContain('Sick Leave');
+      expect(chipText).not.toContain('SickLeave');
+
+      // Verify Scheduled Leaves badge displays "Sick Leave" (not "SickLeave")
+      const leaveBadge = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.variant === 'emergency' && typeof el?.props?.label === 'string'
+      );
+      expect(leaveBadge).not.toBeNull();
+      expect(leaveBadge.props.label).toBe('Sick Leave');
+
+      // Select Sick Leave chip, enter dates, and submit
+      sickChip.props.onPress();
+      const startInput = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.label === 'Start Date' && typeof el?.props?.onChangeText === 'function'
+      );
+      const endInput = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.label === 'End Date' && typeof el?.props?.onChangeText === 'function'
+      );
+      expect(startInput).not.toBeNull();
+      expect(endInput).not.toBeNull();
+      startInput.props.onChangeText('2026-11-25');
+      endInput.props.onChangeText('2026-11-26');
+
+      const submitBtn = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.title === 'Submit Leave' && typeof el?.props?.onPress === 'function'
+      );
+      expect(submitBtn).not.toBeNull();
+      await submitBtn.props.onPress();
+
+      expect(createPayloads).toHaveLength(1);
+      expect(createPayloads[0].leaveType).toBe('SickLeave');
+      expect(createPayloads[0].startDate).toBe('2026-11-25');
+      expect(createPayloads[0].endDate).toBe('2026-11-26');
+
+      harness.unmount();
+    } finally {
+      clinicService.getDoctorScheduleTemplates = origGetTemplates;
+      clinicService.getDoctorLeaves = origGetLeaves;
+      clinicService.createDoctorLeave = origCreateLeave;
+    }
+  });
+
+  test('Issue 244: DoctorRosterCalendarModal caches templates and leaves per doctorId for the open session, invalidates on mutations, and clears on close', async () => {
+    const origGetTemplates = clinicService.getDoctorScheduleTemplates;
+    const origGetLeaves = clinicService.getDoctorLeaves;
+    const origUpsertTemplate = clinicService.upsertDoctorScheduleTemplate;
+    const origDeleteLeave = clinicService.deleteDoctorLeave;
+
+    const templateFetches: string[] = [];
+    const leaveFetches: string[] = [];
+
+    const templatesByDoc: Record<string, any[]> = {
+      'doc-1': [
+        {
+          id: 'tpl-doc1-mon',
+          doctorId: 'doc-1',
+          dayOfWeek: 'Monday',
+          startTime: '08:30:00',
+          endTime: '16:30:00',
+          isOvernightShift: false,
+          slotDurationMinutes: 30,
+          isActive: true,
+          breaks: [],
+        },
+      ],
+      'doc-2': [
+        {
+          id: 'tpl-doc2-mon',
+          doctorId: 'doc-2',
+          dayOfWeek: 'Monday',
+          startTime: '10:00:00',
+          endTime: '18:00:00',
+          isOvernightShift: false,
+          slotDurationMinutes: 15,
+          isActive: true,
+          breaks: [],
+        },
+      ],
+    };
+    const leavesByDoc: Record<string, any[]> = {
+      'doc-1': [
+        {
+          id: 'leave-doc1-1',
+          doctorId: 'doc-1',
+          doctorName: 'Maria Santos',
+          startDate: '2026-12-01',
+          endDate: '2026-12-01',
+          leaveType: 'SickLeave',
+          status: 'Approved',
+          createdAt: '2026-11-20T00:00:00Z',
+        },
+      ],
+      'doc-2': [],
+    };
+
+    try {
+      clinicService.getDoctorScheduleTemplates = (async (docId: string) => {
+        templateFetches.push(docId);
+        return [templatesByDoc[docId] || [], null];
+      }) as any;
+      clinicService.getDoctorLeaves = (async (docId: string) => {
+        leaveFetches.push(docId);
+        return [leavesByDoc[docId] || [], null];
+      }) as any;
+      clinicService.upsertDoctorScheduleTemplate = (async () => [{ id: 'tpl-doc1-mon' }, null]) as any;
+      clinicService.deleteDoctorLeave = (async () => [true, null]) as any;
+
+      const doctors: StaffMember[] = [
+        {
+          id: 'doc-1',
+          tenantId: 'tenant-1',
+          clinicId: 'clinic-1',
+          firstName: 'Maria',
+          lastName: 'Santos',
+          role: 'Doctor',
+          isActive: true,
+          createdAt: '2026-10-14T00:00:00Z',
+        },
+        {
+          id: 'doc-2',
+          tenantId: 'tenant-1',
+          clinicId: 'clinic-1',
+          firstName: 'Juan',
+          lastName: 'Reyes',
+          role: 'Doctor',
+          isActive: true,
+          createdAt: '2026-10-14T00:00:00Z',
+        },
+      ];
+
+      const harness = createRosterHookHarness((props: any) => DoctorRosterCalendarModal(props), {
+        visible: true,
+        onClose: () => {},
+        doctors,
+        initialDoctorId: 'doc-1',
+      });
+      await flushMicrotasks();
+
+      expect(templateFetches).toEqual(['doc-1']);
+      expect(leaveFetches).toEqual([]);
+
+      // Toggle to Leaves for doc-1 -> fetches leaves once
+      findTreeNode(harness.result.current, (el) => el?.props?.testID === 'roster-tab-leaves').props.onPress();
+      await flushMicrotasks();
+      expect(leaveFetches).toEqual(['doc-1']);
+
+      // Toggle back to Templates for doc-1 -> served from cache (no refetch)
+      findTreeNode(harness.result.current, (el) => el?.props?.testID === 'roster-tab-templates').props.onPress();
+      await flushMicrotasks();
+      expect(templateFetches).toEqual(['doc-1']);
+
+      // Switch to doc-2 -> fetches doc-2 templates once
+      findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.accessibilityLabel === 'Select Dr. Juan Reyes'
+      ).props.onPress();
+      await flushMicrotasks();
+      expect(templateFetches).toEqual(['doc-1', 'doc-2']);
+
+      const doc2StartInput = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.label === 'Shift Start Time'
+      );
+      expect(doc2StartInput.props.value).toBe('10:00');
+
+      // Switch back to doc-1 -> instant cache hit, no extra network call, restores 08:30
+      findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.accessibilityLabel === 'Select Dr. Maria Santos'
+      ).props.onPress();
+      await flushMicrotasks();
+      expect(templateFetches).toEqual(['doc-1', 'doc-2']);
+
+      const doc1StartInput = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.label === 'Shift Start Time'
+      );
+      expect(doc1StartInput.props.value).toBe('08:30');
+
+      // Save template for doc-1 -> invalidates cache and forces refresh
+      const saveBtn = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.title === 'Save Template' && typeof el?.props?.onPress === 'function'
+      );
+      await saveBtn.props.onPress();
+      expect(templateFetches).toEqual(['doc-1', 'doc-2', 'doc-1']);
+
+      // Switch to Leaves for doc-1 -> still cached (no refetch yet)
+      findTreeNode(harness.result.current, (el) => el?.props?.testID === 'roster-tab-leaves').props.onPress();
+      await flushMicrotasks();
+      expect(leaveFetches).toEqual(['doc-1']);
+
+      // Delete leave for doc-1 -> invalidates leave cache and forces refresh
+      const deleteLeaveBtn = findTreeNode(
+        harness.result.current,
+        (el) => typeof el?.props?.onPress === 'function' && el?.props?.children?.props?.name === 'trash'
+      );
+      expect(deleteLeaveBtn).not.toBeNull();
+      await deleteLeaveBtn.props.onPress();
+      expect(leaveFetches).toEqual(['doc-1', 'doc-1']);
+
+      // Close and reopen modal -> clears session cache and fetches fresh data
+      harness.rerender({
+        visible: false,
+        onClose: () => {},
+        doctors,
+        initialDoctorId: 'doc-1',
+      });
+      await flushMicrotasks();
+
+      harness.rerender({
+        visible: true,
+        onClose: () => {},
+        doctors,
+        initialDoctorId: 'doc-1',
+      });
+      await flushMicrotasks();
+      expect(leaveFetches).toEqual(['doc-1', 'doc-1', 'doc-1']);
+
+      harness.unmount();
+    } finally {
+      clinicService.getDoctorScheduleTemplates = origGetTemplates;
+      clinicService.getDoctorLeaves = origGetLeaves;
+      clinicService.upsertDoctorScheduleTemplate = origUpsertTemplate;
+      clinicService.deleteDoctorLeave = origDeleteLeave;
+    }
+  });
+
+  test('Issue 244: DoctorRosterCalendarModal preserves Weekly Templates layout with overlay while loading and renders SkeletonList for Leaves', async () => {
+    const origGetTemplates = clinicService.getDoctorScheduleTemplates;
+    const origGetLeaves = clinicService.getDoctorLeaves;
+
+    let resolveTemplates!: (val: any) => void;
+    let resolveLeaves!: (val: any) => void;
+
+    try {
+      clinicService.getDoctorScheduleTemplates = (() =>
+        new Promise((resolve) => {
+          resolveTemplates = resolve;
+        })) as any;
+      clinicService.getDoctorLeaves = (() =>
+        new Promise((resolve) => {
+          resolveLeaves = resolve;
+        })) as any;
+
+      const doctors: StaffMember[] = [
+        {
+          id: 'doc-1',
+          tenantId: 'tenant-1',
+          clinicId: 'clinic-1',
+          firstName: 'Maria',
+          lastName: 'Santos',
+          role: 'Doctor',
+          isActive: true,
+          createdAt: '2026-10-14T00:00:00Z',
+        },
+      ];
+
+      const harness = createRosterHookHarness((props: any) => DoctorRosterCalendarModal(props), {
+        visible: true,
+        onClose: () => {},
+        doctors,
+        initialDoctorId: 'doc-1',
+      });
+
+      // While templates are loading, the form stays mounted (non-collapsing) with overlay pill
+      const formWrapperDuringLoad = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.testID === 'roster-templates-form'
+      );
+      const loadingOverlay = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.testID === 'roster-templates-loading-overlay'
+      );
+      const saveBtnDuringLoad = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.title === 'Save Template'
+      );
+      expect(formWrapperDuringLoad).not.toBeNull();
+      expect(formWrapperDuringLoad.props.pointerEvents).toBe('none');
+      expect(loadingOverlay).not.toBeNull();
+      expect(saveBtnDuringLoad).not.toBeNull();
+      expect(saveBtnDuringLoad.props.disabled).toBe(true);
+
+      // Resolve templates -> overlay clears, form becomes interactive
+      resolveTemplates([[], null]);
+      await flushMicrotasks();
+
+      expect(
+        findTreeNode(
+          harness.result.current,
+          (el) => el?.props?.testID === 'roster-templates-loading-overlay'
+        )
+      ).toBeNull();
+      const formWrapperLoaded = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.testID === 'roster-templates-form'
+      );
+      expect(formWrapperLoaded.props.pointerEvents).toBe('auto');
+
+      // Switch to Leaves tab while leaves request is still pending -> SkeletonList shown inside leaves container
+      findTreeNode(harness.result.current, (el) => el?.props?.testID === 'roster-tab-leaves').props.onPress();
+      const leavesSkeleton = findTreeNode(
+        harness.result.current,
+        (el) => el?.props?.testID === 'roster-leaves-loading-skeleton'
+      );
+      expect(leavesSkeleton).not.toBeNull();
+
+      resolveLeaves([[], null]);
+      await flushMicrotasks();
+
+      expect(
+        findTreeNode(
+          harness.result.current,
+          (el) => el?.props?.testID === 'roster-leaves-loading-skeleton'
+        )
+      ).toBeNull();
+
+      harness.unmount();
+    } finally {
+      clinicService.getDoctorScheduleTemplates = origGetTemplates;
+      clinicService.getDoctorLeaves = origGetLeaves;
+    }
+  });
 });
+
+function createRosterHookHarness<Props, Result>(
+  hookFn: (props: Props) => Result,
+  initialProps: Props
+) {
+  const stateSlots: any[] = [];
+  const effectSlots: Array<{ fn: () => any; cleanup?: any; deps: any[]; hasChanged: boolean }> = [];
+  const refSlots: Array<{ current: any }> = [];
+  const memoSlots: Array<{ value: any; deps: any[] }> = [];
+  let slotIndex = 0;
+  let effectIndex = 0;
+  let refIndex = 0;
+  let memoIndex = 0;
+  let currentProps = initialProps;
+  let result!: Result;
+  let isRendering = false;
+  let hasPendingRender = false;
+
+  const mockHooks: any = {
+    useState: (initial: any) => {
+      const idx = slotIndex++;
+      if (stateSlots.length <= idx) {
+        stateSlots.push(typeof initial === 'function' ? initial() : initial);
+      }
+      const setState = (newVal: any) => {
+        const nextVal = typeof newVal === 'function' ? newVal(stateSlots[idx]) : newVal;
+        if (stateSlots[idx] !== nextVal) {
+          stateSlots[idx] = nextVal;
+          scheduleRender();
+        }
+      };
+      return [stateSlots[idx], setState];
+    },
+    useRef: (initial: any) => {
+      const idx = refIndex++;
+      if (refSlots.length <= idx) refSlots.push({ current: initial });
+      return refSlots[idx];
+    },
+    useCallback: (fn: any, deps: any[]) => mockHooks.useMemo(() => fn, deps),
+    useMemo: (fn: any, deps: any[]) => {
+      const idx = memoIndex++;
+      const prev = memoSlots[idx];
+      const changed = !prev || !deps || deps.some((d, i) => d !== prev.deps[i]);
+      if (changed) {
+        const value = fn();
+        memoSlots[idx] = { value, deps };
+        return value;
+      }
+      return prev.value;
+    },
+    useEffect: (fn: any, deps: any[]) => {
+      const idx = effectIndex++;
+      const prev = effectSlots[idx];
+      const hasChanged = !prev || !deps || deps.some((d, i) => d !== prev?.deps[i]);
+      effectSlots[idx] = { fn, deps, hasChanged, cleanup: prev?.cleanup };
+    },
+    useContext: (context: React.Context<any>) => (context as any)._currentValue,
+    useSyncExternalStore: (_sub: any, getSnap: () => any) => getSnap(),
+  };
+
+  function scheduleRender() {
+    if (isRendering) {
+      hasPendingRender = true;
+      return;
+    }
+    render();
+  }
+
+  function render() {
+    if (isRendering) return;
+    isRendering = true;
+    try {
+      do {
+        hasPendingRender = false;
+        slotIndex = 0;
+        effectIndex = 0;
+        refIndex = 0;
+        memoIndex = 0;
+        const internals = (React as any).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+        const prevDispatcher = internals ? internals.H : null;
+        if (internals) internals.H = mockHooks;
+        try {
+          result = hookFn(currentProps);
+        } finally {
+          if (internals) internals.H = prevDispatcher;
+        }
+        for (const eff of effectSlots) {
+          if (eff.hasChanged) {
+            eff.hasChanged = false;
+            if (typeof eff.cleanup === 'function') eff.cleanup();
+            eff.cleanup = eff.fn();
+          }
+        }
+      } while (hasPendingRender);
+    } finally {
+      isRendering = false;
+    }
+  }
+
+  render();
+
+  return {
+    get result() {
+      return { current: result };
+    },
+    rerender: (nextProps: Props) => {
+      currentProps = nextProps;
+      render();
+    },
+    unmount: () => {
+      for (const eff of effectSlots) {
+        if (typeof eff.cleanup === 'function') eff.cleanup();
+      }
+    },
+  };
+}
+
+function findTreeNode(node: any, predicate: (el: any) => boolean): any {
+  if (!node || typeof node !== 'object') return null;
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findTreeNode(child, predicate);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (predicate(node)) return node;
+  if (node.props?.children !== undefined) {
+    return findTreeNode(node.props.children, predicate);
+  }
+  return null;
+}
+
+function collectTreeText(node: any): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(collectTreeText).join('');
+  if (typeof node === 'object' && node.props?.children !== undefined) {
+    return collectTreeText(node.props.children);
+  }
+  return '';
+}
+
+async function flushMicrotasks() {
+  for (let i = 0; i < 6; i++) {
+    await Promise.resolve();
+  }
+}
