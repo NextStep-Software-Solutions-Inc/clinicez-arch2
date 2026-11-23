@@ -211,7 +211,7 @@ export default function GovernmentIdsScreen() {
     load();
   }, [load]);
 
-  useProfileSync(load);
+  useProfileSync(load, { isDirtyRef });
 
   const onSave = handleSubmit(async (data) => {
     if (data.philhealthCategory === 'DD') {

@@ -79,8 +79,8 @@ function now(): Date {
     return new Date();
 }
 
-function parseMembershipStatus(status?: string | null): 'pending' | 'active' | undefined {
-    return status === 'active' || status === 'pending' ? status : undefined;
+function parseMembershipStatus(status?: string | null): 'pending' | 'active' | 'rejected' | undefined {
+    return status === 'active' || status === 'pending' || status === 'rejected' ? status : undefined;
 }
 
 function parseJsonArray<T>(value: string | null | undefined, fallback: T[]): T[] {
@@ -457,9 +457,9 @@ async function updateOrganizationCache(patientId: string, remoteOrgs: RemoteOrgS
             name: org.name,
             description: org.description,
             isPublic: org.isPublic,
-            logoUrl: org.logoUrl,
-            coverImageUrl: org.coverImageUrl,
-            addressHint: org.addressHint,
+            logoUrl: org.logoUrl ?? null,
+            coverImageUrl: org.coverImageUrl ?? null,
+            addressHint: org.addressHint ?? null,
             privacyPolicyUrl: DEFAULT_PRIVACY_POLICY_URL,
             termsAndConditionsUrl: DEFAULT_TERMS_URL,
             rolesJson: org.rolesJson,
@@ -570,10 +570,10 @@ async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicS
         const row = {
             id: clinic.id,
             name: clinic.name,
-            address: clinic.address,
-            description: clinic.description,
-            logoUrl: clinic.logoUrl,
-            coverImageUrl: clinic.coverImageUrl,
+            address: clinic.address ?? null,
+            description: clinic.description ?? null,
+            logoUrl: clinic.logoUrl ?? null,
+            coverImageUrl: clinic.coverImageUrl ?? null,
             isPublic: clinic.isPublic,
             supportsAppointments: clinic.supportsAppointments,
             privacyPolicyUrl: DEFAULT_PRIVACY_POLICY_URL,
@@ -1315,7 +1315,7 @@ export async function getClinicDetailOnline(
         featuredScore: remote.featuredScore ?? 0,
         activeMemberCount: remote.activeMemberCount ?? 0,
         isJoined: remote.membershipStatus === 'Active',
-        isVisible: remote.isPublic || Boolean(remote.membershipStatus),
+        isVisible: remote.isPublic || remote.membershipStatus === 'Active' || remote.membershipStatus === 'Pending',
         unlockedByOrganizationIds: [],
         membershipStatus: localMembershipStatus(remote.membershipStatus),
         linkedOrganizations: (remote.linkedOrganizations ?? []).map((org) => ({

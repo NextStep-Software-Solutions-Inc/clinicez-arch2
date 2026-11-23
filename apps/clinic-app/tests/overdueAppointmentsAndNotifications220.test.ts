@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import { describe, expect, test, mock, beforeEach, setSystemTime } from 'bun:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ExtendedAppointmentItem } from '../components/calendar/types';
@@ -354,28 +354,34 @@ describe('Issue 220: Overdue Appointment Prompts, No-Show Action & Staff Notific
 
   describe('3. AppointmentInspectionModal Overdue Prompts, No-Show & Terminal Locks', () => {
     test('renders same-day overdue warning banner with elapsed duration and Mark No-Show button', () => {
-      const sameDayOverdue = createBaseAppointment({
-        scheduledAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-        status: 'Confirmed',
-      });
+      // Pin midday Asia/Manila so `now - 25m` never crosses midnight into yesterday.
+      setSystemTime(new Date('2026-11-20T06:00:00Z'));
+      try {
+        const sameDayOverdue = createBaseAppointment({
+          scheduledAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
+          status: 'Confirmed',
+        });
 
-      const html = renderToStaticMarkup(
-        React.createElement(AppointmentInspectionModal, {
-          visible: true,
-          appointment: sameDayOverdue,
-          onClose: () => {},
-          onCheckIn: () => {},
-          onReschedule: () => {},
-          onCancel: () => {},
-          onMarkNoShow: () => {},
-        })
-      );
+        const html = renderToStaticMarkup(
+          React.createElement(AppointmentInspectionModal, {
+            visible: true,
+            appointment: sameDayOverdue,
+            onClose: () => {},
+            onCheckIn: () => {},
+            onReschedule: () => {},
+            onCancel: () => {},
+            onMarkNoShow: () => {},
+          })
+        );
 
-      expect(html).toContain('data-testid="overdue-appointment-banner"');
-      expect(html).toContain('data-overdue-severity="same-day"');
-      expect(html).toContain('Appointment Overdue');
-      expect(html).toContain('data-testid="btn-drawer-noshow"');
-      expect(html).toContain('Mark No-Show');
+        expect(html).toContain('data-testid="overdue-appointment-banner"');
+        expect(html).toContain('data-overdue-severity="same-day"');
+        expect(html).toContain('Appointment Overdue');
+        expect(html).toContain('data-testid="btn-drawer-noshow"');
+        expect(html).toContain('Mark No-Show');
+      } finally {
+        setSystemTime();
+      }
     });
 
     test('renders past-date overdue high-visibility banner and allows No-Show dispatch', async () => {
@@ -669,17 +675,48 @@ describe('Issue 220: Overdue Appointment Prompts, No-Show Action & Staff Notific
         status: 'Confirmed',
       });
 
-      const html = renderToStaticMarkup(
-        React.createElement(AppointmentRescheduleModal, {
-          visible: true,
-          appointment: pastAppt,
-          defaultToToday: true,
-          onClose: () => {},
-        })
-      );
+      // Pin daytime Asia/Manila (10:10 PHT) so next slot stays on the same calendar day.
+      setSystemTime(new Date('2026-11-20T02:10:00Z'));
+      try {
+        const html = renderToStaticMarkup(
+          React.createElement(AppointmentRescheduleModal, {
+            visible: true,
+            appointment: pastAppt,
+            defaultToToday: true,
+            onClose: () => {},
+          })
+        );
 
-      expect(html).toContain(`data-value="${getManilaTodayStr()}"`);
-      expect(html).not.toContain('data-value="2026-10-15"');
+        expect(html).toContain('data-value="2026-11-20"');
+        expect(html).not.toContain('data-value="2026-10-15"');
+      } finally {
+        setSystemTime();
+      }
+    });
+
+    test('rolls default date to tomorrow 09:00 after 23:15 Asia/Manila when defaultToToday is true', () => {
+      const pastAppt = createBaseAppointment({
+        scheduledAt: '2026-10-15T08:00:00Z',
+        status: 'Confirmed',
+      });
+
+      // 15:20 UTC = 23:20 PHT; +15m rounds to midnight, rolling over to next Manila day at 09:00.
+      setSystemTime(new Date('2026-11-20T15:20:00Z'));
+      try {
+        const html = renderToStaticMarkup(
+          React.createElement(AppointmentRescheduleModal, {
+            visible: true,
+            appointment: pastAppt,
+            defaultToToday: true,
+            onClose: () => {},
+          })
+        );
+
+        expect(html).toContain('data-value="2026-11-21"');
+        expect(html).toContain('data-value="09:00"');
+      } finally {
+        setSystemTime();
+      }
     });
   });
 

@@ -96,9 +96,10 @@ describe('appointment status boundary table', () => {
 });
 
 describe('membership status boundary', () => {
-  test('maps PascalCase to local lowercase and null to undefined', () => {
+  test('maps PascalCase to local lowercase and null/undefined to undefined', () => {
     expect(localMembershipStatus('Active')).toBe('active');
     expect(localMembershipStatus('Pending')).toBe('pending');
+    expect(localMembershipStatus('Rejected')).toBe('rejected');
     expect(localMembershipStatus(null)).toBeUndefined();
     expect(localMembershipStatus(undefined)).toBeUndefined();
   });

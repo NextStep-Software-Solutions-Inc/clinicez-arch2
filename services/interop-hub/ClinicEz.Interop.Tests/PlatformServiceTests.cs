@@ -18,7 +18,7 @@ public class PlatformServiceTests
 
     private static InteropEnvelope Request(Party from, Guid? correlation = null) =>
         W.Env(InteropTypes.PhilHealthRequest, from, Party.PhilHealth, correlation,
-            new PhilHealthRequestPayload { Operation = PhilHealthOperations.YakapPinValidate, Argument = "12-345" });
+            new PhilHealthRequestPayload { Operation = PhilHealthOperations.YakapValidateStanding, Argument = "12-345" });
 
     [Fact]
     public async Task A_facility_asks_the_proxy_and_the_proxy_answers_that_facility()
@@ -117,7 +117,7 @@ public class PlatformServiceTests
         (await hub.PullAsync("portal", "portal")).Should().ContainSingle().Which.Envelope.MessageId.Should().Be(ask.MessageId);
 
         var answer = W.Env(InteropTypes.PhilHealthConfigResponded, Party.Portal, Party.PhilHealth, correlation,
-            new PhilHealthConfigRespondedPayload { Found = true, Config = new PhilHealthConfigPayload { TenantId = W.TenantA, Password = "x" } });
+            new PhilHealthConfigRespondedPayload { Found = true, Config = new PhilHealthConfigPayload { TenantId = W.TenantA, SecretKey = "x" } });
         (await hub.SendAsync("portal", answer)).Status.Should().Be(SendResult.Accepted);
         (await hub.PullAsync(Proxy, Proxy)).Should().ContainSingle().Which.Envelope.MessageId.Should().Be(answer.MessageId);
 

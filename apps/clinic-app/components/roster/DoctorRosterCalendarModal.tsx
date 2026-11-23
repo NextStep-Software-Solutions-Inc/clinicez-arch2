@@ -14,6 +14,7 @@ import {
   Icon,
   Badge,
   EmptyState,
+  SkeletonList,
   ValidatedDateInput,
   validateDateString,
   TimeInput,
@@ -84,7 +85,30 @@ const DAYS_OF_WEEK = [
 
 const SLOT_INTERVALS = [15, 30, 60];
 
-const LEAVE_TYPES = ['Vacation', 'SickLeave', 'CME', 'Emergency', 'Holiday'];
+export interface LeaveTypeOption {
+  value: string;
+  label: string;
+}
+
+export const LEAVE_TYPE_OPTIONS: readonly LeaveTypeOption[] = [
+  { value: 'Vacation', label: 'Vacation' },
+  { value: 'SickLeave', label: 'Sick Leave' },
+  { value: 'CME', label: 'CME' },
+  { value: 'Emergency', label: 'Emergency' },
+  { value: 'Holiday', label: 'Holiday' },
+] as const;
+
+const LEAVE_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  LEAVE_TYPE_OPTIONS.map((option) => [option.value, option.label])
+);
+
+export function formatLeaveTypeLabel(leaveType?: string | null): string {
+  const trimmed = leaveType?.trim();
+  if (!trimmed) {
+    return 'Leave';
+  }
+  return LEAVE_TYPE_LABELS[trimmed] ?? trimmed;
+}
 
 const DAY_INDEX_TO_NAME: Record<number, string> = {
   0: 'Sunday',
@@ -160,6 +184,19 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
   const prevVisibleRef = useRef(visible);
   const activeTemplateDocIdRef = useRef<string | null>(null);
   const activeLeaveDocIdRef = useRef<string | null>(null);
+  const templatesCacheRef = useRef<Record<string, DoctorScheduleTemplateItem[]>>({});
+  const leavesCacheRef = useRef<Record<string, DoctorLeaveItem[]>>({});
+
+  useEffect(() => {
+    if (!visible) {
+      templatesCacheRef.current = {};
+      leavesCacheRef.current = {};
+      activeTemplateDocIdRef.current = null;
+      activeLeaveDocIdRef.current = null;
+      setLoadingTemplates(false);
+      setLoadingLeaves(false);
+    }
+  }, [visible]);
 
   useEffect(() => {
     const visibleJustOpened = visible && !prevVisibleRef.current;
@@ -182,17 +219,32 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
     }
   }, [visible, initialDoctorId, doctors, selectedDoctorId]);
 
-  const loadTemplates = useCallback(async (docId: string) => {
+  const loadTemplates = useCallback(async (docId: string, options?: { force?: boolean }) => {
     if (!docId) return;
+    const force = options?.force === true;
+    const cached = templatesCacheRef.current[docId];
+    if (!force && cached !== undefined) {
+      activeTemplateDocIdRef.current = docId;
+      setTemplates(cached);
+      setLoadingTemplates(false);
+      return;
+    }
+
     activeTemplateDocIdRef.current = docId;
-    try {
+    if (!force) {
+      setTemplates([]);
       setLoadingTemplates(true);
+    }
+
+    try {
       const [data, err] = await clinicService.getDoctorScheduleTemplates(docId);
       if (activeTemplateDocIdRef.current !== docId) return;
       if (err) {
         notify.error(err.message || 'Failed to load doctor templates.');
       } else {
-        setTemplates(data || []);
+        const nextTemplates = data || [];
+        templatesCacheRef.current[docId] = nextTemplates;
+        setTemplates(nextTemplates);
       }
     } catch (err: any) {
       if (activeTemplateDocIdRef.current !== docId) return;
@@ -204,17 +256,32 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
     }
   }, []);
 
-  const loadLeaves = useCallback(async (docId: string) => {
+  const loadLeaves = useCallback(async (docId: string, options?: { force?: boolean }) => {
     if (!docId) return;
+    const force = options?.force === true;
+    const cached = leavesCacheRef.current[docId];
+    if (!force && cached !== undefined) {
+      activeLeaveDocIdRef.current = docId;
+      setLeaves(cached);
+      setLoadingLeaves(false);
+      return;
+    }
+
     activeLeaveDocIdRef.current = docId;
-    try {
+    if (!force) {
+      setLeaves([]);
       setLoadingLeaves(true);
+    }
+
+    try {
       const [data, err] = await clinicService.getDoctorLeaves(docId);
       if (activeLeaveDocIdRef.current !== docId) return;
       if (err) {
         notify.error(err.message || 'Failed to load doctor leaves.');
       } else {
-        setLeaves(data || []);
+        const nextLeaves = data || [];
+        leavesCacheRef.current[docId] = nextLeaves;
+        setLeaves(nextLeaves);
       }
     } catch (err: any) {
       if (activeLeaveDocIdRef.current !== docId) return;
@@ -308,6 +375,8 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
         return;
       }
 
+      delete templatesCacheRef.current[selectedDoctorId];
+
       if (isPendingRosterSync) {
         const [, syncErr] = isDoctorPending
           ? await clinicService.updatePendingStaffVerification(selectedDoctorId)
@@ -320,7 +389,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                 'Verification submission is no longer pending review. Refreshing status.'
             );
             await Promise.all([
-              loadTemplates(selectedDoctorId),
+              loadTemplates(selectedDoctorId, { force: true }),
               onRefreshVerificationState?.(),
             ]);
             return;
@@ -329,7 +398,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
             syncErr.message ||
               'Schedule saved locally, but pending verification update failed.'
           );
-          await loadTemplates(selectedDoctorId);
+          await loadTemplates(selectedDoctorId, { force: true });
           return;
         }
 
@@ -338,7 +407,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
             ? `${getDayName(selectedDay)} schedule saved and pending verification submission updated.`
             : `${getDayName(selectedDay)} marked Off Duty and pending verification submission updated.`
         );
-        await loadTemplates(selectedDoctorId);
+        await loadTemplates(selectedDoctorId, { force: true });
         return;
       }
 
@@ -347,7 +416,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
           ? `${getDayName(selectedDay)} schedule saved successfully.`
           : `${getDayName(selectedDay)} marked as Off Duty.`
       );
-      await loadTemplates(selectedDoctorId);
+      await loadTemplates(selectedDoctorId, { force: true });
     } catch (err: any) {
       notify.error(err?.message || 'Failed to save schedule template.');
     } finally {
@@ -383,6 +452,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                 notify.error(err.message || `Failed to remove ${dayName} schedule.`);
                 return;
               }
+              delete templatesCacheRef.current[selectedDoctorId];
               if (isPendingRosterSync) {
                 const [, syncErr] = isDoctorPending
                   ? await clinicService.updatePendingStaffVerification(selectedDoctorId)
@@ -395,7 +465,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                         'Verification submission is no longer pending review. Refreshing status.'
                     );
                     await Promise.all([
-                      loadTemplates(selectedDoctorId),
+                      loadTemplates(selectedDoctorId, { force: true }),
                       onRefreshVerificationState?.(),
                     ]);
                     return;
@@ -404,7 +474,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                     syncErr.message ||
                       `${dayName} schedule removed locally, but pending verification update failed.`
                   );
-                  await loadTemplates(selectedDoctorId);
+                  await loadTemplates(selectedDoctorId, { force: true });
                   return;
                 }
               }
@@ -413,7 +483,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                   ? `${dayName} schedule removed and pending verification submission updated.`
                   : `${dayName} schedule removed successfully.`
               );
-              await loadTemplates(selectedDoctorId);
+              await loadTemplates(selectedDoctorId, { force: true });
               // Reset day form to clean defaults
               setStartTime('09:00');
               setEndTime('17:00');
@@ -498,12 +568,13 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
         return;
       }
 
+      delete leavesCacheRef.current[selectedDoctorId];
       notify.success('Doctor leave recorded successfully.');
       setLeaveStartDate('');
       setLeaveEndDate('');
       setLeaveReason('');
       setIsPartialDay(false);
-      await loadLeaves(selectedDoctorId);
+      await loadLeaves(selectedDoctorId, { force: true });
     } catch (err: any) {
       notify.error(err?.message || 'Failed to record doctor leave.');
     } finally {
@@ -518,8 +589,9 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
         notify.error(err.message || 'Failed to delete leave.');
         return;
       }
+      delete leavesCacheRef.current[selectedDoctorId];
       notify.success('Leave deleted successfully.');
-      await loadLeaves(selectedDoctorId);
+      await loadLeaves(selectedDoctorId, { force: true });
     } catch (err: any) {
       notify.error(err?.message || 'Failed to delete leave.');
     }
@@ -576,10 +648,14 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
         </View>
 
         {/* Tab Toggle */}
-        <View style={styles.tabBar}>
+        <View style={styles.tabBar} accessibilityRole="tablist">
           <Pressable
             style={[styles.tabButton, activeTab === 'templates' && styles.tabButtonActive]}
             onPress={() => setActiveTab('templates')}
+            accessibilityRole="tab"
+            accessibilityLabel="Weekly Templates"
+            accessibilityState={{ selected: activeTab === 'templates' }}
+            testID="roster-tab-templates"
           >
             <Icon
               name="calendar"
@@ -596,6 +672,10 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
           <Pressable
             style={[styles.tabButton, activeTab === 'leaves' && styles.tabButtonActive]}
             onPress={() => setActiveTab('leaves')}
+            accessibilityRole="tab"
+            accessibilityLabel="Leaves & Blackout Dates"
+            accessibilityState={{ selected: activeTab === 'leaves' }}
+            testID="roster-tab-leaves"
           >
             <Icon
               name="clock"
@@ -612,16 +692,12 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
         </View>
 
         {activeTab === 'templates' ? (
-          <View style={styles.tabContent}>
-            {loadingTemplates ? (
-              <View style={styles.loadingBox}>
-                <ActivityIndicator size="small" color={theme.colors.primary} />
-                <ThemedText variant="small" style={styles.loadingText}>
-                  Loading templates...
-                </ThemedText>
-              </View>
-            ) : (
-              <>
+          <View style={styles.tabContent} testID="roster-templates-tab-content">
+            <View
+              style={loadingTemplates ? styles.tabContentDimmed : undefined}
+              pointerEvents={loadingTemplates ? 'none' : 'auto'}
+              testID="roster-templates-form"
+            >
                 {/* Day Selector */}
                 <View style={styles.daySelector}>
                   {DAYS_OF_WEEK.map((d) => {
@@ -844,6 +920,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                       variant="outline"
                       icon="trash"
                       loading={deletingTemplate}
+                      disabled={loadingTemplates}
                       onPress={handleDeleteTemplate}
                     />
                   ) : null}
@@ -851,14 +928,30 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                     title={isPendingRosterSync ? PENDING_VERIFICATION_BUTTON_LABEL : 'Save Template'}
                     variant="primary"
                     loading={savingTemplate}
+                    disabled={loadingTemplates}
                     onPress={handleSaveTemplate}
                   />
                 </View>
-              </>
-            )}
+            </View>
+
+            {loadingTemplates ? (
+              <View
+                style={styles.loadingOverlay}
+                testID="roster-templates-loading-overlay"
+                accessibilityRole="progressbar"
+                accessibilityLabel="Loading templates"
+              >
+                <View style={styles.loadingPill}>
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                  <ThemedText variant="smallBold" style={styles.loadingText}>
+                    Loading templates...
+                  </ThemedText>
+                </View>
+              </View>
+            ) : null}
           </View>
         ) : (
-          <View style={styles.tabContent}>
+          <View style={styles.tabContent} testID="roster-leaves-tab-content">
             {/* Record Leave Form */}
             <View style={styles.leaveFormCard}>
               <ThemedText variant="bodyBold" style={styles.leaveFormTitle}>
@@ -892,19 +985,23 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                     Leave Type
                   </ThemedText>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.typePills}>
-                    {LEAVE_TYPES.map((t) => {
-                      const isChosen = leaveType === t;
+                    {LEAVE_TYPE_OPTIONS.map((option) => {
+                      const isChosen = leaveType === option.value;
                       return (
                         <Pressable
-                          key={t}
+                          key={option.value}
                           style={[styles.typePill, isChosen && styles.typePillSelected]}
-                          onPress={() => setLeaveType(t)}
+                          onPress={() => setLeaveType(option.value)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Leave type ${option.label}`}
+                          accessibilityState={{ selected: isChosen }}
+                          testID={`leave-type-chip-${option.value}`}
                         >
                           <ThemedText
                             variant="captionBold"
                             style={[styles.typePillText, isChosen && styles.typePillTextSelected]}
                           >
-                            {t}
+                            {option.label}
                           </ThemedText>
                         </Pressable>
                       );
@@ -975,39 +1072,43 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
               Scheduled Leaves & Closures
             </ThemedText>
 
-            {loadingLeaves ? (
-              <ActivityIndicator size="small" color={theme.colors.primary} />
-            ) : leaves.length === 0 ? (
-              <ThemedText variant="small" style={styles.emptyLeavesText}>
-                No upcoming leaves scheduled.
-              </ThemedText>
-            ) : (
-              leaves.map((l) => (
-                <View key={l.id} style={styles.leaveItemCard}>
-                  <View style={styles.leaveItemInfo}>
-                    <View style={styles.leaveItemHeader}>
-                      <ThemedText variant="bodyBold">
-                        {l.startDate} {l.startDate !== l.endDate ? `to ${l.endDate}` : ''}
-                      </ThemedText>
-                      <Badge variant="emergency" label={l.leaveType || 'Leave'} size="sm" />
-                    </View>
-                    {l.partialDayStartTime ? (
-                      <ThemedText variant="caption" style={styles.leaveTimeText}>
-                        Time: {l.partialDayStartTime} - {l.partialDayEndTime}
-                      </ThemedText>
-                    ) : null}
-                    {l.reason ? (
-                      <ThemedText variant="small" style={styles.leaveReasonText}>
-                        {l.reason}
-                      </ThemedText>
-                    ) : null}
-                  </View>
-                  <Pressable style={styles.deleteLeaveBtn} onPress={() => handleDeleteLeave(l.id)}>
-                    <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergency} />
-                  </Pressable>
+            <View style={styles.leavesListContainer} testID="roster-leaves-list-container">
+              {loadingLeaves ? (
+                <View testID="roster-leaves-loading-skeleton">
+                  <SkeletonList rows={2} rowHeight={58} />
                 </View>
-              ))
-            )}
+              ) : leaves.length === 0 ? (
+                <ThemedText variant="small" style={styles.emptyLeavesText}>
+                  No upcoming leaves scheduled.
+                </ThemedText>
+              ) : (
+                leaves.map((l) => (
+                  <View key={l.id} style={styles.leaveItemCard}>
+                    <View style={styles.leaveItemInfo}>
+                      <View style={styles.leaveItemHeader}>
+                        <ThemedText variant="bodyBold">
+                          {l.startDate} {l.startDate !== l.endDate ? `to ${l.endDate}` : ''}
+                        </ThemedText>
+                        <Badge variant="emergency" label={formatLeaveTypeLabel(l.leaveType)} size="sm" />
+                      </View>
+                      {l.partialDayStartTime ? (
+                        <ThemedText variant="caption" style={styles.leaveTimeText}>
+                          Time: {l.partialDayStartTime} - {l.partialDayEndTime}
+                        </ThemedText>
+                      ) : null}
+                      {l.reason ? (
+                        <ThemedText variant="small" style={styles.leaveReasonText}>
+                          {l.reason}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                    <Pressable style={styles.deleteLeaveBtn} onPress={() => handleDeleteLeave(l.id)}>
+                      <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+                    </Pressable>
+                  </View>
+                ))
+              )}
+            </View>
           </View>
         )}
           </>
@@ -1079,14 +1180,39 @@ const styles = StyleSheet.create({
   },
   tabContent: {
     paddingTop: theme.spacing.xs,
+    minHeight: 440,
+    position: 'relative',
   },
-  loadingBox: {
-    padding: theme.spacing.xl,
+  tabContentDimmed: {
+    opacity: 0.45,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  loadingPill: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.full,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    ...theme.shadows.md,
   },
   loadingText: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSecondary,
+  },
+  leavesListContainer: {
+    minHeight: 120,
   },
   daySelector: {
     flexDirection: 'row',

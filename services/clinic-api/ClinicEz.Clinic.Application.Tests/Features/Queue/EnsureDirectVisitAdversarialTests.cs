@@ -253,8 +253,8 @@ public class EnsureDirectVisitAdversarialTests
     }
 
     [Theory]
-    [InlineData((VisitType)6)]
-    [InlineData((VisitType)7)]
+    [InlineData((VisitType)0)]
+    [InlineData((VisitType)13)]
     [InlineData((VisitType)99)]
     public async Task Handle_NonClinicalVisitTypes_DoNotReuse_CreatesNewDV(VisitType nonClinicalVisitType)
     {

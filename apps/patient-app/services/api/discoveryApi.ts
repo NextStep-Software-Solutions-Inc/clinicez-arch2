@@ -3,17 +3,18 @@ import { api, ApiError } from './apiClient';
 import { membershipStatusSchema } from './wireEnums';
 
 // ── Schemas mirroring DiscoveryDtos + MembershipDtos ──────────────────────────
-// `membershipStatus` is the PascalCase member name ("Pending" | "Active") or null when not joined.
+// `patient-api` uses JsonIgnoreCondition.WhenWritingNull, so null wire fields are omitted (`undefined`).
+// `membershipStatus` is the PascalCase member name ("Pending" | "Active" | "Rejected") or null/omitted when not joined.
 
-const organizationSummarySchema = z.object({
+export const organizationSummarySchema = z.object({
     id: z.string(),
     slug: z.string(),
     name: z.string(),
     description: z.string(),
     isPublic: z.boolean(),
-    logoUrl: z.string().nullable(),
-    coverImageUrl: z.string().nullable(),
-    addressHint: z.string().nullable(),
+    logoUrl: z.string().nullish(),
+    coverImageUrl: z.string().nullish(),
+    addressHint: z.string().nullish(),
     featuredScore: z.number(),
     activeMemberCount: z.number(),
     requiredShareFieldsJson: z.string(),
@@ -22,22 +23,22 @@ const organizationSummarySchema = z.object({
 });
 export type OrganizationSummary = z.infer<typeof organizationSummarySchema>;
 
-const clinicSummarySchema = z.object({
+export const clinicSummarySchema = z.object({
     id: z.string(),
     name: z.string(),
-    description: z.string().nullable(),
-    address: z.string().nullable(),
+    description: z.string().nullish(),
+    address: z.string().nullish(),
     isPublic: z.boolean(),
     supportsAppointments: z.boolean(),
     isGated: z.boolean().optional(),
     isUnlocked: z.boolean().optional(),
     isOnlineBookingPaused: z.boolean().optional(),
-    operatingHours: z.string().nullable().optional(),
+    operatingHours: z.string().nullish(),
     isPhilHealthAccredited: z.boolean().optional(),
-    contactNumber: z.string().nullable().optional(),
-    contactEmail: z.string().nullable().optional(),
-    logoUrl: z.string().nullable(),
-    coverImageUrl: z.string().nullable(),
+    contactNumber: z.string().nullish(),
+    contactEmail: z.string().nullish(),
+    logoUrl: z.string().nullish(),
+    coverImageUrl: z.string().nullish(),
     specialtiesJson: z.string(),
     requiredShareFieldsJson: z.string(),
     featuredScore: z.number(),
@@ -46,36 +47,36 @@ const clinicSummarySchema = z.object({
 });
 export type ClinicSummary = z.infer<typeof clinicSummarySchema>;
 
-const organizationDetailSchema = organizationSummarySchema.extend({
-    privacyPolicyUrl: z.string().nullable(),
-    termsAndConditionsUrl: z.string().nullable(),
+export const organizationDetailSchema = organizationSummarySchema.extend({
+    privacyPolicyUrl: z.string().nullish(),
+    termsAndConditionsUrl: z.string().nullish(),
     linkedClinics: z.array(clinicSummarySchema),
 });
 export type OrganizationDetail = z.infer<typeof organizationDetailSchema>;
 
-const clinicProviderSchema = z.object({
+export const clinicProviderSchema = z.object({
     id: z.string(),
     name: z.string(),
     specialty: z.string(),
-    avatarUrl: z.string().nullable(),
-    professionalLicenseNo: z.string().nullable(),
+    avatarUrl: z.string().nullish(),
+    professionalLicenseNo: z.string().nullish(),
 });
 export type ClinicProviderDto = z.infer<typeof clinicProviderSchema>;
 
-const clinicServiceSchema = z.object({
+export const clinicServiceSchema = z.object({
     id: z.string(),
     name: z.string(),
-    description: z.string().nullable(),
-    durationMinutes: z.number().nullable(),
-    price: z.number().nullable(),
+    description: z.string().nullish(),
+    durationMinutes: z.number().nullish(),
+    price: z.number().nullish(),
 });
 export type ClinicServiceDto = z.infer<typeof clinicServiceSchema>;
 
-const clinicDetailSchema = clinicSummarySchema.extend({
-    privacyPolicyUrl: z.string().nullable(),
-    termsAndConditionsUrl: z.string().nullable(),
+export const clinicDetailSchema = clinicSummarySchema.extend({
+    privacyPolicyUrl: z.string().nullish(),
+    termsAndConditionsUrl: z.string().nullish(),
     linkedOrganizations: z.array(organizationSummarySchema),
-    membershipStatus: membershipStatusSchema.nullable(),
+    membershipStatus: membershipStatusSchema.nullish(),
     healthcareProviders: z.array(clinicProviderSchema),
     services: z.array(clinicServiceSchema),
 });
@@ -96,7 +97,7 @@ export interface PagedResult<T> {
     take: number;
 }
 
-const organizationMembershipResultSchema = z.object({
+export const organizationMembershipResultSchema = z.object({
     id: z.string(),
     organizationId: z.string(),
     organizationName: z.string(),
@@ -104,7 +105,7 @@ const organizationMembershipResultSchema = z.object({
     roleName: z.string(),
     status: membershipStatusSchema,
     consentDataSharing: z.boolean(),
-    consentedAt: z.string().nullable(),
+    consentedAt: z.string().nullish(),
     createdAt: z.string(),
 });
 export type OrganizationMembershipResult = z.infer<typeof organizationMembershipResultSchema>;
@@ -274,8 +275,8 @@ export async function cancelClinicMembership(
 export const unlockClinicResultSchema = z.object({
     success: z.boolean().optional(),
     isUnlocked: z.boolean(),
-    membershipId: z.string().nullable().optional(),
-    message: z.string().nullable().optional(),
+    membershipId: z.string().nullish(),
+    message: z.string().nullish(),
 });
 export type UnlockClinicResult = z.infer<typeof unlockClinicResultSchema>;
 

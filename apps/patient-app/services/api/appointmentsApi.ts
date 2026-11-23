@@ -7,8 +7,8 @@ import { appointmentStatusSchema } from './wireEnums';
 const clinicProviderSnapshotSchema = z.object({
     id: z.string(),
     name: z.string(),
-    specialty: z.string().nullable(),
-    avatarUrl: z.string().nullable(),
+    specialty: z.string().nullish(),
+    avatarUrl: z.string().nullish(),
 });
 export type ClinicProviderSnapshot = z.infer<typeof clinicProviderSnapshotSchema>;
 
@@ -17,13 +17,13 @@ export const remoteAppointmentSchema = z.object({
     clinicId: z.string(),
     clinicName: z.string(),
     provider: clinicProviderSnapshotSchema,
-    serviceType: z.string().nullable(),
+    serviceType: z.string().nullish(),
     /** ISO-8601 UTC */
     scheduledAt: z.string(),
     durationMinutes: z.number(),
     /** PascalCase member name: Pending | Confirmed | Cancelled | Completed | NoShow | ActionRequired */
     status: appointmentStatusSchema,
-    notes: z.string().nullable(),
+    notes: z.string().nullish(),
     subject: z.string().nullish(),
     chiefComplaint: z.string().nullish(),
     clinicalAssessment: z.string().nullish(),

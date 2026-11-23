@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import ThemedText from '@ui/ThemedText';
-import { useAppTheme } from '../../contexts/ThemeContext';
 import ProfileFormField from './ProfileFormField';
 import ProfileToggle from './ProfileToggle';
 import ProfileSelectModal, { SelectOption } from './ProfileSelectModal';
 import { locationService } from '../../services/api/locationService';
+import {
+  isNcrRegion,
+  shouldBypassProvinceTier,
+  fetchRegionDependentLocations,
+  fetchProvinceDependentCities,
+  type AddressValidationErrors,
+} from '../../utils/addressValidation';
 import type { StructuredPsgcAddress, PsgcLocationDto } from '@shared/safe';
 
 export interface CascadingAddressPickerProps {
@@ -13,6 +18,8 @@ export interface CascadingAddressPickerProps {
   onChange: (next: StructuredPsgcAddress) => void;
   disabled?: boolean;
   showSameAsPermanentToggle?: boolean;
+  required?: boolean;
+  errors?: AddressValidationErrors;
 }
 
 export default function CascadingAddressPicker({
@@ -20,78 +27,156 @@ export default function CascadingAddressPicker({
   onChange,
   disabled = false,
   showSameAsPermanentToggle = false,
+  required = false,
+  errors,
 }: CascadingAddressPickerProps) {
-  const { colors, radii } = useAppTheme();
-
   const [regions, setRegions] = useState<PsgcLocationDto[]>([]);
   const [provinces, setProvinces] = useState<PsgcLocationDto[]>([]);
+  const [provincesLoadedForRegion, setProvincesLoadedForRegion] = useState<string | null>(null);
   const [cities, setCities] = useState<PsgcLocationDto[]>([]);
   const [barangays, setBarangays] = useState<PsgcLocationDto[]>([]);
 
+  const [loadingRegions, setLoadingRegions] = useState(false);
+  const [loadingProvinces, setLoadingProvinces] = useState(false);
+  const [loadingCities, setLoadingCities] = useState(false);
+  const [loadingBarangays, setLoadingBarangays] = useState(false);
+
   const [activeModal, setActiveModal] = useState<'region' | 'province' | 'city' | 'barangay' | null>(null);
+
+  const isKnownNcr = isNcrRegion(value.regionPsgc, value.regionName);
+  const isNcrWithoutProvinces = shouldBypassProvinceTier({
+    regionPsgc: value.regionPsgc,
+    regionName: value.regionName,
+    provincesCount: provinces.length,
+    provincesLoadedForRegion,
+  });
 
   // Load Regions on mount
   useEffect(() => {
     let active = true;
-    locationService.getRegions().then((data) => {
-      if (active && data) {
-        setRegions(data);
-      }
-    });
+    setLoadingRegions(true);
+    locationService
+      .getRegions()
+      .then((data) => {
+        if (active && data) {
+          setRegions(data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoadingRegions(false);
+      });
     return () => {
       active = false;
     };
   }, []);
 
-  // Cascading: Load Provinces / NCR Cities when Region changes
+  // Cascading: Load Provinces (non-NCR) or direct Cities (NCR / zero-province regions) when Region changes
   useEffect(() => {
     if (!value.regionPsgc) {
       setProvinces([]);
+      setProvincesLoadedForRegion(null);
+      setCities([]);
+      setBarangays([]);
+      setLoadingProvinces(false);
+      setLoadingCities(false);
       return;
     }
-    let active = true;
-    locationService.getProvinces(value.regionPsgc).then((provs) => {
-      if (!active) return;
-      setProvinces(provs);
-      if (provs.length === 0) {
-        // Single-tier region like NCR: directly load cities
-        locationService.getCities(undefined, value.regionPsgc || undefined).then((cList) => {
-          if (active) setCities(cList);
-        });
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [value.regionPsgc]);
 
-  // Cascading: Load Cities when Province changes
-  useEffect(() => {
-    if (!value.provincePsgc) {
-      if (!value.regionPsgc || provinces.length > 0) {
-        setCities([]);
-      }
-      return;
-    }
     let active = true;
-    locationService.getCities(value.provincePsgc, value.regionPsgc || undefined).then((data) => {
-      if (active) setCities(data);
-    });
+    const regionCode = value.regionPsgc;
+
+    setProvinces([]);
+    setProvincesLoadedForRegion(null);
+    if (isKnownNcr) {
+      setCities([]);
+      setLoadingProvinces(false);
+      setLoadingCities(true);
+    } else {
+      setLoadingProvinces(true);
+    }
+
+    fetchRegionDependentLocations(regionCode, value.regionName, locationService)
+      .then((result) => {
+        if (!active) return;
+        setProvinces(result.provinces);
+        setProvincesLoadedForRegion(regionCode);
+        if (result.cities !== null) {
+          setCities(result.cities);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) {
+          setLoadingProvinces(false);
+          if (isKnownNcr) {
+            setLoadingCities(false);
+          }
+        }
+      });
+
     return () => {
       active = false;
     };
-  }, [value.provincePsgc, value.regionPsgc, provinces.length]);
+  }, [value.regionPsgc, isKnownNcr]);
+
+  // Cascading: Load Cities when Province changes (non-NCR regions only)
+  useEffect(() => {
+    if (isNcrWithoutProvinces) {
+      return;
+    }
+
+    if (!value.provincePsgc) {
+      setCities([]);
+      setLoadingCities(false);
+      return;
+    }
+
+    let active = true;
+    setLoadingCities(true);
+    fetchProvinceDependentCities(
+      {
+        regionPsgc: value.regionPsgc,
+        provincePsgc: value.provincePsgc,
+        bypassProvince: isNcrWithoutProvinces,
+      },
+      locationService,
+    )
+      .then((result) => {
+        if (active && !result.preserveCities && result.cities !== null) {
+          setCities(result.cities);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoadingCities(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [value.provincePsgc, value.regionPsgc, isNcrWithoutProvinces]);
 
   // Cascading: Load Barangays when City changes
   useEffect(() => {
     if (!value.cityMunicipalityPsgc) {
       setBarangays([]);
+      setLoadingBarangays(false);
       return;
     }
+
     let active = true;
-    locationService.getBarangays(value.cityMunicipalityPsgc).then((data) => {
-      if (active) setBarangays(data);
-    });
+    setLoadingBarangays(true);
+    locationService
+      .getBarangays(value.cityMunicipalityPsgc)
+      .then((data) => {
+        if (active) setBarangays(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoadingBarangays(false);
+      });
+
     return () => {
       active = false;
     };
@@ -183,13 +268,12 @@ export default function CascadingAddressPicker({
     [barangays, value, onChange]
   );
 
-  const isNcrWithoutProvinces = Boolean(
-    value.regionName?.toLowerCase().includes('ncr') ||
-    value.regionName?.toLowerCase().includes('national capital') ||
-    (value.regionPsgc && provinces.length === 0)
-  );
-
   const isLocked = disabled || Boolean(value.isSameAsPermanent);
+  const showRequired = required && !value.isSameAsPermanent;
+  const activeErrors = value.isSameAsPermanent ? undefined : errors;
+  const canSelectCity = isNcrWithoutProvinces
+    ? Boolean(value.regionPsgc)
+    : Boolean(value.provincePsgc);
 
   return (
     <View style={styles.container}>
@@ -211,8 +295,10 @@ export default function CascadingAddressPicker({
       <ProfileFormField
         label="Region"
         value={value.regionName || (value.regionPsgc ? `Region (${value.regionPsgc})` : '')}
-        placeholder="Select Region"
+        placeholder={loadingRegions ? 'Loading regions...' : 'Select Region'}
         picker
+        required={showRequired}
+        error={activeErrors?.region}
         editable={!isLocked}
         onPressIn={() => !isLocked && setActiveModal('region')}
       />
@@ -222,8 +308,16 @@ export default function CascadingAddressPicker({
         <ProfileFormField
           label="Province"
           value={value.provinceName || (value.provincePsgc ? `Province (${value.provincePsgc})` : '')}
-          placeholder={value.regionPsgc ? 'Select Province' : 'Select Region first'}
+          placeholder={
+            !value.regionPsgc
+              ? 'Select Region first'
+              : loadingProvinces
+                ? 'Loading provinces...'
+                : 'Select Province'
+          }
           picker
+          required={showRequired}
+          error={activeErrors?.province}
           editable={!isLocked && Boolean(value.regionPsgc)}
           onPressIn={() => !isLocked && Boolean(value.regionPsgc) && setActiveModal('province')}
         />
@@ -234,25 +328,35 @@ export default function CascadingAddressPicker({
         label="City / Municipality"
         value={value.cityMunicipalityName || (value.cityMunicipalityPsgc ? `City (${value.cityMunicipalityPsgc})` : '')}
         placeholder={
-          isNcrWithoutProvinces
-            ? value.regionPsgc ? 'Select City / Municipality' : 'Select Region first'
-            : value.provincePsgc ? 'Select City / Municipality' : 'Select Province first'
+          !canSelectCity
+            ? isNcrWithoutProvinces
+              ? 'Select Region first'
+              : 'Select Province first'
+            : loadingCities
+              ? 'Loading cities...'
+              : 'Select City / Municipality'
         }
         picker
-        editable={!isLocked && (isNcrWithoutProvinces ? Boolean(value.regionPsgc) : Boolean(value.provincePsgc))}
-        onPressIn={() =>
-          !isLocked &&
-          (isNcrWithoutProvinces ? Boolean(value.regionPsgc) : Boolean(value.provincePsgc)) &&
-          setActiveModal('city')
-        }
+        required={showRequired}
+        error={activeErrors?.cityMunicipality}
+        editable={!isLocked && canSelectCity}
+        onPressIn={() => !isLocked && canSelectCity && setActiveModal('city')}
       />
 
       {/* Barangay Picker */}
       <ProfileFormField
         label="Barangay"
         value={value.barangayName || (value.barangayPsgc ? `Barangay (${value.barangayPsgc})` : '')}
-        placeholder={value.cityMunicipalityPsgc ? 'Select Barangay' : 'Select City first'}
+        placeholder={
+          !value.cityMunicipalityPsgc
+            ? 'Select City first'
+            : loadingBarangays
+              ? 'Loading barangays...'
+              : 'Select Barangay'
+        }
         picker
+        required={showRequired}
+        error={activeErrors?.barangay}
         editable={!isLocked && Boolean(value.cityMunicipalityPsgc)}
         onPressIn={() => !isLocked && Boolean(value.cityMunicipalityPsgc) && setActiveModal('barangay')}
       />
@@ -295,6 +399,8 @@ export default function CascadingAddressPicker({
         title="Select Region"
         options={regionOptions}
         selected={value.regionPsgc}
+        loading={loadingRegions}
+        emptyText="No regions available"
         onSelect={handleSelectRegion}
         onClose={() => setActiveModal(null)}
       />
@@ -304,6 +410,8 @@ export default function CascadingAddressPicker({
         title="Select Province"
         options={provinceOptions}
         selected={value.provincePsgc}
+        loading={loadingProvinces}
+        emptyText="No provinces available"
         onSelect={handleSelectProvince}
         onClose={() => setActiveModal(null)}
       />
@@ -313,6 +421,8 @@ export default function CascadingAddressPicker({
         title="Select City / Municipality"
         options={cityOptions}
         selected={value.cityMunicipalityPsgc}
+        loading={loadingCities}
+        emptyText="No cities or municipalities available"
         onSelect={handleSelectCity}
         onClose={() => setActiveModal(null)}
       />
@@ -322,6 +432,8 @@ export default function CascadingAddressPicker({
         title="Select Barangay"
         options={barangayOptions}
         selected={value.barangayPsgc}
+        loading={loadingBarangays}
+        emptyText="No barangays available"
         onSelect={handleSelectBarangay}
         onClose={() => setActiveModal(null)}
       />

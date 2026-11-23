@@ -1,11 +1,14 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useClerk, useAuth } from '@clerk/clerk-react';
-import { IconClock, IconShieldLock } from '@tabler/icons-react';
+import { IconClock } from '@tabler/icons-react';
 import {
   getIdleTimeoutMinutes,
   getLastActiveTimestamp,
   setLastActiveTimestamp,
-  getIdleBroadcastChannel,
+  clearLastActiveTimestamp,
+  evaluateIdleStatus,
+  createSafeIdleBroadcastChannel,
+  type SafeIdleChannel,
   ADMIN_LAST_ACTIVE_KEY,
   WARNING_COUNTDOWN_SECONDS,
 } from '@/lib/idleGuard';
@@ -22,76 +25,169 @@ export function IdleSessionGuard({ children }: IdleSessionGuardProps) {
   const [secondsRemaining, setSecondsRemaining] = useState(WARNING_COUNTDOWN_SECONDS);
 
   const lastRecordedRef = useRef<number>(Date.now());
-  const channelRef = useRef<BroadcastChannel | null>(null);
+  const channelRef = useRef<SafeIdleChannel | null>(null);
+  const isWarningOpenRef = useRef<boolean>(false);
+  const isSigningOutRef = useRef<boolean>(false);
+  const signOutRef = useRef(signOut);
+  signOutRef.current = signOut;
 
   const timeoutMinutes = getIdleTimeoutMinutes();
   const totalTimeoutSeconds = timeoutMinutes * 60;
   const warningStartSeconds = Math.max(10, totalTimeoutSeconds - WARNING_COUNTDOWN_SECONDS);
 
-  const recordActivity = useCallback(() => {
-    const now = Date.now();
-    if (lastRecordedRef.current > now) {
-      lastRecordedRef.current = now;
-    }
-    // Throttle writes to at most once per second
-    if (now - lastRecordedRef.current < 1000) return;
-
-    lastRecordedRef.current = now;
-    setLastActiveTimestamp(now);
-    setIsWarningOpen(false);
-
-    if (channelRef.current) {
-      channelRef.current.postMessage({ type: 'ACTIVITY', timestamp: now });
-    }
+  const setWarningOpen = useCallback((open: boolean) => {
+    isWarningOpenRef.current = open;
+    setIsWarningOpen(open);
   }, []);
 
-  const handleSignOut = useCallback(async () => {
-    setIsWarningOpen(false);
-    try {
-      await signOut();
-    } catch {
-      // Ignored if signOut errors
-    }
-    if (typeof window !== 'undefined') {
-      window.location.href = '/sign-in?reason=session_expired';
-    }
-  }, [signOut]);
+  const recordActivity = useCallback(
+    (force = false) => {
+      if (isSigningOutRef.current) return;
+
+      const now = Date.now();
+      if (lastRecordedRef.current > now) {
+        lastRecordedRef.current = now;
+      }
+      // Throttle passive writes to at most once per second
+      if (!force && now - lastRecordedRef.current < 1000) return;
+
+      lastRecordedRef.current = now;
+      setLastActiveTimestamp(now);
+      setWarningOpen(false);
+
+      const channel = channelRef.current;
+      if (channel && !channel.isClosed) {
+        channel.postMessage({ type: 'ACTIVITY', timestamp: now });
+      }
+    },
+    [setWarningOpen]
+  );
+
+  const handleStaySignedIn = useCallback(() => {
+    recordActivity(true);
+  }, [recordActivity]);
+
+  const handleSignOut = useCallback(
+    async (broadcastLogout = false) => {
+      if (isSigningOutRef.current) return;
+      isSigningOutRef.current = true;
+      setWarningOpen(false);
+
+      if (broadcastLogout) {
+        const channel = channelRef.current;
+        if (channel && !channel.isClosed) {
+          channel.postMessage({ type: 'LOGOUT' });
+        }
+      }
+
+      clearLastActiveTimestamp();
+
+      try {
+        await signOutRef.current();
+      } catch {
+        // Ignored if signOut errors
+      }
+      if (typeof window !== 'undefined') {
+        window.location.href = '/sign-in?reason=session_expired';
+      }
+    },
+    [setWarningOpen]
+  );
+
+  const handleManualSignOut = useCallback(() => {
+    void handleSignOut(true);
+  }, [handleSignOut]);
 
   useEffect(() => {
     if (!isSignedIn) {
-      setIsWarningOpen(false);
+      if (channelRef.current) {
+        const staleChannel = channelRef.current;
+        channelRef.current = null;
+        staleChannel.close();
+      }
+      isSigningOutRef.current = false;
+      setWarningOpen(false);
       return;
     }
 
-    // Set initial timestamp
-    recordActivity();
+    let isDisposed = false;
+    isSigningOutRef.current = false;
 
-    // Setup broadcast channel
-    const channel = getIdleBroadcastChannel();
+    // Setup lifecycle-guarded broadcast channel BEFORE posting any initial activity
+    const channel = createSafeIdleBroadcastChannel();
     channelRef.current = channel;
 
+    const evaluateAndEnforceIdle = () => {
+      if (isDisposed || isSigningOutRef.current) return;
+
+      const lastActive = getLastActiveTimestamp();
+      const status = evaluateIdleStatus(
+        lastActive,
+        Date.now(),
+        totalTimeoutSeconds,
+        warningStartSeconds
+      );
+
+      if (status.isExpired) {
+        void handleSignOut(true);
+      } else if (status.isWarning) {
+        setSecondsRemaining(status.remainingSeconds);
+        setWarningOpen(true);
+      } else {
+        setWarningOpen(false);
+      }
+    };
+
     if (channel) {
-      channel.onmessage = (event) => {
+      channel.setOnMessage((event) => {
+        if (isDisposed) return;
         if (event.data?.type === 'ACTIVITY') {
-          lastRecordedRef.current = event.data.timestamp || Date.now();
-          setIsWarningOpen(false);
+          if (isSigningOutRef.current) return;
+          const now = Date.now();
+          const incoming =
+            typeof event.data.timestamp === 'number' && Number.isFinite(event.data.timestamp)
+              ? Math.min(event.data.timestamp, now)
+              : now;
+          lastRecordedRef.current = incoming;
+          setWarningOpen(false);
         } else if (event.data?.type === 'LOGOUT') {
-          handleSignOut();
+          void handleSignOut(false);
         }
-      };
+      });
     }
+
+    // Initialize activity timestamp safely after channel setup
+    recordActivity(true);
 
     // Listen to storage events from other tabs
     const handleStorage = (e: StorageEvent) => {
+      if (isDisposed || isSigningOutRef.current) return;
       if (e.key === ADMIN_LAST_ACTIVE_KEY && e.newValue) {
         const parsed = parseInt(e.newValue, 10);
-        if (!isNaN(parsed)) {
-          lastRecordedRef.current = parsed;
-          setIsWarningOpen(false);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          lastRecordedRef.current = Math.min(parsed, Date.now());
+          setWarningOpen(false);
         }
       }
     };
     window.addEventListener('storage', handleStorage);
+
+    // Re-evaluate immediately when returning to a backgrounded or sleeping tab
+    const handleVisibilityChange = () => {
+      if (isDisposed) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        evaluateAndEnforceIdle();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    const handleFocus = () => {
+      if (isDisposed) return;
+      evaluateAndEnforceIdle();
+    };
+    window.addEventListener('focus', handleFocus);
 
     // Activity event listeners
     const activityEvents: Array<keyof WindowEventMap> = [
@@ -103,11 +199,25 @@ export function IdleSessionGuard({ children }: IdleSessionGuardProps) {
     ];
 
     const onUserActivity = () => {
+      if (isDisposed || isSigningOutRef.current) return;
       // If warning modal is open, don't automatically dismiss on background mouse movements;
-      // require explicit "Stay Signed In" button click or key press.
-      if (!isWarningOpen) {
-        recordActivity();
+      // require explicit "Stay Signed In" button click.
+      if (isWarningOpenRef.current) return;
+
+      // Guard against browser-throttled timers: if the idle window has already expired
+      // before setInterval or visibilitychange fired, enforce sign-out instead of extending.
+      const status = evaluateIdleStatus(
+        getLastActiveTimestamp(),
+        Date.now(),
+        totalTimeoutSeconds,
+        warningStartSeconds
+      );
+      if (status.isExpired) {
+        void handleSignOut(true);
+        return;
       }
+
+      recordActivity(false);
     };
 
     activityEvents.forEach((evt) => {
@@ -115,35 +225,27 @@ export function IdleSessionGuard({ children }: IdleSessionGuardProps) {
     });
 
     // Check interval every second
-    const intervalId = window.setInterval(() => {
-      const lastActive = getLastActiveTimestamp();
-      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - lastActive) / 1000));
-
-      if (elapsedSeconds >= totalTimeoutSeconds) {
-        if (channelRef.current) {
-          channelRef.current.postMessage({ type: 'LOGOUT' });
-        }
-        handleSignOut();
-      } else if (elapsedSeconds >= warningStartSeconds) {
-        const remaining = Math.max(0, totalTimeoutSeconds - elapsedSeconds);
-        setSecondsRemaining(remaining);
-        setIsWarningOpen(true);
-      } else {
-        setIsWarningOpen(false);
-      }
-    }, 1000);
+    const intervalId = window.setInterval(evaluateAndEnforceIdle, 1000);
 
     return () => {
-      clearInterval(intervalId);
+      isDisposed = true;
+      window.clearInterval(intervalId);
       window.removeEventListener('storage', handleStorage);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+      window.removeEventListener('focus', handleFocus);
       activityEvents.forEach((evt) => {
         window.removeEventListener(evt, onUserActivity);
       });
+      if (channelRef.current === channel) {
+        channelRef.current = null;
+      }
       if (channel) {
         channel.close();
       }
     };
-  }, [isSignedIn, isWarningOpen, recordActivity, handleSignOut, totalTimeoutSeconds, warningStartSeconds]);
+  }, [isSignedIn, recordActivity, handleSignOut, setWarningOpen, totalTimeoutSeconds, warningStartSeconds]);
 
   return (
     <>
@@ -183,14 +285,14 @@ export function IdleSessionGuard({ children }: IdleSessionGuardProps) {
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
               <button
                 type="button"
-                onClick={handleSignOut}
+                onClick={handleManualSignOut}
                 className="px-4 py-2 text-xs font-medium text-text-secondary hover:text-text rounded-lg transition-colors cursor-pointer"
               >
                 Sign Out Now
               </button>
               <button
                 type="button"
-                onClick={recordActivity}
+                onClick={handleStaySignedIn}
                 className="px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors cursor-pointer shadow-sm"
               >
                 Stay Signed In

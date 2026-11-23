@@ -119,7 +119,7 @@ export default function PersonalDemographicsScreen() {
     }
   }, [patientId, reset, user?.firstName, user?.lastName]);
 
-  useProfileSync(loadLocal);
+  useProfileSync(loadLocal, { isDirtyRef });
 
   useEffect(() => {
     let isMounted = true;
@@ -128,7 +128,7 @@ export default function PersonalDemographicsScreen() {
       // 1. Read from local SQLite first for immediate UI render
       try {
         const row = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
-        if (row && isMounted) {
+        if (row && isMounted && !isDirtyRef.current) {
           const localFirst = row.firstName || user?.firstName || '';
           const localLast = row.lastName || user?.lastName || '';
           const rawBlood = fromBackendBloodType(row.bloodType) ?? (row.bloodType ?? '');

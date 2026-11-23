@@ -18,7 +18,11 @@ import {
 } from 'date-fns';
 import { AppIcon } from '../ui/Icon';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
-import { resolveDoctorAffiliations } from '../../services/search/directorySearchService';
+import {
+  hasDateStripAvailability,
+  resolveAvailableDaysOfWeek,
+  resolveDoctorAffiliations,
+} from '../../services/search/directorySearchService';
 import type { DirectoryDoctorDto } from '../../services/api/homeApi';
 import type { AvailableSlot } from '../../services/appointments/types';
 
@@ -81,6 +85,14 @@ function BookingSlotStepComponent({
   const [selectedPeriod, setSelectedPeriod] = useState<TimeOfDayPeriod>('morning');
   const affiliations = useMemo(() => resolveDoctorAffiliations(doctor), [doctor]);
   const activeClinicId = selectedClinicId ?? doctor.clinicId;
+  const activeAffiliation = useMemo(
+    () => affiliations.find((a) => a.clinicId === activeClinicId) ?? affiliations[0] ?? null,
+    [affiliations, activeClinicId],
+  );
+  const availableDaysOfWeek = useMemo(
+    () => resolveAvailableDaysOfWeek(activeAffiliation?.availabilities),
+    [activeAffiliation?.availabilities],
+  );
   const isBookingPaused = !doctor.clinicSupportsAppointments;
 
   const openSlots = useMemo(
@@ -497,6 +509,14 @@ function BookingSlotStepComponent({
         <View style={[styles.dateStripRow, { gap: spacing.xs + 2, marginTop: spacing.md }]}>
           {dateStripDays.map((day) => {
             const isSelected = isSameDay(day, selectedDate);
+            const hasAvailability = hasDateStripAvailability({
+              day,
+              isSelected,
+              isBookingPaused,
+              isLoadingSlots,
+              openSlotsCount: openSlots.length,
+              availableDaysOfWeek,
+            });
             const dayName = format(day, 'EEE');
             const dayNum = format(day, 'dd');
 
@@ -545,18 +565,22 @@ function BookingSlotStepComponent({
                   {dayNum}
                 </Text>
 
-                <View
-                  style={[
-                    styles.dayDot,
-                    {
-                      borderRadius: radii.full,
-                      backgroundColor: isSelected
-                        ? colors.inverseAccent
-                        : colors.emeraldDot,
-                      marginTop: spacing.xs,
-                    },
-                  ]}
-                />
+                {hasAvailability ? (
+                  <View
+                    style={[
+                      styles.dayDot,
+                      {
+                        borderRadius: radii.full,
+                        backgroundColor: isSelected
+                          ? colors.inverseAccent
+                          : colors.emeraldDot,
+                        marginTop: spacing.xs,
+                      },
+                    ]}
+                  />
+                ) : (
+                  <View style={[styles.dayDot, { marginTop: spacing.xs }]} />
+                )}
               </Pressable>
             );
           })}

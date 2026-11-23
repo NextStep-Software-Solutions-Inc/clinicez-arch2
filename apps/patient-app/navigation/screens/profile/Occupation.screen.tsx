@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -46,13 +46,16 @@ export default function OccupationScreen() {
   });
 
   const [hasRecord, setHasRecord] = useState(false);
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
 
   const load = useCallback(async () => {
+    if (!patientId || isDirtyRef.current) return;
     try {
       const row = await db.query.patientOccupation.findFirst({
         where: eq(patientOccupation.patientId, patientId),
       });
-      if (row) {
+      if (row && !isDirtyRef.current) {
         setHasRecord(true);
         reset({
           occupation: row.occupation ?? '',
@@ -72,7 +75,7 @@ export default function OccupationScreen() {
     load();
   }, [load]);
 
-  useProfileSync(load);
+  useProfileSync(load, { isDirtyRef });
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
@@ -84,11 +87,18 @@ export default function OccupationScreen() {
         yearsInOccupation: data.yearsInOccupation ? parseInt(data.yearsInOccupation, 10) : null,
         updatedAt: new Date(),
       };
-      if (hasRecord) {
+      const existingRows = await db
+        .select({ id: patientOccupation.id })
+        .from(patientOccupation)
+        .where(eq(patientOccupation.patientId, patientId))
+        .limit(1);
+
+      if (hasRecord || existingRows.length > 0) {
         await db
           .update(patientOccupation)
           .set(payload)
           .where(eq(patientOccupation.patientId, patientId));
+        setHasRecord(true);
       } else {
         await db.insert(patientOccupation).values({
           id: randomUUID(),
