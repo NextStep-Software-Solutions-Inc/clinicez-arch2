@@ -20,6 +20,12 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
+import {
+  validateAddressForm,
+  hasAddressValidationErrors,
+  isNcrRegion,
+  type AddressValidationErrors,
+} from '@utils/addressValidation';
 import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
 import { deletePatientAddress } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
@@ -77,6 +83,7 @@ export default function AddressesScreen() {
   const [editing, setEditing] = useState<AddressForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [typeModal, setTypeModal] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<AddressValidationErrors>({});
   const sheetRef = useRef<BottomSheetModalType>(null);
 
   const { selectOptions: typeOptions } = useEhrOptions('address_type');
@@ -102,6 +109,7 @@ export default function AddressesScreen() {
   const openAdd = () => {
     reset(EMPTY_FORM);
     setEditing(EMPTY_FORM);
+    setValidationErrors({});
     sheetRef.current?.present();
   };
 
@@ -128,6 +136,7 @@ export default function AddressesScreen() {
     };
     reset(form);
     setEditing(form);
+    setValidationErrors({});
     sheetRef.current?.present();
   };
 
@@ -156,28 +165,55 @@ export default function AddressesScreen() {
   };
 
   const onSave = handleSubmit(async (data) => {
+    const normalizedType = (['primary', 'secondary'].includes(data.type) ? data.type : 'primary') as 'primary' | 'secondary';
+    const effectiveSameAsPermanent = normalizedType === 'secondary' && Boolean(data.isSameAsPermanent);
+
+    const errors = validateAddressForm({
+      type: normalizedType,
+      regionPsgc: data.regionPsgc,
+      regionName: data.regionName,
+      region: data.region,
+      provincePsgc: data.provincePsgc,
+      provinceName: data.provinceName,
+      province: data.province,
+      cityMunicipalityPsgc: data.cityMunicipalityPsgc,
+      cityMunicipalityName: data.cityMunicipalityName,
+      cityMunicipality: data.cityMunicipality,
+      barangayPsgc: data.barangayPsgc,
+      barangayName: data.barangayName,
+      barangay: data.barangayName || data.streetBarangay,
+      isSameAsPermanent: effectiveSameAsPermanent,
+    });
+
+    if (hasAddressValidationErrors(errors)) {
+      setValidationErrors(errors);
+      return;
+    }
+
+    setValidationErrors({});
     setSaving(true);
     const { id, houseNo, streetBarangay, postalCode, ...rest } = data;
+    const isNcr = isNcrRegion(data.regionPsgc, data.regionName || rest.region);
     const dbFields = {
       ...rest,
       patientId,
-      type: (['primary', 'secondary'].includes(data.type) ? data.type : 'primary') as 'primary' | 'secondary',
+      type: normalizedType,
       houseStreet: houseNo.trim() || null,
       barangay: (data.barangayName || streetBarangay || '').trim() || null,
       cityMunicipality: (data.cityMunicipalityName || rest.cityMunicipality || '').trim(),
-      province: (data.provinceName || rest.province || '').trim() || null,
+      province: isNcr ? null : (data.provinceName || rest.province || '').trim() || null,
       region: (data.regionName || rest.region || '').trim() || null,
       zipCode: postalCode.trim() || null,
       country: rest.country?.trim() || 'Philippines',
       regionPsgc: data.regionPsgc ?? null,
-      provincePsgc: data.provincePsgc ?? null,
+      provincePsgc: isNcr ? null : (data.provincePsgc ?? null),
       cityMunicipalityPsgc: data.cityMunicipalityPsgc ?? null,
       barangayPsgc: data.barangayPsgc ?? null,
       regionName: data.regionName ?? null,
-      provinceName: data.provinceName ?? null,
+      provinceName: isNcr ? null : (data.provinceName ?? null),
       cityMunicipalityName: data.cityMunicipalityName ?? null,
       barangayName: data.barangayName ?? null,
-      isSameAsPermanent: Boolean(data.isSameAsPermanent),
+      isSameAsPermanent: effectiveSameAsPermanent,
       updatedAt: new Date(),
     };
     try {
@@ -216,8 +252,12 @@ export default function AddressesScreen() {
         {addresses.map((a) => (
           <ProfileListItemCard
             key={a.id}
-            title={[a.houseStreet, a.barangay].filter(Boolean).join(', ') || 'Address'}
-            subtitle={[a.cityMunicipality, a.province].filter(Boolean).join(', ')}
+            title={
+              a.isSameAsPermanent && !a.houseStreet && !a.barangay
+                ? 'Same as Permanent Address'
+                : [a.houseStreet, a.barangay].filter(Boolean).join(', ') || 'Address'
+            }
+            subtitle={[a.cityMunicipality, a.province || a.region].filter(Boolean).join(', ')}
             badge={a.type === 'primary' ? 'Primary' : 'Secondary'}
             onEdit={() => openEdit(a)}
             onDelete={() => onDelete(a.id, a.serverId)}
@@ -275,8 +315,31 @@ export default function AddressesScreen() {
               setValue('houseNo', next.houseStreet || next.streetAddress || '', { shouldDirty: true });
               setValue('postalCode', next.postalCode || next.zipCode || '', { shouldDirty: true });
               setValue('isSameAsPermanent', next.isSameAsPermanent, { shouldDirty: true });
+
+              if (hasAddressValidationErrors(validationErrors)) {
+                setValidationErrors(
+                  validateAddressForm({
+                    type: watch('type'),
+                    regionPsgc: next.regionPsgc,
+                    regionName: next.regionName,
+                    region: next.regionName || '',
+                    provincePsgc: next.provincePsgc,
+                    provinceName: next.provinceName,
+                    province: next.provinceName || '',
+                    cityMunicipalityPsgc: next.cityMunicipalityPsgc,
+                    cityMunicipalityName: next.cityMunicipalityName,
+                    cityMunicipality: next.cityMunicipalityName || '',
+                    barangayPsgc: next.barangayPsgc,
+                    barangayName: next.barangayName,
+                    barangay: next.barangayName || '',
+                    isSameAsPermanent: next.isSameAsPermanent,
+                  }),
+                );
+              }
             }}
             showSameAsPermanentToggle={watch('type') === 'secondary'}
+            required
+            errors={validationErrors}
           />
           <Controller control={control} name="country" render={({ field }) => (
             <ProfileFormField label="Country" value={field.value} onChangeText={field.onChange} />
@@ -286,8 +349,24 @@ export default function AddressesScreen() {
       </ThemedBottomSheetModal>
 
       <Controller control={control} name="type" render={({ field }) => (
-        <ProfileSelectModal visible={typeModal} title="Address Type" options={typeOptions}
-          selected={field.value} onSelect={field.onChange} onClose={() => setTypeModal(false)} />
+        <ProfileSelectModal
+          visible={typeModal}
+          title="Address Type"
+          options={typeOptions}
+          selected={field.value}
+          onSelect={(nextType) => {
+            field.onChange(nextType);
+            if (nextType !== 'secondary') {
+              setValue('isSameAsPermanent', false, { shouldDirty: true });
+            }
+            if (hasAddressValidationErrors(validationErrors)) {
+              if (nextType === 'secondary' && watch('isSameAsPermanent')) {
+                setValidationErrors({});
+              }
+            }
+          }}
+          onClose={() => setTypeModal(false)}
+        />
       )} />
     </BottomSheetModalProvider>
   );
