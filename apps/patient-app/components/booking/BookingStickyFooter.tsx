@@ -176,7 +176,7 @@ function BookingStickyFooterComponent({
                   },
                 ]}
               >
-                {bookingPaused ? 'Booking Paused' : 'Continue to Review &amp; Confirm'}
+                {bookingPaused ? 'Booking Paused' : 'Continue to Review & Confirm'}
               </Text>
               <AppIcon
                 name={bookingPaused ? 'alert' : 'arrowRight'}

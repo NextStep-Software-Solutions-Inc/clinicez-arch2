@@ -4,8 +4,10 @@ import { join } from 'node:path';
 import { iconNames } from '../components/ui/iconNames';
 import {
   applyDoctorAffiliation,
+  hasDateStripAvailability,
   isDirectoryBookingPaused,
   practitionerProfileToDoctorDto,
+  resolveAvailableDaysOfWeek,
   resolveDefaultAffiliation,
 } from '../services/search/directorySearchService';
 
@@ -55,7 +57,8 @@ describe('Patient Appointment Booking Flow Replacement Suite', () => {
     expect(footerSrc.includes('SELECTED CONSULTATION')).toBe(true);
     expect(footerSrc.includes('Proceed to Choose Slot')).toBe(true);
     expect(footerSrc.includes('SELECTED APPOINTMENT SLOT')).toBe(true);
-    expect(footerSrc.includes('Continue to Review &amp; Confirm')).toBe(true);
+    expect(footerSrc.includes('Continue to Review & Confirm')).toBe(true);
+    expect(footerSrc.includes('&amp;')).toBe(false);
     expect(footerSrc.includes('Estimated Copay')).toBe(true);
     expect(footerSrc.includes('Confirm & Book')).toBe(true);
   });
@@ -82,6 +85,8 @@ describe('Patient Appointment Booking Flow Replacement Suite', () => {
     expect(slotStepSrc.includes('Evening')).toBe(true);
     expect(slotStepSrc.includes('On-Time Clinic Arrival Guarantee')).toBe(true);
     expect(slotStepSrc.includes('s.available !== false')).toBe(true);
+    expect(slotStepSrc.includes('hasDateStripAvailability')).toBe(true);
+    expect(slotStepSrc.includes('{hasAvailability ? (')).toBe(true);
   });
 
   test('5. Step 3 (Review & Confirm): renders 15-minute live countdown timer, consultation mode, editable reason input, real cost breakdown, and guarantees', () => {
@@ -381,5 +386,90 @@ describe('Patient Appointment Booking Flow Replacement Suite', () => {
     expect(pausedDoc.id).toBe('prov-paused');
     expect(pausedDoc.clinicSupportsAppointments).toBe(false);
     expect(isDirectoryBookingPaused(pausedDoc, null)).toBe(true);
+  });
+
+  test('12. Date Strip Availability Dot: reflects weekly schedule availability, live selected-day slots, and booking pause state', () => {
+    const weekdaySet = resolveAvailableDaysOfWeek([
+      { dayOfWeek: 'Monday', startTime: '09:00', endTime: '17:00' },
+      { dayOfWeek: 2, startTime: '09:00', endTime: '17:00' },
+      { dayOfWeek: 'Wed', startTime: '09:00', endTime: '17:00' },
+      { dayOfWeek: '4', startTime: '09:00', endTime: '17:00' },
+      { dayOfWeek: 'Friday', startTime: '09:00', endTime: '17:00' },
+    ]);
+
+    expect(Array.from(weekdaySet).sort()).toEqual([1, 2, 3, 4, 5]);
+    expect(resolveAvailableDaysOfWeek([]).size).toBe(0);
+    expect(resolveAvailableDaysOfWeek(null).size).toBe(0);
+
+    // 2026-11-23 is Monday, 2026-11-28 is Saturday, 2026-11-29 is Sunday
+    const monday = new Date(2026, 10, 23);
+    const saturday = new Date(2026, 10, 28);
+    const sunday = new Date(2026, 10, 29);
+
+    // Unselected scheduled weekday shows dot; off-duty weekend days do not
+    expect(
+      hasDateStripAvailability({
+        day: monday,
+        isSelected: false,
+        isBookingPaused: false,
+        isLoadingSlots: false,
+        openSlotsCount: 0,
+        availableDaysOfWeek: weekdaySet,
+      }),
+    ).toBe(true);
+    expect(
+      hasDateStripAvailability({
+        day: saturday,
+        isSelected: false,
+        isBookingPaused: false,
+        isLoadingSlots: false,
+        openSlotsCount: 0,
+        availableDaysOfWeek: weekdaySet,
+      }),
+    ).toBe(false);
+    expect(
+      hasDateStripAvailability({
+        day: sunday,
+        isSelected: false,
+        isBookingPaused: false,
+        isLoadingSlots: false,
+        openSlotsCount: 0,
+        availableDaysOfWeek: weekdaySet,
+      }),
+    ).toBe(false);
+
+    // Selected weekday with 0 open slots (fully booked) hides dot once loaded
+    expect(
+      hasDateStripAvailability({
+        day: monday,
+        isSelected: true,
+        isBookingPaused: false,
+        isLoadingSlots: false,
+        openSlotsCount: 0,
+        availableDaysOfWeek: weekdaySet,
+      }),
+    ).toBe(false);
+    expect(
+      hasDateStripAvailability({
+        day: monday,
+        isSelected: true,
+        isBookingPaused: false,
+        isLoadingSlots: false,
+        openSlotsCount: 4,
+        availableDaysOfWeek: weekdaySet,
+      }),
+    ).toBe(true);
+
+    // Booking paused hides dots on all days
+    expect(
+      hasDateStripAvailability({
+        day: monday,
+        isSelected: true,
+        isBookingPaused: true,
+        isLoadingSlots: false,
+        openSlotsCount: 4,
+        availableDaysOfWeek: weekdaySet,
+      }),
+    ).toBe(false);
   });
 });

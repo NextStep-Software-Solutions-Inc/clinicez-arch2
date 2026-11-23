@@ -20,26 +20,70 @@ import {
   sortDirectoryDoctors,
 } from './networkDirectory';
 
-const SHORT_DAY_NAMES: Record<string, string> = {
-  sunday: 'Sun',
-  monday: 'Mon',
-  tuesday: 'Tue',
-  wednesday: 'Wed',
-  thursday: 'Thu',
-  friday: 'Fri',
-  saturday: 'Sat',
-  '0': 'Sun',
-  '1': 'Mon',
-  '2': 'Tue',
-  '3': 'Wed',
-  '4': 'Thu',
-  '5': 'Fri',
-  '6': 'Sat',
+const DAY_OF_WEEK_INDEX: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+  '0': 0,
+  '1': 1,
+  '2': 2,
+  '3': 3,
+  '4': 4,
+  '5': 5,
+  '6': 6,
 };
 
-function formatDayShort(dayOfWeek: string | number): string {
+const SHORT_DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+export function parseDayOfWeekIndex(dayOfWeek: string | number): number | null {
   const key = String(dayOfWeek).trim().toLowerCase();
-  return SHORT_DAY_NAMES[key] ?? String(dayOfWeek).slice(0, 3);
+  const idx = DAY_OF_WEEK_INDEX[key];
+  return typeof idx === 'number' ? idx : null;
+}
+
+function formatDayShort(dayOfWeek: string | number): string {
+  const idx = parseDayOfWeekIndex(dayOfWeek);
+  return idx !== null ? SHORT_DAY_LABELS[idx] : String(dayOfWeek).slice(0, 3);
+}
+
+export function resolveAvailableDaysOfWeek(
+  availabilities: DirectoryAvailabilityWindowDto[] | null | undefined,
+): Set<number> {
+  const days = new Set<number>();
+  if (!availabilities || availabilities.length === 0) return days;
+  for (const win of availabilities) {
+    const idx = parseDayOfWeekIndex(win.dayOfWeek);
+    if (idx !== null) {
+      days.add(idx);
+    }
+  }
+  return days;
+}
+
+export function hasDateStripAvailability(params: {
+  day: Date;
+  isSelected: boolean;
+  isBookingPaused: boolean;
+  isLoadingSlots: boolean;
+  openSlotsCount: number;
+  availableDaysOfWeek: ReadonlySet<number>;
+}): boolean {
+  if (params.isBookingPaused) return false;
+  if (params.isSelected && !params.isLoadingSlots) {
+    return params.openSlotsCount > 0;
+  }
+  return params.availableDaysOfWeek.has(params.day.getDay());
 }
 
 export function formatAvailabilityWindow(win: DirectoryAvailabilityWindowDto): string {
