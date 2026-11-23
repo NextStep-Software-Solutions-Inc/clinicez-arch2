@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -45,13 +45,16 @@ export default function DentalVisionScreen() {
   });
 
   const [hasRecord, setHasRecord] = useState(false);
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
 
   const load = useCallback(async () => {
+    if (!patientId || isDirtyRef.current) return;
     try {
       const row = await db.query.patientDentalVision.findFirst({
         where: eq(patientDentalVision.patientId, patientId),
       });
-      if (row) {
+      if (row && !isDirtyRef.current) {
         setHasRecord(true);
         reset({
           dentistName: row.dentistName ?? '',
@@ -70,7 +73,7 @@ export default function DentalVisionScreen() {
     load();
   }, [load]);
 
-  useProfileSync(load);
+  useProfileSync(load, { isDirtyRef });
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
@@ -85,11 +88,18 @@ export default function DentalVisionScreen() {
         updatedAt: new Date(),
       };
 
-      if (hasRecord) {
+      const existingRows = await db
+        .select({ id: patientDentalVision.id })
+        .from(patientDentalVision)
+        .where(eq(patientDentalVision.patientId, patientId))
+        .limit(1);
+
+      if (hasRecord || existingRows.length > 0) {
         await db
           .update(patientDentalVision)
           .set(payload)
           .where(eq(patientDentalVision.patientId, patientId));
+        setHasRecord(true);
       } else {
         await db.insert(patientDentalVision).values({
           id: randomUUID(),

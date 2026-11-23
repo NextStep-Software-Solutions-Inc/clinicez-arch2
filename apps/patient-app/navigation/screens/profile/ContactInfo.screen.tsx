@@ -62,7 +62,7 @@ export default function ContactInfoScreen() {
     }
   }, [patientId, reset, accountEmail]);
 
-  useProfileSync(loadLocal);
+  useProfileSync(loadLocal, { isDirtyRef });
 
   useEffect(() => {
     let isMounted = true;
@@ -71,7 +71,7 @@ export default function ContactInfoScreen() {
       // 1. Read from local SQLite
       try {
         const row = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
-        if (row && isMounted) {
+        if (row && isMounted && !isDirtyRef.current) {
           reset({
             mobile: row.mobile ?? '',
             altPhone: row.altPhone ?? '',

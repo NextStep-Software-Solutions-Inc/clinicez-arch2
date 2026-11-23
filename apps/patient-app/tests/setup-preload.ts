@@ -50,6 +50,7 @@ mock.module('react-native', () => ({
   TouchableHighlight: 'TouchableHighlight',
   Pressable: 'Pressable',
   ScrollView: 'ScrollView',
+  KeyboardAvoidingView: 'KeyboardAvoidingView',
   TextInput: 'TextInput',
   ActivityIndicator: 'ActivityIndicator',
   Modal: 'Modal',

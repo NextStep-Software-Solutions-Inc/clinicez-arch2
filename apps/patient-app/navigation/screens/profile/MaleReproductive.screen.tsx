@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -35,13 +35,16 @@ export default function MaleReproductiveScreen() {
   const hasVasectomy = watch('hasVasectomy');
 
   const [hasRecord, setHasRecord] = useState(false);
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
 
   const load = useCallback(async () => {
+    if (!patientId || isDirtyRef.current) return;
     try {
       const row = await db.query.patientMaleReproductive.findFirst({
         where: eq(patientMaleReproductive.patientId, patientId),
       });
-      if (row) {
+      if (row && !isDirtyRef.current) {
         setHasRecord(true);
         reset({
           hasVasectomy: row.hasVasectomy ?? false,
@@ -58,7 +61,7 @@ export default function MaleReproductiveScreen() {
     load();
   }, [load]);
 
-  useProfileSync(load);
+  useProfileSync(load, { isDirtyRef });
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
@@ -70,11 +73,18 @@ export default function MaleReproductiveScreen() {
         conditions: data.conditions.trim() || null,
         updatedAt: new Date(),
       };
-      if (hasRecord) {
+      const existingRows = await db
+        .select({ id: patientMaleReproductive.id })
+        .from(patientMaleReproductive)
+        .where(eq(patientMaleReproductive.patientId, patientId))
+        .limit(1);
+
+      if (hasRecord || existingRows.length > 0) {
         await db
           .update(patientMaleReproductive)
           .set(payload)
           .where(eq(patientMaleReproductive.patientId, patientId));
+        setHasRecord(true);
       } else {
         await db.insert(patientMaleReproductive).values({
           id: randomUUID(),

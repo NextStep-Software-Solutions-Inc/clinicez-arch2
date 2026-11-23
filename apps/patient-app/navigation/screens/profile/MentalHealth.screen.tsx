@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -46,13 +46,16 @@ export default function MentalHealthScreen() {
   });
 
   const [hasRecord, setHasRecord] = useState(false);
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
 
   const load = useCallback(async () => {
+    if (!patientId || isDirtyRef.current) return;
     try {
       const row = await db.query.patientMentalHealthProfile.findFirst({
         where: eq(patientMentalHealthProfile.patientId, patientId),
       });
-      if (row) {
+      if (row && !isDirtyRef.current) {
         setHasRecord(true);
         reset({
           hasPriorDiagnosis: row.hasPriorDiagnosis ?? false,
@@ -71,7 +74,7 @@ export default function MentalHealthScreen() {
     load();
   }, [load]);
 
-  useProfileSync(load);
+  useProfileSync(load, { isDirtyRef });
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
@@ -85,11 +88,18 @@ export default function MentalHealthScreen() {
         psychotherapyStatus: data.psychotherapyStatus || null,
         updatedAt: new Date(),
       };
-      if (hasRecord) {
+      const existingRows = await db
+        .select({ id: patientMentalHealthProfile.id })
+        .from(patientMentalHealthProfile)
+        .where(eq(patientMentalHealthProfile.patientId, patientId))
+        .limit(1);
+
+      if (hasRecord || existingRows.length > 0) {
         await db
           .update(patientMentalHealthProfile)
           .set(payload)
           .where(eq(patientMentalHealthProfile.patientId, patientId));
+        setHasRecord(true);
       } else {
         await db.insert(patientMentalHealthProfile).values({
           id: randomUUID(),

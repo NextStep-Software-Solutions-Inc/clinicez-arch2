@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet, View, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { db } from '@db/index';
@@ -89,14 +89,18 @@ export default function NcdQuestionnaireScreen() {
     qid22ProteinDate: '' as string,
   });
 
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
+
   // Load existing records from local SQLite
   const load = useCallback(async () => {
+    if (!patientId || isDirtyRef.current) return;
     try {
       const rows = await db
         .select()
         .from(patientNcdQuestionnaire)
         .where(eq(patientNcdQuestionnaire.patientId, patientId));
-      if (rows && rows.length > 0) {
+      if (rows && rows.length > 0 && !isDirtyRef.current) {
         const row = rows[0];
         setRecordId(row.id);
         setForm({
@@ -144,7 +148,7 @@ export default function NcdQuestionnaireScreen() {
     load();
   }, [load]);
 
-  useProfileSync(load);
+  useProfileSync(load, { isDirtyRef });
 
   const updateField = (key: keyof typeof form, val: any) => {
     setForm((prev) => ({ ...prev, [key]: val }));
@@ -208,11 +212,20 @@ export default function NcdQuestionnaireScreen() {
       };
 
       // 1. Save into local SQLite
-      if (recordId) {
+      const existingRows = await db
+        .select({ id: patientNcdQuestionnaire.id })
+        .from(patientNcdQuestionnaire)
+        .where(eq(patientNcdQuestionnaire.patientId, patientId))
+        .limit(1);
+
+      if (recordId || existingRows.length > 0) {
         await db
           .update(patientNcdQuestionnaire)
           .set(payload)
           .where(eq(patientNcdQuestionnaire.patientId, patientId));
+        if (!recordId && existingRows[0]?.id) {
+          setRecordId(existingRows[0].id);
+        }
       } else {
         await db
           .insert(patientNcdQuestionnaire)

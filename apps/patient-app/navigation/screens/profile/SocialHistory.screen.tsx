@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -79,13 +79,16 @@ export default function SocialHistoryScreen() {
   const alcoholUseLevel = watch('alcoholUseLevel');
 
   const [hasRecord, setHasRecord] = useState(false);
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
 
   const load = useCallback(async () => {
+    if (!patientId || isDirtyRef.current) return;
     try {
       const row = await db.query.patientSocialHistory.findFirst({
         where: eq(patientSocialHistory.patientId, patientId),
       });
-      if (row) {
+      if (row && !isDirtyRef.current) {
         setHasRecord(true);
         reset({
           tobaccoStatus: row.tobaccoStatus ?? '',
@@ -121,7 +124,7 @@ export default function SocialHistoryScreen() {
     load();
   }, [load]);
 
-  useProfileSync(load);
+  useProfileSync(load, { isDirtyRef });
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
@@ -138,11 +141,18 @@ export default function SocialHistoryScreen() {
         sleepQuality: data.sleepQuality || null,
         updatedAt: new Date(),
       };
-      if (hasRecord) {
+      const existingRows = await db
+        .select({ id: patientSocialHistory.id })
+        .from(patientSocialHistory)
+        .where(eq(patientSocialHistory.patientId, patientId))
+        .limit(1);
+
+      if (hasRecord || existingRows.length > 0) {
         await db
           .update(patientSocialHistory)
           .set(payload)
           .where(eq(patientSocialHistory.patientId, patientId));
+        setHasRecord(true);
       } else {
         await db.insert(patientSocialHistory).values({
           id: randomUUID(),
