@@ -3,12 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Schedules.DTOs;
+using ClinicEz.Clinic.Application.Features.Schedules.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
-using ClinicEz.Shared.Common;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -211,38 +210,16 @@ public sealed class UpsertDoctorScheduleTemplateCommandHandler
 
         await _unitOfWork.SaveChangesAsync(ct);
 
-        if (!request.SkipPendingVerificationSync && _directorySyncService != null)
-        {
-            clinician ??= await _staffRepo.Query()
-                .FirstOrDefaultAsync(s => s.ClinicId == _clinicContext.ClinicId && s.Id == request.DoctorId && !s.IsDeleted, ct);
-
-            if (clinician is { IsActive: true, IsDirectoryOptIn: true }
-                && ClinicianDirectoryValidationHelper.IsClinicianRole(clinician.Role))
-            {
-                if (clinician.PublicVerificationStatus == PractitionerVerificationLevel.PendingVerification)
-                {
-                    await _directorySyncService.SyncPendingPractitionerVerificationAsync(
-                        clinician.Id,
-                        throwOnConflict: false,
-                        _clinicContext.StaffId?.ToString(),
-                        _clinicContext.StaffName,
-                        ct);
-                }
-                else if (_settingsRepo != null)
-                {
-                    var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct);
-                    if (settings?.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
-                    {
-                        await _directorySyncService.SyncPendingFacilityVerificationAsync(
-                            settings,
-                            throwOnConflict: false,
-                            _clinicContext.StaffId?.ToString(),
-                            _clinicContext.StaffName,
-                            ct);
-                    }
-                }
-            }
-        }
+        await DoctorScheduleDirectorySyncHelper.SyncAfterScheduleMutationAsync(
+            request.DoctorId,
+            request.SkipPendingVerificationSync,
+            clinician,
+            _staffRepo,
+            _settingsRepo,
+            _directorySyncService,
+            _unitOfWork,
+            _clinicContext,
+            ct);
 
         var activeBreaks = template.BreakTimes
             .Where(b => !b.IsDeleted)
