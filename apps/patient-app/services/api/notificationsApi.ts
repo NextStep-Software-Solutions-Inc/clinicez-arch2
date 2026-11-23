@@ -7,29 +7,26 @@ import { notificationCategorySchema, notificationTypeSchema, type NotificationWi
 export const remoteNotificationSchema = z.object({
     id: z.string(),
     type: notificationTypeSchema,
-    category: notificationCategorySchema,
+    category: notificationCategorySchema.nullish(),
     title: z.string(),
     body: z.string(),
     isRead: z.boolean(),
-    readAt: z.string().nullable(),
-    expiresAt: z.string().nullable(),
-    sourceId: z.string().nullable(),
+    readAt: z.string().nullish(),
+    expiresAt: z.string().nullish(),
+    sourceId: z.string().nullish(),
     /** JSON-encoded extra data */
-    payload: z.string().nullable(),
+    payload: z.string().nullish(),
     createdAt: z.string(),
 });
 export type RemoteNotification = z.infer<typeof remoteNotificationSchema>;
 
 /**
- * Notification as delivered by `GET /patients/{id}/sync/changes`: same as the notifications
- * endpoint but `category`, `expiresAt` and `sourceId` may be absent. Document notifications carry
- * `payload` JSON `{ kind, documentId }`.
+ * Notification as delivered by `GET /patients/{id}/sync/changes`: same contract as the
+ * notifications endpoint; `category`, `expiresAt`, `sourceId`, `readAt` and `payload` may
+ * be null or omitted under `WhenWritingNull`. Document notifications carry `payload` JSON
+ * `{ kind, documentId }`.
  */
-export const syncNotificationSchema = remoteNotificationSchema.extend({
-    category: notificationCategorySchema.optional(),
-    expiresAt: z.string().nullable().optional(),
-    sourceId: z.string().nullable().optional(),
-});
+export const syncNotificationSchema = remoteNotificationSchema;
 export type SyncNotificationDto = z.infer<typeof syncNotificationSchema>;
 
 export const notificationListResultSchema = z.object({

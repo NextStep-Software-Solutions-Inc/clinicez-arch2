@@ -27,7 +27,7 @@ export function canRevokeGrant(status: AccessGrantStatus): boolean {
   return status === 'Active';
 }
 
-export function revokeConfirmationMessage(facilityName: string | null): string {
+export function revokeConfirmationMessage(facilityName: string | null | undefined): string {
   const who = facilityName ?? 'This facility';
   return `${who} will no longer be able to fetch your records. Information it has already imported into its own chart stays there and cannot be taken back.`;
 }

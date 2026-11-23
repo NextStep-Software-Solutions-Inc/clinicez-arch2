@@ -236,7 +236,7 @@ export async function upsertRemoteNotifications(
         category: n.category ? localNotificationCategory(n.category) : 'system',
         title: n.title,
         body: n.body,
-        data: n.payload,
+        data: n.payload ?? null,
         isRead: n.isRead,
         createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
         readAt: n.readAt ? new Date(n.readAt) : null,

@@ -225,8 +225,8 @@ export default function ClinicDetailsScreen() {
         name={clinic.name}
         logoUrl={clinic.logoUrl}
         coverImageUrl={clinic.coverImageUrl}
-        badgeLabel={clinic.isJoined ? 'Joined' : clinic.membershipStatus === 'pending' ? 'Pending Approval' : clinic.isPublic ? 'Public' : 'Private'}
-        badgeColor={clinic.isJoined ? colors.success : clinic.membershipStatus === 'pending' ? colors.warning : clinic.isPublic ? colors.primary : colors.textMuted}
+        badgeLabel={clinic.isJoined ? 'Joined' : clinic.membershipStatus === 'pending' ? 'Pending Approval' : clinic.membershipStatus === 'rejected' ? 'Request Declined' : clinic.isPublic ? 'Public' : 'Private'}
+        badgeColor={clinic.isJoined ? colors.success : clinic.membershipStatus === 'pending' ? colors.warning : clinic.membershipStatus === 'rejected' ? colors.emergency : clinic.isPublic ? colors.primary : colors.textMuted}
         style={styles.coverHeader}
       />
       <View style={styles.titleBlock}>
@@ -314,6 +314,8 @@ export default function ClinicDetailsScreen() {
                 ? 'You have joined this clinic.'
                 : clinic.membershipStatus === 'pending'
                 ? 'Your join request is pending approval.'
+                : clinic.membershipStatus === 'rejected'
+                ? 'Your previous join request was declined. You can submit a new request.'
                 : clinic.isPublic
                 ? 'You can join directly from here.'
                 : 'Join a partnered organization to unlock this clinic.'}

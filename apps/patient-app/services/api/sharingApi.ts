@@ -35,13 +35,13 @@ export const accessGrantSchema = z.object({
     id: z.string(),
     tenantId: z.string(),
     facilityId: z.string(),
-    facilityName: z.string().nullable(),
+    facilityName: z.string().nullish(),
     scopes: z.array(sharingScopeSchema),
     purpose: z.string(),
     source: grantSourceSchema,
     status: grantStatusSchema,
     expiresAt: z.string(),
-    revokedAt: z.string().nullable(),
+    revokedAt: z.string().nullish(),
     createdAt: z.string(),
 });
 export type AccessGrantDto = z.infer<typeof accessGrantSchema>;
@@ -51,10 +51,10 @@ export const accessGrantListSchema = z.array(accessGrantSchema);
 export const accessLogSchema = z.object({
     id: z.string(),
     grantId: z.string(),
-    facilityName: z.string().nullable(),
+    facilityName: z.string().nullish(),
     actor: z.string(),
     action: z.string(),
-    detail: z.string().nullable(),
+    detail: z.string().nullish(),
     at: z.string(),
 });
 export type AccessLogDto = z.infer<typeof accessLogSchema>;

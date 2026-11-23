@@ -105,7 +105,7 @@ export interface JoinClinicInput {
 
 export interface OrganizationView extends OrganizationEntity {
     isJoined: boolean;
-    membershipStatus?: 'pending' | 'active' | null;
+    membershipStatus?: 'pending' | 'active' | 'rejected' | null;
 }
 
 export interface ClinicView extends ClinicEntity {
@@ -113,7 +113,7 @@ export interface ClinicView extends ClinicEntity {
     isVisible: boolean;
     isUnlocked?: boolean;
     unlockedByOrganizationIds: string[];
-    membershipStatus?: 'pending' | 'active' | null;
+    membershipStatus?: 'pending' | 'active' | 'rejected' | null;
 }
 
 export interface OrganizationDetail extends OrganizationView {
@@ -131,7 +131,7 @@ export interface ClinicService {
 
 export interface ClinicDetail extends ClinicView {
     linkedOrganizations: OrganizationEntity[];
-    membershipStatus?: 'pending' | 'active';
+    membershipStatus?: 'pending' | 'active' | 'rejected';
     healthcareProviders: ClinicProvider[];
     services: ClinicService[];
 }
