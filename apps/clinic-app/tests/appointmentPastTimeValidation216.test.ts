@@ -702,10 +702,30 @@ describe('Issue 216 — Reject Past Same-Day Appointment Times (Asia/Manila + 5m
     }
   });
 
-  test('7. MonthView + toDateString resolves 2026-11-01 (not 2026-10-31) when clicking Day 1 under TZ=America/New_York', () => {
+  function withProcessTimezone<T>(timeZone: string, fn: () => T): T {
+    const initialTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     const prevTz = process.env.TZ;
-    process.env.TZ = 'America/New_York';
+    process.env.TZ = timeZone;
+    const restore = () => {
+      // Assign the prior timezone before deleting TZ so runtimes whose tzset() ignores delete reset Date offsets.
+      process.env.TZ = prevTz ?? initialTz;
+      if (prevTz === undefined) delete process.env.TZ;
+    };
     try {
+      const result = fn();
+      if (result && typeof (result as any).finally === 'function') {
+        return (result as any).finally(restore);
+      }
+      restore();
+      return result;
+    } catch (err) {
+      restore();
+      throw err;
+    }
+  }
+
+  test('7. MonthView + toDateString resolves 2026-11-01 (not 2026-10-31) when clicking Day 1 under TZ=America/New_York', () =>
+    withProcessTimezone('America/New_York', () => {
       const selectedDates: string[] = [];
       const harness = createLocalHookHarness((props: any) => MonthView(props), {
         currentDate: new Date(2026, 10, 1, 12, 0, 0),
@@ -736,21 +756,15 @@ describe('Issue 216 — Reject Past Same-Day Appointment Times (Asia/Manila + 5m
 
       expect(selectedDates).toEqual(['2026-11-01', '2026-11-15']);
       harness.unmount();
-    } finally {
-      if (prevTz === undefined) delete process.env.TZ;
-      else process.env.TZ = prevTz;
-    }
-  });
+    }));
 
-  test('8. Runtime AppointmentRescheduleModal, ScheduleVisitModal & defaultSlot at 23:30 PHT enforce Issue 216 under TZ=America/New_York', async () => {
-    const prevTz = process.env.TZ;
-    process.env.TZ = 'America/New_York';
+  test('8. Runtime AppointmentRescheduleModal, ScheduleVisitModal & defaultSlot at 23:30 PHT enforce Issue 216 under TZ=America/New_York', async () =>
+    withProcessTimezone('America/New_York', async () => {
+      const origReschedule = clinicService.rescheduleAppointment;
+      const origGetSlots = clinicService.getDoctorAvailableSlots;
+      const origCreateAppt = clinicService.createAppointment;
 
-    const origReschedule = clinicService.rescheduleAppointment;
-    const origGetSlots = clinicService.getDoctorAvailableSlots;
-    const origCreateAppt = clinicService.createAppointment;
-
-    try {
+      try {
       // A) Appointments.screen.defaultSlot at 23:30 PHT (2026-11-20T15:30:00Z -> 2026-11-21 01:00 PHT)
       expect(defaultSlot(new Date('2026-11-20T15:30:00Z'))).toEqual({
         date: '2026-11-21',
@@ -981,12 +995,10 @@ describe('Issue 216 — Reject Past Same-Day Appointment Times (Asia/Manila + 5m
         'Cannot schedule an appointment for a time that has already passed.',
       );
       scheduleHarness.unmount();
-    } finally {
-      if (prevTz === undefined) delete process.env.TZ;
-      else process.env.TZ = prevTz;
-      clinicService.rescheduleAppointment = origReschedule;
-      clinicService.getDoctorAvailableSlots = origGetSlots;
-      clinicService.createAppointment = origCreateAppt;
-    }
-  });
+      } finally {
+        clinicService.rescheduleAppointment = origReschedule;
+        clinicService.getDoctorAvailableSlots = origGetSlots;
+        clinicService.createAppointment = origCreateAppt;
+      }
+    }));
 });
