@@ -88,7 +88,12 @@ export default function ObstetricProfileScreen() {
   const pregSheetRef = useRef<BottomSheetModalType>(null);
   const contraSheetRef = useRef<BottomSheetModalType>(null);
 
-  const obsForm = useForm<ObsForm>({
+  const {
+    control: obsControl,
+    handleSubmit: handleObsSubmit,
+    reset: resetObsForm,
+    formState: { isDirty: isObsDirty },
+  } = useForm<ObsForm>({
     defaultValues: { menarche: '', lastMenstrualPeriod: '', cycleLength: '', cycleDuration: '', dysmenorrhea: '', menopauseAge: '', gravida: '', para: '', abortion: '', living: '' },
   });
 
@@ -101,6 +106,7 @@ export default function ObstetricProfileScreen() {
   });
 
   const loadPregnancies = useCallback(async () => {
+    if (!patientId) return;
     try {
       const rows = await db.select().from(patientPregnancies).where(eq(patientPregnancies.patientId, patientId));
       setPregnancies(rows.filter((r) => !r.deletedAt));
@@ -110,6 +116,7 @@ export default function ObstetricProfileScreen() {
   }, [patientId]);
 
   const loadContra = useCallback(async () => {
+    if (!patientId) return;
     try {
       const rows = await db.select().from(patientContraceptiveHistory).where(eq(patientContraceptiveHistory.patientId, patientId));
       setContraItems(rows.filter((r) => !r.deletedAt));
@@ -119,15 +126,18 @@ export default function ObstetricProfileScreen() {
   }, [patientId]);
 
   const [hasObsRecord, setHasObsRecord] = useState(false);
+  const isObsDirtyRef = useRef(isObsDirty);
+  isObsDirtyRef.current = isObsDirty;
 
   const loadObsProfile = useCallback(async () => {
+    if (!patientId || isObsDirtyRef.current) return;
     try {
       const row = await db.query.patientObstetricProfile.findFirst({
         where: eq(patientObstetricProfile.patientId, patientId),
       });
-      if (row) {
+      if (row && !isObsDirtyRef.current) {
         setHasObsRecord(true);
-        obsForm.reset({
+        resetObsForm({
           menarche: row.ageAtMenarche?.toString() ?? '',
           lastMenstrualPeriod: row.lmp ?? '',
           cycleLength: row.cycleLength?.toString() ?? '',
@@ -143,7 +153,7 @@ export default function ObstetricProfileScreen() {
     } catch (err) {
       console.warn('[ObstetricProfileScreen] Failed to load obs profile:', err);
     }
-  }, [patientId, obsForm]);
+  }, [patientId, resetObsForm]);
 
   const load = useCallback(async () => {
     await Promise.all([loadObsProfile(), loadPregnancies(), loadContra()]);
@@ -155,7 +165,7 @@ export default function ObstetricProfileScreen() {
 
   useProfileSync(load);
 
-  const onSaveObs = obsForm.handleSubmit(async (data) => {
+  const onSaveObs = handleObsSubmit(async (data) => {
     setSaving(true);
     try {
       const payload = {
@@ -172,11 +182,18 @@ export default function ObstetricProfileScreen() {
         livingChildren: data.living ? parseInt(data.living, 10) : null,
         updatedAt: new Date(),
       };
-      if (hasObsRecord) {
+      const existingRows = await db
+        .select({ id: patientObstetricProfile.id })
+        .from(patientObstetricProfile)
+        .where(eq(patientObstetricProfile.patientId, patientId))
+        .limit(1);
+
+      if (hasObsRecord || existingRows.length > 0) {
         await db
           .update(patientObstetricProfile)
           .set(payload)
           .where(eq(patientObstetricProfile.patientId, patientId));
+        setHasObsRecord(true);
       } else {
         await db.insert(patientObstetricProfile).values({
           id: randomUUID(),
@@ -187,7 +204,7 @@ export default function ObstetricProfileScreen() {
       }
 
       const syncResult = await flushAndSyncProfile(patientId, getToken);
-      obsForm.reset(data);
+      resetObsForm(data);
 
       if (syncResult.isOffline) {
         dialog.alert('Saved Offline', 'Obstetric profile saved locally and will sync when you are back online.');
@@ -350,40 +367,40 @@ export default function ObstetricProfileScreen() {
             contentContainerStyle={[styles.content, { padding: spacing.md }]}
           >
             <ProfileSectionHeader title="Menstrual History" />
-            <Controller control={obsForm.control} name="menarche" render={({ field }) => (
+            <Controller control={obsControl} name="menarche" render={({ field }) => (
               <ProfileFormField label="Age at Menarche" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="e.g. 12" />
             )} />
-            <Controller control={obsForm.control} name="lastMenstrualPeriod" render={({ field }) => (
+            <Controller control={obsControl} name="lastMenstrualPeriod" render={({ field }) => (
               <ProfileDatePicker label="Last Menstrual Period" value={field.value} onChange={field.onChange} />
             )} />
-            <Controller control={obsForm.control} name="cycleLength" render={({ field }) => (
+            <Controller control={obsControl} name="cycleLength" render={({ field }) => (
               <ProfileFormField label="Cycle Length (days)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="e.g. 28" />
             )} />
-            <Controller control={obsForm.control} name="cycleDuration" render={({ field }) => (
+            <Controller control={obsControl} name="cycleDuration" render={({ field }) => (
               <ProfileFormField label="Menstrual Duration (days)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="e.g. 5" />
             )} />
-            <Controller control={obsForm.control} name="dysmenorrhea" render={({ field }) => (
+            <Controller control={obsControl} name="dysmenorrhea" render={({ field }) => (
               <ProfileFormField label="Dysmenorrhea" value={field.value} onChangeText={field.onChange} placeholder="e.g. None, Mild, Severe" />
             )} />
-            <Controller control={obsForm.control} name="menopauseAge" render={({ field }) => (
+            <Controller control={obsControl} name="menopauseAge" render={({ field }) => (
               <ProfileFormField label="Age at Menopause (if applicable)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="Optional" />
             )} />
 
             <ProfileSectionHeader title="Obstetric Summary (GPAL)" />
-            <Controller control={obsForm.control} name="gravida" render={({ field }) => (
+            <Controller control={obsControl} name="gravida" render={({ field }) => (
               <ProfileFormField label="Gravida (G) — Total Pregnancies" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
             )} />
-            <Controller control={obsForm.control} name="para" render={({ field }) => (
+            <Controller control={obsControl} name="para" render={({ field }) => (
               <ProfileFormField label="Para (P) — Live Births" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
             )} />
-            <Controller control={obsForm.control} name="abortion" render={({ field }) => (
+            <Controller control={obsControl} name="abortion" render={({ field }) => (
               <ProfileFormField label="Abortion (A) — Losses" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
             )} />
-            <Controller control={obsForm.control} name="living" render={({ field }) => (
+            <Controller control={obsControl} name="living" render={({ field }) => (
               <ProfileFormField label="Living Children (L)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
             )} />
 
-            <ProfileSaveBar onSave={onSaveObs} saving={saving} isDirty={obsForm.formState.isDirty} label="Save Obstetric Profile" />
+            <ProfileSaveBar onSave={onSaveObs} saving={saving} isDirty={isObsDirty} label="Save Obstetric Profile" />
 
             <ProfileSectionHeader title="Pregnancy History" />
             {pregnancies.map((p) => {
