@@ -18,6 +18,7 @@ import { Route as signUpRoute } from './routes/sign-up';
 import { Route as syncAuthRoute } from './routes/sync-auth';
 import { Route as invitationsTokenRoute } from './routes/invitations/$token';
 import { Route as resetPasswordTokenRoute } from './routes/reset-password/$token';
+import { NotFoundScreen } from './components/NotFoundScreen';
 
 export const routeTree = rootRoute.addChildren([
   authRoute.addChildren([
@@ -41,7 +42,10 @@ export const routeTree = rootRoute.addChildren([
   resetPasswordTokenRoute,
 ]);
 
-export const router = createRouter({ routeTree });
+export const router = createRouter({
+  routeTree,
+  defaultNotFoundComponent: NotFoundScreen,
+});
 
 declare module '@tanstack/react-router' {
   interface Register {

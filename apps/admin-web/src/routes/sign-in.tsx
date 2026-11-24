@@ -1,5 +1,5 @@
 import React from 'react';
-import { createRoute } from '@tanstack/react-router';
+import { createRoute, useLocation } from '@tanstack/react-router';
 import { Route as rootRoute } from './__root';
 import { SignIn } from '@clerk/clerk-react';
 import { IconAlertCircle } from '@tabler/icons-react';
@@ -7,8 +7,9 @@ import { ClinicEzLogo } from '@/components/ClinicEzLogo';
 import { getIdleTimeoutMinutes } from '@/lib/idleGuard';
 
 function SignInPage() {
+  const location = useLocation();
   const searchParams = new URLSearchParams(
-    typeof window !== 'undefined' ? window.location.search : ''
+    location.searchStr ?? (typeof window !== 'undefined' ? window.location.search : '')
   );
   const reason = searchParams.get('reason');
   const idleMinutes = getIdleTimeoutMinutes();
@@ -53,8 +54,23 @@ function SignInPage() {
   );
 }
 
-export const Route = createRoute({
+const signInBaseRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'sign-in',
   component: SignInPage,
 });
+
+const signInIndexRoute = createRoute({
+  getParentRoute: () => signInBaseRoute,
+  path: '/',
+});
+
+const signInSplatRoute = createRoute({
+  getParentRoute: () => signInBaseRoute,
+  path: '$',
+});
+
+export const Route = signInBaseRoute.addChildren([
+  signInIndexRoute,
+  signInSplatRoute,
+]);

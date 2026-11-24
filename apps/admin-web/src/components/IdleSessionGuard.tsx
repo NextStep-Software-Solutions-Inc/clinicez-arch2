@@ -24,7 +24,7 @@ export function IdleSessionGuard({ children }: IdleSessionGuardProps) {
   const [isWarningOpen, setIsWarningOpen] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(WARNING_COUNTDOWN_SECONDS);
 
-  const lastRecordedRef = useRef<number>(Date.now());
+  const lastRecordedRef = useRef<number>(0);
   const channelRef = useRef<SafeIdleChannel | null>(null);
   const isWarningOpenRef = useRef<boolean>(false);
   const isSigningOutRef = useRef<boolean>(false);
@@ -106,6 +106,7 @@ export function IdleSessionGuard({ children }: IdleSessionGuardProps) {
         staleChannel.close();
       }
       isSigningOutRef.current = false;
+      lastRecordedRef.current = 0;
       setWarningOpen(false);
       return;
     }

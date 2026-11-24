@@ -114,4 +114,13 @@ describe('Edge Security Headers & Robots Specification', () => {
     expect(content).toContain('User-agent: *');
     expect(content).toContain('Disallow: /');
   });
+
+  it('vercel.json configures SPA catch-all rewrite to /index.html for Clerk sub-routes', () => {
+    const vercelConfig = JSON.parse(fs.readFileSync(vercelJsonPath, 'utf8'));
+    expect(Array.isArray(vercelConfig.rewrites)).toBe(true);
+    expect(vercelConfig.rewrites).toContainEqual({
+      source: '/(.*)',
+      destination: '/index.html',
+    });
+  });
 });
