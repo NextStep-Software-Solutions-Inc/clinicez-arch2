@@ -4,7 +4,7 @@ import { localHealthRecords } from '@db/schema/localHealthRecords';
 import { inboxLabResults } from '@db/schema/inboxLabResults';
 import { filesMetadata } from '@db/schema/filesMetadata';
 import { getPatientRecordStreamUrl } from '../api/filesApi';
-import { blobStorage } from '../storage';
+import { blobStorage, downloadBlobWithAuthRetry } from '../storage';
 import { checkIsOnline, type GetToken } from './uploadQueueService';
 
 export const DOCUMENT_CACHED_EVENT = 'document-cached';
@@ -201,16 +201,21 @@ export async function preCacheUncachedDocuments(
 
   await poolMap(targets, concurrency, async (target) => {
     try {
-      const token = await getToken();
       const ext = target.fileName.split('.').pop() ?? 'bin';
       const subfolder = target.kind === 'lab_result' ? 'lab-results' : 'records';
       const blobKey = `${patientId}/${subfolder}/${target.id}.${ext}`;
 
       let localPath: string;
       if (options?.downloadFn) {
+        const token = await getToken();
         localPath = await options.downloadFn(target, token);
       } else {
-        localPath = await blobStorage.downloadAndSaveBlob(blobKey, target.streamUrl, token);
+        localPath = await downloadBlobWithAuthRetry({
+          blobKey,
+          remoteUrl: target.streamUrl,
+          getToken,
+          storage: blobStorage,
+        });
       }
 
       const now = new Date();

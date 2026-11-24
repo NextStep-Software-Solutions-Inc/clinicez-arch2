@@ -160,6 +160,10 @@ export function usePermission(permission: string): boolean {
 const OFFLINE_RETRY_MS = 30_000;
 const LOCK_EXPIRY_CHECK_MS = 30_000;
 
+export function hadActiveOrLockedSession(s: AuthState): boolean {
+  return s === 'signedIn' || s === 'mustChangePassword' || s === 'locked' || s === 'workstationLocked';
+}
+
 function resetWebUrlToRoot(): void {
   if (Platform?.OS !== 'web' || typeof window === 'undefined' || !window.history?.replaceState) return;
   try {
@@ -255,19 +259,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // React to server session rejections, idle logout, workstation locks/unlocks, and cross-tab events.
   useEffect(() => {
     onSessionExpired(() => {
-      const wasBooting = stateRef.current === 'booting';
+      if (!hadActiveOrLockedSession(stateRef.current)) return;
       setUser(null);
       setOffline(false);
       setLockedSession(null);
       setIdleWarningSecondsLeft(null);
       setAccountSwitchAlert(null);
-      if (!wasBooting) {
-        resetWebUrlToRoot();
-        setNotice('Your session has ended. Please sign in again.');
-        setState('signedOut');
-      }
+      resetWebUrlToRoot();
+      setNotice('Your session has ended. Please sign in again.');
+      setState('signedOut');
     });
     onSessionIdleExpired(() => {
+      if (!hadActiveOrLockedSession(stateRef.current)) return;
       setUser(null);
       setOffline(false);
       setLockedSession(null);

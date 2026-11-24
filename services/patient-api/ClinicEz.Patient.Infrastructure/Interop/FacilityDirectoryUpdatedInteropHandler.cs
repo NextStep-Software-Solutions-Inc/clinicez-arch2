@@ -96,7 +96,10 @@ public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<Fac
                     SupportsAppointments = !(message.IsBookingPaused ?? false),
                     OperatingHours = message.OperatingHours?.Trim(),
                     IsGated = message.IsJoinGated ?? false,
-                    JoinCode = message.JoinCode?.Trim(),
+                    JoinCode = string.IsNullOrWhiteSpace(message.JoinCode)
+                        ? null
+                        : PublicRoutes.NormalizeJoinCode(message.JoinCode),
+                    JoinCodeExpiresAt = message.JoinCodeExpiresAtUtc,
                     SpecialtiesJson = specialtiesJson,
                     RequiredShareFieldsJson = "[\"demographics\",\"allergies\",\"medications\"]",
                     PrivacyPolicyUrl = privacyUrl,
@@ -153,9 +156,22 @@ public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<Fac
                     if (message.OperatingHours != null)
                         existingClinic.OperatingHours = string.IsNullOrWhiteSpace(message.OperatingHours) ? null : message.OperatingHours.Trim();
                     if (message.IsJoinGated.HasValue)
+                    {
                         existingClinic.IsGated = message.IsJoinGated.Value;
-                    if (message.JoinCode != null)
-                        existingClinic.JoinCode = string.IsNullOrWhiteSpace(message.JoinCode) ? null : message.JoinCode.Trim();
+                        existingClinic.JoinCode = string.IsNullOrWhiteSpace(message.JoinCode)
+                            ? null
+                            : PublicRoutes.NormalizeJoinCode(message.JoinCode);
+                        existingClinic.JoinCodeExpiresAt = message.JoinCodeExpiresAtUtc;
+                    }
+                    else
+                    {
+                        if (message.JoinCode != null)
+                            existingClinic.JoinCode = string.IsNullOrWhiteSpace(message.JoinCode)
+                                ? null
+                                : PublicRoutes.NormalizeJoinCode(message.JoinCode);
+                        if (message.JoinCodeExpiresAtUtc.HasValue)
+                            existingClinic.JoinCodeExpiresAt = message.JoinCodeExpiresAtUtc;
+                    }
                 }
 
                 existingClinic.SyncPublicStatus();

@@ -153,6 +153,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         var prevEnableTeleconsultation = settings.EnableTeleconsultation;
         var prevIsJoinEnabled = settings.IsJoinEnabled;
         var prevJoinCode = settings.JoinCode;
+        var prevJoinCodeExpiresAt = settings.JoinCodeExpiresAt;
 
         if (!string.IsNullOrWhiteSpace(request.ClinicName))
             settings.ClinicName = request.ClinicName.Trim();
@@ -479,7 +480,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
 
         var joinGatingChanged =
             prevIsJoinEnabled != settings.IsJoinEnabled ||
-            !string.Equals(prevJoinCode, settings.JoinCode, StringComparison.Ordinal);
+            !string.Equals(prevJoinCode, settings.JoinCode, StringComparison.Ordinal) ||
+            prevJoinCodeExpiresAt != settings.JoinCodeExpiresAt;
 
         if (!request.SkipPendingVerificationSync
             && directoryFieldsChanged

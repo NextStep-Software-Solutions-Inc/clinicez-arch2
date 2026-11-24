@@ -1,3 +1,4 @@
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
@@ -36,9 +37,9 @@ public sealed class UnlockClinicAccessCommandValidator : AbstractValidator<Unloc
 
         When(x => !string.IsNullOrWhiteSpace(x.JoinCode), () =>
         {
-            RuleFor(x => x.JoinCode!.Trim())
-                .Length(6).WithMessage("Join code must be exactly 6 alphanumeric characters.")
-                .Matches(@"^[a-zA-Z0-9]{6}$").WithMessage("Join code must contain only alphanumeric characters.");
+            RuleFor(x => x.JoinCode)
+                .Must(PublicRoutes.IsValidJoinCode)
+                .WithMessage("Join code must be a valid clinic passcode (3-50 alphanumeric characters, or a 4-character clinic prefix with a hyphen such as 45F9-LF9ZS5LT).");
         });
 
         When(x => !x.OrganizationId.HasValue, () =>
@@ -93,14 +94,15 @@ public sealed class UnlockClinicAccessCommandHandler
         // Verification Path 1: Join Code
         if (!string.IsNullOrWhiteSpace(request.JoinCode))
         {
-            var code = request.JoinCode.Trim();
+            var code = PublicRoutes.NormalizeJoinCode(request.JoinCode);
+            var expectedCode = PublicRoutes.NormalizeJoinCode(clinic.JoinCode);
 
             if (clinic.JoinCodeExpiresAt.HasValue && clinic.JoinCodeExpiresAt.Value < DateTime.UtcNow)
             {
                 throw new ValidationException("The join code for this clinic has expired.");
             }
 
-            if (!string.Equals(clinic.JoinCode?.Trim(), code, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(expectedCode) || !string.Equals(expectedCode, code, StringComparison.Ordinal))
             {
                 throw new ValidationException("Invalid clinic join code.");
             }

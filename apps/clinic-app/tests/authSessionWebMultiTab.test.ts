@@ -58,6 +58,7 @@ const {
   __resetAuthChannelForTests,
   broadcastActivity,
   changePassword,
+  ensureFreshToken,
   getAccessToken,
   getLockedSession,
   getSessionSnapshot,
@@ -770,5 +771,68 @@ describe('authSession web multi-tab & native dual-mode', () => {
     expect(isActiveSessionBusy()).toBe(false);
     unreg();
     expect(isActiveSessionBusy()).toBe(false);
+  });
+
+  test('ensureFreshToken on web when signed out returns false without calling /auth/refresh, triggering onSessionExpired, or broadcasting session-cleared', async () => {
+    const peerChannel = new MockBroadcastChannel('clinicez-auth');
+    const received: any[] = [];
+    peerChannel.onmessage = (e) => received.push(e.data);
+
+    let expiredNotified = false;
+    onSessionExpired(() => {
+      expiredNotified = true;
+    });
+
+    const ok = await ensureFreshToken();
+    onSessionExpired(null);
+
+    expect(ok).toBe(false);
+    expect(postCalls.length).toBe(0);
+    expect(expiredNotified).toBe(false);
+    expect(received.length).toBe(0);
+  });
+
+  test('restoreSession on web receiving HTTP 401 when no session existed does not trigger onSessionExpired or broadcast session-cleared', async () => {
+    const peerChannel = new MockBroadcastChannel('clinicez-auth');
+    const received: any[] = [];
+    peerChannel.onmessage = (e) => received.push(e.data);
+
+    let expiredNotified = false;
+    onSessionExpired(() => {
+      expiredNotified = true;
+    });
+
+    nextPostResponse = async () => {
+      const error: any = new Error('Unauthorized');
+      error.response = { status: 401, data: { message: 'Invalid refresh token' } };
+      throw error;
+    };
+
+    const outcome = await restoreSession();
+    onSessionExpired(null);
+
+    expect(outcome.state).toBe('signedOut');
+    expect(postCalls.length).toBe(1);
+    expect(postCalls[0].url).toContain('/auth/refresh');
+    expect(expiredNotified).toBe(false);
+    expect(received.some((m) => m?.type === 'session-cleared')).toBe(false);
+  });
+
+  test('ensureFreshToken on web when signed in with an expired access token still calls /auth/refresh and updates the access token', async () => {
+    nextPostResponse = async () => ({
+      data: { data: makeTokens('expired-access', null, -60_000) },
+    });
+    await login('reyes@clinic.test', 'Pass123!');
+    postCalls.length = 0;
+
+    nextPostResponse = async () => ({
+      data: { data: makeTokens('fresh-access', null, 10 * 60_000) },
+    });
+
+    const ok = await ensureFreshToken();
+    expect(ok).toBe(true);
+    expect(postCalls.length).toBe(1);
+    expect(postCalls[0].url).toContain('/auth/refresh');
+    expect(getAccessToken()).toBe('fresh-access');
   });
 });

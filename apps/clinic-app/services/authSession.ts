@@ -368,6 +368,7 @@ async function persist(tokens: AuthTokens, fallbackEmail?: string | null, broadc
   user = normalizedUser;
   lockedSession = null;
   lastRefreshLockedSession = null;
+  lastNetworkFailureAt = 0;
   offline = false;
   setWorkstationLockedFlag(false);
 
@@ -392,25 +393,32 @@ async function persist(tokens: AuthTokens, fallbackEmail?: string | null, broadc
 }
 
 async function clearSession(reason: 'none' | 'expired' | 'idle' = 'none') {
+  const hadSession =
+    user !== null ||
+    accessToken !== null ||
+    refreshToken !== null ||
+    lockedSession !== null ||
+    hasWorkstationLockedFlag();
   accessToken = null;
   accessExpiresAt = 0;
   refreshToken = null;
   user = null;
   lockedSession = null;
   lastRefreshLockedSession = null;
+  lastNetworkFailureAt = 0;
   offline = false;
   setWorkstationLockedFlag(false);
   await deleteSecureItem(REFRESH_KEY);
   await deleteSecureItem(USER_KEY);
   await deleteSecureItem(LAST_ONLINE_KEY);
-  if (isWeb()) {
+  if (isWeb() && (reason !== 'expired' || hadSession)) {
     broadcastAuth({
       type: 'session-cleared',
       reason: reason === 'none' ? 'logout' : reason,
     });
   }
   emit();
-  if (reason === 'expired') sessionExpiredHandler?.();
+  if (reason === 'expired' && hadSession) sessionExpiredHandler?.();
   else if (reason === 'idle') sessionIdleHandler?.();
 }
 
@@ -601,6 +609,8 @@ export function refreshSession(): Promise<boolean> {
 export async function ensureFreshToken(): Promise<boolean> {
   if (lockedSession || lockInFlight) return false;
   if (accessToken && Date.now() < accessExpiresAt - EXPIRY_SKEW_MS) return true;
+  if (isWeb() && !user && !accessToken) return false;
+  if (!isWeb() && !refreshToken) return false;
   // Don't make every request wait on a dead network while the server is unreachable.
   if (Date.now() - lastNetworkFailureAt < NETWORK_RETRY_BACKOFF_MS) return false;
   return refreshSession();

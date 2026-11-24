@@ -38,8 +38,23 @@ function SignUpPage() {
   );
 }
 
-export const Route = createRoute({
+const signUpBaseRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'sign-up',
   component: SignUpPage,
 });
+
+const signUpIndexRoute = createRoute({
+  getParentRoute: () => signUpBaseRoute,
+  path: '/',
+});
+
+const signUpSplatRoute = createRoute({
+  getParentRoute: () => signUpBaseRoute,
+  path: '$',
+});
+
+export const Route = signUpBaseRoute.addChildren([
+  signUpIndexRoute,
+  signUpSplatRoute,
+]);

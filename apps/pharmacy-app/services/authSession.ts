@@ -200,6 +200,7 @@ async function applyTokens(tokens: AuthTokens) {
   accessToken = tokens.accessToken;
   accessExpiresAt = Date.parse(tokens.accessTokenExpiresAtUtc) || Date.now() + FALLBACK_ACCESS_LIFETIME_MS;
   user = tokens.user;
+  lastNetworkFailureAt = 0;
 
   if (isWeb()) {
     refreshToken = null;
@@ -219,19 +220,21 @@ async function applyTokens(tokens: AuthTokens) {
 }
 
 async function clearSession(reason: 'none' | 'expired' | 'idle' | 'logout' = 'none') {
+  const hadSession = user !== null || accessToken !== null || refreshToken !== null;
   accessToken = null;
   accessExpiresAt = 0;
   refreshToken = null;
   user = null;
+  lastNetworkFailureAt = 0;
   await deleteSecureItem(REFRESH_KEY);
-  if (isWeb()) {
+  if (isWeb() && (reason !== 'expired' || hadSession)) {
     broadcastAuth({
       type: 'session-cleared',
       reason: reason === 'none' ? 'logout' : reason,
     });
   }
   emit();
-  if (reason === 'expired' || reason === 'idle') {
+  if ((reason === 'expired' && hadSession) || reason === 'idle') {
     notifyReason(reason);
   }
 }
@@ -339,8 +342,9 @@ export async function restoreSession(): Promise<AuthUser | null> {
 /** Returns an access token that is valid for at least a few more seconds, rotating it first if needed. */
 export async function getValidAccessToken(): Promise<string | null> {
   if (accessToken && Date.now() < accessExpiresAt - EXPIRY_SKEW_MS) return accessToken;
-  if (Date.now() - lastNetworkFailureAt < NETWORK_RETRY_BACKOFF_MS) return accessToken;
+  if (isWeb() && !user && !accessToken) return null;
   if (!isWeb() && !refreshToken) return accessToken;
+  if (Date.now() - lastNetworkFailureAt < NETWORK_RETRY_BACKOFF_MS) return accessToken;
   await refreshSession();
   return accessToken;
 }

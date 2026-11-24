@@ -67,6 +67,7 @@ public record FacilityCreatedEvent
     public bool? IsBookingPaused { get; init; }
     public bool? IsJoinGated { get; init; }
     public string? JoinCode { get; init; }
+    public DateTime? JoinCodeExpiresAtUtc { get; init; }
     public bool? IsPlatformVerified { get; init; }
     public PlatformVerificationStatus? PlatformVerificationStatus { get; init; }
     public string? VerificationRejectionReason { get; init; }

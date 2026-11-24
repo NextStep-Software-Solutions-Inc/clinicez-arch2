@@ -1453,4 +1453,47 @@ public sealed class PatientInteropFlowTests
             InteropTypes.CommsThreadStateChanged, InteropTypes.CommsEligibilitySynced,
             InteropTypes.CommsCallStateChanged);
     }
+
+    [Fact]
+    public async Task Directory_update_syncs_prefixed_join_code_and_expiry_and_clears_when_removed()
+    {
+        using var h = new PatientInteropHarness();
+        var clinicId = Guid.NewGuid();
+        var clinicSender = PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA);
+        var expiresAt = DateTime.UtcNow.AddDays(7);
+
+        await h.DeliverAsync(DirectoryUpdate(clinicSender, new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Nextstep OPD",
+            IsDirectoryPublished = true,
+            IsJoinGated = true,
+            JoinCode = " 45f9-lf9zs5lt ",
+            JoinCodeExpiresAtUtc = expiresAt
+        }));
+
+        var synced = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        synced.IsGated.Should().BeTrue();
+        synced.JoinCode.Should().Be("45F9-LF9ZS5LT");
+        synced.JoinCodeExpiresAt.Should().BeCloseTo(expiresAt, TimeSpan.FromMilliseconds(10));
+
+        await h.DeliverAsync(DirectoryUpdate(clinicSender, new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Nextstep OPD",
+            IsDirectoryPublished = true,
+            IsJoinGated = false,
+            JoinCode = null,
+            JoinCodeExpiresAtUtc = null
+        }));
+
+        var cleared = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        cleared.IsGated.Should().BeFalse();
+        cleared.JoinCode.Should().BeNull();
+        cleared.JoinCodeExpiresAt.Should().BeNull();
+    }
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
-import { router } from '../src/router';
+import { createMemoryHistory, createRouter } from '@tanstack/react-router';
+import { routeTree, router } from '../src/router';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -57,6 +58,56 @@ describe('Clean Root TanStack Router Tree (ZERO /admin/* prefix)', () => {
       for (const routeId of Object.keys(router.routesById)) {
         expect(routeId.startsWith('/admin/')).toBe(false);
       }
+    }
+  });
+
+  it('matches Clerk auth root and catch-all sub-routes without Not Found', async () => {
+    const authPaths = [
+      { path: '/sign-in', parentRouteId: '/sign-in' },
+      { path: '/sign-in?reason=session_expired', parentRouteId: '/sign-in' },
+      { path: '/sign-in/factor-one', parentRouteId: '/sign-in' },
+      { path: '/sign-in/factor-two', parentRouteId: '/sign-in' },
+      { path: '/sign-in/sso-callback', parentRouteId: '/sign-in' },
+      { path: '/sign-in/reset-password', parentRouteId: '/sign-in' },
+      { path: '/sign-up', parentRouteId: '/sign-up' },
+      { path: '/sign-up/verify-email-address', parentRouteId: '/sign-up' },
+      { path: '/sign-up/continue', parentRouteId: '/sign-up' },
+      { path: '/sign-up/sso-callback', parentRouteId: '/sign-up' },
+    ];
+
+    for (const { path: targetPath, parentRouteId } of authPaths) {
+      const history = createMemoryHistory({ initialEntries: [targetPath] });
+      const testRouter = createRouter({ routeTree, history });
+      await testRouter.load();
+
+      const nonRootMatches = testRouter.state.matches.filter(
+        (m) => m.routeId !== '__root__'
+      );
+      expect(nonRootMatches.length).toBeGreaterThan(0);
+      expect(nonRootMatches.some((m) => m.routeId === parentRouteId)).toBe(true);
+      expect(
+        testRouter.state.matches.some((m: any) => Boolean(m.globalNotFound))
+      ).toBe(false);
+    }
+  });
+
+  it('rejects /admin/* auth prefixes and non-auth prefixes while providing defaultNotFoundComponent', async () => {
+    expect(router.options.defaultNotFoundComponent).toBeDefined();
+
+    for (const badPath of [
+      '/admin/sign-in',
+      '/admin/sign-in/factor-one',
+      '/admin/sign-up/verify-email-address',
+      '/sign-in-evil',
+    ]) {
+      const history = createMemoryHistory({ initialEntries: [badPath] });
+      const testRouter = createRouter({ routeTree, history });
+      await testRouter.load();
+
+      const nonRootMatches = testRouter.state.matches.filter(
+        (m) => m.routeId !== '__root__'
+      );
+      expect(nonRootMatches.length).toBe(0);
     }
   });
 });

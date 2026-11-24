@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Database } from 'bun:sqlite';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
@@ -16,9 +18,18 @@ import {
   getCachedDocumentTypes,
   refreshDocumentTypes,
 } from '../services/files/filesShared';
-import { cleanupPreviewCache, revokePreviewUri } from '../services/files/filesService.web';
+import {
+  cleanupPreviewCache,
+  hasCachedPreviewBlob,
+  preparePreviewFile,
+  revokePreviewUri,
+} from '../services/files/filesService.web';
 import type { DocumentTypeResponse } from '../services/files/types';
-import { blobStorage } from '../services/storage';
+import {
+  BlobFetchError,
+  blobStorage,
+  downloadBlobWithAuthRetry,
+} from '../services/storage';
 import { webBlobStorage } from '../services/storage/blobStorage.web';
 import { resetAndRetryFailedUploads } from '../services/sync/uploadQueueService';
 import { filesMetadata } from '../db/schema/filesMetadata';
@@ -551,6 +562,245 @@ describe('File Sync, Backend Document Types Reconciliation, and Reopen Preview R
       expect(getPatientRecordStreamUrl('pat-1', 'file-2')).toBe(
         'https://patient-api.dev.clinicez.net/api/v1/patients/pat-1/records/file-2/stream'
       );
+    }
+  });
+
+  test('preparePreviewFile rejects null or blank token without calling /stream fetch', async () => {
+    const { db } = createFullSyncTestDb();
+    process.env.EXPO_PUBLIC_API_URL = 'https://patient-api.dev.clinicez.net/api/v1';
+
+    const patientId = 'patient-null-token';
+    const fileId = 'file-null-token-1';
+    const now = new Date();
+
+    await db.insert(filesMetadata).values({
+      id: fileId,
+      patientId,
+      documentTypeId: DOCUMENT_TYPE_IDS.labResult,
+      name: 'lab-report.pdf',
+      title: 'Lab Report',
+      mimeType: 'application/pdf',
+      extension: 'pdf',
+      sizeBytes: 1024,
+      localPath: null,
+      isCached: false,
+      syncStatus: 'synced',
+      syncOperation: 'update',
+      serverId: 'srv-null-token-1',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    let fetchCalls = 0;
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      throw new Error('fetch() must NOT be invoked when token is null or blank');
+    }) as unknown as typeof fetch;
+
+    await expect(
+      preparePreviewFile(patientId, fileId, async () => null, {
+        db,
+        blobStorage: webBlobStorage,
+      })
+    ).rejects.toThrow(/session|sign in/i);
+
+    await expect(
+      preparePreviewFile(patientId, fileId, async () => '   ', {
+        db,
+        blobStorage: webBlobStorage,
+      })
+    ).rejects.toThrow(/session|sign in/i);
+
+    expect(fetchCalls).toBe(0);
+    expect(await hasCachedPreviewBlob(patientId, fileId, { db, blobStorage: webBlobStorage })).toBe(false);
+  });
+
+  test('preparePreviewFile retries once with getToken({ skipCache: true }) on HTTP 401 and caches blob', async () => {
+    const { db } = createFullSyncTestDb();
+    process.env.EXPO_PUBLIC_API_URL = 'https://patient-api.dev.clinicez.net/api/v1';
+
+    let urlCounter = 0;
+    URL.createObjectURL = (() => `blob:https://my.dev.clinicez.net/retry-ok-${++urlCounter}`) as typeof URL.createObjectURL;
+    URL.revokeObjectURL = (() => {}) as typeof URL.revokeObjectURL;
+
+    const patientId = 'patient-retry-ok';
+    const fileId = 'file-retry-ok-1';
+    const serverId = 'srv-retry-ok-1';
+    const blobKey = `${patientId}/records/${fileId}.jpg`;
+    const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+    const now = new Date();
+
+    await db.insert(filesMetadata).values({
+      id: fileId,
+      patientId,
+      documentTypeId: DOCUMENT_TYPE_IDS.xray,
+      name: 'chest-xray.jpg',
+      title: 'Chest X-Ray',
+      mimeType: 'image/jpeg',
+      extension: 'jpg',
+      sizeBytes: jpegBytes.byteLength,
+      localPath: null,
+      isCached: false,
+      syncStatus: 'synced',
+      syncOperation: 'update',
+      serverId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const tokenCalls: Array<{ skipCache?: boolean } | undefined> = [];
+    const fetchAuthHeaders: Array<string | null> = [];
+
+    const getToken = async (options?: { skipCache?: boolean }) => {
+      tokenCalls.push(options);
+      return options?.skipCache ? 'fresh-jwt' : 'stale-jwt';
+    };
+
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      const auth = headers.get('Authorization');
+      fetchAuthHeaders.push(auth);
+      if (auth === 'Bearer stale-jwt') {
+        return new Response(null, { status: 401 });
+      }
+      if (auth === 'Bearer fresh-jwt') {
+        return new Response(jpegBytes, {
+          status: 200,
+          headers: { 'Content-Type': 'image/jpeg' },
+        });
+      }
+      return new Response(null, { status: 500 });
+    }) as unknown as typeof fetch;
+
+    const prepared = await preparePreviewFile(patientId, fileId, getToken, {
+      db,
+      blobStorage: webBlobStorage,
+    });
+
+    expect(tokenCalls).toEqual([undefined, { skipCache: true }]);
+    expect(fetchAuthHeaders).toEqual(['Bearer stale-jwt', 'Bearer fresh-jwt']);
+    expect(prepared.uri).toBe('blob:https://my.dev.clinicez.net/retry-ok-1');
+    expect(prepared.previewKind).toBe('image');
+
+    const [updated] = await db.select().from(filesMetadata).where(eq(filesMetadata.id, fileId));
+    expect(updated.isCached).toBe(true);
+    expect(updated.localPath).toBe(blobKey);
+    expect(await hasCachedPreviewBlob(patientId, fileId, { db, blobStorage: webBlobStorage })).toBe(true);
+
+    await cleanupPreviewCache(patientId, fileId);
+    await webBlobStorage.deleteBlob(blobKey);
+  });
+
+  test('preparePreviewFile stops after one HTTP 401 retry when fresh token is also rejected or null', async () => {
+    const { db } = createFullSyncTestDb();
+    process.env.EXPO_PUBLIC_API_URL = 'https://patient-api.dev.clinicez.net/api/v1';
+
+    const patientId = 'patient-retry-fail';
+    const fileId = 'file-retry-fail-1';
+    const now = new Date();
+
+    await db.insert(filesMetadata).values({
+      id: fileId,
+      patientId,
+      documentTypeId: DOCUMENT_TYPE_IDS.other,
+      name: 'scan.pdf',
+      title: 'Scan',
+      mimeType: 'application/pdf',
+      extension: 'pdf',
+      sizeBytes: 512,
+      localPath: null,
+      isCached: false,
+      syncStatus: 'synced',
+      syncOperation: 'update',
+      serverId: 'srv-retry-fail-1',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    let persistentFetchCount = 0;
+    globalThis.fetch = (async () => {
+      persistentFetchCount += 1;
+      return new Response(null, { status: 401 });
+    }) as unknown as typeof fetch;
+
+    await expect(
+      preparePreviewFile(
+        patientId,
+        fileId,
+        async (options) => (options?.skipCache ? 'still-rejected-jwt' : 'stale-jwt'),
+        { db, blobStorage: webBlobStorage }
+      )
+    ).rejects.toThrow(/401|authorize|sign/i);
+    expect(persistentFetchCount).toBe(2);
+
+    let nullRefreshFetchCount = 0;
+    globalThis.fetch = (async () => {
+      nullRefreshFetchCount += 1;
+      return new Response(null, { status: 401 });
+    }) as unknown as typeof fetch;
+
+    await expect(
+      preparePreviewFile(
+        patientId,
+        fileId,
+        async (options) => (options?.skipCache ? null : 'stale-jwt'),
+        { db, blobStorage: webBlobStorage }
+      )
+    ).rejects.toThrow(/expired|sign in/i);
+    expect(nullRefreshFetchCount).toBe(1);
+  });
+
+  test('downloadBlobWithAuthRetry handles native BlobFetchError 401 retry and does not retry non-401 errors', async () => {
+    const tokensSeen: Array<string | null> = [];
+    const mockStorage = {
+      async downloadAndSaveBlob(blobKey: string, _url: string, token: string | null) {
+        tokensSeen.push(token);
+        if (token === 'stale-native-jwt') {
+          throw new BlobFetchError('Failed to download blob: HTTP 401', 401);
+        }
+        return `file:///sandbox/${blobKey}`;
+      },
+    };
+
+    const uri = await downloadBlobWithAuthRetry({
+      blobKey: 'pat-1/records/rec-1.pdf',
+      remoteUrl: 'https://patient-api.dev.clinicez.net/api/v1/patients/pat-1/records/rec-1/stream',
+      getToken: async (options) => (options?.skipCache ? 'fresh-native-jwt' : 'stale-native-jwt'),
+      storage: mockStorage,
+    });
+
+    expect(uri).toBe('file:///sandbox/pat-1/records/rec-1.pdf');
+    expect(tokensSeen).toEqual(['stale-native-jwt', 'fresh-native-jwt']);
+
+    let tokenCallsOn404 = 0;
+    await expect(
+      downloadBlobWithAuthRetry({
+        blobKey: 'pat-1/records/missing.pdf',
+        remoteUrl: 'https://patient-api.dev.clinicez.net/api/v1/patients/pat-1/records/missing/stream',
+        getToken: async () => {
+          tokenCallsOn404 += 1;
+          return 'valid-jwt';
+        },
+        storage: {
+          async downloadAndSaveBlob() {
+            throw new BlobFetchError('Failed to download blob: HTTP 404', 404);
+          },
+        },
+      })
+    ).rejects.toThrow('Failed to download blob: HTTP 404');
+    expect(tokenCallsOn404).toBe(1);
+  });
+
+  test('FileViewer web & native wait for Clerk isLoaded and load metadata independently from preparePreviewFile', () => {
+    const appRoot = path.resolve(import.meta.dir, '..');
+    const webViewer = fs.readFileSync(path.join(appRoot, 'navigation/screens/files/FileViewer.screen.web.tsx'), 'utf8').replace(/\r\n/g, '\n');
+    const nativeViewer = fs.readFileSync(path.join(appRoot, 'navigation/screens/files/FileViewer.screen.tsx'), 'utf8').replace(/\r\n/g, '\n');
+
+    for (const source of [webViewer, nativeViewer]) {
+      expect(source).toContain('isLoaded');
+      expect(source).toContain('hasCachedPreviewBlob');
+      expect(source).not.toMatch(/Promise\.all\s*\(\s*\[[^\]]*preparePreviewFile[^\]]*getFileById/s);
+      expect(source).not.toMatch(/Promise\.all\s*\(\s*\[[^\]]*getFileById[^\]]*preparePreviewFile/s);
     }
   });
 });

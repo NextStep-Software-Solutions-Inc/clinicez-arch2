@@ -12,6 +12,7 @@ import { useDocumentTypes } from '../../../hooks/useDocumentTypes';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRegisterWebHeaderOverride } from '../../../contexts/HeaderSearchContext';
 import {
+  hasCachedPreviewBlob,
   preparePreviewFile,
   revokePreviewUri,
   getFileById,
@@ -36,7 +37,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
   const { colors, spacing, radii, sizes, shadows } = useAppTheme();
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
-  const { getToken } = useClerkAuth();
+  const { getToken, isLoaded } = useClerkAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
   const { fileId } = route.params;
@@ -52,7 +53,9 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
 
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
+  const metadataRequestIdRef = useRef(0);
   const activeUriRef = useRef<string | null>(null);
+  const loadedKeyRef = useRef<string | null>(null);
 
   const categoryLabel = useMemo(
     () =>
@@ -78,15 +81,42 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
     }
   }, [navigation, viewerHeaderTitle]);
 
-  const loadFile = useCallback(() => {
-    const reqId = ++requestIdRef.current;
-    setIsRetrying(true);
-    setError(null);
-    Promise.all([
-      preparePreviewFile(patientId, fileId, getTokenRef.current),
-      getFileById(patientId, fileId),
-    ])
-      .then(([previewRes, fileRes]) => {
+  const loadMetadata = useCallback(async () => {
+    const metaReqId = ++metadataRequestIdRef.current;
+    try {
+      const fileRes = await getFileById(patientId, fileId);
+      if (!mountedRef.current || metaReqId !== metadataRequestIdRef.current) return;
+      setFileMetadata(fileRes);
+    } catch {
+      // Metadata lookup failure should not mask preview loading or error recovery
+    }
+  }, [fileId, patientId]);
+
+  const loadPreview = useCallback(
+    async (options?: { force?: boolean }) => {
+      const targetKey = `${patientId}:${fileId}`;
+      if (!options?.force && loadedKeyRef.current === targetKey) {
+        return;
+      }
+
+      const reqId = ++requestIdRef.current;
+      setIsRetrying(true);
+      setError(null);
+
+      try {
+        if (!isLoaded) {
+          const isCached = await hasCachedPreviewBlob(patientId, fileId).catch(() => false);
+          if (!mountedRef.current || reqId !== requestIdRef.current) return;
+
+          if (!isCached) {
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+              setError('Sign in and connect to the internet to open this file.');
+            }
+            return;
+          }
+        }
+
+        const previewRes = await preparePreviewFile(patientId, fileId, getTokenRef.current);
         if (!mountedRef.current || reqId !== requestIdRef.current) {
           revokePreviewUri(fileId, previewRes.uri);
           return;
@@ -95,33 +125,51 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
           revokePreviewUri(fileId, activeUriRef.current);
         }
         activeUriRef.current = previewRes.uri;
+        loadedKeyRef.current = targetKey;
         setPreview(previewRes);
-        setFileMetadata(fileRes);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!mountedRef.current || reqId !== requestIdRef.current) return;
         setError(err instanceof Error ? err.message : 'Unable to decrypt or load this file.');
-      })
-      .finally(() => {
+      } finally {
         if (mountedRef.current && reqId === requestIdRef.current) {
           setIsRetrying(false);
         }
-      });
-  }, [fileId, patientId]);
+      }
+    },
+    [fileId, isLoaded, patientId]
+  );
+
+  const handleRetry = useCallback(() => {
+    void loadMetadata();
+    void loadPreview({ force: true });
+  }, [loadMetadata, loadPreview]);
 
   useEffect(() => {
     mountedRef.current = true;
-    loadFile();
+    loadedKeyRef.current = null;
+    if (activeUriRef.current) {
+      revokePreviewUri(fileId, activeUriRef.current);
+      activeUriRef.current = null;
+    }
+    setPreview(null);
+    setFileMetadata(null);
+    setError(null);
+    void loadMetadata();
 
     return () => {
       mountedRef.current = false;
       requestIdRef.current += 1;
+      metadataRequestIdRef.current += 1;
       if (activeUriRef.current) {
         revokePreviewUri(fileId, activeUriRef.current);
         activeUriRef.current = null;
       }
     };
-  }, [fileId, loadFile]);
+  }, [fileId, loadMetadata, patientId]);
+
+  useEffect(() => {
+    void loadPreview();
+  }, [loadPreview]);
 
   const handleDownload = useCallback(async () => {
     try {
@@ -232,7 +280,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
           {error}
         </ThemedText>
         <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm }}>
-          <Button label="Try again" variant="outline" loading={isRetrying} onPress={loadFile} />
+          <Button label="Try again" variant="outline" loading={isRetrying} onPress={handleRetry} />
         </View>
       </View>
     );

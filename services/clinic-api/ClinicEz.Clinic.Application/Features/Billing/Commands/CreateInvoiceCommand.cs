@@ -125,9 +125,9 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
             throw new BadRequestException("PatientId and PatientName are required to generate an invoice.");
         }
 
-        var effectivePatientId = request.PatientId.HasValue && request.PatientId.Value != Guid.Empty
+        Guid? effectivePatientId = request.PatientId.HasValue && request.PatientId.Value != Guid.Empty
             ? request.PatientId.Value
-            : (request.IsWalkInRetail ? Guid.Empty : (Guid?)null);
+            : null;
 
         var effectivePatientName = !string.IsNullOrWhiteSpace(request.WalkInCustomerName)
             ? request.WalkInCustomerName.Trim()
@@ -307,7 +307,11 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
                     }
                 }
 
-                if (isCashierCounterMerge && existingInvoice.PatientId != Guid.Empty && !request.IsWalkInRetail)
+                if (isCashierCounterMerge &&
+                    existingInvoice.PatientId.HasValue &&
+                    existingInvoice.PatientId.Value != Guid.Empty &&
+                    !request.IsWalkInRetail &&
+                    !existingInvoice.IsWalkInRetail)
                 {
                     await PublishInvoiceRequestAsync(existingInvoice, cancellationToken);
                 }
@@ -486,7 +490,8 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
         }
 
         var shouldForwardToCashierCounter = isCashierCounter &&
-            invoice.PatientId != Guid.Empty &&
+            invoice.PatientId.HasValue &&
+            invoice.PatientId.Value != Guid.Empty &&
             !request.IsWalkInRetail;
 
         if (shouldForwardToCashierCounter)
@@ -505,7 +510,7 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
     /// </summary>
     private async Task PublishInvoiceRequestAsync(Invoice invoice, CancellationToken ct)
     {
-        if (invoice.PatientId == Guid.Empty || invoice.NetAmount <= 0m)
+        if (!invoice.PatientId.HasValue || invoice.PatientId.Value == Guid.Empty || invoice.IsWalkInRetail || invoice.NetAmount <= 0m)
         {
             return;
         }

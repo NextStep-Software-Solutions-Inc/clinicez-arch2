@@ -14,7 +14,7 @@ export const UPLOAD_QUEUE_PROGRESS_EVENT = 'upload-queue-progress';
 export const MAX_CONCURRENT_UPLOADS = 2;
 export const MAX_RETRY_ATTEMPTS = 5;
 
-export type GetToken = () => Promise<string | null>;
+export type GetToken = (options?: { skipCache?: boolean }) => Promise<string | null>;
 
 export interface EnqueueUploadParams {
   patientId: string;

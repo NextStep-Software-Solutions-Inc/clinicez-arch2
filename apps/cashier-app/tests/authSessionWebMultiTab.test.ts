@@ -234,4 +234,40 @@ describe('cashier authSession web multi-tab & native dual-mode', () => {
     expect(await refreshSession()).toBe(false);
     expect(postCalls.length).toBe(0);
   });
+
+  test('web ensureFreshAccessToken when signed out returns null without calling /auth/refresh or triggering onSessionNotice', async () => {
+    let notice: string | null = null;
+    onSessionNotice((msg) => {
+      notice = msg;
+    });
+
+    const token = await ensureFreshAccessToken();
+    expect(token).toBeNull();
+    expect(postCalls.length).toBe(0);
+    expect(notice).toBeNull();
+  });
+
+  test('web restoreSession receiving 401 with no prior session does not trigger onSessionNotice or broadcast session-cleared', async () => {
+    const peerChannel = new MockBroadcastChannel('clinicez-cashier-auth');
+    const received: any[] = [];
+    peerChannel.onmessage = (e) => received.push(e.data);
+
+    let notice: string | null = null;
+    onSessionNotice((msg) => {
+      notice = msg;
+    });
+
+    nextPostResponse = async () => {
+      const error: any = new Error('Unauthorized');
+      error.response = { status: 401, data: { message: 'Invalid refresh token' } };
+      throw error;
+    };
+
+    const restored = await restoreSession();
+    expect(restored).toBeNull();
+    expect(postCalls.length).toBe(1);
+    expect(postCalls[0].url).toContain('/auth/refresh');
+    expect(notice).toBeNull();
+    expect(received.some((m) => m?.type === 'session-cleared')).toBe(false);
+  });
 });

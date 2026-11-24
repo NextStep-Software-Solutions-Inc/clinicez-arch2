@@ -16,6 +16,11 @@ import Button from '../ui/Button';
 import { triggerHaptic } from '../../utils/haptics';
 import { ApiError } from '../../services/api/apiClient';
 import { GATED_CATALOG_STRINGS } from '../../constants/gatedCatalogStrings';
+import {
+  MAX_JOIN_CODE_LENGTH,
+  sanitizeClinicJoinCodeInput,
+  validateClinicJoinCode,
+} from '../../utils/joinCode';
 
 export interface ClinicJoinCodeModalProps {
   visible: boolean;
@@ -27,8 +32,6 @@ export interface ClinicJoinCodeModalProps {
   initialCode?: string;
 }
 
-const CODE_LENGTH = 6;
-
 export default function ClinicJoinCodeModal({
   visible,
   clinicId: _clinicId,
@@ -38,9 +41,10 @@ export default function ClinicJoinCodeModal({
   onScanQr,
   initialCode = '',
 }: ClinicJoinCodeModalProps) {
-  const { colors, radii, spacing, sizes } = useAppTheme();
+  const { colors, radii, spacing, sizes, fontSizes, fonts } = useAppTheme();
 
-  const [code, setCode] = useState(initialCode);
+  const [code, setCode] = useState(() => sanitizeClinicJoinCodeInput(initialCode));
+  const [isFocused, setIsFocused] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -48,7 +52,7 @@ export default function ClinicJoinCodeModal({
 
   useEffect(() => {
     if (visible) {
-      setCode(initialCode.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LENGTH));
+      setCode(sanitizeClinicJoinCodeInput(initialCode));
       setErrorMessage(null);
       setIsUnlocking(false);
       const timer = setTimeout(() => {
@@ -56,20 +60,29 @@ export default function ClinicJoinCodeModal({
       }, 150);
       return () => clearTimeout(timer);
     }
+    setIsFocused(false);
   }, [visible, initialCode]);
 
   const handleCodeChange = (text: string) => {
-    const sanitized = text.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LENGTH);
+    const sanitized = sanitizeClinicJoinCodeInput(text);
     setCode(sanitized);
     if (errorMessage) {
       setErrorMessage(null);
     }
   };
 
+  const handleClearCode = () => {
+    setCode('');
+    if (errorMessage) {
+      setErrorMessage(null);
+    }
+    inputRef.current?.focus();
+  };
+
   const handleUnlock = async (overrideCode?: string) => {
-    const targetCode = (overrideCode ?? code).trim().toUpperCase();
-    if (targetCode.length !== CODE_LENGTH) {
-      setErrorMessage(GATED_CATALOG_STRINGS.modal.lengthError);
+    const validation = validateClinicJoinCode(overrideCode ?? code);
+    if (!validation.isValid) {
+      setErrorMessage(validation.error || GATED_CATALOG_STRINGS.modal.lengthError);
       void triggerHaptic('error');
       return;
     }
@@ -78,7 +91,7 @@ export default function ClinicJoinCodeModal({
     setErrorMessage(null);
 
     try {
-      await onUnlock(targetCode);
+      await onUnlock(validation.normalizedCode);
       void triggerHaptic('success');
       onClose();
     } catch (err: unknown) {
@@ -166,67 +179,81 @@ export default function ClinicJoinCodeModal({
               {GATED_CATALOG_STRINGS.modal.subtitleSuffix}
             </ThemedText>
 
-            {/* Segmented Code Entry Boxes */}
-            <Pressable
-              onPress={() => inputRef.current?.focus()}
-              style={styles.codeContainer}
-              accessibilityRole="none"
-            >
-              <View style={[styles.boxRow, { gap: spacing.sm }]}>
-                {Array.from({ length: CODE_LENGTH }).map((_, index) => {
-                  const char = code[index] || '';
-                  const isFocused = code.length === index;
-                  const hasError = Boolean(errorMessage);
+            {/* Canonical Join Passcode Input */}
+            <View style={[styles.codeContainer, { gap: spacing.xs }]}>
+              <Pressable
+                onPress={() => inputRef.current?.focus()}
+                accessibilityRole="none"
+                style={[
+                  styles.codeInputBox,
+                  {
+                    minHeight: sizes.controlLg + spacing.xs,
+                    borderRadius: radii.lg,
+                    borderColor: errorMessage
+                      ? colors.emergency
+                      : isFocused
+                      ? colors.primary
+                      : code.length > 0
+                      ? colors.borderDark
+                      : colors.border,
+                    backgroundColor: errorMessage
+                      ? colors.emergencySubtle
+                      : isFocused
+                      ? colors.primarySubtle
+                      : colors.background,
+                    borderWidth: isFocused || Boolean(errorMessage) ? 2 : sizes.borderWidth,
+                    paddingHorizontal: spacing.md,
+                    gap: spacing.xs,
+                  },
+                ]}
+              >
+                <TextInput
+                  ref={inputRef}
+                  value={code}
+                  onChangeText={handleCodeChange}
+                  onFocus={() => setIsFocused(true)}
+                  onBlur={() => setIsFocused(false)}
+                  onSubmitEditing={() => {
+                    if (code.trim().length > 0 && !isUnlocking) {
+                      void handleUnlock();
+                    }
+                  }}
+                  maxLength={MAX_JOIN_CODE_LENGTH}
+                  placeholder={GATED_CATALOG_STRINGS.modal.inputPlaceholder}
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  keyboardType="default"
+                  returnKeyType="done"
+                  editable={!isUnlocking}
+                  style={[
+                    styles.codeTextInput,
+                    {
+                      color: errorMessage ? colors.emergencyText : colors.text,
+                      fontSize: fontSizes.xl,
+                      fontFamily: fonts.mono['700'],
+                    },
+                  ]}
+                  accessibilityLabel={GATED_CATALOG_STRINGS.modal.inputAccessibilityLabel}
+                />
+                {code.length > 0 && !isUnlocking ? (
+                  <Pressable
+                    onPress={handleClearCode}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear join code"
+                    hitSlop={spacing.xs}
+                    style={({ pressed }) => [styles.clearCodeButton, { opacity: pressed ? 0.65 : 1 }]}
+                  >
+                    <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
+                  </Pressable>
+                ) : null}
+              </Pressable>
 
-                  return (
-                    <View
-                      key={index}
-                      style={[
-                        styles.codeBox,
-                        {
-                          borderRadius: radii.md,
-                          borderColor: hasError
-                            ? colors.emergency
-                            : isFocused
-                            ? colors.primary
-                            : char
-                            ? colors.borderDark
-                            : colors.border,
-                          backgroundColor: hasError
-                            ? colors.emergencySubtle
-                            : isFocused
-                            ? colors.primarySubtle
-                            : colors.background,
-                          borderWidth: isFocused || hasError ? 2 : sizes.borderWidth,
-                        },
-                      ]}
-                    >
-                      <ThemedText
-                        variant="h2"
-                        color={hasError ? 'emergencyText' : 'text'}
-                        style={styles.codeText}
-                      >
-                        {char}
-                      </ThemedText>
-                    </View>
-                  );
-                })}
-              </View>
-
-              {/* Underlying TextInput for cross-platform input and paste */}
-              <TextInput
-                ref={inputRef}
-                value={code}
-                onChangeText={handleCodeChange}
-                maxLength={CODE_LENGTH}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                keyboardType="default"
-                editable={!isUnlocking}
-                style={styles.hiddenInput}
-                accessibilityLabel={GATED_CATALOG_STRINGS.modal.inputAccessibilityLabel}
-              />
-            </Pressable>
+              <ThemedText variant="caption" color="textMuted" style={styles.inputHint}>
+                {GATED_CATALOG_STRINGS.modal.inputHint}
+              </ThemedText>
+            </View>
 
             {/* Error Banner */}
             {errorMessage ? (
@@ -266,7 +293,7 @@ export default function ClinicJoinCodeModal({
                 variant="primary"
                 size="lg"
                 loading={isUnlocking}
-                disabled={code.length !== CODE_LENGTH || isUnlocking}
+                disabled={code.trim().length === 0 || isUnlocking}
                 onPress={() => handleUnlock()}
                 fullWidth
               />
@@ -333,27 +360,28 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   codeContainer: {
+    width: '100%',
     alignItems: 'center',
     marginVertical: 8,
   },
-  boxRow: {
+  codeInputBox: {
+    width: '100%',
+    maxWidth: 420,
     flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  codeBox: {
-    width: 46,
-    height: 54,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  codeText: {
+  codeTextInput: {
+    flex: 1,
+    minWidth: 0,
     textAlign: 'center',
+    letterSpacing: 1.5,
+    paddingVertical: 10,
   },
-  hiddenInput: {
-    position: 'absolute',
-    width: 1,
-    height: 1,
-    opacity: 0.01,
+  clearCodeButton: {
+    padding: 4,
+  },
+  inputHint: {
+    textAlign: 'center',
   },
   errorBanner: {
     gap: 4,

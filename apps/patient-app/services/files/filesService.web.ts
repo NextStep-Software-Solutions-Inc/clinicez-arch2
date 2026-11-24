@@ -2,8 +2,10 @@ import { eq } from 'drizzle-orm';
 import { mutate } from 'swr';
 import { filesMetadata } from '@db/schema/filesMetadata';
 import type {
+  GetToken,
   ImportFilesInput,
   PreparedPreviewFile,
+  PreparePreviewOptions,
   SyncPendingFilesResult,
   WebPickedFile,
 } from './types';
@@ -25,7 +27,7 @@ import {
 import { resolveDocumentTypeId } from './documentTypeMapping';
 import { compressWebBlobForUpload } from './fileCompression';
 import { getPatientRecordStreamUrl } from '../api/filesApi';
-import { blobStorage } from '../storage';
+import { blobStorage, downloadBlobWithAuthRetry } from '../storage';
 import { enqueueOfflineRecordUpload, drainUploadQueue } from '../sync/uploadQueueService';
 
 /**
@@ -33,8 +35,6 @@ import { enqueueOfflineRecordUpload, drainUploadQueue } from '../sync/uploadQueu
  * Binary data is stored locally in IndexedDB (ClinicEzPatientBlobs), and metadata in sql.js SQLite.
  * Uploads are deferred through uploadQueueService and sent to POST /patients/{patientId}/records.
  */
-
-type GetToken = () => Promise<string | null>;
 
 const FILES_KEY = (key: unknown) => Array.isArray(key) && key[0] === 'files-browser';
 
@@ -181,13 +181,25 @@ function trackPreviewUrl(fileId: string, url: string) {
   previewUrls.set(fileId, set);
 }
 
+export async function hasCachedPreviewBlob(
+  patientId: string,
+  fileId: string,
+  options?: PreparePreviewOptions,
+): Promise<boolean> {
+  const file = await getFileById(patientId, fileId, options?.db);
+  if (!file?.localPath) return false;
+  const storage = options?.blobStorage ?? blobStorage;
+  return storage.hasBlob(file.localPath);
+}
+
 export async function preparePreviewFile(
   patientId: string,
   fileId: string,
   getToken?: GetToken,
+  options?: PreparePreviewOptions,
 ): Promise<PreparedPreviewFile> {
   rememberToken(getToken);
-  const file = await getFileById(patientId, fileId);
+  const file = await getFileById(patientId, fileId, options?.db);
   if (!file) throw new Error('File not found.');
 
   let extension = normalizeExtension(file.extension) || extensionFromName(file.name);
@@ -198,24 +210,26 @@ export async function preparePreviewFile(
   if (!extensionFromName(finalName) && extension) finalName = `${finalName}.${extension}`;
   const mimeType = file.mimeType ?? mimeFromExtension(extension);
 
+  const storage = options?.blobStorage ?? blobStorage;
   let uri: string | null = null;
   if (file.localPath) {
-    uri = await blobStorage.getBlobUri(file.localPath, mimeType);
+    uri = await storage.getBlobUri(file.localPath, mimeType);
   }
 
   if (!uri) {
-    if (!getToken) {
-      throw new Error('Sign in and connect to the internet to open this file.');
-    }
-    const token = await getToken();
     const serverId = file.serverId ?? file.id;
     const blobKey = `${patientId}/records/${fileId}.${extension || 'bin'}`;
     const streamUrl = getPatientRecordStreamUrl(patientId, serverId);
-    const localKey = await blobStorage.downloadAndSaveBlob(blobKey, streamUrl, token);
+    const localKey = await downloadBlobWithAuthRetry({
+      blobKey,
+      remoteUrl: streamUrl,
+      getToken,
+      storage,
+    });
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const targetDb = require('@db/index').db;
+    const targetDb = options?.db ?? require('@db/index').db;
     await targetDb.update(filesMetadata).set({ localPath: localKey, isCached: true }).where(eq(filesMetadata.id, file.id));
-    uri = await blobStorage.getBlobUri(localKey, mimeType);
+    uri = await storage.getBlobUri(localKey, mimeType);
   }
 
   if (!uri) {
