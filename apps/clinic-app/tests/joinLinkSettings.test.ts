@@ -126,6 +126,8 @@ import {
   isJoinLinkSettingsDirty,
   BLANK_PASSCODE_EXPIRATION_HELPER,
   reviewDocument,
+  sanitizeJoinCodeInput,
+  validateClinicSettingsJoinCode,
 } from '../components/settings/joinLinkUtils';
 
 describe('Feature 9: Join Link Settings Card & Administration', () => {
@@ -657,5 +659,19 @@ describe('GitHub #160 & Split Specimen Card: Blank passcode locks expiration to 
     expect(payloadBlank.joinCodeExpiresAt).toBeNull();
     expect(payloadBlank.clearJoinCode).toBe(true);
     expect(payloadBlank.clearJoinCodeExpiresAt).toBe(false);
+  });
+
+  test('Issue #258: sanitizeJoinCodeInput preserves hyphens on clinic-prefixed codes and prevents double-prefixing', () => {
+    expect(sanitizeJoinCodeInput('45f9-lf9zs5lt')).toBe('45F9-LF9ZS5LT');
+    expect(sanitizeJoinCodeInput('45f9-lf9zs5lx!')).toBe('45F9-LF9ZS5LX');
+    expect(sanitizeJoinCodeInput('akn3q2lv')).toBe('AKN3Q2LV');
+    expect(sanitizeJoinCodeInput('a'.repeat(60)).length).toBe(50);
+
+    expect(validateClinicSettingsJoinCode('')).toBeNull();
+    expect(validateClinicSettingsJoinCode('AKN3Q2LV')).toBeNull();
+    expect(validateClinicSettingsJoinCode('45F9-LF9ZS5LT')).toBeNull();
+    expect(validateClinicSettingsJoinCode('ABC')).toBe('Join passcode must be at least 4 characters.');
+    expect(validateClinicSettingsJoinCode('45F9-')).toContain('4-character clinic prefix with a hyphen');
+    expect(validateClinicSettingsJoinCode('AB-1234')).toContain('4-character clinic prefix with a hyphen');
   });
 });

@@ -227,6 +227,7 @@ public static class ClinicDirectorySnapshotBuilder
             IsBookingPaused = settings.IsOnlineBookingPaused,
             IsJoinGated = settings.IsJoinEnabled && !string.IsNullOrWhiteSpace(settings.JoinCode),
             JoinCode = settings.JoinCode,
+            JoinCodeExpiresAtUtc = settings.JoinCodeExpiresAt,
             Providers = providerDtos,
             Services = serviceDtos
         };

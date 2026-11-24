@@ -1,10 +1,14 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Settings.Commands;
 using ClinicEz.Clinic.Application.Features.Settings.Queries;
+using ClinicEz.Clinic.Application.Features.Settings.Services;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
@@ -200,5 +204,54 @@ public class JoinCodeSettingsExpirationTests
         persisted!.ClinicName.Should().Be("Renamed Clinic Facility");
         persisted.JoinCode.Should().Be("PRESERVE");
         persisted.JoinCodeExpiresAt.Should().Be(expiry);
+    }
+
+    [Fact]
+    public async Task UpdateFacilitySettings_ChangeOnlyJoinCodeExpiresAt_TriggersDirectorySyncWithExpiryAndPrefixedCode()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var directorySyncService = Substitute.For<IClinicDirectorySyncService>();
+
+        var existing = new FacilitySettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            ClinicName = "Nextstep OPD",
+            JoinCode = "45F9-LF9ZS5LT",
+            JoinCodeExpiresAt = DateTime.UtcNow.AddDays(1),
+            IsJoinEnabled = true,
+            IsWorkspaceEligible = true,
+            IsDirectoryPublished = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified,
+        };
+        await context.Settings.AddAsync(existing);
+        await context.SaveChangesAsync();
+
+        var newExpiry = DateTime.UtcNow.AddDays(30);
+        var updateHandler = new UpdateClinicSettingsCommandHandler(
+            settingsRepo,
+            _clinicContext,
+            uow,
+            directorySyncService: directorySyncService);
+
+        await updateHandler.Handle(new UpdateClinicSettingsCommand(JoinCodeExpiresAt: newExpiry), CancellationToken.None);
+
+        await directorySyncService.Received(1).EnqueueDirectoryUpdateAsync(
+            Arg.Is<FacilitySettings>(s =>
+                s.ClinicId == _testClinicId &&
+                s.JoinCode == "45F9-LF9ZS5LT" &&
+                s.JoinCodeExpiresAt == newExpiry),
+            Arg.Any<CancellationToken>());
+
+        var snapshot = ClinicDirectorySnapshotBuilder.BuildFacilityDirectoryEvent(
+            existing,
+            Array.Empty<StaffMember>(),
+            Array.Empty<ServiceItem>(),
+            Array.Empty<DoctorScheduleTemplate>());
+        snapshot.JoinCode.Should().Be("45F9-LF9ZS5LT");
+        snapshot.JoinCodeExpiresAtUtc.Should().Be(newExpiry);
+        snapshot.IsJoinGated.Should().BeTrue();
     }
 }

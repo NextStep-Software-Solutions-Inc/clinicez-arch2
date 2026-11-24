@@ -40,11 +40,14 @@ public sealed class EmpiricalChallengerM1GovernanceTests
     // ──────────────────────────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData("12345", "too short")]
-    [InlineData("1234567", "too long")]
-    [InlineData("VIP-88", "hyphen")]
+    [InlineData("12", "too short (< 3 chars)")]
+    [InlineData("B4C-JOINNOW", "3-char prefix (< 4 chars)")]
+    [InlineData("B4C7-", "missing code after hyphen")]
+    [InlineData("VIP-88", "3-char prefix hyphen")]
     [InlineData("VIP@88", "special char")]
     [InlineData("VIP 88", "space")]
+    [InlineData("45F9-A-B", "multiple hyphens")]
+    [InlineData("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "exceeds 50 chars")]
     public void UnlockValidator_WhenMalformedJoinCode_FailsValidation(string malformedCode, string reason)
     {
         var validator = new UnlockClinicAccessCommandValidator();
@@ -53,6 +56,23 @@ public sealed class EmpiricalChallengerM1GovernanceTests
         var result = validator.Validate(command);
 
         result.IsValid.Should().BeFalse($"code '{malformedCode}' ({reason}) must fail validation");
+    }
+
+    [Theory]
+    [InlineData("45F9-LF9ZS5LT")]
+    [InlineData("45f9-lf9zs5lt")]
+    [InlineData("  45F9-LF9ZS5LT  ")]
+    [InlineData("VIP888")]
+    [InlineData("APEX2026")]
+    [InlineData("B4C7-1")]
+    public void UnlockValidator_WhenCanonicalJoinCode_PassesValidation(string validCode)
+    {
+        var validator = new UnlockClinicAccessCommandValidator();
+        var command = new UnlockClinicAccessCommand(Guid.NewGuid(), Guid.NewGuid(), JoinCode: validCode);
+
+        var result = validator.Validate(command);
+
+        result.IsValid.Should().BeTrue($"canonical code '{validCode}' should pass validation");
     }
 
     [Fact]

@@ -289,7 +289,7 @@ export interface UnlockClinicAccessInput {
 }
 
 /**
- * Submits an unlock request for a gated clinic using a 6-character Join Code
+ * Submits an unlock request for a gated clinic using a clinic Join Code
  * or linked partner Organization ID.
  *
  * Backend endpoint: POST /api/v1/clinics/{clinicId}/unlock

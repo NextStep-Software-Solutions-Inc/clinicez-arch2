@@ -30,6 +30,8 @@ import {
   isJoinLinkSettingsDirty,
   BLANK_PASSCODE_EXPIRATION_HELPER,
   ExpirationWindow,
+  sanitizeJoinCodeInput,
+  validateClinicSettingsJoinCode,
 } from './joinLinkUtils';
 import { generateQrMatrix, buildQrPathData } from './qrGenerator';
 import { openReceptionPlacardPdf } from './receptionPlacardPdf';
@@ -129,7 +131,7 @@ export default function JoinLinkSettingsCard({
 
   // Actions
   const handleJoinCodeChange = useCallback((val: string) => {
-    const clean = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const clean = sanitizeJoinCodeInput(val);
     setJoinCode(clean);
     if (clean.trim() === '') {
       setExpirationWindow('never');
@@ -222,9 +224,12 @@ export default function JoinLinkSettingsCard({
 
   const handleSaveSettings = useCallback(async () => {
     const trimmedCode = joinCode.trim().toUpperCase();
-    if (isEnabled && trimmedCode.length > 0 && trimmedCode.length < 4) {
-      notify.error('Join passcode must be at least 4 characters.');
-      return;
+    if (isEnabled && trimmedCode.length > 0) {
+      const validationError = validateClinicSettingsJoinCode(trimmedCode);
+      if (validationError) {
+        notify.error(validationError);
+        return;
+      }
     }
 
     setSaving(true);
@@ -432,7 +437,7 @@ export default function JoinLinkSettingsCard({
                     value={joinCode}
                     onChangeText={handleJoinCodeChange}
                     placeholder="Enter or generate passcode"
-                    maxLength={16}
+                    maxLength={50}
                     editable={isEnabled}
                   />
                   <Button

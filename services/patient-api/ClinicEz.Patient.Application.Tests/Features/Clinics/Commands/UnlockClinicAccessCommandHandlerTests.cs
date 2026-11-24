@@ -253,4 +253,49 @@ public sealed class UnlockClinicAccessCommandHandlerTests
         _membershipRepo.Received(1).Update(existing);
         await _uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    [Theory]
+    [InlineData("45F9-LF9ZS5LT")]
+    [InlineData("45f9-lf9zs5lt")]
+    [InlineData("  45F9-LF9ZS5LT  ")]
+    public async Task Handle_WhenClinicPrefixedJoinCodeMatches_UnlocksSuccessfully(string submittedCode)
+    {
+        var patientId = Guid.NewGuid();
+        var clinicId = Guid.NewGuid();
+
+        var clinic = new Clinic { Id = clinicId, IsGated = true, JoinCode = "45F9-LF9ZS5LT", ActiveMemberCount = 2 };
+
+        _patientRepo.GetByIdAsync(patientId, Arg.Any<CancellationToken>())
+            .Returns(new Patient { Id = patientId });
+        _clinicRepo.GetByIdAsync(clinicId, Arg.Any<CancellationToken>()).Returns(clinic);
+        _membershipRepo.GetByPatientAndClinicWithDeletedAsync(patientId, clinicId, Arg.Any<CancellationToken>())
+            .Returns((ClinicMembership?)null);
+        _uow.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(1);
+
+        var command = new UnlockClinicAccessCommand(clinicId, patientId, JoinCode: submittedCode);
+        var result = await CreateHandler().Handle(command, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.IsUnlocked.Should().BeTrue();
+        result.MembershipId.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_WhenUnprefixedCodeSubmittedForPrefixedClinicCode_ThrowsValidationException()
+    {
+        var patientId = Guid.NewGuid();
+        var clinicId = Guid.NewGuid();
+
+        var clinic = new Clinic { Id = clinicId, IsGated = true, JoinCode = "45F9-LF9ZS5LT" };
+
+        _patientRepo.GetByIdAsync(patientId, Arg.Any<CancellationToken>())
+            .Returns(new Patient { Id = patientId });
+        _clinicRepo.GetByIdAsync(clinicId, Arg.Any<CancellationToken>()).Returns(clinic);
+
+        var command = new UnlockClinicAccessCommand(clinicId, patientId, JoinCode: "LF9ZS5LT");
+        var act = () => CreateHandler().Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ValidationException>()
+            .WithMessage("*Invalid clinic join code*");
+    }
 }

@@ -15,6 +15,39 @@ export function generateRandomJoinCode(length: number = 8): string {
   return code;
 }
 
+export const MAX_CLINIC_JOIN_CODE_LENGTH = 50;
+
+/**
+ * Sanitizes live Join Passcode edits in Clinic Settings while preserving hyphens
+ * so previously saved clinic-prefixed codes (e.g. `45F9-LF9ZS5LT`) are not stripped
+ * and double-prefixed on re-save.
+ */
+export function sanitizeJoinCodeInput(val: string): string {
+  return val
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .slice(0, MAX_CLINIC_JOIN_CODE_LENGTH);
+}
+
+/**
+ * Validates non-empty Clinic Settings Join Passcodes against the canonical PublicRoutes contract.
+ * Returns null when valid (or empty), or an actionable error message when invalid.
+ */
+export function validateClinicSettingsJoinCode(code: string): string | null {
+  const clean = publicRoutes.normalizeJoinCode(code);
+  if (!clean) return null;
+
+  if (!clean.includes('-') && clean.length < 4) {
+    return 'Join passcode must be at least 4 characters.';
+  }
+
+  if (!publicRoutes.isValidJoinCode(clean)) {
+    return 'Join passcode must use letters and numbers (or a 4-character clinic prefix with a hyphen, e.g. 45F9-LF9ZS5LT).';
+  }
+
+  return null;
+}
+
 export type ExpirationWindow = '24h' | '7d' | '30d' | 'never' | 'custom';
 
 export const BLANK_PASSCODE_EXPIRATION_HELPER =

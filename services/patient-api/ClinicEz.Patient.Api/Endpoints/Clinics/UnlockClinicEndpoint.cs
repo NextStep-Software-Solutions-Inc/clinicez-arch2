@@ -67,7 +67,7 @@ public sealed class UnlockClinicEndpoint : IEndpoint
             })
             .WithTags("Discovery")
             .WithName("UnlockClinicAccess")
-            .WithSummary("Unlock gated clinic service catalog and appointment booking using a 6-character Join Code or linked Organization")
+            .WithSummary("Unlock gated clinic service catalog and appointment booking using a Join Code or linked Organization")
             .Produces<ApiResponse<UnlockClinicResultDto>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status400BadRequest)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)

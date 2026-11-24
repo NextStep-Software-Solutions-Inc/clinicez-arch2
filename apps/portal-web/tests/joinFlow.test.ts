@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
+import React from 'react';
+import { renderToString } from 'react-dom/server';
 import { NextRequest } from 'next/server';
+import { publicRoutes } from '@shared/safe';
+import { JoinCodeModal } from '../src/components/join/JoinCodeModal';
 
 // Genuine imports from source modules
 import {
@@ -153,6 +157,22 @@ describe('Feature 16: Join Code Gating & Expiration in Public Join Workstation',
     const params = new URLSearchParams('code=');
     const code = params.get('code');
     expect(!code || code.trim() === '').toBe(true);
+  });
+
+  test('T2.2 (Issue #258): JoinCodeModal renders 50-char hyphenated passcode input and validates canonical codes', () => {
+    const html = renderToString(
+      React.createElement(JoinCodeModal, {
+        isOpen: true,
+        facilityName: 'Nextstep OPD',
+        onUnlock: () => {},
+      })
+    );
+    expect(html).toContain('maxLength="50"');
+    expect(html).toContain('45F9-LF9ZS5LT');
+    expect(publicRoutes.isValidJoinCode('45F9-LF9ZS5LT')).toBe(true);
+    expect(publicRoutes.isValidJoinCode('CLINIC2026')).toBe(true);
+    expect(publicRoutes.isValidJoinCode('45F9-')).toBe(false);
+    expect(publicRoutes.isValidJoinCode('B4C-JOIN')).toBe(false);
   });
 });
 
