@@ -1029,7 +1029,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     // Patient & Attending Clinician Summary Box
                     col.Item().PaddingTop(8).Border(1).BorderColor("#E2E8F0").Background("#F8FAFC").Padding(10).Column(demog =>
                     {
-                        var isWalkInRetail = invoice.PatientId == Guid.Empty;
+                        var isWalkInRetail = invoice.IsWalkInRetail || !invoice.PatientId.HasValue || invoice.PatientId.Value == Guid.Empty;
                         demog.Item().Row(r =>
                         {
                             r.RelativeItem().Column(c =>
@@ -1286,7 +1286,8 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             ClinicId = settings.ClinicId,
             InvoiceNumber = $"SOA-PREVIEW-{(string.IsNullOrWhiteSpace(preview.QueueNumber) ? "001" : preview.QueueNumber)}",
             InvoiceDate = DateTime.UtcNow,
-            PatientId = preview.PatientId ?? Guid.Empty,
+            PatientId = preview.PatientId.HasValue && preview.PatientId.Value != Guid.Empty ? preview.PatientId.Value : null,
+            IsWalkInRetail = !preview.PatientId.HasValue || preview.PatientId.Value == Guid.Empty,
             PatientName = preview.PatientName,
             DiscountType = preview.DiscountType,
             DiscountIdNumber = preview.DiscountIdNumber,

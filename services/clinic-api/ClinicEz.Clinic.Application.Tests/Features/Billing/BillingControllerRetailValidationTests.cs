@@ -66,7 +66,7 @@ public class BillingControllerRetailValidationTests
             ClinicId: Guid.NewGuid(),
             InvoiceNumber: "INV-20261026-001",
             InvoiceDate: DateTime.UtcNow,
-            PatientId: Guid.Empty,
+            PatientId: null,
             PatientName: "Pedro Penduko",
             QueueItemId: null,
             AppointmentId: null,
