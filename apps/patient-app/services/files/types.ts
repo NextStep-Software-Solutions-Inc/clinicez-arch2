@@ -1,6 +1,14 @@
 import type { File as ExpoFile } from 'expo-file-system';
 import type { FileMetadata } from '@db/schema/filesMetadata';
 import type { DocumentType } from '@db/schema/documentTypes';
+import type { AuthTokenProvider, IBlobStorage } from '../storage/blobStorage';
+
+export type GetToken = AuthTokenProvider;
+
+export interface PreparePreviewOptions {
+  db?: any;
+  blobStorage?: Pick<IBlobStorage, 'getBlobUri' | 'downloadAndSaveBlob' | 'hasBlob'>;
+}
 
 export const DEFAULT_MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 
@@ -46,7 +54,7 @@ export interface ImportFilesInput {
   patientId: string;
   documentTypeId?: string | null;
   files: PickedFileInput[];
-  getToken?: () => Promise<string | null>;
+  getToken?: GetToken;
 }
 
 export interface PreparedPreviewFile {

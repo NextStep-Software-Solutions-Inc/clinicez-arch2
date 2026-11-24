@@ -497,8 +497,8 @@ export function findBestFileType(
   );
 }
 
-export async function getFileById(patientId: string, fileId: string) {
-  const targetDb = resolveDb();
+export async function getFileById(patientId: string, fileId: string, dbOverride?: any) {
+  const targetDb = resolveDb(dbOverride);
   const [file] = await targetDb
     .select()
     .from(filesMetadata)

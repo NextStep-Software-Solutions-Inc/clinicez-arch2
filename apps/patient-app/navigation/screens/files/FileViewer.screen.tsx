@@ -14,6 +14,7 @@ import {
 import { mutate } from 'swr';
 import ZoomableImage from '../../../components/ui/ZoomableImage';
 import { useNavigation } from '@react-navigation/native';
+import NetInfo from '@react-native-community/netinfo';
 import { useAuth as useAppAuth } from 'contexts/AuthContext';
 import * as Sharing from 'expo-sharing';
 import Pdf from 'react-native-pdf';
@@ -27,6 +28,7 @@ import { useDocumentTypes } from '../../../hooks/useDocumentTypes';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   cleanupPreviewCache,
+  hasCachedPreviewBlob,
   preparePreviewFile,
   getFileById,
   deleteItem,
@@ -52,7 +54,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { runWithAutoLockPaused } = useAppAuth();
-  const { getToken } = useClerkAuth();
+  const { getToken, isLoaded } = useClerkAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
 
@@ -69,6 +71,9 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   const [isSharing, setIsSharing] = useState(false);
 
   const mountedRef = useRef(true);
+  const requestIdRef = useRef(0);
+  const metadataRequestIdRef = useRef(0);
+  const loadedKeyRef = useRef<string | null>(null);
 
   // Single clean back handler across header button and Android hardware back
   const handleGoBack = useCallback(() => {
@@ -115,38 +120,84 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
     return formatRecordSubtitle(fileMetadata) || undefined;
   }, [fileMetadata]);
 
-  const loadFile = useCallback(() => {
-    setIsRetrying(true);
-    setError(null);
-    Promise.all([
-      preparePreviewFile(patientId, fileId, getTokenRef.current),
-      getFileById(patientId, fileId),
-    ])
-      .then(([previewRes, fileRes]) => {
-        if (!mountedRef.current) return;
+  const loadMetadata = useCallback(async () => {
+    const metaReqId = ++metadataRequestIdRef.current;
+    try {
+      const fileRes = await getFileById(patientId, fileId);
+      if (!mountedRef.current || metaReqId !== metadataRequestIdRef.current) return;
+      setFileMetadata(fileRes);
+    } catch {
+      // Metadata lookup failure should not mask preview loading or error recovery
+    }
+  }, [fileId, patientId]);
+
+  const loadPreview = useCallback(
+    async (options?: { force?: boolean }) => {
+      const targetKey = `${patientId}:${fileId}`;
+      if (!options?.force && loadedKeyRef.current === targetKey) {
+        return;
+      }
+
+      const reqId = ++requestIdRef.current;
+      setIsRetrying(true);
+      setError(null);
+
+      try {
+        if (!isLoaded) {
+          const isCached = await hasCachedPreviewBlob(patientId, fileId).catch(() => false);
+          if (!mountedRef.current || reqId !== requestIdRef.current) return;
+
+          if (!isCached) {
+            const net = await NetInfo.fetch().catch(() => ({ isConnected: true }));
+            if (!mountedRef.current || reqId !== requestIdRef.current) return;
+
+            if (net.isConnected === false) {
+              setError('This file is not available offline yet, and you are currently offline.');
+            }
+            return;
+          }
+        }
+
+        const previewRes = await preparePreviewFile(patientId, fileId, getTokenRef.current);
+        if (!mountedRef.current || reqId !== requestIdRef.current) return;
+        loadedKeyRef.current = targetKey;
         setPreview(previewRes);
-        setFileMetadata(fileRes);
-      })
-      .catch((err) => {
-        if (!mountedRef.current) return;
+      } catch (err) {
+        if (!mountedRef.current || reqId !== requestIdRef.current) return;
         setError(err instanceof Error ? err.message : 'Unable to open file preview.');
-      })
-      .finally(() => {
-        if (mountedRef.current) {
+      } finally {
+        if (mountedRef.current && reqId === requestIdRef.current) {
           setIsRetrying(false);
         }
-      });
-  }, [fileId, patientId]);
+      }
+    },
+    [fileId, isLoaded, patientId]
+  );
+
+  const handleRetry = useCallback(() => {
+    void loadMetadata();
+    void loadPreview({ force: true });
+  }, [loadMetadata, loadPreview]);
 
   useEffect(() => {
     mountedRef.current = true;
-    loadFile();
+    loadedKeyRef.current = null;
+    setPreview(null);
+    setFileMetadata(null);
+    setError(null);
+    void loadMetadata();
 
     return () => {
       mountedRef.current = false;
+      requestIdRef.current += 1;
+      metadataRequestIdRef.current += 1;
       cleanupPreviewCache(patientId, fileId).catch(() => {});
     };
-  }, [fileId, loadFile, patientId]);
+  }, [fileId, loadMetadata, patientId]);
+
+  useEffect(() => {
+    void loadPreview();
+  }, [loadPreview]);
 
   const handleShare = async () => {
     if (isSharing) return;
@@ -232,7 +283,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
               label="Try again"
               variant="outline"
               loading={isRetrying}
-              onPress={loadFile}
+              onPress={handleRetry}
               style={{ marginTop: spacing.sm }}
             />
           </View>

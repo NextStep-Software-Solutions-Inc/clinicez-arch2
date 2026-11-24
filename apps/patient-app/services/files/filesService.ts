@@ -5,8 +5,10 @@ import { mutate } from 'swr';
 import { db } from '@db/index';
 import { filesMetadata } from '@db/schema/filesMetadata';
 import {
+  type GetToken,
   ImportFilesInput,
   PreparedPreviewFile,
+  type PreparePreviewOptions,
   SyncPendingFilesResult,
 } from './types';
 import {
@@ -26,7 +28,7 @@ import {
 } from './filesShared';
 import { resolveDocumentTypeId } from './documentTypeMapping';
 import { getPatientRecordStreamUrl } from '../api/filesApi';
-import { blobStorage } from '../storage';
+import { blobStorage, downloadBlobWithAuthRetry } from '../storage';
 import { enqueueOfflineRecordUpload, drainUploadQueue } from '../sync/uploadQueueService';
 
 export {
@@ -120,12 +122,30 @@ export async function importFiles(input: ImportFilesInput): Promise<string[]> {
   return importedIds;
 }
 
+export async function hasCachedPreviewBlob(
+  patientId: string,
+  fileId: string,
+  options?: PreparePreviewOptions,
+): Promise<boolean> {
+  const file = await getFileById(patientId, fileId, options?.db);
+  if (!file?.localPath) return false;
+  if (options?.blobStorage) {
+    return options.blobStorage.hasBlob(file.localPath);
+  }
+  try {
+    return new File(file.localPath).exists;
+  } catch {
+    return false;
+  }
+}
+
 export async function preparePreviewFile(
   patientId: string,
   fileId: string,
-  getToken?: () => Promise<string | null>
+  getToken?: GetToken,
+  options?: PreparePreviewOptions,
 ): Promise<PreparedPreviewFile> {
-  const file = await getFileById(patientId, fileId);
+  const file = await getFileById(patientId, fileId, options?.db);
   if (!file) throw new Error('File not found.');
 
   let extension = normalizeExtension(file.extension) || extensionFromName(file.name);
@@ -138,28 +158,35 @@ export async function preparePreviewFile(
   if (!extensionFromName(finalName) && extension) finalName = `${finalName}.${extension}`;
   const mimeType = file.mimeType ?? mimeFromExtension(extension);
 
+  const storage = options?.blobStorage ?? blobStorage;
   let localUri: string | null = file.localPath;
 
   if (localUri) {
-    const localFile = new File(localUri);
-    if (!localFile.exists) {
-      localUri = null;
+    if (options?.blobStorage) {
+      const hasLocal = await options.blobStorage.hasBlob(localUri);
+      if (!hasLocal) localUri = null;
+    } else {
+      const localFile = new File(localUri);
+      if (!localFile.exists) {
+        localUri = null;
+      }
     }
   }
 
   // If we don't have the file locally, download it on demand
   if (!localUri) {
-    if (!getToken) {
-      throw new Error('This file is not available offline yet, and you are currently offline.');
-    }
-
-    const token = await getToken();
     const serverId = file.serverId ?? file.id;
     const blobKey = `${patientId}/records/${fileId}.${extension || 'bin'}`;
     const streamUrl = getPatientRecordStreamUrl(patientId, serverId);
 
-    localUri = await blobStorage.downloadAndSaveBlob(blobKey, streamUrl, token);
-    await db.update(filesMetadata).set({ localPath: localUri, isCached: true }).where(eq(filesMetadata.id, file.id));
+    localUri = await downloadBlobWithAuthRetry({
+      blobKey,
+      remoteUrl: streamUrl,
+      getToken,
+      storage,
+    });
+    const targetDb = options?.db ?? db;
+    await targetDb.update(filesMetadata).set({ localPath: localUri, isCached: true }).where(eq(filesMetadata.id, file.id));
   }
 
   return {

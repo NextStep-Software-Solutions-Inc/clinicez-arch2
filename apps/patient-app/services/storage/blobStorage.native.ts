@@ -1,6 +1,6 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
-import type { IBlobStorage } from './blobStorage';
+import { BlobFetchError, type IBlobStorage } from './blobStorage';
 
 const BASE_BLOB_DIR = 'ClinicEZ-blobs';
 
@@ -94,7 +94,14 @@ export const nativeBlobStorage: IBlobStorage = {
     });
 
     if (result.status < 200 || result.status >= 300) {
-      throw new Error(`Failed to download blob: HTTP ${result.status}`);
+      try {
+        if (file.exists) {
+          file.delete();
+        }
+      } catch {
+        // Ignore cleanup errors for failed partial/error downloads
+      }
+      throw new BlobFetchError(`Failed to download blob: HTTP ${result.status}`, result.status);
     }
     return file.uri;
   },

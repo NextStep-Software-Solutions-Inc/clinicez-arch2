@@ -1,4 +1,4 @@
-import type { IBlobStorage } from './blobStorage';
+import { BlobFetchError, type IBlobStorage } from './blobStorage';
 
 const IDB_BLOB_DB = 'ClinicEzPatientBlobs';
 const IDB_BLOB_STORE = 'blobs';
@@ -88,7 +88,7 @@ export const webBlobStorage: IBlobStorage = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!response.ok) {
-      throw new Error(`Blob fetch failed: HTTP ${response.status}`);
+      throw new BlobFetchError(`Blob fetch failed: HTTP ${response.status}`, response.status);
     }
     const blob = await response.blob();
     return this.saveBlob(blobKey, blob, blob.type || 'application/octet-stream');
