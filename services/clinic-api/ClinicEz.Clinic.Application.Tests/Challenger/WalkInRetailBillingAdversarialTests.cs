@@ -71,7 +71,7 @@ public class WalkInRetailBillingAdversarialTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.Should().NotBeNull();
-        result.PatientId.Should().Be(Guid.Empty, "Walk-in retail without a registered patient must use Guid.Empty");
+        result.PatientId.Should().BeNull("Walk-in retail without a registered patient must persist NULL to satisfy the nullable Patients FK");
         result.PatientName.Should().Be("Ka Pedro");
         result.GrossAmount.Should().Be(125m);
         result.NetAmount.Should().Be(125m);
@@ -113,7 +113,7 @@ public class WalkInRetailBillingAdversarialTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.Should().NotBeNull();
-        result.PatientId.Should().Be(Guid.Empty);
+        result.PatientId.Should().BeNull();
         result.PatientName.Should().Be("Doña Victorina");
         result.GrossAmount.Should().Be(140m);
         result.NetAmount.Should().Be(140m);
@@ -597,7 +597,8 @@ public class WalkInRetailBillingAdversarialTests
             TenantId = tenantId,
             ClinicId = clinicId,
             InvoiceNumber = "INV-20261023-099",
-            PatientId = Guid.Empty,
+            PatientId = null,
+            IsWalkInRetail = true,
             PatientName = "Walk-In Retail Guest",
             GrossAmount = 500m,
             NetAmount = 500m,
@@ -666,7 +667,8 @@ public class WalkInRetailBillingAdversarialTests
             TenantId = tenantId,
             ClinicId = clinicId,
             InvoiceNumber = "INV-20261023-088",
-            PatientId = Guid.Empty,
+            PatientId = null,
+            IsWalkInRetail = true,
             PatientName = "Walk-In Mixed Line Items",
             GrossAmount = 850m,
             NetAmount = 850m,
