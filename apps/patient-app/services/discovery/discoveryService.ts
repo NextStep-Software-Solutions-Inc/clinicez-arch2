@@ -29,6 +29,8 @@ import {
 import { createBookingDraft as apiCreateDraft, submitBookingDraft as apiSubmitDraft } from '../api/bookingApi';
 import { ApiError } from '../api/apiClient';
 import { localMembershipStatus } from './membershipStatus';
+import { GATED_CATALOG_STRINGS } from '../../constants/gatedCatalogStrings';
+import { validateClinicJoinCode } from '../../utils/joinCode';
 import {
     parseShareSections,
     serializeShareSections,
@@ -1343,7 +1345,7 @@ export async function getClinicDetailOnline(
 /**
  * Unlocks a gated clinic's service catalog and appointment booking.
  *
- * 1. Pre-flight network and 6-character code validation.
+ * 1. Pre-flight network and canonical join code validation.
  * 2. POST /api/v1/clinics/{clinicId}/unlock with join code.
  * 3. Persist active membership locally in SQLite (clinic_memberships).
  * 4. Fetch online unredacted clinic detail (service catalog & provider roster).
@@ -1360,10 +1362,11 @@ export async function unlockClinicAccess(
         throw new Error('OFFLINE_ERROR');
     }
 
-    const cleanCode = joinCode.trim().toUpperCase();
-    if (!cleanCode || cleanCode.length !== 6 || !/^[A-Z0-9]{6}$/.test(cleanCode)) {
-        throw new Error('Join code must be exactly 6 alphanumeric characters.');
+    const validation = validateClinicJoinCode(joinCode);
+    if (!validation.isValid) {
+        throw new Error(validation.error || GATED_CATALOG_STRINGS.modal.lengthError);
     }
+    const cleanCode = validation.normalizedCode;
 
     const unlockResult = await apiUnlockClinic(getToken, clinicId, {
         joinCode: cleanCode,

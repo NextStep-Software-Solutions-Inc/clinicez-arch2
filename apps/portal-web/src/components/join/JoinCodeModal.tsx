@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { Lock, ArrowRight, AlertCircle, ShieldAlert } from "lucide-react";
-import { lightColors } from "@clinicez/design-tokens";
+import { Lock, ArrowRight, AlertCircle } from "lucide-react";
+import { publicRoutes } from "@shared/safe";
 
 interface JoinCodeModalProps {
   isOpen: boolean;
@@ -40,14 +40,14 @@ export function JoinCodeModal({
       return;
     }
 
-    const cleanCode = code.trim().toUpperCase();
+    const cleanCode = publicRoutes.normalizeJoinCode(code);
     if (!cleanCode) {
       setError("Please enter the facility Join Code.");
       return;
     }
 
-    if (!/^[A-Z0-9]{4,12}$/.test(cleanCode)) {
-      setError("Join code must contain only letters and numbers (6-8 characters).");
+    if (!publicRoutes.isValidJoinCode(cleanCode)) {
+      setError("Enter a valid clinic join code (e.g. 45F9-LF9ZS5LT or CLINIC2026).");
       return;
     }
 
@@ -82,11 +82,11 @@ export function JoinCodeModal({
               type="text"
               value={code}
               onChange={(e) => {
-                setCode(e.target.value.toUpperCase());
+                setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 50));
                 setError(null);
               }}
-              placeholder="e.g. CLINIC2026"
-              maxLength={12}
+              placeholder="e.g. 45F9-LF9ZS5LT"
+              maxLength={50}
               className="w-full px-4 py-3 rounded-xl border border-input text-lg font-mono font-bold tracking-widest text-foreground bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary uppercase transition-all"
               autoFocus
             />

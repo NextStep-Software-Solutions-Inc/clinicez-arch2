@@ -4,6 +4,7 @@ import { describe, expect, test, mock } from 'bun:test';
 import { parseReceptionQr } from '../utils/receptionQrParser';
 import { GATED_CATALOG_STRINGS } from '../constants/gatedCatalogStrings';
 import { ApiError } from '../services/api/apiClient';
+import { sanitizeClinicJoinCodeInput, validateClinicJoinCode } from '../utils/joinCode';
 
 // ── Domain Logic Mock Fixtures & Pure Evaluators ─────────────────────────────
 
@@ -229,26 +230,26 @@ describe('Empirical Challenger M4.1 — Two-Tier Governance & Gated Access Stres
       expect(mockGatedClinic.contactNumber).toBe('+63 88 856 1738');
     });
 
-    test('2B: Enter 6-char join code sanitization and length enforcement', () => {
-      let codeInput = '  vip-888! ';
-      const sanitized = codeInput.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-      expect(sanitized).toBe('VIP888');
-      expect(sanitized.length).toBe(6);
+    test('2B: Canonical and clinic-prefixed join code sanitization and validation', () => {
+      const prefixedInput = '  45f9-lf9zs5lt! ';
+      const sanitizedPrefixed = sanitizeClinicJoinCodeInput(prefixedInput);
+      expect(sanitizedPrefixed).toBe('45F9-LF9ZS5LT');
+      expect(validateClinicJoinCode(sanitizedPrefixed).isValid).toBe(true);
+      expect(validateClinicJoinCode('  vip888 ').isValid).toBe(true);
 
-      // Incomplete code
-      const shortCode = 'AB12';
-      const shortSanitized = shortCode.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-      expect(shortSanitized.length).toBe(4);
-      expect(shortSanitized.length === 6).toBe(false);
+      // Too short or malformed hyphenated code
+      expect(validateClinicJoinCode('AB').isValid).toBe(false);
+      expect(validateClinicJoinCode('45F9-').isValid).toBe(false);
+      expect(validateClinicJoinCode('B4C-JOINNOW').isValid).toBe(false);
     });
 
     test('2C: Placard QR scan parsing across multiple formats', () => {
       // 1. App custom URI scheme with query param
       expect(parseReceptionQr('clinicez://join?code=VIP888')).toBe('VIP888');
-      expect(parseReceptionQr('clinicez://clinics/cdo/unlock?code=VIP888')).toBe('VIP888');
+      expect(parseReceptionQr('clinicez://clinics/cdo/unlock?code=45F9-LF9ZS5LT')).toBe('45F9-LF9ZS5LT');
 
       // 2. HTTPS Web portal URLs (query param ?code= or ?joinCode=)
-      expect(parseReceptionQr('https://portal.clinicez.com/join?code=VIP888')).toBe('VIP888');
+      expect(parseReceptionQr('https://portal.clinicez.com/join?code=45F9-LF9ZS5LT')).toBe('45F9-LF9ZS5LT');
       expect(parseReceptionQr('https://portal.clinicez.com/join/tenant-cdo/clinic-1?code=VIP888')).toBe('VIP888');
       expect(parseReceptionQr('https://portal.clinicez.com/clinics/cdo/unlock?joinCode=VIP888')).toBe('VIP888');
 

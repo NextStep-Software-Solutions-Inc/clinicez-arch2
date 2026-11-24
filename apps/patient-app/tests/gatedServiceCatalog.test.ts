@@ -2,6 +2,7 @@ import { describe, expect, test, mock } from 'bun:test';
 import { GATED_CATALOG_STRINGS } from '../constants/gatedCatalogStrings';
 import { parseReceptionQr } from '../utils/receptionQrParser';
 import { ApiError } from '../services/api/apiClient';
+import { sanitizeClinicJoinCodeInput, validateClinicJoinCode } from '../utils/joinCode';
 
 // ── Mock React Native & Native Dependencies Before Component Imports ────────
 mock.module('react-native', () => ({
@@ -163,18 +164,12 @@ function evaluateGatedClinicView(clinic: typeof mockLockedClinic) {
 }
 
 function sanitizeJoinCodeInput(raw: string): string {
-  return raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  return sanitizeClinicJoinCodeInput(raw);
 }
 
 function validateJoinCode(code: string): { isValid: boolean; error: string | null } {
-  const sanitized = sanitizeJoinCodeInput(code);
-  if (sanitized.length === 0) {
-    return { isValid: false, error: 'Please enter a join code.' };
-  }
-  if (sanitized.length !== 6) {
-    return { isValid: false, error: GATED_CATALOG_STRINGS.modal.lengthError };
-  }
-  return { isValid: true, error: null };
+  const result = validateClinicJoinCode(code);
+  return { isValid: result.isValid, error: result.error };
 }
 
 // ── Test Suite ───────────────────────────────────────────────────────────────
@@ -261,23 +256,28 @@ describe('Gated Service Catalog & Join Code Verification (Milestone 3)', () => {
   });
 
   // ── TEST 3: Join Code Modal & Unlock Submission Flow ──────────────────────
-  describe('Test 3: Opening modal, entering 6-char code, and submitting unlock', () => {
-    test('sanitizes input to 6 uppercase alphanumeric characters', () => {
+  describe('Test 3: Opening modal, entering canonical or prefixed code, and submitting unlock', () => {
+    test('sanitizes input to uppercase alphanumeric characters while preserving hyphens', () => {
       expect(sanitizeJoinCodeInput('cdo202')).toBe('CDO202');
-      expect(sanitizeJoinCodeInput('ustp-26!')).toBe('USTP26');
-      expect(sanitizeJoinCodeInput('abcdefghijk')).toBe('ABCDEF');
+      expect(sanitizeJoinCodeInput('45f9-lf9zs5lt')).toBe('45F9-LF9ZS5LT');
+      expect(sanitizeJoinCodeInput('ustp-26!')).toBe('USTP-26');
       expect(sanitizeJoinCodeInput('12 34 56')).toBe('123456');
     });
 
-    test('validates 6-character length constraint for submission enablement', () => {
+    test('validates canonical and clinic-prefixed join code formats', () => {
       expect(validateJoinCode('').isValid).toBe(false);
-      expect(validateJoinCode('CDO').isValid).toBe(false);
-      expect(validateJoinCode('CDO').error).toBe(GATED_CATALOG_STRINGS.modal.lengthError);
+      expect(validateJoinCode('AB').isValid).toBe(false);
+      expect(validateJoinCode('AB').error).toBe(GATED_CATALOG_STRINGS.modal.lengthError);
+      expect(validateJoinCode('45F9-').isValid).toBe(false);
+      expect(validateJoinCode('B4C-JOIN').isValid).toBe(false);
       expect(validateJoinCode('CDO202').isValid).toBe(true);
       expect(validateJoinCode('CDO202').error).toBeNull();
+      expect(validateJoinCode('45F9-LF9ZS5LT').isValid).toBe(true);
+      expect(validateJoinCode('45f9-lf9zs5lt').isValid).toBe(true);
+      expect(validateJoinCode('  45F9-LF9ZS5LT  ').isValid).toBe(true);
     });
 
-    test('triggers unlockClinicAccess with uppercase code and transitions state on success', async () => {
+    test('triggers unlockClinicAccess with uppercase prefixed code and transitions state on success', async () => {
       let passedClinicId = '';
       let passedJoinCode = '';
       let unlockCallCount = 0;
@@ -294,7 +294,7 @@ describe('Gated Service Catalog & Join Code Verification (Milestone 3)', () => {
         };
       });
 
-      const inputCode = 'ustp26';
+      const inputCode = '45f9-lf9zs5lt';
       const validation = validateJoinCode(inputCode);
       expect(validation.isValid).toBe(true);
 
@@ -303,22 +303,23 @@ describe('Gated Service Catalog & Join Code Verification (Milestone 3)', () => {
 
       expect(unlockCallCount).toBe(1);
       expect(passedClinicId).toBe('clinic-ustp-cdo');
-      expect(passedJoinCode).toBe('USTP26');
+      expect(passedJoinCode).toBe('45F9-LF9ZS5LT');
       expect(result.isUnlocked).toBe(true);
       expect(result.services.length).toBe(2);
     });
 
-    test('reception QR parser accurately extracts join codes from query parameters and raw codes', () => {
+    test('reception QR parser accurately extracts prefixed and unprefixed join codes', () => {
       // 1. Raw join codes
       expect(parseReceptionQr('CDO202')).toBe('CDO202');
       expect(parseReceptionQr('ustp26')).toBe('USTP26');
+      expect(parseReceptionQr('45f9-lf9zs5lt')).toBe('45F9-LF9ZS5LT');
 
       // 2. Custom App URL scheme with query parameters
       expect(parseReceptionQr('clinicez://join?code=CDO202')).toBe('CDO202');
-      expect(parseReceptionQr('clinicez://clinics/cdo/unlock?code=VIP888')).toBe('VIP888');
+      expect(parseReceptionQr('clinicez://clinics/cdo/unlock?code=45F9-LF9ZS5LT')).toBe('45F9-LF9ZS5LT');
 
       // 3. Web URL query parameters (?code= or ?joinCode=)
-      expect(parseReceptionQr('https://clinicez.ph/join?code=CDO202')).toBe('CDO202');
+      expect(parseReceptionQr('https://clinicez.ph/join?code=45F9-LF9ZS5LT')).toBe('45F9-LF9ZS5LT');
       expect(parseReceptionQr('https://portal.clinicez.com/join/tenant-1/facility-1?code=VIP888')).toBe('VIP888');
       expect(parseReceptionQr('https://clinicez.ph/clinic/details?joinCode=CDO202')).toBe('CDO202');
 
@@ -412,7 +413,8 @@ describe('Gated Service Catalog & Join Code Verification (Milestone 3)', () => {
       expect(GATED_CATALOG_STRINGS.modal.submittingButton).toBe('Unlocking Access...');
       expect(GATED_CATALOG_STRINGS.modal.cancelButton).toBe('Cancel');
       expect(GATED_CATALOG_STRINGS.modal.qrButton).toBe('Scan Reception Placard QR');
-      expect(GATED_CATALOG_STRINGS.modal.lengthError).toBe('Join code must be exactly 6 characters.');
+      expect(GATED_CATALOG_STRINGS.modal.lengthError).toBe('Enter a valid clinic join code (e.g. 45F9-LF9ZS5LT or VIP888).');
+      expect(GATED_CATALOG_STRINGS.modal.inputPlaceholder).toBe('e.g. 45F9-LF9ZS5LT');
 
       // Catalog Keys
       expect(GATED_CATALOG_STRINGS.catalog.servicesSectionTitle).toBe('Services & Pricing');
