@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.ServicesCatalog.Common;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
@@ -10,6 +11,7 @@ using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Licensing;
 using MediatR;
@@ -92,7 +94,8 @@ public sealed record UpdateClinicSettingsCommand(
     bool? EnableStaffOverdueAlerts = null,
     int? IdleLockMinutes = null,
     int? MaxLockedSessionHours = null,
-    bool? AllowStaffPinUnlock = null) : IRequest<ClinicSettingsDto>;
+    bool? AllowStaffPinUnlock = null,
+    string? LtoEvidenceObjectKey = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -103,6 +106,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
     private readonly ClinicEz.Clinic.Domain.Interfaces.IKioskAccessInvalidator? _kioskInvalidator;
     private readonly IFacilityLicenseValidator? _licenseValidator;
     private readonly IClinicDirectorySyncService? _directorySyncService;
+    private readonly IInteropPublisher? _interopPublisher;
+    private readonly IRepository<AuditEntry>? _auditRepo;
+    private readonly IRepository<StaffMember>? _staffRepo;
+    private readonly IRepository<DoctorScheduleTemplate>? _scheduleRepo;
 
     public UpdateClinicSettingsCommandHandler(
         IRepository<FacilitySettings> settingsRepo,
@@ -111,7 +118,11 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         IRepository<ServiceItem>? serviceRepo = null,
         ClinicEz.Clinic.Domain.Interfaces.IKioskAccessInvalidator? kioskInvalidator = null,
         IFacilityLicenseValidator? licenseValidator = null,
-        IClinicDirectorySyncService? directorySyncService = null)
+        IClinicDirectorySyncService? directorySyncService = null,
+        IInteropPublisher? interopPublisher = null,
+        IRepository<AuditEntry>? auditRepo = null,
+        IRepository<StaffMember>? staffRepo = null,
+        IRepository<DoctorScheduleTemplate>? scheduleRepo = null)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
@@ -120,6 +131,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         _kioskInvalidator = kioskInvalidator;
         _licenseValidator = licenseValidator;
         _directorySyncService = directorySyncService;
+        _interopPublisher = interopPublisher;
+        _auditRepo = auditRepo;
+        _staffRepo = staffRepo;
+        _scheduleRepo = scheduleRepo;
     }
 
     public async Task<ClinicSettingsDto> Handle(UpdateClinicSettingsCommand request, CancellationToken ct)
@@ -147,6 +162,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         var prevLetterheadContact = settings.LetterheadContact;
         var prevLetterheadDohLto = settings.LetterheadDohLto;
         var prevDohLtoExpiryDate = settings.DohLtoExpiryDate;
+        var prevLtoEvidenceObjectKey = settings.LtoEvidenceObjectKey;
+        var wasVerified = settings.PlatformVerificationStatus == PlatformVerificationStatus.Verified;
         var prevSpecialtyMode = settings.SpecialtyMode;
         var prevAccreditationNumber = settings.AccreditationNumber;
         var prevIsPhilHealthConfigured = settings.IsPhilHealthConfigured;
@@ -200,6 +217,15 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.DohLtoExpiryDate = null;
         else if (request.DohLtoExpiryDate.HasValue)
             settings.DohLtoExpiryDate = request.DohLtoExpiryDate.Value;
+
+        if (request.LtoEvidenceObjectKey != null)
+        {
+            settings.LtoEvidenceObjectKey = FacilityDirectoryValidationHelper.ValidateLtoEvidenceObjectKeyForClinic(
+                settings.TenantId,
+                settings.ClinicId,
+                prevLtoEvidenceObjectKey,
+                request.LtoEvidenceObjectKey);
+        }
 
         if (request.LetterheadFooter != null)
             settings.LetterheadFooter = string.IsNullOrWhiteSpace(request.LetterheadFooter) ? null : request.LetterheadFooter.Trim();
@@ -460,8 +486,40 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.AllowStaffPinUnlock.HasValue)
             settings.AllowStaffPinUnlock = request.AllowStaffPinUnlock.Value;
 
-        settings.UpdatedAt = DateTime.UtcNow;
+        var updatedAt = DateTime.UtcNow;
+        settings.UpdatedAt = updatedAt;
         settings.UpdatedBy = "ClinicAdmin";
+
+        var ltoCredentialsChanged = FacilityDirectoryValidationHelper.HasRegulatedLtoCredentialsChanged(
+            prevLetterheadDohLto,
+            settings.LetterheadDohLto,
+            prevDohLtoExpiryDate,
+            settings.DohLtoExpiryDate,
+            prevLtoEvidenceObjectKey,
+            settings.LtoEvidenceObjectKey);
+
+        var triggeredLtoUpdateResubmission = false;
+        if (wasVerified && ltoCredentialsChanged)
+        {
+            if (string.IsNullOrWhiteSpace(settings.LetterheadDohLto)
+                && string.IsNullOrWhiteSpace(settings.LtoEvidenceObjectKey))
+            {
+                throw new ValidationException("A DOH LTO number or LTO proof document is required when updating a verified facility's LTO credentials.");
+            }
+
+            await FacilityDirectoryValidationHelper.EnqueueLtoResubmissionAndAuditAsync(
+                settings,
+                updatedAt,
+                _clinicContext,
+                _directorySyncService,
+                _interopPublisher,
+                _staffRepo,
+                _serviceRepo,
+                _scheduleRepo,
+                _auditRepo,
+                ct);
+            triggeredLtoUpdateResubmission = true;
+        }
 
         await _unitOfWork.SaveChangesAsync(ct);
 
@@ -472,6 +530,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             !string.Equals(prevLetterheadContact, settings.LetterheadContact, StringComparison.Ordinal) ||
             !string.Equals(prevLetterheadDohLto, settings.LetterheadDohLto, StringComparison.Ordinal) ||
             prevDohLtoExpiryDate != settings.DohLtoExpiryDate ||
+            !string.Equals(prevLtoEvidenceObjectKey, settings.LtoEvidenceObjectKey, StringComparison.Ordinal) ||
             !string.Equals(prevSpecialtyMode, settings.SpecialtyMode, StringComparison.Ordinal) ||
             !string.Equals(prevAccreditationNumber, settings.AccreditationNumber, StringComparison.Ordinal) ||
             prevIsPhilHealthConfigured != settings.IsPhilHealthConfigured ||
@@ -482,6 +541,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             !string.Equals(prevJoinCode, settings.JoinCode, StringComparison.Ordinal);
 
         if (!request.SkipPendingVerificationSync
+            && !triggeredLtoUpdateResubmission
             && directoryFieldsChanged
             && _directorySyncService != null
             && settings.PlatformVerificationStatus == PlatformVerificationStatus.PendingReview)
@@ -493,7 +553,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
                 _clinicContext.StaffName,
                 ct);
         }
-        else if ((directoryFieldsChanged || joinGatingChanged)
+        else if (!triggeredLtoUpdateResubmission
+            && (directoryFieldsChanged || joinGatingChanged)
             && _directorySyncService != null
             && settings.PlatformVerificationStatus == PlatformVerificationStatus.Verified
             && settings.IsDirectoryPublished)

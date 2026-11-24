@@ -89,7 +89,7 @@ public class PlatformServiceRulesTests
         await using var cell = new TestCell();
         var clinic = await cell.ProvisionAsync(Fac.Clinic("tenant-a"));
         var lab = await cell.ProvisionAsync(Fac.Lab("tenant-a"));
-        var config = new PhilHealthConfigPayload { TenantId = "tenant-a", Username = "clinic-user", Password = "s3cret", CipherKey = "k3y", IsActive = true };
+        var config = new PhilHealthConfigPayload { TenantId = "tenant-a", SoftwareCertificateId = "CERT-001", SecretKey = "s3cret", CipherKey = "k3y", IsActive = true };
 
         var ask = Envelope(InteropTypes.PhilHealthConfigRequested, Party.PhilHealth, Party.Portal, new PhilHealthConfigRequestedPayload { TenantId = "tenant-a" });
         (await SendAsync(cell, Proxy, ask)).Status.Should().Be(SendResult.Accepted);
@@ -130,7 +130,7 @@ public class PlatformServiceRulesTests
             InteropTypes.PhilHealthRequest,
             facility.Party,
             Party.PhilHealth,
-            new PhilHealthRequestPayload { Operation = PhilHealthOperations.YakapPinValidate, Argument = "12-345678901-2" });
+            new PhilHealthRequestPayload { Operation = PhilHealthOperations.YakapValidateStanding, Argument = "12-345678901-2" });
 
     private static InteropEnvelope Envelope<T>(string type, Party from, Party to, T payload) =>
         InteropEnvelope.Create(type, from, to, Guid.NewGuid(), payload);

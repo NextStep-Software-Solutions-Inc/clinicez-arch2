@@ -176,9 +176,12 @@ const {
   PENDING_VERIFICATION_BUTTON_LABEL,
   PENDING_VERIFICATION_CONFLICT_CODE,
   PENDING_VERIFICATION_HELPER_NOTE,
+  REGULATED_LTO_REVERIFICATION_NOTICE,
   REGULATED_PRC_REVERIFICATION_NOTICE,
+  RESUBMIT_LTO_BUTTON_LABEL,
   RESUBMIT_VERIFICATION_BUTTON_LABEL,
   buildDohLtoSettingsPayload,
+  hasRegulatedLtoCredentialsChanged,
   hasRegulatedPrcCredentialsChanged,
   isPendingVerificationConflictError,
 } = await import('../utils/directoryVerification');
@@ -2332,6 +2335,266 @@ describe('Issues 217 & 218 — clinic-app Pending Verification Sync & DOH LTO Ex
       clinicService.updateStaff = origUpdateStaff;
       clinicService.uploadStaffPrcProof = origUploadPrc;
       clinicService.submitStaffVerification = origSubmitVerification;
+    }
+  });
+
+  test('14. Issue 242 — hasRegulatedLtoCredentialsChanged, buildDohLtoSettingsPayload with ltoEvidenceObjectKey & uploadLtoProof stageOnly query param', async () => {
+    expect(
+      hasRegulatedLtoCredentialsChanged({
+        previousDohLtoNumber: 'DOH-LTO-04A-2026-0089',
+        nextDohLtoNumber: ' DOH-LTO-04A-2026-0089 ',
+        previousDohLtoExpiryDate: '2028-06-30',
+        nextDohLtoExpiryDate: '2028-06-30',
+        previousLtoEvidenceObjectKey: 'lto/old.pdf',
+        nextLtoEvidenceObjectKey: 'lto/old.pdf',
+        hasPickedProofFile: false,
+      }),
+    ).toBe(false);
+
+    expect(
+      hasRegulatedLtoCredentialsChanged({
+        previousDohLtoNumber: 'DOH-LTO-04A-2026-0089',
+        nextDohLtoNumber: 'DOH-LTO-04A-2026-0099',
+        previousDohLtoExpiryDate: '2028-06-30',
+        nextDohLtoExpiryDate: '2028-06-30',
+        previousLtoEvidenceObjectKey: 'lto/old.pdf',
+        nextLtoEvidenceObjectKey: 'lto/old.pdf',
+      }),
+    ).toBe(true);
+
+    expect(
+      hasRegulatedLtoCredentialsChanged({
+        previousDohLtoNumber: 'DOH-LTO-04A-2026-0089',
+        nextDohLtoNumber: 'DOH-LTO-04A-2026-0089',
+        previousDohLtoExpiryDate: '2028-06-30',
+        nextDohLtoExpiryDate: '2029-12-31',
+        previousLtoEvidenceObjectKey: 'lto/old.pdf',
+        nextLtoEvidenceObjectKey: 'lto/old.pdf',
+      }),
+    ).toBe(true);
+
+    expect(
+      hasRegulatedLtoCredentialsChanged({
+        previousDohLtoNumber: 'DOH-LTO-04A-2026-0089',
+        nextDohLtoNumber: 'DOH-LTO-04A-2026-0089',
+        previousDohLtoExpiryDate: '2028-06-30',
+        nextDohLtoExpiryDate: '2028-06-30',
+        previousLtoEvidenceObjectKey: 'lto/old.pdf',
+        nextLtoEvidenceObjectKey: 'lto/new.pdf',
+      }),
+    ).toBe(true);
+
+    expect(
+      buildDohLtoSettingsPayload({
+        dohLto: 'DOH-LTO-04A-2026-0089',
+        dohLtoExpiryDate: '2029-12-31',
+        previousDohLtoExpiryDate: '2028-06-30',
+        ltoEvidenceObjectKey: 'tenants/t-1/clinics/c-1/verification/lto/new.pdf',
+      }),
+    ).toEqual({
+      letterheadDohLto: 'DOH-LTO-04A-2026-0089',
+      dohLtoExpiryDate: '2029-12-31',
+      ltoEvidenceObjectKey: 'tenants/t-1/clinics/c-1/verification/lto/new.pdf',
+    });
+
+    const origPost = clinicApiClient.post;
+    const postUrls: string[] = [];
+    clinicApiClient.post = (async (url: string) => {
+      postUrls.push(url);
+      return [{ objectKey: 'staged-lto-key' } as any, null];
+    }) as any;
+
+    try {
+      await clinicService.uploadLtoProof(new FormData(), undefined, {
+        stageOnly: true,
+      });
+      expect(postUrls).toEqual(['/clinic-settings/lto-proof?stageOnly=true']);
+    } finally {
+      clinicApiClient.post = origPost;
+    }
+  });
+
+  test('15. Issue 242 — Verified facility requires Save LTO & Resubmit for Verification on LTO number/expiry/proof edits and supports DocumentTemplatesSettingsTab LTO notice', async () => {
+    resetFeedbackState();
+    const origUpdateSettings = clinicService.updateSettings;
+    const origGetBlob = clinicApiClient.getBlob;
+    clinicApiClient.getBlob = (async () => [new Blob(['pdf'], { type: 'application/pdf' }), null]) as any;
+
+    try {
+      const saveCalls: Array<{
+        dohLto: string;
+        dohLtoExpiryDate?: string | null;
+        ltoEvidenceObjectKey?: string | null;
+      }> = [];
+      const uploadCalls: Array<{ opts?: any }> = [];
+
+      let currentLto = 'DOH-LTO-04A-2026-0089';
+      let currentExpiry = '2028-06-30';
+      let currentProofKey = 'tenants/t-1/clinics/c-1/verification/lto/old-lto.pdf';
+      let currentStatus: any = 'Verified';
+
+      const makeReadinessProps = (): any => ({
+        license: {
+          status: 'Active',
+          planTier: 'Growth',
+          isTampered: false,
+          limits: { maxStaff: 10 },
+        },
+        clinicName: 'St. Jude Clinic',
+        letterheadAddress: '123 Rizal Ave, Manila',
+        letterheadContact: '0917-000-0000',
+        accreditationNumber: 'PHIC-001',
+        operatingHours: 'Mon-Fri 8am-5pm',
+        letterheadDohLto: currentLto,
+        dohLtoExpiryDate: currentExpiry,
+        ltoEvidenceObjectKey: currentProofKey,
+        staff: [
+          { id: 'd1', role: 'Doctor', isActive: true, prcLicenseNumber: '0123456' },
+          { id: 'r1', role: 'Receptionist', isActive: true },
+        ],
+        services: [{ id: 's1', isActive: true, name: 'Consult', category: 'Consultation', standardPrice: 500 }],
+        roles: [],
+        platformVerificationStatus: currentStatus,
+        isDirectoryPublished: true,
+        isWorkspaceEligible: true,
+        onSaveDohLto: async (dohLto: string, dohLtoExpiryDate?: string | null, ltoEvidenceObjectKey?: string | null) => {
+          saveCalls.push({ dohLto, dohLtoExpiryDate: dohLtoExpiryDate ?? null, ltoEvidenceObjectKey: ltoEvidenceObjectKey ?? null });
+          currentLto = dohLto;
+          currentExpiry = dohLtoExpiryDate ?? '';
+          if (ltoEvidenceObjectKey) {
+            currentProofKey = ltoEvidenceObjectKey;
+          }
+          currentStatus = 'PendingReview';
+          harness.rerender(makeReadinessProps());
+          return true;
+        },
+        onUploadLtoProof: async (_form: any, opts?: any) => {
+          uploadCalls.push({ opts });
+          return 'tenants/t-1/clinics/c-1/verification/lto/new-lto.pdf';
+        },
+        onNavigateTab: () => {},
+        onOpenAddStaff: () => {},
+        onOpenAddService: () => {},
+        onOpenLicenseModal: () => {},
+      });
+
+      const harness = createLocalHookHarness((props: any) => FacilityReadinessTab(props), makeReadinessProps());
+
+      // 1) Baseline Verified facility shows Save LTO (disabled) and no notice
+      expect(findNodeByTestId(harness.result.current, 'readiness-lto-reverification-notice')).toBeNull();
+      const baselineSaveBtn = findNodeByTestId(harness.result.current, 'btn-save-doh-lto');
+      expect(baselineSaveBtn.props.title).toBe('Save LTO');
+      expect(baselineSaveBtn.props.disabled).toBe(true);
+
+      // 2) Editing DOH LTO Number shows notice & switches CTA; reverting restores Save LTO
+      const ltoInput = findNodeByTestId(harness.result.current, 'readiness-input-doh-lto');
+      ltoInput.props.onChangeText('DOH-LTO-04A-2026-0999');
+      const noticeNum = findNodeByTestId(harness.result.current, 'readiness-lto-reverification-notice');
+      expect(noticeNum).not.toBeNull();
+      expect(JSON.stringify(noticeNum)).toContain(REGULATED_LTO_REVERIFICATION_NOTICE);
+      const resubmitBtnNum = findNodeByTestId(harness.result.current, 'btn-save-doh-lto');
+      expect(resubmitBtnNum.props.title).toBe(RESUBMIT_LTO_BUTTON_LABEL);
+      expect(resubmitBtnNum.props.disabled).toBe(false);
+
+      ltoInput.props.onChangeText('DOH-LTO-04A-2026-0089');
+      expect(findNodeByTestId(harness.result.current, 'readiness-lto-reverification-notice')).toBeNull();
+      expect(findNodeByTestId(harness.result.current, 'btn-save-doh-lto').props.title).toBe('Save LTO');
+
+      // 3) Editing DOH LTO Expiry Date shows notice & switches CTA
+      const expiryInput = findNodeByTestId(harness.result.current, 'readiness-input-doh-lto-expiry');
+      expiryInput.props.onChangeText('2029-12-31');
+      expect(findNodeByTestId(harness.result.current, 'readiness-lto-reverification-notice')).not.toBeNull();
+      expect(findNodeByTestId(harness.result.current, 'btn-save-doh-lto').props.title).toBe(RESUBMIT_LTO_BUTTON_LABEL);
+
+      // Revert expiry, test Replace LTO Proof (stageOnly: true) & Discard
+      expiryInput.props.onChangeText('2028-06-30');
+      expect(findNodeByTestId(harness.result.current, 'readiness-lto-reverification-notice')).toBeNull();
+
+      mockPickedDocumentResult = {
+        canceled: false,
+        assets: [
+          {
+            name: 'renewed-lto.pdf',
+            size: 2048,
+            mimeType: 'application/pdf',
+            uri: 'file:///renewed-lto.pdf',
+          },
+        ],
+      };
+      await findNodeByTestId(harness.result.current, 'btn-upload-lto-proof').props.onPress();
+      expect(uploadCalls).toEqual([{ opts: { stageOnly: true } }]);
+      expect(currentProofKey).toBe('tenants/t-1/clinics/c-1/verification/lto/old-lto.pdf');
+      expect(findNodeByTestId(harness.result.current, 'readiness-lto-reverification-notice')).not.toBeNull();
+      expect(findNodeByTestId(harness.result.current, 'btn-save-doh-lto').props.title).toBe(RESUBMIT_LTO_BUTTON_LABEL);
+      expect(findNodeByTestId(harness.result.current, 'btn-save-doh-lto').props.disabled).toBe(false);
+
+      // Discard staged proof restores clean state
+      findNodeByTestId(harness.result.current, 'btn-discard-staged-lto-proof').props.onPress();
+      expect(findNodeByTestId(harness.result.current, 'readiness-lto-reverification-notice')).toBeNull();
+      expect(findNodeByTestId(harness.result.current, 'btn-save-doh-lto').props.title).toBe('Save LTO');
+
+      // 4) Re-stage proof + update expiry and click Save LTO & Resubmit for Verification
+      await findNodeByTestId(harness.result.current, 'btn-upload-lto-proof').props.onPress();
+      findNodeByTestId(harness.result.current, 'readiness-input-doh-lto-expiry').props.onChangeText('2029-12-31');
+      await findNodeByTestId(harness.result.current, 'btn-save-doh-lto').props.onPress();
+
+      expect(saveCalls).toEqual([
+        {
+          dohLto: 'DOH-LTO-04A-2026-0089',
+          dohLtoExpiryDate: '2029-12-31',
+          ltoEvidenceObjectKey: 'tenants/t-1/clinics/c-1/verification/lto/new-lto.pdf',
+        },
+      ]);
+      expect(currentStatus).toBe('PendingReview');
+      expect(currentProofKey).toBe('tenants/t-1/clinics/c-1/verification/lto/new-lto.pdf');
+      harness.unmount();
+
+      // 5) DocumentTemplatesSettingsTab also surfaces notice & Save & Resubmit for Verification when Verified LTO # changes
+      let refreshVerificationCalls = 0;
+      const docsSettings: any = {
+        id: 'set-242',
+        tenantId: 't-1',
+        clinicId: 'c-1',
+        clinicName: 'St. Jude Clinic',
+        letterheadDohLto: 'DOH-LTO-04A-2026-0089',
+        dohLicenseToOperate: 'DOH-LTO-04A-2026-0089',
+        platformVerificationStatus: 'Verified',
+      };
+      clinicService.updateSettings = (async (payload: any) => [
+        {
+          ...docsSettings,
+          ...payload,
+          platformVerificationStatus: 'PendingReview',
+        },
+        null,
+      ]) as any;
+
+      const docsHarness = createLocalHookHarness(
+        (props: any) => DocumentTemplatesSettingsTab(props),
+        {
+          settings: docsSettings,
+          platformVerificationStatus: 'Verified',
+          onRefreshVerificationState: async () => {
+            refreshVerificationCalls += 1;
+          },
+        } as any,
+      );
+
+      findNodeByTestId(docsHarness.result.current, 'input-doh-lto').props.onChangeText('DOH-LTO-04A-2026-8888');
+      const docsNotice = findNodeByTestId(docsHarness.result.current, 'docs-lto-reverification-notice');
+      expect(docsNotice).not.toBeNull();
+      expect(JSON.stringify(docsNotice)).toContain(REGULATED_LTO_REVERIFICATION_NOTICE);
+      const docsSaveBtn = findNodeByTestId(docsHarness.result.current, 'btn-save-settings');
+      expect(docsSaveBtn.props.title).toBe(RESUBMIT_VERIFICATION_BUTTON_LABEL);
+
+      await docsSaveBtn.props.onPress();
+      expect(refreshVerificationCalls).toBe(1);
+      docsHarness.unmount();
+    } finally {
+      mockPickedDocumentResult = { canceled: true, assets: null };
+      resetFeedbackState();
+      clinicService.updateSettings = origUpdateSettings;
+      clinicApiClient.getBlob = origGetBlob;
     }
   });
 });

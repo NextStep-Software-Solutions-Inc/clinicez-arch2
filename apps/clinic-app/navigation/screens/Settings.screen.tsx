@@ -559,12 +559,18 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const [ltoSaving, setLtoSaving] = useState(false);
   const [ltoUploading, setLtoUploading] = useState(false);
 
-  const handleSaveDohLto = async (dohLto: string, dohLtoExpiryDate?: string | null) => {
+  const handleSaveDohLto = async (
+    dohLto: string,
+    dohLtoExpiryDate?: string | null,
+    ltoEvidenceObjectKey?: string | null,
+  ) => {
+    const wasVerifiedFacility = effectiveVerificationStatus === 'Verified';
     const isPendingFacility = effectiveVerificationStatus === 'PendingReview';
     const payload = buildDohLtoSettingsPayload({
       dohLto,
       dohLtoExpiryDate: dohLtoExpiryDate ?? '',
       previousDohLtoExpiryDate: effectiveDohLtoExpiryDate,
+      ltoEvidenceObjectKey,
       skipPendingVerificationSync: isPendingFacility,
     });
 
@@ -583,6 +589,13 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             ...prev,
             letterheadDohLto: saved.letterheadDohLto ?? prev.letterheadDohLto,
             dohLtoExpiryDate: saved.dohLtoExpiryDate ?? null,
+            ltoEvidenceObjectKey: saved.ltoEvidenceObjectKey ?? prev.ltoEvidenceObjectKey,
+            platformVerificationStatus:
+              saved.platformVerificationStatus ?? prev.platformVerificationStatus,
+            lastVerificationSubmittedAtUtc:
+              saved.lastVerificationSubmittedAtUtc ?? prev.lastVerificationSubmittedAtUtc,
+            verificationRejectionReason:
+              saved.verificationRejectionReason ?? prev.verificationRejectionReason,
           }
         : prev
     );
@@ -613,23 +626,41 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
 
     setLtoSaving(false);
     await refreshReadiness();
-    notify.success('DOH LTO details saved.');
+    notify.success(
+      wasVerifiedFacility && saved.platformVerificationStatus === 'PendingReview'
+        ? 'DOH LTO details saved and resubmitted for verification.'
+        : 'DOH LTO details saved.',
+    );
     return true;
   };
 
-  const handleUploadLtoProof = async (formData: FormData) => {
+  const handleUploadLtoProof = async (
+    formData: FormData,
+    options?: { stageOnly?: boolean },
+  ) => {
     const isPendingFacility = effectiveVerificationStatus === 'PendingReview';
+    const isStageOnly = options?.stageOnly === true;
     setLtoUploading(true);
     const [res, err] = await clinicService.uploadLtoProof(
       formData,
       undefined,
-      isPendingFacility ? { skipPendingVerificationSync: true } : undefined,
+      isPendingFacility
+        ? { skipPendingVerificationSync: true }
+        : isStageOnly
+        ? { stageOnly: true }
+        : undefined,
     );
     if (err || !res?.objectKey) {
       setLtoUploading(false);
       notify.error(err?.message || 'Could not upload DOH LTO proof.');
       return false;
     }
+
+    if (isStageOnly) {
+      setLtoUploading(false);
+      return res.objectKey;
+    }
+
     setSettings((prev) => (prev ? { ...prev, ltoEvidenceObjectKey: res.objectKey } : prev));
 
     if (isPendingFacility) {

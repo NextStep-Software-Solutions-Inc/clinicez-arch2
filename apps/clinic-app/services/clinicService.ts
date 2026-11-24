@@ -203,9 +203,12 @@ export interface PendingSyncMutationOptions {
   skipPendingVerificationSync?: boolean;
 }
 
-export interface UploadStaffPrcProofOptions extends PendingSyncMutationOptions {
+export interface UploadEvidenceProofOptions extends PendingSyncMutationOptions {
   stageOnly?: boolean;
 }
+
+export type UploadStaffPrcProofOptions = UploadEvidenceProofOptions;
+export type UploadLtoProofOptions = UploadEvidenceProofOptions;
 
 export function isVerificationConflictError(err?: ApiError | null): boolean {
   return Boolean(
@@ -5473,10 +5476,18 @@ export const clinicService = {
   async uploadLtoProof(
     fileInput: FormData | Blob | { uri: string; name: string; type: string },
     fileName?: string,
-    options?: PendingSyncMutationOptions,
+    options?: UploadLtoProofOptions,
   ) {
     const formData = toEvidenceUploadFormData(fileInput, fileName);
-    const qs = options?.skipPendingVerificationSync === true ? '?skipPendingVerificationSync=true' : '';
+    const params = new URLSearchParams();
+    if (options?.skipPendingVerificationSync === true) {
+      params.set('skipPendingVerificationSync', 'true');
+    }
+    if (options?.stageOnly === true) {
+      params.set('stageOnly', 'true');
+    }
+    const qsStr = params.toString();
+    const qs = qsStr ? `?${qsStr}` : '';
     return clinicApiClient.post<EvidenceProofUploadResult>(`/clinic-settings/lto-proof${qs}`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',

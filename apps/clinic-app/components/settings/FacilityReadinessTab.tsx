@@ -11,14 +11,17 @@ import { Skeleton, SkeletonList } from '../ui/Skeleton';
 import { theme, subscribeActiveTheme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 import {
+  hasRegulatedLtoCredentialsChanged,
   PENDING_VERIFICATION_BUTTON_LABEL,
   pickVerificationEvidenceFile,
+  REGULATED_LTO_REVERIFICATION_NOTICE,
   resolveFacilityVerificationBadge,
+  RESUBMIT_LTO_BUTTON_LABEL,
   toEvidenceFormData,
   type PickedEvidenceFile,
 } from '../../utils/directoryVerification';
 import { clinicService } from '../../services/clinicService';
-import { PendingVerificationNote } from './common';
+import { PendingVerificationNote, ReverificationNoticeBanner } from './common';
 import { EvidenceProofPreview } from './EvidenceProofPreview';
 import { SettingsTabKey, ReadinessCheckItem } from './types';
 import {
@@ -95,8 +98,15 @@ export interface FacilityReadinessTabProps {
   ltoEvidenceObjectKey?: string | null;
   optedInCliniciansCount?: number;
   optedInCliniciansReadyCount?: number;
-  onSaveDohLto?: (dohLto: string, dohLtoExpiryDate?: string | null) => Promise<boolean | void> | boolean | void;
-  onUploadLtoProof?: (file: FormData) => Promise<boolean | void> | boolean | void;
+  onSaveDohLto?: (
+    dohLto: string,
+    dohLtoExpiryDate?: string | null,
+    ltoEvidenceObjectKey?: string | null,
+  ) => Promise<boolean | void> | boolean | void;
+  onUploadLtoProof?: (
+    file: FormData,
+    options?: { stageOnly?: boolean },
+  ) => Promise<boolean | string | { objectKey?: string } | void> | boolean | string | { objectKey?: string } | void;
   onSubmitVerification?: () => Promise<void> | void;
   onWithdrawVerification?: () => Promise<void> | void;
   onTogglePublishDirectory?: (nextPublished: boolean) => Promise<void> | void;
@@ -161,6 +171,7 @@ export default function FacilityReadinessTab({
   const [localLtoSaving, setLocalLtoSaving] = useState(false);
   const [localLtoUploading, setLocalLtoUploading] = useState(false);
   const [localLtoFile, setLocalLtoFile] = useState<PickedEvidenceFile | null>(null);
+  const [stagedLtoObjectKey, setStagedLtoObjectKey] = useState<string | null>(null);
   const [ltoInput, setLtoInput] = useState(letterheadDohLto ?? '');
   const [ltoExpiryInput, setLtoExpiryInput] = useState(dohLtoExpiryDate ?? '');
   const fetchLtoProofBlob = useMemo(
@@ -175,6 +186,19 @@ export default function FacilityReadinessTab({
   useEffect(() => {
     setLtoExpiryInput(dohLtoExpiryDate ?? '');
   }, [dohLtoExpiryDate]);
+
+  useEffect(() => {
+    if (platformVerificationStatus !== 'Verified') {
+      setStagedLtoObjectKey(null);
+    }
+  }, [platformVerificationStatus]);
+
+  useEffect(() => {
+    if (stagedLtoObjectKey && ltoEvidenceObjectKey === stagedLtoObjectKey) {
+      setStagedLtoObjectKey(null);
+      setLocalLtoFile(null);
+    }
+  }, [ltoEvidenceObjectKey, stagedLtoObjectKey]);
 
   const publishingLoading = isPublishingMutating ?? localPublishingLoading;
   const pauseLoading = isBookingPauseMutating ?? localPauseLoading;
@@ -365,6 +389,20 @@ export default function FacilityReadinessTab({
       : undefined;
   const ltoDraftDirty =
     ltoInput.trim() !== savedDohLto || trimmedLtoExpiry !== savedDohLtoExpiry;
+  const hasStagedLtoProof = Boolean(stagedLtoObjectKey || (isVerified && localLtoFile));
+  const effectiveLtoProofKey = stagedLtoObjectKey ?? ltoEvidenceObjectKey;
+  const hasVerifiedLtoCredentialEdits =
+    isVerified &&
+    hasRegulatedLtoCredentialsChanged({
+      previousDohLtoNumber: savedDohLto,
+      nextDohLtoNumber: ltoInput,
+      previousDohLtoExpiryDate: savedDohLtoExpiry,
+      nextDohLtoExpiryDate: trimmedLtoExpiry,
+      previousLtoEvidenceObjectKey: ltoEvidenceObjectKey,
+      nextLtoEvidenceObjectKey: effectiveLtoProofKey,
+      hasPickedProofFile: hasStagedLtoProof,
+    });
+  const canSaveLto = (ltoDraftDirty || hasStagedLtoProof) && !savingLto && !uploadingLto && !ltoExpiryError;
 
   const handlePickAndUploadLtoProof = async () => {
     if (!onUploadLtoProof) {
@@ -379,13 +417,40 @@ export default function FacilityReadinessTab({
     }
     setLocalLtoUploading(true);
     try {
-      const ok = await onUploadLtoProof(toEvidenceFormData(picked.file));
-      if (ok !== false) {
-        setLocalLtoFile(picked.file);
+      const uploadResult = await onUploadLtoProof(
+        toEvidenceFormData(picked.file),
+        isVerified ? { stageOnly: true } : undefined,
+      );
+      if (uploadResult === false) {
+        return;
       }
+
+      if (isVerified) {
+        const stagedKey =
+          typeof uploadResult === 'string'
+            ? uploadResult
+            : uploadResult &&
+              typeof uploadResult === 'object' &&
+              typeof uploadResult.objectKey === 'string'
+            ? uploadResult.objectKey
+            : null;
+        if (stagedKey) {
+          setStagedLtoObjectKey(stagedKey);
+        }
+        setLocalLtoFile(picked.file);
+        notify.success('DOH LTO proof ready. Save LTO & Resubmit for Verification to submit.');
+        return;
+      }
+
+      setLocalLtoFile(picked.file);
     } finally {
       setLocalLtoUploading(false);
     }
+  };
+
+  const handleDiscardStagedLtoProof = () => {
+    setStagedLtoObjectKey(null);
+    setLocalLtoFile(null);
   };
 
   const handleSaveDohLto = async () => {
@@ -396,7 +461,15 @@ export default function FacilityReadinessTab({
     }
     setLocalLtoSaving(true);
     try {
-      await onSaveDohLto(ltoInput.trim(), trimmedLtoExpiry || null);
+      const ok = await onSaveDohLto(
+        ltoInput.trim(),
+        trimmedLtoExpiry || null,
+        stagedLtoObjectKey ?? undefined,
+      );
+      if (ok !== false) {
+        setStagedLtoObjectKey(null);
+        setLocalLtoFile(null);
+      }
     } finally {
       setLocalLtoSaving(false);
     }
@@ -726,34 +799,59 @@ export default function FacilityReadinessTab({
               {onSaveDohLto ? (
                 <View style={styles.ltoSaveBtnWrap}>
                   <Button
-                    title={isPendingReview ? PENDING_VERIFICATION_BUTTON_LABEL : 'Save LTO'}
-                    variant="outline"
+                    title={
+                      hasVerifiedLtoCredentialEdits
+                        ? RESUBMIT_LTO_BUTTON_LABEL
+                        : isPendingReview
+                        ? PENDING_VERIFICATION_BUTTON_LABEL
+                        : 'Save LTO'
+                    }
+                    variant={hasVerifiedLtoCredentialEdits ? 'primary' : 'outline'}
                     size="sm"
                     onPress={handleSaveDohLto}
                     loading={savingLto}
-                    disabled={!ltoDraftDirty || savingLto || Boolean(ltoExpiryError)}
+                    disabled={!canSaveLto}
                     testID="btn-save-doh-lto"
                   />
                 </View>
               ) : null}
             </View>
 
-            {isPendingReview ? (
+            {hasVerifiedLtoCredentialEdits ? (
+              <ReverificationNoticeBanner
+                message={REGULATED_LTO_REVERIFICATION_NOTICE}
+                testID="readiness-lto-reverification-notice"
+              />
+            ) : isPendingReview ? (
               <PendingVerificationNote testID="readiness-pending-helper-note" />
             ) : null}
 
             <View style={styles.ltoProofRow}>
               <Button
-                title={hasLtoProof ? 'Replace LTO Proof' : 'Upload LTO Proof'}
+                title={hasLtoProof || hasStagedLtoProof ? 'Replace LTO Proof' : 'Upload LTO Proof'}
                 variant="secondary"
                 size="sm"
                 icon="upload"
                 loading={uploadingLto}
-                disabled={uploadingLto}
+                disabled={uploadingLto || savingLto}
                 onPress={handlePickAndUploadLtoProof}
                 testID="btn-upload-lto-proof"
               />
-              {hasLtoProof ? (
+              {hasStagedLtoProof ? (
+                <>
+                  <ThemedText variant="caption" color={theme.colors.warningText}>
+                    New LTO proof staged. Click {RESUBMIT_LTO_BUTTON_LABEL} to submit.
+                  </ThemedText>
+                  <Button
+                    title="Discard Staged Proof"
+                    variant="ghost"
+                    size="sm"
+                    onPress={handleDiscardStagedLtoProof}
+                    disabled={savingLto || uploadingLto}
+                    testID="btn-discard-staged-lto-proof"
+                  />
+                </>
+              ) : hasLtoProof ? (
                 <ThemedText variant="caption" color={theme.colors.successText}>
                   LTO evidence document is stored on file.
                 </ThemedText>
@@ -764,10 +862,10 @@ export default function FacilityReadinessTab({
               )}
             </View>
 
-            {hasLtoProof || localLtoFile ? (
+            {hasLtoProof || hasStagedLtoProof || localLtoFile ? (
               <EvidenceProofPreview
                 label="DOH License to Operate (LTO) Proof"
-                objectKey={ltoEvidenceObjectKey}
+                objectKey={effectiveLtoProofKey}
                 localFile={localLtoFile}
                 fetchBlob={fetchLtoProofBlob}
                 testID="lto-proof-preview"

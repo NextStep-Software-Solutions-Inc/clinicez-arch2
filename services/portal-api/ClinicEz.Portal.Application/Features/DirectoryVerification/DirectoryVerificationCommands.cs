@@ -158,6 +158,8 @@ public sealed class ApproveVerificationRequestCommandHandler(
             {
                 if (!string.IsNullOrWhiteSpace(snapshot.DohLtoNumber))
                     facility.LicenseToOperate = snapshot.DohLtoNumber.Trim();
+                else if (VerificationReviewerLookup.HasJsonPropertyKey(facilityReq.SubmittedSnapshotJson, "dohLtoNumber"))
+                    facility.LicenseToOperate = null;
                 if (VerificationReviewerLookup.HasJsonPropertyKey(facilityReq.SubmittedSnapshotJson, "dohLtoExpiryDate")
                     || snapshot.DohLtoExpiryDate.HasValue)
                     facility.LtoExpiryDate = snapshot.DohLtoExpiryDate;

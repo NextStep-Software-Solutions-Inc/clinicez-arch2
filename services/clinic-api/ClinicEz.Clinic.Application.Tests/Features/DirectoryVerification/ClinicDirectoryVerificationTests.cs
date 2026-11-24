@@ -1359,5 +1359,129 @@ public class ClinicDirectoryVerificationTests
         payload.IsPlatformVerified.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task UpdateVerifiedClinicSettings_LtoChangesResetToPendingAndEmitLtoUpdate_WhileNonLtoKeepsVerified()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
+        var storage = Substitute.For<IClinicStorageService>();
+        storage.SaveEncryptedFileAsync(Arg.Any<string>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.ArgAt<string>(0));
+        var publisher = Substitute.For<IInteropPublisher>();
+
+        var originalExpiry = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1));
+        var originalProofKey = $"tenants/{TenantId}/clinics/{_clinicId:D}/verification/lto/old-lto.pdf";
+
+        await settingsRepo.AddAsync(new FacilitySettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            ClinicId = _clinicId,
+            ClinicName = "Verified LTO Clinic",
+            OperatingHours = "Mon-Fri 8AM-5PM",
+            LetterheadDohLto = "DOH-LTO-04A-2026-0001",
+            DohLtoExpiryDate = originalExpiry,
+            LtoEvidenceObjectKey = originalProofKey,
+            IsWorkspaceEligible = true,
+            IsDirectoryPublished = true,
+            PlatformVerificationStatus = PlatformVerificationStatus.Verified
+        });
+        await uow.SaveChangesAsync();
+
+        var syncService = new ClinicDirectorySyncService(staffRepo, servicesRepo, publisher, settingsRepo: settingsRepo);
+        var updateHandler = new UpdateClinicSettingsCommandHandler(
+            settingsRepo,
+            _clinicContext,
+            uow,
+            serviceRepo: servicesRepo,
+            directorySyncService: syncService,
+            interopPublisher: publisher,
+            auditRepo: auditRepo,
+            staffRepo: staffRepo);
+
+        // 1. Non-LTO edit keeps Verified and emits zero FacilityVerificationRequested
+        var nonLtoUpdated = await updateHandler.Handle(
+            new UpdateClinicSettingsCommand(
+                LetterheadDohLto: "DOH-LTO-04A-2026-0001",
+                DohLtoExpiryDate: originalExpiry,
+                LetterheadFooter: "Updated legal disclaimer."),
+            CancellationToken.None);
+
+        nonLtoUpdated.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.Verified);
+        publisher.DidNotReceiveWithAnyArgs().Enqueue<FacilityVerificationRequestedPayload>(default!, default!, default!, default, default!);
+
+        // 2. StageOnly LTO upload stores proof without mutating settings or status
+        var uploadHandler = new UploadLtoProofCommandHandler(
+            settingsRepo, storage, _clinicContext, uow,
+            auditRepo: auditRepo, directorySyncService: syncService,
+            interopPublisher: publisher, staffRepo: staffRepo, servicesRepo: servicesRepo);
+
+        var stagedProof = await uploadHandler.Handle(
+            new UploadLtoProofCommand("renewed-lto.pdf", "application/pdf", 5, [0x25, 0x50, 0x44, 0x46, 0x2D], StageOnly: true),
+            CancellationToken.None);
+
+        stagedProof.ObjectKey.Should().NotBe(originalProofKey);
+        var settingsAfterStage = await settingsRepo.Query().FirstAsync();
+        settingsAfterStage.LtoEvidenceObjectKey.Should().Be(originalProofKey);
+        settingsAfterStage.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.Verified);
+        publisher.DidNotReceiveWithAnyArgs().Enqueue<FacilityVerificationRequestedPayload>(default!, default!, default!, default, default!);
+
+        // 3. Clearing both DOH LTO # and LTO proof on Verified facility throws ValidationException
+        Func<Task> clearAll = () => updateHandler.Handle(
+            new UpdateClinicSettingsCommand(LetterheadDohLto: "", LtoEvidenceObjectKey: ""),
+            CancellationToken.None);
+        await clearAll.Should().ThrowAsync<ValidationException>();
+
+        // 4. Saving staged proof + updated LTO # & expiry transitions Verified -> PendingReview and emits LtoUpdate
+        var renewedExpiry = originalExpiry.AddYears(2);
+        var resubmitted = await updateHandler.Handle(
+            new UpdateClinicSettingsCommand(
+                LetterheadDohLto: "DOH-LTO-04A-2026-0099",
+                DohLtoExpiryDate: renewedExpiry,
+                LtoEvidenceObjectKey: stagedProof.ObjectKey),
+            CancellationToken.None);
+
+        resubmitted.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.PendingReview);
+        resubmitted.LetterheadDohLto.Should().Be("DOH-LTO-04A-2026-0099");
+        resubmitted.DohLtoExpiryDate.Should().Be(renewedExpiry);
+        resubmitted.LtoEvidenceObjectKey.Should().Be(stagedProof.ObjectKey);
+
+        publisher.Received(1).Enqueue(
+            InteropTypes.FacilityVerificationRequested,
+            Arg.Any<Party>(),
+            Party.Portal,
+            _clinicId,
+            Arg.Is<FacilityVerificationRequestedPayload>(p =>
+                p.RequestKind == "LtoUpdate" &&
+                p.DohLtoNumber == "DOH-LTO-04A-2026-0099" &&
+                p.DohLtoExpiryDate == renewedExpiry &&
+                p.LtoEvidenceObjectKey == stagedProof.ObjectKey));
+
+        // 5. Direct non-staged upload on a Verified facility also triggers LtoUpdate resubmission
+        var persistedForDirectUpload = await settingsRepo.Query().FirstAsync();
+        persistedForDirectUpload.PlatformVerificationStatus = PlatformVerificationStatus.Verified;
+        await uow.SaveChangesAsync();
+        publisher.ClearReceivedCalls();
+
+        var directProof = await uploadHandler.Handle(
+            new UploadLtoProofCommand("direct-lto.png", "image/png", 4, [0x89, 0x50, 0x4E, 0x47], StageOnly: false),
+            CancellationToken.None);
+
+        var afterDirect = await settingsRepo.Query().FirstAsync();
+        afterDirect.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.PendingReview);
+        afterDirect.LtoEvidenceObjectKey.Should().Be(directProof.ObjectKey);
+        publisher.Received(1).Enqueue(
+            InteropTypes.FacilityVerificationRequested,
+            Arg.Any<Party>(),
+            Party.Portal,
+            _clinicId,
+            Arg.Is<FacilityVerificationRequestedPayload>(p =>
+                p.RequestKind == "LtoUpdate" &&
+                p.LtoEvidenceObjectKey == directProof.ObjectKey));
+    }
+
     #endregion
 }

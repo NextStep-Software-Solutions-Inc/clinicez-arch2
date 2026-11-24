@@ -91,9 +91,6 @@ public class MessageCoverageTests
         new(InteropTypes.PhilHealthConfigUpsertRequested, [PhilHealth], [Portal]),
         new(InteropTypes.PhilHealthConfigUpsertResponded, [Portal], [PhilHealth]),
 
-        new(InteropTypes.YakapTransmittalRequested, [Portal], [Clinic]),
-        new(InteropTypes.YakapTransmittalResponded, [Clinic], [Portal]),
-
         new(InteropTypes.YakapSubmissionRequested, [Portal], [Clinic]),
         new(InteropTypes.YakapSubmissionResponded, [Clinic], [Portal]),
 

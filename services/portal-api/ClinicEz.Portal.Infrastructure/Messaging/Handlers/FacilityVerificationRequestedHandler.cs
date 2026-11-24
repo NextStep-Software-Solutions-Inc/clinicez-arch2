@@ -141,6 +141,14 @@ public sealed class FacilityVerificationRequestedHandler(
             ContactEmail = snapshotContactEmail
         };
 
+        var rawRequestKind = payload.RequestKind?.Trim();
+        var isLtoUpdateKind = string.Equals(rawRequestKind, "LtoUpdate", StringComparison.OrdinalIgnoreCase);
+        var normalizedRequestKind = string.IsNullOrWhiteSpace(rawRequestKind)
+            ? "Initial"
+            : isLtoUpdateKind
+                ? "Resubmission"
+                : rawRequestKind;
+
         var facilityReq = new FacilityVerificationRequest
         {
             Id = requestId,
@@ -148,7 +156,7 @@ public sealed class FacilityVerificationRequestedHandler(
             FacilityId = facility.Id,
             SubmissionNumber = maxSubmission + 1,
             CorrelationId = (context.CorrelationId != Guid.Empty ? context.CorrelationId : requestId).ToString(),
-            RequestKind = string.IsNullOrWhiteSpace(payload.RequestKind) ? "Initial" : payload.RequestKind.Trim(),
+            RequestKind = normalizedRequestKind,
             SubmittedByClinicUserId = payload.SubmittedByClinicUserId,
             SubmittedByDisplayName = payload.SubmittedByDisplayName,
             SubmittedAtUtc = submittedAt,
@@ -208,12 +216,56 @@ public sealed class FacilityVerificationRequestedHandler(
                 .Where(r => r.FacilityId == facility.Id && !r.IsDeleted && staffIds.Contains(r.ClinicStaffMemberId))
                 .ToListAsync(ct);
 
+        var activeAffiliations = isLtoUpdateKind && staffIds.Count > 0
+            ? await dbContext.PractitionerAffiliations
+                .AsNoTracking()
+                .Where(a => !a.IsDeleted
+                            && a.FacilityId == facility.Id
+                            && a.AffiliationStatus == "Active"
+                            && staffIds.Contains(a.ClinicStaffMemberId))
+                .ToListAsync(ct)
+            : new List<PractitionerAffiliation>();
+
         var emailOutbox = new List<(string Contact, string Name, string Profession, string RawToken, string OtpCode, Guid CorrelationId)>();
 
         foreach (var item in bundled)
         {
             var professionKind = DirectoryVerificationHelper.NormalizeProfessionOrFallback(item.ProfessionKind);
             var normalizedPrc = DirectoryVerificationHelper.NormalizePrcOrFallback(item.NormalizedPrcLicenseNo, item.SubmittedPrcLicenseNo);
+
+            var matched = existingCanonical.FirstOrDefault(p =>
+                string.Equals(p.ProfessionKind, professionKind, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(p.NormalizedPrcLicenseNo, normalizedPrc, StringComparison.OrdinalIgnoreCase));
+
+            if (isLtoUpdateKind
+                && matched is not null
+                && matched.VerificationStatus == PractitionerVerificationLevel.Verified
+                && PractitionerIdentity.IsCompatibleNameMatch(matched.FirstName, matched.LastName, item.FirstName, item.LastName)
+                && activeAffiliations.Any(a => a.ClinicStaffMemberId == item.ClinicStaffMemberId && a.PractitionerId == matched.Id))
+            {
+                var priorApproved = priorStaffRequests
+                    .Where(r => r.ClinicStaffMemberId == item.ClinicStaffMemberId && r.Status == "Approved")
+                    .OrderByDescending(r => r.SubmissionNumber)
+                    .ThenByDescending(r => r.SubmittedAtUtc)
+                    .FirstOrDefault();
+
+                var hasOpenRequest = priorStaffRequests.Any(r =>
+                    r.ClinicStaffMemberId == item.ClinicStaffMemberId
+                    && r.Status is "PendingReview" or "AwaitingOtp");
+
+                var unchangedApprovedCredentials = !hasOpenRequest && (priorApproved is null || (
+                    string.Equals(priorApproved.NormalizedPrcLicenseNo, normalizedPrc, StringComparison.OrdinalIgnoreCase)
+                    && priorApproved.PrcExpiryDate == item.PrcExpiryDate
+                    && string.Equals(
+                        string.IsNullOrWhiteSpace(priorApproved.PrcEvidenceObjectKey) ? null : priorApproved.PrcEvidenceObjectKey.Trim(),
+                        string.IsNullOrWhiteSpace(item.PrcEvidenceObjectKey) ? null : item.PrcEvidenceObjectKey.Trim(),
+                        StringComparison.Ordinal)));
+
+                if (unchangedApprovedCredentials)
+                {
+                    continue;
+                }
+            }
 
             foreach (var oldStaffReq in priorStaffRequests.Where(r =>
                          r.ClinicStaffMemberId == item.ClinicStaffMemberId
@@ -244,10 +296,6 @@ public sealed class FacilityVerificationRequestedHandler(
                 .Where(r => r.ClinicStaffMemberId == item.ClinicStaffMemberId)
                 .Select(r => (int?)r.SubmissionNumber)
                 .Max() ?? 0;
-
-            var matched = existingCanonical.FirstOrDefault(p =>
-                string.Equals(p.ProfessionKind, professionKind, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(p.NormalizedPrcLicenseNo, normalizedPrc, StringComparison.OrdinalIgnoreCase));
 
             var pracReqId = Guid.NewGuid();
             var status = "PendingReview";

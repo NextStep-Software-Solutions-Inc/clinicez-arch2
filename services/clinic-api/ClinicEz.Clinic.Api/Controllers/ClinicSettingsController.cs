@@ -40,10 +40,11 @@ public sealed class ClinicSettingsController : ControllerBase
     public async Task<ActionResult<ApiResponse<EvidenceProofUploadResultDto>>> UploadLtoProof(
         [FromForm] IFormFile? file,
         [FromQuery] bool skipPendingVerificationSync = false,
+        [FromQuery] bool stageOnly = false,
         CancellationToken ct = default)
     {
         var (fileName, contentType, length, bytes) = await VerificationEvidenceHelper.ReadValidatedFormFileAsync(file, ct);
-        var result = await _sender.Send(new UploadLtoProofCommand(fileName, contentType, length, bytes, skipPendingVerificationSync), ct);
+        var result = await _sender.Send(new UploadLtoProofCommand(fileName, contentType, length, bytes, skipPendingVerificationSync, stageOnly), ct);
         return Ok(ApiResponse<EvidenceProofUploadResultDto>.Success(result, "DOH LTO proof uploaded."));
     }
 

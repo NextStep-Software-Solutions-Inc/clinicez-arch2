@@ -108,6 +108,23 @@ export function PendingVerificationNote({ testID }: { testID?: string }) {
   );
 }
 
+export function ReverificationNoticeBanner({
+  message,
+  testID,
+}: {
+  message: string;
+  testID?: string;
+}) {
+  return (
+    <View style={styles.reverificationBanner} testID={testID}>
+      <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+      <ThemedText variant="caption" color={theme.colors.warningText} style={styles.flex}>
+        {message}
+      </ThemedText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
@@ -160,5 +177,15 @@ const styles = StyleSheet.create({
   },
   pendingNoteText: {
     flexShrink: 1,
+  },
+  reverificationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.warningBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.warningBorder,
+    borderRadius: theme.radii.sm,
   },
 });
