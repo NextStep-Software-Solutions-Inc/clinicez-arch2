@@ -4,6 +4,7 @@ import { RouterProvider } from '@tanstack/react-router';
 import { ClerkProvider } from '@clerk/clerk-react';
 import { ApiProvider } from './components/ApiProvider';
 import { ClerkConfigDiagnosticScreen } from './components/ClerkConfigDiagnosticScreen';
+import { ClerkBootGuard } from './components/ClerkLoadFailureScreen';
 import { router } from './router';
 import './index.css';
 
@@ -23,11 +24,13 @@ if (rootElement) {
   } else {
     root.render(
       <React.StrictMode>
-        <ClerkProvider publishableKey={clerkPubKey}>
-          <ApiProvider>
-            <RouterProvider router={router} />
-          </ApiProvider>
-        </ClerkProvider>
+        <ClerkBootGuard>
+          <ClerkProvider publishableKey={clerkPubKey}>
+            <ApiProvider>
+              <RouterProvider router={router} />
+            </ApiProvider>
+          </ClerkProvider>
+        </ClerkBootGuard>
       </React.StrictMode>
     );
   }
