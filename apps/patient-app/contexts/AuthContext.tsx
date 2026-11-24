@@ -15,6 +15,8 @@ import { refreshDocumentTypes } from '../services/files/filesShared';
 import { refreshOrganizationsFromApi, refreshClinicsFromApi } from '../services/discovery/discoveryService';
 import { pullDocumentChanges } from '../services/sync/documentsSyncService';
 import { clearNetworkDirectoryCache, refreshNetworkDirectory } from '../services/search/networkDirectory';
+import { useNetworkOnline } from '../hooks/useNetworkOnline';
+import { computeIsSessionExpired } from '../utils/sessionExpiry';
 
 const PIN_KEY = 'app_pin';
 const PIN_SALT_KEY = 'app_pin_salt';
@@ -103,8 +105,54 @@ async function hashPinWithSalt(pin: string, saltHex: string): Promise<string> {
   return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, `${saltHex}:${pin}`);
 }
 
+const LOCAL_VAULT_KEYS = [
+  INTERNAL_PATIENT_ID_KEY,
+  PIN_KEY,
+  PIN_SALT_KEY,
+  HAS_PIN_KEY,
+  BIOMETRICS_ENABLED_KEY,
+  LOCK_TIMEOUT_KEY,
+  BOOTSTRAP_COMPLETE_KEY,
+  'privacy_hide_amounts',
+  'privacy_blur_previews',
+  'privacy_local_analytics',
+  'privacy_hidden_ids',
+  'push_token',
+  'debug_force_yakap_registered',
+] as const;
+
+async function clearLocalVaultData(): Promise<void> {
+  await clearAllData().catch((err) => {
+    console.warn('[AuthContext] Failed to wipe local SQLite data:', err);
+  });
+  await clearWebDatabaseSnapshot().catch((err) => {
+    console.warn('[AuthContext] Failed to wipe Web IndexedDB snapshot:', err);
+  });
+  await clearNetworkDirectoryCache().catch((err) => {
+    console.warn('[AuthContext] Failed to clear network directory cache:', err);
+  });
+  await blobStorage.clearCache().catch((err) => {
+    console.warn('[AuthContext] Failed to clear blob cache:', err);
+  });
+  await Promise.all(LOCAL_VAULT_KEYS.map((key) => SecureStore.deleteItemAsync(key).catch(() => {})));
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.localStorage) {
+    LOCAL_VAULT_KEYS.forEach((key) => {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {}
+    });
+  }
+}
+
 interface AuthContextType {
   isAuthenticated: boolean;
+  isClerkLoaded: boolean;
+  isClerkSignedIn: boolean;
+  isLocallyAuthenticated: boolean;
+  isSessionExpired: boolean;
+  isReauthenticating: boolean;
+  startReauth: () => void;
+  cancelReauth: () => void;
   isLocked: boolean;
   hasPIN: boolean;
   biometricsEnabled: boolean;
@@ -133,9 +181,10 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const { isSignedIn, userId, sessionId, getToken } = useClerkAuth();
+  const { isLoaded: isClerkLoadedRaw, isSignedIn, userId, sessionId, getToken } = useClerkAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
+  const { isOnline } = useNetworkOnline();
   const [hasPIN, setHasPIN] = useState(false);
   const [biometricsEnabled, setBiometricsEnabledState] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
@@ -146,7 +195,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [showUserNotFoundAlert, setShowUserNotFoundAlert] = useState(false);
   const [verificationError, setVerificationError] = useState<Error | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const isVerifying = !!(isSignedIn && !internalPatientId);
+  const [isReauthenticating, setIsReauthenticating] = useState(false);
+  const isClerkLoaded = Boolean(isClerkLoadedRaw);
+  const isClerkSignedIn = Boolean(isSignedIn);
+  const isReauthenticatingRef = useRef(isReauthenticating);
+  isReauthenticatingRef.current = isReauthenticating;
+  const isVerifying = !!(isSignedIn && (!internalPatientId || isReauthenticating));
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const autoLockPauseDepthRef = useRef(0);
@@ -223,14 +277,55 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             SecureStore.getItemAsync(BOOTSTRAP_COMPLETE_KEY),
           ]);
 
-          if (storedId) {
+          let prefetchedPatient: Awaited<ReturnType<typeof getPatientByClerkId>> | undefined = undefined;
+
+          if (isReauthenticatingRef.current && storedId) {
+            let reauthPatient: Awaited<ReturnType<typeof getPatientByClerkId>> = null;
+            let lookupFailed = false;
+            try {
+              reauthPatient = await getPatientByClerkId(getTokenRef.current, userId);
+              prefetchedPatient = reauthPatient;
+            } catch (lookupErr) {
+              lookupFailed = true;
+              console.warn('[AuthContext] Re-auth patient lookup failed:', lookupErr);
+            }
+
+            if (lookupFailed && storedBootstrap === 'true') {
+              setInternalPatientId(storedId);
+              setIsInitialized(true);
+              setIsReauthenticating(false);
+              return;
+            }
+
+            if (reauthPatient?.id && reauthPatient.id === storedId && storedBootstrap === 'true') {
+              setInternalPatientId(storedId);
+              setIsInitialized(true);
+              setIsReauthenticating(false);
+              pullDocumentChanges(storedId, getTokenRef.current).catch((err) =>
+                console.warn('[AuthContext] Background document pull failed:', err)
+              );
+              refreshNetworkDirectory(getTokenRef.current, storedId).catch((err) =>
+                console.warn('[AuthContext] Background network directory refresh failed:', err)
+              );
+              return;
+            }
+
+            if (!lookupFailed && (!reauthPatient?.id || reauthPatient.id !== storedId)) {
+              await clearLocalVaultData();
+              setHasPIN(false);
+              setIsLocked(false);
+              setIsInitialized(false);
+              setInternalPatientId(null);
+            }
+          } else if (storedId) {
             setInternalPatientId(storedId);
             if (storedBootstrap === 'true') {
               setIsInitialized(true);
+              setIsReauthenticating(false);
               // Non-blocking background sync of profile and documents when online
               getPatientByClerkId(getTokenRef.current, userId)
                 .then((patient) => {
-                  if (patient?.id) {
+                  if (patient?.id && patient.id === storedId) {
                     return upsertPatientSummary(patient, userId);
                   }
                 })
@@ -247,7 +342,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
           }
 
-          let patient = await getPatientByClerkId(getTokenRef.current, userId);
+          let patient =
+            prefetchedPatient !== undefined
+              ? prefetchedPatient
+              : await getPatientByClerkId(getTokenRef.current, userId);
 
           // JIT Auto-Provisioning: If Clerk authenticated user is missing from DB, create profile automatically
           if (!patient || !patient.id) {
@@ -301,7 +399,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             await SecureStore.setItemAsync(BOOTSTRAP_COMPLETE_KEY, 'true');
             setInternalPatientId(patient.id);
             setIsInitialized(true);
+            setIsReauthenticating(false);
           } else {
+            setIsReauthenticating(false);
             setShowUserNotFoundAlert(true);
           }
         } catch (err) {
@@ -392,49 +492,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [hasPIN, isSignedIn, internalPatientId]);
 
   const logout = async () => {
-    // 1. Truncate all SQLite database tables & wipe Web IndexedDB snapshot
-    await clearAllData().catch((err) => {
-      console.warn('[AuthContext] Failed to wipe local SQLite data on logout:', err);
-    });
-    await clearWebDatabaseSnapshot().catch((err) => {
-      console.warn('[AuthContext] Failed to wipe Web IndexedDB snapshot on logout:', err);
-    });
+    // 1-3. Truncate SQLite, clear IndexedDB/caches, and delete local vault keys
+    await clearLocalVaultData();
 
-    // 2. Wipe binary blob storage cache & cached network directory (Native disk & Web IndexedDB)
-    await clearNetworkDirectoryCache().catch((err) => {
-      console.warn('[AuthContext] Failed to clear network directory cache on logout:', err);
-    });
-    await blobStorage.clearCache().catch((err) => {
-      console.warn('[AuthContext] Failed to clear blob cache on logout:', err);
-    });
-
-    // 3. Delete all session, security, privacy, and cached Clerk token keys
-    const keysToDelete = [
-      INTERNAL_PATIENT_ID_KEY,
-      PIN_KEY,
-      PIN_SALT_KEY,
-      HAS_PIN_KEY,
-      BIOMETRICS_ENABLED_KEY,
-      LOCK_TIMEOUT_KEY,
-      BOOTSTRAP_COMPLETE_KEY,
-      'privacy_hide_amounts',
-      'privacy_blur_previews',
-      'privacy_local_analytics',
-      'privacy_hidden_ids',
-      'push_token',
-      'debug_force_yakap_registered',
-      '__clerk_client_jwt',
-    ];
-
-    await Promise.all(keysToDelete.map((key) => SecureStore.deleteItemAsync(key).catch(() => {})));
+    // Also delete cached Clerk session tokens
+    await SecureStore.deleteItemAsync('__clerk_client_jwt').catch(() => {});
 
     if (Platform.OS === 'web' && typeof window !== 'undefined' && window.localStorage) {
-      keysToDelete.forEach((key) => {
-        try {
-          window.localStorage.removeItem(key);
-        } catch {}
-      });
       try {
+        window.localStorage.removeItem('__clerk_client_jwt');
         for (let i = window.localStorage.length - 1; i >= 0; i--) {
           const k = window.localStorage.key(i);
           if (k && k.startsWith('__clerk')) {
@@ -447,6 +513,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // 4. Reset in-memory React state
     setHasPIN(false);
     setIsLocked(false);
+    setIsReauthenticating(false);
     setInternalPatientId(null);
     setVerificationError(null);
     setIsInitialized(false);
@@ -461,6 +528,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const lock = () => setIsLocked(true);
   const unlock = () => setIsLocked(false);
+  const startReauth = useCallback(() => {
+    setIsLocked(false);
+    setIsReauthenticating(true);
+  }, []);
+  const cancelReauth = useCallback(() => {
+    setIsReauthenticating(false);
+  }, []);
 
   const runWithAutoLockPaused = useCallback(async <T,>(task: () => Promise<T>): Promise<T> => {
     autoLockPauseDepthRef.current += 1;
@@ -580,12 +654,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const isLocallyAuthenticated = !!(internalPatientId && hasPIN);
-  const isAuthenticated = (isSignedIn ?? false) || isLocallyAuthenticated;
+  const isAuthenticated = isClerkSignedIn || isLocallyAuthenticated;
+  const isSessionExpired = computeIsSessionExpired({
+    isOnline,
+    isClerkLoaded,
+    isClerkSignedIn,
+    isLocallyAuthenticated,
+  });
 
   return (
     <AuthContext.Provider
       value={{
         isAuthenticated,
+        isClerkLoaded,
+        isClerkSignedIn,
+        isLocallyAuthenticated,
+        isSessionExpired,
+        isReauthenticating,
+        startReauth,
+        cancelReauth,
         isLocked,
         hasPIN,
         biometricsEnabled,

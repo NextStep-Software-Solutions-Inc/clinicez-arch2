@@ -7,31 +7,59 @@ import SetupPINStack from './SetupPINStack';
 import MainStack from './MainStack';
 import { useIsAppLoading } from '../../hooks/useNavState';
 import { useAuth } from '../../contexts/AuthContext';
+import { useOnboarding } from '../../contexts/OnboardingContext';
+import { useAuth as useClerkAuth } from '@clerk/expo';
+import { resolveNavAccess } from '../../utils/sessionExpiry';
+
+function useResolvedWebNavAccess() {
+  const auth = useAuth();
+  const onboarding = useOnboarding();
+  const clerkAuth = useClerkAuth();
+  const isAppLoading = useIsAppLoading();
+  const resolved = resolveNavAccess({
+    isAuthenticated: auth.isAuthenticated,
+    isInitialized: auth.isInitialized,
+    internalPatientId: auth.internalPatientId,
+    hasPIN: auth.hasPIN,
+    isLocked: auth.isLocked,
+    isLoading: auth.isLoading,
+    onboardingComplete: onboarding.isComplete,
+    onboardingLoading: onboarding.isLoading,
+    isClerkLoaded: Boolean(clerkAuth.isLoaded),
+    isClerkSignedIn: auth.isClerkSignedIn,
+    isReauthenticating: auth.isReauthenticating,
+  });
+  return { ...resolved, isAppLoading };
+}
 
 /**
  * On Web, unauthenticated visitors can always access both Onboarding (Welcome & Onboard)
  * and Auth (Login, Signup, Verify, ForgotPassword) without being permanently locked out
- * by a first-launch mobile storage gate.
+ * by a first-launch mobile storage gate. When re-authenticating after session expiry,
+ * Onboarding is suppressed so the visitor lands directly on Login.
  */
-export const useIsUnauthenticatedWeb = () => {
-  const auth = useAuth();
-  const isAppLoading = useIsAppLoading();
+export const useIsOnboardingWeb = () => {
+  const { isAppLoading, isOnboardingWeb } = useResolvedWebNavAccess();
   if (isAppLoading) return false;
-  return !auth.isAuthenticated;
+  return isOnboardingWeb;
+};
+
+export const useIsUnauthenticatedWeb = () => {
+  const { isAppLoading, isUnauthenticatedWeb } = useResolvedWebNavAccess();
+  if (isAppLoading) return false;
+  return isUnauthenticatedWeb;
 };
 
 export const useIsSettingUpPINWeb = () => {
-  const auth = useAuth();
-  const isAppLoading = useIsAppLoading();
+  const { isAppLoading, isSettingUpPINWeb } = useResolvedWebNavAccess();
   if (isAppLoading) return false;
-  return auth.isAuthenticated && auth.isInitialized && !auth.hasPIN;
+  return isSettingUpPINWeb;
 };
 
 export const useIsMainReadyWeb = () => {
-  const auth = useAuth();
-  const isAppLoading = useIsAppLoading();
+  const { isAppLoading, isMainReadyWeb } = useResolvedWebNavAccess();
   if (isAppLoading) return false;
-  return auth.isAuthenticated && auth.isInitialized && auth.hasPIN;
+  return isMainReadyWeb;
 };
 
 const RootStackWeb = createNativeStackNavigator({
@@ -44,7 +72,7 @@ const RootStackWeb = createNativeStackNavigator({
     }),
     Onboarding: createNativeStackScreen({
       screen: OnboardingStack,
-      if: useIsUnauthenticatedWeb,
+      if: useIsOnboardingWeb,
     }),
     Auth: createNativeStackScreen({
       screen: AuthStack,

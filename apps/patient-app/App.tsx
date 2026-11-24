@@ -26,9 +26,10 @@ import { tokenCache } from '@clerk/expo/token-cache';
 import { resourceCache } from '@clerk/expo/resource-cache'
 import DatabaseProvider from 'components/DatabaseProvider';
 import SyncManager from 'components/SyncManager';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OfflineAlertProvider } from 'contexts/OfflineAlertContext';
-import { useIsLocked } from 'hooks/useNavState';
+import { useIsLocked, useIsMainReady } from 'hooks/useNavState';
+import SessionExpiredBanner from 'components/auth/SessionExpiredBanner';
 import LockScreen from './navigation/screens/Lock.screen';
 import UnlockScreen from './navigation/screens/Unlock.screen';
 import * as ExpoNotifications from 'expo-notifications';
@@ -149,6 +150,19 @@ function OTAUpdater() {
   return null;
 }
 
+function NativeSessionExpiredBanner() {
+  const isMainReady = useIsMainReady();
+  const isLocked = useIsLocked();
+  const { isSessionExpired } = useAuth();
+  const insets = useSafeAreaInsets();
+
+  if (Platform.OS === 'web' || !isMainReady || isLocked || !isSessionExpired) {
+    return null;
+  }
+
+  return <SessionExpiredBanner topInset={insets.top} />;
+}
+
 function AppWithTheme() {
   const theme = useAppTheme();
   const { showUserNotFoundAlert, setShowUserNotFoundAlert, userId, logout, getToken, internalPatientId } = useAuth();
@@ -180,6 +194,7 @@ function AppWithTheme() {
                     options={{ autoConnect: false }}
                   >
                     <WebShell>
+                      <NativeSessionExpiredBanner />
                       <Navigation ref={navigationRef} theme={selectedTheme} linking={linking} />
                       <LockOverlay backgroundColor={selectedTheme.colors.background} />
                     </WebShell>

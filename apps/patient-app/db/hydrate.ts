@@ -11,7 +11,7 @@
  */
 
 import { originalDb, flushDatabaseSnapshot, ensureDatabaseReady } from './index';
-import { and, eq, ne, or } from 'drizzle-orm';
+import { and, eq, ne, notInArray, or } from 'drizzle-orm';
 import {
   patients,
   patientHomeCache,
@@ -233,6 +233,76 @@ export async function reconcileListEntity<TItem extends { id: string; clientId?:
   }
 }
 
+const INACTIVE_SYNC_STATUSES = ['synced', 'rejected', 'dead'] as const;
+const INACTIVE_SYNC_STATUS_SET = new Set<string>(INACTIVE_SYNC_STATUSES);
+
+export interface SyncQueueScopeRow {
+  entityId?: string | null;
+  entityType?: string | null;
+  status?: string | null;
+  payloadJson?: string | null;
+}
+
+/**
+ * Computes active sync protection sets from `sync_queue` rows:
+ * - Ignores terminal/inactive rows (`synced`, `rejected`, `dead`).
+ * - Populates `pendingEntityIds` only with record-level IDs (`entityId`, `payload.id`,
+ *   `payload.clientId`), never child records' `payload.patientId`.
+ * - Tracks active `entityType`s belonging to `patientId` in `pendingEntityTypesForPatient`
+ *   so demographics and singleton protection are scoped strictly to matching mutations.
+ */
+export function computePendingSyncScope(
+  rows: SyncQueueScopeRow[],
+  patientId: string,
+): {
+  pendingEntityIds: Set<string>;
+  pendingEntityTypesForPatient: Set<string>;
+} {
+  const pendingEntityIds = new Set<string>();
+  const pendingEntityTypesForPatient = new Set<string>();
+
+  for (const q of rows) {
+    if (q.status && INACTIVE_SYNC_STATUS_SET.has(q.status)) {
+      continue;
+    }
+    if (q.entityId) {
+      pendingEntityIds.add(q.entityId);
+    }
+
+    let payload: Record<string, any> | null = null;
+    if (q.payloadJson) {
+      try {
+        payload = JSON.parse(q.payloadJson);
+      } catch {
+        payload = null;
+      }
+    }
+
+    if (payload) {
+      if (typeof payload.id === 'string' && payload.id) {
+        pendingEntityIds.add(payload.id);
+      }
+      if (typeof payload.clientId === 'string' && payload.clientId) {
+        pendingEntityIds.add(payload.clientId);
+      }
+    }
+
+    if (q.entityType) {
+      const matchesPatient =
+        q.entityId === patientId ||
+        payload?.patientId === patientId ||
+        payload?.id === patientId ||
+        payload?.clientId === patientId ||
+        !payload?.patientId;
+      if (matchesPatient) {
+        pendingEntityTypesForPatient.add(q.entityType);
+      }
+    }
+  }
+
+  return { pendingEntityIds, pendingEntityTypesForPatient };
+}
+
 /**
  * Hydrates all 22 ISyncable entity categories from a full-record API response
  * into local SQLite. Existing rows are reconciled; pending offline writes
@@ -250,36 +320,20 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       status: syncQueue.status,
       payloadJson: syncQueue.payloadJson,
     })
-    .from(syncQueue);
-  const pendingEntityIds = new Set<string>();
-  for (const q of pendingQueue) {
-    if (q.entityId) pendingEntityIds.add(q.entityId);
-    if (q.payloadJson) {
-      try {
-        const payload = JSON.parse(q.payloadJson);
-        if (payload.id) pendingEntityIds.add(payload.id);
-        if (payload.clientId) pendingEntityIds.add(payload.clientId);
-        if (payload.patientId) pendingEntityIds.add(payload.patientId);
-      } catch {
-        // ignore parse error
-      }
-    }
-  }
-  const hasPendingGovIds = pendingQueue.some(
-    (q) =>
-      q.entityType === 'patient_government_ids' &&
-      q.status !== 'synced' &&
-      q.status !== 'rejected' &&
-      q.status !== 'dead',
+    .from(syncQueue)
+    .where(notInArray(syncQueue.status, [...INACTIVE_SYNC_STATUSES]));
+  const { pendingEntityIds, pendingEntityTypesForPatient } = computePendingSyncScope(
+    pendingQueue,
+    patientId,
   );
 
   // 1. demographics
-  if (!pendingEntityIds.has(patientId)) {
+  if (!pendingEntityTypesForPatient.has('patient')) {
     await upsertPatientSummary(record.demographics);
   }
 
   // 2. government IDs: map the list of typed ID items into the singleton row
-  if (!pendingEntityIds.has(patientId) && !hasPendingGovIds) {
+  if (!pendingEntityTypesForPatient.has('patient_government_ids')) {
     const govIds = record.governmentIds || [];
     const existingRows = await originalDb
       .select()
@@ -611,7 +665,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 13. social history (singleton)
   //     Local schema differs significantly — map best-effort
-  if (record.socialHistory && !pendingEntityIds.has(patientId)) {
+  if (record.socialHistory && !pendingEntityTypesForPatient.has('patient_social_history')) {
     const sh = record.socialHistory;
     let existingSh: any = null;
     try {
@@ -696,7 +750,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   );
 
   // 15. occupation (singleton)  (local: occupation, employer, industry, workEnvironment, yearsInOccupation, hazardExposure)
-  if (record.occupation && !pendingEntityIds.has(patientId)) {
+  if (record.occupation && !pendingEntityTypesForPatient.has('patient_occupation')) {
     const occ = record.occupation;
     let existingOcc: any = null;
     try {
@@ -754,7 +808,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 17. obstetric profile (singleton)
   //     Local schema uses: gravida, para, abortion, livingChildren, lmp, cycleLength, etc.
-  if (record.obstetricProfile && !pendingEntityIds.has(patientId)) {
+  if (record.obstetricProfile && !pendingEntityTypesForPatient.has('patient_obstetric_profile')) {
     const op = record.obstetricProfile;
     let existingOp: any = null;
     try {
@@ -867,7 +921,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   );
 
   // 20. male reproductive (singleton)  (local: hasVasectomy, vasectomyDate, conditions)
-  if (record.maleReproductive && !pendingEntityIds.has(patientId)) {
+  if (record.maleReproductive && !pendingEntityTypesForPatient.has('patient_male_reproductive')) {
     const mr = record.maleReproductive;
     const row = {
       id: mr.id,
@@ -887,7 +941,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   }
 
   // 21. dental & vision (singleton)  (local: dentistName, dentistClinic, orthodonticDevice, eyeDoctorName, correctiveLenses)
-  if (record.dentalVision && !pendingEntityIds.has(patientId)) {
+  if (record.dentalVision && !pendingEntityTypesForPatient.has('patient_dental_vision')) {
     const dv = record.dentalVision;
     const row = {
       id: dv.id,
@@ -911,7 +965,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   // 22. mental health profile (singleton)
   //     Local schema: hasPriorDiagnosis, providerName, providerSpecialty, providerClinic, psychotherapyStatus
   //     API DTO has more fields — map best-effort
-  if (record.mentalHealthProfile && !pendingEntityIds.has(patientId)) {
+  if (record.mentalHealthProfile && !pendingEntityTypesForPatient.has('patient_mental_health_profile')) {
     const mh = record.mentalHealthProfile;
     const statusMap: Record<string, 'Active' | 'Inactive' | 'None'> = {
       active: 'Active',
@@ -942,7 +996,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   }
 
   // 23. NCD Questionnaire (PhilHealth Yakap)
-  if (record.ncdQuestionnaire && !pendingEntityIds.has(patientId)) {
+  if (record.ncdQuestionnaire && !pendingEntityTypesForPatient.has('patient_ncd_questionnaire')) {
     await hydrateNcdQuestionnaire(patientId, record.ncdQuestionnaire);
   }
 
