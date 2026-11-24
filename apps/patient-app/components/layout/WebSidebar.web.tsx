@@ -1,14 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { DeviceEventEmitter, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useUser } from '@clerk/expo';
 import type { NavigationState, ParamListBase } from '@react-navigation/native';
+import { eq } from 'drizzle-orm';
 import ThemedText from '@ui/ThemedText';
 import { AppIcon } from '@ui/Icon';
 import ClinicEzMark from '@ui/ClinicEzMark';
 import { useNotificationContext } from 'contexts/NotificationContext';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 import { extractInitials } from '../../services/home/homeDashboardService';
+import { db } from '@db/index';
+import { patients } from '@db/schema/patients';
 import {
   WEB_PRIMARY_NAV,
   WEB_SECONDARY_NAV,
@@ -34,11 +38,46 @@ export default function WebSidebar({ state, navigation, collapsed }: WebSidebarP
   const { colors, spacing, radii, sizes } = theme;
   const { colors: ceColors, typography: ceTypography } = useClinicalEmpathyTheme();
   const { user } = useUser();
+  const { internalPatientId } = useAuth();
   const { unreadCount } = useNotificationContext();
   const active = resolveActiveSection(state);
 
   const [localAvatarUri, setLocalAvatarUri] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<boolean>(false);
+  const [patientRecord, setPatientRecord] = useState<{
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    avatarUrl?: string | null;
+  } | null>(null);
+
+  const reloadPatient = useCallback(async () => {
+    if (!internalPatientId) {
+      setPatientRecord(null);
+      return;
+    }
+    try {
+      const p = await db.query.patients.findFirst({
+        where: eq(patients.id, internalPatientId),
+      });
+      if (p) {
+        setPatientRecord({
+          firstName: p.firstName,
+          lastName: p.lastName,
+          email: p.email,
+          avatarUrl: p.avatarUrl,
+        });
+      }
+    } catch {}
+  }, [internalPatientId]);
+
+  useEffect(() => {
+    void reloadPatient();
+    const sub = DeviceEventEmitter.addListener('profile-synced', () => {
+      void reloadPatient();
+    });
+    return () => sub.remove();
+  }, [reloadPatient, user?.firstName, user?.lastName, user?.fullName]);
 
   useEffect(() => {
     try {
@@ -49,18 +88,23 @@ export default function WebSidebar({ state, navigation, collapsed }: WebSidebarP
     }
   }, [user?.imageUrl]);
 
-  const avatarUrl = user?.imageUrl ?? localAvatarUri;
+  const avatarUrl = user?.imageUrl ?? localAvatarUri ?? patientRecord?.avatarUrl ?? null;
 
   useEffect(() => {
     setAvatarError(false);
   }, [avatarUrl]);
 
+  const localDbName = [patientRecord?.firstName, patientRecord?.lastName]
+    .filter(Boolean)
+    .join(' ')
+    .trim() || null;
+  const email = user?.primaryEmailAddress?.emailAddress ?? patientRecord?.email ?? undefined;
   const displayName =
+    localDbName ||
     user?.fullName ||
     user?.firstName ||
-    user?.primaryEmailAddress?.emailAddress?.split('@')[0] ||
+    email?.split('@')[0] ||
     'Patient';
-  const email = user?.primaryEmailAddress?.emailAddress;
   const initials = useMemo(() => extractInitials(displayName), [displayName]);
 
   const renderItem = (item: WebNavItem) => {

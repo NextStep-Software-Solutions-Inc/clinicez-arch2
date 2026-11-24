@@ -55,7 +55,7 @@ import type { DirectorySearchRouteParams } from './Search.screen';
 export default function HomeScreen() {
   const { colors, spacing } = useClinicalEmpathyTheme();
   const navigation = useNavigation<any>();
-  const { getToken } = useAuth();
+  const { getToken, isSessionExpired } = useAuth();
   const { user } = useUser();
   const patientId = usePatientId();
   const { unreadCount } = useNotificationContext();
@@ -127,19 +127,23 @@ export default function HomeScreen() {
             setRecentConsultation(null);
           }
 
-          const { data: liveData } = await fetchAndCacheHomeDashboard(
-            getToken,
-            patientId,
-            fallbackUser,
-          );
-          setDashboard(liveData);
+          if (!isSessionExpired) {
+            const { data: liveData } = await fetchAndCacheHomeDashboard(
+              getToken,
+              patientId,
+              fallbackUser,
+            );
+            setDashboard(liveData);
+          } else {
+            setDashboard(localSnapshot);
+          }
         }
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
       }
     },
-    [fallbackUser, getToken, patientId],
+    [fallbackUser, getToken, isSessionExpired, patientId],
   );
 
   useEffect(() => {

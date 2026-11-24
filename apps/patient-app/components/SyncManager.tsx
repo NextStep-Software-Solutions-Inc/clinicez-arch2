@@ -20,7 +20,7 @@ const WRITE_DEBOUNCE_MS = 1_000; // 1s debounce to batch rapid local writes
  * 5. Periodic background polling while active and online.
  */
 export default function SyncManager() {
-  const { getToken, internalPatientId } = useAuth();
+  const { getToken, internalPatientId, isClerkLoaded, isClerkSignedIn } = useAuth();
   const getTokenRef = useRef(getToken);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -29,7 +29,7 @@ export default function SyncManager() {
   }, [getToken]);
 
   useEffect(() => {
-    if (!internalPatientId) return;
+    if (!internalPatientId || !isClerkSignedIn) return;
 
     const runSync = () => {
       syncFullProfile(internalPatientId, getTokenRef.current).catch((err) => {
@@ -102,7 +102,7 @@ export default function SyncManager() {
       }
       registerSyncTrigger(null);
     };
-  }, [internalPatientId]);
+  }, [internalPatientId, isClerkLoaded, isClerkSignedIn]);
 
   return null;
 }

@@ -36,6 +36,8 @@ import { useOfflineAlert } from 'contexts/OfflineAlertContext';
 import { useBreakpoint } from 'hooks/useBreakpoint';
 import { syncFullProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { dialog } from '@utils/dialog';
+import { pluralizeCount as plural } from '@utils/pluralize';
 
 type Counts = {
   addresses: number;
@@ -109,14 +111,9 @@ async function loadCounts(patientId: string): Promise<Counts> {
   };
 }
 
-function plural(n: number, noun: string) {
-  if (n === 0) return 'None';
-  return `${n} ${noun}${n !== 1 ? 's' : ''}`;
-}
-
 export default function ProfileScreenWeb() {
   const navigation = useNavigation<any>();
-  const { internalPatientId, getToken } = useAuth();
+  const { internalPatientId, getToken, isSessionExpired, startReauth } = useAuth();
   const { showOfflineAlert } = useOfflineAlert();
   const { colors, spacing, sizes } = useAppTheme();
   const { isCompact } = useBreakpoint();
@@ -132,16 +129,22 @@ export default function ProfileScreenWeb() {
   }, [internalPatientId]);
 
   const fetchAndHydrateFullRecord = useCallback(async (): Promise<boolean> => {
-    if (!internalPatientId) return false;
+    if (!internalPatientId || isSessionExpired) return false;
     const res = await syncFullProfile(internalPatientId, getToken);
     return res.success;
-  }, [internalPatientId, getToken]);
+  }, [internalPatientId, getToken, isSessionExpired]);
 
   useProfileSync(reloadCounts);
 
   useEffect(() => {
+    if (isSessionExpired) {
+      hasBackgroundFetchedRef.current = false;
+    }
+  }, [isSessionExpired]);
+
+  useEffect(() => {
     reloadCounts();
-    if (!hasBackgroundFetchedRef.current) {
+    if (!isSessionExpired && !hasBackgroundFetchedRef.current) {
       hasBackgroundFetchedRef.current = true;
       NetInfo.fetch()
         .then(async (state) => {
@@ -152,7 +155,7 @@ export default function ProfileScreenWeb() {
         })
         .catch(() => {});
     }
-  }, [fetchAndHydrateFullRecord, reloadCounts]);
+  }, [fetchAndHydrateFullRecord, isSessionExpired, reloadCounts]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -165,12 +168,23 @@ export default function ProfileScreenWeb() {
         );
         return;
       }
+      if (isSessionExpired) {
+        dialog.alert(
+          'Session Expired',
+          'Please sign in again to refresh your profile from the server.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign In', onPress: startReauth },
+          ],
+        );
+        return;
+      }
       const ok = await fetchAndHydrateFullRecord();
       if (ok) reloadCounts();
     } finally {
       setIsRefreshing(false);
     }
-  }, [fetchAndHydrateFullRecord, reloadCounts, showOfflineAlert]);
+  }, [fetchAndHydrateFullRecord, isSessionExpired, reloadCounts, showOfflineAlert, startReauth]);
 
   const c = counts;
 

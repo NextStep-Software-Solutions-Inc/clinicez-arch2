@@ -121,6 +121,18 @@ async function executePushSync(
   patientId: string,
   getToken: () => Promise<string | null>,
 ): Promise<ProfileSyncResult> {
+  const token = await getToken();
+  if (!token) {
+    return {
+      success: false,
+      synced: 0,
+      failed: 0,
+      skipped: true,
+      reason: 'Session expired — sign in required to sync.',
+    };
+  }
+  const resolvedGetToken = () => Promise.resolve(token);
+
   const pendingItems = await originalDb
     .select()
     .from(syncQueue)
@@ -150,7 +162,7 @@ async function executePushSync(
 
   try {
     // 3. Send the batch to backend
-    const ack = await pushSyncPayload(getToken, patientId, syncRequests);
+    const ack = await pushSyncPayload(resolvedGetToken, patientId, syncRequests);
 
     // 4. Update syncedAt on corresponding local SQLite rows
     const syncTs = new Date();
@@ -314,8 +326,14 @@ export async function pullAndHydrateProfile(
     return { success: true, synced: 0, failed: 0, skipped: true, isOffline: true, reason: 'Device is offline.' };
   }
 
+  const token = await getToken();
+  if (!token) {
+    return { success: false, synced: 0, failed: 0, skipped: true, reason: 'Session expired — sign in required to sync.' };
+  }
+  const resolvedGetToken = () => Promise.resolve(token);
+
   try {
-    const fullRecord = await getPatientFullRecord(getToken, patientId);
+    const fullRecord = await getPatientFullRecord(resolvedGetToken, patientId);
     if (fullRecord) {
       await hydrateFullRecord(fullRecord);
       await flushDatabaseSnapshot();
@@ -349,6 +367,12 @@ export async function syncFullProfile(
     return { success: true, synced: 0, failed: 0, skipped: true, isOffline: true, reason: 'Device is offline.' };
   }
 
+  const token = await getToken();
+  if (!token) {
+    return { success: false, synced: 0, failed: 0, skipped: true, reason: 'Session expired — sign in required to sync.' };
+  }
+  const resolvedGetToken = () => Promise.resolve(token);
+
   if (isSyncing) {
     pendingFollowUpSync = true;
     return { success: true, synced: 0, failed: 0, skipped: true, reason: 'Sync already in progress.' };
@@ -357,12 +381,12 @@ export async function syncFullProfile(
   isSyncing = true;
   try {
     // 1. Push Phase
-    const pushResult = await executePushSync(patientId, getToken);
+    const pushResult = await executePushSync(patientId, resolvedGetToken);
 
     // 2. Pull Phase
     let pullResult: ProfileSyncResult | null = null;
     try {
-      const fullRecord = await getPatientFullRecord(getToken, patientId);
+      const fullRecord = await getPatientFullRecord(resolvedGetToken, patientId);
       if (fullRecord) {
         await hydrateFullRecord(fullRecord);
         await flushDatabaseSnapshot();
@@ -376,7 +400,7 @@ export async function syncFullProfile(
 
     // 3. Documents: incremental pull of facility-written records (cursor-based, failures are non-fatal)
     try {
-      await pullDocumentChanges(patientId, getToken);
+      await pullDocumentChanges(patientId, resolvedGetToken);
     } catch (documentsErr) {
       console.warn('[SyncService] Document pull failed during full sync:', documentsErr);
     }

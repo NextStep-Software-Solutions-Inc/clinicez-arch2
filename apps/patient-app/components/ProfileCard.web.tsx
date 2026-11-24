@@ -7,6 +7,8 @@ import { AppIcon } from './ui/Icon';
 import { dialog } from '@utils/dialog';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useProfileSync } from '../hooks/useProfileSync';
+import { extractInitials } from '../services/home/homeDashboardService';
 import { db } from '@db/index';
 import { patients } from '@db/schema/patients';
 import { eq } from 'drizzle-orm';
@@ -15,7 +17,12 @@ export default function ProfileCardWeb() {
   const { colors, radii, shadows } = useAppTheme();
   const { user } = useUser();
   const { internalPatientId } = useAuth();
-  const [patientRecord, setPatientRecord] = useState<{ firstName?: string | null; lastName?: string | null } | null>(null);
+  const [patientRecord, setPatientRecord] = useState<{
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    avatarUrl?: string | null;
+  } | null>(null);
 
   const reloadPatient = useCallback(async () => {
     if (!internalPatientId) return;
@@ -23,9 +30,18 @@ export default function ProfileCardWeb() {
       const p = await db.query.patients.findFirst({
         where: eq(patients.id, internalPatientId),
       });
-      if (p) setPatientRecord({ firstName: p.firstName, lastName: p.lastName });
+      if (p) {
+        setPatientRecord({
+          firstName: p.firstName,
+          lastName: p.lastName,
+          email: p.email,
+          avatarUrl: p.avatarUrl,
+        });
+      }
     } catch {}
   }, [internalPatientId]);
+
+  useProfileSync(reloadPatient);
 
   useEffect(() => {
     reloadPatient();
@@ -48,7 +64,7 @@ export default function ProfileCardWeb() {
     }
   }, []);
 
-  const avatarSource = previewUri ?? localUri ?? user?.imageUrl ?? null;
+  const avatarSource = previewUri ?? localUri ?? user?.imageUrl ?? patientRecord?.avatarUrl ?? null;
 
   const localDbName = [patientRecord?.firstName, patientRecord?.lastName]
     .filter(Boolean)
@@ -56,21 +72,15 @@ export default function ProfileCardWeb() {
     .trim() || null;
 
   const clerkName = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
+  const email = user?.emailAddresses[0]?.emailAddress ?? patientRecord?.email ?? '';
 
   const displayName =
-    clerkName ||
     localDbName ||
-    user?.emailAddresses[0]?.emailAddress ||
+    clerkName ||
+    email ||
     'Patient';
 
-  const initials = displayName
-    .split(' ')
-    .map((w: string) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-
-  const email = user?.emailAddresses[0]?.emailAddress ?? '';
+  const initials = extractInitials(displayName);
 
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
@@ -80,6 +90,11 @@ export default function ProfileCardWeb() {
   }, [avatarSource]);
 
   const handlePickImage = useCallback(async () => {
+    if (!user) {
+      dialog.alert('Sign In Required', 'Please sign in again to update your profile photo.', [{ text: 'OK' }]);
+      return;
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,

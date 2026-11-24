@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Image } from 'react-native';
 import { useUser } from '@clerk/expo';
+import { eq } from 'drizzle-orm';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { db } from '@db/index';
+import { patients } from '@db/schema/patients';
 import ThemedText from '@ui/ThemedText';
 import Button from '@ui/Button';
 import { AppIcon } from '@ui/Icon';
@@ -16,15 +19,50 @@ interface LockScreenProps {
 export default function LockScreen({ onUnlockPress }: LockScreenProps) {
   const { colors, spacing, radii, sizes } = useAppTheme();
   const { user } = useUser();
-  const { logout } = useAuth();
+  const { logout, internalPatientId } = useAuth();
+  const [patientRecord, setPatientRecord] = useState<{
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    avatarUrl?: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!internalPatientId) return;
+    db.query.patients
+      .findFirst({ where: eq(patients.id, internalPatientId) })
+      .then((p) => {
+        if (active && p) {
+          setPatientRecord({
+            firstName: p.firstName,
+            lastName: p.lastName,
+            email: p.email,
+            avatarUrl: p.avatarUrl,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [internalPatientId]);
+
+  const localDbName = [patientRecord?.firstName, patientRecord?.lastName]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  const email = user?.emailAddresses[0]?.emailAddress ?? patientRecord?.email ?? '';
 
   const displayName =
+    localDbName ||
     user?.fullName ||
     [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
-    user?.emailAddresses[0]?.emailAddress ||
-    'User';
+    email ||
+    'Patient';
 
-  const email = user?.emailAddresses[0]?.emailAddress ?? '';
+  const avatarUri = user?.imageUrl ?? patientRecord?.avatarUrl ?? null;
 
   const handleLogout = () => {
     dialog.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -54,9 +92,9 @@ export default function LockScreen({ onUnlockPress }: LockScreenProps) {
 
         {/* Authenticated user identity */}
         <View style={[styles.userCard, { gap: spacing.sm }]}>
-          {user?.imageUrl ? (
+          {avatarUri ? (
             <Image
-              source={{ uri: user.imageUrl }}
+              source={{ uri: avatarUri }}
               style={[
                 styles.avatarImage,
                 {

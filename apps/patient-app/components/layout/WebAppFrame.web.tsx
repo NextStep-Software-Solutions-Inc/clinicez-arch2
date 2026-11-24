@@ -12,6 +12,7 @@ import { resolveFocusedScreenName, resolveWebHeaderState } from '../../navigatio
 import { useWebKeyboardShortcuts } from '../../hooks/useWebKeyboardShortcuts.web';
 import WebSidebar from './WebSidebar.web';
 import WebPageHeader from './WebPageHeader.web';
+import SessionExpiredBanner from '../auth/SessionExpiredBanner';
 
 interface WebAppFrameProps {
   state: NavigationState<ParamListBase>;
@@ -76,6 +77,7 @@ function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFr
           onOpenSettings={() => navigation.navigate('SettingsScreen')}
         />
       ) : null}
+      <SessionExpiredBanner />
       <View style={styles.contentOuter}>
         <View style={[styles.contentInner, { maxWidth: sizes.contentMaxWidth }]}>{children}</View>
       </View>

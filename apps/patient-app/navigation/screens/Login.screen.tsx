@@ -32,7 +32,7 @@ export default function LoginScreen() {
   const navigation = useNavigation<any>();
   const { signIn, errors, fetchStatus } = useSignIn();
   const { startSSOFlow } = useSSO();
-  const { unlock } = useAuth();
+  const { unlock, isReauthenticating, cancelReauth } = useAuth();
   const { colors, spacing, radii, sizes } = useAppTheme();
 
   const [identifier, setIdentifier] = useState('');
@@ -139,6 +139,29 @@ export default function LoginScreen() {
             Sign in to access your consultations, prescriptions, and records.
           </ThemedText>
         </View>
+
+        {/* Re-authentication Banner */}
+        {isReauthenticating ? (
+          <View
+            style={[
+              styles.errorBanner,
+              {
+                backgroundColor: colors.infoBg,
+                borderColor: colors.infoBorder,
+                borderRadius: radii.md,
+                padding: spacing.md,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.sm,
+              },
+            ]}
+          >
+            <AppIcon name="info" size={sizes.iconMd} color="infoText" />
+            <ThemedText variant="smallBold" color="infoText" style={{ flex: 1 }}>
+              Your session expired. Sign in again to sync your records and view online files.
+            </ThemedText>
+          </View>
+        ) : null}
 
         {/* Global Error Banner */}
         {errorMessage ? (
@@ -266,6 +289,16 @@ export default function LoginScreen() {
             </ThemedText>
           </Pressable>
         </View>
+
+        {/* Continue Offline Action during Re-authentication */}
+        {isReauthenticating ? (
+          <Button
+            label="Continue offline instead"
+            variant="ghost"
+            fullWidth
+            onPress={cancelReauth}
+          />
+        ) : null}
 
         {/* Clinical Security Safeguard */}
         <View style={[styles.trustRow, { gap: spacing.xs }]}>

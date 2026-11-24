@@ -21,7 +21,7 @@ export default function LoginScreenWeb() {
   const navigation = useNavigation<any>();
   const { signIn, errors, fetchStatus } = useSignIn();
   const { startSSOFlow } = useSSO();
-  const { unlock } = useAuth();
+  const { unlock, isReauthenticating, cancelReauth } = useAuth();
   const { colors, spacing, radii, sizes } = useAppTheme();
 
   const [identifier, setIdentifier] = useState('');
@@ -124,6 +124,29 @@ export default function LoginScreenWeb() {
             Sign in to access your appointments, medical records, and digital care.
           </ThemedText>
         </View>
+
+        {/* Re-authentication Banner */}
+        {isReauthenticating ? (
+          <View
+            style={[
+              styles.errorBanner,
+              {
+                backgroundColor: colors.infoBg,
+                borderColor: colors.infoBorder,
+                borderRadius: radii.md,
+                padding: spacing.md,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.sm,
+              },
+            ]}
+          >
+            <AppIcon name="info" size={sizes.iconMd} color="infoText" />
+            <ThemedText variant="smallBold" color="infoText" style={{ flex: 1 }}>
+              Your session expired. Sign in again to sync your records and view online files.
+            </ThemedText>
+          </View>
+        ) : null}
 
         {/* Global Error Banner */}
         {errorMessage ? (
@@ -263,16 +286,28 @@ export default function LoginScreenWeb() {
           </ThemedText>
         </View>
 
-        {/* Back to Landing Page */}
-        <Pressable
-          onPress={() => navigation.navigate('Onboarding', { screen: 'Welcome' })}
-          style={[styles.backToHomeBtn, { paddingVertical: spacing.sm }]}
-          accessibilityRole="button"
-        >
-          <ThemedText variant="small" color="textMuted">
-            ← Back to Clinic EZ overview
-          </ThemedText>
-        </Pressable>
+        {/* Back to Landing Page / Continue Offline */}
+        {isReauthenticating ? (
+          <Pressable
+            onPress={cancelReauth}
+            style={[styles.backToHomeBtn, { paddingVertical: spacing.sm }]}
+            accessibilityRole="button"
+          >
+            <ThemedText variant="smallBold" color="primary">
+              Continue offline instead
+            </ThemedText>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => navigation.navigate('Onboarding', { screen: 'Welcome' })}
+            style={[styles.backToHomeBtn, { paddingVertical: spacing.sm }]}
+            accessibilityRole="button"
+          >
+            <ThemedText variant="small" color="textMuted">
+              ← Back to Clinic EZ overview
+            </ThemedText>
+          </Pressable>
+        )}
       </View>
     </ScrollView>
   );

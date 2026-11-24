@@ -36,6 +36,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
 import { syncFullProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { dialog } from '@utils/dialog';
+import { pluralizeCount as plural } from '@utils/pluralize';
 
 type Counts = {
   addresses: number;
@@ -109,14 +111,9 @@ async function loadCounts(patientId: string): Promise<Counts> {
   };
 }
 
-function plural(n: number, noun: string) {
-  if (n === 0) return 'None';
-  return `${n} ${noun}${n !== 1 ? 's' : ''}`;
-}
-
 export default function ProfileScreen() {
   const navigation = useNavigation();
-  const { internalPatientId, getToken } = useAuth();
+  const { internalPatientId, getToken, isSessionExpired, startReauth } = useAuth();
   const { showOfflineAlert } = useOfflineAlert();
   const [counts, setCounts] = useState<Counts | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -136,13 +133,19 @@ export default function ProfileScreen() {
    * Returns true if the fetch succeeded, false otherwise.
    */
   const fetchAndHydrateFullRecord = useCallback(async (): Promise<boolean> => {
-    if (!internalPatientId) return false;
+    if (!internalPatientId || isSessionExpired) return false;
     const res = await syncFullProfile(internalPatientId, getToken);
     return res.success;
-  }, [internalPatientId, getToken]);
+  }, [internalPatientId, getToken, isSessionExpired]);
 
   // Keep counts in sync on navigation focus and whenever a background sync completes
   useProfileSync(reloadCounts);
+
+  useEffect(() => {
+    if (isSessionExpired) {
+      hasBackgroundFetchedRef.current = false;
+    }
+  }, [isSessionExpired]);
 
   // ── initial mount: load local counts + background full-record fetch ───────
 
@@ -151,7 +154,7 @@ export default function ProfileScreen() {
 
     // Background full-record fetch — runs once per session when the screen
     // is first mounted. Does NOT block the UI; counts are refreshed afterward.
-    if (!hasBackgroundFetchedRef.current) {
+    if (!isSessionExpired && !hasBackgroundFetchedRef.current) {
       hasBackgroundFetchedRef.current = true;
       NetInfo.fetch().then(async (state) => {
         if (state.isConnected) {
@@ -160,7 +163,7 @@ export default function ProfileScreen() {
         }
       }).catch(() => { /* offline or error — silent */ });
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchAndHydrateFullRecord, isSessionExpired, reloadCounts]);
 
   // ── pull-to-refresh ────────────────────────────────────────────────────────
 
@@ -175,12 +178,23 @@ export default function ProfileScreen() {
         );
         return;
       }
+      if (isSessionExpired) {
+        dialog.alert(
+          'Session Expired',
+          'Please sign in again to refresh your profile from the server.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign In', onPress: startReauth },
+          ],
+        );
+        return;
+      }
       const ok = await fetchAndHydrateFullRecord();
       if (ok) reloadCounts();
     } finally {
       setIsRefreshing(false);
     }
-  }, [fetchAndHydrateFullRecord, reloadCounts, showOfflineAlert]);
+  }, [fetchAndHydrateFullRecord, isSessionExpired, reloadCounts, showOfflineAlert, startReauth]);
 
   // ── render ────────────────────────────────────────────────────────────────
 
