@@ -21,6 +21,35 @@ export interface TeleconsultSettingsCardProps {
   showSkeletons?: boolean;
 }
 
+export interface RecordingPolicyOption {
+  readonly id: TeleconsultRecordingPolicy;
+  readonly label: string;
+  readonly description: string;
+}
+
+export const RECORDING_POLICY_OPTIONS: readonly RecordingPolicyOption[] = [
+  {
+    id: 'Disabled',
+    label: 'Disabled',
+    description: 'Consultations are not recorded. Retention and consent settings below are inactive.',
+  },
+  {
+    id: 'WorkspaceVaultOnly',
+    label: 'Workspace Vault Only',
+    description: 'Encrypted recordings are saved only to your clinic workspace vault.',
+  },
+  {
+    id: 'Both',
+    label: 'Clinic Vault & Patient',
+    description: 'Encrypted recordings are saved to the clinic vault and shared with the patient.',
+  },
+] as const;
+
+export function getRecordingPolicyDescription(policy: TeleconsultRecordingPolicy | string): string {
+  const match = RECORDING_POLICY_OPTIONS.find((opt) => opt.id === policy);
+  return match?.description ?? 'Controls encrypted video recording storage during teleconsultations.';
+}
+
 export default function TeleconsultSettingsCard({
   settings,
   onSettingsUpdated,
@@ -55,10 +84,13 @@ export default function TeleconsultSettingsCard({
   });
 
   const [saving, setSaving] = useState(false);
-  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const lastSavedAtRef = useRef<Date | null>(null);
 
   const settingsDisabled = !isWorkspaceTeleconsultEntitled || !enableTeleconsultation;
+  const isRecordingPolicyDisabled = recordingPolicy === 'Disabled';
+  const isRecordingDisabled = settingsDisabled || isRecordingPolicyDisabled;
 
   const serializeState = useCallback(
     (s: {
@@ -152,8 +184,10 @@ export default function TeleconsultSettingsCard({
           return;
         }
 
+        const savedAt = new Date();
         lastSavedSnapshotRef.current = currentSnapshot;
-        setLastSavedAt(new Date());
+        lastSavedAtRef.current = savedAt;
+        setLastSavedAt(savedAt);
         setAutoSaveStatus('saved');
         onSettingsUpdated?.(updated);
         if (!silent) {
@@ -196,8 +230,13 @@ export default function TeleconsultSettingsCard({
     });
 
     if (currentSnapshot === lastSavedSnapshotRef.current) {
+      setAutoSaveStatus((prev) =>
+        prev === 'pending' ? (lastSavedAtRef.current ? 'saved' : 'idle') : prev
+      );
       return;
     }
+
+    setAutoSaveStatus('pending');
 
     const timer = setTimeout(() => {
       void performSave(true);
@@ -373,19 +412,13 @@ export default function TeleconsultSettingsCard({
             Recording Policy
           </ThemedText>
           <ThemedText variant="caption" color={theme.colors.textSecondary}>
-            Governs CMK AES-256-GCM encrypted vault video recording during consultations
+            Controls encrypted video recording storage during teleconsultations
           </ThemedText>
           <View style={styles.optionsRow} testID="setting-recording-policy">
             <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.accessibilityValue}>
               {recordingPolicy}
             </ThemedText>
-            {(
-              [
-                { id: 'Disabled', label: 'Disabled' },
-                { id: 'WorkspaceVaultOnly', label: 'WorkspaceVaultOnly' },
-                { id: 'Both', label: 'Both' },
-              ] as const
-            ).map((opt) => {
+            {RECORDING_POLICY_OPTIONS.map((opt) => {
               const isSelected = recordingPolicy === opt.id;
               return (
                 <Pressable
@@ -410,7 +443,35 @@ export default function TeleconsultSettingsCard({
               );
             })}
           </View>
+          <ThemedText
+            variant="caption"
+            color={theme.colors.textMuted}
+            testID="recording-policy-helper"
+          >
+            {getRecordingPolicyDescription(recordingPolicy)}
+          </ThemedText>
         </View>
+
+        {/* Recording-Dependent Settings (muted and disabled when recording policy is Disabled) */}
+        <View
+          testID="teleconsult-recording-dependent-settings"
+          pointerEvents={isRecordingDisabled ? 'none' : 'auto'}
+          style={[
+            styles.recordingDependentGroup,
+            !settingsDisabled && isRecordingPolicyDisabled && styles.dependentSettingsDisabled,
+          ]}
+        >
+          {isRecordingPolicyDisabled && (
+            <View
+              style={styles.recordingDisabledNoteRow}
+              testID="recording-dependent-disabled-note"
+            >
+              <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Applies only when Recording Policy is enabled.
+              </ThemedText>
+            </View>
+          )}
 
         {/* 4. Retention Days */}
         <View style={styles.settingBlock}>
@@ -425,8 +486,8 @@ export default function TeleconsultSettingsCard({
               {String(retentionDays)}
             </ThemedText>
             <TextInput
-              style={styles.textInput}
-              editable={!settingsDisabled}
+              style={[styles.textInput, isRecordingDisabled && styles.textInputDisabled]}
+              editable={!isRecordingDisabled}
               value={String(retentionDays)}
               onChangeText={(val) => {
                 const parsed = parseInt(val.replace(/[^0-9]/g, ''), 10);
@@ -436,6 +497,7 @@ export default function TeleconsultSettingsCard({
               placeholder="30"
               placeholderTextColor={theme.colors.textLight}
               accessibilityLabel="Recording Retention Policy in Days"
+              accessibilityState={{ disabled: isRecordingDisabled }}
             />
           </View>
         </View>
@@ -454,17 +516,21 @@ export default function TeleconsultSettingsCard({
             </ThemedText>
           </View>
           <Pressable
-            disabled={settingsDisabled}
-            onPress={() => setConsentRequired((prev) => !prev)}
+            disabled={isRecordingDisabled}
+            onPress={() => {
+              if (!isRecordingDisabled) {
+                setConsentRequired((prev) => !prev);
+              }
+            }}
             accessibilityRole="switch"
-            accessibilityState={{ checked: consentRequired, disabled: settingsDisabled }}
+            accessibilityState={{ checked: consentRequired, disabled: isRecordingDisabled }}
             accessibilityLabel="Require Dual-Party Consent"
             style={styles.switchHitTarget}
           >
             <View
               style={[
                 styles.switchTrack,
-                settingsDisabled
+                isRecordingDisabled
                   ? styles.switchTrackDisabled
                   : consentRequired
                   ? styles.switchTrackOn
@@ -481,11 +547,12 @@ export default function TeleconsultSettingsCard({
           </Pressable>
         </View>
         </View>
+        </View>
 
         {/* Auto-Save Status */}
         <View style={styles.saveActionRow}>
           <View style={styles.autoSaveIndicator} testID="teleconsult-autosave-status">
-            {autoSaveStatus === 'saving' ? (
+            {autoSaveStatus === 'pending' || autoSaveStatus === 'saving' ? (
               <>
                 <Icon name="clock" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
@@ -496,7 +563,7 @@ export default function TeleconsultSettingsCard({
               <>
                 <Icon name="check" size={theme.sizes.iconSm} color={theme.colors.successText} />
                 <ThemedText variant="caption" color={theme.colors.successText}>
-                  Last saved at{' '}
+                  Saved at{' '}
                   {lastSavedAt.toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -513,7 +580,7 @@ export default function TeleconsultSettingsCard({
               </>
             ) : (
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Changes auto-save automatically
+                Changes save automatically
               </ThemedText>
             )}
           </View>
@@ -590,6 +657,11 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     minHeight: theme.sizes.touchTarget,
   },
+  textInputDisabled: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.borderLight,
+    color: theme.colors.textMuted,
+  },
   switchSettingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -656,6 +728,14 @@ const styles = StyleSheet.create({
   },
   dependentSettingsDisabled: {
     opacity: 0.5,
+  },
+  recordingDependentGroup: {
+    gap: theme.spacing.lg,
+  },
+  recordingDisabledNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   saveActionRow: {
     paddingTop: theme.spacing.md,
