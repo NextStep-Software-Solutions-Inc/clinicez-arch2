@@ -218,11 +218,11 @@ export const pharmacyService = {
 
   // Scope 5: Facility Licensing & Autonomous Staff Roster
   async getLicenseStatus() {
-    return pharmacyApiClient.get<PharmacyLicenseStatus>('/license');
+    return pharmacyApiClient.get<PharmacyLicenseStatus>('/license', { skipAuth: true });
   },
 
   async applyLicense(licenseToken: string) {
-    return pharmacyApiClient.post<PharmacyLicenseStatus>('/license/apply', { licenseToken });
+    return pharmacyApiClient.post<PharmacyLicenseStatus>('/license/apply', { licenseToken }, { skipAuth: true });
   },
 
   async getStaff(role?: PharmacyStaffRole, isActive?: boolean) {

@@ -4902,7 +4902,7 @@ export const clinicService = {
   },
 
   async getLicenseStatus() {
-    return clinicApiClient.get<FacilityLicenseStatus>('/clinic/license');
+    return clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', { skipAuth: true });
   },
 
   /**
@@ -4919,6 +4919,7 @@ export const clinicService = {
     const [directFacility, directErr] = await clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', {
       headers: { 'X-Facility-Slug': clean },
       params: { facilitySlug: clean },
+      skipAuth: true,
     });
 
     if (directFacility && directFacility.status === 'Active' && directFacility.facilitySlug) {
@@ -4929,6 +4930,7 @@ export const clinicService = {
     const [tenantFacility, tenantErr] = await clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', {
       headers: { 'X-Tenant-Id': clean },
       params: { tenant: clean },
+      skipAuth: true,
     });
 
     if (tenantFacility && tenantFacility.facilitySlug && tenantFacility.status === 'Active') {
@@ -4946,6 +4948,7 @@ export const clinicService = {
         const [verifiedByClinicName] = await clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', {
           headers: { 'X-Facility-Slug': candidateSlug },
           params: { facilitySlug: candidateSlug },
+          skipAuth: true,
         });
         if (verifiedByClinicName && verifiedByClinicName.status === 'Active' && verifiedByClinicName.facilitySlug) {
           return [verifiedByClinicName, null];
@@ -4967,6 +4970,7 @@ export const clinicService = {
           const [verified] = await clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', {
             headers: { 'X-Facility-Slug': resolvedFacilitySlug },
             params: { facilitySlug: resolvedFacilitySlug },
+            skipAuth: true,
           });
           if (verified && verified.status === 'Active' && verified.facilitySlug) {
             return [verified, null];
@@ -4988,7 +4992,7 @@ export const clinicService = {
   },
 
   async applyLicense(licenseToken: string) {
-    return clinicApiClient.post<FacilityLicenseStatus>('/clinic/license/apply', { licenseToken });
+    return clinicApiClient.post<FacilityLicenseStatus>('/clinic/license/apply', { licenseToken }, { skipAuth: true });
   },
 
   async getRoles() {
@@ -5534,7 +5538,7 @@ export const clinicService = {
       Pragma: 'no-cache',
     };
     if (pin) headers['X-Queue-Pin'] = pin;
-    return clinicApiClient.get<any>(`/public/queue/display${query ? `?${query}` : ''}`, { headers });
+    return clinicApiClient.get<any>(`/public/queue/display${query ? `?${query}` : ''}`, { headers, skipAuth: true });
   },
 
   // PhilHealth YAKAP 2.0 Services 01–08

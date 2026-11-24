@@ -22,7 +22,9 @@ export function clinicApiUrl(path: string): string {
   return joinApiUrl(base, path);
 }
 
-type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
+export type ClinicRequestConfig = AxiosRequestConfig & { skipAuth?: boolean };
+
+type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean; skipAuth?: boolean };
 
 export interface ClinicApiClientOptions {
   /** Resolves the server origin per request, so a server address entered after launch is picked up. */
@@ -57,7 +59,7 @@ export class ClinicApiClient {
       if (tenantHint) config.headers['X-Tenant-Id'] = tenantHint;
       if (context.clinicId) config.headers['X-Clinic-Id'] = context.clinicId;
 
-      if (this.options.authenticated) {
+      if (this.options.authenticated && !(config as RetriableConfig).skipAuth) {
         await ensureFreshToken();
         const token = getAccessToken();
         if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -68,7 +70,7 @@ export class ClinicApiClient {
     if (options.authenticated) {
       this.client.interceptors.response.use(undefined, async (error) => {
         const original = error?.config as RetriableConfig | undefined;
-        if (error?.response?.status === 401 && original && !original._retried) {
+        if (error?.response?.status === 401 && original && !original._retried && !original.skipAuth) {
           original._retried = true;
           // Single-flight: concurrent 401s share one refresh rotation.
           if (await refreshSession()) {
@@ -86,45 +88,45 @@ export class ClinicApiClient {
     return extractApiError(error);
   }
 
-  async get<T>(url: string, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
+  async get<T>(url: string, config?: ClinicRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.get<ApiResponse<T>>(url, config));
     if (error) return [null, ClinicApiClient.toError<T>(error)];
     return [response?.data?.data ?? null, null];
   }
 
-  async post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
+  async post<T>(url: string, data?: unknown, config?: ClinicRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.post<ApiResponse<T>>(url, data, config));
     if (error) return [null, ClinicApiClient.toError<T>(error)];
     return [response?.data?.data ?? null, null];
   }
 
-  async put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
+  async put<T>(url: string, data?: unknown, config?: ClinicRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.put<ApiResponse<T>>(url, data, config));
     if (error) return [null, ClinicApiClient.toError<T>(error)];
     return [response?.data?.data ?? null, null];
   }
 
-  async patch<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
+  async patch<T>(url: string, data?: unknown, config?: ClinicRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.patch<ApiResponse<T>>(url, data, config));
     if (error) return [null, ClinicApiClient.toError<T>(error)];
     return [response?.data?.data ?? null, null];
   }
 
-  async delete<T>(url: string, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
+  async delete<T>(url: string, config?: ClinicRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.delete<ApiResponse<T>>(url, config));
     if (error) return [null, ClinicApiClient.toError<T>(error)];
     return [response?.data?.data ?? null, null];
   }
 
   /** Authenticated binary download (PDFs, attachments). */
-  async getBlob(url: string, config?: AxiosRequestConfig): Promise<[Blob | null, ApiError | null]> {
+  async getBlob(url: string, config?: ClinicRequestConfig): Promise<[Blob | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.get<Blob>(url, { ...config, responseType: 'blob' }));
     if (error) return [null, ClinicApiClient.toError(error)];
     return [response?.data ?? null, null];
   }
 
   /** Authenticated binary POST request (dynamic PDF previews). */
-  async postBlob<B = unknown>(url: string, body?: B, config?: AxiosRequestConfig): Promise<[Blob | null, ApiError | null]> {
+  async postBlob<B = unknown>(url: string, body?: B, config?: ClinicRequestConfig): Promise<[Blob | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.post<Blob>(url, body, { ...config, responseType: 'blob' }));
     if (error) return [null, ClinicApiClient.toError(error)];
     return [response?.data ?? null, null];

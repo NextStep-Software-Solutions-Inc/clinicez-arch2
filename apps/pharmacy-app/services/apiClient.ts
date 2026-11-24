@@ -5,7 +5,9 @@ import { getAccessToken, getValidAccessToken, refreshSession, tenantHeaders } fr
 
 const API_PREFIX = '/api/v1';
 
-type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
+export type PharmacyRequestConfig = AxiosRequestConfig & { skipAuth?: boolean };
+
+type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean; skipAuth?: boolean };
 
 export class PharmacyApiClient {
   private client: AxiosInstance;
@@ -20,9 +22,11 @@ export class PharmacyApiClient {
 
     this.client.interceptors.request.use(async (config) => {
       config.baseURL = getPharmacyApiBaseUrl();
-      const token = await getValidAccessToken();
-      if (token) {
-        config.headers.set('Authorization', `Bearer ${token}`);
+      if (!(config as RetriableConfig).skipAuth) {
+        const token = await getValidAccessToken();
+        if (token) {
+          config.headers.set('Authorization', `Bearer ${token}`);
+        }
       }
       Object.entries(tenantHeaders()).forEach(([name, value]) => config.headers.set(name, value));
       return config;
@@ -30,7 +34,7 @@ export class PharmacyApiClient {
 
     this.client.interceptors.response.use(undefined, async (error) => {
       const original = error?.config as RetriableConfig | undefined;
-      if (error?.response?.status === 401 && original && !original._retried) {
+      if (error?.response?.status === 401 && original && !original._retried && !original.skipAuth) {
         original._retried = true;
         if (await refreshSession()) {
           const token = getAccessToken();
@@ -42,7 +46,7 @@ export class PharmacyApiClient {
     });
   }
 
-  async get<T>(url: string, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
+  async get<T>(url: string, config?: PharmacyRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.get<ApiResponse<T>>(url, config));
     if (error) {
       return [null, extractApiError(error)];
@@ -50,7 +54,7 @@ export class PharmacyApiClient {
     return [response?.data?.data ?? null, null];
   }
 
-  async post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
+  async post<T>(url: string, data?: unknown, config?: PharmacyRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.post<ApiResponse<T>>(url, data, config));
     if (error) {
       return [null, extractApiError(error)];
@@ -58,7 +62,7 @@ export class PharmacyApiClient {
     return [response?.data?.data ?? null, null];
   }
 
-  async put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
+  async put<T>(url: string, data?: unknown, config?: PharmacyRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.put<ApiResponse<T>>(url, data, config));
     if (error) {
       return [null, extractApiError(error)];
@@ -66,7 +70,7 @@ export class PharmacyApiClient {
     return [response?.data?.data ?? null, null];
   }
 
-  async delete<T>(url: string, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
+  async delete<T>(url: string, config?: PharmacyRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.delete<ApiResponse<T>>(url, config));
     if (error) {
       return [null, extractApiError(error)];

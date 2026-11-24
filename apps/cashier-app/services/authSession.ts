@@ -158,6 +158,7 @@ function applyToken(token: AuthToken) {
   accessToken = token.accessToken;
   accessExpiresAt = Date.parse(token.expiresAtUtc) || Date.now() + fallbackMs;
   user = token.user;
+  lastNetworkFailureAt = 0;
   if (isWeb()) {
     broadcastAuth({
       type: 'session-refreshed',
@@ -170,17 +171,19 @@ function applyToken(token: AuthToken) {
 }
 
 function clearSession(reason: 'none' | 'expired' | 'idle' | 'logout' = 'none') {
+  const hadSession = user !== null || accessToken !== null;
   accessToken = null;
   accessExpiresAt = 0;
   user = null;
-  if (isWeb()) {
+  lastNetworkFailureAt = 0;
+  if (isWeb() && (reason !== 'expired' || hadSession)) {
     broadcastAuth({
       type: 'session-cleared',
       reason: reason === 'none' ? 'logout' : reason,
     });
   }
   emit();
-  if (reason === 'expired' || reason === 'idle') {
+  if ((reason === 'expired' && hadSession) || reason === 'idle') {
     notifyReason(reason);
   }
 }
@@ -280,6 +283,7 @@ export function refreshSession(): Promise<boolean> {
 export async function ensureFreshAccessToken(): Promise<string | null> {
   if (!isWeb()) return getAccessToken();
   if (accessToken && Date.now() < accessExpiresAt - EXPIRY_SKEW_MS) return accessToken;
+  if (!user && !accessToken) return null;
   if (Date.now() - lastNetworkFailureAt < NETWORK_RETRY_BACKOFF_MS) return accessToken;
   await refreshSession();
   return accessToken;
