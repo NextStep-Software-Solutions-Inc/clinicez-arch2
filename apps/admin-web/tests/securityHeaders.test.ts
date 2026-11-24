@@ -2,6 +2,17 @@ import { describe, it, expect } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 
+function parseCspDirectives(cspHeader: string): Map<string, string[]> {
+  const directives = new Map<string, string[]>();
+  for (const part of cspHeader.split(';')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const [name, ...values] = trimmed.split(/\s+/);
+    directives.set(name.toLowerCase(), values);
+  }
+  return directives;
+}
+
 describe('Edge Security Headers & Robots Specification', () => {
   const adminWebRoot = path.resolve(__dirname, '..');
   const vercelJsonPath = path.join(adminWebRoot, 'vercel.json');
@@ -32,6 +43,42 @@ describe('Edge Security Headers & Robots Specification', () => {
     expect(csp).toContain('https://*.clerk.com');
     expect(csp).toContain("base-uri 'self'");
     expect(csp).toContain("form-action 'self'");
+
+    const directives = parseCspDirectives(csp!);
+
+    const scriptSrc = directives.get('script-src');
+    expect(scriptSrc).toBeDefined();
+    expect(scriptSrc).toContain("'self'");
+    expect(scriptSrc).toContain("'unsafe-inline'");
+    expect(scriptSrc).toContain('https://*.clerk.accounts.dev');
+    expect(scriptSrc).toContain('https://*.clerk.com');
+    expect(scriptSrc).toContain('https://clerk.clinicez.net');
+    expect(scriptSrc).not.toContain("'unsafe-eval'");
+    expect(scriptSrc).not.toContain('blob:');
+    expect(scriptSrc).not.toContain('https://*.clinicez.net');
+
+    const workerSrc = directives.get('worker-src');
+    expect(workerSrc).toBeDefined();
+    expect(workerSrc).toContain("'self'");
+    expect(workerSrc).toContain('blob:');
+
+    const frameSrc = directives.get('frame-src');
+    expect(frameSrc).toBeDefined();
+    expect(frameSrc).toContain("'self'");
+    expect(frameSrc).toContain('blob:');
+    expect(frameSrc).toContain('https://*.clerk.accounts.dev');
+    expect(frameSrc).toContain('https://*.clerk.com');
+    expect(frameSrc).toContain('https://clerk.clinicez.net');
+
+    const connectSrc = directives.get('connect-src');
+    expect(connectSrc).toBeDefined();
+    expect(connectSrc).toContain("'self'");
+    expect(connectSrc).toContain('https://*');
+    expect(connectSrc).toContain('https://*.protect.clerk.com:*');
+
+    expect(directives.get('frame-ancestors')).toEqual(["'none'"]);
+    expect(directives.get('base-uri')).toEqual(["'self'"]);
+    expect(directives.get('form-action')).toEqual(["'self'"]);
 
     // 2. X-Frame-Options: DENY
     expect(headersMap.get('x-frame-options')).toBe('DENY');

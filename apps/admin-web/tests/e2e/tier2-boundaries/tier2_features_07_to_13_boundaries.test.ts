@@ -1,4 +1,6 @@
 import { describe, test, expect } from "bun:test";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import {
   evaluateIdleSessionState,
   evaluateMfaGate,
@@ -59,8 +61,16 @@ describe("Tier 2 — Feature 8 Boundaries: Edge Security Headers & Robots Config
   });
 
   test("F8.B2: Verifies that script-src does NOT include 'unsafe-eval' to prevent XSS", () => {
-    const strictCsp = "default-src 'self'; script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://*.clerk.com; frame-ancestors 'none';";
-    expect(strictCsp).not.toContain("'unsafe-eval'");
+    const vercelJsonPath = path.resolve(__dirname, "../../../vercel.json");
+    const vercelConfig = JSON.parse(fs.readFileSync(vercelJsonPath, "utf-8"));
+    const rootHeaders = vercelConfig.headers?.find((h: any) => h.source === "/(.*)")?.headers ?? [];
+    const csp: string | undefined = rootHeaders.find(
+      (h: any) => h.key?.toLowerCase() === "content-security-policy"
+    )?.value;
+
+    expect(csp).toBeDefined();
+    expect(csp).not.toContain("'unsafe-eval'");
+    expect(csp).toContain("https://clerk.clinicez.net");
   });
 
   test("F8.B3: Rejects framing by any ancestor (frame-ancestors 'none' blocks all origins including self)", () => {
