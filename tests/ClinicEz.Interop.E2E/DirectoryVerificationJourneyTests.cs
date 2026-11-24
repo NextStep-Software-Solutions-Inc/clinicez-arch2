@@ -917,4 +917,134 @@ public sealed class DirectoryVerificationJourneyTests
         await cell.Patient.AssertNothingStuckAsync();
         await portal.AssertNothingStuckAsync();
     }
+
+    [Fact]
+    public async Task FunctionalCheck5_VerifiedFacilityRegulatedLtoEdit_CreatesPendingReviewResubmission_PreservesApprovedSnapshot_AndReApproves()
+    {
+        await using var cell = new TestCell();
+        using var portal = new PortalVerificationHost(cell.Hub);
+
+        var initialExpiry = new DateOnly(2028, 6, 30);
+        const string initialLto = "DOH-LTO-2026-101";
+        const string initialLtoProof = "verification/lto/lto-resubmit-v1.pdf";
+
+        var clinic = await ProvisionClinicAsync(cell, portal, "lto-resubmit-care", "LTO Resubmit Care Clinic", isPatientDiscoveryEligible: true);
+        await SeedClinicOperationalSetupAsync(cell, clinic, initialLto, initialLtoProof);
+        await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new UpdateClinicSettingsCommand(DohLtoExpiryDate: initialExpiry));
+
+        var doctor = await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new CreateStaffMemberCommand(
+            FirstName: "Justine Mae",
+            LastName: "Tabasan",
+            MiddleName: null,
+            Title: "Dr.",
+            Role: StaffRole.Doctor,
+            ClinicRoleId: null,
+            Email: "justine@ltoresubmit.ph",
+            PhoneNumber: null,
+            PrcLicenseNumber: "0123456",
+            PtrNumber: null,
+            S2LicenseNumber: null,
+            Specialty: "Family Medicine",
+            InitialPassword: "ClinicPass2026!",
+            IsDirectoryOptIn: true,
+            PrcExpiryDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(2)),
+            PrcEvidenceObjectKey: "verification/prc/tabasan-lto-e2e.pdf",
+            VerificationContact: "justine@ltoresubmit.ph",
+            PublicBio: "Primary care doctor."));
+
+        await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new PublishClinicToDirectoryCommand(true));
+        await Cell.PumpAsync([cell.Clinic, cell.Patient, portal]);
+
+        var sub1 = await portal.DbAsync(db => db.FacilityVerificationRequests.SingleAsync(r => r.FacilityId == clinic.Id));
+        await portal.SendAsync(new ApproveVerificationRequestCommand(sub1.Id, "admin_1", "Verifier One", "Initial facility approval"));
+        await Cell.PumpAsync([cell.Clinic, cell.Patient, portal]);
+
+        var settingsAfterInitial = await cell.Clinic.DbAsync(db => db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == clinic.Id));
+        settingsAfterInitial.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.Verified);
+        var emailsAfterInitialApprove = portal.Notifications.Sent.Count;
+
+        // 1. Non-LTO settings edit keeps Verified and creates no new FacilityVerificationRequest
+        await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new UpdateClinicSettingsCommand(
+            LetterheadDohLto: initialLto,
+            DohLtoExpiryDate: initialExpiry,
+            LetterheadFooter: "Updated legal disclaimer."));
+        await Cell.PumpAsync([cell.Clinic, cell.Patient, portal]);
+
+        (await portal.DbAsync(db => db.FacilityVerificationRequests.CountAsync(r => r.FacilityId == clinic.Id)))
+            .Should().Be(1);
+        var settingsAfterNonLto = await cell.Clinic.DbAsync(db => db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == clinic.Id));
+        settingsAfterNonLto.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.Verified);
+
+        // 2. Staging replacement LTO proof keeps Verified until saved & resubmitted
+        var ltoBytes = Encoding.UTF8.GetBytes("%PDF-1.4\nrenewed-lto-proof");
+        var stagedProof = await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new UploadLtoProofCommand(
+            "renewed-lto.pdf", "application/pdf", ltoBytes.Length, ltoBytes, StageOnly: true));
+        await Cell.PumpAsync([cell.Clinic, cell.Patient, portal]);
+
+        var settingsAfterStage = await cell.Clinic.DbAsync(db => db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == clinic.Id));
+        settingsAfterStage.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.Verified);
+        settingsAfterStage.LtoEvidenceObjectKey.Should().Be(initialLtoProof);
+
+        // 3. Saving updated LTO #, expiry date, and staged proof -> transitions to PendingReview and creates Submission #2 in Governance
+        var renewedExpiry = new DateOnly(2029, 12, 31);
+        const string renewedLto = "DOH-LTO-2026-202";
+        var updatedSettings = await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new UpdateClinicSettingsCommand(
+            LetterheadDohLto: renewedLto,
+            DohLtoExpiryDate: renewedExpiry,
+            LtoEvidenceObjectKey: stagedProof.ObjectKey));
+
+        updatedSettings.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.PendingReview);
+        await Cell.PumpAsync([cell.Clinic, cell.Patient, portal]);
+
+        var facilitySubmissions = await portal.DbAsync(db =>
+            db.FacilityVerificationRequests
+                .Where(r => r.FacilityId == clinic.Id)
+                .OrderBy(r => r.SubmissionNumber)
+                .ToListAsync());
+
+        facilitySubmissions.Should().HaveCount(2);
+        facilitySubmissions[0].Status.Should().Be("Approved");
+        facilitySubmissions[0].LtoEvidenceObjectKey.Should().Be(initialLtoProof);
+
+        facilitySubmissions[1].SubmissionNumber.Should().Be(2);
+        facilitySubmissions[1].RequestKind.Should().Be("Resubmission");
+        facilitySubmissions[1].Status.Should().Be("PendingReview");
+        facilitySubmissions[1].LtoEvidenceObjectKey.Should().Be(stagedProof.ObjectKey);
+
+        // No phantom practitioner OTP emails or extra practitioner submissions created
+        portal.Notifications.Sent.Count.Should().Be(emailsAfterInitialApprove);
+        (await portal.DbAsync(db => db.PractitionerVerificationRequests.CountAsync(r => r.ClinicStaffMemberId == doctor.Id)))
+            .Should().Be(1);
+
+        var queue = await portal.SendAsync(new GetVerificationQueueQuery(Kind: "facility", Status: "PendingReview"));
+        queue.PendingFacilityCount.Should().Be(1);
+
+        var detail1 = await portal.SendAsync(new GetVerificationRequestDetailQuery(facilitySubmissions[0].Id));
+        detail1!.DohLtoNumber.Should().Be(initialLto);
+        detail1.DohLtoExpiryDate.Should().Be(initialExpiry);
+        detail1.LtoEvidenceObjectKey.Should().Be(initialLtoProof);
+
+        var detail2 = await portal.SendAsync(new GetVerificationRequestDetailQuery(facilitySubmissions[1].Id));
+        detail2!.DohLtoNumber.Should().Be(renewedLto);
+        detail2.DohLtoExpiryDate.Should().Be(renewedExpiry);
+        detail2.LtoEvidenceObjectKey.Should().Be(stagedProof.ObjectKey);
+        detail2.ResubmissionDiff!.LtoProofUpdated.Should().BeTrue();
+        detail2.ResubmissionDiff.ChangedFields.Should().Contain(c => c.FieldKey == "dohLtoNumber");
+        detail2.ResubmissionDiff.ChangedFields.Should().Contain(c => c.FieldKey == "dohLtoExpiryDate");
+
+        // 4. Governance approves Submission #2 -> facility returns to Verified with renewed LTO # / expiry / proof
+        await portal.SendAsync(new ApproveVerificationRequestCommand(facilitySubmissions[1].Id, "admin_1", "Verifier One", "Approved renewed DOH LTO"));
+        await Cell.PumpAsync([cell.Clinic, cell.Patient, portal]);
+
+        var finalSettings = await cell.Clinic.DbAsync(db => db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == clinic.Id));
+        finalSettings.PlatformVerificationStatus.Should().Be(PlatformVerificationStatus.Verified);
+        finalSettings.LetterheadDohLto.Should().Be(renewedLto);
+        finalSettings.DohLtoExpiryDate.Should().Be(renewedExpiry);
+        finalSettings.LtoEvidenceObjectKey.Should().Be(stagedProof.ObjectKey);
+
+        await AssertAllHubEnvelopesAreObjectKeyOnlyAndCompactAsync(cell.Hub);
+        await cell.Clinic.AssertNothingStuckAsync();
+        await cell.Patient.AssertNothingStuckAsync();
+        await portal.AssertNothingStuckAsync();
+    }
 }

@@ -537,8 +537,7 @@ public sealed class DirectoryVerificationSyncAndEnrichmentE2ETests
         var approvedSnapshotBefore = (await portal.DbAsync(db => db.FacilityVerificationRequests.SingleAsync(r => r.Id == req.Id))).SubmittedSnapshotJson;
 
         await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new UpdateClinicSettingsCommand(
-            OperatingHours: "Mon-Sun 00:00-23:59",
-            LetterheadDohLto: "DOH-LTO-MUTATED"));
+            OperatingHours: "Mon-Sun 00:00-23:59"));
 
         Func<Task> act = () => cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new UpdatePendingFacilityVerificationCommand());
         var ex = (await act.Should().ThrowAsync<VerificationConflictException>()).Which;
@@ -557,6 +556,7 @@ public sealed class DirectoryVerificationSyncAndEnrichmentE2ETests
                 TenantId = clinic.Tenant,
                 FacilityId = clinic.Id,
                 FacilityName = clinic.Name,
+                DohLtoNumber = "DOH-LTO-MUTATED",
                 ExpectedRequestId = req.Id
             },
             timeout: TimeSpan.FromSeconds(10));

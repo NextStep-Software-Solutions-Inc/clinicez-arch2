@@ -600,4 +600,81 @@ public sealed class ClinicApiEndpointsIntegrationTests : IAsyncLifetime
             data.GetProperty("publicVerificationStatus").GetString().Should().Be("PendingVerification");
         }
     }
+
+    [Fact]
+    public async Task ClinicStageOnlyLtoProofAndUpdateSettings_PreservesVerifiedUntilResubmit_AndTransitionsOnPut()
+    {
+        var originalKey = $"tenants/{TenantId}/clinics/{_clinicId:D}/verification/lto/old-lto.pdf";
+        var originalExpiry = new DateOnly(2028, 6, 15);
+        await DbAsync(async db =>
+        {
+            db.Settings.Add(new FacilitySettings
+            {
+                TenantId = TenantId,
+                ClinicId = _clinicId,
+                ClinicName = "StageOnly LTO Test Clinic",
+                OperatingHours = "Mon-Fri 8AM-5PM",
+                LetterheadDohLto = "DOH-LTO-STAGE-001",
+                DohLtoExpiryDate = originalExpiry,
+                LtoEvidenceObjectKey = originalKey,
+                IsWorkspaceEligible = true,
+                IsDirectoryPublished = true,
+                PlatformVerificationStatus = PlatformVerificationStatus.Verified
+            });
+            await Task.CompletedTask;
+        });
+
+        // 1. Upload replacement LTO proof with ?stageOnly=true -> returns staged objectKey without mutating settings
+        using var form = new MultipartFormDataContent();
+        var fileBytes = "%PDF-1.4\nnew-lto-proof"u8.ToArray();
+        var fileContent = new ByteArrayContent(fileBytes);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        form.Add(fileContent, "file", "new-lto.pdf");
+
+        var uploadReq = new HttpRequestMessage(HttpMethod.Post, "/api/v1/clinic-settings/lto-proof?stageOnly=true")
+        {
+            Content = form
+        };
+        uploadReq.Headers.Add("X-Test-StaffId", _adminStaffId.ToString());
+        uploadReq.Headers.Add("X-Test-Permissions", $"{ClinicPermissions.SettingsRead},{ClinicPermissions.SettingsManage}");
+        var uploadResp = await _client.SendAsync(uploadReq);
+        uploadResp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        string stagedKey;
+        using (var doc = JsonDocument.Parse(await uploadResp.Content.ReadAsStringAsync()))
+        {
+            stagedKey = doc.RootElement.GetProperty("data").GetProperty("objectKey").GetString()!;
+        }
+        stagedKey.Should().NotBeNullOrWhiteSpace();
+        stagedKey.Should().NotBe(originalKey);
+
+        var readinessBeforeSave = await _client.SendAsync(CreateRequest(
+            HttpMethod.Get,
+            "/api/v1/clinic-settings/readiness",
+            permissions: $"{ClinicPermissions.SettingsRead},{ClinicPermissions.SettingsManage}"));
+        readinessBeforeSave.StatusCode.Should().Be(HttpStatusCode.OK);
+        using (var doc = JsonDocument.Parse(await readinessBeforeSave.Content.ReadAsStringAsync()))
+        {
+            var data = doc.RootElement.GetProperty("data");
+            data.GetProperty("ltoEvidenceObjectKey").GetString().Should().Be(originalKey);
+            data.GetProperty("platformVerificationStatus").GetString().Should().Be("Verified");
+        }
+
+        // 2. PUT /api/v1/settings commits staged key + LTO expiry & number and transitions Verified -> PendingReview
+        var putResp = await _client.SendAsync(CreateRequest(HttpMethod.Put, "/api/v1/settings", new
+        {
+            letterheadDohLto = "DOH-LTO-STAGE-002",
+            dohLtoExpiryDate = "2029-12-31",
+            ltoEvidenceObjectKey = stagedKey
+        }));
+        putResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        using (var doc = JsonDocument.Parse(await putResp.Content.ReadAsStringAsync()))
+        {
+            var data = doc.RootElement.GetProperty("data");
+            data.GetProperty("letterheadDohLto").GetString().Should().Be("DOH-LTO-STAGE-002");
+            data.GetProperty("dohLtoExpiryDate").GetString().Should().Be("2029-12-31");
+            data.GetProperty("ltoEvidenceObjectKey").GetString().Should().Be(stagedKey);
+            data.GetProperty("platformVerificationStatus").GetString().Should().Be("PendingReview");
+        }
+    }
 }

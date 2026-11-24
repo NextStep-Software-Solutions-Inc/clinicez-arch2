@@ -24,8 +24,12 @@ import {
   type ClinicSettingsRecord,
   type PlatformVerificationStatus,
 } from '../../services/clinicService';
-import { PENDING_VERIFICATION_BUTTON_LABEL } from '../../utils/directoryVerification';
-import { PendingVerificationNote } from './common';
+import {
+  PENDING_VERIFICATION_BUTTON_LABEL,
+  REGULATED_LTO_REVERIFICATION_NOTICE,
+  RESUBMIT_VERIFICATION_BUTTON_LABEL,
+} from '../../utils/directoryVerification';
+import { PendingVerificationNote, ReverificationNoticeBanner } from './common';
 import {
   BRAND_COLOR_PRESETS,
   DEFAULT_CLINIC_BRAND_COLOR,
@@ -347,6 +351,9 @@ export default function DocumentTemplatesSettingsTab({
       if (err) {
         Alert.alert('Save Failed', err.message || 'Unable to update stationery settings.');
       } else if (updated) {
+        const wasVerifiedLtoResubmit =
+          platformVerificationStatus === 'Verified' &&
+          updated.platformVerificationStatus === 'PendingReview';
         setInternalSettings(updated);
         populateForm(updated);
         onSettingsUpdated?.(updated);
@@ -371,6 +378,12 @@ export default function DocumentTemplatesSettingsTab({
             return;
           }
           notify.success('Stationery saved and pending verification submission updated.');
+          return;
+        }
+
+        if (wasVerifiedLtoResubmit) {
+          await onRefreshVerificationState?.();
+          notify.success('Stationery saved and facility resubmitted for verification.');
           return;
         }
 
@@ -476,6 +489,9 @@ export default function DocumentTemplatesSettingsTab({
 
   // State 4: Active Full Workstation Studio
   const savedBaseline = deriveStationeryFormValues(internalSettings);
+  const hasVerifiedLtoEdit =
+    platformVerificationStatus === 'Verified' &&
+    dohLicenseToOperate.trim() !== savedBaseline.dohLicenseToOperate.trim();
   const isDirty =
     internalSettings.id === 'new' ||
     letterheadHeader !== savedBaseline.letterheadHeader ||
@@ -696,11 +712,20 @@ export default function DocumentTemplatesSettingsTab({
           {/* Save Action Bar */}
           {isDirty || saving ? (
             <View style={styles.saveActionBar}>
-              {isPendingFacility ? <PendingVerificationNote /> : null}
+              {hasVerifiedLtoEdit ? (
+                <ReverificationNoticeBanner
+                  message={REGULATED_LTO_REVERIFICATION_NOTICE}
+                  testID="docs-lto-reverification-notice"
+                />
+              ) : isPendingFacility ? (
+                <PendingVerificationNote />
+              ) : null}
               <Button
                 title={
                   saving
                     ? 'Saving Changes...'
+                    : hasVerifiedLtoEdit
+                    ? RESUBMIT_VERIFICATION_BUTTON_LABEL
                     : isPendingFacility
                     ? PENDING_VERIFICATION_BUTTON_LABEL
                     : 'Save Changes'

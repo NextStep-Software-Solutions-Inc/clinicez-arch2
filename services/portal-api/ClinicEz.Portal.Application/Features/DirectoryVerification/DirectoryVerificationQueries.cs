@@ -304,7 +304,7 @@ public sealed class GetVerificationQueueQueryHandler(IApplicationDbContext db)
                     Status: r.Status,
                     SubmittedAtUtc: r.SubmittedAtUtc,
                     SubmittedByDisplayName: submittedBy,
-                    DohLtoNumber: facilitySnap?.DohLtoNumber ?? r.Facility.LicenseToOperate,
+                    DohLtoNumber: GetVerificationRequestDetailQueryHandler.ResolveDohLtoNumber(snapshotEl, facilitySnap, r.Facility.LicenseToOperate),
                     LtoEvidenceObjectKey: r.LtoEvidenceObjectKey ?? r.Facility.LtoEvidenceObjectKey,
                     FacilityVerificationRequestId: null,
                     PractitionerId: null,
@@ -557,7 +557,7 @@ public sealed class GetVerificationRequestDetailQueryHandler(IApplicationDbConte
                 .FirstOrDefaultAsync(b => b.TenantId == facilityReq.TenantId && !b.IsDeleted, ct);
 
             var branch = facilityReq.Facility.Branch;
-            var dohLtoNumber = FirstNonEmpty(facilitySnap?.DohLtoNumber, facilityReq.Facility.LicenseToOperate);
+            var dohLtoNumber = ResolveDohLtoNumber(snapshotEl, facilitySnap, facilityReq.Facility.LicenseToOperate);
             var dohLtoExpiryDate = ResolveDohLtoExpiryDate(snapshotEl, facilitySnap, facilityReq.Facility.LtoExpiryDate);
             var clinicContactNumber = FirstValidPhoneNumber(
                 facilitySnap?.ContactNumber,
@@ -1031,7 +1031,15 @@ public sealed class GetVerificationRequestDetailQueryHandler(IApplicationDbConte
                 || (!string.IsNullOrWhiteSpace(prevChild.NormalizedPrcLicenseNo)
                     && string.Equals(c.NormalizedPrcLicenseNo, prevChild.NormalizedPrcLicenseNo, StringComparison.OrdinalIgnoreCase)));
 
-            if (!stillPresent)
+            var stillInCurrentSnapshot = currSnap?.Practitioners?.Any(p =>
+                p.ClinicStaffMemberId == prevChild.ClinicStaffMemberId
+                || (!string.IsNullOrWhiteSpace(prevChild.NormalizedPrcLicenseNo)
+                    && string.Equals(
+                        DirectoryVerificationHelper.NormalizePrcOrFallback(p.NormalizedPrcLicenseNo, p.SubmittedPrcLicenseNo),
+                        prevChild.NormalizedPrcLicenseNo,
+                        StringComparison.OrdinalIgnoreCase))) == true;
+
+            if (!stillPresent && !stillInCurrentSnapshot)
             {
                 var prevChildSnap = DirectoryVerificationHelper.DeserializePractitionerSnapshot(prevChild.SubmittedSnapshotJson);
                 var prevChildName = prevChildSnap is not null
@@ -1346,6 +1354,26 @@ public sealed class GetVerificationRequestDetailQueryHandler(IApplicationDbConte
     private static bool HasJsonProperty(JsonElement? element, string propertyName) =>
         TryGetJsonPropertyCaseInsensitive(element, propertyName, out var prop)
         && prop.ValueKind != JsonValueKind.Null;
+
+    internal static string? ResolveDohLtoNumber(
+        JsonElement? snapshotEl,
+        FacilityVerificationRequestedPayload? facilitySnap,
+        string? facilityFallback)
+    {
+        if (!string.IsNullOrWhiteSpace(facilitySnap?.DohLtoNumber))
+            return facilitySnap.DohLtoNumber.Trim();
+
+        if (TryGetJsonPropertyCaseInsensitive(snapshotEl, "dohLtoNumber", out var prop))
+        {
+            if (prop.ValueKind == JsonValueKind.Null)
+                return null;
+
+            if (prop.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(prop.GetString()))
+                return null;
+        }
+
+        return FirstNonEmpty(facilityFallback);
+    }
 
     internal static DateOnly? ResolveDohLtoExpiryDate(
         JsonElement? snapshotEl,

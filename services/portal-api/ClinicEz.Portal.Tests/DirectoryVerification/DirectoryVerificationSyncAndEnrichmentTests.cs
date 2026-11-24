@@ -2615,4 +2615,156 @@ public sealed class DirectoryVerificationSyncAndEnrichmentTests : IDisposable
         Assert.Null(facDetail!.ClinicContactNumber);
         Assert.Equal("wave.ambray@nextstep-software.com", facDetail.ClinicContactEmail);
     }
+
+    [Fact]
+    public async Task LtoUpdateResubmission_OnApprovedFacility_CreatesPendingReviewResubmission_PreservesApprovedHistory_AndDoesNotReOtpVerifiedPractitioners()
+    {
+        var reqHandler = new FacilityVerificationRequestedHandler(
+            _context,
+            _clock,
+            NullLogger<FacilityVerificationRequestedHandler>.Instance,
+            NewNotifications(),
+            new FixedFrontendUrl("https://portal.clinicez.test"));
+
+        var sub1Id = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var oldExpiry = new DateOnly(2028, 6, 30);
+        const string oldLto = "DOH-LTO-2026-100";
+        const string oldProof = "tenants/t/clinics/c/verification/lto/sub1-lto.pdf";
+
+        var bundledDoctor = new BundledPractitionerSubmissionDto
+        {
+            ClinicStaffMemberId = staffId,
+            ProfessionKind = "Doctor",
+            FirstName = "Justine Mae",
+            LastName = "Tabasan",
+            Title = "Dr.",
+            SubmittedPrcLicenseNo = "0123456",
+            NormalizedPrcLicenseNo = "0123456",
+            PrcExpiryDate = new DateOnly(2029, 12, 31),
+            PrcEvidenceObjectKey = "tenants/t/clinics/c/verification/prc/doc-v1.pdf",
+            VerificationContact = "justine@gammacare.ph",
+            Specialty = "Family Medicine"
+        };
+
+        var sub1Payload = new FacilityVerificationRequestedPayload
+        {
+            RequestId = sub1Id,
+            TenantId = _tenant.Id.ToString(),
+            FacilityId = _facility.Id,
+            FacilityName = _facility.Name,
+            FacilitySlug = _facility.Slug,
+            DohLtoNumber = oldLto,
+            DohLtoExpiryDate = oldExpiry,
+            LtoEvidenceObjectKey = oldProof,
+            RequestKind = "Initial",
+            SubmittedByClinicUserId = "user_admin_1",
+            SubmittedByDisplayName = "Clinic Admin",
+            SubmittedAtUtc = _clock.GetUtcNow().UtcDateTime,
+            Practitioners = [bundledDoctor]
+        };
+
+        await reqHandler.HandleAsync(
+            sub1Payload,
+            new InteropMessageContext(InteropEnvelope.Create(InteropTypes.FacilityVerificationRequested, FacilityParty(), Party.Portal, sub1Id, sub1Payload)),
+            CancellationToken.None);
+
+        await new ApproveVerificationRequestCommandHandler(
+                _context, TestSupport.ProvisioningPublisher(_context), new InteropPublisher(_context), _clock)
+            .Handle(new ApproveVerificationRequestCommand(sub1Id, "admin_1", "Admin One", "Approved initial LTO"), CancellationToken.None);
+
+        var emailsBeforeResubmit = _emailSender.Sent.Count;
+
+        // Facility edits DOH LTO #, expiry date, and LTO proof -> emits RequestKind = "LtoUpdate"
+        _clock.Advance(TimeSpan.FromHours(3));
+        var sub2Id = Guid.NewGuid();
+        var newExpiry = new DateOnly(2029, 12, 31);
+        const string newLto = "DOH-LTO-2026-200";
+        const string newProof = "tenants/t/clinics/c/verification/lto/sub2-lto.pdf";
+
+        var sub2Payload = sub1Payload with
+        {
+            RequestId = sub2Id,
+            DohLtoNumber = newLto,
+            DohLtoExpiryDate = newExpiry,
+            LtoEvidenceObjectKey = newProof,
+            RequestKind = "LtoUpdate",
+            SubmittedAtUtc = _clock.GetUtcNow().UtcDateTime
+        };
+
+        await reqHandler.HandleAsync(
+            sub2Payload,
+            new InteropMessageContext(InteropEnvelope.Create(InteropTypes.FacilityVerificationRequested, FacilityParty(), Party.Portal, sub2Id, sub2Payload)),
+            CancellationToken.None);
+
+        // Already-verified & active-affiliated practitioner must NOT receive an OTP email or duplicate AwaitingOtp request
+        Assert.Equal(emailsBeforeResubmit, _emailSender.Sent.Count);
+
+        var allFacilityReqs = await _context.FacilityVerificationRequests
+            .Where(r => r.FacilityId == _facility.Id)
+            .OrderBy(r => r.SubmissionNumber)
+            .ToListAsync();
+        Assert.Equal(2, allFacilityReqs.Count);
+
+        // Submission #1 stays Approved and immutable
+        Assert.Equal("Approved", allFacilityReqs[0].Status);
+        Assert.Equal(oldProof, allFacilityReqs[0].LtoEvidenceObjectKey);
+        Assert.Contains(oldLto, allFacilityReqs[0].SubmittedSnapshotJson);
+        Assert.Contains(oldProof, allFacilityReqs[0].SubmittedSnapshotJson);
+
+        // Submission #2 is PendingReview Resubmission with updated proof
+        Assert.Equal(2, allFacilityReqs[1].SubmissionNumber);
+        Assert.Equal("Resubmission", allFacilityReqs[1].RequestKind);
+        Assert.Equal("PendingReview", allFacilityReqs[1].Status);
+        Assert.Equal(newProof, allFacilityReqs[1].LtoEvidenceObjectKey);
+
+        var pracReqs = await _context.PractitionerVerificationRequests
+            .Where(r => r.FacilityId == _facility.Id && r.ClinicStaffMemberId == staffId)
+            .ToListAsync();
+        Assert.Single(pracReqs);
+        Assert.Equal("Approved", pracReqs[0].Status);
+
+        var queue = await new GetVerificationQueueQueryHandler(_context)
+            .Handle(new GetVerificationQueueQuery(Kind: "facility", Status: "PendingReview"), CancellationToken.None);
+        Assert.Equal(1, queue.PendingFacilityCount);
+        Assert.Contains(queue.Items, i => i.Id == sub2Id && i.DohLtoNumber == newLto && i.DohLtoExpiryDate == newExpiry);
+
+        var detail1 = await new GetVerificationRequestDetailQueryHandler(_context)
+            .Handle(new GetVerificationRequestDetailQuery(sub1Id), CancellationToken.None);
+        Assert.NotNull(detail1);
+        Assert.Equal(oldLto, detail1.DohLtoNumber);
+        Assert.Equal(oldExpiry, detail1.DohLtoExpiryDate);
+        Assert.Equal(oldProof, detail1.LtoEvidenceObjectKey);
+
+        var detail2 = await new GetVerificationRequestDetailQueryHandler(_context)
+            .Handle(new GetVerificationRequestDetailQuery(sub2Id), CancellationToken.None);
+        Assert.NotNull(detail2);
+        Assert.Equal("Resubmission", detail2.RequestKind);
+        Assert.Equal("PendingReview", detail2.Status);
+        Assert.Equal(newLto, detail2.DohLtoNumber);
+        Assert.Equal(newExpiry, detail2.DohLtoExpiryDate);
+        Assert.Equal(newProof, detail2.LtoEvidenceObjectKey);
+        Assert.Equal(2, detail2.SubmissionHistory.Count);
+        Assert.Contains(detail2.SubmissionHistory, h => h.Id == sub1Id && h.Status == "Approved");
+        Assert.Contains(detail2.SubmissionHistory, h => h.Id == sub2Id && h.Status == "PendingReview" && h.RequestKind == "Resubmission");
+        Assert.NotNull(detail2.ResubmissionDiff);
+        Assert.True(detail2.ResubmissionDiff.LtoProofUpdated);
+        Assert.Equal("Approved", detail2.ResubmissionDiff.PreviousStatus);
+        Assert.Contains(detail2.ResubmissionDiff.ChangedFields, c => c.FieldKey == "dohLtoNumber" && c.PreviousValue == oldLto && c.CurrentValue == newLto);
+        Assert.Contains(detail2.ResubmissionDiff.ChangedFields, c => c.FieldKey == "dohLtoExpiryDate" && c.CurrentValue == "2029-12-31");
+        Assert.DoesNotContain(detail2.ResubmissionDiff.ChangedFields, c => c.FieldKey.StartsWith("practitioner:") && c.ChangeKind == "Removed");
+
+        // Governance approves Submission #2 -> facility returns to Verified with updated LTO fields
+        var approval2 = await new ApproveVerificationRequestCommandHandler(
+                _context, TestSupport.ProvisioningPublisher(_context), new InteropPublisher(_context), _clock)
+            .Handle(new ApproveVerificationRequestCommand(sub2Id, "admin_1", "Admin One", "Approved renewed LTO"), CancellationToken.None);
+        Assert.Equal("Approved", approval2.Status);
+
+        var updatedFacility = await _context.Facilities.FindAsync(_facility.Id);
+        Assert.Equal(PlatformVerificationStatus.Verified, updatedFacility!.PlatformVerificationStatus);
+        Assert.Equal(newLto, updatedFacility.LicenseToOperate);
+        Assert.Equal(newExpiry, updatedFacility.LtoExpiryDate);
+        Assert.Equal(newProof, updatedFacility.LtoEvidenceObjectKey);
+        Assert.Equal(sub2Id, updatedFacility.LatestVerificationRequestId);
+    }
 }

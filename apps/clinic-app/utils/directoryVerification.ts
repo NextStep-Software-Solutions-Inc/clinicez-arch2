@@ -16,6 +16,9 @@ export const PENDING_VERIFICATION_HELPER_NOTE =
 export const RESUBMIT_VERIFICATION_BUTTON_LABEL = 'Save & Resubmit for Verification';
 export const REGULATED_PRC_REVERIFICATION_NOTICE =
   'Updating PRC credentials or proof requires re-verification by Platform Governance.';
+export const RESUBMIT_LTO_BUTTON_LABEL = 'Save LTO & Resubmit for Verification';
+export const REGULATED_LTO_REVERIFICATION_NOTICE =
+  'Updating DOH LTO credentials or proof requires re-verification by Platform Governance.';
 
 export function isPendingVerificationConflictError(
   err?: Pick<ApiError, 'status' | 'errorCode'> | null,
@@ -29,6 +32,7 @@ export function buildDohLtoSettingsPayload(input: {
   dohLto: string;
   dohLtoExpiryDate?: string | null;
   previousDohLtoExpiryDate?: string | null;
+  ltoEvidenceObjectKey?: string | null;
   skipPendingVerificationSync?: boolean;
 }): Partial<ClinicSettingsRecord> {
   const payload: Partial<ClinicSettingsRecord> = {
@@ -44,11 +48,43 @@ export function buildDohLtoSettingsPayload(input: {
     payload.clearDohLtoExpiryDate = true;
   }
 
+  const trimmedProofKey = (input.ltoEvidenceObjectKey ?? '').trim();
+  if (trimmedProofKey) {
+    payload.ltoEvidenceObjectKey = trimmedProofKey;
+  }
+
   if (input.skipPendingVerificationSync === true) {
     payload.skipPendingVerificationSync = true;
   }
 
   return payload;
+}
+
+export function hasRegulatedLtoCredentialsChanged(input: {
+  previousDohLtoNumber?: string | null;
+  nextDohLtoNumber?: string | null;
+  previousDohLtoExpiryDate?: string | null;
+  nextDohLtoExpiryDate?: string | null;
+  previousLtoEvidenceObjectKey?: string | null;
+  nextLtoEvidenceObjectKey?: string | null;
+  hasPickedProofFile?: boolean;
+}): boolean {
+  if ((input.previousDohLtoNumber ?? '').trim() !== (input.nextDohLtoNumber ?? '').trim()) {
+    return true;
+  }
+
+  if ((input.previousDohLtoExpiryDate ?? '').trim() !== (input.nextDohLtoExpiryDate ?? '').trim()) {
+    return true;
+  }
+
+  if (input.hasPickedProofFile) {
+    return true;
+  }
+
+  return (
+    (input.previousLtoEvidenceObjectKey ?? '').trim() !==
+    (input.nextLtoEvidenceObjectKey ?? '').trim()
+  );
 }
 
 export const MAX_EVIDENCE_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
