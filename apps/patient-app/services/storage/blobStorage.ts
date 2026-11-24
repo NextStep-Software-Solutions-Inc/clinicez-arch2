@@ -1,3 +1,60 @@
+export type AuthTokenProvider = (options?: { skipCache?: boolean }) => Promise<string | null>;
+
+export class BlobFetchError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'BlobFetchError';
+    this.status = status;
+  }
+}
+
+export function isUnauthorizedBlobError(err: unknown): boolean {
+  if (err instanceof BlobFetchError && err.status === 401) {
+    return true;
+  }
+  return err instanceof Error && /\bHTTP\s+401\b/i.test(err.message);
+}
+
+export async function downloadBlobWithAuthRetry(params: {
+  blobKey: string;
+  remoteUrl: string;
+  getToken?: AuthTokenProvider;
+  storage: Pick<IBlobStorage, 'downloadAndSaveBlob'>;
+}): Promise<string> {
+  if (!params.getToken) {
+    throw new Error('Sign in and connect to the internet to open this file.');
+  }
+
+  const token = await params.getToken();
+  if (!token || !token.trim()) {
+    throw new Error('Your session has expired or is not ready. Please sign in again to open this file.');
+  }
+
+  try {
+    return await params.storage.downloadAndSaveBlob(params.blobKey, params.remoteUrl, token);
+  } catch (err) {
+    if (!isUnauthorizedBlobError(err)) {
+      throw err;
+    }
+
+    const freshToken = await params.getToken({ skipCache: true });
+    if (!freshToken || !freshToken.trim()) {
+      throw new Error('Your session has expired. Please sign in again to open this file.');
+    }
+
+    try {
+      return await params.storage.downloadAndSaveBlob(params.blobKey, params.remoteUrl, freshToken);
+    } catch (retryErr) {
+      if (isUnauthorizedBlobError(retryErr)) {
+        throw new Error('Unable to authorize file download (HTTP 401). Please sign out and sign back in.');
+      }
+      throw retryErr;
+    }
+  }
+}
+
 export interface BlobMetadata {
   blobKey: string;
   mimeType: string;
