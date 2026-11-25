@@ -6,7 +6,10 @@ import {
   useConversations,
   useTriageQueue,
 } from '@clinicez/comms-sdk/react';
-import { resolveConversationDisplayTitle } from '@clinicez/comms-sdk/core';
+import {
+  isConversationClosed,
+  resolveConversationDisplayTitle,
+} from '@clinicez/comms-sdk/core';
 import {
   ChatDrawer,
   TriageQueueView,
@@ -103,7 +106,7 @@ export default function ClinicChatDrawerHost() {
     }
     return conversations.reduce((sum, c) => {
       if (removedConversationIds.has(c.id)) return sum;
-      if (locallyArchivedIds.has(c.id) || c.status === 'Closed') return sum;
+      if (locallyArchivedIds.has(c.id) || isConversationClosed(c)) return sum;
       if (c.scope === 'StaffContext' && c.contextType === 'TeleconsultCall') return sum;
       return sum + (c.unreadCount ?? 0);
     }, 0);
@@ -265,7 +268,7 @@ export default function ClinicChatDrawerHost() {
       .filter((c) => {
         if (removedConversationIds.has(c.id)) return false;
         if (c.scope === 'StaffContext' && c.contextType === 'TeleconsultCall') return false;
-        const isArchived = c.status === 'Closed' || locallyArchivedIds.has(c.id);
+        const isArchived = isConversationClosed(c) || locallyArchivedIds.has(c.id);
         if (selectedScope === 'Archived') {
           if (!isArchived) return false;
         } else {
@@ -293,7 +296,7 @@ export default function ClinicChatDrawerHost() {
         return true;
       })
       .map((c) => {
-        const isArchived = c.status === 'Closed' || locallyArchivedIds.has(c.id);
+        const isArchived = isConversationClosed(c) || locallyArchivedIds.has(c.id);
         return {
           id: c.id,
           scope: c.scope as ChatDrawerItem['scope'],
@@ -679,11 +682,24 @@ export default function ClinicChatDrawerHost() {
             conversationId={activeConversationId}
             initialConversation={(() => {
               const found = conversations.find((c) => c.id === activeConversationId);
-              if (found && locallyArchivedIds.has(found.id) && found.status !== 'Closed') {
-                return { ...found, status: 'Closed' as const };
+              if (found && locallyArchivedIds.has(found.id) && !isConversationClosed(found)) {
+                return {
+                  ...found,
+                  status: 'Closed' as const,
+                  closedAtUtc: found.closedAtUtc ?? new Date().toISOString(),
+                };
               }
               return found;
             })()}
+            onReopenConversation={async (reopened) => {
+              setLocallyArchivedIds((prev) => {
+                if (!prev.has(reopened.id)) return prev;
+                const next = new Set(prev);
+                next.delete(reopened.id);
+                return next;
+              });
+              await Promise.allSettled([refreshConversations?.(), refreshTriage?.()]);
+            }}
             isMuted={mutedConversationIds.has(activeConversationId)}
             onToggleMute={async (nextMuted) => {
               if (nextMuted) {

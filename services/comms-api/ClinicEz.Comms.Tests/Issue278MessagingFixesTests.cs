@@ -340,7 +340,7 @@ public class Issue278MessagingFixesTests : IDisposable
             Scope = ConversationScope.PatientFacility,
             Kind = ConversationKind.PatientTriage,
             PatientId = patientId,
-            Status = RequestStatus.Answered,
+            Status = RequestStatus.Routed,
             LastSeq = 1,
             MessageCount = 1,
         });
