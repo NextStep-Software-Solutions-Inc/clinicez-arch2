@@ -12,8 +12,6 @@ import {
   differenceInCalendarDays,
   format,
   isSameDay,
-  isToday,
-  startOfToday,
   subDays,
 } from 'date-fns';
 import { AppIcon } from '../ui/Icon';
@@ -23,6 +21,12 @@ import {
   resolveAvailableDaysOfWeek,
   resolveDoctorAffiliations,
 } from '../../services/search/directorySearchService';
+import {
+  getManilaTodayDate,
+  isManilaToday,
+  isPastManilaSlot,
+  selectRecommendedSlot,
+} from '../../services/appointments/slotUtils';
 import type { DirectoryDoctorDto } from '../../services/api/homeApi';
 import type { AvailableSlot } from '../../services/appointments/types';
 
@@ -83,6 +87,17 @@ function BookingSlotStepComponent({
 }: BookingSlotStepProps) {
   const { colors, typography, radii, spacing, elevation } = useClinicalEmpathyTheme();
   const [selectedPeriod, setSelectedPeriod] = useState<TimeOfDayPeriod>('morning');
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const now = useMemo(() => new Date(nowMs), [nowMs]);
+  const selectedDateKey = useMemo(() => format(selectedDate, 'yyyy-MM-dd'), [selectedDate]);
   const affiliations = useMemo(() => resolveDoctorAffiliations(doctor), [doctor]);
   const activeClinicId = selectedClinicId ?? doctor.clinicId;
   const activeAffiliation = useMemo(
@@ -96,18 +111,21 @@ function BookingSlotStepComponent({
   const isBookingPaused = !doctor.clinicSupportsAppointments;
 
   const openSlots = useMemo(
-    () => availableSlots.filter((s) => s.available !== false),
-    [availableSlots],
+    () =>
+      availableSlots
+        .filter((s) => s.available !== false && !isPastManilaSlot(selectedDateKey, s.time, now))
+        .sort((a, b) => a.time.localeCompare(b.time)),
+    [availableSlots, now, selectedDateKey],
   );
 
   // Stable 6-day window containing selectedDate without shifting cards unexpectedly on click
   const dateStripDays = useMemo(() => {
-    const today = startOfToday();
+    const today = getManilaTodayDate(now);
     const diffDays = Math.max(0, differenceInCalendarDays(selectedDate, today));
     const windowOffset = Math.floor(diffDays / 6) * 6;
     const windowStart = addDays(today, windowOffset);
     return Array.from({ length: 6 }, (_, i) => addDays(windowStart, i));
-  }, [selectedDate]);
+  }, [now, selectedDate]);
 
   const periodCounts = useMemo(() => {
     let morning = 0;
@@ -137,7 +155,7 @@ function BookingSlotStepComponent({
   );
 
   const recommendedSlotId = useMemo(
-    () => (openSlots.find((s) => s.time.startsWith('10:')) ?? openSlots[0])?.id ?? null,
+    () => selectRecommendedSlot(openSlots)?.id ?? null,
     [openSlots],
   );
 
@@ -151,7 +169,7 @@ function BookingSlotStepComponent({
     : doctor.clinicName;
 
   const durationMins = serviceDurationMinutes > 0 ? serviceDurationMinutes : 30;
-  const isAtToday = isToday(selectedDate);
+  const isAtToday = isManilaToday(selectedDate, now);
 
   const PERIOD_TABS: Array<{
     key: TimeOfDayPeriod;
@@ -452,7 +470,7 @@ function BookingSlotStepComponent({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Jump to today"
-              onPress={() => onSelectDate(startOfToday())}
+              onPress={() => onSelectDate(getManilaTodayDate(new Date()))}
               style={({ pressed }) => [
                 styles.todayPill,
                 {
@@ -843,7 +861,9 @@ function BookingSlotStepComponent({
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[typography.labelBold, { color: colors.navyText }]}>
-            On-Time Clinic Arrival Guarantee
+            {consultationMode === 'telehealth'
+              ? 'Virtual Waiting Room Check-In'
+              : 'On-Time Clinic Arrival Guarantee'}
           </Text>
           <Text style={[typography.bodySm, { color: colors.bodyText, marginTop: spacing.xxs }]}>
             {consultationMode === 'telehealth'

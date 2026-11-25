@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ClinicEz.Patient.Application.Common.Interfaces;
+using ClinicEz.Patient.Application.Features.Appointments;
 using ClinicEz.Patient.Application.Features.Sharing;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
@@ -40,6 +41,7 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
     private readonly PatientShareSnapshotBuilder _snapshots;
     private readonly IFileRecordRepository? _fileRepo;
     private readonly IPatientEncryptionService? _encryptionService;
+    private readonly TimeProvider _timeProvider;
 
     public SubmitBookingDraftCommandHandler(
         IBookingDraftRepository draftRepo, IClinicRepository clinicRepo, IUnitOfWork uow,
@@ -47,7 +49,8 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
         IPatientRepository patientRepo, IPatientAccessRepository accessRepo, IStorageService storage,
         IOptions<SharingOptions> sharingOptions, PatientShareSnapshotBuilder snapshots,
         IFileRecordRepository? fileRepo = null,
-        IPatientEncryptionService? encryptionService = null)
+        IPatientEncryptionService? encryptionService = null,
+        TimeProvider? timeProvider = null)
     {
         _draftRepo = draftRepo; _clinicRepo = clinicRepo; _uow = uow;
         _membershipRepo = membershipRepo;
@@ -59,6 +62,7 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
         _snapshots = snapshots;
         _fileRepo = fileRepo;
         _encryptionService = encryptionService;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<string?> Handle(SubmitBookingDraftCommand request, CancellationToken cancellationToken)
@@ -80,6 +84,11 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
 
         if (string.IsNullOrWhiteSpace(clinic.TenantId))
             throw new ConflictException($"Clinic '{clinic.Name}' is not registered in the facility directory yet, so it cannot receive bookings.");
+
+        BookingScheduleValidation.ValidateBookingSchedule(
+            draft.PreferredDate,
+            draft.PreferredTime,
+            _timeProvider);
 
         var patient = await _patientRepo.GetWithProfileAsync(request.PatientId, cancellationToken)
             ?? throw new NotFoundException($"Patient '{request.PatientId}' was not found.");

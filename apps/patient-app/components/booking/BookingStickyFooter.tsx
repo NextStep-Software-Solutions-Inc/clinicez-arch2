@@ -4,6 +4,7 @@ import { AppIcon } from '../ui/Icon';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 import type { DirectoryDoctorDto } from '../../services/api/homeApi';
 import type { BookingStep } from './BookingStepIndicator';
+import type { ConsultationMode } from './BookingSlotStep';
 
 export interface BookingStickyFooterProps {
   currentStep: BookingStep;
@@ -11,6 +12,7 @@ export interface BookingStickyFooterProps {
   isBookingPaused?: boolean;
   selectedSlotSummary?: string | null;
   formattedCopay?: string;
+  consultationMode?: ConsultationMode;
   isSubmitting?: boolean;
   bottomInset?: number;
   maxContentWidth?: number;
@@ -29,6 +31,7 @@ function BookingStickyFooterComponent({
   isBookingPaused = false,
   selectedSlotSummary,
   formattedCopay = '₱0.00',
+  consultationMode = 'in_person',
   isSubmitting = false,
   bottomInset = 0,
   maxContentWidth,
@@ -202,7 +205,7 @@ function BookingStickyFooterComponent({
                 {formattedCopay}
               </Text>
               <Text style={[typography.labelSm, { color: colors.primary }]}>
-                due at visit
+                {consultationMode === 'telehealth' ? 'due at session' : 'due at visit'}
               </Text>
             </View>
 

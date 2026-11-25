@@ -1,11 +1,13 @@
 using System.Text.Json;
 using ClinicEz.Patient.Application.Common.DTOs;
+using ClinicEz.Patient.Application.Features.Appointments;
 using ClinicEz.Patient.Domain.Enums;
 using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interoperability;
+using FluentValidation;
 using MediatR;
 
 namespace ClinicEz.Patient.Application.Features.Appointments.Commands.RescheduleAppointment;
@@ -16,6 +18,23 @@ public sealed record RescheduleAppointmentCommand(
     DateTime ScheduledAt,
     string? Reason) : IRequest<AppointmentDto>;
 
+public sealed class RescheduleAppointmentCommandValidator : AbstractValidator<RescheduleAppointmentCommand>
+{
+    private readonly TimeProvider _timeProvider;
+
+    public RescheduleAppointmentCommandValidator(TimeProvider? timeProvider = null)
+    {
+        _timeProvider = timeProvider ?? TimeProvider.System;
+
+        RuleFor(x => x.ScheduledAt)
+            .Cascade(CascadeMode.Stop)
+            .NotEqual(default(DateTime))
+            .WithMessage("Scheduled date and time is required.")
+            .Must(dt => !BookingScheduleValidation.IsScheduledAtInPast(dt, _timeProvider))
+            .WithMessage("Cannot reschedule an appointment to a time that has already passed.");
+    }
+}
+
 public sealed class RescheduleAppointmentCommandHandler
     : IRequestHandler<RescheduleAppointmentCommand, AppointmentDto>
 {
@@ -25,6 +44,7 @@ public sealed class RescheduleAppointmentCommandHandler
     private readonly IPatientRepository _patientRepository;
     private readonly IInteropPublisher _publisher;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly TimeProvider _timeProvider;
 
     public RescheduleAppointmentCommandHandler(
         IAppointmentRepository appointmentRepository,
@@ -32,7 +52,8 @@ public sealed class RescheduleAppointmentCommandHandler
         IClinicRepository clinicRepository,
         IPatientRepository patientRepository,
         IInteropPublisher publisher,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        TimeProvider? timeProvider = null)
     {
         _appointmentRepository = appointmentRepository;
         _bookingDraftRepository = bookingDraftRepository;
@@ -40,18 +61,28 @@ public sealed class RescheduleAppointmentCommandHandler
         _patientRepository = patientRepository;
         _publisher = publisher;
         _unitOfWork = unitOfWork;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<AppointmentDto> Handle(
         RescheduleAppointmentCommand request,
         CancellationToken cancellationToken)
     {
+        if (BookingScheduleValidation.IsScheduledAtInPast(request.ScheduledAt, _timeProvider))
+        {
+            const string message = "Cannot reschedule an appointment to a time that has already passed.";
+            throw new ClinicEz.Shared.Exceptions.ValidationException(
+                message,
+                new Dictionary<string, string[]>
+                {
+                    [nameof(RescheduleAppointmentCommand.ScheduledAt)] = [message]
+                });
+        }
+
         var patient = await _patientRepository.GetByIdAsync(request.PatientId, cancellationToken)
             ?? throw new NotFoundException($"Patient '{request.PatientId}' was not found.");
 
-        var scheduledUtc = request.ScheduledAt.Kind == DateTimeKind.Unspecified
-            ? DateTime.SpecifyKind(request.ScheduledAt, DateTimeKind.Utc)
-            : request.ScheduledAt.ToUniversalTime();
+        var scheduledUtc = BookingScheduleValidation.NormalizeToUtc(request.ScheduledAt);
 
         var rescheduleNote = !string.IsNullOrWhiteSpace(request.Reason)
             ? $"Reschedule request: {request.Reason.Trim()}"

@@ -16,6 +16,14 @@ public sealed class GetAvailableSlotsQueryHandlerTests
     private readonly IClinicMembershipRepository _membershipRepo = Substitute.For<IClinicMembershipRepository>();
     private readonly IOrganizationMembershipRepository _orgMembershipRepo = Substitute.For<IOrganizationMembershipRepository>();
 
+    private static DateOnly NextWeekday(DayOfWeek dayOfWeek)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8));
+        var daysUntil = ((int)dayOfWeek - (int)today.DayOfWeek + 7) % 7;
+        if (daysUntil == 0) daysUntil = 7;
+        return today.AddDays(daysUntil);
+    }
+
     private GetAvailableSlotsQueryHandler CreateHandler() =>
         new(_availabilityRepo, _appointmentRepo, _clinicRepo, _membershipRepo, _orgMembershipRepo);
 
@@ -24,7 +32,7 @@ public sealed class GetAvailableSlotsQueryHandlerTests
     {
         var clinicId = Guid.NewGuid();
         var providerId = Guid.NewGuid();
-        var date = new DateOnly(2026, 10, 19); // Monday
+        var date = NextWeekday(DayOfWeek.Monday);
 
         _clinicRepo.GetByIdAsync(clinicId, Arg.Any<CancellationToken>())
             .Returns(new Clinic { Id = clinicId, IsGated = false });
@@ -100,7 +108,7 @@ public sealed class GetAvailableSlotsQueryHandlerTests
         var clinicId = Guid.NewGuid();
         var providerId = Guid.NewGuid();
         var patientId = Guid.NewGuid();
-        var date = new DateOnly(2026, 10, 19);
+        var date = NextWeekday(DayOfWeek.Monday);
 
         _clinicRepo.GetByIdAsync(clinicId, Arg.Any<CancellationToken>())
             .Returns(new Clinic { Id = clinicId, IsGated = true });
@@ -140,7 +148,7 @@ public sealed class GetAvailableSlotsQueryHandlerTests
         var providerId = Guid.NewGuid();
         var patientId = Guid.NewGuid();
         var orgId = Guid.NewGuid();
-        var date = new DateOnly(2026, 10, 19);
+        var date = NextWeekday(DayOfWeek.Monday);
 
         var clinic = new Clinic
         {

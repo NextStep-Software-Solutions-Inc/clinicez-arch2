@@ -194,6 +194,51 @@ public sealed class PatientHomeAndSearchEndpointTests : IAsyncLifetime
         var submitPausedResp = await _host.Client.SendAsync(submitPausedReq);
         submitPausedResp.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await submitPausedResp.Content.ReadAsStringAsync()).Should().Contain("Online booking is currently paused for this clinic.");
+
+        // Past-schedule ValidationException -> HTTP 400
+        var pastClinicId = Guid.NewGuid();
+        _host.Sender.Send(
+                Arg.Is<CreateBookingDraftCommand>(c => c.ClinicId == pastClinicId),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new ValidationException(
+                "Cannot schedule an appointment for a time that has already passed.",
+                new Dictionary<string, string[]>
+                {
+                    ["ScheduledAt"] = ["Cannot schedule an appointment for a time that has already passed."]
+                }));
+
+        using var createPastReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/patients/{patientId}/booking-drafts")
+        {
+            Content = JsonContent.Create(new
+            {
+                clinicId = pastClinicId,
+                preferredDate = "2026-11-25",
+                preferredTime = "09:00",
+                shareFieldsJson = "[]",
+                attachedFileIdsJson = "[]"
+            })
+        };
+        createPastReq.Headers.Add(PatientApiTestHost.UserHeader, "clerk_owner");
+        var createPastResp = await _host.Client.SendAsync(createPastReq);
+        createPastResp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await createPastResp.Content.ReadAsStringAsync()).Should().Contain("Cannot schedule an appointment for a time that has already passed.");
+
+        var expiredDraftId = Guid.NewGuid();
+        _host.Sender.Send(
+                Arg.Is<SubmitBookingDraftCommand>(c => c.DraftId == expiredDraftId),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new ValidationException(
+                "Cannot schedule an appointment for a time that has already passed.",
+                new Dictionary<string, string[]>
+                {
+                    ["ScheduledAt"] = ["Cannot schedule an appointment for a time that has already passed."]
+                }));
+
+        using var submitPastReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/patients/{patientId}/booking-drafts/{expiredDraftId}/submit");
+        submitPastReq.Headers.Add(PatientApiTestHost.UserHeader, "clerk_owner");
+        var submitPastResp = await _host.Client.SendAsync(submitPastReq);
+        submitPastResp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await submitPastResp.Content.ReadAsStringAsync()).Should().Contain("Cannot schedule an appointment for a time that has already passed.");
     }
 
     [Fact]

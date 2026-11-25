@@ -1,6 +1,7 @@
 using MediatR;
 using ClinicEz.Patient.Application.Common.DTOs;
 using ClinicEz.Patient.Application.Common.Errors;
+using ClinicEz.Patient.Application.Features.Appointments;
 using ClinicEz.Patient.Application.Features.Sharing;
 using ClinicEz.Shared.Interoperability;
 using FluentValidation;
@@ -24,11 +25,29 @@ public sealed record CreateBookingDraftCommand(
 
 public sealed class CreateBookingDraftCommandValidator : AbstractValidator<CreateBookingDraftCommand>
 {
-    public CreateBookingDraftCommandValidator()
+    private readonly TimeProvider _timeProvider;
+
+    public CreateBookingDraftCommandValidator(TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
+
         RuleFor(x => x.ShareSections)
             .Must(sections => sections is null || sections.Count == 0 || (SharingScopeMap.TryParse(sections, out var scopes) && !scopes.HasFlag(SharingScopes.Demographics)))
             .WithErrorCode(ErrorCodes.InvalidEnumValue)
             .WithMessage("Booking sections must be record categories such as Allergies or Medications; demographics are chosen with the share fields.");
+
+        RuleFor(x => x)
+            .Custom((command, context) =>
+            {
+                if (!BookingScheduleValidation.TryValidateBookingSchedule(
+                        command.PreferredDate,
+                        command.PreferredTime,
+                        _timeProvider,
+                        out var fieldName,
+                        out var errorMessage))
+                {
+                    context.AddFailure(fieldName, errorMessage);
+                }
+            });
     }
 }
