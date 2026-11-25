@@ -204,7 +204,8 @@ public static class DependencyInjection
             .Handle<CommsMessageReceivedPayload, CommsMessageReceivedInteropHandler>(InteropTypes.CommsMessageReceived)
             .Handle<CommsThreadStateChangedPayload, CommsThreadStateChangedInteropHandler>(InteropTypes.CommsThreadStateChanged)
             .Handle<CommsEligibilitySyncedPayload, CommsEligibilitySyncedInteropHandler>(InteropTypes.CommsEligibilitySynced)
-            .Handle<CommsCallStateChangedPayload, CommsCallStateChangedInteropHandler>(InteropTypes.CommsCallStateChanged));
+            .Handle<CommsCallStateChangedPayload, CommsCallStateChangedInteropHandler>(InteropTypes.CommsCallStateChanged)
+            .Handle<CommsAttachmentChunkPayload, CommsAttachmentChunkInteropHandler>(InteropTypes.CommsAttachmentChunk));
 
     public static IServiceCollection AddClerkAuthentication(
         this IServiceCollection services,

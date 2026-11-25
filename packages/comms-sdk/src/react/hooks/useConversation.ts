@@ -204,20 +204,25 @@ export function useConversation(
     };
   }, [client, conversationId, options?.markAsReadOnMount, staffId]);
 
-  // Sync when connection reconnects
+  // Sync when connection connects or reconnects
   useEffect(() => {
     if (!conversationId) return;
 
     const unsub = client.events.on('connectionStateChanged', (state) => {
       if (state === 'Connected') {
-        refreshRef.current().catch(() => {});
+        subscriptionTracker
+          .ensureJoined(client, conversationId)
+          .catch(() => {})
+          .finally(() => {
+            refreshRef.current().catch(() => {});
+          });
       }
     });
 
     return () => {
       unsub();
     };
-  }, [client, conversationId]);
+  }, [client, conversationId, subscriptionTracker]);
 
   // Sync with OptimisticStore
   useEffect(() => {

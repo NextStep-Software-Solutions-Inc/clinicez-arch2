@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Patient.Application.Features.Communications;
 using ClinicEz.Patient.Application.Features.Communications.DTOs;
 using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
@@ -53,8 +54,14 @@ public sealed class GetPatientConversationDetailQueryHandler : IRequestHandler<G
             await _uow.SaveChangesAsync(ct);
         }
 
+        var patientFullName = conversation.Patient != null
+            ? $"{conversation.Patient.FirstName} {conversation.Patient.LastName}".Trim()
+            : null;
+
         var messages = conversation.Messages
-            .OrderBy(m => m.Seq)
+            .OrderBy(m => m.CreatedAtUtc)
+            .ThenBy(m => m.Seq)
+            .ThenBy(m => m.Id)
             .Select(m => new PatientMessageDto(
                 m.Id,
                 m.ConversationId,
@@ -62,7 +69,12 @@ public sealed class GetPatientConversationDetailQueryHandler : IRequestHandler<G
                 m.ClientMessageId,
                 m.SenderType,
                 m.SenderId,
-                m.SenderName,
+                CommsAttachmentHelpers.ResolveSenderDisplayName(
+                    m.SenderType,
+                    m.SenderName,
+                    conversation.FacilityName,
+                    patientFullName,
+                    conversation.SubmittingAccountName),
                 m.ContentText,
                 m.RequiresAcknowledgement,
                 m.IsAcknowledged,

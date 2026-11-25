@@ -10,9 +10,11 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
   conversationScope,
   messages,
   currentUserId,
+  viewerType = 'Staff',
   onSendMessage,
   onResendMessage,
   onAcknowledgeMessage,
+  onOpenAttachment,
   onFileToChart,
   privacyBlurEnabled,
   onTogglePrivacyBlur,
@@ -199,7 +201,15 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
       ) : (
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((msg) => {
-            const isMe = Boolean(msg.senderId && msg.senderId === currentUserId);
+            const isMe =
+              viewerType === 'Patient'
+                ? msg.senderType === 'Patient' ||
+                  (msg.senderType as string) === 'Guardian' ||
+                  (Boolean(msg.senderId) &&
+                    msg.senderId === currentUserId &&
+                    msg.senderType !== 'Staff' &&
+                    msg.senderType !== 'System')
+                : Boolean(msg.senderId && msg.senderId === currentUserId);
             const isInternalNote = msg.visibility === 'Internal';
             const isPeeking = hoveredMessageId === msg.id;
             const isObscured = privacyBlurEnabled && !isPeeking;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Patient.Application.Common.Interfaces;
 using ClinicEz.Patient.Application.Features.Communications.DTOs;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Interfaces;
@@ -27,17 +28,23 @@ public sealed class SubmitPatientMessageCommandHandler : IRequestHandler<SubmitP
     private readonly IPatientCommunicationsRepository _commsRepo;
     private readonly IUnitOfWork _uow;
     private readonly IInteropPublisher _publisher;
+    private readonly IStorageService? _storageService;
+    private readonly IPatientEncryptionService? _encryptionService;
 
     public SubmitPatientMessageCommandHandler(
         IPatientRepository patientRepo,
         IPatientCommunicationsRepository commsRepo,
         IUnitOfWork uow,
-        IInteropPublisher publisher)
+        IInteropPublisher publisher,
+        IStorageService? storageService = null,
+        IPatientEncryptionService? encryptionService = null)
     {
         _patientRepo = patientRepo;
         _commsRepo = commsRepo;
         _uow = uow;
         _publisher = publisher;
+        _storageService = storageService;
+        _encryptionService = encryptionService;
     }
 
     public async Task<PatientMessageDto> Handle(
@@ -56,7 +63,7 @@ public sealed class SubmitPatientMessageCommandHandler : IRequestHandler<SubmitP
             throw new ForbiddenException("You do not have access to this conversation.");
         }
 
-        if (conversation.Status == RequestStatus.Closed)
+        if (conversation.Status == RequestStatus.Closed || conversation.Status == RequestStatus.Declined)
         {
             throw new ValidationException("Cannot send a message to a closed conversation.");
         }
@@ -88,36 +95,33 @@ public sealed class SubmitPatientMessageCommandHandler : IRequestHandler<SubmitP
             RetentionDeadlineUtc = retentionDeadline
         };
 
-        var attachmentDtos = new List<PatientMessageAttachmentDto>();
-        if (request.Attachments != null && request.Attachments.Count > 0)
-        {
-            foreach (var att in request.Attachments)
-            {
-                var attachment = new PatientMessageAttachment
-                {
-                    Id = Guid.NewGuid(),
-                    MessageId = message.Id,
-                    StorageKey = att.FileKey,
-                    FileName = att.FileName,
-                    ContentType = att.ContentType,
-                    FileSizeBytes = att.SizeBytes,
-                    HashSha256 = att.HashSha256,
-                    IsClean = true,
-                    ScanStatus = "Clean"
-                };
-                message.Attachments.Add(attachment);
+        var targetFacilityType = CommunicationCommandRules.ResolveFacilityType(conversation.HomeFacilityType);
 
-                attachmentDtos.Add(new PatientMessageAttachmentDto(
-                    attachment.Id,
-                    attachment.MessageId,
-                    attachment.StorageKey,
-                    attachment.FileName,
-                    attachment.ContentType,
-                    attachment.FileSizeBytes,
-                    attachment.HashSha256,
-                    attachment.ScanStatus));
-            }
-        }
+        var outboundAttachments = await CommunicationCommandRules.AttachAndEnqueueChunksAsync(
+            _commsRepo,
+            _publisher,
+            _storageService,
+            _encryptionService,
+            message,
+            request.Attachments,
+            conversation.PatientId,
+            callerPatient?.Id ?? conversation.PatientId,
+            conversation.HomeTenantId,
+            conversation.HomeFacilityId,
+            targetFacilityType,
+            conversation.HomeFacilityType,
+            conversation.Id,
+            ct);
+
+        var attachmentDtos = message.Attachments.Select(attachment => new PatientMessageAttachmentDto(
+            attachment.Id,
+            attachment.MessageId,
+            attachment.StorageKey,
+            attachment.FileName,
+            attachment.ContentType,
+            attachment.FileSizeBytes,
+            attachment.HashSha256,
+            attachment.ScanStatus)).ToList();
 
         await _commsRepo.AddMessageAsync(message, ct);
 
@@ -140,12 +144,10 @@ public sealed class SubmitPatientMessageCommandHandler : IRequestHandler<SubmitP
             ContentText: request.ContentText,
             Visibility: MessageVisibility.Public,
             RequiresAcknowledgement: false,
-            Attachments: request.Attachments,
+            Attachments: outboundAttachments,
             ClientSentAtUtc: now,
             RetentionDeadlineUtc: retentionDeadline
         );
-
-        var targetFacilityType = CommunicationCommandRules.ResolveFacilityType(conversation.HomeFacilityType);
 
         _publisher.Enqueue(
             InteropTypes.CommsMessageSubmit,

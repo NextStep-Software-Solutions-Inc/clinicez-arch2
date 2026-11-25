@@ -45,7 +45,9 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
   }, [getCommsTicket]);
 
   const ticketProvider = useCallback(async (): Promise<string> => {
-    setConnectionState((prev) => ({ ...prev, status: 'acquiring_ticket' }));
+    setConnectionState((prev) =>
+      prev.status === 'connected' ? prev : { ...prev, status: 'acquiring_ticket' }
+    );
     try {
       const resp = await ticketProviderRef.current();
       setActiveTicket(resp);

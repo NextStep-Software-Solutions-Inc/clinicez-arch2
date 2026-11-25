@@ -42,7 +42,8 @@ public sealed class PatientCommunicationsRepository : BaseRepository<PatientConv
     public async Task<PatientConversation?> GetConversationWithMessagesAsync(Guid conversationId, CancellationToken ct = default)
     {
         return await Context.PatientConversations
-            .Include(c => c.Messages.OrderBy(m => m.Seq))
+            .Include(c => c.Patient)
+            .Include(c => c.Messages.OrderBy(m => m.CreatedAtUtc).ThenBy(m => m.Seq).ThenBy(m => m.Id))
                 .ThenInclude(m => m.Attachments)
             .FirstOrDefaultAsync(c => c.Id == conversationId, ct);
     }
@@ -102,6 +103,29 @@ public sealed class PatientCommunicationsRepository : BaseRepository<PatientConv
     public async Task AddAttachmentAsync(PatientMessageAttachment attachment, CancellationToken ct = default)
     {
         await Context.PatientMessageAttachments.AddAsync(attachment, ct);
+    }
+
+    public async Task<PatientMessageAttachment?> GetAttachmentByIdAsync(Guid attachmentId, CancellationToken ct = default)
+    {
+        return await Context.PatientMessageAttachments
+            .Include(a => a.Message)
+                .ThenInclude(m => m!.Conversation)
+            .FirstOrDefaultAsync(a => a.Id == attachmentId, ct);
+    }
+
+    public async Task<IReadOnlyList<PatientMessageAttachment>> GetAttachmentsByStorageKeysAsync(
+        IEnumerable<string> storageKeys,
+        CancellationToken ct = default)
+    {
+        var keys = storageKeys.Where(k => !string.IsNullOrWhiteSpace(k)).Distinct().ToList();
+        if (keys.Count == 0)
+        {
+            return Array.Empty<PatientMessageAttachment>();
+        }
+
+        return await Context.PatientMessageAttachments
+            .Where(a => keys.Contains(a.StorageKey))
+            .ToListAsync(ct);
     }
 
     public async Task<long> GetNextSequenceForConversationAsync(Guid conversationId, CancellationToken ct = default)

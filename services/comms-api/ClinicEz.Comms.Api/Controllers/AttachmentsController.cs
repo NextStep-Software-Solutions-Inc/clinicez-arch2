@@ -27,17 +27,20 @@ public class AttachmentsController : ControllerBase
     private readonly IMediator _mediator;
     private readonly ICommsDbContext _db;
     private readonly ICommsStorageService _storage;
+    private readonly IAttachmentCryptoService _crypto;
     private readonly IInteropPublisher? _publisher;
 
     public AttachmentsController(
         IMediator mediator,
         ICommsDbContext db,
         ICommsStorageService storage,
+        IAttachmentCryptoService crypto,
         IInteropPublisher? publisher = null)
     {
         _mediator = mediator;
         _db = db;
         _storage = storage;
+        _crypto = crypto;
         _publisher = publisher;
     }
 
@@ -86,7 +89,25 @@ public class AttachmentsController : ControllerBase
         var bytes = await _storage.ReadEncryptedAttachmentAsync(attachment.StoragePath, ct);
         if (bytes == null) return NotFound();
 
-        return File(bytes, "application/octet-stream", attachment.SafeFileName);
+        byte[] outputBytes = bytes;
+        if (!string.IsNullOrWhiteSpace(attachment.EncryptionIvBase64) &&
+            !string.IsNullOrWhiteSpace(attachment.EncryptionTagBase64) &&
+            !string.IsNullOrWhiteSpace(attachment.WrappedKeyJson))
+        {
+            var metadata = new AttachmentCryptoMetadata(
+                attachment.EncryptionAlgorithm,
+                attachment.EncryptionKeyId,
+                attachment.EncryptionIvBase64,
+                attachment.EncryptionTagBase64,
+                attachment.WrappedKeyJson);
+            outputBytes = await _crypto.DecryptAsync(bytes, metadata, attachment.TenantId, attachment.FacilityId, ct);
+        }
+
+        var contentType = string.IsNullOrWhiteSpace(attachment.ContentType)
+            ? "application/octet-stream"
+            : attachment.ContentType;
+
+        return File(outputBytes, contentType, attachment.SafeFileName);
     }
 
     [HttpPost("{id:guid}/file-to-chart")]
