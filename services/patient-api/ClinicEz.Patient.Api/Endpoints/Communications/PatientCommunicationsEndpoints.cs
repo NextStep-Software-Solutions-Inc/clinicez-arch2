@@ -121,7 +121,8 @@ public sealed class PatientCommunicationsEndpoints : IEndpoint
                     request.Category,
                     request.ContentText,
                     request.IsEmergencyConfirmed,
-                    request.Attachments), ct);
+                    request.Attachments,
+                    request.Subject), ct);
 
                 return Results.Ok(ApiResponse<SubmitPatientInquiryResponse>.Success(result));
             })

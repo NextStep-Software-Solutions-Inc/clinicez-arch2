@@ -133,6 +133,7 @@ public sealed class ReopenConversationCommandHandler : IRequestHandler<ReopenCon
         conversation.LastSeq++;
         conversation.MessageCount++;
         var isStaffReopen = !string.IsNullOrWhiteSpace(request.ReopenedByStaffId);
+        var patientDisplayName = CommsInquiryDisplayHelper.ResolvePatientParticipantName(conversation.Participants) ?? "Patient";
         var reopenMsg = new Message
         {
             Id = Guid.NewGuid(),
@@ -144,7 +145,7 @@ public sealed class ReopenConversationCommandHandler : IRequestHandler<ReopenCon
             SenderId = isStaffReopen ? request.ReopenedByStaffId : request.PatientId.ToString(),
             SenderDisplayName = isStaffReopen
                 ? (string.IsNullOrWhiteSpace(request.ReopenedByStaffName) ? "Clinic Staff" : request.ReopenedByStaffName)
-                : "Patient",
+                : patientDisplayName,
             ContentText = isStaffReopen
                 ? $"Inquiry reopened by clinic staff: {request.Reason.Trim()}"
                 : $"Inquiry reopened by patient: {request.Reason.Trim()}",

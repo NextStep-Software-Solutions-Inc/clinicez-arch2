@@ -24,6 +24,7 @@ import {
   TriageQueueItem,
   TriageQueueViewProps
 } from './types';
+import { formatMessageCategory } from '../core/messageCategory';
 
 export function isItemSlaBreached(item: TriageQueueItem): boolean {
   if (item.slaBreached || item.isSlaBreached) return true;
@@ -344,7 +345,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                       </View>
                     )}
                     <View style={styles.categoryBadge}>
-                      <Text style={styles.categoryBadgeText}>{item.category}</Text>
+                      <Text style={styles.categoryBadgeText}>{formatMessageCategory(item.category, 'clinical')}</Text>
                     </View>
                   </View>
 

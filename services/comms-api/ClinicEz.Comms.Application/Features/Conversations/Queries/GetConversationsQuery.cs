@@ -4,6 +4,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Comms.Application.Common.Helpers;
 using ClinicEz.Comms.Application.Common.Interfaces;
 using ClinicEz.Comms.Application.Models;
 using ClinicEz.Comms.Domain.Entities;
@@ -315,6 +316,27 @@ public sealed class GetConversationsQueryHandler : IRequestHandler<GetConversati
 
     public static string? ResolveDisplayTitle(Conversation c, string? currentStaffId)
     {
+        if (c.Scope == ConversationScope.PatientFacility)
+        {
+            if (!string.IsNullOrWhiteSpace(c.Title) && !CommsInquiryDisplayHelper.IsLegacyRawCategoryInquiryTitle(c.Title))
+            {
+                return c.Title;
+            }
+
+            var patientName = CommsInquiryDisplayHelper.ResolvePatientParticipantName(c.Participants);
+            if (!string.IsNullOrWhiteSpace(patientName))
+            {
+                return patientName;
+            }
+
+            if (c.Category.HasValue)
+            {
+                return $"{CommsInquiryDisplayHelper.FormatCategoryLabel(c.Category.Value)} Inquiry";
+            }
+
+            return c.Title;
+        }
+
         if (!string.IsNullOrWhiteSpace(c.Title))
         {
             return c.Title;

@@ -185,7 +185,8 @@ public sealed record CommsRequestSubmitPayload(
     string ContentText,
     bool IsEmergencyConfirmed,
     IReadOnlyList<CommsAttachmentReference>? Attachments,
-    DateTime SubmittedAtUtc);
+    DateTime SubmittedAtUtc,
+    string? PatientDisplayName = null);
 
 /// <summary>Payload for <c>comms.message.submit</c>.</summary>
 public sealed record CommsMessageSubmitPayload(

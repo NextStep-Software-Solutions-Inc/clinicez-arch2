@@ -5,6 +5,7 @@ import {
   TriageQueueItem,
   WebTriageQueueViewProps
 } from './types';
+import { formatMessageCategory } from '../core/messageCategory';
 
 export function isItemSlaBreached(item: TriageQueueItem): boolean {
   if (item.slaBreached || item.isSlaBreached) return true;
@@ -361,7 +362,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                     )}
 
                     <span className="px-2 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      {item.category}
+                      {formatMessageCategory(item.category, 'clinical')}
                     </span>
                   </div>
 

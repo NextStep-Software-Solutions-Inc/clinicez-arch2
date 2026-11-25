@@ -6,6 +6,10 @@ import { useNavigation } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { MessageThread } from '@clinicez/comms-sdk/native-ui';
 import type { ThreadAttachment, ThreadMessage } from '@clinicez/comms-sdk/native-ui';
+import {
+  formatMessageCategory,
+  isRedundantCategorySubject,
+} from '@clinicez/comms-sdk/core';
 import Screen from '../../../components/layout/Screen';
 import IconButton from '../../../components/ui/IconButton';
 import ThemedText from '../../../components/ui/ThemedText';
@@ -221,6 +225,19 @@ export default function ConversationThreadScreen({ route }: Props) {
 
   const title = conversation?.facilityName ?? initialTitle ?? 'Conversation';
   const scope = conversation?.homeFacilityType ?? initialScope ?? 'Facility';
+  const formattedCategory = conversation?.category
+    ? formatMessageCategory(conversation.category, 'patient')
+    : null;
+  const distinctSubject =
+    conversation?.subject &&
+    !isRedundantCategorySubject(conversation.subject, conversation.category)
+      ? conversation.subject.trim()
+      : null;
+  const headerSubtitle = formattedCategory
+    ? distinctSubject
+      ? `${formattedCategory} • ${distinctSubject}`
+      : formattedCategory
+    : distinctSubject || scope;
 
   return (
     <Screen width="full" contentContainerStyle={styles.screenContainer}>
@@ -249,7 +266,7 @@ export default function ConversationThreadScreen({ route }: Props) {
             {title}
           </ThemedText>
           <ThemedText variant="caption" color="textMuted">
-            {conversation?.subject ? `${conversation.category} • ${conversation.subject}` : scope}
+            {headerSubtitle}
           </ThemedText>
         </View>
 

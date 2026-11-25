@@ -29,18 +29,24 @@ mock.module('react-native', () => ({
 
 let ChatDrawer: any;
 let MessageThread: any;
+let TriageQueueView: any;
 let WebChatDrawer: any;
 let WebMessageThread: any;
+let WebTriageQueueView: any;
 
 beforeAll(async () => {
   const drawerMod = await import('../../src/native-ui/ChatDrawer');
   ChatDrawer = drawerMod.ChatDrawer;
   const threadMod = await import('../../src/native-ui/MessageThread');
   MessageThread = threadMod.MessageThread;
+  const triageMod = await import('../../src/native-ui/TriageQueueView');
+  TriageQueueView = triageMod.TriageQueueView;
   const webDrawerMod = await import('../../src/web-ui/ChatDrawer');
   WebChatDrawer = webDrawerMod.ChatDrawer;
   const webThreadMod = await import('../../src/web-ui/MessageThread');
   WebMessageThread = webThreadMod.MessageThread;
+  const webTriageMod = await import('../../src/web-ui/TriageQueueView');
+  WebTriageQueueView = webTriageMod.TriageQueueView;
 });
 
 function getTextContent(element: any): string {
@@ -546,5 +552,94 @@ describe('Native UI ChatDrawer & MessageThread (#212, #213, #158)', () => {
 
     expect(isConversationClosed(null)).toBe(false);
     expect(isConversationClosed(undefined)).toBe(false);
+  });
+
+  it('TriageQueueView (native & web) and ChatDrawer render formatted category labels and subtitles (#284)', () => {
+    const triageItem = {
+      conversationId: 't-284',
+      requestId: 't-284',
+      patientId: 'pat-284',
+      patientNameMasked: 'Justine Mae Tabasan',
+      category: 'PostVisitFollowUp',
+      contentText: 'Checking on my post-visit labs.',
+      priority: 'Routine' as const,
+      status: 'WithTriage' as const,
+      submittedAtUtc: '2026-11-25T10:00:00Z',
+      triageDueAtUtc: '2026-11-25T12:00:00Z',
+      isOffHours: false,
+      slaBreached: false,
+      isEmergencyConfirmed: false,
+    };
+
+    const nativeTriage = createHookHarness(() =>
+      TriageQueueView({
+        items: [triageItem],
+        facilityName: 'Nextstep OPD',
+        onExecuteDisposition: async () => {},
+        onRefresh: () => {},
+      })
+    );
+    const nativeTriageText = getTextContent(nativeTriage.result.current);
+    expect(nativeTriageText).toContain('Justine Mae Tabasan');
+    expect(nativeTriageText).toContain('Post-Visit Follow-Up');
+    expect(nativeTriageText).not.toContain('PostVisitFollowUp');
+    nativeTriage.unmount();
+
+    const webTriage = createHookHarness(() =>
+      WebTriageQueueView({
+        items: [triageItem],
+        facilityName: 'Nextstep OPD',
+        onExecuteDisposition: async () => {},
+        onRefresh: () => {},
+      })
+    );
+    const webTriageText = getTextContent(webTriage.result.current);
+    expect(webTriageText).toContain('Justine Mae Tabasan');
+    expect(webTriageText).toContain('Post-Visit Follow-Up');
+    expect(webTriageText).not.toContain('PostVisitFollowUp');
+    webTriage.unmount();
+
+    const drawerItems: ChatDrawerItem[] = [
+      {
+        id: 'd-284',
+        scope: 'PatientFacility',
+        title: 'Justine Mae Tabasan',
+        subtitle: 'Post-Visit Follow-Up',
+        lastMessageSnippet: 'Checking on my post-visit labs.',
+        unreadCount: 1,
+      },
+    ];
+
+    const nativeDrawer = createHookHarness(() =>
+      ChatDrawer({
+        items: drawerItems,
+        selectedScope: 'All',
+        onSelectScope: () => {},
+        onSelectConversation: () => {},
+        searchQuery: '',
+        onSearchChange: () => {},
+      })
+    );
+    const nativeDrawerText = getTextContent(nativeDrawer.result.current);
+    expect(nativeDrawerText).toContain('Justine Mae Tabasan');
+    expect(nativeDrawerText).toContain('Post-Visit Follow-Up');
+    nativeDrawer.unmount();
+
+    const webDrawer = createHookHarness(() =>
+      WebChatDrawer({
+        isOpen: true,
+        onClose: () => {},
+        items: drawerItems,
+        selectedScope: 'All',
+        onSelectScope: () => {},
+        onSelectConversation: () => {},
+        searchQuery: '',
+        onSearchChange: () => {},
+      })
+    );
+    const webDrawerText = getTextContent(webDrawer.result.current);
+    expect(webDrawerText).toContain('Justine Mae Tabasan');
+    expect(webDrawerText).toContain('Post-Visit Follow-Up');
+    webDrawer.unmount();
   });
 });

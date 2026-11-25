@@ -2,9 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore 
 import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform, type ViewStyle } from 'react-native';
 import { useConversation, useSendMessage, useComms } from '@clinicez/comms-sdk/react';
 import {
+  formatMessageCategory,
   getClosedConversationLabel,
   isConversationClosed,
+  isLegacyRawCategoryInquiryTitle,
   resolveConversationDisplayTitle,
+  resolvePatientParticipantName,
 } from '@clinicez/comms-sdk/core';
 import { MessageThread } from '@clinicez/comms-sdk/native-ui';
 import type { ThreadMessage } from '@clinicez/comms-sdk/native-ui';
@@ -61,7 +64,10 @@ const SPEED_RESPONSE_PILLS = [
   '+ On My Way',
 ];
 
-function getCategoryLabel(scope?: string): string {
+function getCategoryLabel(scope?: string, category?: string | null): string {
+  if (category && category.trim()) {
+    return formatMessageCategory(category, 'clinical');
+  }
   switch (scope) {
     case 'PatientFacility':
       return 'Patient Request';
@@ -169,7 +175,10 @@ export default function ClinicActiveThread({
   // Header and View State
   const [customTitle, setCustomTitle] = useState<string | null>(null);
   const rawTitle = customTitle ?? conversation?.title ?? initialConversation?.title ?? '';
-  const isGenericPlaceholder = !rawTitle.trim() || rawTitle.trim().toLowerCase() === 'conversation';
+  const isGenericPlaceholder =
+    !rawTitle.trim() ||
+    rawTitle.trim().toLowerCase() === 'conversation' ||
+    isLegacyRawCategoryInquiryTitle(rawTitle);
   const resolvedTitle = useMemo(() => {
     const raw = conversation || initialConversation;
     if (!raw) return '';
@@ -410,26 +419,50 @@ export default function ClinicActiveThread({
     onReopenConversation,
   ]);
 
+  const resolvedPatientSenderName = useMemo(() => {
+    const raw = conversation || initialConversation;
+    if (raw?.scope !== 'PatientFacility') return null;
+    const fromParticipant = resolvePatientParticipantName(raw.participants);
+    if (fromParticipant) return fromParticipant;
+    if (
+      activeTitle &&
+      activeTitle !== 'Patient Request' &&
+      activeTitle !== 'Patient Inquiry' &&
+      !activeTitle.endsWith(' Inquiry')
+    ) {
+      return activeTitle;
+    }
+    return null;
+  }, [conversation, initialConversation, activeTitle]);
+
   const threadMessages: ThreadMessage[] = useMemo(() => {
-    return messages.map((m) => ({
-      id: m.messageId,
-      seq: m.seq,
-      conversationId: m.conversationId,
-      senderType: (m.senderType as ThreadMessage['senderType']) || 'Staff',
-      senderId: m.senderId ?? undefined,
-      senderDisplayName: m.senderDisplayName,
-      senderRole: undefined,
-      contentText: m.contentText,
-      visibility: m.visibility as ThreadMessage['visibility'],
-      state: m.deliveryState as ThreadMessage['state'],
-      clientSentAtUtc: m.sentAtUtc,
-      serverReceivedAtUtc: undefined,
-      requiresAcknowledgement: m.requiresAcknowledgement,
-      isAcknowledged: m.isAcknowledged,
-      acknowledgedByName: m.acknowledgedByName ?? undefined,
-      acknowledgedAtUtc: m.acknowledgedAtUtc ?? undefined,
-    }));
-  }, [messages]);
+    return messages.map((m) => {
+      const isGenericPatientSender =
+        m.senderType === 'Patient' &&
+        (!m.senderDisplayName?.trim() || m.senderDisplayName.trim().toLowerCase() === 'patient');
+      return {
+        id: m.messageId,
+        seq: m.seq,
+        conversationId: m.conversationId,
+        senderType: (m.senderType as ThreadMessage['senderType']) || 'Staff',
+        senderId: m.senderId ?? undefined,
+        senderDisplayName:
+          isGenericPatientSender && resolvedPatientSenderName
+            ? resolvedPatientSenderName
+            : m.senderDisplayName,
+        senderRole: undefined,
+        contentText: m.contentText,
+        visibility: m.visibility as ThreadMessage['visibility'],
+        state: m.deliveryState as ThreadMessage['state'],
+        clientSentAtUtc: m.sentAtUtc,
+        serverReceivedAtUtc: undefined,
+        requiresAcknowledgement: m.requiresAcknowledgement,
+        isAcknowledged: m.isAcknowledged,
+        acknowledgedByName: m.acknowledgedByName ?? undefined,
+        acknowledgedAtUtc: m.acknowledgedAtUtc ?? undefined,
+      };
+    });
+  }, [messages, resolvedPatientSenderName]);
 
   // Filter messages when search is active
   const filteredMessages = useMemo(() => {
@@ -613,12 +646,12 @@ export default function ClinicActiveThread({
       `Shift Handoff Summary`,
       `Generated: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
       `Conversation: ${activeTitle}`,
-      `Category: ${getCategoryLabel(conversation?.scope)}`,
+      `Category: ${getCategoryLabel(conversation?.scope, conversation?.category)}`,
       `Care Team Members: ${members.map((m) => `${m.name} (${m.role})`).join(', ')}`,
       `Pending Clinical Orders: ${alertLines || 'None'}`,
       `Instructions: ${instructionsText}`,
     ].join('\n\n');
-  }, [activeAlerts, activeTitle, conversation?.scope, handoffInstructions, members]);
+  }, [activeAlerts, activeTitle, conversation?.category, conversation?.scope, handoffInstructions, members]);
 
   const handleCopyHandoff = async () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -688,7 +721,7 @@ export default function ClinicActiveThread({
             <View style={styles.headerBadgesRow}>
               <View style={styles.scopeBadge}>
                 <ThemedText variant="captionBold" color={theme.colors.primary} style={styles.scopeBadgeText}>
-                  {getCategoryLabel(conversation?.scope)}
+                  {getCategoryLabel(conversation?.scope, conversation?.category)}
                 </ThemedText>
               </View>
               {isClosed && (

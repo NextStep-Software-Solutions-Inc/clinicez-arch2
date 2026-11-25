@@ -91,6 +91,7 @@ export interface ParticipantDto {
   id: string;
   userId: string;
   participantId?: string;
+  participantType?: string | null;
   displayName: string;
   role: string;
   joinedAtUtc: string;
