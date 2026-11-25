@@ -8,6 +8,7 @@ import {
   IconArrowRight,
   IconAlertTriangle,
   IconSwitchHorizontal,
+  IconCircleCheck,
 } from '@tabler/icons-react';
 import { toast } from 'sonner';
 import { ClinicEzLogo } from '@/components/ClinicEzLogo';
@@ -17,6 +18,13 @@ import {
   INVITATION_EMAIL_MISMATCH_MESSAGE,
   type ClerkEmailLikeUser,
 } from '@/lib/invitationEmailMatcher';
+import {
+  buildInvitationPath,
+  clearAllPendingAdminAuthState,
+  savePendingAuthRedirect,
+  savePendingInvitationToken,
+} from '@/lib/authRedirect';
+import { performCleanAdminSignOut } from '@/lib/adminAuthRecovery';
 
 function InvitationAcceptPage() {
   const { token } = Route.useParams();
@@ -44,10 +52,14 @@ function InvitationAcceptPage() {
     // outside clerk provider in unit tests
   }
 
+  const inviteReturnPath = buildInvitationPath(token);
   const isEmailMatched = Boolean(
     isSignedIn && user && invite?.email && isUserEmailMatched(user, invite.email)
   );
   const isEmailMismatch = Boolean(isSignedIn && invite && !isEmailMatched);
+  const isTerminalInvite = Boolean(
+    invite && (invite.isAlreadyAccepted || invite.isRevoked || invite.isSuspended || invite.isExpired)
+  );
 
   useEffect(() => {
     async function fetchInvite() {
@@ -56,7 +68,11 @@ function InvitationAcceptPage() {
         setError(null);
         const res = await adminService.getInvitationDetails(token);
         setInvite(res);
+        if (res.isAlreadyAccepted || res.isRevoked || res.isSuspended || res.isExpired) {
+          clearAllPendingAdminAuthState();
+        }
       } catch (err: any) {
+        clearAllPendingAdminAuthState();
         setError(err?.message || 'Invalid or expired invitation token.');
       } finally {
         setLoading(false);
@@ -65,13 +81,19 @@ function InvitationAcceptPage() {
     fetchInvite();
   }, [token]);
 
+  const persistPendingInviteContext = () => {
+    savePendingInvitationToken(token);
+    savePendingAuthRedirect(inviteReturnPath);
+  };
+
   const handleAccept = async () => {
-    if (!invite || !isEmailMatched) return;
+    if (!invite || !isEmailMatched || isTerminalInvite) return;
     try {
       setAccepting(true);
       await adminService.acceptInvitation(token);
+      clearAllPendingAdminAuthState();
       toast.success('Invitation accepted successfully! Welcome to Clinic EZ Governance.');
-      window.location.href = '/';
+      window.location.href = '/sync-auth';
     } catch (err: any) {
       toast.error(err?.message || 'Failed to accept invitation.');
     } finally {
@@ -80,15 +102,20 @@ function InvitationAcceptPage() {
   };
 
   const handleSwitchAccount = async () => {
-    if (!token || !token.trim() || !signOutFn) return;
+    if (!inviteReturnPath || !signOutFn) return;
     setSwitchingAccount(true);
+    persistPendingInviteContext();
     try {
-      const trimmedToken = token.trim();
-      await signOutFn({ redirectUrl: `/invitations/${encodeURIComponent(trimmedToken)}` });
+      await signOutFn({ redirectUrl: inviteReturnPath });
     } catch {
       setSwitchingAccount(false);
       toast.error('Failed to switch account. Please sign out and try again.');
     }
+  };
+
+  const handleSignOutToSignIn = async () => {
+    setSwitchingAccount(true);
+    await performCleanAdminSignOut(signOutFn, '/sign-in');
   };
 
   if (loading) {
@@ -154,7 +181,72 @@ function InvitationAcceptPage() {
               </div>
             </div>
 
-            {isEmailMismatch ? (
+            {invite.isAlreadyAccepted ? (
+              <div className="space-y-3">
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-700 dark:text-emerald-300 space-y-1.5">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <IconCircleCheck className="h-4 w-4 shrink-0" />
+                    <span>Invitation Already Accepted</span>
+                  </div>
+                  <p>
+                    This administrative invitation has already been activated.
+                  </p>
+                </div>
+                {isSignedIn && isEmailMatched ? (
+                  <Link
+                    to="/sync-auth"
+                    className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors shadow-sm"
+                  >
+                    <span>Enter Governance Workstation</span>
+                    <IconArrowRight className="h-4 w-4" />
+                  </Link>
+                ) : isSignedIn ? (
+                  <button
+                    type="button"
+                    onClick={handleSignOutToSignIn}
+                    disabled={switchingAccount}
+                    className="w-full flex items-center justify-center px-4 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {switchingAccount ? 'Signing Out...' : 'Sign Out & Sign In'}
+                  </button>
+                ) : (
+                  <Link
+                    to="/sign-in"
+                    className="w-full flex items-center justify-center px-4 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors"
+                  >
+                    Go to Administrative Sign In
+                  </Link>
+                )}
+              </div>
+            ) : invite.isRevoked || invite.isSuspended || invite.isExpired ? (
+              <div className="space-y-3">
+                <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 space-y-1.5">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <IconAlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>
+                      {invite.isSuspended
+                        ? 'Administrative Account Suspended'
+                        : invite.isRevoked
+                        ? 'Invitation Revoked'
+                        : 'Invitation Expired'}
+                    </span>
+                  </div>
+                  <p>
+                    {invite.isSuspended
+                      ? 'This administrative account is currently suspended. Contact your platform administrator.'
+                      : invite.isRevoked
+                      ? 'This invitation has been revoked. Request a new invitation from your platform administrator.'
+                      : 'This invitation link has expired. Request a new invitation from your platform administrator.'}
+                  </p>
+                </div>
+                <Link
+                  to="/"
+                  className="w-full flex items-center justify-center px-4 py-2.5 text-xs font-semibold text-text bg-surface-muted hover:bg-border rounded-xl transition-colors"
+                >
+                  Return to Homepage
+                </Link>
+              </div>
+            ) : isEmailMismatch ? (
               <div className="space-y-3">
                 <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-700 dark:text-amber-300 space-y-1.5">
                   <div className="flex items-center gap-2 font-semibold">
@@ -199,12 +291,16 @@ function InvitationAcceptPage() {
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <Link
                     to="/sign-in"
+                    search={inviteReturnPath ? { redirect_url: inviteReturnPath } : undefined}
+                    onClick={persistPendingInviteContext}
                     className="flex items-center justify-center px-4 py-2.5 text-xs font-semibold text-text bg-surface-muted hover:bg-border rounded-xl transition-colors"
                   >
                     Sign In
                   </Link>
                   <Link
                     to="/sign-up"
+                    search={inviteReturnPath ? { redirect_url: inviteReturnPath } : undefined}
+                    onClick={persistPendingInviteContext}
                     className="flex items-center justify-center px-4 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors"
                   >
                     Sign Up
