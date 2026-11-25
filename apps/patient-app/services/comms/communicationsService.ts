@@ -134,6 +134,32 @@ export interface PatientEligibilityGrantDto {
   windowEndUtc?: string | null;
 }
 
+/**
+ * Collapses multiple active clinical grants (e.g. Confirmed Appointment + Checked-In Queue Visit)
+ * for the same destination facility into a single option, preferring the grant with the latest expiry.
+ */
+export function deduplicateEligibilityGrants(
+  grants: PatientEligibilityGrantDto[],
+): PatientEligibilityGrantDto[] {
+  const byFacility = new Map<string, PatientEligibilityGrantDto>();
+
+  const scoreWindowEnd = (windowEndUtc?: string | null): number => {
+    if (!windowEndUtc) return Number.POSITIVE_INFINITY;
+    const parsed = Date.parse(windowEndUtc);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  for (const grant of grants) {
+    const key = `${grant.tenantId.toLowerCase()}|${grant.facilityId.toLowerCase()}|${grant.facilityType.toLowerCase()}`;
+    const existing = byFacility.get(key);
+    if (!existing || scoreWindowEnd(grant.windowEndUtc) >= scoreWindowEnd(existing.windowEndUtc)) {
+      byFacility.set(key, grant);
+    }
+  }
+
+  return Array.from(byFacility.values());
+}
+
 export interface SubmitPatientInquiryRequest {
   patientId?: string;
   tenantId: string;

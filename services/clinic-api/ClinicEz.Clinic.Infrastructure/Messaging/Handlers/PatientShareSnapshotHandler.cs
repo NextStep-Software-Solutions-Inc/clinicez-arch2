@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Infrastructure.Persistence;
@@ -42,15 +43,18 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
     private readonly ApplicationDbContext _dbContext;
     private readonly ClinicRecipientResolver _recipient;
     private readonly ILogger<PatientShareSnapshotHandler> _logger;
+    private readonly ICommsEligibilityPublisher? _eligibilityPublisher;
 
     public PatientShareSnapshotHandler(
         ApplicationDbContext dbContext,
         ClinicRecipientResolver recipient,
-        ILogger<PatientShareSnapshotHandler> logger)
+        ILogger<PatientShareSnapshotHandler> logger,
+        ICommsEligibilityPublisher? eligibilityPublisher = null)
     {
         _dbContext = dbContext;
         _recipient = recipient;
         _logger = logger;
+        _eligibilityPublisher = eligibilityPublisher;
     }
 
     public async Task HandleAsync(PatientShareSnapshotPayload message, InteropMessageContext context, CancellationToken ct)
@@ -119,6 +123,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             MergeDemographics(patient, message.Demographics!);
         }
 
+        var wasUnlinked = patient.CloudPatientId != message.PatientId;
         patient.LinkCloudAccount(message.PatientId, message.ClinicEzId);
         patient.ShareGrantId = message.GrantId;
         patient.ShareGrantScopes = message.Scopes;
@@ -201,6 +206,31 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             var queueItem = await QueuePatientAsync(clinic, patient, import, now, ct);
             import.QueueItemId = queueItem.Id;
             import.QueueNumber = queueItem.QueueNumber;
+
+            if (_eligibilityPublisher != null)
+            {
+                await _eligibilityPublisher.EnqueueGrantAsync(
+                    clinic.TenantId,
+                    clinic.ClinicId,
+                    patient.Id,
+                    "QueueVisit",
+                    queueItem.Id.ToString(),
+                    now,
+                    now.AddDays(7),
+                    CommsEligibilityVersions.Initial,
+                    cloudPatientIdOverride: message.PatientId,
+                    ct: ct);
+            }
+        }
+
+        if (wasUnlinked && _eligibilityPublisher != null)
+        {
+            await _eligibilityPublisher.SyncActiveEligibilityForLinkedPatientAsync(
+                clinic.TenantId,
+                clinic.ClinicId,
+                patient.Id,
+                message.PatientId,
+                ct);
         }
 
         await _dbContext.SaveChangesAsync(ct);

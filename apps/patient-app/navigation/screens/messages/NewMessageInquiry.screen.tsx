@@ -19,12 +19,14 @@ import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
   communicationsService,
+  deduplicateEligibilityGrants,
   type CommsAttachmentReference,
   type MessageCategory,
   type PatientEligibilityGrantDto,
 } from '../../../services/comms/communicationsService';
 import { dialog } from '../../../utils/dialog';
 
+export { deduplicateEligibilityGrants };
 export const MAX_SUBJECT_LENGTH = 100;
 export const MAX_MESSAGE_LENGTH = 850;
 export const MAX_COMBINED_CONTENT_LENGTH = 1000;
@@ -118,8 +120,10 @@ export default function NewMessageInquiryScreen() {
   const targetPatientId = selectedDependentId ?? internalPatientId ?? null;
 
   const eligibleGrants = useMemo(() => {
-    if (!targetPatientId) return grants;
-    return grants.filter((g) => g.patientId === targetPatientId);
+    const scoped = targetPatientId
+      ? grants.filter((g) => g.patientId === targetPatientId)
+      : grants;
+    return deduplicateEligibilityGrants(scoped);
   }, [grants, targetPatientId]);
 
   useEffect(() => {

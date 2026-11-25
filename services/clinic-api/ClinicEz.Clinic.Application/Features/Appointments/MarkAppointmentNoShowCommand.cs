@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -24,19 +25,25 @@ public sealed class MarkAppointmentNoShowCommandHandler : IRequestHandler<MarkAp
     private readonly IClinicContext? _clinicContext;
     private readonly IInteropPublisher? _publisher;
     private readonly TimeProvider? _timeProvider;
+    private readonly IRepository<Patient>? _patientRepo;
+    private readonly ICommsEligibilityPublisher? _eligibilityPublisher;
 
     public MarkAppointmentNoShowCommandHandler(
         IRepository<Appointment> appointmentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext? clinicContext = null,
         IInteropPublisher? publisher = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IRepository<Patient>? patientRepo = null,
+        ICommsEligibilityPublisher? eligibilityPublisher = null)
     {
         _appointmentRepo = appointmentRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _publisher = publisher;
         _timeProvider = timeProvider;
+        _patientRepo = patientRepo;
+        _eligibilityPublisher = eligibilityPublisher;
     }
 
     public async Task<AppointmentDto> Handle(MarkAppointmentNoShowCommand request, CancellationToken ct)
@@ -70,21 +77,40 @@ public sealed class MarkAppointmentNoShowCommandHandler : IRequestHandler<MarkAp
             ? _clinicContext.StaffName
             : "ClinicStaff";
 
-        if (_publisher != null)
+        var revokeReason = string.IsNullOrWhiteSpace(request.Reason)
+            ? "Appointment marked as no-show"
+            : request.Reason.Trim();
+        var revokeVersion = CommsEligibilityVersions.ForRevoke(now);
+        if (_eligibilityPublisher != null)
         {
-            var tenantId = appointment.TenantId ?? string.Empty;
-            var grantId = CommsGrantIdGenerator.Create(tenantId, appointment.ClinicId.ToString(), "Appointment", appointment.Id.ToString());
-            var from = Party.ForFacility(tenantId, appointment.ClinicId.ToString(), FacilityType.Clinic);
-            var to = Party.ForFacility(tenantId, appointment.ClinicId.ToString(), FacilityType.Clinic, service: InteropServices.Comms);
-            var revokePayload = new CommsEligibilityRevokedPayload(
-                GrantId: grantId,
-                TenantId: tenantId,
-                FacilityId: appointment.ClinicId.ToString(),
-                PatientId: appointment.PatientId,
-                Reason: string.IsNullOrWhiteSpace(request.Reason) ? "Appointment marked as no-show" : request.Reason.Trim(),
-                RevokedAtUtc: now,
-                Version: 2);
-            _publisher.Enqueue(InteropTypes.CommsEligibilityRevoked, from, to, correlationId: grantId, revokePayload);
+            await _eligibilityPublisher.EnqueueRevokeAsync(
+                appointment.TenantId,
+                appointment.ClinicId,
+                appointment.PatientId,
+                "Appointment",
+                appointment.Id.ToString(),
+                revokeReason,
+                now,
+                revokeVersion,
+                ct: ct);
+        }
+        else if (_publisher != null)
+        {
+            var cloudPatientId = await CommsEligibilityOutboxHelper.ResolveCloudPatientIdAsync(
+                _patientRepo, appointment.ClinicId, appointment.PatientId, ct);
+            if (cloudPatientId.HasValue)
+            {
+                CommsEligibilityOutboxHelper.EnqueueRevoke(
+                    _publisher,
+                    appointment.TenantId ?? string.Empty,
+                    appointment.ClinicId,
+                    cloudPatientId.Value,
+                    "Appointment",
+                    appointment.Id.ToString(),
+                    revokeReason,
+                    now,
+                    revokeVersion);
+            }
         }
 
         await _unitOfWork.SaveChangesAsync(ct);

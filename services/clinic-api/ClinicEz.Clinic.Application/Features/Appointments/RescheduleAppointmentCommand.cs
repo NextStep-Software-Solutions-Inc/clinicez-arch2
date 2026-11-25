@@ -58,17 +58,23 @@ public sealed class RescheduleAppointmentCommandHandler : IRequestHandler<Resche
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAppointmentNotificationDispatcher? _dispatcher;
     private readonly IInteropPublisher? _publisher;
+    private readonly IRepository<Patient>? _patientRepo;
+    private readonly ICommsEligibilityPublisher? _eligibilityPublisher;
 
     public RescheduleAppointmentCommandHandler(
         IRepository<Appointment> appointmentRepo,
         IUnitOfWork unitOfWork,
         IAppointmentNotificationDispatcher? dispatcher = null,
-        IInteropPublisher? publisher = null)
+        IInteropPublisher? publisher = null,
+        IRepository<Patient>? patientRepo = null,
+        ICommsEligibilityPublisher? eligibilityPublisher = null)
     {
         _appointmentRepo = appointmentRepo;
         _unitOfWork = unitOfWork;
         _dispatcher = dispatcher;
         _publisher = publisher;
+        _patientRepo = patientRepo;
+        _eligibilityPublisher = eligibilityPublisher;
     }
 
     public async Task<AppointmentDto> Handle(RescheduleAppointmentCommand request, CancellationToken ct)
@@ -133,24 +139,39 @@ public sealed class RescheduleAppointmentCommandHandler : IRequestHandler<Resche
             await _dispatcher.DispatchStaffNotificationAsync(appointment, "rescheduled", ct);
         }
 
-        if (_publisher != null)
+        var grantNow = DateTime.UtcNow;
+        var grantEnd = (newStartUtc > grantNow ? newStartUtc : grantNow).AddDays(7);
+        var grantVersion = CommsEligibilityVersions.ForUpdate(grantNow);
+        if (_eligibilityPublisher != null)
         {
-            var tenantId = appointment.TenantId ?? string.Empty;
-            var grantId = CommsGrantIdGenerator.Create(tenantId, appointment.ClinicId.ToString(), "Appointment", appointment.Id.ToString());
-            var from = Party.ForFacility(tenantId, appointment.ClinicId.ToString(), FacilityType.Clinic);
-            var to = Party.ForFacility(tenantId, appointment.ClinicId.ToString(), FacilityType.Clinic, service: InteropServices.Comms);
-            var grantPayload = new CommsEligibilityGrantedPayload(
-                GrantId: grantId,
-                TenantId: tenantId,
-                FacilityId: appointment.ClinicId.ToString(),
-                FacilityType: "Clinic",
-                PatientId: appointment.PatientId,
-                ContextType: "Appointment",
-                ContextId: appointment.Id.ToString(),
-                WindowStartUtc: DateTime.UtcNow,
-                WindowEndUtc: newStartUtc.AddDays(7),
-                Version: 2);
-            _publisher.Enqueue(InteropTypes.CommsEligibilityGranted, from, to, correlationId: grantId, grantPayload);
+            await _eligibilityPublisher.EnqueueGrantAsync(
+                appointment.TenantId,
+                appointment.ClinicId,
+                appointment.PatientId,
+                "Appointment",
+                appointment.Id.ToString(),
+                grantNow,
+                grantEnd,
+                grantVersion,
+                ct: ct);
+        }
+        else if (_publisher != null)
+        {
+            var cloudPatientId = await CommsEligibilityOutboxHelper.ResolveCloudPatientIdAsync(
+                _patientRepo, appointment.ClinicId, appointment.PatientId, ct);
+            if (cloudPatientId.HasValue)
+            {
+                CommsEligibilityOutboxHelper.EnqueueGrant(
+                    _publisher,
+                    appointment.TenantId ?? string.Empty,
+                    appointment.ClinicId,
+                    cloudPatientId.Value,
+                    "Appointment",
+                    appointment.Id.ToString(),
+                    grantNow,
+                    grantEnd,
+                    grantVersion);
+            }
         }
 
         try

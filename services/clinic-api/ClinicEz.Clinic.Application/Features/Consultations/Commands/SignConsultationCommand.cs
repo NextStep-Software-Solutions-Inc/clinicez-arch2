@@ -67,6 +67,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
     private readonly IUploadGrantService? _uploadGrantService;
     private readonly ILabRequisitionPublisher? _labRequisitionPublisher;
     private readonly IDocumentSecurityService? _documentSecurityService;
+    private readonly ICommsEligibilityPublisher? _eligibilityPublisher;
 
     public SignConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
@@ -90,7 +91,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         IRepository<LabOrder>? labOrderRepository = null,
         IUploadGrantService? uploadGrantService = null,
         ILabRequisitionPublisher? labRequisitionPublisher = null,
-        IDocumentSecurityService? documentSecurityService = null)
+        IDocumentSecurityService? documentSecurityService = null,
+        ICommsEligibilityPublisher? eligibilityPublisher = null)
     {
         _consultationRepository = consultationRepository;
         _staffRepository = staffRepository;
@@ -114,6 +116,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         _uploadGrantService = uploadGrantService;
         _labRequisitionPublisher = labRequisitionPublisher;
         _documentSecurityService = documentSecurityService;
+        _eligibilityPublisher = eligibilityPublisher;
     }
 
     public async Task<ConsultationEncounterDto> Handle(SignConsultationCommand request, CancellationToken cancellationToken)
@@ -520,23 +523,37 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             await _appointmentPublisher.PublishAppointmentUpdatedAsync(pushPayload, cancellationToken);
         }
 
-        if (_publisher != null)
+        var grantNow = DateTime.UtcNow;
+        if (_eligibilityPublisher != null)
         {
-            var grantId = CommsGrantIdGenerator.Create(encounter.TenantId, encounter.ClinicId.ToString(), "Encounter", encounter.Id.ToString());
-            var from = Party.ForFacility(encounter.TenantId, encounter.ClinicId.ToString(), FacilityType.Clinic);
-            var to = Party.ForFacility(encounter.TenantId, encounter.ClinicId.ToString(), FacilityType.Clinic, service: InteropServices.Comms);
-            var grantPayload = new CommsEligibilityGrantedPayload(
-                GrantId: grantId,
-                TenantId: encounter.TenantId,
-                FacilityId: encounter.ClinicId.ToString(),
-                FacilityType: "Clinic",
-                PatientId: encounter.PatientId,
-                ContextType: "Encounter",
-                ContextId: encounter.Id.ToString(),
-                WindowStartUtc: DateTime.UtcNow,
-                WindowEndUtc: DateTime.UtcNow.AddDays(14),
-                Version: 1);
-            _publisher.Enqueue(InteropTypes.CommsEligibilityGranted, from, to, correlationId: grantId, grantPayload);
+            await _eligibilityPublisher.EnqueueGrantAsync(
+                encounter.TenantId,
+                encounter.ClinicId,
+                encounter.PatientId,
+                "Encounter",
+                encounter.Id.ToString(),
+                grantNow,
+                grantNow.AddDays(14),
+                CommsEligibilityVersions.Initial,
+                ct: cancellationToken);
+        }
+        else if (_publisher != null)
+        {
+            var cloudPatientId = await CommsEligibilityOutboxHelper.ResolveCloudPatientIdAsync(
+                _patientRepository, encounter.ClinicId, encounter.PatientId, cancellationToken);
+            if (cloudPatientId.HasValue)
+            {
+                CommsEligibilityOutboxHelper.EnqueueGrant(
+                    _publisher,
+                    encounter.TenantId,
+                    encounter.ClinicId,
+                    cloudPatientId.Value,
+                    "Encounter",
+                    encounter.Id.ToString(),
+                    grantNow,
+                    grantNow.AddDays(14),
+                    CommsEligibilityVersions.Initial);
+            }
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Infrastructure.Persistence;
@@ -26,17 +27,20 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
     private readonly ClinicRecipientResolver _recipient;
     private readonly IInteropPublisher _publisher;
     private readonly ILogger<AppointmentBookedHandler> _logger;
+    private readonly ICommsEligibilityPublisher? _eligibilityPublisher;
 
     public AppointmentBookedHandler(
         ApplicationDbContext dbContext,
         ClinicRecipientResolver recipient,
         IInteropPublisher publisher,
-        ILogger<AppointmentBookedHandler> logger)
+        ILogger<AppointmentBookedHandler> logger,
+        ICommsEligibilityPublisher? eligibilityPublisher = null)
     {
         _dbContext = dbContext;
         _recipient = recipient;
         _publisher = publisher;
         _logger = logger;
+        _eligibilityPublisher = eligibilityPublisher;
     }
 
     public async Task HandleAsync(AppointmentBookedEvent message, InteropMessageContext context, CancellationToken ct)
@@ -121,6 +125,19 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
                         }
                     });
 
+                var rescheduleNow = DateTime.UtcNow;
+                var rescheduleEnd = (existing.ScheduledAt > rescheduleNow ? existing.ScheduledAt : rescheduleNow).AddDays(7);
+                CommsEligibilityOutboxHelper.EnqueueGrant(
+                    _publisher,
+                    clinic.TenantId,
+                    clinic.ClinicId,
+                    message.PatientId,
+                    "Appointment",
+                    existing.Id.ToString(),
+                    rescheduleNow,
+                    rescheduleEnd,
+                    CommsEligibilityVersions.ForUpdate(rescheduleNow));
+
                 await _dbContext.SaveChangesAsync(ct);
                 _logger.LogInformation(
                     "[AppointmentBookedHandler] Rescheduled appointment {AppointmentId} for Patient {PatientId} at Clinic {ClinicId} to {ScheduledAt}",
@@ -135,6 +152,7 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
         // Locate or auto-provision ClinicPatient
         var tenantId = clinic.TenantId;
 
+        var wasUnlinked = false;
         // 1. Locate existing ClinicPatient strictly by CloudPatientId or Id first
         var clinicPatient = await _dbContext.Patients
             .IgnoreQueryFilters()
@@ -172,6 +190,7 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
                     {
                         clinicPatient = candidate;
                         clinicPatient.CloudPatientId = message.PatientId;
+                        wasUnlinked = true;
                     }
                 }
             }
@@ -218,6 +237,7 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
                 if (!idAlreadyTaken)
                 {
                     clinicPatient.CloudPatientId = message.PatientId;
+                    wasUnlinked = true;
                 }
             }
             if (string.IsNullOrWhiteSpace(clinicPatient.Email) && !string.IsNullOrWhiteSpace(message.Email))
@@ -543,6 +563,29 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
                     }
                 }
             });
+
+        var grantNow = DateTime.UtcNow;
+        var grantEnd = (appointment.ScheduledAt > grantNow ? appointment.ScheduledAt : grantNow).AddDays(7);
+        CommsEligibilityOutboxHelper.EnqueueGrant(
+            _publisher,
+            clinic.TenantId,
+            clinic.ClinicId,
+            message.PatientId,
+            "Appointment",
+            appointment.Id.ToString(),
+            grantNow,
+            grantEnd,
+            CommsEligibilityVersions.Initial);
+
+        if (wasUnlinked && _eligibilityPublisher != null)
+        {
+            await _eligibilityPublisher.SyncActiveEligibilityForLinkedPatientAsync(
+                clinic.TenantId,
+                clinic.ClinicId,
+                clinicPatient.Id,
+                message.PatientId,
+                ct);
+        }
 
         await _dbContext.SaveChangesAsync(ct);
 
