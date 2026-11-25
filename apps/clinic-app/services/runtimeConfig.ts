@@ -1,5 +1,11 @@
 import { Platform } from 'react-native';
-import { buildServiceHostRegex, parseServiceHost, resolveServiceApiUrl, setServiceSubdomainsOverride } from '@shared/safe';
+import {
+  buildServiceHostRegex,
+  isDevelopmentEnvironment,
+  parseServiceHost,
+  resolveServiceApiUrl,
+  setServiceSubdomainsOverride,
+} from '@shared/safe';
 import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
 import { normalizeServerUrl, resolveRuntimeApiUrl } from './serverUrl';
 import { parseRuntimeSettings, pickSetting, SettingName, SettingValues } from './runtimeSettings';
@@ -41,6 +47,8 @@ const BUILD_SETTINGS: SettingValues = {
   get EXPO_PUBLIC_OFFLINE_GRACE_HOURS() { return process.env.EXPO_PUBLIC_OFFLINE_GRACE_HOURS; },
   get EXPO_PUBLIC_ENABLE_COMMS() { return process.env.EXPO_PUBLIC_ENABLE_COMMS; },
   get EXPO_PUBLIC_IDLE_TIMEOUT_MINUTES() { return process.env.EXPO_PUBLIC_IDLE_TIMEOUT_MINUTES; },
+  get EXPO_PUBLIC_APP_ENV() { return process.env.EXPO_PUBLIC_APP_ENV; },
+  get EXPO_PUBLIC_VERCEL_ENV() { return process.env.EXPO_PUBLIC_VERCEL_ENV; },
 };
 
 /** One setting, resolved the same way on every deployment: runtime (on-prem `config.json`) first, then build-time. */
@@ -202,4 +210,31 @@ export function getWebIdleTimeoutMinutes(): number {
   if (raw === undefined) return DEFAULT_WEB_IDLE_TIMEOUT_MINUTES;
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_WEB_IDLE_TIMEOUT_MINUTES;
+}
+
+/**
+ * Whether this clinic app instance is running in a development environment.
+ * Fail-closed: returns `false` for production cloud, staging, and on-premise deployments.
+ */
+export function isDevelopmentEnv(): boolean {
+  const isDevBundle = typeof __DEV__ !== 'undefined' && Boolean(__DEV__);
+  const hasWindowHost = typeof window !== 'undefined' && Boolean(window.location?.hostname);
+  const hostname = hasWindowHost ? window.location.hostname : null;
+  const rawConfiguredApi = getSetting('EXPO_PUBLIC_CLINIC_API_URL');
+  // Avoid treating derivedWebApiUrl()'s no-window fallback (localhost:5245) as a live local dev server in SSR/tests.
+  const apiBaseUrl = isNative
+    ? getApiBaseUrl()
+    : configuredApiUrl() ?? (hasWindowHost ? derivedWebApiUrl() : null);
+
+  return isDevelopmentEnvironment({
+    appEnv: getSetting('EXPO_PUBLIC_APP_ENV'),
+    vercelEnv: getSetting('EXPO_PUBLIC_VERCEL_ENV'),
+    isDevBundle,
+    nodeEnv: typeof process !== 'undefined' ? process.env?.NODE_ENV : undefined,
+    hostname,
+    serviceSubdomain: getServiceSubdomain(),
+    baseDomain: getSetting('EXPO_PUBLIC_BASE_DOMAIN'),
+    apiBaseUrl,
+    configuredApiUrl: rawConfiguredApi,
+  });
 }

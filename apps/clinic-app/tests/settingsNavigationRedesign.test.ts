@@ -717,4 +717,70 @@ describe('Settings Dual-Mode Navigation Redesign & Issue #163 Regression Suite',
     expect(tvHtml).toContain('data-testid="copy-lan-tv-link-btn"');
     expect(tvHtml).toContain('wordBreak&quot;:&quot;break-all&quot;');
   });
+
+  test('12. WorkstationNodeDevSection hides DevDataSeederCard and sample data copy in production, while showing it in development', () => {
+    const prevDev = (globalThis as any).__DEV__;
+    const prevNodeEnv = process.env.NODE_ENV;
+    const prevAppEnv = process.env.EXPO_PUBLIC_APP_ENV;
+    const prevVercelEnv = process.env.EXPO_PUBLIC_VERCEL_ENV;
+    const prevApiUrl = process.env.EXPO_PUBLIC_CLINIC_API_URL;
+    const prevBaseDomain = process.env.EXPO_PUBLIC_BASE_DOMAIN;
+    const hadWindow = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+    const prevWindow = (globalThis as any).window;
+
+    try {
+      (globalThis as any).__DEV__ = false;
+      process.env.NODE_ENV = 'production';
+      delete process.env.EXPO_PUBLIC_APP_ENV;
+      delete process.env.EXPO_PUBLIC_VERCEL_ENV;
+      process.env.EXPO_PUBLIC_CLINIC_API_URL = 'https://clinic.api.clinicez.net';
+      delete process.env.EXPO_PUBLIC_BASE_DOMAIN;
+      (globalThis as any).window = { location: { hostname: 'ustp-cdo.clinic.clinicez.net', protocol: 'https:' } };
+
+      const prodCollapsedHtml = renderToStaticMarkup(
+        React.createElement(WorkstationNodeDevSection, {
+          filterQuery: '',
+        })
+      );
+      expect(prodCollapsedHtml).toContain('Server Connection');
+      expect(prodCollapsedHtml).toContain('Check or configure your clinic server connection.');
+      expect(prodCollapsedHtml).not.toContain('Sample Data');
+      expect(prodCollapsedHtml).not.toContain('load sample patients');
+
+      const prodExpandedHtml = renderToStaticMarkup(
+        React.createElement(WorkstationNodeDevSection, {
+          filterQuery: '',
+          defaultExpanded: true,
+        })
+      );
+      expect(prodExpandedHtml).toContain('Edge server &amp; API connectivity');
+      expect(prodExpandedHtml).not.toContain('Development Data Seeder');
+      expect(prodExpandedHtml).not.toContain('Scalability Engine');
+
+      (globalThis as any).__DEV__ = true;
+      delete process.env.EXPO_PUBLIC_CLINIC_API_URL;
+      const devExpandedHtml = renderToStaticMarkup(
+        React.createElement(WorkstationNodeDevSection, {
+          filterQuery: '',
+          defaultExpanded: true,
+        })
+      );
+      expect(devExpandedHtml).toContain('Edge server &amp; API connectivity');
+      expect(devExpandedHtml).toContain('Development Data Seeder &amp; Scalability Engine');
+    } finally {
+      (globalThis as any).__DEV__ = prevDev;
+      if (prevNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = prevNodeEnv;
+      if (prevAppEnv === undefined) delete process.env.EXPO_PUBLIC_APP_ENV;
+      else process.env.EXPO_PUBLIC_APP_ENV = prevAppEnv;
+      if (prevVercelEnv === undefined) delete process.env.EXPO_PUBLIC_VERCEL_ENV;
+      else process.env.EXPO_PUBLIC_VERCEL_ENV = prevVercelEnv;
+      if (prevApiUrl === undefined) delete process.env.EXPO_PUBLIC_CLINIC_API_URL;
+      else process.env.EXPO_PUBLIC_CLINIC_API_URL = prevApiUrl;
+      if (prevBaseDomain === undefined) delete process.env.EXPO_PUBLIC_BASE_DOMAIN;
+      else process.env.EXPO_PUBLIC_BASE_DOMAIN = prevBaseDomain;
+      if (hadWindow) (globalThis as any).window = prevWindow;
+      else delete (globalThis as any).window;
+    }
+  });
 });
