@@ -19,6 +19,10 @@ import {
   rescheduleAppointment,
   getAppointmentDetail,
 } from '../../../services/appointments/appointmentsService';
+import {
+  isPastManilaSlot,
+  markPastSlotsUnavailable,
+} from '../../../services/appointments/slotUtils';
 import type { AvailableSlot, AppointmentItem } from '../../../services/appointments/types';
 import { dialog } from '../../../utils/dialog';
 
@@ -96,7 +100,7 @@ export default function RescheduleScreen({ route }: Props) {
     setSelectedSlotId(null);
     fetchAvailableSlots(clinicId, appointment.provider.id, selectedDate, getToken)
       .then((res) => {
-        if (mounted) setSlots(res.slots);
+        if (mounted) setSlots(markPastSlotsUnavailable(res.slots, selectedDate));
       })
       .catch((err) =>
         dialog.alert('Server Error', `Unable to load available slots. ${err?.message || ''}`)
@@ -114,8 +118,17 @@ export default function RescheduleScreen({ route }: Props) {
 
   const handleSubmit = async () => {
     if (!selectedSlot || !reason.trim()) return;
+    if (isPastManilaSlot(selectedDate, selectedSlot.time)) {
+      setSlots((prev) => markPastSlotsUnavailable(prev, selectedDate));
+      setSelectedSlotId(null);
+      dialog.alert(
+        'Time Slot Unavailable',
+        'This time slot has already passed. Please select an upcoming time slot.',
+      );
+      return;
+    }
     setIsSaving(true);
-    const newScheduledAt = new Date(`${selectedDate}T${selectedSlot.time}:00`).toISOString();
+    const newScheduledAt = new Date(`${selectedDate}T${selectedSlot.time}:00+08:00`).toISOString();
 
     const [updated, error] = await safeAwait(
       rescheduleAppointment(
@@ -132,7 +145,7 @@ export default function RescheduleScreen({ route }: Props) {
       if (error.message === 'OFFLINE_ERROR') {
         showOfflineAlert();
       } else {
-        dialog.alert('Error', 'Unable to update the appointment. Please try again.');
+        dialog.alert('Error', error.message || 'Unable to update the appointment. Please try again.');
       }
       setIsSaving(false);
       return;

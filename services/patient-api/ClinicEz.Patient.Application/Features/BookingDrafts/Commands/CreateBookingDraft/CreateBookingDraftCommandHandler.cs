@@ -1,3 +1,4 @@
+using ClinicEz.Patient.Application.Features.Appointments;
 using ClinicEz.Patient.Application.Features.Sharing;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Enums;
@@ -15,17 +16,20 @@ public sealed class CreateBookingDraftCommandHandler : IRequestHandler<CreateBoo
     private readonly IBookingDraftRepository _draftRepo;
     private readonly IUnitOfWork _uow;
     private readonly IClinicRepository? _clinicRepo;
+    private readonly TimeProvider _timeProvider;
 
     public CreateBookingDraftCommandHandler(
         IPatientRepository patientRepo,
         IBookingDraftRepository draftRepo,
         IUnitOfWork uow,
-        IClinicRepository? clinicRepo = null)
+        IClinicRepository? clinicRepo = null,
+        TimeProvider? timeProvider = null)
     {
         _patientRepo = patientRepo;
         _draftRepo = draftRepo;
         _uow = uow;
         _clinicRepo = clinicRepo;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<Guid> Handle(CreateBookingDraftCommand request, CancellationToken cancellationToken)
@@ -48,6 +52,11 @@ public sealed class CreateBookingDraftCommandHandler : IRequestHandler<CreateBoo
         {
             throw new BadRequestException("Maximum active booking drafts reached.");
         }
+
+        BookingScheduleValidation.ValidateBookingSchedule(
+            request.PreferredDate,
+            request.PreferredTime,
+            _timeProvider);
 
         var resolvedProviderId = request.ProviderId;
         var resolvedProviderName = string.IsNullOrWhiteSpace(request.ProviderName) ? null : request.ProviderName.Trim();

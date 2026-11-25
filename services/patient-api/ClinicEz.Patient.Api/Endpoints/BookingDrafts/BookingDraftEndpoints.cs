@@ -56,6 +56,7 @@ public sealed class CreateBookingDraftEndpoint : IEndpoint
             .WithSummary("Create a booking draft (appointment request) for a patient")
             .WithDescription("Creates a new draft appointment request with preferred details, reason, and notes for a patient.")
             .Produces<ApiResponse<Guid>>(StatusCodes.Status201Created)
+            .ProducesValidationProblem()
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .Produces<ApiResponse<object>>(StatusCodes.Status409Conflict)
             .RequireAuthorization();
@@ -79,6 +80,7 @@ public sealed class SubmitBookingDraftEndpoint : IEndpoint
             .WithSummary("Submit a ready booking draft to the Clinic Dashboard API")
             .WithDescription("Submits an existing, ready booking draft to the destination clinic for review and approval.")
             .Produces<ApiResponse<string?>>(StatusCodes.Status202Accepted)
+            .ProducesValidationProblem()
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .Produces<ApiResponse<object>>(StatusCodes.Status409Conflict)
             .RequireAuthorization();

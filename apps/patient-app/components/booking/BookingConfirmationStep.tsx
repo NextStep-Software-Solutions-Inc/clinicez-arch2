@@ -3,11 +3,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { AppIcon } from '../ui/Icon';
 import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
+import type { ConsultationMode } from './BookingSlotStep';
 
 export interface BookingConfirmationStepProps {
   bookingReference: string;
   patientEmail?: string | null;
   doctorName: string;
+  consultationMode?: ConsultationMode;
   onViewAppointments: () => void;
   onBackToHome: () => void;
 }
@@ -16,6 +18,7 @@ function BookingConfirmationStepComponent({
   bookingReference,
   patientEmail,
   doctorName,
+  consultationMode = 'in_person',
   onViewAppointments,
   onBackToHome,
 }: BookingConfirmationStepProps) {
@@ -183,7 +186,7 @@ function BookingConfirmationStepComponent({
               { color: colors.navyText, marginLeft: spacing.xs },
             ]}
           >
-            Before Your Visit
+            {consultationMode === 'telehealth' ? 'Before Your Virtual Visit' : 'Before Your Visit'}
           </Text>
         </View>
 
@@ -203,10 +206,14 @@ function BookingConfirmationStepComponent({
             </View>
             <View style={{ flex: 1, marginLeft: spacing.sm }}>
               <Text style={[typography.labelBold, { color: colors.navyText }]}>
-                Government Photo ID &amp; Insurance Card
+                {consultationMode === 'telehealth'
+                  ? 'Camera & Microphone Check'
+                  : 'Government Photo ID & Insurance Card'}
               </Text>
               <Text style={[typography.bodySm, { color: colors.bodyText, marginTop: spacing.xxs }]}>
-                Required for front-desk identification and insurance verification.
+                {consultationMode === 'telehealth'
+                  ? 'Join your virtual waiting room 10 minutes early to test audio and video.'
+                  : 'Required for front-desk identification and insurance verification.'}
               </Text>
             </View>
           </View>
@@ -226,10 +233,14 @@ function BookingConfirmationStepComponent({
             </View>
             <View style={{ flex: 1, marginLeft: spacing.sm }}>
               <Text style={[typography.labelBold, { color: colors.navyText }]}>
-                Current Prescription Bottles or List
+                {consultationMode === 'telehealth'
+                  ? 'Quiet, Well-Lit Space'
+                  : 'Current Prescription Bottles or List'}
               </Text>
               <Text style={[typography.bodySm, { color: colors.bodyText, marginTop: spacing.xxs }]}>
-                Helps {doctorName} review dosage and check contraindications.
+                {consultationMode === 'telehealth'
+                  ? 'Ensure a private location with a stable internet connection for your consult.'
+                  : `Helps ${doctorName} review dosage and check contraindications.`}
               </Text>
             </View>
           </View>
@@ -249,10 +260,14 @@ function BookingConfirmationStepComponent({
             </View>
             <View style={{ flex: 1, marginLeft: spacing.sm }}>
               <Text style={[typography.labelBold, { color: colors.navyText }]}>
-                No Fasting Required
+                {consultationMode === 'telehealth'
+                  ? 'Current Medication List'
+                  : 'No Fasting Required'}
               </Text>
               <Text style={[typography.bodySm, { color: colors.bodyText, marginTop: spacing.xxs }]}>
-                You may have your normal meals and water prior to this consult.
+                {consultationMode === 'telehealth'
+                  ? `Have your medications and questions ready so ${doctorName} can review them smoothly.`
+                  : 'You may have your normal meals and water prior to this consult.'}
               </Text>
             </View>
           </View>
