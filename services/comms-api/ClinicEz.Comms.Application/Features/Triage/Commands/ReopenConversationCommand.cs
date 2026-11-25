@@ -20,7 +20,9 @@ public sealed record ReopenConversationCommand(
     string TenantId,
     Guid PatientId,
     bool? IsEmergencyConfirmed,
-    string Reason) : IRequest<ConversationDto>;
+    string Reason,
+    string? ReopenedByStaffId = null,
+    string? ReopenedByStaffName = null) : IRequest<ConversationDto>;
 
 public sealed class ReopenConversationCommandHandler : IRequestHandler<ReopenConversationCommand, ConversationDto>
 {
@@ -130,6 +132,7 @@ public sealed class ReopenConversationCommandHandler : IRequestHandler<ReopenCon
         // 5. Add Reopen Notification Message
         conversation.LastSeq++;
         conversation.MessageCount++;
+        var isStaffReopen = !string.IsNullOrWhiteSpace(request.ReopenedByStaffId);
         var reopenMsg = new Message
         {
             Id = Guid.NewGuid(),
@@ -137,10 +140,14 @@ public sealed class ReopenConversationCommandHandler : IRequestHandler<ReopenCon
             TenantId = conversation.TenantId,
             FacilityId = conversation.FacilityId,
             Seq = conversation.LastSeq,
-            SenderType = "Patient",
-            SenderId = request.PatientId.ToString(),
-            SenderDisplayName = "Patient",
-            ContentText = $"Inquiry reopened by patient: {request.Reason.Trim()}",
+            SenderType = isStaffReopen ? "Staff" : "Patient",
+            SenderId = isStaffReopen ? request.ReopenedByStaffId : request.PatientId.ToString(),
+            SenderDisplayName = isStaffReopen
+                ? (string.IsNullOrWhiteSpace(request.ReopenedByStaffName) ? "Clinic Staff" : request.ReopenedByStaffName)
+                : "Patient",
+            ContentText = isStaffReopen
+                ? $"Inquiry reopened by clinic staff: {request.Reason.Trim()}"
+                : $"Inquiry reopened by patient: {request.Reason.Trim()}",
             Visibility = MessageVisibility.Public,
             State = DeliveryState.Received,
             ClientSentAtUtc = now,

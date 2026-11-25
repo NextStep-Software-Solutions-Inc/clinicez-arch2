@@ -1,7 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform, type ViewStyle } from 'react-native';
 import { useConversation, useSendMessage, useComms } from '@clinicez/comms-sdk/react';
-import { resolveConversationDisplayTitle } from '@clinicez/comms-sdk/core';
+import {
+  getClosedConversationLabel,
+  isConversationClosed,
+  resolveConversationDisplayTitle,
+} from '@clinicez/comms-sdk/core';
 import { MessageThread } from '@clinicez/comms-sdk/native-ui';
 import type { ThreadMessage } from '@clinicez/comms-sdk/native-ui';
 import ThemedText from '../ui/ThemedText';
@@ -45,6 +49,7 @@ export interface ClinicActiveThreadProps {
   pinnedAlerts?: PinnedAlertItem[] | null;
   onDeleteConversation?: (conversationId: string) => void;
   onCloseAndArchive?: (conversationId: string) => void;
+  onReopenConversation?: (conversation: ConversationDto) => Promise<void> | void;
   isMuted?: boolean;
   onToggleMute?: (nextMuted: boolean) => Promise<void> | void;
 }
@@ -103,6 +108,7 @@ export default function ClinicActiveThread({
   pinnedAlerts,
   onDeleteConversation,
   onCloseAndArchive,
+  onReopenConversation,
   isMuted: isMutedProp,
   onToggleMute,
 }: ClinicActiveThreadProps) {
@@ -115,7 +121,18 @@ export default function ClinicActiveThread({
   const styles = useMemo(() => createStyles(), [themeSnapshot]);
 
   const { conversation: hookConv, messages, isLoading, error, acknowledgeMessage } = useConversation(conversationId);
-  const conversation = hookConv || initialConversation || null;
+  const [reopenedConversation, setReopenedConversation] = useState<ConversationDto | null>(null);
+  const [isReopening, setIsReopening] = useState(false);
+
+  useEffect(() => {
+    setReopenedConversation(null);
+  }, [conversationId]);
+
+  const effectiveHookConv =
+    reopenedConversation && reopenedConversation.id === conversationId
+      ? reopenedConversation
+      : hookConv;
+  const conversation = effectiveHookConv || initialConversation || null;
   const { sendMessage, resendMessage } = useSendMessage();
   const comms = useComms();
   const { staff } = useStaff();
@@ -191,8 +208,44 @@ export default function ClinicActiveThread({
       : rawTitle.trim()
   );
   const [privacyBlur, setPrivacyBlur] = useState(false);
-  const isArchived =
-    conversation?.status === 'Closed' || initialConversation?.status === 'Closed';
+  const hasNewerReopenState = Boolean(
+    effectiveHookConv &&
+      ((reopenedConversation && reopenedConversation.id === conversationId) ||
+        (initialConversation &&
+          (effectiveHookConv.reopenCount ?? 0) > (initialConversation.reopenCount ?? 0))),
+  );
+  const isClosed = hasNewerReopenState
+    ? isConversationClosed(effectiveHookConv)
+    : isConversationClosed(effectiveHookConv) || isConversationClosed(initialConversation);
+  const closedSource = isConversationClosed(effectiveHookConv)
+    ? effectiveHookConv
+    : initialConversation;
+  const isExplicitlyArchived =
+    closedSource?.status === 'Closed' && !closedSource?.triageDisposition;
+  const closedStatusLabel = getClosedConversationLabel(closedSource);
+  const closedBadgeText = isExplicitlyArchived
+    ? 'Closed / Archived'
+    : `Closed (${closedStatusLabel})`;
+  const closedBannerText = isExplicitlyArchived
+    ? 'This conversation is closed and archived. Message history is read-only.'
+    : `Conversation closed (${closedStatusLabel}). Message history is read-only.`;
+  const resolvedPatientId =
+    closedSource?.patientId ||
+    (closedSource?.scope === 'PatientFacility' && closedSource?.contextType === 'Patient'
+      ? closedSource.contextId
+      : null);
+  const isGrantExpired = Boolean(
+    closedSource?.grantWindowEndUtc &&
+      !Number.isNaN(new Date(closedSource.grantWindowEndUtc).getTime()) &&
+      new Date(closedSource.grantWindowEndUtc).getTime() < Date.now(),
+  );
+  const canReopen = Boolean(
+    isClosed &&
+      closedSource?.scope === 'PatientFacility' &&
+      resolvedPatientId &&
+      (closedSource?.reopenCount ?? 0) < 1 &&
+      !isGrantExpired,
+  );
   const resolvedParticipantMuted = useMemo(() => {
     const participants = conversation?.participants as ThreadParticipantLike[] | undefined;
     const self = participants?.find(
@@ -264,6 +317,10 @@ export default function ClinicActiveThread({
 
   const handleSendMessage = useCallback(
     async (text: string, isInternal: boolean) => {
+      if (isClosed) {
+        notify.info('This conversation is closed. Reopen it to send new messages.');
+        return;
+      }
       await sendMessage({
         conversationId,
         contentText: text,
@@ -271,19 +328,87 @@ export default function ClinicActiveThread({
       });
       playMessageChime();
     },
-    [conversationId, sendMessage],
+    [conversationId, isClosed, sendMessage],
   );
 
   const handleResend = useCallback(
     async (messageId: string) => {
+      if (isClosed) {
+        notify.info('This conversation is closed. Reopen it to resend messages.');
+        return;
+      }
       try {
         await resendMessage(messageId);
       } catch (err: unknown) {
         console.warn('Failed to resend message:', err);
       }
     },
-    [resendMessage],
+    [isClosed, resendMessage],
   );
+
+  const handleReopenConversation = useCallback(async () => {
+    if (!canReopen || isReopening || !resolvedPatientId) return;
+    setIsReopening(true);
+    try {
+      const base = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
+      if (!base) {
+        throw new Error('Communications service URL is not configured.');
+      }
+      const headers = await getCommsAuthHeaders();
+      const res = await fetch(`${base}/api/v1/comms/conversations/${conversationId}/reopen`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          patientId: resolvedPatientId,
+          isEmergencyConfirmed: false,
+          reason: 'Reopened by clinic staff for follow-up',
+          isStaffReopen: true,
+        }),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        let parsedMessage = '';
+        if (errText) {
+          try {
+            const parsed = JSON.parse(errText) as {
+              detail?: string;
+              message?: string;
+              title?: string;
+            };
+            parsedMessage = parsed.detail || parsed.message || parsed.title || '';
+          } catch {
+            parsedMessage = errText;
+          }
+        }
+        throw new Error(parsedMessage || `Failed to reopen conversation (HTTP ${res.status})`);
+      }
+      const reopenedDto = (await res.json()) as ConversationDto;
+      setReopenedConversation(reopenedDto);
+      comms?.client?.events?.emit?.('conversationUpdated', reopenedDto);
+      comms?.client?.events?.emit?.('threadStateChanged', {
+        conversationId,
+        newStatus: reopenedDto.status,
+        disposition: reopenedDto.triageDisposition ?? null,
+        assignedStaffId: reopenedDto.assignedStaffId ?? null,
+        assignedStaffName: reopenedDto.assignedStaffName ?? null,
+      });
+      await onReopenConversation?.(reopenedDto);
+      notify.success('Conversation reopened.');
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to reopen conversation.';
+      notify.error(errMsg);
+    } finally {
+      setIsReopening(false);
+    }
+  }, [
+    canReopen,
+    isReopening,
+    resolvedPatientId,
+    getCommsAuthHeaders,
+    conversationId,
+    comms,
+    onReopenConversation,
+  ]);
 
   const threadMessages: ThreadMessage[] = useMemo(() => {
     return messages.map((m) => ({
@@ -315,7 +440,7 @@ export default function ClinicActiveThread({
 
   // Speed response 1-tap reply
   const handleSendSpeedReply = async (pillText: string) => {
-    if (isArchived) return;
+    if (isClosed) return;
     try {
       await handleSendMessage(pillText, false);
     } catch (err: unknown) {
@@ -509,7 +634,7 @@ export default function ClinicActiveThread({
   };
 
   const handlePostHandoffNote = async () => {
-    if (isArchived) return;
+    if (isClosed) return;
     try {
       await handleSendMessage(handoffSummaryContent, true);
       setIsHandoffModalOpen(false);
@@ -566,10 +691,10 @@ export default function ClinicActiveThread({
                   {getCategoryLabel(conversation?.scope)}
                 </ThemedText>
               </View>
-              {isArchived && (
+              {isClosed && (
                 <View style={styles.archivedBadge} testID="clinic-active-thread-archived-badge">
                   <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.scopeBadgeText}>
-                    Closed / Archived
+                    {closedBadgeText}
                   </ThemedText>
                 </View>
               )}
@@ -669,7 +794,7 @@ export default function ClinicActiveThread({
       )}
 
       {/* Quick 1-Tap Clinical Response Speed Pills */}
-      {!isArchived && (
+      {!isClosed && (
         <View style={styles.speedPillsContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.speedPillsScroll}>
             {SPEED_RESPONSE_PILLS.map((pill) => (
@@ -703,19 +828,38 @@ export default function ClinicActiveThread({
           onAcknowledgeMessage={async (msgId: string) => {
             await acknowledgeMessage(msgId);
           }}
-          isArchived={isArchived}
-          isReadOnly={isArchived}
+          isArchived={isClosed}
+          isReadOnly={isClosed}
           readOnlyBanner={
-            isArchived ? (
+            isClosed ? (
               <View
                 style={styles.readOnlyBanner}
                 testID="message-thread-archived-banner"
                 accessibilityRole="text"
               >
-                <Icon name="archive" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-                <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.readOnlyBannerText}>
-                  This conversation is closed and archived. Message history is read-only.
-                </ThemedText>
+                <View style={styles.readOnlyBannerHeader}>
+                  <Icon
+                    name={isExplicitlyArchived ? 'archive' : 'lock'}
+                    size={theme.sizes.iconSm}
+                    color={theme.colors.textMuted}
+                  />
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.readOnlyBannerText}>
+                    {closedBannerText}
+                  </ThemedText>
+                </View>
+                {canReopen && (
+                  <Button
+                    title="Reopen Conversation"
+                    variant="outline"
+                    size="sm"
+                    icon="refresh"
+                    loading={isReopening}
+                    disabled={isReopening}
+                    onPress={handleReopenConversation}
+                    accessibilityLabel="Reopen conversation"
+                    testID="btn-reopen-conversation"
+                  />
+                )}
               </View>
             ) : undefined
           }
@@ -871,7 +1015,7 @@ export default function ClinicActiveThread({
           </Pressable>
 
           {/* Action 6: Close & Archive */}
-          {!isArchived && (
+          {!isClosed && (
             <Pressable
               onPress={handleCloseAndArchive}
               style={styles.actionMenuItem}
@@ -990,7 +1134,7 @@ export default function ClinicActiveThread({
               onPress={handleCopyHandoff}
               style={styles.modalFooterBtn}
             />
-            {!isArchived && (
+            {!isClosed && (
               <Button
                 title="Post to Thread"
                 variant="secondary"
@@ -1103,15 +1247,21 @@ function createStyles() {
       lineHeight: 14,
     },
     readOnlyBanner: {
-      flexDirection: 'row',
+      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: theme.spacing.xs,
+      gap: theme.spacing.sm,
       paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.md,
       backgroundColor: theme.colors.surfaceSubtle,
       borderTopWidth: theme.sizes.borderWidth,
       borderTopColor: theme.colors.border,
+    },
+    readOnlyBannerHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: theme.spacing.xs,
     },
     readOnlyBannerText: {
       textAlign: 'center',

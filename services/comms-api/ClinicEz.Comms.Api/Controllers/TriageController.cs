@@ -89,13 +89,21 @@ public class TriageController : ControllerBase
         CancellationToken ct)
     {
         var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var staffId = request.IsStaffReopen
+            ? (User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? "staff")
+            : null;
+        var staffName = request.IsStaffReopen
+            ? (User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue("name") ?? "Staff Member")
+            : null;
 
         var command = new ReopenConversationCommand(
             id,
             tenantId,
             request.PatientId,
             request.IsEmergencyConfirmed,
-            request.Reason);
+            request.Reason,
+            staffId,
+            staffName);
 
         var result = await _mediator.Send(command, ct);
         return Ok(result);
@@ -126,4 +134,5 @@ public sealed record RecordDispositionApiRequest(
 public sealed record ReopenConversationApiRequest(
     Guid PatientId,
     bool? IsEmergencyConfirmed,
-    string Reason);
+    string Reason,
+    bool IsStaffReopen = false);
