@@ -324,4 +324,86 @@ describe('useConversation Hook', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('updates conversation state in real time on conversationUpdated and threadStateChanged (#282)', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          id: 'conv-live-282',
+          tenantId: 't1',
+          facilityId: 'f1',
+          scope: 'PatientFacility',
+          kind: 'PatientTriage',
+          title: 'Patient Inquiry',
+          status: 'WithTriage',
+          isEmergencyConfirmed: false,
+          isLocalOnly: false,
+          reopenCount: 0,
+          messageCount: 1,
+          lastSeq: 1,
+          createdAtUtc: '2026-11-25T00:00:00Z',
+          createdBy: 'patient-1',
+          closedAtUtc: null,
+          participants: [],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )) as any;
+
+    try {
+      const client = new MockCommsClient();
+      const tracker = new SubscriptionTracker();
+      const store = new OptimisticStore();
+      const mockContext = createMockContext(client, store, tracker, 'https://comms.test');
+
+      const contextMap = new Map();
+      contextMap.set(CommsContext, mockContext);
+
+      const harness = createHookHarness(
+        () => useConversation('conv-live-282', { markAsReadOnMount: false }),
+        { contextValues: contextMap }
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(harness.result.current.conversation?.status).toBe('WithTriage');
+      expect(harness.result.current.conversation?.closedAtUtc).toBeNull();
+
+      // Transition via threadStateChanged (e.g. Answered)
+      client.events.emit('threadStateChanged', {
+        conversationId: 'conv-live-282',
+        newStatus: 'Answered',
+        disposition: 'Answered',
+      });
+      expect(harness.result.current.conversation?.status).toBe('Answered');
+      expect(harness.result.current.conversation?.triageDisposition).toBe('Answered');
+      expect(harness.result.current.conversation?.closedAtUtc).toBeTruthy();
+
+      // Transition via conversationUpdated (e.g. Reopened)
+      client.events.emit('conversationUpdated', {
+        id: 'conv-live-282',
+        tenantId: 't1',
+        facilityId: 'f1',
+        scope: 'PatientFacility',
+        kind: 'PatientTriage',
+        status: 'WithTriage',
+        triageDisposition: null,
+        isEmergencyConfirmed: false,
+        isLocalOnly: false,
+        reopenCount: 1,
+        messageCount: 2,
+        lastSeq: 2,
+        createdAtUtc: '2026-11-25T00:00:00Z',
+        createdBy: 'patient-1',
+        closedAtUtc: null,
+        participants: [],
+      });
+      expect(harness.result.current.conversation?.status).toBe('WithTriage');
+      expect(harness.result.current.conversation?.closedAtUtc).toBeNull();
+      expect(harness.result.current.conversation?.reopenCount).toBe(1);
+
+      harness.unmount();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

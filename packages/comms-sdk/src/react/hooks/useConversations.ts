@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  isConversationClosed,
+  TERMINAL_CONVERSATION_STATUSES
+} from '../../core/conversationFilters';
 import { ConversationDto, ConversationScope, ParticipantDto } from '../../core/types';
 import { useCommsContext } from '../CommsContext';
 import { resolveCommsAuthHeaders } from '../internal/authHeaders';
@@ -398,6 +402,32 @@ export function useConversations(
       );
     });
 
+    const unsubThreadState = client.events.on('threadStateChanged', (payload) => {
+      if (!payload.conversationId) return;
+      const isTerminal = TERMINAL_CONVERSATION_STATUSES.has(payload.newStatus);
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === payload.conversationId
+            ? {
+                ...c,
+                status: payload.newStatus,
+                triageDisposition:
+                  payload.disposition !== undefined ? payload.disposition : c.triageDisposition,
+                assignedStaffId:
+                  payload.assignedStaffId !== undefined
+                    ? payload.assignedStaffId
+                    : c.assignedStaffId,
+                assignedStaffName:
+                  payload.assignedStaffName !== undefined
+                    ? payload.assignedStaffName
+                    : c.assignedStaffName,
+                closedAtUtc: isTerminal ? (c.closedAtUtc ?? new Date().toISOString()) : null,
+              }
+            : c
+        )
+      );
+    });
+
     const unsubMsg = client.events.on('messageReceived', (msg) => {
       setConversations((prev) =>
         prev.map((c) => {
@@ -405,7 +435,7 @@ export function useConversations(
             const isDuplicateSeq = c.lastSeq > 0 && msg.seq > 0 && msg.seq <= c.lastSeq;
             const isOwn = Boolean(msg.senderId && staffId && msg.senderId === staffId);
             const currentUnread = c.unreadCount ?? 0;
-            const shouldIncrementUnread = !isDuplicateSeq && !isOwn && c.status !== 'Closed';
+            const shouldIncrementUnread = !isDuplicateSeq && !isOwn && !isConversationClosed(c);
             return {
               ...c,
               lastMessageAtUtc: msg.sentAtUtc,
@@ -431,6 +461,7 @@ export function useConversations(
     return () => {
       unsubCreated();
       unsubUpdated();
+      unsubThreadState();
       unsubMsg();
       unsubState();
     };
@@ -442,14 +473,14 @@ export function useConversations(
   // below exclude Closed threads unless scope === 'Archived'.
   const filteredConversations = useMemo(() => {
     const explicitlyIncludesClosed =
-      filter.status === 'Closed' ||
-      (Array.isArray(filter.status) && filter.status.includes('Closed'));
+      (filter.status && !Array.isArray(filter.status) && TERMINAL_CONVERSATION_STATUSES.has(filter.status)) ||
+      (Array.isArray(filter.status) && filter.status.some((s) => TERMINAL_CONVERSATION_STATUSES.has(s)));
 
     return conversations.filter((c) => {
       if (scope === 'Archived') {
-        if (c.status !== 'Closed') return false;
+        if (!isConversationClosed(c)) return false;
       } else if (scope && scope !== 'All') {
-        if (!explicitlyIncludesClosed && c.status === 'Closed') return false;
+        if (!explicitlyIncludesClosed && isConversationClosed(c)) return false;
         if (Array.isArray(scope)) {
           if (!scope.includes(c.scope)) return false;
         } else if (c.scope !== scope) {
@@ -487,7 +518,7 @@ export function useConversations(
       PatientFacility: 0
     };
     for (const c of filteredConversations) {
-      if (scope !== 'Archived' && c.status === 'Closed') continue;
+      if (scope !== 'Archived' && isConversationClosed(c)) continue;
       const u = c.unreadCount ?? 0;
       if (u > 0 && counts[c.scope] !== undefined) {
         counts[c.scope] += u;
@@ -498,7 +529,7 @@ export function useConversations(
 
   const totalUnreadCount = useMemo(() => {
     return filteredConversations.reduce((sum, c) => {
-      if (scope !== 'Archived' && c.status === 'Closed') return sum;
+      if (scope !== 'Archived' && isConversationClosed(c)) return sum;
       return sum + (c.unreadCount ?? 0);
     }, 0);
   }, [filteredConversations, scope]);

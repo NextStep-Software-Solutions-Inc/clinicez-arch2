@@ -52,7 +52,12 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
             .FirstOrDefaultAsync(c => c.Id == request.ConversationId && c.TenantId == request.TenantId, ct)
             ?? throw new NotFoundException($"Conversation '{request.ConversationId}' not found.");
 
-        if (conversation.ClosedAtUtc.HasValue)
+        if (conversation.ClosedAtUtc.HasValue
+            || conversation.Status is RequestStatus.Closed
+                or RequestStatus.Answered
+                or RequestStatus.NeedsVisit
+                or RequestStatus.Declined
+                or RequestStatus.Resolved)
         {
             throw new ValidationException("Conversation thread is closed. New messages cannot be sent.");
         }

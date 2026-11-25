@@ -1,6 +1,12 @@
 import { beforeAll, describe, expect, it, mock } from 'bun:test';
 import React from 'react';
 import { createShadows, lightColors } from '@clinicez/design-tokens';
+import {
+  getClosedConversationLabel,
+  isConversationClosed,
+  TERMINAL_CONVERSATION_STATUSES
+} from '../../src/core/conversationFilters';
+import type { RequestStatus } from '../../src/core/types';
 import type {
   ChatDrawerItem,
   ConversationScopeFilter,
@@ -516,5 +522,29 @@ describe('Native UI ChatDrawer & MessageThread (#212, #213, #158)', () => {
       'This conversation is closed and archived. Message history is read-only.'
     );
     webThreadHarness.unmount();
+  });
+
+  it('isConversationClosed and getClosedConversationLabel classify all terminal statuses and closedAtUtc (#282)', () => {
+    const activeStatuses: RequestStatus[] = ['Submitted', 'WithTriage', 'Routed'];
+    for (const status of activeStatuses) {
+      expect(isConversationClosed({ status, closedAtUtc: null })).toBe(false);
+      expect(isConversationClosed({ status, closedAtUtc: '2026-11-25T08:00:00Z' })).toBe(true);
+    }
+
+    const terminalExpectations: Array<[RequestStatus, string]> = [
+      ['Answered', 'Answered'],
+      ['NeedsVisit', 'Needs Visit'],
+      ['Declined', 'Declined'],
+      ['Resolved', 'Resolved'],
+      ['Closed', 'Closed / Archived'],
+    ];
+    for (const [status, expectedLabel] of terminalExpectations) {
+      expect(TERMINAL_CONVERSATION_STATUSES.has(status)).toBe(true);
+      expect(isConversationClosed({ status, closedAtUtc: null })).toBe(true);
+      expect(getClosedConversationLabel({ status, closedAtUtc: null })).toBe(expectedLabel);
+    }
+
+    expect(isConversationClosed(null)).toBe(false);
+    expect(isConversationClosed(undefined)).toBe(false);
   });
 });

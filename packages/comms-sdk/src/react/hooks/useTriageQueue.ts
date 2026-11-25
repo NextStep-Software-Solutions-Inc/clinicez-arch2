@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { TERMINAL_CONVERSATION_STATUSES } from '../../core/conversationFilters';
 import { ConversationDto, TriageDisposition } from '../../core/types';
 import { useCommsContext } from '../CommsContext';
 import {
@@ -62,13 +63,30 @@ export function useTriageQueue(
     refresh().catch(() => {});
 
     const unsubThread = client.events.on('threadStateChanged', ({ conversationId, newStatus, disposition }) => {
+      const isTerminal = TERMINAL_CONVERSATION_STATUSES.has(newStatus);
       setRawItems((prev) =>
         prev.map((item) =>
           item.id === conversationId
-            ? { ...item, status: newStatus, triageDisposition: disposition }
+            ? {
+                ...item,
+                status: newStatus,
+                triageDisposition: disposition,
+                closedAtUtc: isTerminal ? (item.closedAtUtc ?? new Date().toISOString()) : null,
+              }
             : item
         )
       );
+    });
+
+    const unsubUpdated = client.events.on('conversationUpdated', (conv) => {
+      if (conv.scope !== 'PatientFacility') return;
+      setRawItems((prev) => {
+        const exists = prev.some((item) => item.id === conv.id);
+        if (exists) {
+          return prev.map((item) => (item.id === conv.id ? { ...item, ...conv } : item));
+        }
+        return [conv, ...prev];
+      });
     });
 
     const unsubCreated = client.events.on('conversationCreated', (conv) => {
@@ -85,6 +103,7 @@ export function useTriageQueue(
 
     return () => {
       unsubThread();
+      unsubUpdated();
       unsubCreated();
       unsubState();
     };
@@ -152,6 +171,7 @@ export function useTriageQueue(
             participants: []
           }),
           status: input.disposition === 'Routed' ? 'Routed' : 'Closed',
+          closedAtUtc: input.disposition === 'Routed' ? null : new Date().toISOString(),
           triageDisposition: input.disposition,
           declineReasonCode: input.declineReasonCode,
           assignedStaffId: input.assignedStaffId ?? staffId,
