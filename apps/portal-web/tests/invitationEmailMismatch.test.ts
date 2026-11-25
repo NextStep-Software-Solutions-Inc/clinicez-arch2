@@ -276,11 +276,12 @@ describe("Issue #115: Invitation Email Mismatch Validation & Account Switching",
       const source = fs.readFileSync(adminClientPath, "utf-8");
       expect(source).toContain("isUserEmailMatched(user, invite.email)");
       expect(source).toContain("INVITATION_EMAIL_MISMATCH_MESSAGE");
-      expect(source).toContain("if (!invite || !isEmailMatched) return;");
+      expect(source).toContain("if (!invite || !isEmailMatched || isTerminalInvite) return;");
       expect(source).toContain("!isEmailMatched");
       expect(source).toContain("Account Mismatch");
       expect(source).toContain("Switch Account & Sign In");
-      expect(source).toContain("signOutFn({ redirectUrl: `/invitations/${encodeURIComponent(trimmedToken)}` })");
+      expect(source).toContain("const inviteReturnPath = buildInvitationPath(token);");
+      expect(source).toContain("signOutFn({ redirectUrl: inviteReturnPath })");
       expect(source).toContain('Return to Homepage');
       expect(source).not.toContain('Return to Admin Portal');
       expect(source).not.toMatch(/#[0-9A-Fa-f]{6}/);
