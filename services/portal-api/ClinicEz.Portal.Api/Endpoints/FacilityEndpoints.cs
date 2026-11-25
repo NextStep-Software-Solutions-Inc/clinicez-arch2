@@ -796,17 +796,10 @@ public class FacilityEndpoints : IEndpoint
                 logger,
                 ct);
 
-            if (outcome.File == null)
-            {
-                return outcome.ClinicUnavailable
-                    ? Results.Json(new { Message = outcome.ErrorMessage ?? "Clinic workstation is unreachable." }, statusCode: 502)
-                    : Results.NotFound(new { Message = outcome.ErrorMessage ?? "DOH LTO proof file not found." });
-            }
-
-            httpContext.Response.Headers.CacheControl = "private, no-store";
-            httpContext.Response.Headers.XContentTypeOptions = "nosniff";
-            httpContext.Response.Headers.ContentDisposition = $"inline; filename=\"{outcome.File.FileName}\"";
-            return Results.File(outcome.File.Content, outcome.File.ContentType);
+            return VerificationEvidenceHttpResults.ToInlineFileResult(
+                httpContext,
+                outcome,
+                "DOH LTO proof file not found.");
         })
         .RequireAuthorization()
         .WithName("GetFacilityLtoProof")

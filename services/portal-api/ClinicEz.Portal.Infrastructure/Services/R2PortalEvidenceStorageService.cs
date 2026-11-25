@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
@@ -139,6 +140,14 @@ public sealed class R2PortalEvidenceStorageService : IPortalEvidenceStorageServi
             await using var memoryStream = new MemoryStream();
             await response.ResponseStream.CopyToAsync(memoryStream, ct);
             var bytes = memoryStream.ToArray();
+            if (bytes.Length == 0)
+            {
+                _logger.LogWarning(
+                    "Cloudflare R2 returned an empty object in bucket {Bucket} at {ObjectKey}.",
+                    _bucketName,
+                    normalizedKey);
+                return await ReadFromFallbackAsync(normalizedKey, ct);
+            }
 
             var contentType = ResolveReadableContentType(response.Headers?.ContentType, normalizedKey);
             var rawMetaFileName = response.Metadata?[FileNameMetadataKey]
@@ -161,11 +170,55 @@ public sealed class R2PortalEvidenceStorageService : IPortalEvidenceStorageServi
                     normalizedKey);
             }
 
-            if (_fallbackReadStorage is not null)
-            {
-                return await _fallbackReadStorage.ReadEvidenceAsync(normalizedKey, ct);
-            }
+            return await ReadFromFallbackAsync(normalizedKey, ct);
+        }
+        catch (AmazonS3Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Cloudflare R2 read failed for bucket {Bucket} at {ObjectKey} (HTTP {StatusCode}, ErrorCode {ErrorCode}). Falling back to secondary storage.",
+                _bucketName,
+                normalizedKey,
+                (int)ex.StatusCode,
+                ex.ErrorCode ?? "Unknown");
 
+            return await ReadFromFallbackAsync(normalizedKey, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is AmazonClientException or HttpRequestException or IOException or OperationCanceledException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Cloudflare R2 transport/IO failure for bucket {Bucket} at {ObjectKey}. Falling back to secondary storage.",
+                _bucketName,
+                normalizedKey);
+
+            return await ReadFromFallbackAsync(normalizedKey, ct);
+        }
+    }
+
+    private async Task<PortalEvidenceFile?> ReadFromFallbackAsync(string normalizedKey, CancellationToken ct)
+    {
+        if (_fallbackReadStorage is null)
+            return null;
+
+        try
+        {
+            return await _fallbackReadStorage.ReadEvidenceAsync(normalizedKey, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Fallback portal evidence storage read failed at {ObjectKey}.",
+                normalizedKey);
             return null;
         }
     }
@@ -305,18 +358,7 @@ public sealed class R2PortalEvidenceStorageService : IPortalEvidenceStorageServi
     }
 
     private static string ResolveReadableContentType(string? headerContentType, string objectKey)
-    {
-        var normalized = (headerContentType ?? string.Empty).Split(';', 2)[0].Trim().ToLowerInvariant();
-        if (normalized == "image/jpg")
-            return "image/jpeg";
-        if (!string.IsNullOrWhiteSpace(normalized) &&
-            !string.Equals(normalized, "application/octet-stream", StringComparison.Ordinal))
-        {
-            return normalized;
-        }
-
-        return InferContentTypeFromKey(objectKey);
-    }
+        => VerificationEvidenceResolver.NormalizeContentType(headerContentType, objectKey);
 
     private static string InferContentTypeFromKey(string objectKey)
     {

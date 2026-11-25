@@ -43,11 +43,28 @@ public static class VerificationEvidenceResolver
 
         var trimmedKey = objectKey.Trim();
 
-        // 1. Check local portal storage first (fast path for portal-uploaded LTO proofs)
-        var localFile = await storage.ReadEvidenceAsync(trimmedKey, ct);
-        if (localFile != null)
+        // 1. Check local portal storage first (fast path for portal-uploaded or cached proofs)
+        try
         {
-            return new VerificationEvidenceLookupOutcome(localFile);
+            var localFile = await storage.ReadEvidenceAsync(trimmedKey, ct);
+            if (localFile != null && localFile.Content.Length > 0)
+            {
+                return new VerificationEvidenceLookupOutcome(new PortalEvidenceFile(
+                    localFile.Content,
+                    NormalizeContentType(localFile.ContentType, trimmedKey),
+                    SanitizeFileName(localFile.FileName, trimmedKey)));
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(
+                ex,
+                "Failed reading verification evidence '{ObjectKey}' from portal storage; falling back to clinic Interop.",
+                trimmedKey);
         }
 
         // 2. Fallback to clinic storage via Interop Hub request/reply (for clinic-uploaded LTO & PRC proofs)
@@ -175,7 +192,7 @@ public static class VerificationEvidenceResolver
         return string.IsNullOrWhiteSpace(cleaned) ? "verification-evidence" : cleaned;
     }
 
-    private static string NormalizeContentType(string? contentType, string objectKey)
+    public static string NormalizeContentType(string? contentType, string objectKey)
     {
         if (!string.IsNullOrWhiteSpace(contentType))
         {

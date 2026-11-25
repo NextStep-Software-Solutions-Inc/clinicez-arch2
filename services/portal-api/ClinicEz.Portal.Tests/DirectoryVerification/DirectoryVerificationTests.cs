@@ -4,9 +4,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using ClinicEz.Portal.Api.Endpoints;
@@ -1247,5 +1249,153 @@ public sealed class DirectoryVerificationTests : IDisposable
         var notSuspendedEx = await Assert.ThrowsAsync<CodedConflictException>(() =>
             reinstateHandler.Handle(new ReinstatePractitionerCommand(pracId, "admin_1", "Reviewer One", "Already verified"), CancellationToken.None));
         Assert.Equal("practitioner_not_suspended", notSuspendedEx.Code);
+    }
+
+    [Fact]
+    public async Task Issue276_R2AndLocalStorageFailures_FallBackCleanlyToClinicInteropWithoutThrowing()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"clinicez-issue276-test-{Guid.NewGuid():N}");
+        try
+        {
+            var localCfg = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["Storage:BasePath"] = tempDir })
+                .Build();
+            var localFallback = new LocalPortalEvidenceStorageService(
+                localCfg, NullLogger<LocalPortalEvidenceStorageService>.Instance);
+
+            // Reading before directory exists must return null without creating directory or throwing
+            Assert.False(Directory.Exists(tempDir));
+            Assert.Null(await localFallback.ReadEvidenceAsync("verification/lto/missing.pdf", CancellationToken.None));
+            Assert.False(Directory.Exists(tempDir));
+
+            // 1. R2 non-404 AmazonS3Exception (403 AccessDenied, 400, 503), AmazonClientException, empty stream, and malformed Content-Type
+            var pdfBytes = "%PDF-1.4\n%issue276"u8.ToArray();
+            var fallbackKey = await localFallback.SaveLtoProofAsync(
+                _tenantA.Id, _clinicA.Id, "application/pdf", pdfBytes, CancellationToken.None);
+
+            foreach (var status in new[] { HttpStatusCode.Forbidden, HttpStatusCode.BadRequest, HttpStatusCode.ServiceUnavailable })
+            {
+                var s3Mock = new Mock<IAmazonS3>(MockBehavior.Strict);
+                s3Mock
+                    .Setup(c => c.GetObjectAsync(It.IsAny<GetObjectRequest>(), It.IsAny<CancellationToken>()))
+                    .ThrowsAsync(new AmazonS3Exception($"Simulated {(int)status}")
+                    {
+                        StatusCode = status,
+                        ErrorCode = status == HttpStatusCode.Forbidden ? "AccessDenied" : "Error"
+                    });
+
+                using var r2WithFallback = new R2PortalEvidenceStorageService(
+                    s3Mock.Object,
+                    R2Options.DefaultBucketName,
+                    NullLogger<R2PortalEvidenceStorageService>.Instance,
+                    localFallback);
+
+                var recovered = await r2WithFallback.ReadEvidenceAsync(fallbackKey, CancellationToken.None);
+                Assert.NotNull(recovered);
+                Assert.Equal(pdfBytes, recovered!.Content);
+                Assert.Equal("application/pdf", recovered.ContentType);
+
+                using var r2WithoutFallback = new R2PortalEvidenceStorageService(
+                    s3Mock.Object,
+                    R2Options.DefaultBucketName,
+                    NullLogger<R2PortalEvidenceStorageService>.Instance);
+
+                Assert.Null(await r2WithoutFallback.ReadEvidenceAsync("tenants/t/clinics/c/verification/lto/missing.pdf", CancellationToken.None));
+            }
+
+            // Transport / AmazonClientException also falls back cleanly
+            var transportMock = new Mock<IAmazonS3>(MockBehavior.Strict);
+            transportMock
+                .Setup(c => c.GetObjectAsync(It.IsAny<GetObjectRequest>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new AmazonClientException("Simulated R2 network failure"));
+            using (var r2Transport = new R2PortalEvidenceStorageService(
+                transportMock.Object,
+                R2Options.DefaultBucketName,
+                NullLogger<R2PortalEvidenceStorageService>.Instance))
+            {
+                Assert.Null(await r2Transport.ReadEvidenceAsync("tenants/t/clinics/c/verification/lto/missing.pdf", CancellationToken.None));
+            }
+
+            // Empty body (0 bytes) and malformed Content-Type header are safely normalized
+            var malformedS3Mock = new Mock<IAmazonS3>(MockBehavior.Strict);
+            malformedS3Mock
+                .Setup(c => c.GetObjectAsync(It.Is<GetObjectRequest>(r => r.Key == "verification/lto/empty.pdf"), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new GetObjectResponse
+                {
+                    BucketName = R2Options.DefaultBucketName,
+                    Key = "verification/lto/empty.pdf",
+                    HttpStatusCode = HttpStatusCode.OK,
+                    ResponseStream = new MemoryStream(Array.Empty<byte>())
+                });
+            malformedS3Mock
+                .Setup(c => c.GetObjectAsync(It.Is<GetObjectRequest>(r => r.Key == "verification/lto/bad-mime.pdf"), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() =>
+                {
+                    var res = new GetObjectResponse
+                    {
+                        BucketName = R2Options.DefaultBucketName,
+                        Key = "verification/lto/bad-mime.pdf",
+                        HttpStatusCode = HttpStatusCode.OK,
+                        ResponseStream = new MemoryStream(pdfBytes, writable: false)
+                    };
+                    res.Headers.ContentType = "not-a-valid-mime";
+                    return res;
+                });
+
+            using (var r2Malformed = new R2PortalEvidenceStorageService(
+                malformedS3Mock.Object,
+                R2Options.DefaultBucketName,
+                NullLogger<R2PortalEvidenceStorageService>.Instance))
+            {
+                Assert.Null(await r2Malformed.ReadEvidenceAsync("verification/lto/empty.pdf", CancellationToken.None));
+                var badMimeResult = await r2Malformed.ReadEvidenceAsync("verification/lto/bad-mime.pdf", CancellationToken.None);
+                Assert.NotNull(badMimeResult);
+                Assert.Equal("application/pdf", badMimeResult!.ContentType);
+            }
+
+            // 2. VerificationEvidenceResolver catches storage exceptions and still resolves from Clinic Interop
+            var throwingStorage = new Mock<IPortalEvidenceStorageService>();
+            throwingStorage
+                .Setup(s => s.ReadEvidenceAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new AmazonS3Exception("AccessDenied") { StatusCode = HttpStatusCode.Forbidden, ErrorCode = "AccessDenied" });
+
+            var interopClient = new Mock<IInteropRequestClient>();
+            interopClient
+                .Setup(c => c.RequestAsync<VerificationEvidenceRequestedPayload, VerificationEvidenceRespondedPayload>(
+                    InteropTypes.VerificationEvidenceRequested,
+                    InteropTypes.VerificationEvidenceResponded,
+                    Party.Portal,
+                    It.IsAny<Party>(),
+                    It.Is<VerificationEvidenceRequestedPayload>(p => p.ObjectKey == "tenants/t/clinics/c/verification/lto/new.pdf"),
+                    It.IsAny<TimeSpan>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new VerificationEvidenceRespondedPayload
+                {
+                    Found = true,
+                    ContentType = "application/pdf",
+                    FileName = "PR_PR-2026-GSPD-003.pdf",
+                    Base64Content = Convert.ToBase64String(pdfBytes)
+                });
+
+            var outcome = await VerificationEvidenceResolver.ResolveAsync(
+                throwingStorage.Object,
+                interopClient.Object,
+                _tenantA.Id,
+                _clinicA.Id,
+                "tenants/t/clinics/c/verification/lto/new.pdf",
+                NullLogger.Instance,
+                CancellationToken.None);
+
+            Assert.NotNull(outcome.File);
+            Assert.False(outcome.ClinicUnavailable);
+            Assert.Equal("application/pdf", outcome.File!.ContentType);
+            Assert.Equal("PR_PR-2026-GSPD-003.pdf", outcome.File.FileName);
+            Assert.Equal(pdfBytes, outcome.File.Content);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
     }
 }
