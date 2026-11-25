@@ -6,10 +6,14 @@ import { IconAlertCircle } from '@tabler/icons-react';
 import { ClinicEzLogo } from '@/components/ClinicEzLogo';
 import { getIdleTimeoutMinutes } from '@/lib/idleGuard';
 
-function SignInPage() {
-  const location = useLocation();
+export interface SignInViewProps {
+  SignInComponent?: React.ComponentType<React.ComponentProps<typeof SignIn>>;
+}
+
+export function SignInView({ SignInComponent = SignIn }: SignInViewProps) {
+  const searchStr = useLocation({ select: (loc) => loc.searchStr });
   const searchParams = new URLSearchParams(
-    location.searchStr ?? (typeof window !== 'undefined' ? window.location.search : '')
+    searchStr ?? (typeof window !== 'undefined' ? window.location.search : '')
   );
   const reason = searchParams.get('reason');
   const idleMinutes = getIdleTimeoutMinutes();
@@ -42,7 +46,7 @@ function SignInPage() {
         )}
 
         <div className="flex justify-center">
-          <SignIn
+          <SignInComponent
             path="/sign-in"
             routing="path"
             signUpUrl="/sign-up"
@@ -52,6 +56,10 @@ function SignInPage() {
       </div>
     </div>
   );
+}
+
+function SignInPage() {
+  return <SignInView />;
 }
 
 const signInBaseRoute = createRoute({
