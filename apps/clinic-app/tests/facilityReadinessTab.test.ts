@@ -727,4 +727,74 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
       });
     }
   });
+
+  test('11. Aligns DOH LTO Number, Expiry Date, and Save/Resubmit button vertically (Issue #277)', () => {
+    const extractFlatStyle = (markup: string, testId: string): Record<string, any> => {
+      const escaped = testId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`data-testid="${escaped}"[^>]*data-style="([^"]+)"`);
+      const match = regex.exec(markup);
+      expect(match).not.toBeNull();
+      const parsed = JSON.parse(match![1].replace(/&quot;/g, '"'));
+      if (Array.isArray(parsed)) {
+        return Object.assign({}, ...parsed.flat(Infinity).filter(Boolean));
+      }
+      return parsed;
+    };
+
+    const expectedLabelOffset = theme.typography.captionBold.lineHeight + 2 + theme.spacing.xs;
+
+    const states = [
+      {
+        platformVerificationStatus: 'Unverified' as const,
+        expectedLabel: 'Save LTO',
+      },
+      {
+        platformVerificationStatus: 'PendingReview' as const,
+        expectedLabel: 'Save &amp; Update Submission',
+      },
+      {
+        platformVerificationStatus: 'Verified' as const,
+        stagedLtoObjectKey: 'tenants/t/clinics/c/verification/lto/staged.pdf',
+        expectedLabel: 'Save LTO &amp; Resubmit for Verification',
+      },
+    ];
+
+    for (const state of states) {
+      const markup = renderToStaticMarkup(
+        React.createElement(FacilityReadinessTab, {
+          license: mockActiveLicense as any,
+          clinicName: 'St. Jude Health Hub',
+          letterheadAddress: '123 Rizal Ave, Manila',
+          letterheadContact: '0917-000-0000',
+          accreditationNumber: 'PHIC-1234',
+          letterheadDohLto: 'DOH-LTO-04A-2026-0089',
+          ltoEvidenceObjectKey: 'tenants/t/clinics/c/verification/lto/original.pdf',
+          operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
+          staff: mockStaff as any,
+          services: mockServices as any,
+          roles: mockRoles as any,
+          platformVerificationStatus: state.platformVerificationStatus,
+          stagedLtoObjectKey: state.stagedLtoObjectKey ?? null,
+          isWorkspaceEligible: true,
+          onSaveDohLto: async () => true,
+          onNavigateTab: () => {},
+          onOpenAddStaff: () => {},
+          onOpenAddService: () => {},
+          onOpenLicenseModal: () => {},
+        })
+      );
+
+      expect(markup).toContain(state.expectedLabel);
+
+      const rowStyle = extractFlatStyle(markup, 'readiness-lto-input-row');
+      expect(rowStyle.alignItems).toBe('flex-start');
+
+      const btnWrapStyle = extractFlatStyle(markup, 'readiness-lto-save-btn-wrap');
+      expect(btnWrapStyle.paddingTop).toBe(expectedLabelOffset);
+      expect(btnWrapStyle.paddingBottom).toBeUndefined();
+
+      const btnStyle = extractFlatStyle(markup, 'btn-save-doh-lto');
+      expect(btnStyle.minHeight).toBe(theme.sizes.controlMd);
+    }
+  });
 });
