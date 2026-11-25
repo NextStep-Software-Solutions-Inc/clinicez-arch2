@@ -2234,4 +2234,203 @@ describe("Directory Verifications — Admin Governance Workstation", () => {
       }
     });
   });
+
+  describe("6. Issue 276 — ProofEvidenceCard Keying & Facility/Practitioner Tab Rendering", () => {
+    const reviewerProfile: ReviewerProfile = {
+      isAdmin: true,
+      fullName: "Directory Verifier",
+      email: "verifier@clinicez.ph",
+      roleName: "Directory Verifier",
+      permissions: [VERIFICATION_PERMISSIONS.VIEW, VERIFICATION_PERMISSIONS.VERIFY],
+    };
+
+    function makeDetail(
+      overrides: Partial<VerificationRequestDetailDto> = {},
+    ): VerificationRequestDetailDto {
+      return {
+        id: "fac-276",
+        kind: "Facility",
+        status: "PendingReview",
+        requestKind: "Resubmission",
+        submissionNumber: 3,
+        correlationId: "corr-276",
+        submittedAtUtc: "2026-11-25T01:00:00Z",
+        submittedByClinicUserId: "user-clinic-1",
+        submittedByDisplayName: "Clinic Manager",
+        reviewedAtUtc: null,
+        reviewedByAdminUserId: null,
+        reviewerNotes: null,
+        withdrawnAtUtc: null,
+        withdrawnByActor: null,
+        withdrawalReason: null,
+        tenantId: "t-276",
+        tenantSlug: "manila-care",
+        tenantName: "Manila Care Network",
+        facilityId: "f-276",
+        facilityName: "Manila Care Ermita",
+        facilitySlug: "manila-care-ermita",
+        facilityVerificationStatus: "PendingReview",
+        dohLtoNumber: "DOH-LTO-2026-003",
+        dohLtoExpiryDate: "2029-12-31",
+        clinicContactNumber: "+63 2 8555 0199",
+        clinicContactEmail: "ermita@manilacare.ph",
+        philHealthAccreditationNumber: null,
+        isPhilHealthAccredited: false,
+        supportsInPerson: true,
+        supportsTeleconsult: false,
+        evidenceObjectKey: "tenants/t1/clinics/f1/verification/lto/873eb60fedb24d539d2cbd7486dadbd4.jpg",
+        ltoEvidenceObjectKey: "tenants/t1/clinics/f1/verification/lto/873eb60fedb24d539d2cbd7486dadbd4.jpg",
+        prcEvidenceObjectKey: null,
+        submittedSnapshotJson: "{}",
+        snapshot: null,
+        hasNameMismatch: false,
+        childPractitionerRequests: [],
+        prcMatchCandidates: [],
+        submissionHistory: [],
+        resubmissionDiff: null,
+        ...overrides,
+      };
+    }
+
+    test("ProofEvidenceCard remounts cleanly on in-place objectKey updates and renders Facility/Practitioner PDF & image proof tabs", async () => {
+      const originalFetch = verificationService.fetchVerificationEvidence;
+      const originalGetDetail = verificationService.getVerificationRequestDetail;
+      const originalCreateObjectURL = URL.createObjectURL;
+      const originalRevokeObjectURL = URL.revokeObjectURL;
+      let blobCounter = 0;
+      (URL as any).createObjectURL = () => `blob:mock-evidence-${++blobCounter}`;
+      (URL as any).revokeObjectURL = () => {};
+
+      const baseFacDetail = makeDetail({
+        childPractitionerRequests: [
+          {
+            id: "child-276",
+            clinicStaffMemberId: "staff-276",
+            practitionerId: null,
+            affiliationId: null,
+            submissionNumber: 1,
+            requestKind: "Initial",
+            professionKind: "Doctor",
+            firstName: "Jose",
+            lastName: "Rizal",
+            title: "Dr.",
+            submittedPrcLicenseNo: "0088112",
+            normalizedPrcLicenseNo: "0088112",
+            prcExpiryDate: "2028-06-30",
+            prcEvidenceObjectKey: "tenants/t1/clinics/f1/verification/prc/rizal.png",
+            verificationContact: "jose@example.ph",
+            specialty: "Family Medicine",
+            publicBio: null,
+            avatarUrl: null,
+            status: "PendingReview",
+            hasNameMismatch: false,
+            prcMatchCandidates: [],
+            availabilities: [],
+          },
+        ],
+      });
+      const updatedFacDetail = makeDetail({
+        ...baseFacDetail,
+        ltoEvidenceObjectKey: "tenants/t1/clinics/f1/verification/lto/pr-2026-gspd-003.pdf",
+        evidenceObjectKey: "tenants/t1/clinics/f1/verification/lto/pr-2026-gspd-003.pdf",
+      });
+
+      let currentServerFacDetail = baseFacDetail;
+      (verificationService as any).getVerificationRequestDetail = async () => currentServerFacDetail;
+
+      const fetchCalls: Array<{ requestId: string; kind?: string; childRequestId?: string }> = [];
+      (verificationService as any).fetchVerificationEvidence = async (
+        requestId: string,
+        opts: { kind?: "lto" | "prc"; childRequestId?: string } = {},
+      ) => {
+        fetchCalls.push({ requestId, kind: opts.kind, childRequestId: opts.childRequestId });
+        if (opts.kind === "prc") {
+          return {
+            blob: new Blob(["png-bytes"], { type: "image/png" }),
+            contentType: "image/png",
+            fileName: opts.childRequestId ? "bundled-prc.png" : "practitioner-prc.png",
+          };
+        }
+        const isUpdatedPdf = currentServerFacDetail.ltoEvidenceObjectKey?.endsWith("pr-2026-gspd-003.pdf") || requestId === "prac-276";
+        return {
+          blob: new Blob(["%PDF-1.4"], { type: "application/pdf" }),
+          contentType: "application/pdf",
+          fileName: isUpdatedPdf ? "PR_PR-2026-GSPD-003.pdf" : "old-lto.jpg",
+        };
+      };
+
+      try {
+        const mounted = mountReactTree(
+          <VerificationDetailWorkspace
+            requestId="fac-276"
+            profile={reviewerProfile}
+          />,
+        );
+        await new Promise((r) => setTimeout(r, 20));
+        expect(fetchCalls[0]).toEqual({ requestId: "fac-276", kind: "lto", childRequestId: undefined });
+        expect(mounted.html).toContain("old-lto.jpg");
+
+        // In-place update on server followed by Refresh remounts ProofEvidenceCard via updated objectKey
+        currentServerFacDetail = updatedFacDetail;
+        const refreshBtn = findReactNode(
+          mounted.tree,
+          (el) => el?.type === "button" && extractNodeText(el).includes("Refresh"),
+        );
+        expect(refreshBtn).not.toBeNull();
+        refreshBtn.props.onClick();
+        await new Promise((r) => setTimeout(r, 20));
+        expect(fetchCalls.length).toBe(2);
+        expect(mounted.html).toContain("PR_PR-2026-GSPD-003.pdf");
+        expect(mounted.html).toContain("<iframe");
+
+        // Switching to bundled PRC tab renders child PRC image viewer
+        const bundledPrcTab = findReactNode(
+          mounted.tree,
+          (el) => el?.props?.role === "tab" && extractNodeText(el).includes("PRC"),
+        );
+        expect(bundledPrcTab).not.toBeNull();
+        bundledPrcTab.props.onClick();
+        await new Promise((r) => setTimeout(r, 20));
+        expect(fetchCalls[2]).toEqual({ requestId: "fac-276", kind: "prc", childRequestId: "child-276" });
+        expect(mounted.html).toContain("bundled-prc.png");
+        expect(mounted.html).toContain("<img");
+        mounted.unmount();
+
+        // Practitioner workspace renders both PRC License Proof and Facility DOH LTO Proof tabs
+        const pracDetail = makeDetail({
+          id: "prac-276",
+          kind: "Practitioner",
+          prcEvidenceObjectKey: "tenants/t1/clinics/f1/verification/prc/63a3f72086484bc4928f3ce7a0c1ce4f.pdf",
+          evidenceObjectKey: "tenants/t1/clinics/f1/verification/prc/63a3f72086484bc4928f3ce7a0c1ce4f.pdf",
+          ltoEvidenceObjectKey: "tenants/t1/clinics/f1/verification/lto/pr-2026-gspd-003.pdf",
+        });
+        const pracMounted = mountReactTree(
+          <VerificationDetailWorkspace
+            requestId="prac-276"
+            profile={reviewerProfile}
+            initialDetail={pracDetail}
+          />,
+        );
+        await new Promise((r) => setTimeout(r, 20));
+        expect(pracMounted.html).toContain("practitioner-prc.png");
+
+        const pracLtoTab = findReactNode(
+          pracMounted.tree,
+          (el) => el?.props?.role === "tab" && extractNodeText(el).includes("Facility DOH LTO Proof"),
+        );
+        expect(pracLtoTab).not.toBeNull();
+        pracLtoTab.props.onClick();
+        await new Promise((r) => setTimeout(r, 20));
+        expect(fetchCalls.some((c) => c.requestId === "prac-276" && c.kind === "prc")).toBe(true);
+        expect(fetchCalls.some((c) => c.requestId === "prac-276" && c.kind === "lto")).toBe(true);
+        expect(pracMounted.html).toContain("PR_PR-2026-GSPD-003.pdf");
+        pracMounted.unmount();
+      } finally {
+        (verificationService as any).fetchVerificationEvidence = originalFetch;
+        (verificationService as any).getVerificationRequestDetail = originalGetDetail;
+        (URL as any).createObjectURL = originalCreateObjectURL;
+        (URL as any).revokeObjectURL = originalRevokeObjectURL;
+      }
+    });
+  });
 });

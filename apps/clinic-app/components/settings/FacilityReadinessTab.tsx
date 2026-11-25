@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, Pressable, ViewStyle } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
@@ -107,6 +107,12 @@ export interface FacilityReadinessTabProps {
     file: FormData,
     options?: { stageOnly?: boolean },
   ) => Promise<boolean | string | { objectKey?: string } | void> | boolean | string | { objectKey?: string } | void;
+  stagedLtoObjectKey?: string | null;
+  stagedLtoFile?: PickedEvidenceFile | null;
+  onStagedLtoProofChange?: (stagedKey: string | null, stagedFile: PickedEvidenceFile | null) => void;
+  hasPendingLtoSyncError?: boolean;
+  onRetryPendingVerificationSync?: () => Promise<boolean | void> | boolean | void;
+  isRetryingPendingSync?: boolean;
   onSubmitVerification?: () => Promise<void> | void;
   onWithdrawVerification?: () => Promise<void> | void;
   onTogglePublishDirectory?: (nextPublished: boolean) => Promise<void> | void;
@@ -147,6 +153,12 @@ export default function FacilityReadinessTab({
   optedInCliniciansReadyCount,
   onSaveDohLto,
   onUploadLtoProof,
+  stagedLtoObjectKey: stagedLtoObjectKeyProp,
+  stagedLtoFile: stagedLtoFileProp,
+  onStagedLtoProofChange,
+  hasPendingLtoSyncError = false,
+  onRetryPendingVerificationSync,
+  isRetryingPendingSync = false,
   onSubmitVerification,
   onWithdrawVerification,
   onTogglePublishDirectory,
@@ -171,7 +183,26 @@ export default function FacilityReadinessTab({
   const [localLtoSaving, setLocalLtoSaving] = useState(false);
   const [localLtoUploading, setLocalLtoUploading] = useState(false);
   const [localLtoFile, setLocalLtoFile] = useState<PickedEvidenceFile | null>(null);
-  const [stagedLtoObjectKey, setStagedLtoObjectKey] = useState<string | null>(null);
+  const [localStagedLtoObjectKey, setLocalStagedLtoObjectKey] = useState<string | null>(null);
+  const isControlledStagedLto =
+    stagedLtoObjectKeyProp !== undefined || Boolean(onStagedLtoProofChange);
+  const stagedLtoObjectKey = isControlledStagedLto
+    ? (stagedLtoObjectKeyProp ?? null)
+    : localStagedLtoObjectKey;
+  const effectiveLocalLtoFile = isControlledStagedLto
+    ? (stagedLtoFileProp ?? localLtoFile)
+    : localLtoFile;
+  const setStagedProofState = useCallback(
+    (nextKey: string | null, nextFile: PickedEvidenceFile | null) => {
+      if (onStagedLtoProofChange) {
+        onStagedLtoProofChange(nextKey, nextFile);
+      } else {
+        setLocalStagedLtoObjectKey(nextKey);
+      }
+      setLocalLtoFile(nextFile);
+    },
+    [onStagedLtoProofChange],
+  );
   const [ltoInput, setLtoInput] = useState(letterheadDohLto ?? '');
   const [ltoExpiryInput, setLtoExpiryInput] = useState(dohLtoExpiryDate ?? '');
   const fetchLtoProofBlob = useMemo(
@@ -188,17 +219,16 @@ export default function FacilityReadinessTab({
   }, [dohLtoExpiryDate]);
 
   useEffect(() => {
-    if (platformVerificationStatus !== 'Verified') {
-      setStagedLtoObjectKey(null);
+    if (platformVerificationStatus !== 'Verified' && stagedLtoObjectKey) {
+      setStagedProofState(null, null);
     }
-  }, [platformVerificationStatus]);
+  }, [platformVerificationStatus, stagedLtoObjectKey, setStagedProofState]);
 
   useEffect(() => {
     if (stagedLtoObjectKey && ltoEvidenceObjectKey === stagedLtoObjectKey) {
-      setStagedLtoObjectKey(null);
-      setLocalLtoFile(null);
+      setStagedProofState(null, null);
     }
-  }, [ltoEvidenceObjectKey, stagedLtoObjectKey]);
+  }, [ltoEvidenceObjectKey, stagedLtoObjectKey, setStagedProofState]);
 
   const publishingLoading = isPublishingMutating ?? localPublishingLoading;
   const pauseLoading = isBookingPauseMutating ?? localPauseLoading;
@@ -389,7 +419,7 @@ export default function FacilityReadinessTab({
       : undefined;
   const ltoDraftDirty =
     ltoInput.trim() !== savedDohLto || trimmedLtoExpiry !== savedDohLtoExpiry;
-  const hasStagedLtoProof = Boolean(stagedLtoObjectKey || (isVerified && localLtoFile));
+  const hasStagedLtoProof = Boolean(stagedLtoObjectKey || (isVerified && effectiveLocalLtoFile));
   const effectiveLtoProofKey = stagedLtoObjectKey ?? ltoEvidenceObjectKey;
   const hasVerifiedLtoCredentialEdits =
     isVerified &&
@@ -434,10 +464,7 @@ export default function FacilityReadinessTab({
               typeof uploadResult.objectKey === 'string'
             ? uploadResult.objectKey
             : null;
-        if (stagedKey) {
-          setStagedLtoObjectKey(stagedKey);
-        }
-        setLocalLtoFile(picked.file);
+        setStagedProofState(stagedKey, picked.file);
         notify.success('DOH LTO proof ready. Save LTO & Resubmit for Verification to submit.');
         return;
       }
@@ -449,8 +476,7 @@ export default function FacilityReadinessTab({
   };
 
   const handleDiscardStagedLtoProof = () => {
-    setStagedLtoObjectKey(null);
-    setLocalLtoFile(null);
+    setStagedProofState(null, null);
   };
 
   const handleSaveDohLto = async () => {
@@ -467,8 +493,7 @@ export default function FacilityReadinessTab({
         stagedLtoObjectKey ?? undefined,
       );
       if (ok !== false) {
-        setStagedLtoObjectKey(null);
-        setLocalLtoFile(null);
+        setStagedProofState(null, null);
       }
     } finally {
       setLocalLtoSaving(false);
@@ -862,11 +887,31 @@ export default function FacilityReadinessTab({
               )}
             </View>
 
-            {hasLtoProof || hasStagedLtoProof || localLtoFile ? (
+            {isPendingReview && hasPendingLtoSyncError && onRetryPendingVerificationSync ? (
+              <View style={styles.pendingSyncBanner} testID="readiness-pending-sync-error-banner">
+                <View style={styles.pendingSyncTextWrap}>
+                  <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.warning} />
+                  <ThemedText variant="caption" color={theme.colors.warningText} style={styles.pendingSyncText}>
+                    Updated DOH LTO proof was saved locally, but syncing to Platform Governance failed.
+                  </ThemedText>
+                </View>
+                <Button
+                  title="Retry Sync"
+                  variant="secondary"
+                  size="sm"
+                  loading={isRetryingPendingSync}
+                  disabled={isRetryingPendingSync || savingLto || uploadingLto}
+                  onPress={onRetryPendingVerificationSync}
+                  testID="btn-retry-pending-lto-sync"
+                />
+              </View>
+            ) : null}
+
+            {hasLtoProof || hasStagedLtoProof || effectiveLocalLtoFile ? (
               <EvidenceProofPreview
                 label="DOH License to Operate (LTO) Proof"
                 objectKey={effectiveLtoProofKey}
-                localFile={localLtoFile}
+                localFile={effectiveLocalLtoFile}
                 fetchBlob={fetchLtoProofBlob}
                 testID="lto-proof-preview"
               />
@@ -1161,6 +1206,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
+  },
+  pendingSyncBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.warningBorder,
+    backgroundColor: theme.colors.warningBg,
+  },
+  pendingSyncTextWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    minWidth: 200,
+  },
+  pendingSyncText: {
+    flex: 1,
   },
   controlRow: {
     flexDirection: 'row',

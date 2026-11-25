@@ -19,11 +19,9 @@ public sealed class LocalPortalEvidenceStorageService(
     private static string ResolveRoot(IConfiguration? configuration)
     {
         var configured = configuration?["Storage:BasePath"];
-        var root = !string.IsNullOrWhiteSpace(configured)
+        return !string.IsNullOrWhiteSpace(configured)
             ? Path.GetFullPath(configured)
             : Path.Combine(AppContext.BaseDirectory, "Storage", "VerificationEvidence");
-        Directory.CreateDirectory(root);
-        return root;
     }
 
     private string ResolveSafeFullPath(string objectKey)
@@ -112,19 +110,28 @@ public sealed class LocalPortalEvidenceStorageService(
             return null;
         }
 
-        if (!File.Exists(fullPath))
+        if (!Directory.Exists(_storageRoot) || !File.Exists(fullPath))
             return null;
 
-        var bytes = await File.ReadAllBytesAsync(fullPath, ct);
-        var ext = Path.GetExtension(fullPath).ToLowerInvariant();
-        var contentType = ext switch
+        byte[] bytes;
+        try
         {
-            ".pdf" => "application/pdf",
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            _ => "application/octet-stream"
-        };
+            bytes = await File.ReadAllBytesAsync(fullPath, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Failed reading local verification evidence at {ObjectKey}.", objectKey);
+            return null;
+        }
 
+        if (bytes.Length == 0)
+            return null;
+
+        var contentType = VerificationEvidenceResolver.NormalizeContentType(null, fullPath);
         var fileName = SanitizeFileName(Path.GetFileName(fullPath));
         return new PortalEvidenceFile(bytes, contentType, fileName);
     }

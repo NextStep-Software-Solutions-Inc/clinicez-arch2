@@ -61,7 +61,9 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
     private Guid _tenantId;
     private Guid _facilityId;
     private Guid _facReqId;
+    private Guid _childPracReqId;
     private Guid _pracReqAwaitingOtpId;
+    private Func<string, Exception?>? _r2ReadExceptionOverride;
     private readonly StubInteropRequestClient _interopClient = new();
     private readonly ConcurrentDictionary<(string Bucket, string Key), (byte[] Bytes, string ContentType, string? FileName)> _r2Objects = new();
     private const string ConfirmToken = "confirm-token-secret-2026";
@@ -87,6 +89,12 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
         mock.Setup(c => c.GetObjectAsync(It.IsAny<GetObjectRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((GetObjectRequest req, CancellationToken _) =>
             {
+                var overrideEx = _r2ReadExceptionOverride?.Invoke(req.Key);
+                if (overrideEx is not null)
+                {
+                    throw overrideEx;
+                }
+
                 if (!_r2Objects.TryGetValue((req.BucketName, req.Key), out var entry))
                 {
                     throw new AmazonS3Exception("Not found")
@@ -227,6 +235,7 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
         _tenantId = Guid.NewGuid();
         _facilityId = Guid.NewGuid();
         _facReqId = Guid.NewGuid();
+        _childPracReqId = Guid.NewGuid();
         _pracReqAwaitingOtpId = Guid.NewGuid();
 
         var tenant = new Tenant
@@ -282,7 +291,7 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
             Status = "PendingReview"
         };
 
-        var childDocId = Guid.NewGuid();
+        var childDocId = _childPracReqId;
         var childSnap = new PractitionerRequestSnapshot(
             childDocId,
             _facilityId,
@@ -1101,6 +1110,97 @@ public sealed class DirectoryVerificationApiTests : IAsyncLifetime
         dupReinstateReq.Content = JsonContent.Create(new { reason = "Duplicate" });
         var dupReinstateRes = await _client.SendAsync(dupReinstateReq);
         Assert.Equal(HttpStatusCode.Conflict, dupReinstateRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task Issue276_EvidenceEndpoints_RecoverViaClinicInteropWhenR2Returns403Forbidden()
+    {
+        var ltoPdfBytes = "%PDF-1.4\n%PR_PR-2026-GSPD-003"u8.ToArray();
+        var prcJpegBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46 };
+        var nursePngBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+
+        _interopClient.ConfigureResponse("verification/lto/ermita-lto.pdf", new VerificationEvidenceRespondedPayload
+        {
+            Found = true,
+            ContentType = "application/pdf",
+            FileName = "PR_PR-2026-GSPD-003.pdf",
+            Base64Content = Convert.ToBase64String(ltoPdfBytes)
+        });
+        _interopClient.ConfigureResponse("verification/prc/rizal.pdf", new VerificationEvidenceRespondedPayload
+        {
+            Found = true,
+            ContentType = "image/jpeg",
+            FileName = "rizal-prc.jpg",
+            Base64Content = Convert.ToBase64String(prcJpegBytes)
+        });
+        _interopClient.ConfigureResponse("verification/prc/clara.pdf", new VerificationEvidenceRespondedPayload
+        {
+            Found = true,
+            ContentType = "image/png",
+            FileName = "clara-prc.png",
+            Base64Content = Convert.ToBase64String(nursePngBytes)
+        });
+
+        _r2ReadExceptionOverride = _ => new AmazonS3Exception("AccessDenied")
+        {
+            StatusCode = HttpStatusCode.Forbidden,
+            ErrorCode = "AccessDenied"
+        };
+
+        try
+        {
+            // 1. Facility DOH LTO Proof (PDF)
+            var facLtoRes = await _client.SendAsync(AsUser(
+                HttpMethod.Get,
+                $"/api/v1/admin/verification-queue/{_facReqId}/evidence?kind=lto",
+                "clerk_verifier"));
+            Assert.Equal(HttpStatusCode.OK, facLtoRes.StatusCode);
+            Assert.Equal("application/pdf", facLtoRes.Content.Headers.ContentType?.MediaType);
+            Assert.Equal("PR_PR-2026-GSPD-003.pdf", facLtoRes.Content.Headers.ContentDisposition?.FileName?.Trim('"'));
+            Assert.Equal(ltoPdfBytes, await facLtoRes.Content.ReadAsByteArrayAsync());
+
+            // 2. Facility Bundled Practitioner PRC Proof (JPEG)
+            var facChildPrcRes = await _client.SendAsync(AsUser(
+                HttpMethod.Get,
+                $"/api/v1/admin/verification-queue/{_facReqId}/evidence?kind=prc&childRequestId={_childPracReqId}",
+                "clerk_verifier"));
+            Assert.Equal(HttpStatusCode.OK, facChildPrcRes.StatusCode);
+            Assert.Equal("image/jpeg", facChildPrcRes.Content.Headers.ContentType?.MediaType);
+            Assert.Equal("rizal-prc.jpg", facChildPrcRes.Content.Headers.ContentDisposition?.FileName?.Trim('"'));
+            Assert.Equal(prcJpegBytes, await facChildPrcRes.Content.ReadAsByteArrayAsync());
+
+            // 3. Practitioner PRC License Proof (PNG)
+            var pracPrcRes = await _client.SendAsync(AsUser(
+                HttpMethod.Get,
+                $"/api/v1/admin/verification-queue/{_pracReqAwaitingOtpId}/evidence?kind=prc",
+                "clerk_verifier"));
+            Assert.Equal(HttpStatusCode.OK, pracPrcRes.StatusCode);
+            Assert.Equal("image/png", pracPrcRes.Content.Headers.ContentType?.MediaType);
+            Assert.Equal("clara-prc.png", pracPrcRes.Content.Headers.ContentDisposition?.FileName?.Trim('"'));
+            Assert.Equal(nursePngBytes, await pracPrcRes.Content.ReadAsByteArrayAsync());
+
+            // 4. Practitioner Facility DOH LTO Proof tab (PDF)
+            var pracLtoRes = await _client.SendAsync(AsUser(
+                HttpMethod.Get,
+                $"/api/v1/admin/verification-queue/{_pracReqAwaitingOtpId}/evidence?kind=lto",
+                "clerk_verifier"));
+            Assert.Equal(HttpStatusCode.OK, pracLtoRes.StatusCode);
+            Assert.Equal("application/pdf", pracLtoRes.Content.Headers.ContentType?.MediaType);
+            Assert.Equal(ltoPdfBytes, await pracLtoRes.Content.ReadAsByteArrayAsync());
+
+            // 5. Tenant Portal LTO Proof endpoint also recovers cleanly instead of 500
+            var portalLtoRes = await _client.SendAsync(AsUser(
+                HttpMethod.Get,
+                $"/api/v1/facilities/{_facilityId}/lto-proof?tenantSlug=manila-care",
+                "clerk_clinic_owner"));
+            Assert.Equal(HttpStatusCode.OK, portalLtoRes.StatusCode);
+            Assert.Equal("application/pdf", portalLtoRes.Content.Headers.ContentType?.MediaType);
+            Assert.Equal(ltoPdfBytes, await portalLtoRes.Content.ReadAsByteArrayAsync());
+        }
+        finally
+        {
+            _r2ReadExceptionOverride = null;
+        }
     }
 
     private sealed class HeaderTestAuthHandler(
