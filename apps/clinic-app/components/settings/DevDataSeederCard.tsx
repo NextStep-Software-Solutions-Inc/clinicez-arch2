@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import { theme } from '../../constants/theme';
 import { notify, Alert } from '../../utils/feedback';
 import { useClinic } from '../../context/ClinicContext';
+import { isDevelopmentEnv } from '../../services/runtimeConfig';
 import {
   clinicService,
   PatientSeedResult,
@@ -22,6 +23,7 @@ export interface DevDataSeederCardProps {
 
 export default function DevDataSeederCard({ onNavigatePatients }: DevDataSeederCardProps = {}) {
   const { facilityName, settings } = useClinic();
+  const isDevEnv = isDevelopmentEnv();
 
   const activeClinicId = settings?.clinicId;
   const activeTenantId = settings?.tenantId;
@@ -31,23 +33,30 @@ export default function DevDataSeederCard({ onNavigatePatients }: DevDataSeederC
   const [clearExisting, setClearExisting] = useState<boolean>(false);
   const [loadingStatus, setLoadingStatus] = useState<boolean>(false);
   const [status, setStatus] = useState<SeedStatusResult | null>(null);
+  const [serverRestricted, setServerRestricted] = useState<boolean>(false);
   const [seeding, setSeeding] = useState<boolean>(false);
   const [clearing, setClearing] = useState<boolean>(false);
   const [lastResult, setLastResult] = useState<PatientSeedResult | null>(null);
 
   const fetchStatus = useCallback(async () => {
-    if (!activeClinicId) return;
+    if (!isDevEnv || !activeClinicId) return;
     setLoadingStatus(true);
     const [data, err] = await clinicService.getClinicSeedStatus(activeClinicId);
     setLoadingStatus(false);
+    if (err?.status === 403) {
+      setServerRestricted(true);
+      return;
+    }
     if (!err && data) {
+      setServerRestricted(false);
       setStatus(data);
     }
-  }, [activeClinicId]);
+  }, [isDevEnv, activeClinicId]);
 
   useEffect(() => {
+    if (!isDevEnv) return;
     fetchStatus();
-  }, [fetchStatus]);
+  }, [isDevEnv, fetchStatus]);
 
   const handleSeed = async () => {
     if (!activeClinicId) {
@@ -143,6 +152,10 @@ export default function DevDataSeederCard({ onNavigatePatients }: DevDataSeederC
       (status.medicalHistories?.problems ?? 0) +
       (status.medicalHistories?.immunizations ?? 0)
     : 0;
+
+  if (!isDevEnv || serverRestricted) {
+    return null;
+  }
 
   return (
     <Card>

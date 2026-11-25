@@ -7,8 +7,10 @@ import { Card } from '../../ui/Card';
 import EdgeServerSwitcherSection from '../EdgeServerSwitcherSection';
 import DevDataSeederCard from '../DevDataSeederCard';
 import { theme } from '../../../constants/theme';
+import { isDevelopmentEnv } from '../../../services/runtimeConfig';
 
-const DEV_NODE_KEYWORDS = ['edge', 'server', 'seed', 'seeder', 'dev', 'developer', 'node', 'test', 'url', 'api'];
+const SERVER_NODE_KEYWORDS = ['edge', 'server', 'node', 'url', 'api'];
+const DEV_SEEDER_KEYWORDS = ['seed', 'seeder', 'dev', 'developer', 'test'];
 
 export interface WorkstationNodeDevSectionProps {
   filterQuery?: string;
@@ -21,15 +23,19 @@ export default function WorkstationNodeDevSection({
   onNavigatePatients,
   defaultExpanded = false,
 }: WorkstationNodeDevSectionProps) {
+  const showDevSeeder = isDevelopmentEnv();
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   useEffect(() => {
     const q = filterQuery.trim().toLowerCase();
     if (!q) return;
-    if (DEV_NODE_KEYWORDS.some((kw) => kw.includes(q) || q.includes(kw))) {
+    const activeKeywords = showDevSeeder
+      ? [...SERVER_NODE_KEYWORDS, ...DEV_SEEDER_KEYWORDS]
+      : SERVER_NODE_KEYWORDS;
+    if (activeKeywords.some((kw) => kw.includes(q) || q.includes(kw))) {
       setExpanded(true);
     }
-  }, [filterQuery]);
+  }, [filterQuery, showDevSeeder]);
 
   return (
     <View style={styles.wrapper} testID="workstation-node-dev-section">
@@ -38,7 +44,9 @@ export default function WorkstationNodeDevSection({
           onPress={() => setExpanded((prev) => !prev)}
           accessibilityRole="button"
           accessibilityState={{ expanded }}
-          accessibilityLabel="Toggle Server Connection and Sample Data"
+          accessibilityLabel={
+            showDevSeeder ? 'Toggle Server Connection and Sample Data' : 'Toggle Server Connection'
+          }
           testID="toggle-workstation-node-dev"
           style={({ pressed, hovered }: any) => [
             styles.toggleHeader,
@@ -53,12 +61,14 @@ export default function WorkstationNodeDevSection({
             <View style={styles.titleWrap}>
               <View style={styles.titleRow}>
                 <ThemedText variant="bodyBold" color={theme.colors.text}>
-                  Server Connection &amp; Sample Data
+                  {showDevSeeder ? 'Server Connection & Sample Data' : 'Server Connection'}
                 </ThemedText>
                 <Badge label="Advanced" variant="neutral" size="sm" />
               </View>
               <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                Check server connection or load sample patients for testing.
+                {showDevSeeder
+                  ? 'Check server connection or load sample patients for testing.'
+                  : 'Check or configure your clinic server connection.'}
               </ThemedText>
             </View>
           </View>
@@ -74,7 +84,7 @@ export default function WorkstationNodeDevSection({
       {expanded ? (
         <View style={styles.expandedStack}>
           <EdgeServerSwitcherSection />
-          <DevDataSeederCard onNavigatePatients={onNavigatePatients} />
+          {showDevSeeder ? <DevDataSeederCard onNavigatePatients={onNavigatePatients} /> : null}
         </View>
       ) : null}
     </View>

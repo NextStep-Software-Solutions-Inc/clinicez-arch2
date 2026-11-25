@@ -15,6 +15,8 @@ export const SETTING_NAMES = [
   'EXPO_PUBLIC_OFFLINE_GRACE_HOURS',
   'EXPO_PUBLIC_ENABLE_COMMS',
   'EXPO_PUBLIC_IDLE_TIMEOUT_MINUTES',
+  'EXPO_PUBLIC_APP_ENV',
+  'EXPO_PUBLIC_VERCEL_ENV',
 ] as const;
 
 export type SettingName = (typeof SETTING_NAMES)[number];

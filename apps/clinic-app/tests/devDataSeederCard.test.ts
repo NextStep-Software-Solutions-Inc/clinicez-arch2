@@ -113,6 +113,55 @@ const { default: DevDataSeederCard } = await import('../components/settings/DevD
 const { clinicService } = await import('../services/clinicService');
 const { clinicApiClient } = await import('../services/apiClient');
 
+const withEnvOverrides = (
+  overrides: {
+    dev: boolean;
+    nodeEnv?: string;
+    appEnv?: string;
+    vercelEnv?: string;
+    apiUrl?: string;
+    baseDomain?: string;
+    hostname?: string;
+  },
+  fn: () => void
+) => {
+  const prevDev = (globalThis as any).__DEV__;
+  const prevNodeEnv = process.env.NODE_ENV;
+  const prevAppEnv = process.env.EXPO_PUBLIC_APP_ENV;
+  const prevVercelEnv = process.env.EXPO_PUBLIC_VERCEL_ENV;
+  const prevApiUrl = process.env.EXPO_PUBLIC_CLINIC_API_URL;
+  const prevBaseDomain = process.env.EXPO_PUBLIC_BASE_DOMAIN;
+  const hadWindow = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+  const prevWindow = (globalThis as any).window;
+
+  const setOrDelete = (key: string, val: string | undefined) => {
+    if (val === undefined) delete process.env[key];
+    else process.env[key] = val;
+  };
+
+  try {
+    (globalThis as any).__DEV__ = overrides.dev;
+    setOrDelete('NODE_ENV', overrides.nodeEnv);
+    setOrDelete('EXPO_PUBLIC_APP_ENV', overrides.appEnv);
+    setOrDelete('EXPO_PUBLIC_VERCEL_ENV', overrides.vercelEnv);
+    setOrDelete('EXPO_PUBLIC_CLINIC_API_URL', overrides.apiUrl);
+    setOrDelete('EXPO_PUBLIC_BASE_DOMAIN', overrides.baseDomain);
+    if (overrides.hostname !== undefined) {
+      (globalThis as any).window = { location: { hostname: overrides.hostname, protocol: 'https:' } };
+    }
+    fn();
+  } finally {
+    (globalThis as any).__DEV__ = prevDev;
+    setOrDelete('NODE_ENV', prevNodeEnv);
+    setOrDelete('EXPO_PUBLIC_APP_ENV', prevAppEnv);
+    setOrDelete('EXPO_PUBLIC_VERCEL_ENV', prevVercelEnv);
+    setOrDelete('EXPO_PUBLIC_CLINIC_API_URL', prevApiUrl);
+    setOrDelete('EXPO_PUBLIC_BASE_DOMAIN', prevBaseDomain);
+    if (hadWindow) (globalThis as any).window = prevWindow;
+    else delete (globalThis as any).window;
+  }
+};
+
 describe('DevDataSeederCard — Clinic-Exclusive Data Seeder Component', () => {
   afterAll(() => {
     delete (globalThis as any).__mockClinicContext;
@@ -175,5 +224,42 @@ describe('DevDataSeederCard — Clinic-Exclusive Data Seeder Component', () => {
     } finally {
       (clinicApiClient as any).delete = originalDelete;
     }
+  });
+
+  test('6. Renders empty in production environment (__DEV__ = false with production API URL)', () => {
+    withEnvOverrides(
+      {
+        dev: false,
+        nodeEnv: 'production',
+        apiUrl: 'https://clinic.api.clinicez.net',
+        hostname: 'ustp-cdo.clinic.clinicez.net',
+      },
+      () => {
+        const markup = renderToStaticMarkup(React.createElement(DevDataSeederCard));
+        expect(markup).toBe('');
+      }
+    );
+  });
+
+  test('7. Renders empty when EXPO_PUBLIC_APP_ENV=production even if __DEV__ is true', () => {
+    withEnvOverrides({ dev: true, appEnv: 'production' }, () => {
+      const markup = renderToStaticMarkup(React.createElement(DevDataSeederCard));
+      expect(markup).toBe('');
+    });
+  });
+
+  test('8. Renders seeder card when __DEV__ is false in deployed dev web environment', () => {
+    withEnvOverrides(
+      {
+        dev: false,
+        nodeEnv: 'production',
+        apiUrl: 'https://clinic.api.dev.clinicez.net',
+        hostname: 'ustp-cdo.clinic.dev.clinicez.net',
+      },
+      () => {
+        const markup = renderToStaticMarkup(React.createElement(DevDataSeederCard));
+        expect(markup).toContain('Development Data Seeder &amp; Scalability Engine');
+      }
+    );
   });
 });
