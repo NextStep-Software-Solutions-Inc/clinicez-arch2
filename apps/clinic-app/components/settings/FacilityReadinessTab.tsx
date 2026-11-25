@@ -801,7 +801,7 @@ export default function FacilityReadinessTab({
               />
             </View>
 
-            <View style={styles.ltoInputRow}>
+            <View style={styles.ltoInputRow} testID="readiness-lto-input-row">
               <Input
                 containerStyle={styles.ltoInputFlex}
                 label="DOH LTO Number"
@@ -822,7 +822,7 @@ export default function FacilityReadinessTab({
                 testID="readiness-input-doh-lto-expiry"
               />
               {onSaveDohLto ? (
-                <View style={styles.ltoSaveBtnWrap}>
+                <View style={styles.ltoSaveBtnWrap} testID="readiness-lto-save-btn-wrap">
                   <Button
                     title={
                       hasVerifiedLtoCredentialEdits
@@ -832,7 +832,7 @@ export default function FacilityReadinessTab({
                         : 'Save LTO'
                     }
                     variant={hasVerifiedLtoCredentialEdits ? 'primary' : 'outline'}
-                    size="sm"
+                    size="md"
                     onPress={handleSaveDohLto}
                     loading={savingLto}
                     disabled={!canSaveLto}
@@ -1047,6 +1047,10 @@ export default function FacilityReadinessTab({
   );
 }
 
+// Matches the label block height above Input / ValidatedDateInput boxes (captionBold lineHeight + label marginBottom + container gap)
+const LTO_FIELD_LABEL_OFFSET =
+  theme.typography.captionBold.lineHeight + 2 + theme.spacing.xs;
+
 const styles = StyleSheet.create({
   container: {
     gap: theme.spacing.lg,
@@ -1190,7 +1194,7 @@ const styles = StyleSheet.create({
   },
   ltoInputRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
   },
@@ -1199,7 +1203,7 @@ const styles = StyleSheet.create({
     minWidth: 220,
   },
   ltoSaveBtnWrap: {
-    paddingBottom: 20,
+    paddingTop: LTO_FIELD_LABEL_OFFSET,
   },
   ltoProofRow: {
     flexDirection: 'row',
