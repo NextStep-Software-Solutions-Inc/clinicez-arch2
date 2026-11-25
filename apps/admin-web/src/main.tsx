@@ -31,6 +31,8 @@ if (rootElement) {
             publishableKey={clerkPubKey}
             routerPush={routerPush}
             routerReplace={routerReplace}
+            signInFallbackRedirectUrl="/sync-auth"
+            signUpFallbackRedirectUrl="/sync-auth"
           >
             <ApiProvider>
               <RouterProvider router={router} />
