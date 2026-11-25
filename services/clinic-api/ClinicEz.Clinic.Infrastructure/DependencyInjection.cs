@@ -166,6 +166,7 @@ public static class DependencyInjection
         services.AddScoped<ClinicRecipientResolver>();
         services.AddScoped<ClinicPatientAddressResolver>();
         services.AddScoped<IClinicIdentityProvider, ClinicIdentityProvider>();
+        services.AddScoped<ICommsEligibilityPublisher, CommsEligibilityPublisher>();
         services.AddScoped<IPatientAppointmentPublisher, PatientAppointmentPublisher>();
         services.AddScoped<ILabRequisitionPublisher, LabRequisitionPublisher>();
         services.AddScoped<IPrescriptionPublisher, PrescriptionPublisher>();

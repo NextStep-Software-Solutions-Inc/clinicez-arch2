@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Comms.Application.Common.Helpers;
 using ClinicEz.Comms.Application.Common.Interfaces;
 using ClinicEz.Comms.Application.Models;
 using ClinicEz.Comms.Domain.Entities;
@@ -175,6 +176,8 @@ public sealed class ReopenConversationCommandHandler : IRequestHandler<ReopenCon
                 toFacility,
                 correlationId: conversation.Id,
                 stateChangedPayload);
+
+            CommsPatientReplicationHelper.EnqueueThreadStateToPatient(_publisher, conversation, now);
         }
 
         await _db.SaveChangesAsync(ct);

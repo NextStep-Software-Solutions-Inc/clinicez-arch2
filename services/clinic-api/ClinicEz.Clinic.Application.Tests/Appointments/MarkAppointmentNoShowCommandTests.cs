@@ -48,15 +48,32 @@ public sealed class MarkAppointmentNoShowCommandTests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var repo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var fixedNow = new DateTime(2026, 11, 20, 10, 30, 0, DateTimeKind.Utc);
+        var cloudPatientId = Guid.NewGuid();
+
+        var patient = new Patient
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            CloudPatientId = cloudPatientId,
+            PatientCode = "PAT-2026-00001",
+            FirstName = "Juan",
+            LastName = "Dela Cruz",
+            DateOfBirth = new DateOnly(1990, 1, 1),
+            Sex = BiologicalSex.Male,
+            ContactNumber = "09171234567"
+        };
+        await patientRepo.AddAsync(patient);
 
         var appointment = new Appointment
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
             TenantId = _tenantId,
-            PatientId = Guid.NewGuid(),
+            PatientId = patient.Id,
             PatientName = "Juan Dela Cruz",
             DoctorId = Guid.NewGuid(),
             DoctorName = "Dr. Santos",
@@ -69,7 +86,7 @@ public sealed class MarkAppointmentNoShowCommandTests
         await uow.SaveChangesAsync();
 
         var handler = new MarkAppointmentNoShowCommandHandler(
-            repo, uow, _clinicContext, publisher, new FixedTimeProvider(fixedNow));
+            repo, uow, _clinicContext, publisher, new FixedTimeProvider(fixedNow), patientRepo);
 
         var result = await handler.Handle(
             new MarkAppointmentNoShowCommand(appointment.Id, "Patient unreachable after 15 mins"),
@@ -92,7 +109,7 @@ public sealed class MarkAppointmentNoShowCommandTests
             Arg.Any<Party>(),
             Arg.Any<Guid>(),
             Arg.Is<CommsEligibilityRevokedPayload>(p =>
-                p.PatientId == appointment.PatientId &&
+                p.PatientId == cloudPatientId &&
                 p.Reason == "Patient unreachable after 15 mins"));
     }
 

@@ -82,6 +82,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
     private readonly IRepository<FacilitySettings>? _settingsRepo;
     private readonly IRepository<CustomFieldDefinition>? _customFieldRepo;
+    private readonly ICommsEligibilityPublisher? _eligibilityPublisher;
 
     public RegisterClinicPatientCommandHandler(
         IRepository<Patient> patientRepo,
@@ -95,7 +96,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         IRepository<Room>? roomRepo = null,
         IWorkspaceProfileProvider? workspaceProfiles = null,
         IRepository<FacilitySettings>? settingsRepo = null,
-        IRepository<CustomFieldDefinition>? customFieldRepo = null)
+        IRepository<CustomFieldDefinition>? customFieldRepo = null,
+        ICommsEligibilityPublisher? eligibilityPublisher = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
@@ -109,6 +111,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         _workspaceProfiles = workspaceProfiles;
         _settingsRepo = settingsRepo;
         _customFieldRepo = customFieldRepo;
+        _eligibilityPublisher = eligibilityPublisher;
     }
 
     private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
@@ -566,6 +569,22 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             };
 
             await _queueRepo.AddAsync(queueItem, ct);
+
+            if (_eligibilityPublisher != null && patient.CloudPatientId is { } cloudId && cloudId != Guid.Empty)
+            {
+                var grantNow = DateTime.UtcNow;
+                await _eligibilityPublisher.EnqueueGrantAsync(
+                    _clinicContext.TenantId,
+                    _clinicContext.ClinicId,
+                    patient.Id,
+                    "QueueVisit",
+                    queueItem.Id.ToString(),
+                    grantNow,
+                    grantNow.AddDays(7),
+                    CommsEligibilityVersions.Initial,
+                    cloudPatientIdOverride: cloudId,
+                    ct: ct);
+            }
         }
 
         string? allergiesSummary = null;

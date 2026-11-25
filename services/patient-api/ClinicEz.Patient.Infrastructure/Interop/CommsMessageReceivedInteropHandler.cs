@@ -37,7 +37,16 @@ public sealed class CommsMessageReceivedInteropHandler : IInteropHandler<CommsMe
     {
         var msg = await _dbContext.PatientMessages
             .Include(m => m.Conversation)
-            .FirstOrDefaultAsync(m => m.Id == message.MessageId, ct);
+            .FirstOrDefaultAsync(m => m.Id == message.MessageId || m.ClientMessageId == message.MessageId, ct);
+
+        if (msg == null)
+        {
+            msg = await _dbContext.PatientMessages
+                .Include(m => m.Conversation)
+                .FirstOrDefaultAsync(
+                    m => m.ConversationId == message.ConversationId && m.Seq == 1 && m.SenderType == "Patient",
+                    ct);
+        }
 
         if (msg == null)
         {

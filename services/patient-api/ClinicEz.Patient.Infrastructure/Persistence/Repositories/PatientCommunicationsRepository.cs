@@ -67,6 +67,7 @@ public sealed class PatientCommunicationsRepository : BaseRepository<PatientConv
                 g.PatientId == patientId &&
                 g.FacilityId == facilityId &&
                 g.IsActive &&
+                (g.WindowStartUtc == null || g.WindowStartUtc <= now) &&
                 (g.WindowEndUtc == null || g.WindowEndUtc > now),
                 ct);
     }
@@ -82,6 +83,7 @@ public sealed class PatientCommunicationsRepository : BaseRepository<PatientConv
             .Where(g =>
                 idList.Contains(g.PatientId) &&
                 g.IsActive &&
+                (g.WindowStartUtc == null || g.WindowStartUtc <= now) &&
                 (g.WindowEndUtc == null || g.WindowEndUtc > now))
             .OrderByDescending(g => g.SyncedAtUtc)
             .ToListAsync(ct);

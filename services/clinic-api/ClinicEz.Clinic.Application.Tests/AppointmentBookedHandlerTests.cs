@@ -132,7 +132,8 @@ public class AppointmentBookedHandlerTests
 
         await CreateHandler(db).HandleAsync(booked, Delivered(booked, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        var outbox = await db.InteropOutbox.SingleAsync();
+        var outbox = await db.InteropOutbox
+            .SingleAsync(o => o.Type == InteropTypes.ClinicAppointmentUpdated);
         outbox.Type.Should().Be(InteropTypes.ClinicAppointmentUpdated);
         outbox.CorrelationId.Should().Be(booked.DraftId);
         var envelope = InteropEnvelope.FromJson(outbox.EnvelopeJson);
@@ -145,6 +146,14 @@ public class AppointmentBookedHandlerTests
         update.Appointments[0].Status.Should().Be("Confirmed");
         update.Appointments[0].ClinicName.Should().Be("Apex Clinic");
         update.Appointments[0].DraftId.Should().Be(booked.DraftId);
+
+        var grantOutbox = await db.InteropOutbox
+            .SingleAsync(o => o.Type == InteropTypes.CommsEligibilityGranted);
+        var grantEnvelope = InteropEnvelope.FromJson(grantOutbox.EnvelopeJson);
+        var grant = grantEnvelope.GetPayload<ClinicEz.Shared.Interop.Contracts.CommsEligibilityGrantedPayload>();
+        grant.PatientId.Should().Be(booked.PatientId);
+        grant.FacilityId.Should().Be(clinicId.ToString());
+        grant.ContextType.Should().Be("Appointment");
     }
 
     [Fact]
@@ -169,7 +178,8 @@ public class AppointmentBookedHandlerTests
 
         (await db.Appointments.IgnoreQueryFilters().CountAsync()).Should().Be(1);
         (await db.Patients.IgnoreQueryFilters().CountAsync()).Should().Be(1);
-        (await db.InteropOutbox.CountAsync()).Should().Be(1);
+        (await db.InteropOutbox.CountAsync(o => o.Type == InteropTypes.ClinicAppointmentUpdated)).Should().Be(1);
+        (await db.InteropOutbox.CountAsync(o => o.Type == InteropTypes.CommsEligibilityGranted)).Should().Be(1);
     }
 
     [Fact]

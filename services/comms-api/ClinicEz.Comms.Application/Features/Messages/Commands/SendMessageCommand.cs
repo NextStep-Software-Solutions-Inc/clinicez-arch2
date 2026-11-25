@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Comms.Application.Common.Helpers;
 using ClinicEz.Comms.Application.Common.Interfaces;
 using ClinicEz.Comms.Application.Models;
 using ClinicEz.Comms.Domain.Entities;
@@ -160,34 +161,48 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
         // Transactional outbox replication if not site-local and publisher is present
         if (!conversation.IsLocalOnly && _publisher != null)
         {
-            var replicatePayload = new CommsMessageReplicatePayload(
-                message.Id,
-                message.ConversationId,
-                message.Seq,
-                message.TenantId,
-                message.FacilityId,
-                message.SenderType,
-                message.SenderId != null && Guid.TryParse(message.SenderId, out var pSenderGuid) ? pSenderGuid : null,
-                message.SenderDisplayName,
-                message.ContentText,
-                message.Visibility,
-                message.RequiresAcknowledgement,
-                attachmentRefs,
-                message.ClientSentAtUtc,
-                message.RetentionDeadlineUtc,
-                message.State);
+            if (conversation.Scope == ConversationScope.PatientFacility)
+            {
+                if (!string.Equals(request.SenderType, "Patient", StringComparison.OrdinalIgnoreCase))
+                {
+                    CommsPatientReplicationHelper.EnqueueMessageToPatient(
+                        _publisher,
+                        conversation,
+                        message,
+                        attachmentRefs);
+                }
+            }
+            else
+            {
+                var replicatePayload = new CommsMessageReplicatePayload(
+                    message.Id,
+                    message.ConversationId,
+                    message.Seq,
+                    message.TenantId,
+                    message.FacilityId,
+                    message.SenderType,
+                    message.SenderId != null && Guid.TryParse(message.SenderId, out var pSenderGuid) ? pSenderGuid : null,
+                    message.SenderDisplayName,
+                    message.ContentText,
+                    message.Visibility,
+                    message.RequiresAcknowledgement,
+                    attachmentRefs,
+                    message.ClientSentAtUtc,
+                    message.RetentionDeadlineUtc,
+                    message.State);
 
-            var fromParty = Party.ForFacility(request.TenantId, request.FacilityId, FacilityType.Clinic);
-            var toParty = Party.ForFacility(request.TenantId, request.FacilityId, FacilityType.Clinic);
+                var fromParty = Party.ForFacility(request.TenantId, request.FacilityId, FacilityType.Clinic);
+                var toParty = Party.ForFacility(request.TenantId, request.FacilityId, FacilityType.Clinic);
 
-            _publisher.Enqueue(
-                type: InteropTypes.CommsMessageReplicate,
-                from: fromParty,
-                to: toParty,
-                correlationId: message.ConversationId,
-                payload: replicatePayload,
-                schemaVersion: 1,
-                ttl: TimeSpan.FromDays(7));
+                _publisher.Enqueue(
+                    type: InteropTypes.CommsMessageReplicate,
+                    from: fromParty,
+                    to: toParty,
+                    correlationId: message.ConversationId,
+                    payload: replicatePayload,
+                    schemaVersion: 1,
+                    ttl: TimeSpan.FromDays(7));
+            }
         }
 
         await _db.SaveChangesAsync(ct);
