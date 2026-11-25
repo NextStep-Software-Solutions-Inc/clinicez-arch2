@@ -205,6 +205,8 @@ public sealed class PatientCommunicationsEndpoints : IEndpoint
                 IFormFile? file,
                 [FromServices] ICurrentUserService currentUser,
                 [FromServices] IPatientRepository patientRepo,
+                [FromServices] IPatientCommunicationsRepository commsRepo,
+                [FromServices] IUnitOfWork uow,
                 [FromServices] IImageConversionService imageService,
                 [FromServices] IPatientEncryptionService encryptionService,
                 [FromServices] IStorageService storageService,
@@ -242,16 +244,39 @@ public sealed class PatientCommunicationsEndpoints : IEndpoint
                         [new ApiFieldError("file", "SECURITY_SCAN_FAILED", scanResult.ErrorReason ?? "File rejected.")]));
                 }
 
-                var storageKey = $"comms/attachments/{patient.Id}/{Guid.NewGuid():N}/{scanResult.FileName}";
+                var attachmentId = Guid.NewGuid();
+                var storageKey = $"comms/attachments/{patient.Id}/{attachmentId:N}/{scanResult.FileName}";
                 var encrypted = await encryptionService.EncryptAsync(scanResult.Data, patient.Id, ct);
                 await storageService.SaveEncryptedAsync(storageKey, encrypted.Ciphertext, ct);
+
+                var attachmentEntity = new Domain.Entities.PatientMessageAttachment
+                {
+                    Id = attachmentId,
+                    MessageId = null,
+                    PatientId = patient.Id,
+                    FileName = scanResult.FileName,
+                    ContentType = scanResult.ContentType,
+                    FileSizeBytes = scanResult.FileSizeBytes,
+                    StorageKey = storageKey,
+                    IsClean = true,
+                    ScanStatus = "Clean",
+                    HashSha256 = scanResult.HashSha256,
+                    EncryptionAlgorithm = encrypted.EncryptionAlgorithm,
+                    EncryptionIvBase64 = encrypted.IvBase64,
+                    EncryptionTagBase64 = encrypted.TagBase64,
+                    WrappedKeyJson = encrypted.WrappedKeyJson
+                };
+
+                await commsRepo.AddAttachmentAsync(attachmentEntity, ct);
+                await uow.SaveChangesAsync(ct);
 
                 var attachmentRef = new CommsAttachmentReference(
                     FileKey: storageKey,
                     FileName: scanResult.FileName,
                     ContentType: scanResult.ContentType,
                     SizeBytes: scanResult.FileSizeBytes,
-                    HashSha256: scanResult.HashSha256
+                    HashSha256: scanResult.HashSha256,
+                    AttachmentId: attachmentId
                 );
 
                 return Results.Ok(ApiResponse<CommsAttachmentReference>.Success(attachmentRef));
@@ -264,6 +289,78 @@ public sealed class PatientCommunicationsEndpoints : IEndpoint
             .Produces<ApiResponse<object>>(StatusCodes.Status400BadRequest)
             .Produces<ApiResponse<object>>(StatusCodes.Status413PayloadTooLarge)
             .Produces<ApiResponse<object>>(StatusCodes.Status415UnsupportedMediaType);
+
+        // 8b. GET /api/v1/patient/communications/attachments/{attachmentId:guid}/download
+        group.MapGet("/communications/attachments/{attachmentId:guid}/download", async (
+                Guid attachmentId,
+                [FromServices] ICurrentUserService currentUser,
+                [FromServices] IPatientRepository patientRepo,
+                [FromServices] IPatientCommunicationsRepository commsRepo,
+                [FromServices] IStorageService storageService,
+                [FromServices] IPatientEncryptionService encryptionService,
+                CancellationToken ct) =>
+            {
+                var userId = currentUser.UserId;
+                if (string.IsNullOrWhiteSpace(userId))
+                    throw new UnauthorizedException("Authenticated Clerk user identity is required.");
+
+                var attachment = await commsRepo.GetAttachmentByIdAsync(attachmentId, ct);
+                if (attachment == null)
+                    throw new NotFoundException($"Attachment '{attachmentId}' was not found.");
+
+                var ownerPatientId = attachment.PatientId ?? attachment.Message?.Conversation.PatientId;
+                if (!ownerPatientId.HasValue || ownerPatientId.Value == Guid.Empty)
+                    throw new ForbiddenException("Attachment ownership cannot be verified.");
+
+                var isOwned = await patientRepo.IsOwnedByAsync(ownerPatientId.Value, userId, ct);
+                if (!isOwned)
+                {
+                    var conversationPatientId = attachment.Message?.Conversation.PatientId;
+                    if (!conversationPatientId.HasValue || !await patientRepo.IsOwnedByAsync(conversationPatientId.Value, userId, ct))
+                    {
+                        throw new ForbiddenException("You do not have access to this attachment.");
+                    }
+                }
+
+                if (!attachment.IsClean)
+                {
+                    return Results.Json(
+                        ApiResponse<object>.Fail("Attachment failed security scan and cannot be downloaded."),
+                        statusCode: StatusCodes.Status403Forbidden);
+                }
+
+                if (string.IsNullOrWhiteSpace(attachment.EncryptionIvBase64) ||
+                    string.IsNullOrWhiteSpace(attachment.EncryptionTagBase64) ||
+                    string.IsNullOrWhiteSpace(attachment.WrappedKeyJson))
+                {
+                    throw new NotFoundException("Attachment content is not yet available.");
+                }
+
+                var ciphertext = await storageService.DownloadAsync(attachment.StorageKey, ct);
+                var plaintext = await encryptionService.DecryptAsync(
+                    ownerPatientId.Value,
+                    ciphertext,
+                    attachment.EncryptionIvBase64,
+                    attachment.EncryptionTagBase64,
+                    attachment.WrappedKeyJson,
+                    ct);
+
+                var contentType = string.IsNullOrWhiteSpace(attachment.ContentType)
+                    ? "application/octet-stream"
+                    : attachment.ContentType;
+
+                return Results.File(
+                    plaintext,
+                    contentType: contentType,
+                    fileDownloadName: attachment.FileName,
+                    enableRangeProcessing: true);
+            })
+            .WithName("DownloadCommunicationAttachment")
+            .WithSummary("Decrypt AES-256-GCM communication attachment and download plaintext")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ApiResponse<object>>(StatusCodes.Status401Unauthorized)
+            .Produces<ApiResponse<object>>(StatusCodes.Status403Forbidden)
+            .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound);
 
         // 9. GET /api/v1/patient/eligibility-grants
         group.MapGet("/eligibility-grants", async (

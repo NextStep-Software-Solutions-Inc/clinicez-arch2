@@ -56,6 +56,12 @@ mock.module('react-native', () => ({
   TextInput: 'TextInput',
   ActivityIndicator: 'ActivityIndicator',
   Modal: 'Modal',
+  NativeEventEmitter: class {
+    addListener() {
+      return { remove: () => {} };
+    }
+    removeAllListeners() {}
+  },
 }));
 
 await import('react-native');

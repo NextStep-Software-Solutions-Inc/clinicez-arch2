@@ -58,6 +58,10 @@ public sealed class CommsMessageReceivedInteropHandler : IInteropHandler<CommsMe
         // a late confirmation proves it was genuinely received!
         msg.DeliveryState = DeliveryState.Received;
         msg.ReceivedAtUtc = message.ReceivedAtUtc;
+        if (message.AssignedSeq.HasValue && message.AssignedSeq.Value > 0)
+        {
+            msg.Seq = message.AssignedSeq.Value;
+        }
         msg.HasExpiredBannerShown = false;
         msg.UpdatedAtUtc = DateTime.UtcNow;
 

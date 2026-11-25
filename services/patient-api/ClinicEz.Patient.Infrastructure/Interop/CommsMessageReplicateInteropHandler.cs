@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Patient.Application.Common.Interfaces;
+using ClinicEz.Patient.Application.Features.Communications;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Patient.Infrastructure.Persistence;
@@ -73,6 +74,7 @@ public sealed class CommsMessageReplicateInteropHandler : IInteropHandler<CommsM
 
         // 3. Find or create stub conversation replica
         var conversation = await _dbContext.PatientConversations
+            .Include(c => c.Patient)
             .Include(c => c.Messages)
             .FirstOrDefaultAsync(c => c.Id == message.ConversationId, ct);
 
@@ -113,8 +115,11 @@ public sealed class CommsMessageReplicateInteropHandler : IInteropHandler<CommsM
         }
         else
         {
-            conversation.LastMessageAtUtc = message.SentAtUtc;
-            conversation.LastMessagePreview = message.ContentText.Length > 100 ? message.ContentText[..100] : message.ContentText;
+            if (conversation.LastMessageAtUtc == default || message.SentAtUtc >= conversation.LastMessageAtUtc)
+            {
+                conversation.LastMessageAtUtc = message.SentAtUtc;
+                conversation.LastMessagePreview = message.ContentText.Length > 100 ? message.ContentText[..100] : message.ContentText;
+            }
             if (message.SenderType != "Patient")
             {
                 conversation.UnreadCount++;
@@ -127,6 +132,18 @@ public sealed class CommsMessageReplicateInteropHandler : IInteropHandler<CommsM
 
         if (existingMsg == null)
         {
+            var patientEntity = conversation.Patient
+                ?? await _dbContext.Patients.AsNoTracking().FirstOrDefaultAsync(p => p.Id == targetPatientId, ct);
+            var patientFullName = patientEntity != null
+                ? $"{patientEntity.FirstName} {patientEntity.LastName}".Trim()
+                : null;
+            var resolvedSenderName = CommsAttachmentHelpers.ResolveSenderDisplayName(
+                message.SenderType,
+                message.SenderDisplayName,
+                conversation.FacilityName,
+                patientFullName,
+                conversation.SubmittingAccountName);
+
             var newMsg = new PatientMessage
             {
                 Id = message.MessageId,
@@ -134,7 +151,7 @@ public sealed class CommsMessageReplicateInteropHandler : IInteropHandler<CommsM
                 Seq = message.Seq,
                 ClientMessageId = message.MessageId,
                 SenderType = message.SenderType,
-                SenderName = message.SenderDisplayName,
+                SenderName = resolvedSenderName,
                 SenderId = message.SenderId,
                 ContentText = message.ContentText,
                 RequiresAcknowledgement = message.RequiresAcknowledgement,
@@ -149,18 +166,33 @@ public sealed class CommsMessageReplicateInteropHandler : IInteropHandler<CommsM
             {
                 foreach (var att in message.Attachments)
                 {
-                    newMsg.Attachments.Add(new PatientMessageAttachment
+                    var inboundKey = CommsAttachmentHelpers.ComputeInboundStorageKey(targetPatientId, att.FileKey, att.FileName);
+                    var staged = await _dbContext.PatientMessageAttachments
+                        .FirstOrDefaultAsync(
+                            a => a.PatientId == targetPatientId &&
+                                 (a.StorageKey == att.FileKey || a.StorageKey == inboundKey),
+                            ct);
+
+                    if (staged != null)
                     {
-                        Id = Guid.NewGuid(),
-                        MessageId = message.MessageId,
-                        FileName = att.FileName,
-                        ContentType = att.ContentType,
-                        FileSizeBytes = att.SizeBytes,
-                        StorageKey = att.FileKey,
-                        IsClean = true,
-                        ScanStatus = "Clean",
-                        HashSha256 = att.HashSha256
-                    });
+                        staged.MessageId = message.MessageId;
+                    }
+                    else
+                    {
+                        newMsg.Attachments.Add(new PatientMessageAttachment
+                        {
+                            Id = Guid.NewGuid(),
+                            MessageId = message.MessageId,
+                            PatientId = targetPatientId,
+                            FileName = att.FileName,
+                            ContentType = att.ContentType,
+                            FileSizeBytes = att.SizeBytes,
+                            StorageKey = att.FileKey,
+                            IsClean = true,
+                            ScanStatus = "Clean",
+                            HashSha256 = att.HashSha256
+                        });
+                    }
                 }
             }
 

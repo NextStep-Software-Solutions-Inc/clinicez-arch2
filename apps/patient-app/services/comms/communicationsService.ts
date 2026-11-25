@@ -417,4 +417,53 @@ export const communicationsService = {
       formData,
     );
   },
+
+  /**
+   * Download and open a decrypted communication attachment.
+   */
+  async downloadAttachment(
+    getToken: () => Promise<string | null>,
+    attachmentId: string,
+    fileName: string,
+    contentType?: string,
+  ): Promise<void> {
+    const rawBlob = await api.getBlob(
+      getToken,
+      `/patient/communications/attachments/${attachmentId}/download`,
+    );
+    const mimeType = contentType || rawBlob.type || 'application/octet-stream';
+    const typedBlob = rawBlob.type === mimeType ? rawBlob : new Blob([rawBlob], { type: mimeType });
+
+    if (
+      Platform.OS === 'web' &&
+      typeof window !== 'undefined' &&
+      typeof URL !== 'undefined' &&
+      typeof URL.createObjectURL === 'function'
+    ) {
+      const objectUrl = URL.createObjectURL(typedBlob);
+      const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      if (!opened && typeof document !== 'undefined') {
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = fileName || 'attachment';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+      }
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60_000);
+      return;
+    }
+
+    const [{ File, Paths }, Sharing] = await Promise.all([
+      import('expo-file-system'),
+      import('expo-sharing'),
+    ]);
+    const safeName = (fileName || 'attachment').replace(/[^\w.\-_]/g, '_');
+    const targetFile = new File(Paths.cache, safeName);
+    const bytes = new Uint8Array(await typedBlob.arrayBuffer());
+    targetFile.write(bytes);
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(targetFile.uri, { mimeType });
+    }
+  },
 };

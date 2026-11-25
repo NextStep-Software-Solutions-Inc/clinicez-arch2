@@ -53,6 +53,7 @@ export interface ChatDrawerProps {
 }
 
 export interface ThreadAttachment {
+  attachmentId?: string;
   fileKey: string;
   fileName: string;
   contentType: string;
@@ -89,9 +90,12 @@ export interface MessageThreadProps {
   conversationScope: string;
   messages: ThreadMessage[];
   currentUserId: string;
+  viewerType?: 'Staff' | 'Patient';
   onSendMessage: (text: string, isInternal: boolean, attachments?: ThreadAttachment[]) => Promise<void>;
   onResendMessage: (messageId: string) => Promise<void>;
   onAcknowledgeMessage?: (messageId: string) => Promise<void>;
+  onOpenAttachment?: (attachment: ThreadAttachment, message: ThreadMessage) => void | Promise<void>;
+  onPickAttachment?: () => Promise<ThreadAttachment | ThreadAttachment[] | null>;
   privacyBlurEnabled: boolean;
   onTogglePrivacyBlur: () => void;
   renderPrivacyIcon?: (privacyBlurEnabled: boolean) => React.ReactNode;

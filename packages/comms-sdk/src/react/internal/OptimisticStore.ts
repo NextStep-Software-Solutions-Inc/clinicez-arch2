@@ -63,8 +63,19 @@ export class OptimisticStore {
       list.push(message);
     }
 
-    // Sort by seq, then by sentAtUtc
-    list.sort((a, b) => a.seq - b.seq);
+    // Sort chronologically by sentAtUtc first (with seq/messageId tie-breakers)
+    // so optimistic Date.now() seq values and replicated messages never scramble order.
+    list.sort((a, b) => {
+      const timeA = Date.parse(a.sentAtUtc);
+      const timeB = Date.parse(b.sentAtUtc);
+      if (!Number.isNaN(timeA) && !Number.isNaN(timeB) && timeA !== timeB) {
+        return timeA - timeB;
+      }
+      if (a.seq !== b.seq) {
+        return a.seq - b.seq;
+      }
+      return a.messageId.localeCompare(b.messageId);
+    });
     this.conversationMessages.set(message.conversationId, list);
 
     // If matching a pending message that has been accepted or resolved, remove from pending

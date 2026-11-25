@@ -67,7 +67,7 @@ public sealed record PatientMessageDto(
 
 public sealed record PatientMessageAttachmentDto(
     Guid Id,
-    Guid MessageId,
+    Guid? MessageId,
     string StorageKey,
     string FileName,
     string ContentType,

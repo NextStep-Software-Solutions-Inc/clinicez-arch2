@@ -80,6 +80,10 @@ mock.module('react-native', () => ({
   Touchable: { Mixin: {} },
   TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
   NativeModules: {},
+  NativeEventEmitter: class {
+    addListener() { return { remove: () => {} }; }
+    removeAllListeners() {}
+  },
   Animated: {
     Value: class {
       constructor(public val: any) {}
@@ -112,6 +116,10 @@ mock.module('react-native-svg', () => ({
 
 mock.module('@expo-google-fonts/geist', () => ({
   useFonts: () => [true],
+}));
+
+mock.module('expo-document-picker', () => ({
+  getDocumentAsync: mock(async () => ({ canceled: true, assets: null })),
 }));
 
 mock.module('@expo-google-fonts/geist-mono', () => ({

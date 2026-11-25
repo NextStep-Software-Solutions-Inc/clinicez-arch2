@@ -47,9 +47,11 @@ export interface WebMessageThreadProps {
   conversationScope: string;
   messages: ThreadMessage[];
   currentUserId: string;
+  viewerType?: 'Staff' | 'Patient';
   onSendMessage: (text: string, isInternal: boolean, files?: File[]) => Promise<void>;
   onResendMessage: (messageId: string) => Promise<void>;
   onAcknowledgeMessage?: (messageId: string) => Promise<void>;
+  onOpenAttachment?: (attachment: ThreadAttachment, message: ThreadMessage) => void | Promise<void>;
   onFileToChart?: (messageId: string, fileKey: string) => Promise<void>;
   privacyBlurEnabled: boolean;
   onTogglePrivacyBlur: () => void;

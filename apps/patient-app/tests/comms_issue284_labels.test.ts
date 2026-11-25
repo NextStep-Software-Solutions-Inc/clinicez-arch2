@@ -43,6 +43,12 @@ mock.module('react-native', () => ({
   TouchableOpacity: makeStub('TouchableOpacity'),
   ActivityIndicator: makeStub('ActivityIndicator'),
   Modal: makeStub('Modal'),
+  NativeEventEmitter: class {
+    addListener() {
+      return { remove: () => {} };
+    }
+    removeAllListeners() {}
+  },
   useWindowDimensions: () => ({ width: 1280, height: 800, scale: 1, fontScale: 1 }),
   Dimensions: {
     get: () => ({ width: 1280, height: 800, scale: 1, fontScale: 1 }),
@@ -53,8 +59,12 @@ mock.module('react-native', () => ({
 mock.module('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
+mock.module('expo-document-picker', () => ({
+  getDocumentAsync: async () => ({ canceled: true, assets: [] }),
+}));
 
 mock.module('@react-navigation/native', () => ({
+  useFocusEffect: () => {},
   useNavigation: () => ({
     navigate: () => {},
     goBack: () => {},

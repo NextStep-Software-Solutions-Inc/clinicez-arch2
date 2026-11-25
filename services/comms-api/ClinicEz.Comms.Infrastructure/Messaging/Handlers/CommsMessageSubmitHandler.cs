@@ -28,17 +28,23 @@ public sealed class CommsMessageSubmitHandler : IInteropHandler<CommsMessageSubm
     private readonly ICommsRealtimeNotifier _notifier;
     private readonly IInteropPublisher _publisher;
     private readonly ILogger<CommsMessageSubmitHandler> _logger;
+    private readonly ICommsStorageService? _storage;
+    private readonly IAttachmentCryptoService? _crypto;
 
     public CommsMessageSubmitHandler(
         CommsDbContext db,
         ICommsRealtimeNotifier notifier,
         IInteropPublisher publisher,
-        ILogger<CommsMessageSubmitHandler> logger)
+        ILogger<CommsMessageSubmitHandler> logger,
+        ICommsStorageService? storage = null,
+        IAttachmentCryptoService? crypto = null)
     {
         _db = db;
         _notifier = notifier;
         _publisher = publisher;
         _logger = logger;
+        _storage = storage;
+        _crypto = crypto;
     }
 
     public async Task HandleAsync(CommsMessageSubmitPayload message, InteropMessageContext context, CancellationToken ct)
@@ -65,6 +71,7 @@ public sealed class CommsMessageSubmitHandler : IInteropHandler<CommsMessageSubm
 
         var conversation = await _db.Conversations
             .IgnoreQueryFilters()
+            .Include(c => c.Participants)
             .FirstOrDefaultAsync(c => c.Id == message.ConversationId && c.TenantId == message.TenantId, ct);
 
         if (conversation == null)
@@ -76,18 +83,10 @@ public sealed class CommsMessageSubmitHandler : IInteropHandler<CommsMessageSubm
         }
 
         var isPatientSender = string.Equals(message.SenderType, "Patient", StringComparison.OrdinalIgnoreCase);
-        if (conversation.ClosedAtUtc.HasValue || conversation.Status == RequestStatus.Closed)
+        if (conversation.ClosedAtUtc.HasValue || conversation.Status == RequestStatus.Closed || conversation.Status == RequestStatus.Declined)
         {
             _logger.LogWarning(
-                "[CommsMessageSubmitHandler] Conversation {ConversationId} is closed. Dropping {ClientMessageId}.",
-                conversation.Id, message.ClientMessageId);
-            return;
-        }
-
-        if (isPatientSender && conversation.Status == RequestStatus.WithTriage)
-        {
-            _logger.LogWarning(
-                "[CommsMessageSubmitHandler] Conversation {ConversationId} is still with triage. Dropping patient reply {ClientMessageId}.",
+                "[CommsMessageSubmitHandler] Conversation {ConversationId} is closed/declined. Dropping {ClientMessageId}.",
                 conversation.Id, message.ClientMessageId);
             return;
         }
@@ -128,8 +127,7 @@ public sealed class CommsMessageSubmitHandler : IInteropHandler<CommsMessageSubm
         {
             foreach (var att in message.Attachments)
             {
-                attachmentRefs.Add(att);
-                entity.Attachments.Add(new MessageAttachment
+                var attEntity = new MessageAttachment
                 {
                     Id = Guid.NewGuid(),
                     TenantId = conversation.TenantId,
@@ -144,7 +142,18 @@ public sealed class CommsMessageSubmitHandler : IInteropHandler<CommsMessageSubm
                     SHA256Checksum = att.HashSha256 ?? string.Empty,
                     Status = AttachmentStatus.Clean,
                     CreatedAtUtc = now
-                });
+                };
+
+                await CommsAttachmentTransferHelper.TryMaterializeFromStagedChunksAsync(
+                    attEntity,
+                    att.FileKey,
+                    maxProbeChunks: 8,
+                    _storage,
+                    _crypto,
+                    ct);
+
+                entity.Attachments.Add(attEntity);
+                attachmentRefs.Add(att with { FileKey = attEntity.StoragePath, AttachmentId = attEntity.Id });
             }
         }
 
@@ -165,7 +174,8 @@ public sealed class CommsMessageSubmitHandler : IInteropHandler<CommsMessageSubm
                     MessageId: message.ClientMessageId,
                     ConversationId: conversation.Id,
                     RecipientPartyAddress: context.To.Address,
-                    ReceivedAtUtc: now));
+                    ReceivedAtUtc: now,
+                    AssignedSeq: entity.Seq));
         }
 
         await _db.SaveChangesAsync(ct);
@@ -191,5 +201,6 @@ public sealed class CommsMessageSubmitHandler : IInteropHandler<CommsMessageSubm
             entity.RetentionDeadlineUtc);
 
         await _notifier.NotifyMessageReceivedAsync(conversation.Id, dto, ct);
+        await _notifier.NotifyConversationUpdatedAsync(CommsAttachmentTransferHelper.MapConversationDto(conversation), ct);
     }
 }

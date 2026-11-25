@@ -75,6 +75,54 @@ public class LocalCommsStorageService : ICommsStorageService
         return Task.FromResult(false);
     }
 
+    public async Task SaveChunkAsync(string attachmentKey, int chunkIndex, byte[] bytes, CancellationToken ct = default)
+    {
+        var dir = GetChunkDirectory(attachmentKey);
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"{chunkIndex:D4}.part");
+        await File.WriteAllBytesAsync(path, bytes, ct);
+    }
+
+    public async Task<byte[]?> TryAssembleChunksAsync(string attachmentKey, int totalChunks, CancellationToken ct = default)
+    {
+        if (totalChunks <= 0) return null;
+        var dir = GetChunkDirectory(attachmentKey);
+        if (!Directory.Exists(dir)) return null;
+
+        for (var i = 0; i < totalChunks; i++)
+        {
+            if (!File.Exists(Path.Combine(dir, $"{i:D4}.part")))
+            {
+                return null;
+            }
+        }
+
+        using var ms = new MemoryStream();
+        for (var i = 0; i < totalChunks; i++)
+        {
+            var part = await File.ReadAllBytesAsync(Path.Combine(dir, $"{i:D4}.part"), ct);
+            await ms.WriteAsync(part, ct);
+        }
+        return ms.ToArray();
+    }
+
+    public Task DeleteChunksAsync(string attachmentKey, int totalChunks, CancellationToken ct = default)
+    {
+        var dir = GetChunkDirectory(attachmentKey);
+        if (Directory.Exists(dir))
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+        return Task.CompletedTask;
+    }
+
+    private string GetChunkDirectory(string attachmentKey)
+    {
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(attachmentKey ?? string.Empty)))[..24].ToLowerInvariant();
+        return Path.Combine(_basePath, "_chunks", hash);
+    }
+
     private static string SanitizePathSegment(string input)
     {
         if (string.IsNullOrWhiteSpace(input)) return "default";

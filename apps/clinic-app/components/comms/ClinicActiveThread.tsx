@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore 
 import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform, type ViewStyle } from 'react-native';
 import { useConversation, useSendMessage, useComms } from '@clinicez/comms-sdk/react';
 import {
+  AttachmentHelper,
   formatMessageCategory,
   getClosedConversationLabel,
   isConversationClosed,
@@ -10,7 +11,7 @@ import {
   resolvePatientParticipantName,
 } from '@clinicez/comms-sdk/core';
 import { MessageThread } from '@clinicez/comms-sdk/native-ui';
-import type { ThreadMessage } from '@clinicez/comms-sdk/native-ui';
+import type { ThreadAttachment, ThreadMessage } from '@clinicez/comms-sdk/native-ui';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 import Modal from '../ui/Modal';
@@ -325,7 +326,7 @@ export default function ClinicActiveThread({
   }, [pinnedAlerts, conversation, isLoading]);
 
   const handleSendMessage = useCallback(
-    async (text: string, isInternal: boolean) => {
+    async (text: string, isInternal: boolean, attachments?: ThreadAttachment[]) => {
       if (isClosed) {
         notify.info('This conversation is closed. Reopen it to send new messages.');
         return;
@@ -334,10 +335,115 @@ export default function ClinicActiveThread({
         conversationId,
         contentText: text,
         visibility: isInternal ? 'Internal' : 'Public',
+        attachments: attachments?.map((a) => ({
+          attachmentId: a.attachmentId,
+          fileKey: a.fileKey,
+          fileName: a.fileName,
+          contentType: a.contentType,
+          sizeBytes: a.sizeBytes,
+        })),
       });
       playMessageChime();
     },
     [conversationId, isClosed, sendMessage],
+  );
+
+  const handlePickAttachment = useCallback(async (): Promise<ThreadAttachment | null> => {
+    try {
+      const DocumentPicker = await import('expo-document-picker');
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return null;
+      }
+
+      const file = result.assets[0];
+      const fileSize = file.size ?? file.file?.size ?? 0;
+      const contentType = file.mimeType || file.file?.type || 'application/octet-stream';
+
+      let uploadInput: Blob | File | { uri: string; name: string; type: string; size: number };
+      if (typeof Blob !== 'undefined' && file.file instanceof Blob) {
+        uploadInput = file.file;
+      } else if (Platform.OS === 'web' && file.uri) {
+        const res = await fetch(file.uri);
+        uploadInput = await res.blob();
+      } else {
+        uploadInput = {
+          uri: file.uri,
+          name: file.name,
+          type: contentType,
+          size: fileSize,
+        };
+      }
+
+      const base = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
+      const headers = await getCommsAuthHeaders();
+      const ticket = headers.Authorization?.replace(/^Bearer\s+/i, '') ?? '';
+
+      const uploaded = await AttachmentHelper.uploadAttachment(
+        `${base}/api/v1/comms/attachments/upload`,
+        uploadInput,
+        file.name,
+        ticket,
+      );
+
+      return {
+        attachmentId: uploaded.attachmentId,
+        fileKey: uploaded.fileKey,
+        fileName: uploaded.fileName,
+        contentType: uploaded.contentType,
+        sizeBytes: uploaded.fileSizeBytes,
+        isClean: uploaded.status === 'Clean',
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not upload attachment.';
+      notify.error(msg);
+      return null;
+    }
+  }, [getCommsAuthHeaders]);
+
+  const handleOpenAttachment = useCallback(
+    async (att: ThreadAttachment) => {
+      try {
+        if (!att.attachmentId) {
+          notify.info('Attachment is still syncing. Please try again in a moment.');
+          return;
+        }
+        const base = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
+        const headers = await getCommsAuthHeaders();
+        const res = await fetch(`${base}/api/v1/comms/attachments/${att.attachmentId}/download`, {
+          method: 'GET',
+          headers,
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to download attachment (HTTP ${res.status})`);
+        }
+        const rawBlob = await res.blob();
+        const mimeType = att.contentType || rawBlob.type || 'application/octet-stream';
+        const typedBlob = rawBlob.type === mimeType ? rawBlob : new Blob([rawBlob], { type: mimeType });
+
+        if (typeof window !== 'undefined' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+          const objectUrl = URL.createObjectURL(typedBlob);
+          const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+          if (!opened && typeof document !== 'undefined') {
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = att.fileName || 'attachment';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }
+          setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60_000);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Failed to open attachment.';
+        notify.error(msg);
+      }
+    },
+    [getCommsAuthHeaders],
   );
 
   const handleResend = useCallback(
@@ -460,6 +566,14 @@ export default function ClinicActiveThread({
         isAcknowledged: m.isAcknowledged,
         acknowledgedByName: m.acknowledgedByName ?? undefined,
         acknowledgedAtUtc: m.acknowledgedAtUtc ?? undefined,
+        attachments: (m.attachments ?? []).map((att) => ({
+          attachmentId: att.attachmentId,
+          fileKey: att.fileKey,
+          fileName: att.fileName,
+          contentType: att.contentType,
+          sizeBytes: att.sizeBytes,
+          isClean: true,
+        })),
       };
     });
   }, [messages, resolvedPatientSenderName]);
@@ -861,6 +975,8 @@ export default function ClinicActiveThread({
           onAcknowledgeMessage={async (msgId: string) => {
             await acknowledgeMessage(msgId);
           }}
+          onPickAttachment={isClosed ? undefined : handlePickAttachment}
+          onOpenAttachment={handleOpenAttachment}
           isArchived={isClosed}
           isReadOnly={isClosed}
           readOnlyBanner={
