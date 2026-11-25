@@ -156,6 +156,9 @@ public sealed class CommsRequestSubmitHandler : IInteropHandler<CommsRequestSubm
 
         var (isOffHours, triageDueUtc) = ComputeTriageSla(now);
 
+        var resolvedPatientDisplayName = CommsInquiryDisplayHelper.ResolvePatientDisplayName(message.PatientDisplayName);
+        var resolvedTitle = CommsInquiryDisplayHelper.ResolveInitialConversationTitle(message.PatientDisplayName, message.Category);
+
         var conversation = new Conversation
         {
             Id = message.RequestId,
@@ -171,7 +174,7 @@ public sealed class CommsRequestSubmitHandler : IInteropHandler<CommsRequestSubm
             ContextType = activeGrant.ContextType,
             ContextId = activeGrant.ContextId,
             Category = message.Category,
-            Title = $"{message.Category} Inquiry",
+            Title = resolvedTitle,
             Status = RequestStatus.WithTriage,
             IsEmergencyConfirmed = false,
             IsOffHoursSubmission = isOffHours,
@@ -193,7 +196,7 @@ public sealed class CommsRequestSubmitHandler : IInteropHandler<CommsRequestSubm
             TenantId = message.TenantId,
             ParticipantType = "Patient",
             ParticipantId = message.PatientId.ToString(),
-            DisplayName = "Patient",
+            DisplayName = resolvedPatientDisplayName,
             Role = "Patient",
             JoinedAtUtc = now
         };
@@ -208,7 +211,7 @@ public sealed class CommsRequestSubmitHandler : IInteropHandler<CommsRequestSubm
             Seq = 1,
             SenderType = "Patient",
             SenderId = message.PatientId.ToString(),
-            SenderDisplayName = "Patient",
+            SenderDisplayName = resolvedPatientDisplayName,
             ContentText = message.ContentText,
             Visibility = MessageVisibility.Public,
             State = DeliveryState.Received,

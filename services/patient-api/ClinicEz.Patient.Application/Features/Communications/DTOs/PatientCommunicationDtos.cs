@@ -97,7 +97,8 @@ public sealed record SubmitPatientInquiryRequest(
     MessageCategory Category,
     string ContentText,
     bool? IsEmergencyConfirmed,
-    IReadOnlyList<CommsAttachmentReference>? Attachments = null);
+    IReadOnlyList<CommsAttachmentReference>? Attachments = null,
+    string? Subject = null);
 
 public sealed record SubmitPatientInquiryResponse(
     bool IsEmergencyRedirect,

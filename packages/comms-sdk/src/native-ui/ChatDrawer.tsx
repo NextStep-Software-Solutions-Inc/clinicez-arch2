@@ -268,6 +268,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                       </View>
                     </View>
 
+                    {item.subtitle && (
+                      <Text style={styles.cardSubtitle} numberOfLines={1}>
+                        {item.subtitle}
+                      </Text>
+                    )}
+
                     {item.lastMessageSnippet && (
                       <Text
                         style={[
@@ -612,6 +618,12 @@ function createStyles(
     cardTime: {
       fontSize: fontSizeScale.xs,
       color: c.textMuted,
+    },
+    cardSubtitle: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '600',
+      color: c.primary,
+      marginBottom: 2,
     },
     cardSnippet: {
       fontSize: fontSizeScale.sm,

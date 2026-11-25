@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Comms.Application.Common.Helpers;
 using ClinicEz.Comms.Application.Common.Interfaces;
 using ClinicEz.Comms.Application.Models;
 using ClinicEz.Comms.Domain.Entities;
@@ -25,7 +26,8 @@ public sealed record SubmitPatientRequestCommand(
     string ContentText,
     bool? IsEmergencyConfirmed,
     IReadOnlyList<CommsAttachmentReference>? Attachments = null,
-    DateTime? SubmittedAtUtc = null) : IRequest<SubmitPatientRequestResult>;
+    DateTime? SubmittedAtUtc = null,
+    string? PatientDisplayName = null) : IRequest<SubmitPatientRequestResult>;
 
 public sealed record SubmitPatientRequestResult(
     bool IsEmergencyRedirect,
@@ -146,6 +148,9 @@ public sealed class SubmitPatientRequestCommandHandler : IRequestHandler<SubmitP
             triageDueUtc = now.AddHours(2); // Standard 2-hour SLA during operating hours
         }
 
+        var resolvedPatientDisplayName = CommsInquiryDisplayHelper.ResolvePatientDisplayName(request.PatientDisplayName);
+        var resolvedTitle = CommsInquiryDisplayHelper.ResolveInitialConversationTitle(request.PatientDisplayName, request.Category);
+
         var conversation = new Conversation
         {
             Id = Guid.NewGuid(),
@@ -161,7 +166,7 @@ public sealed class SubmitPatientRequestCommandHandler : IRequestHandler<SubmitP
             ContextType = activeGrant.ContextType,
             ContextId = activeGrant.ContextId,
             Category = request.Category,
-            Title = $"{request.Category} Inquiry",
+            Title = resolvedTitle,
             Status = RequestStatus.WithTriage,
             IsEmergencyConfirmed = false,
             IsOffHoursSubmission = isOffHours,
@@ -182,7 +187,7 @@ public sealed class SubmitPatientRequestCommandHandler : IRequestHandler<SubmitP
             TenantId = request.TenantId,
             ParticipantType = "Patient",
             ParticipantId = request.PatientId.ToString(),
-            DisplayName = "Patient",
+            DisplayName = resolvedPatientDisplayName,
             Role = "Patient",
             JoinedAtUtc = now
         };
@@ -197,7 +202,7 @@ public sealed class SubmitPatientRequestCommandHandler : IRequestHandler<SubmitP
             Seq = 1,
             SenderType = "Patient",
             SenderId = request.PatientId.ToString(),
-            SenderDisplayName = "Patient",
+            SenderDisplayName = resolvedPatientDisplayName,
             ContentText = request.ContentText,
             Visibility = MessageVisibility.Public,
             State = DeliveryState.Received,

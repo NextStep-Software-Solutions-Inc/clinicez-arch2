@@ -50,10 +50,18 @@ mock.module('react-native', () => ({
   TouchableHighlight: 'TouchableHighlight',
   Pressable: 'Pressable',
   ScrollView: 'ScrollView',
+  FlatList: 'FlatList',
+  RefreshControl: 'RefreshControl',
   KeyboardAvoidingView: 'KeyboardAvoidingView',
   TextInput: 'TextInput',
   ActivityIndicator: 'ActivityIndicator',
   Modal: 'Modal',
+  NativeEventEmitter: class {
+    addListener() {
+      return { remove: () => {} };
+    }
+    removeAllListeners() {}
+  },
 }));
 
 await import('react-native');

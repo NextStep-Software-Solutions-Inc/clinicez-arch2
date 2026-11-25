@@ -7,8 +7,10 @@ import {
   useTriageQueue,
 } from '@clinicez/comms-sdk/react';
 import {
+  formatMessageCategory,
   isConversationClosed,
   resolveConversationDisplayTitle,
+  resolvePatientFacilityDisplayTitle,
 } from '@clinicez/comms-sdk/core';
 import {
   ChatDrawer,
@@ -287,8 +289,13 @@ export default function ClinicChatDrawerHost() {
               return match ? formatStaffName(match) : null;
             },
           ).toLowerCase();
+          const categoryLabel =
+            c.scope === 'PatientFacility' && c.category
+              ? formatMessageCategory(c.category, 'clinical').toLowerCase()
+              : '';
           return (
             displayTitle.includes(q) ||
+            Boolean(categoryLabel && categoryLabel.includes(q)) ||
             Boolean(c.title && c.title.toLowerCase().includes(q)) ||
             Boolean(c.lastMessageSnippet && c.lastMessageSnippet.toLowerCase().includes(q))
           );
@@ -310,6 +317,10 @@ export default function ClinicChatDrawerHost() {
               return match ? formatStaffName(match) : null;
             },
           ),
+          subtitle:
+            c.scope === 'PatientFacility' && c.category
+              ? formatMessageCategory(c.category, 'clinical')
+              : undefined,
           lastMessageSnippet: c.lastMessageSnippet ?? undefined,
           lastMessageAtUtc: c.lastMessageAtUtc ?? undefined,
           unreadCount: c.unreadCount ?? 0,
@@ -337,10 +348,11 @@ export default function ClinicChatDrawerHost() {
       conversationId: i.id,
       requestId: i.id,
       patientId: i.contextId || i.id,
-      patientNameMasked: i.patientFullName || i.title || 'Patient Inquiry',
+      patientNameMasked:
+        i.patientFullName || resolvePatientFacilityDisplayTitle(i, 'Patient Inquiry'),
       patientDobMasked: '',
       patientAgeGender: `${i.patientAge || 'Adult'} • ${i.patientSex || 'Patient'}`,
-      category: i.category || 'General',
+      category: formatMessageCategory(i.category || 'General', 'clinical'),
       contentText: i.lastMessageSnippet || 'Patient inquiry pending triage review.',
       priority: (i.priority as 'Emergency' | 'Urgent' | 'Routine') || 'Routine',
       status: (i.status as 'Submitted' | 'WithTriage' | 'Routed') || 'Submitted',

@@ -756,6 +756,100 @@ public class PatientCommunicationsTests
             envelope.To.FacilityId.Should().Be(facilityId);
             envelope.To.FacilityType.Should().Be(expectedFacilityType);
             envelope.To.Service.Should().Be(InteropServices.Comms);
+
+            var submitPayload = envelope.GetPayload<CommsRequestSubmitPayload>();
+            submitPayload.PatientDisplayName.Should().Be("Clara Santos");
+            conversation.Subject.Should().BeEmpty();
+        });
+    }
+
+    [Fact]
+    public async Task SubmitPatientInquiry_ForManagedDependent_SendsDependentNameAndPreservesCustomSubject()
+    {
+        using var harness = new PatientInteropHarness();
+        var parentId = Guid.NewGuid();
+        var dependentId = Guid.NewGuid();
+        const string clerkUserId = "user_parent_inquiry_284";
+        const string tenantId = "tenant-nextstep";
+        const string facilityId = "fac-clinic-284";
+
+        await harness.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Domain.Entities.Patient
+            {
+                Id = parentId,
+                ClerkUserId = clerkUserId,
+                FirstName = "Maria",
+                LastName = "Tabasan",
+                ClinicEzId = "CE-PARENT-284"
+            });
+
+            db.Patients.Add(new Domain.Entities.Patient
+            {
+                Id = dependentId,
+                ManagedByPatientId = parentId,
+                RelationshipToManager = "Mother",
+                FirstName = "Justine Mae",
+                LastName = "Tabasan",
+                ClinicEzId = "CE-DEP-284"
+            });
+
+            db.PatientEligibilityGrants.Add(new PatientEligibilityGrant
+            {
+                Id = Guid.NewGuid(),
+                GrantId = Guid.NewGuid(),
+                PatientId = dependentId,
+                TenantId = tenantId,
+                FacilityId = facilityId,
+                FacilityType = "Clinic",
+                FacilityName = "Nextstep OPD",
+                ContextType = "Appointment",
+                ContextId = "appt-284",
+                IsActive = true,
+                WindowStartUtc = DateTime.UtcNow.AddDays(-1),
+                WindowEndUtc = DateTime.UtcNow.AddDays(7)
+            });
+
+            await db.SaveChangesAsync();
+        });
+
+        var handler = new SubmitPatientInquiryCommandHandler(
+            harness.Provider.GetRequiredService<IPatientRepository>(),
+            harness.Provider.GetRequiredService<IPatientCommunicationsRepository>(),
+            harness.Provider.GetRequiredService<IUnitOfWork>(),
+            harness.Provider.GetRequiredService<IInteropPublisher>());
+
+        var response = await handler.Handle(
+            new SubmitPatientInquiryCommand(
+                ClerkUserId: clerkUserId,
+                PatientId: dependentId,
+                TenantId: tenantId,
+                FacilityId: facilityId,
+                FacilityType: "Clinic",
+                FacilityName: "Nextstep OPD",
+                Category: MessageCategory.PostVisitFollowUp,
+                ContentText: "Follow-up after checkup.",
+                IsEmergencyConfirmed: false,
+                Subject: "Blood pressure check"),
+            CancellationToken.None);
+
+        response.ConversationId.Should().NotBeNull();
+
+        await harness.WithDbAsync(async db =>
+        {
+            var conversation = await db.PatientConversations.FindAsync(response.ConversationId);
+            conversation.Should().NotBeNull();
+            conversation!.Subject.Should().Be("Blood pressure check");
+
+            var outbox = await db.InteropOutbox
+                .Where(o => o.Type == InteropTypes.CommsRequestSubmit)
+                .SingleAsync();
+            var envelope = System.Text.Json.JsonSerializer.Deserialize<InteropEnvelope>(
+                outbox.EnvelopeJson,
+                InteropJson.Options);
+            var payload = envelope!.GetPayload<CommsRequestSubmitPayload>();
+            payload.PatientDisplayName.Should().Be("Justine Mae Tabasan");
+            payload.SubmittingAccountId.Should().Be(parentId);
         });
     }
 

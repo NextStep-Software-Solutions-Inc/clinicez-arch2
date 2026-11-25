@@ -43,7 +43,8 @@ public class TriageController : ControllerBase
             request.Category,
             request.ContentText,
             request.IsEmergencyConfirmed,
-            request.Attachments);
+            request.Attachments,
+            PatientDisplayName: request.PatientDisplayName);
 
         var result = await _mediator.Send(command, ct);
         return Ok(result);
@@ -120,7 +121,8 @@ public sealed record SubmitPatientRequestApiRequest(
     MessageCategory Category,
     string ContentText,
     bool? IsEmergencyConfirmed,
-    IReadOnlyList<CommsAttachmentReference>? Attachments = null);
+    IReadOnlyList<CommsAttachmentReference>? Attachments = null,
+    string? PatientDisplayName = null);
 
 public sealed record RecordDispositionApiRequest(
     TriageDisposition Disposition,

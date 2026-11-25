@@ -253,6 +253,7 @@ export default function NewMessageInquiryScreen() {
         contentText: formattedContent,
         isEmergencyConfirmed: false,
         attachments: attachments.length > 0 ? attachments : undefined,
+        subject: trimmedSubject || undefined,
       });
 
       if (response.isEmergencyRedirect) {

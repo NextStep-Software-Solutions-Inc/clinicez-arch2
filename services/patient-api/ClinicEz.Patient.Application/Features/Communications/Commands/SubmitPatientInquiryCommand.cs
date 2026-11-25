@@ -25,7 +25,8 @@ public sealed record SubmitPatientInquiryCommand(
     MessageCategory Category,
     string ContentText,
     bool? IsEmergencyConfirmed,
-    IReadOnlyList<CommsAttachmentReference>? Attachments = null) : IRequest<SubmitPatientInquiryResponse>;
+    IReadOnlyList<CommsAttachmentReference>? Attachments = null,
+    string? Subject = null) : IRequest<SubmitPatientInquiryResponse>;
 
 public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitPatientInquiryCommand, SubmitPatientInquiryResponse>
 {
@@ -80,6 +81,7 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
         var targetPatientId = request.PatientId ?? callerPatient.Id;
         var isDependent = targetPatientId != callerPatient.Id;
         string? relationshipToPatient = isDependent ? null : "Self";
+        Domain.Entities.Patient? dependent = null;
 
         if (isDependent)
         {
@@ -89,8 +91,25 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
                 throw new ForbiddenException("You do not have permission to submit an inquiry for this patient.");
             }
 
-            var dependent = callerPatient.ManagedDependents?.FirstOrDefault(d => d.Id == targetPatientId);
+            dependent = callerPatient.ManagedDependents?.FirstOrDefault(d => d.Id == targetPatientId);
             relationshipToPatient = dependent?.RelationshipToManager ?? "Guardian";
+        }
+
+        var callerDisplayName = $"{callerPatient.FirstName} {callerPatient.LastName}".Trim();
+        var dependentDisplayName = dependent != null
+            ? $"{dependent.FirstName} {dependent.LastName}".Trim()
+            : string.Empty;
+        var resolvedPatientName = !string.IsNullOrWhiteSpace(dependentDisplayName)
+            ? dependentDisplayName
+            : callerDisplayName;
+        var patientDisplayName = !string.IsNullOrWhiteSpace(resolvedPatientName) ? resolvedPatientName : null;
+
+        var normalizedSubject = string.IsNullOrWhiteSpace(request.Subject)
+            ? string.Empty
+            : request.Subject.Trim();
+        if (normalizedSubject.Length > 256)
+        {
+            normalizedSubject = normalizedSubject[..256];
         }
 
         // 2b. Validate Message Content
@@ -123,10 +142,10 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
             HomeFacilityType = resolvedFacilityType,
             FacilityName = resolvedFacilityName,
             Category = request.Category,
-            Subject = request.Category.ToString(),
+            Subject = normalizedSubject,
             Status = RequestStatus.Submitted,
             SubmittingAccountId = callerPatient.Id,
-            SubmittingAccountName = $"{callerPatient.FirstName} {callerPatient.LastName}".Trim(),
+            SubmittingAccountName = callerDisplayName,
             RelationshipToPatient = relationshipToPatient,
             OpenedAtUtc = now,
             LastMessageAtUtc = now,
@@ -143,7 +162,7 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
             ClientMessageId = clientMessageId,
             SenderType = "Patient",
             SenderId = callerPatient.Id,
-            SenderName = $"{callerPatient.FirstName} {callerPatient.LastName}".Trim(),
+            SenderName = string.IsNullOrWhiteSpace(callerDisplayName) ? "Patient" : callerDisplayName,
             ContentText = request.ContentText,
             DeliveryState = DeliveryState.Waiting,
             CreatedAtUtc = now,
@@ -182,7 +201,8 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
             ContentText: request.ContentText,
             IsEmergencyConfirmed: false,
             Attachments: outboundAttachments,
-            SubmittedAtUtc: now
+            SubmittedAtUtc: now,
+            PatientDisplayName: patientDisplayName
         );
 
         _publisher.Enqueue(

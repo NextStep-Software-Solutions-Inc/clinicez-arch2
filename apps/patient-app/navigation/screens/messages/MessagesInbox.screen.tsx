@@ -29,6 +29,10 @@ import {
   type PatientConversationDto,
   type PatientEligibilityGrantDto,
 } from '../../../services/comms/communicationsService';
+import {
+  formatMessageCategory,
+  isRedundantCategorySubject,
+} from '@clinicez/comms-sdk/core';
 import { dialog } from '../../../utils/dialog';
 
 type FacilityFilter = 'All' | 'Clinics' | 'Pharmacies' | 'Laboratories';
@@ -166,9 +170,12 @@ export default function MessagesInboxScreen() {
 
   const handleHideCopy = useCallback(
     async (conversation: PatientConversationDto) => {
+      const label = !isRedundantCategorySubject(conversation.subject, conversation.category)
+        ? conversation.subject.trim()
+        : formatMessageCategory(conversation.category, 'patient');
       const ok = await dialog.confirm({
         title: 'Hide My Copy',
-        message: `Hide your copy of "${conversation.subject}"? This removes the conversation from your device view without altering the official facility record.`,
+        message: `Hide your copy of "${label}"? This removes the conversation from your device view without altering the official facility record.`,
         confirmLabel: 'Hide',
         destructive: true,
       });
@@ -205,6 +212,10 @@ export default function MessagesInboxScreen() {
             : 'info';
 
     const isHidden = item.isHiddenByPatient || hiddenConversationIds.has(item.id);
+    const categoryLabel = formatMessageCategory(item.category, 'patient');
+    const distinctSubject = !isRedundantCategorySubject(item.subject, item.category)
+      ? item.subject.trim()
+      : null;
 
     return (
       <Card
@@ -219,7 +230,7 @@ export default function MessagesInboxScreen() {
       >
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Open conversation: ${item.subject} with ${item.facilityName}`}
+          accessibilityLabel={`Open conversation: ${distinctSubject || categoryLabel} with ${item.facilityName}`}
           onPress={() =>
             navigation.navigate('Main', {
               screen: 'ConversationThreadScreen',
@@ -265,10 +276,12 @@ export default function MessagesInboxScreen() {
 
           {/* Subject & Category */}
           <View style={[styles.metaRow, { gap: spacing.xs, marginVertical: 4 }]}>
-            <Badge label={item.category} tone="neutral" size="sm" />
-            <ThemedText variant="smallBold" numberOfLines={1} style={styles.subjectText}>
-              {item.subject}
-            </ThemedText>
+            <Badge label={categoryLabel} tone="neutral" size="sm" />
+            {distinctSubject && (
+              <ThemedText variant="smallBold" numberOfLines={1} style={styles.subjectText}>
+                {distinctSubject}
+              </ThemedText>
+            )}
             <Badge label={item.status} tone={statusTone} size="sm" />
           </View>
 

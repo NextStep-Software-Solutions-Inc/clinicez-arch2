@@ -10,4 +10,5 @@ export * from './attachments/AttachmentHelper';
 export * from './reactions';
 export * from './conversationTitle';
 export * from './conversationFilters';
+export * from './messageCategory';
 export * from './media';

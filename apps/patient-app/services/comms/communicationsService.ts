@@ -170,6 +170,7 @@ export interface SubmitPatientInquiryRequest {
   contentText: string;
   isEmergencyConfirmed: boolean;
   attachments?: CommsAttachmentReference[];
+  subject?: string;
 }
 
 export interface SubmitPatientInquiryResponse {

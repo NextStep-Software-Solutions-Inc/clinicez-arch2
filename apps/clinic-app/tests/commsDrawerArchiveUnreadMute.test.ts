@@ -324,6 +324,8 @@ let events = new CommsEventEmitter();
 let mockConversations: any[] = [];
 let mockUnreadCountOverride: number | null = null;
 let mockActiveHookConv: any = null;
+let mockActiveMessages: any[] = [];
+let mockTriageItems: any[] = [];
 const markReadCalls: string[] = [];
 const muteCalls: Array<{ id: string; isMuted: boolean }> = [];
 const createConversationCalls: any[] = [];
@@ -373,7 +375,7 @@ mock.module('@clinicez/comms-sdk/react', () => ({
       title: 'Test Thread',
       participants: [],
     },
-    messages: [],
+    messages: mockActiveMessages,
     isLoading: false,
     error: null,
     acknowledgeMessage: async () => {},
@@ -387,8 +389,8 @@ mock.module('@clinicez/comms-sdk/react', () => ({
     },
   }),
   useTriageQueue: () => ({
-    items: [],
-    pendingCount: 0,
+    items: mockTriageItems,
+    pendingCount: mockTriageItems.length,
     urgentCount: 0,
     isLoading: false,
     error: null,
@@ -451,6 +453,8 @@ describe('Comms Drawer Archive, Unread Reset, Mute Suppression & Department Guar
     mockUnreadCountOverride = null;
     mockActiveConversationId = undefined;
     mockActiveHookConv = null;
+    mockActiveMessages = [];
+    mockTriageItems = [];
     markReadCalls.length = 0;
     muteCalls.length = 0;
     createConversationCalls.length = 0;
@@ -513,6 +517,8 @@ describe('Comms Drawer Archive, Unread Reset, Mute Suppression & Department Guar
     mockUnreadCountOverride = null;
     mockActiveConversationId = undefined;
     mockActiveHookConv = null;
+    mockActiveMessages = [];
+    mockTriageItems = [];
   });
 
   test('#212 + #213: excludes TeleconsultCall and Closed from All/StaffContext, and shows only Closed under Archived', async () => {
@@ -1267,5 +1273,95 @@ describe('Comms Drawer Archive, Unread Reset, Mute Suppression & Department Guar
     expect(capturedChatDrawerProps.items.map((i: any) => i.id)).toEqual(['conv-answered-1']);
     expect(capturedChatDrawerProps.items[0].isArchived).toBe(true);
     harness.unmount();
+  });
+
+  test('#284: ClinicChatDrawerHost & ClinicActiveThread display patient name, formatted category, and patient sender label', () => {
+    const patientConv = {
+      id: 'conv-284-1',
+      tenantId: 't1',
+      facilityId: 'c1',
+      scope: 'PatientFacility' as const,
+      kind: 'PatientTriage' as const,
+      title: 'PostVisitFollowUp Inquiry',
+      category: 'PostVisitFollowUp' as const,
+      status: 'WithTriage' as const,
+      unreadCount: 1,
+      lastMessageSnippet: 'Follow-up after lab test',
+      lastMessageAtUtc: '2026-11-25T10:00:00Z',
+      createdAtUtc: '2026-11-25T10:00:00Z',
+      createdBy: 'patient-justine',
+      participants: [
+        {
+          id: 'p-1',
+          userId: 'patient-justine',
+          participantId: 'patient-justine',
+          participantType: 'Patient',
+          displayName: 'Justine Mae Tabasan',
+          role: 'Patient',
+          joinedAtUtc: '2026-11-25T10:00:00Z',
+        },
+      ],
+    };
+
+    mockConversations = [patientConv];
+    mockTriageItems = [
+      {
+        ...patientConv,
+        conversationId: patientConv.id,
+        requestId: patientConv.id,
+        patientFullName: 'Justine Mae Tabasan',
+        patientAge: 'Adult',
+        patientSex: 'Female',
+        patientContact: '',
+        slaTimeRemainingSeconds: 3600,
+        isSlaBreached: false,
+      },
+    ];
+
+    const harness = createClinicHookHarness(() => ClinicChatDrawerHost());
+    renderToStaticMarkup(harness.result.current);
+
+    expect(capturedChatDrawerProps.items).toHaveLength(1);
+    expect(capturedChatDrawerProps.items[0].title).toBe('Justine Mae Tabasan');
+    expect(capturedChatDrawerProps.items[0].subtitle).toBe('Post-Visit Follow-Up');
+    expect(capturedChatDrawerProps.items[0].title).not.toContain('PostVisitFollowUp');
+    harness.unmount();
+
+    mockActiveHookConv = patientConv;
+    mockActiveMessages = [
+      {
+        messageId: 'm-284-1',
+        conversationId: patientConv.id,
+        seq: 1,
+        clientMessageId: 'm-284-1',
+        senderType: 'Patient',
+        senderId: 'patient-justine',
+        senderDisplayName: 'Patient',
+        contentText: 'Good afternoon, checking on my follow-up.',
+        visibility: 'Public',
+        requiresAcknowledgement: false,
+        isAcknowledged: false,
+        acknowledgedAtUtc: null,
+        acknowledgedByAccountId: null,
+        acknowledgedByName: null,
+        attachments: [],
+        deliveryState: 'Received',
+        sentAtUtc: '2026-11-25T10:00:00Z',
+      },
+    ];
+
+    const threadHtml = renderToStaticMarkup(
+      React.createElement(ClinicActiveThread, {
+        conversationId: patientConv.id,
+        initialConversation: patientConv,
+        onBack: () => {},
+        currentUserId: 'staff-curr',
+      }),
+    );
+
+    expect(threadHtml).toContain('Justine Mae Tabasan');
+    expect(threadHtml).toContain('Post-Visit Follow-Up');
+    expect(threadHtml).not.toContain('PostVisitFollowUp Inquiry');
+    expect(capturedMessageThreadProps.messages[0].senderDisplayName).toBe('Justine Mae Tabasan');
   });
 });

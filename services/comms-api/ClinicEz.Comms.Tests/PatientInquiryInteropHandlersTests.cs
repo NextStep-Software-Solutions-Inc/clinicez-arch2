@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Comms.Application.Common.Interfaces;
+using ClinicEz.Comms.Application.Features.Conversations.Queries;
 using ClinicEz.Comms.Application.Features.Messages.Commands;
 using ClinicEz.Comms.Application.Features.Triage.Commands;
 using ClinicEz.Comms.Application.Models;
@@ -70,7 +71,8 @@ public class PatientInquiryInteropHandlersTests
             ContentText: "Checking in regarding my 5:00 PM appointment.",
             IsEmergencyConfirmed: false,
             Attachments: null,
-            SubmittedAtUtc: now);
+            SubmittedAtUtc: now,
+            PatientDisplayName: "Justine Mae Tabasan");
 
         var ctx = new InteropMessageContext(new InteropEnvelope
         {
@@ -93,8 +95,12 @@ public class PatientInquiryInteropHandlersTests
         Assert.Equal(patientId, conv.PatientId);
         Assert.Equal(RequestStatus.WithTriage, conv.Status);
         Assert.Equal(ConversationScope.PatientFacility, conv.Scope);
+        Assert.Equal("Justine Mae Tabasan", conv.Title);
+        Assert.Single(conv.Participants);
+        Assert.Equal("Justine Mae Tabasan", conv.Participants.First().DisplayName);
         Assert.Single(conv.Messages);
         Assert.Equal(DeliveryState.Received, conv.Messages.First().State);
+        Assert.Equal("Justine Mae Tabasan", conv.Messages.First().SenderDisplayName);
 
         _notifierMock.Verify(n => n.NotifyConversationCreatedAsync(It.IsAny<ConversationDto>(), It.IsAny<CancellationToken>()), Times.Once);
         _publisherMock.Verify(p => p.Enqueue(
@@ -331,5 +337,119 @@ public class PatientInquiryInteropHandlersTests
             It.Is<CommsMessageReplicatePayload>(r => r.ContentText == "Please come at 5:00 PM."),
             It.IsAny<int>(),
             It.IsAny<TimeSpan?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CommsRequestSubmitHandler_WithoutPatientDisplayName_UsesFormattedCategoryFallback()
+    {
+        var db = TestDbContextFactory.CreateInMemory();
+        var patientId = Guid.NewGuid();
+        var requestId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        db.EligibilityGrants.Add(new EligibilityGrant
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            FacilityId = FacilityId,
+            FacilityType = "Clinic",
+            PatientId = patientId,
+            ContextType = "Encounter",
+            ContextId = Guid.NewGuid().ToString(),
+            WindowStartUtc = now.AddMinutes(-5),
+            WindowEndUtc = now.AddDays(7),
+            IsActive = true,
+            Version = 1
+        });
+        await db.SaveChangesAsync();
+
+        var handler = new CommsRequestSubmitHandler(
+            db, _notifierMock.Object, _publisherMock.Object, NullLogger<CommsRequestSubmitHandler>.Instance);
+
+        var payload = new CommsRequestSubmitPayload(
+            RequestId: requestId,
+            TenantId: TenantId,
+            FacilityId: FacilityId,
+            FacilityType: "Clinic",
+            PatientId: patientId,
+            SubmittingAccountId: null,
+            Relationship: null,
+            Category: MessageCategory.PostVisitFollowUp,
+            ContentText: "Follow up question",
+            IsEmergencyConfirmed: false,
+            Attachments: null,
+            SubmittedAtUtc: now,
+            PatientDisplayName: null);
+
+        var ctx = new InteropMessageContext(new InteropEnvelope
+        {
+            MessageId = Guid.NewGuid(),
+            Type = InteropTypes.CommsRequestSubmit,
+            From = Party.ForPatient(patientId.ToString()),
+            To = Party.ForFacility(TenantId, FacilityId, FacilityType.Clinic, InteropServices.Comms),
+            CorrelationId = requestId
+        });
+
+        await handler.HandleAsync(payload, ctx, CancellationToken.None);
+
+        var conv = await db.Conversations
+            .Include(c => c.Messages)
+            .Include(c => c.Participants)
+            .SingleAsync(c => c.Id == requestId);
+
+        Assert.Equal("Post-Visit Follow-Up Inquiry", conv.Title);
+        Assert.Equal("Patient", conv.Participants.First().DisplayName);
+        Assert.Equal("Patient", conv.Messages.First().SenderDisplayName);
+    }
+
+    [Fact]
+    public void GetConversations_ResolveDisplayTitle_UpgradesLegacyRawCategoryInquiryTitle()
+    {
+        var patientId = Guid.NewGuid();
+        var legacyWithNamedParticipant = new Conversation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            FacilityId = FacilityId,
+            Scope = ConversationScope.PatientFacility,
+            Kind = ConversationKind.PatientTriage,
+            Category = MessageCategory.PostVisitFollowUp,
+            Title = "PostVisitFollowUp Inquiry",
+            Participants =
+            [
+                new Participant
+                {
+                    ParticipantType = "Patient",
+                    ParticipantId = patientId.ToString(),
+                    DisplayName = "Justine Mae Tabasan",
+                    Role = "Patient"
+                }
+            ]
+        };
+
+        Assert.Equal("Justine Mae Tabasan", GetConversationsQueryHandler.ResolveDisplayTitle(legacyWithNamedParticipant, "staff-1"));
+
+        var legacyWithoutNamedParticipant = new Conversation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            FacilityId = FacilityId,
+            Scope = ConversationScope.PatientFacility,
+            Kind = ConversationKind.PatientTriage,
+            Category = MessageCategory.PostVisitFollowUp,
+            Title = "PostVisitFollowUp Inquiry",
+            Participants =
+            [
+                new Participant
+                {
+                    ParticipantType = "Patient",
+                    ParticipantId = patientId.ToString(),
+                    DisplayName = "Patient",
+                    Role = "Patient"
+                }
+            ]
+        };
+
+        Assert.Equal("Post-Visit Follow-Up Inquiry", GetConversationsQueryHandler.ResolveDisplayTitle(legacyWithoutNamedParticipant, "staff-1"));
     }
 }

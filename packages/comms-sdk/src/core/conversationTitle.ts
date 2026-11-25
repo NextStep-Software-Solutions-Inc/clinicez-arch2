@@ -1,7 +1,10 @@
+import { resolvePatientFacilityDisplayTitle } from './messageCategory';
+
 export interface ParticipantLike {
   id?: string | null;
   userId?: string | null;
   participantId?: string | null;
+  participantType?: string | null;
   displayName?: string | null;
   name?: string | null;
   role?: string | null;
@@ -14,6 +17,7 @@ export interface ConversationTitleLike {
   scope?: string | null;
   kind?: string | null;
   title?: string | null;
+  category?: string | null;
   participants?: ParticipantLike[] | null;
 }
 
@@ -36,6 +40,10 @@ export function resolveConversationDisplayTitle(
   currentUserName?: string | null,
   formatParticipantName?: (p: ParticipantLike) => string | null
 ): string {
+  if (conversation?.scope === 'PatientFacility') {
+    return resolvePatientFacilityDisplayTitle(conversation, '');
+  }
+
   const rawTitle = (conversation?.title || '').trim();
 
   // If the conversation was given an explicit title, use it directly
