@@ -562,7 +562,9 @@ export default function ClinicChatDrawerHost() {
               >
                 {status === 'connected'
                   ? 'Connected'
-                  : status === 'reconnecting' || isReconnecting || isManualReconnecting || status === 'connecting' || status === 'acquiring_ticket'
+                  : status === 'connecting' || status === 'acquiring_ticket'
+                  ? 'Connecting...'
+                  : status === 'reconnecting' || isReconnecting || isManualReconnecting
                   ? 'Reconnecting...'
                   : 'Offline'}
               </ThemedText>

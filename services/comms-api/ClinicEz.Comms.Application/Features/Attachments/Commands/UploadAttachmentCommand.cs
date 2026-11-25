@@ -25,15 +25,18 @@ public sealed class UploadAttachmentCommandHandler : IRequestHandler<UploadAttac
     private readonly ICommsDbContext _db;
     private readonly IAttachmentPipeline _pipeline;
     private readonly ICommsStorageService _storage;
+    private readonly IAttachmentCryptoService? _crypto;
 
     public UploadAttachmentCommandHandler(
         ICommsDbContext db,
         IAttachmentPipeline pipeline,
-        ICommsStorageService storage)
+        ICommsStorageService storage,
+        IAttachmentCryptoService? crypto = null)
     {
         _db = db;
         _pipeline = pipeline;
         _storage = storage;
+        _crypto = crypto;
     }
 
     public async Task<CommsAttachmentDto> Handle(UploadAttachmentCommand request, CancellationToken ct)
@@ -76,29 +79,53 @@ public sealed class UploadAttachmentCommandHandler : IRequestHandler<UploadAttac
         {
             attachment.Status = AttachmentStatus.Clean;
 
-            // Generate ephemeral DEK and encrypt with AES-256-GCM
-            var dek = RandomNumberGenerator.GetBytes(32);
-            var iv = RandomNumberGenerator.GetBytes(12);
-            var ciphertext = new byte[processResult.SanitizedBytes.Length];
-            var tag = new byte[16];
-
-            using (var aesGcm = new AesGcm(dek, 16))
+            if (_crypto != null)
             {
-                aesGcm.Encrypt(iv, processResult.SanitizedBytes, ciphertext, tag);
+                var encrypted = await _crypto.EncryptAsync(
+                    processResult.SanitizedBytes,
+                    request.TenantId,
+                    request.FacilityId,
+                    ct);
+                var storagePath = await _storage.SaveEncryptedAttachmentAsync(
+                    request.TenantId,
+                    request.FacilityId,
+                    attachmentId,
+                    encrypted.Ciphertext,
+                    ct);
+
+                attachment.StoragePath = storagePath;
+                attachment.EncryptionAlgorithm = encrypted.Metadata.Algorithm;
+                attachment.EncryptionKeyId = encrypted.Metadata.KeyId;
+                attachment.EncryptionIvBase64 = encrypted.Metadata.IvBase64;
+                attachment.EncryptionTagBase64 = encrypted.Metadata.TagBase64;
+                attachment.WrappedKeyJson = encrypted.Metadata.WrappedKeyJson;
             }
+            else
+            {
+                // Generate ephemeral DEK and encrypt with AES-256-GCM
+                var dek = RandomNumberGenerator.GetBytes(32);
+                var iv = RandomNumberGenerator.GetBytes(12);
+                var ciphertext = new byte[processResult.SanitizedBytes.Length];
+                var tag = new byte[16];
 
-            // Save encrypted ciphertext
-            var storagePath = await _storage.SaveEncryptedAttachmentAsync(
-                request.TenantId,
-                request.FacilityId,
-                attachmentId,
-                ciphertext,
-                ct);
+                using (var aesGcm = new AesGcm(dek, 16))
+                {
+                    aesGcm.Encrypt(iv, processResult.SanitizedBytes, ciphertext, tag);
+                }
 
-            attachment.StoragePath = storagePath;
-            attachment.EncryptionIvBase64 = Convert.ToBase64String(iv);
-            attachment.EncryptionTagBase64 = Convert.ToBase64String(tag);
-            attachment.WrappedKeyJson = Convert.ToBase64String(dek); // Mock wrap for test/local
+                // Save encrypted ciphertext
+                var storagePath = await _storage.SaveEncryptedAttachmentAsync(
+                    request.TenantId,
+                    request.FacilityId,
+                    attachmentId,
+                    ciphertext,
+                    ct);
+
+                attachment.StoragePath = storagePath;
+                attachment.EncryptionIvBase64 = Convert.ToBase64String(iv);
+                attachment.EncryptionTagBase64 = Convert.ToBase64String(tag);
+                attachment.WrappedKeyJson = Convert.ToBase64String(dek); // Mock wrap for test/local
+            }
         }
 
         _db.MessageAttachments.Add(attachment);

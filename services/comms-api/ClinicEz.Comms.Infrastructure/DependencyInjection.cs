@@ -71,6 +71,7 @@ public static class DependencyInjection
             .Handle<CommsMessageSubmitPayload, CommsMessageSubmitHandler>(InteropTypes.CommsMessageSubmit)
             .Handle<CommsMessageReceivedPayload, CommsMessageReceivedHandler>(InteropTypes.CommsMessageReceived)
             .Handle<CommsMessageAcknowledgedPayload, CommsMessageAcknowledgedHandler>(InteropTypes.CommsMessageAcknowledged)
+            .Handle<CommsAttachmentChunkPayload, CommsAttachmentChunkHandler>(InteropTypes.CommsAttachmentChunk)
             .Handle<GuestCallJoinRequestedPayload, GuestCallJoinRequestedHandler>(InteropTypes.GuestCallJoinRequested)
             .HandleReply(InteropTypes.MediaRoomResponded));
 

@@ -47,6 +47,7 @@ export type DeliveryState = 'Sending' | 'Waiting' | 'Received' | 'NotReceived';
 export type ConnectionState = 'Disconnected' | 'Connecting' | 'Connected' | 'Reconnecting';
 
 export interface CommsAttachmentReference {
+  attachmentId?: string;
   fileKey: string;
   fileName: string;
   contentType: string;

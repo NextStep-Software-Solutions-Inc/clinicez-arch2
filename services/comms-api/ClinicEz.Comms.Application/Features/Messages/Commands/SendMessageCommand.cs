@@ -34,15 +34,21 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
     private readonly ICommsDbContext _db;
     private readonly ICommsRealtimeNotifier _notifier;
     private readonly IInteropPublisher? _publisher;
+    private readonly ICommsStorageService? _storage;
+    private readonly IAttachmentCryptoService? _crypto;
 
     public SendMessageCommandHandler(
         ICommsDbContext db,
         ICommsRealtimeNotifier notifier,
-        IInteropPublisher? publisher = null)
+        IInteropPublisher? publisher = null,
+        ICommsStorageService? storage = null,
+        IAttachmentCryptoService? crypto = null)
     {
         _db = db;
         _notifier = notifier;
         _publisher = publisher;
+        _storage = storage;
+        _crypto = crypto;
     }
 
     public async Task<MessageDto> Handle(SendMessageCommand request, CancellationToken ct)
@@ -74,11 +80,6 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
             }
         }
 
-        if (string.Equals(request.SenderType, "Patient", StringComparison.OrdinalIgnoreCase) && conversation.Status == RequestStatus.WithTriage)
-        {
-            throw new ValidationException("Inquiry is currently with triage. Patient messages are blocked until disposition or routing.");
-        }
-
         // Idempotency check: if client supplied ClientMessageId and it exists in DB, return it
         if (request.ClientMessageId.HasValue)
         {
@@ -89,7 +90,7 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
             if (existing != null)
             {
                 var existingRefs = existing.Attachments
-                    .Select(a => new CommsAttachmentReference(a.StoragePath, a.SafeFileName, a.ContentType, a.SanitizedSizeBytes, a.SHA256Checksum))
+                    .Select(a => new CommsAttachmentReference(a.StoragePath, a.SafeFileName, a.ContentType, a.SanitizedSizeBytes, a.SHA256Checksum, a.Id))
                     .ToList();
 
                 return new MessageDto(
@@ -142,16 +143,25 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
 
         // Attach attachments if any
         var attachmentRefs = new List<CommsAttachmentReference>();
+        var linkedAttachmentEntities = new List<MessageAttachment>();
         if (request.Attachments != null && request.Attachments.Count > 0)
         {
             foreach (var attRef in request.Attachments)
             {
-                attachmentRefs.Add(attRef);
                 var attEntity = await _db.MessageAttachments
-                    .FirstOrDefaultAsync(a => a.StoragePath == attRef.FileKey || a.Id.ToString() == attRef.FileKey, ct);
+                    .FirstOrDefaultAsync(a =>
+                        (attRef.AttachmentId.HasValue && a.Id == attRef.AttachmentId.Value) ||
+                        a.StoragePath == attRef.FileKey ||
+                        a.Id.ToString() == attRef.FileKey, ct);
                 if (attEntity != null)
                 {
                     attEntity.MessageId = message.Id;
+                    linkedAttachmentEntities.Add(attEntity);
+                    attachmentRefs.Add(attRef with { FileKey = attEntity.StoragePath, AttachmentId = attEntity.Id });
+                }
+                else
+                {
+                    attachmentRefs.Add(attRef);
                 }
             }
         }
@@ -170,6 +180,18 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
             {
                 if (!string.Equals(request.SenderType, "Patient", StringComparison.OrdinalIgnoreCase))
                 {
+                    foreach (var attEntity in linkedAttachmentEntities)
+                    {
+                        await CommsAttachmentTransferHelper.EnqueueAttachmentChunksToPatientAsync(
+                            _publisher,
+                            _storage,
+                            _crypto,
+                            conversation,
+                            message,
+                            attEntity,
+                            ct);
+                    }
+
                     CommsPatientReplicationHelper.EnqueueMessageToPatient(
                         _publisher,
                         conversation,

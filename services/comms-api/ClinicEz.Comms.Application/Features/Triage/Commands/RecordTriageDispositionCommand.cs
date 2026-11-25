@@ -275,7 +275,8 @@ public sealed class RecordTriageDispositionCommandHandler : IRequestHandler<Reco
                         a.SafeFileName,
                         a.ContentType,
                         a.SanitizedSizeBytes > 0 ? a.SanitizedSizeBytes : a.OriginalSizeBytes,
-                        a.SHA256Checksum))
+                        a.SHA256Checksum,
+                        a.Id))
                     .ToList();
 
                 var publicMessageCount = conversation.Messages.Count(m => m.Visibility == MessageVisibility.Public);

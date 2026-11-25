@@ -28,17 +28,23 @@ public sealed class CommsRequestSubmitHandler : IInteropHandler<CommsRequestSubm
     private readonly ICommsRealtimeNotifier _notifier;
     private readonly IInteropPublisher _publisher;
     private readonly ILogger<CommsRequestSubmitHandler> _logger;
+    private readonly ICommsStorageService? _storage;
+    private readonly IAttachmentCryptoService? _crypto;
 
     public CommsRequestSubmitHandler(
         CommsDbContext db,
         ICommsRealtimeNotifier notifier,
         IInteropPublisher publisher,
-        ILogger<CommsRequestSubmitHandler> logger)
+        ILogger<CommsRequestSubmitHandler> logger,
+        ICommsStorageService? storage = null,
+        IAttachmentCryptoService? crypto = null)
     {
         _db = db;
         _notifier = notifier;
         _publisher = publisher;
         _logger = logger;
+        _storage = storage;
+        _crypto = crypto;
     }
 
     public async Task HandleAsync(CommsRequestSubmitPayload message, InteropMessageContext context, CancellationToken ct)
@@ -216,7 +222,7 @@ public sealed class CommsRequestSubmitHandler : IInteropHandler<CommsRequestSubm
         {
             foreach (var att in message.Attachments)
             {
-                initialMessage.Attachments.Add(new MessageAttachment
+                var attEntity = new MessageAttachment
                 {
                     Id = Guid.NewGuid(),
                     TenantId = message.TenantId,
@@ -231,7 +237,17 @@ public sealed class CommsRequestSubmitHandler : IInteropHandler<CommsRequestSubm
                     SHA256Checksum = att.HashSha256 ?? string.Empty,
                     Status = AttachmentStatus.Clean,
                     CreatedAtUtc = now
-                });
+                };
+
+                await CommsAttachmentTransferHelper.TryMaterializeFromStagedChunksAsync(
+                    attEntity,
+                    att.FileKey,
+                    maxProbeChunks: 8,
+                    _storage,
+                    _crypto,
+                    ct);
+
+                initialMessage.Attachments.Add(attEntity);
             }
         }
 
@@ -251,7 +267,8 @@ public sealed class CommsRequestSubmitHandler : IInteropHandler<CommsRequestSubm
                 MessageId: initialMessage.Id,
                 ConversationId: conversation.Id,
                 RecipientPartyAddress: context.To.Address,
-                ReceivedAtUtc: now));
+                ReceivedAtUtc: now,
+                AssignedSeq: initialMessage.Seq));
 
         _publisher.Enqueue(
             InteropTypes.CommsThreadStateChanged,

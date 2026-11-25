@@ -117,6 +117,7 @@ public class MessageCoverageTests
         new(InteropTypes.CommsConversationArchived, [Comms], [Comms]),
         new(InteropTypes.CommsTranscriptArchived, [Comms], [Clinic]),
         new(InteropTypes.CommsAttachmentFiled, [Comms], [Clinic]),
+        new(InteropTypes.CommsAttachmentChunk, [Patient, Comms], [Comms, Patient]),
         new(InteropTypes.GuestCallJoinRequested, [Portal], [Comms]),
         new(InteropTypes.GuestTeleconsultInviteIssued, [Clinic], [Portal]),
         new(InteropTypes.GuestTeleconsultInviteRevoked, [Clinic], [Portal]),

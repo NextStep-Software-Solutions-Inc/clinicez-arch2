@@ -19,9 +19,17 @@ import {
 } from '@clinicez/design-tokens';
 import {
   MessageThreadProps,
+  ThreadAttachment,
   ThreadMessage
 } from './types';
 import { OverlayTooltip } from './OverlayTooltip';
+
+function formatAttachmentSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export const MessageThread: React.FC<MessageThreadProps> = ({
   conversationId,
@@ -29,9 +37,12 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   conversationScope,
   messages,
   currentUserId,
+  viewerType = 'Staff',
   onSendMessage,
   onResendMessage,
   onAcknowledgeMessage,
+  onOpenAttachment,
+  onPickAttachment,
   privacyBlurEnabled,
   onTogglePrivacyBlur,
   renderPrivacyIcon,
@@ -66,6 +77,8 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
 
   const [inputText, setInputText] = useState('');
   const [isInternal, setIsInternal] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<ThreadAttachment[]>([]);
+  const [isPickingAttachment, setIsPickingAttachment] = useState(false);
   const [peekingMessageId, setPeekingMessageId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const effectiveReadOnly = Boolean(isReadOnly || isArchived);
@@ -115,13 +128,46 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     }
   };
 
+  const handlePickAttachment = async () => {
+    if (!onPickAttachment || effectiveReadOnly || isPickingAttachment) return;
+    setIsPickingAttachment(true);
+    try {
+      const picked = await onPickAttachment();
+      if (!picked) return;
+      const items = Array.isArray(picked) ? picked : [picked];
+      setPendingAttachments((prev) => {
+        const seen = new Set(prev.map((a) => a.fileKey));
+        const next = [...prev];
+        for (const item of items) {
+          if (item && !seen.has(item.fileKey)) {
+            seen.add(item.fileKey);
+            next.push(item);
+          }
+        }
+        return next;
+      });
+    } catch {
+      // Handled by parent
+    } finally {
+      setIsPickingAttachment(false);
+    }
+  };
+
+  const handleRemovePendingAttachment = (fileKey: string) => {
+    setPendingAttachments((prev) => prev.filter((a) => a.fileKey !== fileKey));
+  };
+
   const handleSend = async () => {
-    if (effectiveReadOnly || !inputText.trim() || isSubmitting) return;
+    const trimmed = inputText.trim();
+    const hasAttachments = pendingAttachments.length > 0;
+    if (effectiveReadOnly || (!trimmed && !hasAttachments) || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await onSendMessage(inputText.trim(), isInternal);
+      const attachmentsToSend = hasAttachments ? [...pendingAttachments] : undefined;
+      await onSendMessage(trimmed || 'Sent attachment', isInternal, attachmentsToSend);
       setInputText('');
       setIsInternal(false);
+      setPendingAttachments([]);
     } catch {
       // Handled by parent or queue
     } finally {
@@ -395,7 +441,15 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
           )}
 
           {messages.map((msg) => {
-            const isMe = msg.senderType === 'Staff' && msg.senderId === currentUserId;
+            const isMe =
+              viewerType === 'Patient'
+                ? msg.senderType === 'Patient' ||
+                  (msg.senderType as string) === 'Guardian' ||
+                  (Boolean(msg.senderId) &&
+                    msg.senderId === currentUserId &&
+                    msg.senderType !== 'Staff' &&
+                    msg.senderType !== 'System')
+                : msg.senderType === 'Staff' && msg.senderId === currentUserId;
             const isInternalNote = msg.visibility === 'Internal';
             const isObscured = privacyBlurEnabled && peekingMessageId !== msg.id;
 
@@ -444,6 +498,35 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                   >
                     {isObscured ? '••••••••••••••••••••••••' : msg.contentText}
                   </Text>
+
+                  {/* Attachments */}
+                  {msg.attachments && msg.attachments.length > 0 && (
+                    <View style={styles.attachmentsList} testID="message-attachments-list">
+                      {msg.attachments.map((att) => (
+                        <TouchableOpacity
+                          key={att.attachmentId ?? att.fileKey}
+                          style={[styles.attachmentChip, isMe ? styles.attachmentChipMe : styles.attachmentChipOther]}
+                          disabled={!onOpenAttachment || att.isClean === false || isObscured}
+                          onPress={() => onOpenAttachment?.(att, msg)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open attachment ${att.fileName}`}
+                        >
+                          <View style={styles.attachmentInfo}>
+                            <Text
+                              style={[styles.attachmentName, isObscured && styles.obscuredText]}
+                              numberOfLines={1}
+                            >
+                              {isObscured ? '[Hidden attachment]' : att.fileName}
+                            </Text>
+                            <Text style={styles.attachmentMeta}>
+                              {formatAttachmentSize(att.sizeBytes)}
+                              {att.isClean === false ? ' • Pending scan' : onOpenAttachment ? ' • Download' : ''}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
 
                   {/* Acknowledgement Action ("Understood") */}
                   {msg.requiresAcknowledgement && (
@@ -533,7 +616,38 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             </TouchableOpacity>
           )}
 
+          {pendingAttachments.length > 0 && (
+            <View style={styles.pendingAttachmentsRow} testID="pending-attachments-row">
+              {pendingAttachments.map((att) => (
+                <View key={att.fileKey} style={styles.pendingAttachmentPill}>
+                  <Text style={styles.pendingAttachmentText} numberOfLines={1}>
+                    {att.fileName}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => handleRemovePendingAttachment(att.fileKey)}
+                    accessibilityLabel={`Remove attachment ${att.fileName}`}
+                    style={styles.pendingAttachmentRemove}
+                  >
+                    <Text style={styles.pendingAttachmentRemoveText}>×</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
           <View style={styles.inputRow}>
+            {onPickAttachment && (
+              <TouchableOpacity
+                style={[styles.attachButton, isPickingAttachment && styles.sendButtonDisabled]}
+                onPress={handlePickAttachment}
+                disabled={isPickingAttachment || isSubmitting}
+                accessibilityRole="button"
+                accessibilityLabel="Attach file"
+              >
+                <Text style={styles.attachButtonText}>{isPickingAttachment ? '...' : '+'}</Text>
+              </TouchableOpacity>
+            )}
+
             <TextInput
               style={[styles.input, isInternal && styles.inputInternal]}
               value={inputText}
@@ -548,9 +662,12 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             />
 
             <TouchableOpacity
-              style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+              style={[
+                styles.sendButton,
+                !inputText.trim() && pendingAttachments.length === 0 && styles.sendButtonDisabled
+              ]}
               onPress={handleSend}
-              disabled={!inputText.trim() || isSubmitting}
+              disabled={(!inputText.trim() && pendingAttachments.length === 0) || isSubmitting}
               accessibilityLabel="Send message"
             >
               {renderSendIcon ? renderSendIcon() : null}
@@ -980,6 +1097,94 @@ function createStyles(
       flexDirection: 'row',
       alignItems: 'flex-end',
       gap: spaceScale.sm,
+    },
+    attachmentsList: {
+      marginTop: spaceScale.xs,
+      gap: spaceScale.xs,
+    },
+    attachmentChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: spaceScale.sm,
+      paddingVertical: spaceScale.xs,
+      borderRadius: radiusScale.sm,
+      borderWidth: 1,
+      minHeight: sizes.touchTarget,
+    },
+    attachmentChipMe: {
+      backgroundColor: c.surface,
+      borderColor: c.primaryBorder,
+    },
+    attachmentChipOther: {
+      backgroundColor: c.surfaceSubtle,
+      borderColor: c.border,
+    },
+    attachmentInfo: {
+      flex: 1,
+    },
+    attachmentName: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '600',
+      color: c.primaryDark,
+    },
+    attachmentMeta: {
+      fontSize: fontSizeScale.xs,
+      color: c.textMuted,
+      marginTop: 2,
+    },
+    pendingAttachmentsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spaceScale.xs,
+      marginBottom: spaceScale.xs,
+    },
+    pendingAttachmentPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: c.primarySubtle,
+      borderColor: c.primaryBorder,
+      borderWidth: 1,
+      borderRadius: radiusScale.full,
+      paddingLeft: spaceScale.sm,
+      paddingRight: spaceScale.xs,
+      paddingVertical: 4,
+      maxWidth: 220,
+      gap: 4,
+    },
+    pendingAttachmentText: {
+      fontSize: fontSizeScale.xs,
+      color: c.primaryDark,
+      fontWeight: '600',
+      flexShrink: 1,
+    },
+    pendingAttachmentRemove: {
+      width: 22,
+      height: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    pendingAttachmentRemoveText: {
+      fontSize: fontSizeScale.sm,
+      color: c.primaryDark,
+      fontWeight: '700',
+      lineHeight: 16,
+    },
+    attachButton: {
+      width: sizes.touchTarget,
+      height: sizes.touchTarget,
+      minWidth: sizes.touchTarget,
+      minHeight: sizes.touchTarget,
+      borderRadius: radiusScale.md,
+      backgroundColor: c.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    attachButtonText: {
+      fontSize: fontSizeScale.lg,
+      fontWeight: '600',
+      color: c.textSecondary,
     },
     input: {
       flex: 1,

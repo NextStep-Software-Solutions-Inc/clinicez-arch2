@@ -682,7 +682,7 @@ public class TriageAdversarialTests
     }
 
     [Fact]
-    public async Task SendMessage_DuringWithTriage_PatientMessageBlocked()
+    public async Task SendMessage_DuringWithTriage_PatientFollowUpAllowed()
     {
         var db = TestDbContextFactory.CreateInMemory();
         var convId = Guid.NewGuid();
@@ -709,8 +709,8 @@ public class TriageAdversarialTests
             Visibility: MessageVisibility.Public,
             RequiresAcknowledgement: false);
 
-        var ex = await Assert.ThrowsAsync<ValidationException>(() => handler.Handle(cmd, CancellationToken.None));
-        Assert.Contains("triage", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var result = await handler.Handle(cmd, CancellationToken.None);
+        Assert.Equal("Can I get an update?", result.ContentText);
     }
 
     [Fact]

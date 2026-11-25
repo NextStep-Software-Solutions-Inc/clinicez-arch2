@@ -264,7 +264,7 @@ public class CommsHub : Hub<ICommsClient>
             m.AcknowledgedAtUtc,
             m.AcknowledgedByAccountId,
             m.AcknowledgedByName,
-            m.Attachments.Select(a => new CommsAttachmentReference(a.StoragePath, a.SafeFileName, a.ContentType, a.SanitizedSizeBytes, a.SHA256Checksum)).ToList(),
+            m.Attachments.Select(a => new CommsAttachmentReference(a.StoragePath, a.SafeFileName, a.ContentType, a.SanitizedSizeBytes, a.SHA256Checksum, a.Id)).ToList(),
             m.State,
             m.ClientSentAtUtc,
             m.RetentionDeadlineUtc

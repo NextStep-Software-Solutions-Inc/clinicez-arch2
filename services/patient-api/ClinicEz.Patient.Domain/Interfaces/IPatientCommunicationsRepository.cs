@@ -32,6 +32,12 @@ public interface IPatientCommunicationsRepository
 
     Task AddAttachmentAsync(PatientMessageAttachment attachment, CancellationToken ct = default);
 
+    Task<PatientMessageAttachment?> GetAttachmentByIdAsync(Guid attachmentId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<PatientMessageAttachment>> GetAttachmentsByStorageKeysAsync(
+        IEnumerable<string> storageKeys,
+        CancellationToken ct = default);
+
     Task<long> GetNextSequenceForConversationAsync(Guid conversationId, CancellationToken ct = default);
 
     void UpdateConversation(PatientConversation conversation);

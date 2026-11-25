@@ -68,11 +68,18 @@ public sealed class PatientMessageAttachmentConfiguration : IEntityTypeConfigura
         builder.Property(a => a.StorageKey).HasMaxLength(512).IsRequired();
         builder.Property(a => a.ScanStatus).HasMaxLength(32).IsRequired();
         builder.Property(a => a.HashSha256).HasMaxLength(64);
+        builder.Property(a => a.EncryptionAlgorithm).HasMaxLength(32);
+        builder.Property(a => a.EncryptionIvBase64).HasMaxLength(100);
+        builder.Property(a => a.EncryptionTagBase64).HasMaxLength(100);
 
         builder.HasOne(a => a.Message)
             .WithMany(m => m.Attachments)
             .HasForeignKey(a => a.MessageId)
+            .IsRequired(false)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(a => a.StorageKey);
+        builder.HasIndex(a => new { a.PatientId, a.StorageKey });
     }
 }
 

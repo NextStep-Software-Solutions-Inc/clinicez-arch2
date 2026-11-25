@@ -166,6 +166,8 @@ public static class InteropTypes
     public const string CommsTranscriptArchived = "comms.transcript.archived";
     /// <summary>Comms -> clinic. Explicit clinician filing of attachment into EMR chart. Payload: <c>CommsAttachmentFiledPayload</c>.</summary>
     public const string CommsAttachmentFiled = "comms.attachment.filed";
+    /// <summary>Patient-api <-> comms. Chunked attachment byte transfer. Payload: <c>CommsAttachmentChunkPayload</c>.</summary>
+    public const string CommsAttachmentChunk = "comms.attachment.chunk";
     /// <summary>Portal -> comms. Payload: <c>GuestCallJoinRequestedPayload</c>.</summary>
     public const string GuestCallJoinRequested = "comms.guest.call.join.requested";
     /// <summary>Clinic -> portal. Payload: <c>GuestTeleconsultInviteIssuedPayload</c>.</summary>

@@ -43,7 +43,7 @@ public sealed class ResendMessageCommandHandler : IRequestHandler<ResendMessageC
         await _notifier.NotifyMessageStateChangedAsync(message.ConversationId, message.Id, DeliveryState.Waiting, now, ct);
 
         var attachmentRefs = message.Attachments
-            .Select(a => new CommsAttachmentReference(a.StoragePath, a.SafeFileName, a.ContentType, a.SanitizedSizeBytes, a.SHA256Checksum))
+            .Select(a => new CommsAttachmentReference(a.StoragePath, a.SafeFileName, a.ContentType, a.SanitizedSizeBytes, a.SHA256Checksum, a.Id))
             .ToList();
 
         return new MessageDto(

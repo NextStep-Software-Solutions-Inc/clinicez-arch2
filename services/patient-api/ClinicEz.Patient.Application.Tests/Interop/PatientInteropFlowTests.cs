@@ -1450,6 +1450,7 @@ public sealed class PatientInteropFlowTests
             InteropTypes.RxStatusChanged, InteropTypes.LabResultReviewed, InteropTypes.ClinicalImmunizationAdministered,
             InteropTypes.PatientQueueAlert, InteropTypes.PatientAppointmentAlert,
             InteropTypes.CommsMessageReplicate, InteropTypes.CommsMessageReceived,
+            InteropTypes.CommsAttachmentChunk,
             InteropTypes.CommsThreadStateChanged, InteropTypes.CommsEligibilitySynced,
             InteropTypes.CommsCallStateChanged);
     }

@@ -370,7 +370,7 @@ public class ChallengerM3EmpiricalTests
     }
 
     [Fact]
-    public async Task Emp_2_6_SendMessage_PatientBlocked_WhileWithTriage()
+    public async Task Emp_2_6_SendMessage_PatientAllowed_WhileWithTriage()
     {
         var db = TestDbContextFactory.CreateInMemory();
         var convId = Guid.NewGuid();
@@ -393,12 +393,13 @@ public class ChallengerM3EmpiricalTests
             SenderType: "Patient",
             SenderId: "pat-1",
             SenderDisplayName: "Patient",
-            ContentText: "Sending message before triage is done",
+            ContentText: "Follow-up message while in triage",
             Visibility: MessageVisibility.Public,
             RequiresAcknowledgement: false);
 
-        var ex = await Assert.ThrowsAsync<ValidationException>(() => handler.Handle(cmd, CancellationToken.None));
-        Assert.Contains("triage", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var result = await handler.Handle(cmd, CancellationToken.None);
+        Assert.Equal("Follow-up message while in triage", result.ContentText);
+        Assert.Equal(1, result.Seq);
     }
 
     [Fact]

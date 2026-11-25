@@ -55,13 +55,13 @@ public class CommsRealtimeNotifier : ICommsRealtimeNotifier
 
     public async Task NotifyConversationCreatedAsync(ConversationDto conversation, CancellationToken ct = default)
     {
-        await _hubContext.Clients.Group($"facility:{conversation.FacilityId}").OnConversationCreated(conversation);
+        await _hubContext.Clients.Group($"facility:{conversation.TenantId}:{conversation.FacilityId}").OnConversationCreated(conversation);
         await _hubContext.Clients.Group($"conv:{conversation.Id}").OnConversationCreated(conversation);
     }
 
     public async Task NotifyConversationUpdatedAsync(ConversationDto conversation, CancellationToken ct = default)
     {
-        await _hubContext.Clients.Group($"facility:{conversation.FacilityId}").OnConversationUpdated(conversation);
+        await _hubContext.Clients.Group($"facility:{conversation.TenantId}:{conversation.FacilityId}").OnConversationUpdated(conversation);
         await _hubContext.Clients.Group($"conv:{conversation.Id}").OnConversationUpdated(conversation);
     }
 }
