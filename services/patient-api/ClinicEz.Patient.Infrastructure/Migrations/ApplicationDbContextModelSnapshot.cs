@@ -4892,6 +4892,21 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
 
+                    b.Property<string>("EncryptionAlgorithm")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("encryption_algorithm");
+
+                    b.Property<string>("EncryptionIvBase64")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("encryption_iv_base64");
+
+                    b.Property<string>("EncryptionTagBase64")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("encryption_tag_base64");
+
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -4915,9 +4930,13 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
-                    b.Property<Guid>("MessageId")
+                    b.Property<Guid?>("MessageId")
                         .HasColumnType("uuid")
                         .HasColumnName("message_id");
+
+                    b.Property<Guid?>("PatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_id");
 
                     b.Property<string>("ScanStatus")
                         .IsRequired()
@@ -4939,6 +4958,10 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("updated_by");
 
+                    b.Property<string>("WrappedKeyJson")
+                        .HasColumnType("text")
+                        .HasColumnName("wrapped_key_json");
+
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -4950,6 +4973,12 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
 
                     b.HasIndex("MessageId")
                         .HasDatabaseName("ix_patient_message_attachments_message_id");
+
+                    b.HasIndex("StorageKey")
+                        .HasDatabaseName("ix_patient_message_attachments_storage_key");
+
+                    b.HasIndex("PatientId", "StorageKey")
+                        .HasDatabaseName("ix_patient_message_attachments_patient_id_storage_key");
 
                     b.ToTable("patient_message_attachments", (string)null);
                 });
@@ -7885,7 +7914,6 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .WithMany("Attachments")
                         .HasForeignKey("MessageId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
                         .HasConstraintName("fk_patient_message_attachments_patient_messages_message_id");
 
                     b.Navigation("Message");

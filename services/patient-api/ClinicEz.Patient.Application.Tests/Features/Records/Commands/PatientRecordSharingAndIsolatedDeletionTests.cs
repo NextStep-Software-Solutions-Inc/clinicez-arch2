@@ -202,7 +202,7 @@ public sealed class PatientRecordSharingAndIsolatedDeletionTests
             PatientId = patientId,
             ClinicId = clinicId,
             Status = BookingDraftStatus.Draft,
-            PreferredDate = new DateOnly(2026, 10, 25),
+            PreferredDate = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8).AddDays(7)),
             PreferredTime = "09:00",
             AttachedFileIdsJson = JsonSerializer.Serialize(new List<Guid> { fileId })
         };
@@ -309,7 +309,7 @@ public sealed class PatientRecordSharingAndIsolatedDeletionTests
             PatientId = patientId,
             ClinicId = clinicId,
             Status = BookingDraftStatus.Draft,
-            PreferredDate = new DateOnly(2026, 10, 25),
+            PreferredDate = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8).AddDays(7)),
             PreferredTime = "09:00",
             AttachedFileIdsJson = JsonSerializer.Serialize(new List<Guid> { fileId })
         };

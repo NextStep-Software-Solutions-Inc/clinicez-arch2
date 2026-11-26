@@ -48,11 +48,16 @@ public static class DependencyInjection
     {
         // No built-in secrets or endpoints: outside Development a missing value stops the start-up.
         RequiredSettings.EnsureConfigured(configuration, env,
-            "ConnectionStrings:DefaultConnection", "Clerk:Authority", "Xendit:SecretKey", "Xendit:CallbackToken", "ClaimToken:SigningKey");
+            "ConnectionStrings:DefaultConnection", "Clerk:Authority", "Clerk:SecretKey", "Xendit:SecretKey", "Xendit:CallbackToken", "ClaimToken:SigningKey");
 
         var connectionString = configuration.GetConnectionString("DefaultConnection");
+        var clerkSecretKey = configuration["Clerk:SecretKey"]?.Trim();
+        if (string.IsNullOrWhiteSpace(clerkSecretKey))
+        {
+            throw new InvalidOperationException("Clerk SecretKey is missing.");
+        }
 
-        services.AddSingleton(new ClerkBackendApi(bearerAuth: configuration["Clerk:SecretKey"] ?? throw new InvalidOperationException("Clerk SecretKey is missing.")));
+        services.AddSingleton(new ClerkBackendApi(bearerAuth: clerkSecretKey));
 
         services.AddHttpContextAccessor();
 
@@ -102,7 +107,13 @@ public static class DependencyInjection
         services.AddScoped<ClinicEz.Portal.Application.Features.Ownership.IOwnershipPolicy, ClinicEz.Portal.Application.Features.Ownership.OwnershipPolicy>();
         services.AddScoped<IClerkMetadataSync, ClerkMetadataSync>();
         services.AddScoped<IClerkPasswordService, ClerkPasswordService>();
-        services.AddScoped<IClerkUserLookup, ClerkUserLookup>();
+        services.AddHttpClient<IClerkUserLookup, ClerkUserLookup>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.clerk.com/v1/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", clerkSecretKey);
+        });
         // The key ring protects the PhilHealth credentials stored per branch, so it is persisted to the database via EF Core.
         services.AddPersistentDataProtection<ApplicationDbContext>(configuration, env, "ClinicEz.Portal");
 

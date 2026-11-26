@@ -5,10 +5,12 @@ import { ClerkProvider } from '@clerk/clerk-react';
 import { ApiProvider } from './components/ApiProvider';
 import { ClerkConfigDiagnosticScreen } from './components/ClerkConfigDiagnosticScreen';
 import { ClerkBootGuard } from './components/ClerkLoadFailureScreen';
+import { createClerkRouterNavigation } from './lib/clerkNavigation';
 import { router } from './router';
 import './index.css';
 
 const clerkPubKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLERK_PUBLISHABLE_KEY?.trim()) || '';
+const { routerPush, routerReplace } = createClerkRouterNavigation(router);
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
@@ -25,7 +27,13 @@ if (rootElement) {
     root.render(
       <React.StrictMode>
         <ClerkBootGuard>
-          <ClerkProvider publishableKey={clerkPubKey}>
+          <ClerkProvider
+            publishableKey={clerkPubKey}
+            routerPush={routerPush}
+            routerReplace={routerReplace}
+            signInFallbackRedirectUrl="/sync-auth"
+            signUpFallbackRedirectUrl="/sync-auth"
+          >
             <ApiProvider>
               <RouterProvider router={router} />
             </ApiProvider>

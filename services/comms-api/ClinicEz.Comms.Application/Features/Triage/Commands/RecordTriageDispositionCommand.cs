@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Comms.Application.Common.Helpers;
 using ClinicEz.Comms.Application.Common.Interfaces;
 using ClinicEz.Comms.Application.Models;
 using ClinicEz.Comms.Domain.Constants;
@@ -195,11 +196,12 @@ public sealed class RecordTriageDispositionCommandHandler : IRequestHandler<Reco
         }
 
         // 4. Append Public Response if provided
+        Message? publicMsg = null;
         if (!string.IsNullOrWhiteSpace(request.PublicResponseText))
         {
             conversation.LastSeq++;
             conversation.MessageCount++;
-            var publicMsg = new Message
+            publicMsg = new Message
             {
                 Id = Guid.NewGuid(),
                 ConversationId = conversation.Id,
@@ -211,10 +213,10 @@ public sealed class RecordTriageDispositionCommandHandler : IRequestHandler<Reco
                 SenderDisplayName = request.StaffName,
                 ContentText = request.PublicResponseText.Trim(),
                 Visibility = MessageVisibility.Public,
-                State = DeliveryState.Received,
+                State = DeliveryState.Waiting,
                 ClientSentAtUtc = now,
                 ServerReceivedAtUtc = now,
-                RetentionDeadlineUtc = now.AddYears(10)
+                RetentionDeadlineUtc = now.AddDays(7)
             };
             conversation.Messages.Add(publicMsg);
             _db.Messages.Add(publicMsg);
@@ -222,7 +224,7 @@ public sealed class RecordTriageDispositionCommandHandler : IRequestHandler<Reco
             conversation.LastMessageSnippet = publicMsg.ContentText.Length > 250 ? publicMsg.ContentText[..250] + "..." : publicMsg.ContentText;
         }
 
-        // 5. Outbox Publishing: Thread State Changed
+        // 5. Outbox Publishing: Thread State Changed & Public Response Replication
         if (_publisher != null)
         {
             var from = Party.ForFacility(conversation.TenantId, conversation.FacilityId, FacilityType.Clinic, service: InteropServices.Comms);
@@ -247,6 +249,16 @@ public sealed class RecordTriageDispositionCommandHandler : IRequestHandler<Reco
                 correlationId: conversation.Id,
                 stateChangedPayload);
 
+            CommsPatientReplicationHelper.EnqueueThreadStateToPatient(_publisher, conversation, now);
+            if (publicMsg != null)
+            {
+                CommsPatientReplicationHelper.EnqueueMessageToPatient(
+                    _publisher,
+                    conversation,
+                    publicMsg,
+                    Array.Empty<CommsAttachmentReference>());
+            }
+
             // 6. If conversation is closed, serialize transcript (public only) and archive to chart
             if (isClosing)
             {
@@ -263,7 +275,8 @@ public sealed class RecordTriageDispositionCommandHandler : IRequestHandler<Reco
                         a.SafeFileName,
                         a.ContentType,
                         a.SanitizedSizeBytes > 0 ? a.SanitizedSizeBytes : a.OriginalSizeBytes,
-                        a.SHA256Checksum))
+                        a.SHA256Checksum,
+                        a.Id))
                     .ToList();
 
                 var publicMessageCount = conversation.Messages.Count(m => m.Visibility == MessageVisibility.Public);

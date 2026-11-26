@@ -28,7 +28,7 @@ import {
 import { getPatientFullRecord, pushSyncPayload, type SyncItemRequest } from './patientApi';
 import { hydrateFullRecord } from '@db/hydrate';
 import { pullDocumentChanges } from '../sync/documentsSyncService';
-import { eq, inArray, or } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import { randomUUID } from 'expo-crypto';
 import { DeviceEventEmitter } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
@@ -164,89 +164,8 @@ async function executePushSync(
     // 3. Send the batch to backend
     const ack = await pushSyncPayload(resolvedGetToken, patientId, syncRequests);
 
-    // 4. Update syncedAt on corresponding local SQLite rows
+    // 4. Build server outcome map first so only truly accepted/applied items update local rows
     const syncTs = new Date();
-
-    // Remap client IDs to server IDs immediately if backend returned ID mappings
-    if (ack.items && Array.isArray(ack.items)) {
-      for (const res of ack.items) {
-        if (
-          res.entityType === 'patient_government_ids' ||
-          res.entityType === 'patient' ||
-          SINGLETON_ENTITY_TYPES.has(res.entityType)
-        ) {
-          continue;
-        }
-        if (res.clientId && res.serverId && res.clientId !== res.serverId && res.status !== 'Rejected') {
-          try {
-            const table = ENTITY_TYPE_TO_TABLE[res.entityType];
-            if (table && table.id) {
-              const existingServerRow = await originalDb
-                .select({ id: table.id })
-                .from(table)
-                .where(eq(table.id, res.serverId));
-
-              if (existingServerRow.length > 0) {
-                await originalDb.delete(table).where(eq(table.id, res.clientId));
-              } else {
-                const updateFields: any = {
-                  id: res.serverId,
-                  syncedAt: syncTs,
-                };
-                if (table.serverId) {
-                  updateFields.serverId = res.serverId;
-                }
-                await originalDb
-                  .update(table)
-                  .set(updateFields)
-                  .where(eq(table.id, res.clientId));
-              }
-            }
-          } catch (remapErr) {
-            console.warn(`[SyncService] Failed to remap clientId ${res.clientId} to serverId ${res.serverId} for ${res.entityType}:`, remapErr);
-          }
-        }
-      }
-    }
-
-    for (const item of pendingItems) {
-      if (item.operation === 'delete') continue;
-      try {
-        const table = ENTITY_TYPE_TO_TABLE[item.entityType];
-        if (!table) continue;
-
-        if (SINGLETON_ENTITY_TYPES.has(item.entityType)) {
-          await originalDb
-            .update(table)
-            .set({ syncedAt: syncTs })
-            .where(eq(table.patientId, patientId));
-        } else if (item.entityType === 'patient') {
-          await originalDb
-            .update(patients)
-            .set({ syncedAt: syncTs })
-            .where(eq(patients.id, patientId));
-        } else if (item.entityType === 'patient_government_ids') {
-          await originalDb
-            .update(patientGovernmentIds)
-            .set({ syncedAt: syncTs })
-            .where(eq(patientGovernmentIds.patientId, patientId));
-        } else {
-          const payload = item.payloadJson ? JSON.parse(item.payloadJson) : null;
-          const rowId = item.entityId || payload?.id || payload?.clientId;
-          if (rowId && table.id) {
-            await originalDb
-              .update(table)
-              .set({ syncedAt: syncTs })
-              .where(eq(table.id, rowId));
-          }
-        }
-      } catch (updateErr) {
-        console.warn(`[SyncService] Failed to update syncedAt for ${item.entityType}:`, updateErr);
-      }
-    }
-
-    // 5. Partition pendingItems into accepted vs rejected
-    const acceptedIds: string[] = [];
     const resultMap = new Map<string, any>();
     if (ack.items && Array.isArray(ack.items)) {
       for (const res of ack.items) {
@@ -256,10 +175,15 @@ async function executePushSync(
       }
     }
 
+    const acceptedIds: string[] = [];
+    const appliedItems: typeof pendingItems = [];
+    let firstFailureReason: string | undefined;
+
     for (const item of pendingItems) {
       const serverResult = resultMap.get(item.id);
       if (serverResult && serverResult.status === 'Rejected') {
         const errorMsg = serverResult.conflictDetail || 'Rejected by server';
+        firstFailureReason ??= errorMsg;
         await originalDb
           .update(syncQueue)
           .set({
@@ -267,8 +191,130 @@ async function executePushSync(
             errorMessage: errorMsg,
           })
           .where(eq(syncQueue.id, item.id));
+      } else if (serverResult && serverResult.status === 'ConflictResolved') {
+        const conflictMsg = serverResult.conflictDetail || 'Sync conflict resolved on server';
+        firstFailureReason ??= conflictMsg;
+        await originalDb
+          .update(syncQueue)
+          .set({
+            status: 'conflict',
+            errorMessage: conflictMsg,
+          })
+          .where(eq(syncQueue.id, item.id));
       } else {
         acceptedIds.push(item.id);
+        appliedItems.push(item);
+      }
+    }
+
+    // 5. Remap client IDs to server IDs & stamp syncedAt only for accepted/applied items
+    for (const item of appliedItems) {
+      const res = resultMap.get(item.id);
+
+      if (
+        res &&
+        res.entityType !== 'patient_government_ids' &&
+        res.entityType !== 'patient' &&
+        !SINGLETON_ENTITY_TYPES.has(res.entityType) &&
+        res.clientId &&
+        res.serverId &&
+        res.clientId !== res.serverId
+      ) {
+        try {
+          const table = ENTITY_TYPE_TO_TABLE[res.entityType];
+          if (table && table.id) {
+            const existingServerRow = await originalDb
+              .select({ id: table.id })
+              .from(table)
+              .where(eq(table.id, res.serverId));
+
+            if (existingServerRow.length > 0) {
+              await originalDb.delete(table).where(eq(table.id, res.clientId));
+            } else {
+              const updateFields: any = {
+                id: res.serverId,
+                syncedAt: syncTs,
+              };
+              if (table.serverId) {
+                updateFields.serverId = res.serverId;
+              }
+              await originalDb
+                .update(table)
+                .set(updateFields)
+                .where(eq(table.id, res.clientId));
+            }
+          }
+        } catch (remapErr) {
+          console.warn(`[SyncService] Failed to remap clientId ${res.clientId} to serverId ${res.serverId} for ${res.entityType}:`, remapErr);
+        }
+      }
+
+      if (item.operation !== 'delete') {
+        try {
+          const table = ENTITY_TYPE_TO_TABLE[item.entityType];
+          if (table) {
+            if (SINGLETON_ENTITY_TYPES.has(item.entityType)) {
+              const singletonUpdate: Record<string, any> = { syncedAt: syncTs };
+              if (res?.serverId && table.serverId) {
+                singletonUpdate.serverId = res.serverId;
+              }
+              await originalDb
+                .update(table)
+                .set(singletonUpdate)
+                .where(eq(table.patientId, patientId));
+            } else if (item.entityType === 'patient') {
+              await originalDb
+                .update(patients)
+                .set({ syncedAt: syncTs })
+                .where(eq(patients.id, patientId));
+            } else if (item.entityType === 'patient_government_ids') {
+              await originalDb
+                .update(patientGovernmentIds)
+                .set({ syncedAt: syncTs })
+                .where(eq(patientGovernmentIds.patientId, patientId));
+            } else {
+              const payload = item.payloadJson ? JSON.parse(item.payloadJson) : null;
+              const rowId = res?.serverId || item.entityId || payload?.id || payload?.clientId;
+              if (rowId && table.id) {
+                const listUpdate: Record<string, any> = { syncedAt: syncTs };
+                if (res?.serverId && table.serverId) {
+                  listUpdate.serverId = res.serverId;
+                }
+                await originalDb
+                  .update(table)
+                  .set(listUpdate)
+                  .where(eq(table.id, rowId));
+              }
+            }
+          }
+        } catch (updateErr) {
+          console.warn(`[SyncService] Failed to update syncedAt for ${item.entityType}:`, updateErr);
+        }
+      }
+
+      // Clear any earlier conflict entry for the same entity now that a newer write succeeded
+      try {
+        if (
+          SINGLETON_ENTITY_TYPES.has(item.entityType) ||
+          item.entityType === 'patient' ||
+          item.entityType === 'patient_government_ids'
+        ) {
+          await originalDb
+            .delete(syncQueue)
+            .where(and(eq(syncQueue.entityType, item.entityType), eq(syncQueue.status, 'conflict')));
+        } else if (item.entityId) {
+          await originalDb
+            .delete(syncQueue)
+            .where(
+              and(
+                eq(syncQueue.entityType, item.entityType),
+                eq(syncQueue.entityId, item.entityId),
+                eq(syncQueue.status, 'conflict'),
+              ),
+            );
+        }
+      } catch {
+        // non-fatal cleanup
       }
     }
 
@@ -278,11 +324,13 @@ async function executePushSync(
     }
     await flushDatabaseSnapshot();
 
+    const failedCount = pendingItems.length - acceptedIds.length;
     return {
-      success: true,
-      synced: ack.accepted,
-      failed: pendingItems.length - acceptedIds.length,
+      success: failedCount === 0,
+      synced: acceptedIds.length,
+      failed: failedCount,
       skipped: false,
+      ...(firstFailureReason ? { reason: firstFailureReason } : {}),
     };
   } catch (apiError: any) {
     console.error('[SyncService] API push failed:', apiError);

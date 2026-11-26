@@ -34,8 +34,30 @@ public sealed class CommsEligibilitySyncedInteropHandler : IInteropHandler<Comms
 
     public async Task HandleAsync(CommsEligibilitySyncedPayload message, InteropMessageContext context, CancellationToken ct)
     {
+        if (message.PatientId == Guid.Empty)
+        {
+            _logger.LogWarning(
+                "Ignoring comms.eligibility.synced for grant {GrantId}: PatientId is empty.",
+                message.GrantId);
+            return;
+        }
+
+        var patientExists = await _dbContext.Patients
+            .AsNoTracking()
+            .AnyAsync(p => p.Id == message.PatientId, ct);
+
+        if (!patientExists)
+        {
+            _logger.LogWarning(
+                "Ignoring comms.eligibility.synced for grant {GrantId}: Patient {PatientId} does not exist in patient-api.",
+                message.GrantId, message.PatientId);
+            return;
+        }
+
         var existing = await _dbContext.PatientEligibilityGrants
             .FirstOrDefaultAsync(g => g.GrantId == message.GrantId, ct);
+
+        var now = DateTime.UtcNow;
 
         if (existing != null)
         {
@@ -46,12 +68,22 @@ public sealed class CommsEligibilitySyncedInteropHandler : IInteropHandler<Comms
                 return;
             }
 
+            existing.PatientId = message.PatientId;
+            existing.TenantId = message.TenantId;
+            existing.FacilityId = message.FacilityId;
+            existing.FacilityType = message.FacilityType;
+            existing.ContextType = message.ContextType;
+            existing.ContextId = message.ContextId;
             existing.IsActive = message.IsActive;
+            if (message.IsActive && existing.WindowStartUtc == null)
+            {
+                existing.WindowStartUtc = now;
+            }
             existing.WindowEndUtc = message.WindowEndUtc;
             existing.ExpiresAtUtc = message.WindowEndUtc;
             existing.Version = message.Version;
-            existing.SyncedAtUtc = DateTime.UtcNow;
-            existing.UpdatedAt = DateTime.UtcNow;
+            existing.SyncedAtUtc = now;
+            existing.UpdatedAt = now;
         }
         else
         {
@@ -76,11 +108,12 @@ public sealed class CommsEligibilitySyncedInteropHandler : IInteropHandler<Comms
                 ContextType = message.ContextType,
                 ContextId = message.ContextId,
                 IsActive = message.IsActive,
+                WindowStartUtc = message.IsActive ? now : null,
                 WindowEndUtc = message.WindowEndUtc,
                 ExpiresAtUtc = message.WindowEndUtc,
                 Version = message.Version,
-                SyncedAtUtc = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow
+                SyncedAtUtc = now,
+                CreatedAt = now
             };
 
             await _dbContext.PatientEligibilityGrants.AddAsync(newGrant, ct);

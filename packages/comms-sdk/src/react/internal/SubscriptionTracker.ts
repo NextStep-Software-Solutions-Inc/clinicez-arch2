@@ -16,6 +16,16 @@ export class SubscriptionTracker {
     }
   }
 
+  public async ensureJoined(client: ICommsClient, conversationId: string): Promise<void> {
+    if ((this.roomRefCounts.get(conversationId) ?? 0) > 0 && client.getConnectionState() === 'Connected') {
+      try {
+        await client.joinConversation(conversationId);
+      } catch (err) {
+        console.warn(`Failed to join retained conversation room '${conversationId}':`, err);
+      }
+    }
+  }
+
   public async releaseRoom(client: ICommsClient, conversationId: string): Promise<void> {
     const current = this.roomRefCounts.get(conversationId) ?? 0;
     if (current <= 1) {

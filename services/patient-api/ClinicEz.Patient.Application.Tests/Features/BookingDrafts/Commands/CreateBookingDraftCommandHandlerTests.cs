@@ -94,7 +94,7 @@ public sealed class CreateBookingDraftCommandHandlerTests
         var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow);
         var cmd = new CreateBookingDraftCommand(
             _patientId, _clinicId, null,
-            PreferredDate: new DateOnly(2026, 11, 1),
+            PreferredDate: DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8).AddDays(7)),
             PreferredTime: "10:00 AM",
             Reason: "Pediatric Consultation",
             Notes: "First visit",

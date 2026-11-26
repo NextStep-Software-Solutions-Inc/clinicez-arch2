@@ -38,7 +38,7 @@ public sealed class PatientInteropFlowTests
             db.BookingDrafts.Add(new BookingDraft
             {
                 Id = draftId, PatientId = patientId, ClinicId = clinicId, Status = BookingDraftStatus.Draft,
-                PreferredDate = new DateOnly(2026, 10, 15), PreferredTime = "14:00", Reason = "Checkup",
+                PreferredDate = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8).AddDays(7)), PreferredTime = "14:00", Reason = "Checkup",
                 ShareFieldsJson = shareFieldsJson
             });
             await db.SaveChangesAsync();
@@ -1450,6 +1450,7 @@ public sealed class PatientInteropFlowTests
             InteropTypes.RxStatusChanged, InteropTypes.LabResultReviewed, InteropTypes.ClinicalImmunizationAdministered,
             InteropTypes.PatientQueueAlert, InteropTypes.PatientAppointmentAlert,
             InteropTypes.CommsMessageReplicate, InteropTypes.CommsMessageReceived,
+            InteropTypes.CommsAttachmentChunk,
             InteropTypes.CommsThreadStateChanged, InteropTypes.CommsEligibilitySynced,
             InteropTypes.CommsCallStateChanged,
             InteropTypes.PatientIdentityDirectoryRequested, InteropTypes.PatientIdentityReconcileRequested);

@@ -91,16 +91,18 @@ export default function NcdQuestionnaireScreen() {
 
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
+  const isSavingRef = useRef(false);
 
   // Load existing records from local SQLite
   const load = useCallback(async () => {
     if (!patientId || isDirtyRef.current) return;
+    if (isSavingRef.current) return;
     try {
       const rows = await db
         .select()
         .from(patientNcdQuestionnaire)
         .where(eq(patientNcdQuestionnaire.patientId, patientId));
-      if (rows && rows.length > 0 && !isDirtyRef.current) {
+      if (rows && rows.length > 0 && !isDirtyRef.current && !isSavingRef.current) {
         const row = rows[0];
         setRecordId(row.id);
         setForm({
@@ -151,12 +153,14 @@ export default function NcdQuestionnaireScreen() {
   useProfileSync(load, { isDirtyRef });
 
   const updateField = (key: keyof typeof form, val: any) => {
+    isDirtyRef.current = true;
     setForm((prev) => ({ ...prev, [key]: val }));
     setIsDirty(true);
   };
 
   // Auto-calculate mmol/L from mg/dL for Fasting Blood Sugar
   const handleFbsMgdlChange = (text: string) => {
+    isDirtyRef.current = true;
     setIsDirty(true);
     const num = parseFloat(text);
     if (!isNaN(num) && num > 0) {
@@ -168,6 +172,7 @@ export default function NcdQuestionnaireScreen() {
   };
 
   const handleSave = async () => {
+    isSavingRef.current = true;
     setIsSaving(true);
     try {
       const now = new Date();
@@ -239,6 +244,7 @@ export default function NcdQuestionnaireScreen() {
 
       const syncResult = await flushAndSyncProfile(patientId, getToken);
 
+      isDirtyRef.current = false;
       setIsDirty(false);
       if (syncResult.isOffline) {
         dialog.alert(
@@ -263,6 +269,7 @@ export default function NcdQuestionnaireScreen() {
       console.error('Failed to save NCD Questionnaire:', err);
       dialog.alert('Save Failed', err?.message || 'Could not save questionnaire. Please try again.');
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
   };

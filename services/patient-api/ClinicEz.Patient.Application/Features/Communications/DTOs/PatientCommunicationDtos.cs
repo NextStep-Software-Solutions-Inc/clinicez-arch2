@@ -67,7 +67,7 @@ public sealed record PatientMessageDto(
 
 public sealed record PatientMessageAttachmentDto(
     Guid Id,
-    Guid MessageId,
+    Guid? MessageId,
     string StorageKey,
     string FileName,
     string ContentType,
@@ -97,7 +97,8 @@ public sealed record SubmitPatientInquiryRequest(
     MessageCategory Category,
     string ContentText,
     bool? IsEmergencyConfirmed,
-    IReadOnlyList<CommsAttachmentReference>? Attachments = null);
+    IReadOnlyList<CommsAttachmentReference>? Attachments = null,
+    string? Subject = null);
 
 public sealed record SubmitPatientInquiryResponse(
     bool IsEmergencyRedirect,

@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Comms.Application.Common.Helpers;
 using ClinicEz.Comms.Application.Common.Interfaces;
 using ClinicEz.Comms.Application.Models;
 using ClinicEz.Comms.Domain.Entities;
@@ -19,7 +20,9 @@ public sealed record ReopenConversationCommand(
     string TenantId,
     Guid PatientId,
     bool? IsEmergencyConfirmed,
-    string Reason) : IRequest<ConversationDto>;
+    string Reason,
+    string? ReopenedByStaffId = null,
+    string? ReopenedByStaffName = null) : IRequest<ConversationDto>;
 
 public sealed class ReopenConversationCommandHandler : IRequestHandler<ReopenConversationCommand, ConversationDto>
 {
@@ -129,6 +132,8 @@ public sealed class ReopenConversationCommandHandler : IRequestHandler<ReopenCon
         // 5. Add Reopen Notification Message
         conversation.LastSeq++;
         conversation.MessageCount++;
+        var isStaffReopen = !string.IsNullOrWhiteSpace(request.ReopenedByStaffId);
+        var patientDisplayName = CommsInquiryDisplayHelper.ResolvePatientParticipantName(conversation.Participants) ?? "Patient";
         var reopenMsg = new Message
         {
             Id = Guid.NewGuid(),
@@ -136,10 +141,14 @@ public sealed class ReopenConversationCommandHandler : IRequestHandler<ReopenCon
             TenantId = conversation.TenantId,
             FacilityId = conversation.FacilityId,
             Seq = conversation.LastSeq,
-            SenderType = "Patient",
-            SenderId = request.PatientId.ToString(),
-            SenderDisplayName = "Patient",
-            ContentText = $"Inquiry reopened by patient: {request.Reason.Trim()}",
+            SenderType = isStaffReopen ? "Staff" : "Patient",
+            SenderId = isStaffReopen ? request.ReopenedByStaffId : request.PatientId.ToString(),
+            SenderDisplayName = isStaffReopen
+                ? (string.IsNullOrWhiteSpace(request.ReopenedByStaffName) ? "Clinic Staff" : request.ReopenedByStaffName)
+                : patientDisplayName,
+            ContentText = isStaffReopen
+                ? $"Inquiry reopened by clinic staff: {request.Reason.Trim()}"
+                : $"Inquiry reopened by patient: {request.Reason.Trim()}",
             Visibility = MessageVisibility.Public,
             State = DeliveryState.Received,
             ClientSentAtUtc = now,
@@ -175,6 +184,8 @@ public sealed class ReopenConversationCommandHandler : IRequestHandler<ReopenCon
                 toFacility,
                 correlationId: conversation.Id,
                 stateChangedPayload);
+
+            CommsPatientReplicationHelper.EnqueueThreadStateToPatient(_publisher, conversation, now);
         }
 
         await _db.SaveChangesAsync(ct);

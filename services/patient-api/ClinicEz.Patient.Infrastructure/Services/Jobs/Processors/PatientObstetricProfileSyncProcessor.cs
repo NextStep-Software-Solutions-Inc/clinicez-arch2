@@ -48,10 +48,10 @@ internal sealed class PatientObstetricProfileSyncProcessor
 {
     public PatientObstetricProfileSyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
     public override string EntityType => SyncableEntityTypes.PatientObstetricProfile;
+    protected override bool UpsertOnMissingUpdate => true;
 
-    protected override async Task<PatientObstetricProfile?> FindExistingAsync(ObstetricProfilePayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientObstetricProfiles.FindAsync([id.Value], ct)
-            : await Context.PatientObstetricProfiles.FirstOrDefaultAsync(e => e.PatientId == p.PatientId || e.ClientId == p.ClientId, ct);
+    protected override Task<PatientObstetricProfile?> FindExistingAsync(ObstetricProfilePayload p, Guid? id, CancellationToken ct)
+        => FindByIdOrAsync(id, e => e.PatientId == p.PatientId || (p.ClientId != Guid.Empty && e.ClientId == p.ClientId), ct);
 
     protected override PatientObstetricProfile CreateFromPayload(ObstetricProfilePayload p) => new()
     {

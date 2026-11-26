@@ -324,12 +324,18 @@ let events = new CommsEventEmitter();
 let mockConversations: any[] = [];
 let mockUnreadCountOverride: number | null = null;
 let mockActiveHookConv: any = null;
+let mockActiveMessages: any[] = [];
+let mockTriageItems: any[] = [];
 const markReadCalls: string[] = [];
 const muteCalls: Array<{ id: string; isMuted: boolean }> = [];
 const createConversationCalls: any[] = [];
 let capturedChatDrawerProps: any = null;
 let capturedMessageThreadProps: any = null;
 let capturedNewConvModalProps: any = null;
+const sendMessageCalls: any[] = [];
+const resendMessageCalls: string[] = [];
+let refreshConversationsCount = 0;
+let refreshTriageCount = 0;
 
 mock.module('@clinicez/comms-sdk/react', () => ({
   CommsContext: React.createContext<any>(null),
@@ -347,7 +353,9 @@ mock.module('@clinicez/comms-sdk/react', () => ({
       mockConversations.reduce((s, c) => s + (c.unreadCount || 0), 0),
     isLoading: false,
     error: null,
-    refresh: async () => {},
+    refresh: async () => {
+      refreshConversationsCount++;
+    },
     createConversation: async (req: any) => {
       createConversationCalls.push(req);
       return { id: 'conv-created-1', ...req };
@@ -367,22 +375,28 @@ mock.module('@clinicez/comms-sdk/react', () => ({
       title: 'Test Thread',
       participants: [],
     },
-    messages: [],
+    messages: mockActiveMessages,
     isLoading: false,
     error: null,
     acknowledgeMessage: async () => {},
   }),
   useSendMessage: () => ({
-    sendMessage: async () => {},
-    resendMessage: async () => {},
+    sendMessage: async (req: any) => {
+      sendMessageCalls.push(req);
+    },
+    resendMessage: async (msgId: string) => {
+      resendMessageCalls.push(msgId);
+    },
   }),
   useTriageQueue: () => ({
-    items: [],
-    pendingCount: 0,
+    items: mockTriageItems,
+    pendingCount: mockTriageItems.length,
     urgentCount: 0,
     isLoading: false,
     error: null,
-    refresh: async () => {},
+    refresh: async () => {
+      refreshTriageCount++;
+    },
     answerRequest: async () => {},
     requestVisit: async () => {},
     declineRequest: async () => {},
@@ -439,6 +453,8 @@ describe('Comms Drawer Archive, Unread Reset, Mute Suppression & Department Guar
     mockUnreadCountOverride = null;
     mockActiveConversationId = undefined;
     mockActiveHookConv = null;
+    mockActiveMessages = [];
+    mockTriageItems = [];
     markReadCalls.length = 0;
     muteCalls.length = 0;
     createConversationCalls.length = 0;
@@ -447,6 +463,10 @@ describe('Comms Drawer Archive, Unread Reset, Mute Suppression & Department Guar
     capturedChatDrawerProps = null;
     capturedMessageThreadProps = null;
     capturedNewConvModalProps = null;
+    sendMessageCalls.length = 0;
+    resendMessageCalls.length = 0;
+    refreshConversationsCount = 0;
+    refreshTriageCount = 0;
     mockConversations = [
       {
         id: 'conv-direct-open',
@@ -497,6 +517,8 @@ describe('Comms Drawer Archive, Unread Reset, Mute Suppression & Department Guar
     mockUnreadCountOverride = null;
     mockActiveConversationId = undefined;
     mockActiveHookConv = null;
+    mockActiveMessages = [];
+    mockTriageItems = [];
   });
 
   test('#212 + #213: excludes TeleconsultCall and Closed from All/StaffContext, and shows only Closed under Archived', async () => {
@@ -1004,5 +1026,342 @@ describe('Comms Drawer Archive, Unread Reset, Mute Suppression & Department Guar
     expect(excludedTabHtml).not.toContain('>4<');
     expect(excludedTabHtml).not.toContain('>0<');
     excludedHarness.unmount();
+  });
+
+  test('#282: ClinicActiveThread disables composer, quick chips, and sendMessage for all terminal statuses and closedAtUtc != null', async () => {
+    const cases = [
+      { status: 'Answered' as const, closedAtUtc: '2026-11-25T08:00:00Z', expectedText: 'Conversation closed (Answered). Message history is read-only.' },
+      { status: 'NeedsVisit' as const, closedAtUtc: '2026-11-25T08:00:00Z', expectedText: 'Conversation closed (Needs Visit). Message history is read-only.' },
+      { status: 'Declined' as const, closedAtUtc: '2026-11-25T08:00:00Z', expectedText: 'Conversation closed (Declined). Message history is read-only.' },
+      { status: 'Resolved' as const, closedAtUtc: '2026-11-25T08:00:00Z', expectedText: 'Conversation closed (Resolved). Message history is read-only.' },
+      { status: 'Closed' as const, closedAtUtc: '2026-11-25T08:00:00Z', expectedText: 'This conversation is closed and archived. Message history is read-only.' },
+      { status: 'Submitted' as const, closedAtUtc: '2026-11-25T08:00:00Z', expectedText: 'Conversation closed (Closed). Message history is read-only.' },
+    ];
+
+    for (const c of cases) {
+      sendMessageCalls.length = 0;
+      const conv = {
+        id: `conv-term-${c.status}`,
+        tenantId: 't1',
+        facilityId: 'c1',
+        scope: 'PatientFacility' as const,
+        kind: 'PatientTriage' as const,
+        title: 'Patient Inquiry',
+        patientId: '00000000-0000-0000-0000-000000000111',
+        status: c.status,
+        closedAtUtc: c.closedAtUtc,
+        isEmergencyConfirmed: false,
+        isLocalOnly: false,
+        reopenCount: 0,
+        messageCount: 2,
+        lastSeq: 2,
+        createdAtUtc: '2026-11-25T00:00:00Z',
+        createdBy: 'patient-1',
+        participants: [],
+      };
+      mockActiveHookConv = conv;
+
+      const html = renderToStaticMarkup(
+        React.createElement(ClinicActiveThread, {
+          conversationId: conv.id,
+          initialConversation: conv,
+          initialActionMenuOpen: true,
+          onBack: () => {},
+          currentUserId: 'staff-curr',
+        }),
+      );
+
+      expect(html).not.toContain('+ Vitals Charted');
+      expect(html).not.toContain('+ On My Way');
+      expect(html).not.toContain('Type message...');
+      expect(html).not.toContain('Close &amp; Archive');
+      expect(html).not.toContain('Post to Thread');
+      expect(html).toContain(c.expectedText);
+      expect(capturedMessageThreadProps.isReadOnly).toBe(true);
+      expect(capturedMessageThreadProps.isArchived).toBe(true);
+
+      // Even if invoked programmatically, send/resend are blocked so no SignalR HubException can fire
+      await capturedMessageThreadProps.onSendMessage('Should not send', false);
+      await capturedMessageThreadProps.onResendMessage('msg-1');
+      expect(sendMessageCalls.length).toBe(0);
+      expect(resendMessageCalls.length).toBe(0);
+    }
+  });
+
+  test('#282: Reopen Conversation button is wired to ReopenConversationCommand and hides when ineligible', async () => {
+    const patientId = '11111111-1111-1111-1111-111111111111';
+    const answeredConv = {
+      id: 'conv-answered-reopen',
+      tenantId: 't1',
+      facilityId: 'c1',
+      scope: 'PatientFacility' as const,
+      kind: 'PatientTriage' as const,
+      title: 'Juan Dela Cruz',
+      patientId,
+      status: 'Answered' as const,
+      triageDisposition: 'Answered' as const,
+      closedAtUtc: '2026-11-25T08:00:00Z',
+      isEmergencyConfirmed: false,
+      isLocalOnly: false,
+      reopenCount: 0,
+      grantWindowEndUtc: '2099-01-01T00:00:00Z',
+      messageCount: 2,
+      lastSeq: 2,
+      createdAtUtc: '2026-11-25T00:00:00Z',
+      createdBy: 'patient-1',
+      participants: [],
+    };
+    mockActiveHookConv = answeredConv;
+
+    const reopenedEvents: any[] = [];
+    events.on('conversationUpdated', (payload) => reopenedEvents.push(payload));
+
+    const fetchCalls: Array<{ url: string; method?: string; body: any }> = [];
+    const originalFetch = globalThis.fetch;
+    const prevCommsUrl = process.env.EXPO_PUBLIC_COMMS_API_URL;
+    process.env.EXPO_PUBLIC_COMMS_API_URL = 'https://comms.local';
+    globalThis.fetch = (async (url: string, init?: any) => {
+      const parsedBody = init?.body ? JSON.parse(init.body) : null;
+      fetchCalls.push({ url, method: init?.method, body: parsedBody });
+      return new Response(
+        JSON.stringify({
+          ...answeredConv,
+          status: 'WithTriage',
+          triageDisposition: null,
+          closedAtUtc: null,
+          reopenCount: 1,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as any;
+
+    try {
+      const reopenCallbacks: any[] = [];
+      const harness = createClinicHookHarness(() =>
+        ClinicActiveThread({
+          conversationId: answeredConv.id,
+          initialConversation: answeredConv,
+          onBack: () => {},
+          currentUserId: 'staff-curr',
+          onReopenConversation: (conv) => {
+            reopenCallbacks.push(conv);
+          },
+        }),
+      );
+
+      const initialHtml = renderToStaticMarkup(harness.result.current);
+      expect(initialHtml).toContain('Reopen Conversation');
+      expect(initialHtml).not.toContain('+ Vitals Charted');
+
+      const bannerNodes = collectElementsByType(capturedMessageThreadProps.readOnlyBanner);
+      const reopenBtn = bannerNodes.find((n) => n.props?.accessibilityLabel === 'Reopen conversation');
+      expect(reopenBtn).toBeDefined();
+
+      await act(async () => {
+        await reopenBtn.props.onPress();
+      });
+
+      expect(fetchCalls.length).toBe(1);
+      expect(fetchCalls[0].url).toBe('https://comms.local/api/v1/comms/conversations/conv-answered-reopen/reopen');
+      expect(fetchCalls[0].method).toBe('POST');
+      expect(fetchCalls[0].body).toEqual({
+        patientId,
+        isEmergencyConfirmed: false,
+        reason: 'Reopened by clinic staff for follow-up',
+        isStaffReopen: true,
+      });
+      expect(reopenedEvents.some((e) => e.id === 'conv-answered-reopen' && e.status === 'WithTriage')).toBe(true);
+      expect(reopenCallbacks.length).toBe(1);
+
+      const reopenedHtml = renderToStaticMarkup(harness.result.current);
+      expect(reopenedHtml).toContain('+ Vitals Charted');
+      expect(reopenedHtml).toContain('Type message...');
+      expect(capturedMessageThreadProps.isReadOnly).toBe(false);
+      harness.unmount();
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (prevCommsUrl === undefined) {
+        delete process.env.EXPO_PUBLIC_COMMS_API_URL;
+      } else {
+        process.env.EXPO_PUBLIC_COMMS_API_URL = prevCommsUrl;
+      }
+    }
+
+    // Ineligible cases must NOT render Reopen Conversation button:
+    // 1. Reopen limit already reached (reopenCount >= 1)
+    const limitReachedConv = { ...answeredConv, reopenCount: 1 };
+    mockActiveHookConv = limitReachedConv;
+    const limitHtml = renderToStaticMarkup(
+      React.createElement(ClinicActiveThread, {
+        conversationId: limitReachedConv.id,
+        initialConversation: limitReachedConv,
+        onBack: () => {},
+        currentUserId: 'staff-curr',
+      }),
+    );
+    expect(limitHtml).not.toContain('Reopen Conversation');
+
+    // 2. Expired grant window
+    const expiredGrantConv = { ...answeredConv, grantWindowEndUtc: '2020-01-01T00:00:00Z' };
+    mockActiveHookConv = expiredGrantConv;
+    const expiredHtml = renderToStaticMarkup(
+      React.createElement(ClinicActiveThread, {
+        conversationId: expiredGrantConv.id,
+        initialConversation: expiredGrantConv,
+        onBack: () => {},
+        currentUserId: 'staff-curr',
+      }),
+    );
+    expect(expiredHtml).not.toContain('Reopen Conversation');
+
+    // 3. Non-triage Facility thread without patientId
+    const facilityClosedConv = {
+      ...answeredConv,
+      scope: 'Facility' as const,
+      patientId: null,
+      status: 'Closed' as const,
+    };
+    mockActiveHookConv = facilityClosedConv;
+    const facilityHtml = renderToStaticMarkup(
+      React.createElement(ClinicActiveThread, {
+        conversationId: facilityClosedConv.id,
+        initialConversation: facilityClosedConv,
+        onBack: () => {},
+        currentUserId: 'staff-curr',
+      }),
+    );
+    expect(facilityHtml).not.toContain('Reopen Conversation');
+  });
+
+  test('#282: ClinicChatDrawerHost treats terminal triage threads as archived and excludes their unread counts', async () => {
+    mockConversations = [
+      {
+        id: 'conv-open-1',
+        scope: 'Direct',
+        status: 'Submitted',
+        title: 'Open Thread',
+        unreadCount: 2,
+        participants: [],
+      },
+      {
+        id: 'conv-answered-1',
+        scope: 'PatientFacility',
+        status: 'Answered',
+        closedAtUtc: '2026-11-25T08:00:00Z',
+        title: 'Answered Inquiry',
+        unreadCount: 3,
+        participants: [],
+      },
+    ];
+
+    const harness = createClinicHookHarness(() => ClinicChatDrawerHost());
+    renderToStaticMarkup(harness.result.current);
+
+    // Active list excludes Answered thread and active unread badge only counts Open Thread (2)
+    expect(capturedChatDrawerProps.items.map((i: any) => i.id)).toEqual(['conv-open-1']);
+    const nodes = collectElementsByType(harness.result.current);
+    const convTab = nodes.find(
+      (n) => n.props?.accessibilityRole === 'tab' && n.props?.accessibilityState?.selected === true,
+    );
+    expect(renderToStaticMarkup(convTab)).toContain('>2<');
+
+    // Switching to Archived shows the Answered thread with isArchived: true
+    await act(async () => {
+      capturedChatDrawerProps.onSelectScope('Archived');
+    });
+    renderToStaticMarkup(harness.result.current);
+    expect(capturedChatDrawerProps.items.map((i: any) => i.id)).toEqual(['conv-answered-1']);
+    expect(capturedChatDrawerProps.items[0].isArchived).toBe(true);
+    harness.unmount();
+  });
+
+  test('#284: ClinicChatDrawerHost & ClinicActiveThread display patient name, formatted category, and patient sender label', () => {
+    const patientConv = {
+      id: 'conv-284-1',
+      tenantId: 't1',
+      facilityId: 'c1',
+      scope: 'PatientFacility' as const,
+      kind: 'PatientTriage' as const,
+      title: 'PostVisitFollowUp Inquiry',
+      category: 'PostVisitFollowUp' as const,
+      status: 'WithTriage' as const,
+      unreadCount: 1,
+      lastMessageSnippet: 'Follow-up after lab test',
+      lastMessageAtUtc: '2026-11-25T10:00:00Z',
+      createdAtUtc: '2026-11-25T10:00:00Z',
+      createdBy: 'patient-justine',
+      participants: [
+        {
+          id: 'p-1',
+          userId: 'patient-justine',
+          participantId: 'patient-justine',
+          participantType: 'Patient',
+          displayName: 'Justine Mae Tabasan',
+          role: 'Patient',
+          joinedAtUtc: '2026-11-25T10:00:00Z',
+        },
+      ],
+    };
+
+    mockConversations = [patientConv];
+    mockTriageItems = [
+      {
+        ...patientConv,
+        conversationId: patientConv.id,
+        requestId: patientConv.id,
+        patientFullName: 'Justine Mae Tabasan',
+        patientAge: 'Adult',
+        patientSex: 'Female',
+        patientContact: '',
+        slaTimeRemainingSeconds: 3600,
+        isSlaBreached: false,
+      },
+    ];
+
+    const harness = createClinicHookHarness(() => ClinicChatDrawerHost());
+    renderToStaticMarkup(harness.result.current);
+
+    expect(capturedChatDrawerProps.items).toHaveLength(1);
+    expect(capturedChatDrawerProps.items[0].title).toBe('Justine Mae Tabasan');
+    expect(capturedChatDrawerProps.items[0].subtitle).toBe('Post-Visit Follow-Up');
+    expect(capturedChatDrawerProps.items[0].title).not.toContain('PostVisitFollowUp');
+    harness.unmount();
+
+    mockActiveHookConv = patientConv;
+    mockActiveMessages = [
+      {
+        messageId: 'm-284-1',
+        conversationId: patientConv.id,
+        seq: 1,
+        clientMessageId: 'm-284-1',
+        senderType: 'Patient',
+        senderId: 'patient-justine',
+        senderDisplayName: 'Patient',
+        contentText: 'Good afternoon, checking on my follow-up.',
+        visibility: 'Public',
+        requiresAcknowledgement: false,
+        isAcknowledged: false,
+        acknowledgedAtUtc: null,
+        acknowledgedByAccountId: null,
+        acknowledgedByName: null,
+        attachments: [],
+        deliveryState: 'Received',
+        sentAtUtc: '2026-11-25T10:00:00Z',
+      },
+    ];
+
+    const threadHtml = renderToStaticMarkup(
+      React.createElement(ClinicActiveThread, {
+        conversationId: patientConv.id,
+        initialConversation: patientConv,
+        onBack: () => {},
+        currentUserId: 'staff-curr',
+      }),
+    );
+
+    expect(threadHtml).toContain('Justine Mae Tabasan');
+    expect(threadHtml).toContain('Post-Visit Follow-Up');
+    expect(threadHtml).not.toContain('PostVisitFollowUp Inquiry');
+    expect(capturedMessageThreadProps.messages[0].senderDisplayName).toBe('Justine Mae Tabasan');
   });
 });

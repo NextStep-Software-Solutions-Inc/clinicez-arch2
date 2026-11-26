@@ -56,6 +56,7 @@ public sealed class EnsureDirectVisitCommandHandler : IRequestHandler<EnsureDire
     private readonly IClinicContext _clinicContext;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
     private readonly IRepository<FacilitySettings>? _settingsRepository;
+    private readonly ICommsEligibilityPublisher? _eligibilityPublisher;
 
     public EnsureDirectVisitCommandHandler(
         IRepository<QueueItem> queueRepository,
@@ -66,7 +67,8 @@ public sealed class EnsureDirectVisitCommandHandler : IRequestHandler<EnsureDire
         IRepository<Room>? roomRepository = null,
         IRepository<StaffMember>? staffRepository = null,
         IWorkspaceProfileProvider? workspaceProfiles = null,
-        IRepository<FacilitySettings>? settingsRepository = null)
+        IRepository<FacilitySettings>? settingsRepository = null,
+        ICommsEligibilityPublisher? eligibilityPublisher = null)
     {
         _queueRepository = queueRepository;
         _unitOfWork = unitOfWork;
@@ -77,6 +79,7 @@ public sealed class EnsureDirectVisitCommandHandler : IRequestHandler<EnsureDire
         _staffRepository = staffRepository;
         _workspaceProfiles = workspaceProfiles;
         _settingsRepository = settingsRepository;
+        _eligibilityPublisher = eligibilityPublisher;
     }
 
     public async Task<QueueItemDto> Handle(EnsureDirectVisitCommand request, CancellationToken cancellationToken)
@@ -257,6 +260,19 @@ public sealed class EnsureDirectVisitCommandHandler : IRequestHandler<EnsureDire
         };
 
         await _queueRepository.AddAsync(queueItem, cancellationToken);
+        if (_eligibilityPublisher != null)
+        {
+            await _eligibilityPublisher.EnqueueGrantAsync(
+                _clinicContext.TenantId,
+                _clinicContext.ClinicId,
+                queueItem.PatientId,
+                "QueueVisit",
+                queueItem.Id.ToString(),
+                now,
+                now.AddDays(7),
+                CommsEligibilityVersions.Initial,
+                ct: cancellationToken);
+        }
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Note: Check-in push notifications to IPatientAppointmentPublisher are suppressed for direct visits.

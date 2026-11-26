@@ -6,9 +6,18 @@ import { MfaGate } from '@/components/MfaGate';
 import { CommandPalette } from '@/components/CommandPalette';
 import { ClinicEzLogo, ClinicEzMark } from '@/components/ClinicEzLogo';
 import { Button, Chip, Text } from '@/components/ui';
+import { AdminAccessStateCard } from '@/components/AdminAccessStateCard';
 import { setupAxiosInterceptors } from '@/lib/api';
+import { adminService } from '@/services/admin.service';
 import { getEnvironmentBadge, readRuntimeEnvironmentSignals } from '@/lib/envBadge';
 import { hasVerifiedMfa } from '@/lib/mfaGuard';
+import {
+  isForbiddenError,
+  isUnauthorizedError,
+  performCleanAdminSignOut,
+  resolvePendingAdminInvitationPath,
+} from '@/lib/adminAuthRecovery';
+import { clearAllPendingAdminAuthState } from '@/lib/authRedirect';
 import {
   IconDashboard,
   IconBuildingHospital,
@@ -103,11 +112,13 @@ function AuthLayout() {
 
   let isSignedIn = true;
   let isLoaded = true;
+  let hasClerkProvider = false;
   let user: any = null;
   let signOut: any = async () => {};
 
   try {
     const auth = useAuth();
+    hasClerkProvider = true;
     isLoaded = auth.isLoaded;
     isSignedIn = Boolean(auth.isSignedIn);
     if (auth.getToken) {
@@ -120,6 +131,76 @@ function AuthLayout() {
   } catch {
     // Outside ClerkProvider in unit tests
   }
+
+  const [adminAuthStatus, setAdminAuthStatus] = useState<'checking' | 'authorized' | 'unauthorized' | 'error'>(
+    () => (hasClerkProvider ? 'checking' : 'authorized')
+  );
+  const [adminAuthError, setAdminAuthError] = useState('');
+  const [authRetryNonce, setAuthRetryNonce] = useState(0);
+  const authUserId = user?.id ?? null;
+
+  useEffect(() => {
+    if (!hasClerkProvider) {
+      setAdminAuthStatus('authorized');
+      return;
+    }
+    if (!isLoaded || !isSignedIn) {
+      setAdminAuthStatus('checking');
+      return;
+    }
+
+    let cancelled = false;
+    setAdminAuthStatus('checking');
+    setAdminAuthError('');
+
+    async function verifyAdminSession() {
+      try {
+        const me = await adminService.getMe();
+        if (cancelled) return;
+
+        if (me.isAdmin) {
+          clearAllPendingAdminAuthState();
+          setAdminAuthStatus('authorized');
+          return;
+        }
+
+        const pendingInvitePath = await resolvePendingAdminInvitationPath();
+        if (cancelled) return;
+        if (pendingInvitePath) {
+          window.location.href = pendingInvitePath;
+          return;
+        }
+
+        setAdminAuthStatus('unauthorized');
+      } catch (err: any) {
+        if (cancelled) return;
+
+        if (isUnauthorizedError(err)) {
+          await performCleanAdminSignOut(signOut, '/sign-in');
+          return;
+        }
+
+        if (isForbiddenError(err)) {
+          const pendingInvitePath = await resolvePendingAdminInvitationPath();
+          if (cancelled) return;
+          if (pendingInvitePath) {
+            window.location.href = pendingInvitePath;
+            return;
+          }
+          setAdminAuthStatus('unauthorized');
+          return;
+        }
+
+        setAdminAuthError(err?.message || 'Failed to verify administrative authorization.');
+        setAdminAuthStatus('error');
+      }
+    }
+
+    verifyAdminSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasClerkProvider, isLoaded, isSignedIn, authUserId, authRetryNonce]);
 
   // Keyboard shortcut for ⌘K or Ctrl+K
   useEffect(() => {
@@ -205,6 +286,40 @@ function AuthLayout() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  if (adminAuthStatus === 'checking') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-text">
+        <div className="flex flex-col items-center gap-4">
+          <ClinicEzMark variant="squircle" className="h-11 w-11 shrink-0 drop-shadow-sm animate-pulse" />
+          <div className="flex items-center gap-2.5 text-text-muted text-sm">
+            <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <span>Verifying administrative authorization...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (adminAuthStatus === 'unauthorized') {
+    return (
+      <AdminAccessStateCard
+        variant="unauthorized"
+        onSignOut={() => performCleanAdminSignOut(signOut, '/sign-in')}
+      />
+    );
+  }
+
+  if (adminAuthStatus === 'error') {
+    return (
+      <AdminAccessStateCard
+        variant="error"
+        message={adminAuthError}
+        onRetry={() => setAuthRetryNonce((n) => n + 1)}
+        onSignOut={() => performCleanAdminSignOut(signOut, '/sign-in')}
+      />
     );
   }
 
@@ -614,14 +729,7 @@ function AuthLayout() {
               <Button
                 variant="unstyled"
                 size="custom"
-                onClick={async () => {
-                  try {
-                    await signOut();
-                  } catch {
-                    // ignore
-                  }
-                  window.location.href = '/sign-in';
-                }}
+                onClick={() => performCleanAdminSignOut(signOut, '/sign-in')}
                 className="h-8 w-8 xl:w-auto xl:px-2.5 text-xs font-medium shrink-0 text-text-secondary hover:text-red-600 hover:bg-surface-muted rounded-xl"
                 title="Sign Out"
                 aria-label="Sign Out"

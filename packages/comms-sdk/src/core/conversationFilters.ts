@@ -1,10 +1,51 @@
 import { resolveConversationDisplayTitle } from './conversationTitle';
-import type { ConversationDto } from './types';
+import type { ConversationDto, RequestStatus } from './types';
+
+export const TERMINAL_CONVERSATION_STATUSES: ReadonlySet<RequestStatus> = new Set<RequestStatus>([
+  'Closed',
+  'Answered',
+  'NeedsVisit',
+  'Declined',
+  'Resolved',
+]);
+
+export function isConversationClosed(
+  conversation?: Pick<ConversationDto, 'status' | 'closedAtUtc'> | null,
+): boolean {
+  if (!conversation) return false;
+  if (conversation.closedAtUtc != null && conversation.closedAtUtc !== '') return true;
+  return TERMINAL_CONVERSATION_STATUSES.has(conversation.status);
+}
+
+export function getClosedConversationLabel(
+  conversation?: Pick<ConversationDto, 'status' | 'triageDisposition' | 'closedAtUtc'> | null,
+): string {
+  if (!conversation) return 'Closed';
+  switch (conversation.status) {
+    case 'Answered':
+      return 'Answered';
+    case 'NeedsVisit':
+      return 'Needs Visit';
+    case 'Declined':
+      return 'Declined';
+    case 'Resolved':
+      return 'Resolved';
+    case 'Closed':
+      return 'Closed / Archived';
+    default:
+      if (conversation.triageDisposition === 'Answered') return 'Answered';
+      if (conversation.triageDisposition === 'NeedsVisit') return 'Needs Visit';
+      if (conversation.triageDisposition === 'Declined') return 'Declined';
+      return 'Closed';
+  }
+}
 
 export type ScopeFilterableConversation = Pick<
   ConversationDto,
   'id' | 'scope' | 'status' | 'title' | 'lastMessageSnippet' | 'participants'
->;
+> & {
+  closedAtUtc?: string | null;
+};
 
 export function filterConversationsByScopeAndQuery<T extends ScopeFilterableConversation>(
   conversations: readonly T[],
@@ -14,7 +55,7 @@ export function filterConversationsByScopeAndQuery<T extends ScopeFilterableConv
   const trimmedQuery = searchQuery.trim().toLowerCase();
 
   return conversations.filter((c) => {
-    const isArchived = c.status === 'Closed';
+    const isArchived = c.status === 'Closed' || Boolean(c.closedAtUtc);
     if (selectedScope === 'Archived') {
       if (!isArchived) return false;
     } else {
@@ -36,10 +77,12 @@ export function filterConversationsByScopeAndQuery<T extends ScopeFilterableConv
 }
 
 export function countActiveUnreadConversations(
-  conversations: ReadonlyArray<Pick<ConversationDto, 'status' | 'unreadCount'>>,
+  conversations: ReadonlyArray<
+    Pick<ConversationDto, 'status' | 'unreadCount'> & { closedAtUtc?: string | null }
+  >,
 ): number {
   return conversations.reduce(
-    (acc, c) => (c.status === 'Closed' ? acc : acc + (c.unreadCount || 0)),
+    (acc, c) => (c.status === 'Closed' || Boolean(c.closedAtUtc) ? acc : acc + (c.unreadCount || 0)),
     0,
   );
 }

@@ -28,7 +28,10 @@ import {
   ClinicServiceItem,
   ClinicRole,
 } from '../../services/clinicService';
-import { buildDohLtoSettingsPayload } from '../../utils/directoryVerification';
+import {
+  buildDohLtoSettingsPayload,
+  type PickedEvidenceFile,
+} from '../../utils/directoryVerification';
 
 import SettingsTabBar from '../../components/settings/SettingsTabBar';
 import SettingsVerticalRail from '../../components/settings/SettingsVerticalRail';
@@ -558,6 +561,38 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const [pauseLoading, setPauseLoading] = useState(false);
   const [ltoSaving, setLtoSaving] = useState(false);
   const [ltoUploading, setLtoUploading] = useState(false);
+  const [stagedLtoObjectKey, setStagedLtoObjectKey] = useState<string | null>(null);
+  const [stagedLtoFile, setStagedLtoFile] = useState<PickedEvidenceFile | null>(null);
+  const [pendingLtoSyncFailed, setPendingLtoSyncFailed] = useState(false);
+  const [retryingPendingSync, setRetryingPendingSync] = useState(false);
+
+  useEffect(() => {
+    if (effectiveVerificationStatus !== 'Verified') {
+      setStagedLtoObjectKey(null);
+      setStagedLtoFile(null);
+    }
+  }, [effectiveVerificationStatus]);
+
+  useEffect(() => {
+    if (stagedLtoObjectKey && effectiveLtoProofKey === stagedLtoObjectKey) {
+      setStagedLtoObjectKey(null);
+      setStagedLtoFile(null);
+    }
+  }, [effectiveLtoProofKey, stagedLtoObjectKey]);
+
+  useEffect(() => {
+    if (effectiveVerificationStatus !== 'PendingReview') {
+      setPendingLtoSyncFailed(false);
+    }
+  }, [effectiveVerificationStatus]);
+
+  const handleStagedLtoProofChange = useCallback(
+    (nextKey: string | null, nextFile: PickedEvidenceFile | null) => {
+      setStagedLtoObjectKey(nextKey);
+      setStagedLtoFile(nextFile);
+    },
+    [],
+  );
 
   const handleSaveDohLto = async (
     dohLto: string,
@@ -605,6 +640,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       setLtoSaving(false);
       if (syncErr) {
         if (isVerificationConflictError(syncErr)) {
+          setPendingLtoSyncFailed(false);
           notify.error(
             syncErr.message ||
               'Verification submission is no longer pending review. Refreshing status.'
@@ -612,6 +648,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
           await refreshVerificationState();
           return false;
         }
+        setPendingLtoSyncFailed(true);
         notify.error(
           syncErr.message ||
             'DOH LTO saved locally, but pending verification update failed.'
@@ -619,18 +656,23 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
         await refreshReadiness();
         return false;
       }
+      setPendingLtoSyncFailed(false);
       await refreshReadiness();
       notify.success('DOH LTO details saved and pending verification submission updated.');
       return true;
     }
 
     setLtoSaving(false);
+    if (wasVerifiedFacility && saved.platformVerificationStatus === 'PendingReview') {
+      setStagedLtoObjectKey(null);
+      setStagedLtoFile(null);
+      await refreshVerificationState();
+      notify.success('DOH LTO details saved and resubmitted for verification.');
+      return true;
+    }
+
     await refreshReadiness();
-    notify.success(
-      wasVerifiedFacility && saved.platformVerificationStatus === 'PendingReview'
-        ? 'DOH LTO details saved and resubmitted for verification.'
-        : 'DOH LTO details saved.',
-    );
+    notify.success('DOH LTO details saved.');
     return true;
   };
 
@@ -668,6 +710,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       setLtoUploading(false);
       if (syncErr) {
         if (isVerificationConflictError(syncErr)) {
+          setPendingLtoSyncFailed(false);
           notify.error(
             syncErr.message ||
               'Verification submission is no longer pending review. Refreshing status.'
@@ -675,6 +718,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
           await refreshVerificationState();
           return false;
         }
+        setPendingLtoSyncFailed(true);
         notify.error(
           syncErr.message ||
             'DOH LTO proof uploaded locally, but pending verification update failed.'
@@ -682,6 +726,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
         await refreshReadiness();
         return false;
       }
+      setPendingLtoSyncFailed(false);
       await refreshReadiness();
       notify.success('DOH LTO proof uploaded and pending verification submission updated.');
       return true;
@@ -690,6 +735,33 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     setLtoUploading(false);
     await refreshReadiness();
     notify.success('DOH LTO proof uploaded.');
+    return true;
+  };
+
+  const handleRetryPendingVerificationSync = async () => {
+    setRetryingPendingSync(true);
+    const [, syncErr] = await clinicService.updatePendingDirectoryVerification();
+    setRetryingPendingSync(false);
+    if (syncErr) {
+      if (isVerificationConflictError(syncErr)) {
+        setPendingLtoSyncFailed(false);
+        notify.error(
+          syncErr.message ||
+            'Verification submission is no longer pending review. Refreshing status.'
+        );
+        await refreshVerificationState();
+        return false;
+      }
+      notify.error(
+        syncErr.message ||
+          'Pending verification sync failed. Please try again.'
+      );
+      return false;
+    }
+
+    setPendingLtoSyncFailed(false);
+    await refreshReadiness();
+    notify.success('Pending verification submission updated.');
     return true;
   };
 
@@ -1007,6 +1079,12 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             optedInCliniciansReadyCount={readiness?.optedInCliniciansReadyCount}
             onSaveDohLto={handleSaveDohLto}
             onUploadLtoProof={handleUploadLtoProof}
+            stagedLtoObjectKey={stagedLtoObjectKey}
+            stagedLtoFile={stagedLtoFile}
+            onStagedLtoProofChange={handleStagedLtoProofChange}
+            hasPendingLtoSyncError={pendingLtoSyncFailed}
+            onRetryPendingVerificationSync={handleRetryPendingVerificationSync}
+            isRetryingPendingSync={retryingPendingSync}
             onSubmitVerification={handleSubmitVerification}
             onWithdrawVerification={handleWithdrawVerification}
             onTogglePublishDirectory={handleTogglePublishDirectory}

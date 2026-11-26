@@ -22,9 +22,8 @@ internal sealed class PatientContraceptiveHistorySyncProcessor
     public PatientContraceptiveHistorySyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
     public override string EntityType => SyncableEntityTypes.PatientContraceptiveHistory;
 
-    protected override async Task<PatientContraceptiveHistory?> FindExistingAsync(ContraceptiveHistoryPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientContraceptiveHistories.FindAsync([id.Value], ct)
-            : await Context.PatientContraceptiveHistories.FirstOrDefaultAsync(e => e.ClientId == p.ClientId, ct);
+    protected override Task<PatientContraceptiveHistory?> FindExistingAsync(ContraceptiveHistoryPayload p, Guid? id, CancellationToken ct)
+        => FindByIdOrAsync(id, p.ClientId != Guid.Empty ? e => e.PatientId == p.PatientId && e.ClientId == p.ClientId : null, ct);
 
     protected override PatientContraceptiveHistory CreateFromPayload(ContraceptiveHistoryPayload p) => new()
         { ClientId = p.ClientId, PatientId = p.PatientId, Method = p.Method, IsCurrent = p.IsCurrent, DateStarted = p.DateStarted, ReasonForStopping = p.ReasonForStopping };

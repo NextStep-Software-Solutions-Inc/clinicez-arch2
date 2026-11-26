@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { TERMINAL_CONVERSATION_STATUSES } from '../../core/conversationFilters';
 import { ConversationDto, MessageDto, ParticipantDto } from '../../core/types';
 import { useCommsContext } from '../CommsContext';
 import { resolveCommsAuthHeaders } from '../internal/authHeaders';
@@ -204,20 +205,25 @@ export function useConversation(
     };
   }, [client, conversationId, options?.markAsReadOnMount, staffId]);
 
-  // Sync when connection reconnects
+  // Sync when connection connects or reconnects
   useEffect(() => {
     if (!conversationId) return;
 
     const unsub = client.events.on('connectionStateChanged', (state) => {
       if (state === 'Connected') {
-        refreshRef.current().catch(() => {});
+        subscriptionTracker
+          .ensureJoined(client, conversationId)
+          .catch(() => {})
+          .finally(() => {
+            refreshRef.current().catch(() => {});
+          });
       }
     });
 
     return () => {
       unsub();
     };
-  }, [client, conversationId]);
+  }, [client, conversationId, subscriptionTracker]);
 
   // Sync with OptimisticStore
   useEffect(() => {
@@ -260,9 +266,41 @@ export function useConversation(
       }
     });
 
+    const unsubConvUpdated = client.events.on('conversationUpdated', (conv) => {
+      const targetId = conv.id || (conv as { conversationId?: string }).conversationId;
+      if (targetId !== conversationId) return;
+      setConversation((prev) => (prev ? { ...prev, ...conv, id: prev.id } : conv));
+      if (Array.isArray(conv.participants)) {
+        setParticipants(conv.participants);
+      }
+    });
+
+    const unsubThreadState = client.events.on('threadStateChanged', (payload) => {
+      if (payload.conversationId !== conversationId) return;
+      setConversation((prev) => {
+        if (!prev) return prev;
+        const isTerminal = TERMINAL_CONVERSATION_STATUSES.has(payload.newStatus);
+        return {
+          ...prev,
+          status: payload.newStatus,
+          triageDisposition:
+            payload.disposition !== undefined ? payload.disposition : prev.triageDisposition,
+          assignedStaffId:
+            payload.assignedStaffId !== undefined ? payload.assignedStaffId : prev.assignedStaffId,
+          assignedStaffName:
+            payload.assignedStaffName !== undefined
+              ? payload.assignedStaffName
+              : prev.assignedStaffName,
+          closedAtUtc: isTerminal ? (prev.closedAtUtc ?? new Date().toISOString()) : null,
+        };
+      });
+    });
+
     return () => {
       unsubPartJoined();
       unsubPartLeft();
+      unsubConvUpdated();
+      unsubThreadState();
     };
   }, [client, conversationId]);
 

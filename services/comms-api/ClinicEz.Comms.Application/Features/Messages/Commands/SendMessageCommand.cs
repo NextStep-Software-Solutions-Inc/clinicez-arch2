@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Comms.Application.Common.Helpers;
 using ClinicEz.Comms.Application.Common.Interfaces;
 using ClinicEz.Comms.Application.Models;
 using ClinicEz.Comms.Domain.Entities;
@@ -33,15 +34,21 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
     private readonly ICommsDbContext _db;
     private readonly ICommsRealtimeNotifier _notifier;
     private readonly IInteropPublisher? _publisher;
+    private readonly ICommsStorageService? _storage;
+    private readonly IAttachmentCryptoService? _crypto;
 
     public SendMessageCommandHandler(
         ICommsDbContext db,
         ICommsRealtimeNotifier notifier,
-        IInteropPublisher? publisher = null)
+        IInteropPublisher? publisher = null,
+        ICommsStorageService? storage = null,
+        IAttachmentCryptoService? crypto = null)
     {
         _db = db;
         _notifier = notifier;
         _publisher = publisher;
+        _storage = storage;
+        _crypto = crypto;
     }
 
     public async Task<MessageDto> Handle(SendMessageCommand request, CancellationToken ct)
@@ -51,7 +58,12 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
             .FirstOrDefaultAsync(c => c.Id == request.ConversationId && c.TenantId == request.TenantId, ct)
             ?? throw new NotFoundException($"Conversation '{request.ConversationId}' not found.");
 
-        if (conversation.ClosedAtUtc.HasValue)
+        if (conversation.ClosedAtUtc.HasValue
+            || conversation.Status is RequestStatus.Closed
+                or RequestStatus.Answered
+                or RequestStatus.NeedsVisit
+                or RequestStatus.Declined
+                or RequestStatus.Resolved)
         {
             throw new ValidationException("Conversation thread is closed. New messages cannot be sent.");
         }
@@ -68,11 +80,6 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
             }
         }
 
-        if (string.Equals(request.SenderType, "Patient", StringComparison.OrdinalIgnoreCase) && conversation.Status == RequestStatus.WithTriage)
-        {
-            throw new ValidationException("Inquiry is currently with triage. Patient messages are blocked until disposition or routing.");
-        }
-
         // Idempotency check: if client supplied ClientMessageId and it exists in DB, return it
         if (request.ClientMessageId.HasValue)
         {
@@ -83,7 +90,7 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
             if (existing != null)
             {
                 var existingRefs = existing.Attachments
-                    .Select(a => new CommsAttachmentReference(a.StoragePath, a.SafeFileName, a.ContentType, a.SanitizedSizeBytes, a.SHA256Checksum))
+                    .Select(a => new CommsAttachmentReference(a.StoragePath, a.SafeFileName, a.ContentType, a.SanitizedSizeBytes, a.SHA256Checksum, a.Id))
                     .ToList();
 
                 return new MessageDto(
@@ -136,16 +143,25 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
 
         // Attach attachments if any
         var attachmentRefs = new List<CommsAttachmentReference>();
+        var linkedAttachmentEntities = new List<MessageAttachment>();
         if (request.Attachments != null && request.Attachments.Count > 0)
         {
             foreach (var attRef in request.Attachments)
             {
-                attachmentRefs.Add(attRef);
                 var attEntity = await _db.MessageAttachments
-                    .FirstOrDefaultAsync(a => a.StoragePath == attRef.FileKey || a.Id.ToString() == attRef.FileKey, ct);
+                    .FirstOrDefaultAsync(a =>
+                        (attRef.AttachmentId.HasValue && a.Id == attRef.AttachmentId.Value) ||
+                        a.StoragePath == attRef.FileKey ||
+                        a.Id.ToString() == attRef.FileKey, ct);
                 if (attEntity != null)
                 {
                     attEntity.MessageId = message.Id;
+                    linkedAttachmentEntities.Add(attEntity);
+                    attachmentRefs.Add(attRef with { FileKey = attEntity.StoragePath, AttachmentId = attEntity.Id });
+                }
+                else
+                {
+                    attachmentRefs.Add(attRef);
                 }
             }
         }
@@ -160,34 +176,60 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
         // Transactional outbox replication if not site-local and publisher is present
         if (!conversation.IsLocalOnly && _publisher != null)
         {
-            var replicatePayload = new CommsMessageReplicatePayload(
-                message.Id,
-                message.ConversationId,
-                message.Seq,
-                message.TenantId,
-                message.FacilityId,
-                message.SenderType,
-                message.SenderId != null && Guid.TryParse(message.SenderId, out var pSenderGuid) ? pSenderGuid : null,
-                message.SenderDisplayName,
-                message.ContentText,
-                message.Visibility,
-                message.RequiresAcknowledgement,
-                attachmentRefs,
-                message.ClientSentAtUtc,
-                message.RetentionDeadlineUtc,
-                message.State);
+            if (conversation.Scope == ConversationScope.PatientFacility)
+            {
+                if (!string.Equals(request.SenderType, "Patient", StringComparison.OrdinalIgnoreCase))
+                {
+                    foreach (var attEntity in linkedAttachmentEntities)
+                    {
+                        await CommsAttachmentTransferHelper.EnqueueAttachmentChunksToPatientAsync(
+                            _publisher,
+                            _storage,
+                            _crypto,
+                            conversation,
+                            message,
+                            attEntity,
+                            ct);
+                    }
 
-            var fromParty = Party.ForFacility(request.TenantId, request.FacilityId, FacilityType.Clinic);
-            var toParty = Party.ForFacility(request.TenantId, request.FacilityId, FacilityType.Clinic);
+                    CommsPatientReplicationHelper.EnqueueMessageToPatient(
+                        _publisher,
+                        conversation,
+                        message,
+                        attachmentRefs);
+                }
+            }
+            else
+            {
+                var replicatePayload = new CommsMessageReplicatePayload(
+                    message.Id,
+                    message.ConversationId,
+                    message.Seq,
+                    message.TenantId,
+                    message.FacilityId,
+                    message.SenderType,
+                    message.SenderId != null && Guid.TryParse(message.SenderId, out var pSenderGuid) ? pSenderGuid : null,
+                    message.SenderDisplayName,
+                    message.ContentText,
+                    message.Visibility,
+                    message.RequiresAcknowledgement,
+                    attachmentRefs,
+                    message.ClientSentAtUtc,
+                    message.RetentionDeadlineUtc,
+                    message.State);
 
-            _publisher.Enqueue(
-                type: InteropTypes.CommsMessageReplicate,
-                from: fromParty,
-                to: toParty,
-                correlationId: message.ConversationId,
-                payload: replicatePayload,
-                schemaVersion: 1,
-                ttl: TimeSpan.FromDays(7));
+                var fromParty = Party.ForFacility(request.TenantId, request.FacilityId, FacilityType.Clinic);
+                var toParty = Party.ForFacility(request.TenantId, request.FacilityId, FacilityType.Clinic);
+
+                _publisher.Enqueue(
+                    type: InteropTypes.CommsMessageReplicate,
+                    from: fromParty,
+                    to: toParty,
+                    correlationId: message.ConversationId,
+                    payload: replicatePayload,
+                    schemaVersion: 1,
+                    ttl: TimeSpan.FromDays(7));
+            }
         }
 
         await _db.SaveChangesAsync(ct);

@@ -682,7 +682,7 @@ public class TriageAdversarialTests
     }
 
     [Fact]
-    public async Task SendMessage_DuringWithTriage_PatientMessageBlocked()
+    public async Task SendMessage_DuringWithTriage_PatientFollowUpAllowed()
     {
         var db = TestDbContextFactory.CreateInMemory();
         var convId = Guid.NewGuid();
@@ -709,8 +709,8 @@ public class TriageAdversarialTests
             Visibility: MessageVisibility.Public,
             RequiresAcknowledgement: false);
 
-        var ex = await Assert.ThrowsAsync<ValidationException>(() => handler.Handle(cmd, CancellationToken.None));
-        Assert.Contains("triage", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var result = await handler.Handle(cmd, CancellationToken.None);
+        Assert.Equal("Can I get an update?", result.ContentText);
     }
 
     [Fact]
@@ -1106,5 +1106,107 @@ public class TriageAdversarialTests
             It.IsAny<Party>(),
             grantId,
             It.IsAny<CommsEligibilitySyncedPayload>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(RequestStatus.Answered)]
+    [InlineData(RequestStatus.NeedsVisit)]
+    [InlineData(RequestStatus.Declined)]
+    [InlineData(RequestStatus.Resolved)]
+    [InlineData(RequestStatus.Closed)]
+    public async Task SendMessage_TerminalStatusWithoutClosedAtUtc_ThrowsValidationException(RequestStatus terminalStatus)
+    {
+        var db = TestDbContextFactory.CreateInMemory();
+        var convId = Guid.NewGuid();
+
+        db.Conversations.Add(new Conversation
+        {
+            Id = convId,
+            TenantId = TenantId,
+            FacilityId = FacilityId,
+            Scope = ConversationScope.PatientFacility,
+            Kind = ConversationKind.PatientTriage,
+            Status = terminalStatus,
+            ClosedAtUtc = null
+        });
+        await db.SaveChangesAsync();
+
+        var handler = new SendMessageCommandHandler(db, _notifierMock.Object, _publisherMock.Object);
+        var cmd = new SendMessageCommand(
+            ConversationId: convId,
+            TenantId: TenantId,
+            FacilityId: FacilityId,
+            SenderType: "Staff",
+            SenderId: "staff-1",
+            SenderDisplayName: "Nurse Joy",
+            ContentText: "+ On My Way",
+            Visibility: MessageVisibility.Public,
+            RequiresAcknowledgement: false);
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => handler.Handle(cmd, CancellationToken.None));
+        Assert.Contains("Conversation thread is closed", ex.Message);
+    }
+
+    [Fact]
+    public async Task Reopen_WithStaffAttribution_PostsStaffReopenMessage_AndResetsToWithTriage()
+    {
+        var db = TestDbContextFactory.CreateInMemory();
+        var convId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        db.EligibilityGrants.Add(new EligibilityGrant
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            FacilityId = FacilityId,
+            FacilityType = "Clinic",
+            PatientId = patientId,
+            WindowStartUtc = now.AddDays(-1),
+            WindowEndUtc = now.AddDays(7),
+            IsActive = true,
+            Version = 1
+        });
+
+        db.Conversations.Add(new Conversation
+        {
+            Id = convId,
+            TenantId = TenantId,
+            FacilityId = FacilityId,
+            Scope = ConversationScope.PatientFacility,
+            Kind = ConversationKind.PatientTriage,
+            PatientId = patientId,
+            Status = RequestStatus.Answered,
+            ClosedAtUtc = now.AddHours(-1),
+            ClosedBy = "Nurse Joy",
+            TriageDisposition = TriageDisposition.Answered,
+            ReopenCount = 0
+        });
+        await db.SaveChangesAsync();
+
+        var handler = new ReopenConversationCommandHandler(db, _notifierMock.Object, _publisherMock.Object);
+
+        var cmd = new ReopenConversationCommand(
+            ConversationId: convId,
+            TenantId: TenantId,
+            PatientId: patientId,
+            IsEmergencyConfirmed: false,
+            Reason: "Reopened by clinic staff for follow-up",
+            ReopenedByStaffId: "staff-99",
+            ReopenedByStaffName: "Dr. Santos");
+
+        var result = await handler.Handle(cmd, CancellationToken.None);
+
+        Assert.Equal(RequestStatus.WithTriage, result.Status);
+        Assert.Equal(1, result.ReopenCount);
+        Assert.Null(result.ClosedAtUtc);
+        Assert.Null(result.TriageDisposition);
+
+        var reopenMessage = db.Messages.FirstOrDefault(m => m.ConversationId == convId);
+        Assert.NotNull(reopenMessage);
+        Assert.Equal("Staff", reopenMessage.SenderType);
+        Assert.Equal("staff-99", reopenMessage.SenderId);
+        Assert.Equal("Dr. Santos", reopenMessage.SenderDisplayName);
+        Assert.Contains("Inquiry reopened by clinic staff", reopenMessage.ContentText);
     }
 }

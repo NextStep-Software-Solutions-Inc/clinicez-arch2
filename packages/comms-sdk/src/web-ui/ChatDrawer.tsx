@@ -201,6 +201,12 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
                   )}
                 </div>
 
+                {item.subtitle && (
+                  <p className="text-xs font-medium text-teal-700 dark:text-teal-400 truncate mb-0.5">
+                    {item.subtitle}
+                  </p>
+                )}
+
                 {item.lastMessageSnippet && (
                   <p className="text-xs text-slate-500 dark:text-slate-400 truncate mb-1.5">
                     {item.lastMessageSnippet}

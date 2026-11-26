@@ -37,7 +37,16 @@ public sealed class CommsMessageReceivedInteropHandler : IInteropHandler<CommsMe
     {
         var msg = await _dbContext.PatientMessages
             .Include(m => m.Conversation)
-            .FirstOrDefaultAsync(m => m.Id == message.MessageId, ct);
+            .FirstOrDefaultAsync(m => m.Id == message.MessageId || m.ClientMessageId == message.MessageId, ct);
+
+        if (msg == null)
+        {
+            msg = await _dbContext.PatientMessages
+                .Include(m => m.Conversation)
+                .FirstOrDefaultAsync(
+                    m => m.ConversationId == message.ConversationId && m.Seq == 1 && m.SenderType == "Patient",
+                    ct);
+        }
 
         if (msg == null)
         {
@@ -49,6 +58,10 @@ public sealed class CommsMessageReceivedInteropHandler : IInteropHandler<CommsMe
         // a late confirmation proves it was genuinely received!
         msg.DeliveryState = DeliveryState.Received;
         msg.ReceivedAtUtc = message.ReceivedAtUtc;
+        if (message.AssignedSeq.HasValue && message.AssignedSeq.Value > 0)
+        {
+            msg.Seq = message.AssignedSeq.Value;
+        }
         msg.HasExpiredBannerShown = false;
         msg.UpdatedAtUtc = DateTime.UtcNow;
 

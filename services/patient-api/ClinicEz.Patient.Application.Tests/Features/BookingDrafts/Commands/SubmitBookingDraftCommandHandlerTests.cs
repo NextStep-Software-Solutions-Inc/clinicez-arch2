@@ -60,6 +60,9 @@ public sealed class SubmitBookingDraftCommandHandlerTests
             Options.Create(new SharingOptions { BookingGrantDays = 30 }),
             new PatientShareSnapshotBuilder(_patientRepo, Substitute.For<IPatientDocumentRepository>()), _fileRepo);
 
+    private static readonly DateOnly FuturePreferredDate =
+        DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8).AddDays(7));
+
     private BookingDraft ArrangeDraft(
         string shareFieldsJson = "[]", string attachedFileIdsJson = "[]", string? clinicTenant = "tenant-a", AccessScopes shareSections = AccessScopes.None)
     {
@@ -69,7 +72,7 @@ public sealed class SubmitBookingDraftCommandHandlerTests
             PatientId = _patientId,
             ClinicId = _clinicId,
             Status = BookingDraftStatus.Draft,
-            PreferredDate = new DateOnly(2026, 10, 15),
+            PreferredDate = FuturePreferredDate,
             PreferredTime = "14:00",
             Reason = "General Checkup",
             ShareFieldsJson = shareFieldsJson,
@@ -131,7 +134,7 @@ public sealed class SubmitBookingDraftCommandHandlerTests
         _published.PatientId.Should().Be(_patientId);
         _published.ClinicId.Should().Be(_clinicId);
         _published.TenantId.Should().Be("tenant-a");
-        _published.PreferredDate.Should().Be(new DateOnly(2026, 10, 15));
+        _published.PreferredDate.Should().Be(FuturePreferredDate);
         _published.PreferredTime.Should().Be("14:00");
         _published.Reason.Should().Be("General Checkup");
         _published.PatientFirstName.Should().Be("Juan");

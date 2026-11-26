@@ -206,6 +206,7 @@ public static class DependencyInjection
             .Handle<CommsThreadStateChangedPayload, CommsThreadStateChangedInteropHandler>(InteropTypes.CommsThreadStateChanged)
             .Handle<CommsEligibilitySyncedPayload, CommsEligibilitySyncedInteropHandler>(InteropTypes.CommsEligibilitySynced)
             .Handle<CommsCallStateChangedPayload, CommsCallStateChangedInteropHandler>(InteropTypes.CommsCallStateChanged)
+            .Handle<CommsAttachmentChunkPayload, CommsAttachmentChunkInteropHandler>(InteropTypes.CommsAttachmentChunk)
             .Respond<PatientIdentityDirectoryRequestedPayload, PatientIdentityDirectoryRespondedPayload, PatientIdentityDirectoryResponder>(
                 InteropTypes.PatientIdentityDirectoryRequested, InteropTypes.PatientIdentityDirectoryResponded)
             .Respond<PatientIdentityReconcileRequestedPayload, PatientIdentityReconcileRespondedPayload, PatientIdentityReconcileResponder>(

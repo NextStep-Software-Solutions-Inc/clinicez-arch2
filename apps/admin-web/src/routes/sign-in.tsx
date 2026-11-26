@@ -1,18 +1,48 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createRoute, useLocation } from '@tanstack/react-router';
 import { Route as rootRoute } from './__root';
 import { SignIn } from '@clerk/clerk-react';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { ClinicEzLogo } from '@/components/ClinicEzLogo';
 import { getIdleTimeoutMinutes } from '@/lib/idleGuard';
+import {
+  buildAuthHrefWithRedirect,
+  clearPendingAuthRedirect,
+  readPendingAuthRedirect,
+  sanitizeAdminRedirectPath,
+  savePendingAuthRedirect,
+} from '@/lib/authRedirect';
 
-function SignInPage() {
-  const location = useLocation();
+interface SignInSearch {
+  reason?: string;
+  redirect_url?: string;
+}
+
+export interface SignInViewProps {
+  SignInComponent?: React.ComponentType<React.ComponentProps<typeof SignIn>>;
+}
+
+export function SignInView({ SignInComponent = SignIn }: SignInViewProps) {
+  const searchStr = useLocation({ select: (loc) => loc.searchStr });
+  const pathname = useLocation({ select: (loc) => loc.pathname });
   const searchParams = new URLSearchParams(
-    location.searchStr ?? (typeof window !== 'undefined' ? window.location.search : '')
+    searchStr ?? (typeof window !== 'undefined' ? window.location.search : '')
   );
   const reason = searchParams.get('reason');
+  const urlRedirect = sanitizeAdminRedirectPath(searchParams.get('redirect_url'));
+  const normalizedPath = (pathname || '/sign-in').replace(/\/+$/, '');
+  const isSubRoute = normalizedPath !== '/sign-in';
+  const resolvedRedirect = urlRedirect ?? (isSubRoute ? readPendingAuthRedirect() : null);
+  const effectiveRedirect = resolvedRedirect ?? '/sync-auth';
   const idleMinutes = getIdleTimeoutMinutes();
+
+  useEffect(() => {
+    if (urlRedirect) {
+      savePendingAuthRedirect(urlRedirect);
+    } else if (!isSubRoute) {
+      clearPendingAuthRedirect();
+    }
+  }, [urlRedirect, isSubRoute]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-text">
@@ -42,11 +72,14 @@ function SignInPage() {
         )}
 
         <div className="flex justify-center">
-          <SignIn
+          <SignInComponent
             path="/sign-in"
             routing="path"
-            signUpUrl="/sign-up"
-            forceRedirectUrl="/sync-auth"
+            signUpUrl={buildAuthHrefWithRedirect('/sign-up', resolvedRedirect)}
+            forceRedirectUrl={effectiveRedirect}
+            fallbackRedirectUrl={effectiveRedirect}
+            signUpForceRedirectUrl={effectiveRedirect}
+            signUpFallbackRedirectUrl={effectiveRedirect}
           />
         </div>
       </div>
@@ -54,9 +87,17 @@ function SignInPage() {
   );
 }
 
+function SignInPage() {
+  return <SignInView />;
+}
+
 const signInBaseRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'sign-in',
+  validateSearch: (search: Record<string, unknown>): SignInSearch => ({
+    reason: typeof search.reason === 'string' ? search.reason : undefined,
+    redirect_url: typeof search.redirect_url === 'string' ? search.redirect_url : undefined,
+  }),
   component: SignInPage,
 });
 

@@ -93,7 +93,13 @@ const axiosInstance = axios.create({
 axiosInstance.interceptors.response.use(
     (response) => {
         if (response.status === 204) return response;
-        if (response.config.responseType === 'text') return response;
+        if (
+            response.config.responseType === 'text' ||
+            response.config.responseType === 'blob' ||
+            response.config.responseType === 'arraybuffer'
+        ) {
+            return response;
+        }
         const envelope = response.data as ApiEnvelope<unknown>;
         if (!envelope.succeeded) {
             throw new ApiError(
@@ -171,6 +177,15 @@ export const api = {
             url: path,
             responseType: 'text',
             transformResponse: [(data: string) => data],
+            timeout: UPLOAD_TIMEOUT_MS,
+        }),
+
+    /** Authenticated binary download (attachments, documents). */
+    getBlob: (getToken: () => Promise<string | null>, path: string): Promise<Blob> =>
+        authRequest<Blob>(getToken, {
+            method: 'GET',
+            url: path,
+            responseType: 'blob',
             timeout: UPLOAD_TIMEOUT_MS,
         }),
 };

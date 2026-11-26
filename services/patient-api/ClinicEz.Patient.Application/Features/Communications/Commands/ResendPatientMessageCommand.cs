@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Patient.Application.Common.Interfaces;
 using ClinicEz.Patient.Application.Features.Communications.DTOs;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Interfaces;
@@ -25,17 +26,23 @@ public sealed class ResendPatientMessageCommandHandler : IRequestHandler<ResendP
     private readonly IPatientCommunicationsRepository _commsRepo;
     private readonly IUnitOfWork _uow;
     private readonly IInteropPublisher _publisher;
+    private readonly IStorageService? _storageService;
+    private readonly IPatientEncryptionService? _encryptionService;
 
     public ResendPatientMessageCommandHandler(
         IPatientRepository patientRepo,
         IPatientCommunicationsRepository commsRepo,
         IUnitOfWork uow,
-        IInteropPublisher publisher)
+        IInteropPublisher publisher,
+        IStorageService? storageService = null,
+        IPatientEncryptionService? encryptionService = null)
     {
         _patientRepo = patientRepo;
         _commsRepo = commsRepo;
         _uow = uow;
         _publisher = publisher;
+        _storageService = storageService;
+        _encryptionService = encryptionService;
     }
 
     public async Task<PatientMessageDto> Handle(
@@ -73,12 +80,33 @@ public sealed class ResendPatientMessageCommandHandler : IRequestHandler<ResendP
         conversation.LastMessageAtUtc = now;
         _commsRepo.UpdateConversation(conversation);
 
+        var targetFacilityType = CommunicationCommandRules.ResolveFacilityType(conversation.HomeFacilityType);
+
+        foreach (var att in message.Attachments)
+        {
+            await CommunicationCommandRules.EnqueueDecryptedChunksIfPresentAsync(
+                _publisher,
+                _storageService,
+                _encryptionService,
+                att,
+                att.PatientId ?? conversation.PatientId,
+                conversation.PatientId,
+                conversation.HomeTenantId,
+                conversation.HomeFacilityId,
+                targetFacilityType,
+                conversation.HomeFacilityType,
+                conversation.Id,
+                message.Id,
+                ct);
+        }
+
         var attachmentRefs = message.Attachments.Select(a => new CommsAttachmentReference(
             FileKey: a.StorageKey,
             FileName: a.FileName,
             ContentType: a.ContentType,
             SizeBytes: a.FileSizeBytes,
-            HashSha256: a.HashSha256
+            HashSha256: a.HashSha256,
+            AttachmentId: a.Id
         )).ToList();
 
         // Re-enqueue with the exact same ClientMessageId for idempotency
@@ -97,8 +125,6 @@ public sealed class ResendPatientMessageCommandHandler : IRequestHandler<ResendP
             ClientSentAtUtc: now,
             RetentionDeadlineUtc: retentionDeadline
         );
-
-        var targetFacilityType = CommunicationCommandRules.ResolveFacilityType(conversation.HomeFacilityType);
 
         _publisher.Enqueue(
             InteropTypes.CommsMessageSubmit,

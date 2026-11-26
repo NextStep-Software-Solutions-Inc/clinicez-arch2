@@ -25,9 +25,8 @@ internal sealed class PatientPregnancySyncProcessor
     public PatientPregnancySyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
     public override string EntityType => SyncableEntityTypes.PatientPregnancy;
 
-    protected override async Task<PatientPregnancy?> FindExistingAsync(PregnancyPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientPregnancies.FindAsync([id.Value], ct)
-            : await Context.PatientPregnancies.FirstOrDefaultAsync(e => e.ClientId == p.ClientId, ct);
+    protected override Task<PatientPregnancy?> FindExistingAsync(PregnancyPayload p, Guid? id, CancellationToken ct)
+        => FindByIdOrAsync(id, p.ClientId != Guid.Empty ? e => e.PatientId == p.PatientId && e.ClientId == p.ClientId : null, ct);
 
     protected override PatientPregnancy CreateFromPayload(PregnancyPayload p) => new()
         { ClientId = p.ClientId, PatientId = p.PatientId, Year = p.Year, Outcome = p.Outcome,

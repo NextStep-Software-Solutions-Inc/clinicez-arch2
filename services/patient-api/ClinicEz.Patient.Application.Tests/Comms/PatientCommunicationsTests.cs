@@ -17,6 +17,7 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Shared.Interop.Handling;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -755,6 +756,100 @@ public class PatientCommunicationsTests
             envelope.To.FacilityId.Should().Be(facilityId);
             envelope.To.FacilityType.Should().Be(expectedFacilityType);
             envelope.To.Service.Should().Be(InteropServices.Comms);
+
+            var submitPayload = envelope.GetPayload<CommsRequestSubmitPayload>();
+            submitPayload.PatientDisplayName.Should().Be("Clara Santos");
+            conversation.Subject.Should().BeEmpty();
+        });
+    }
+
+    [Fact]
+    public async Task SubmitPatientInquiry_ForManagedDependent_SendsDependentNameAndPreservesCustomSubject()
+    {
+        using var harness = new PatientInteropHarness();
+        var parentId = Guid.NewGuid();
+        var dependentId = Guid.NewGuid();
+        const string clerkUserId = "user_parent_inquiry_284";
+        const string tenantId = "tenant-nextstep";
+        const string facilityId = "fac-clinic-284";
+
+        await harness.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Domain.Entities.Patient
+            {
+                Id = parentId,
+                ClerkUserId = clerkUserId,
+                FirstName = "Maria",
+                LastName = "Tabasan",
+                ClinicEzId = "CE-PARENT-284"
+            });
+
+            db.Patients.Add(new Domain.Entities.Patient
+            {
+                Id = dependentId,
+                ManagedByPatientId = parentId,
+                RelationshipToManager = "Mother",
+                FirstName = "Justine Mae",
+                LastName = "Tabasan",
+                ClinicEzId = "CE-DEP-284"
+            });
+
+            db.PatientEligibilityGrants.Add(new PatientEligibilityGrant
+            {
+                Id = Guid.NewGuid(),
+                GrantId = Guid.NewGuid(),
+                PatientId = dependentId,
+                TenantId = tenantId,
+                FacilityId = facilityId,
+                FacilityType = "Clinic",
+                FacilityName = "Nextstep OPD",
+                ContextType = "Appointment",
+                ContextId = "appt-284",
+                IsActive = true,
+                WindowStartUtc = DateTime.UtcNow.AddDays(-1),
+                WindowEndUtc = DateTime.UtcNow.AddDays(7)
+            });
+
+            await db.SaveChangesAsync();
+        });
+
+        var handler = new SubmitPatientInquiryCommandHandler(
+            harness.Provider.GetRequiredService<IPatientRepository>(),
+            harness.Provider.GetRequiredService<IPatientCommunicationsRepository>(),
+            harness.Provider.GetRequiredService<IUnitOfWork>(),
+            harness.Provider.GetRequiredService<IInteropPublisher>());
+
+        var response = await handler.Handle(
+            new SubmitPatientInquiryCommand(
+                ClerkUserId: clerkUserId,
+                PatientId: dependentId,
+                TenantId: tenantId,
+                FacilityId: facilityId,
+                FacilityType: "Clinic",
+                FacilityName: "Nextstep OPD",
+                Category: MessageCategory.PostVisitFollowUp,
+                ContentText: "Follow-up after checkup.",
+                IsEmergencyConfirmed: false,
+                Subject: "Blood pressure check"),
+            CancellationToken.None);
+
+        response.ConversationId.Should().NotBeNull();
+
+        await harness.WithDbAsync(async db =>
+        {
+            var conversation = await db.PatientConversations.FindAsync(response.ConversationId);
+            conversation.Should().NotBeNull();
+            conversation!.Subject.Should().Be("Blood pressure check");
+
+            var outbox = await db.InteropOutbox
+                .Where(o => o.Type == InteropTypes.CommsRequestSubmit)
+                .SingleAsync();
+            var envelope = System.Text.Json.JsonSerializer.Deserialize<InteropEnvelope>(
+                outbox.EnvelopeJson,
+                InteropJson.Options);
+            var payload = envelope!.GetPayload<CommsRequestSubmitPayload>();
+            payload.PatientDisplayName.Should().Be("Justine Mae Tabasan");
+            payload.SubmittingAccountId.Should().Be(parentId);
         });
     }
 
@@ -1017,6 +1112,151 @@ public class PatientCommunicationsTests
                 env!.To.FacilityType.Should().Be(FacilityType.Pharmacy);
                 env.To.FacilityId.Should().Be("pharmacy-9");
             }
+        });
+    }
+
+    [Fact]
+    public async Task CommsEligibilitySynced_PopulatesGrantForCanonicalPatient_AndIgnoresUnknownPatientSafely()
+    {
+        using var harness = new PatientInteropHarness();
+        var patientId = Guid.NewGuid();
+        var clinicId = Guid.NewGuid();
+        const string clerkUserId = "user_issue_272_sync";
+        const string tenantId = "tenant-nextstep";
+
+        await harness.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Domain.Entities.Patient
+            {
+                Id = patientId,
+                ClerkUserId = clerkUserId,
+                FirstName = "Justine Mae",
+                LastName = "Tabasan",
+                ClinicEzId = "CE-JUSTINE-272"
+            });
+            db.Clinics.Add(new Domain.Entities.Clinic
+            {
+                Id = clinicId,
+                TenantId = tenantId,
+                Name = "Nextstep OPD",
+                IsPublic = true,
+                SupportsAppointments = true
+            });
+            await db.SaveChangesAsync();
+        });
+
+        await harness.WithDbAsync(async db =>
+        {
+            var notifier = Substitute.For<ISyncNotificationService>();
+            var handler = new Infrastructure.Interop.CommsEligibilitySyncedInteropHandler(
+                db, notifier, NullLogger<Infrastructure.Interop.CommsEligibilitySyncedInteropHandler>.Instance);
+
+            var validGrantId = CommsGrantIdGenerator.Create(tenantId, clinicId.ToString(), "Appointment", Guid.NewGuid().ToString());
+            var ctx = new InteropMessageContext(InteropEnvelope.Create(
+                InteropTypes.CommsEligibilitySynced,
+                Party.ForFacility(tenantId, clinicId.ToString(), FacilityType.Clinic, InteropServices.Comms),
+                Party.ForPatient(patientId.ToString()),
+                validGrantId,
+                new CommsEligibilitySyncedPayload(
+                    validGrantId, tenantId, clinicId.ToString(), "Clinic", patientId,
+                    "Appointment", "appt-1", true, DateTime.UtcNow.AddDays(7), 1)));
+
+            await handler.HandleAsync(
+                new CommsEligibilitySyncedPayload(
+                    validGrantId, tenantId, clinicId.ToString(), "Clinic", patientId,
+                    "Appointment", "appt-1", true, DateTime.UtcNow.AddDays(7), 1),
+                ctx,
+                CancellationToken.None);
+
+            // Unknown local patient ID must NOT throw an FK exception or crash the inbox poller
+            var unknownPatientId = Guid.NewGuid();
+            var unknownGrantId = CommsGrantIdGenerator.Create(tenantId, clinicId.ToString(), "Appointment", Guid.NewGuid().ToString());
+            await handler.HandleAsync(
+                new CommsEligibilitySyncedPayload(
+                    unknownGrantId, tenantId, clinicId.ToString(), "Clinic", unknownPatientId,
+                    "Appointment", "appt-unknown", true, DateTime.UtcNow.AddDays(7), 1),
+                ctx,
+                CancellationToken.None);
+        });
+
+        var queryHandler = new GetPatientEligibilityGrantsQueryHandler(
+            harness.Provider.GetRequiredService<IPatientRepository>(),
+            harness.Provider.GetRequiredService<IPatientCommunicationsRepository>());
+
+        var grants = await queryHandler.Handle(new GetPatientEligibilityGrantsQuery(clerkUserId), CancellationToken.None);
+        grants.Should().ContainSingle();
+        grants[0].FacilityName.Should().Be("Nextstep OPD");
+        grants[0].PatientId.Should().Be(patientId);
+        grants[0].WindowStartUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task CommsMessageReceived_MatchesInitialInquiryMessageByConversationIdFallback()
+    {
+        using var harness = new PatientInteropHarness();
+        var patientId = Guid.NewGuid();
+        var conversationId = Guid.NewGuid();
+        var initialMessageId = Guid.NewGuid();
+
+        await harness.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Domain.Entities.Patient
+            {
+                Id = patientId,
+                ClerkUserId = "user_ack_272",
+                FirstName = "Justine",
+                LastName = "Tabasan",
+                ClinicEzId = "CE-ACK-272"
+            });
+            db.PatientConversations.Add(new PatientConversation
+            {
+                Id = conversationId,
+                PatientId = patientId,
+                HomeTenantId = "tenant-nextstep",
+                HomeFacilityId = Guid.NewGuid().ToString(),
+                HomeFacilityType = "Clinic",
+                FacilityName = "Nextstep OPD",
+                Category = MessageCategory.Scheduling,
+                Subject = "Scheduling",
+                Status = RequestStatus.Submitted
+            });
+            db.PatientMessages.Add(new PatientMessage
+            {
+                Id = initialMessageId,
+                ConversationId = conversationId,
+                Seq = 1,
+                ClientMessageId = Guid.NewGuid(),
+                SenderType = "Patient",
+                SenderId = patientId,
+                SenderName = "Justine Tabasan",
+                ContentText = "Initial inquiry",
+                DeliveryState = DeliveryState.Waiting,
+                RetentionDeadlineUtc = DateTime.UtcNow.AddDays(7)
+            });
+            await db.SaveChangesAsync();
+        });
+
+        await harness.WithDbAsync(async db =>
+        {
+            var notifier = Substitute.For<ISyncNotificationService>();
+            var handler = new Infrastructure.Interop.CommsMessageReceivedInteropHandler(
+                db, notifier, NullLogger<Infrastructure.Interop.CommsMessageReceivedInteropHandler>.Instance);
+
+            var ackTime = DateTime.UtcNow;
+            var payload = new CommsMessageReceivedPayload(conversationId, conversationId, "cloud:comms", ackTime);
+            var ctx = new InteropMessageContext(InteropEnvelope.Create(
+                InteropTypes.CommsMessageReceived,
+                Party.ForFacility("tenant-nextstep", Guid.NewGuid().ToString(), FacilityType.Clinic, InteropServices.Comms),
+                Party.ForPatient(patientId.ToString()),
+                conversationId,
+                payload));
+
+            await handler.HandleAsync(payload, ctx, CancellationToken.None);
+
+            var msg = await db.PatientMessages.FindAsync(initialMessageId);
+            msg.Should().NotBeNull();
+            msg!.DeliveryState.Should().Be(DeliveryState.Received);
+            msg.ReceivedAtUtc.Should().Be(ackTime);
         });
     }
 }

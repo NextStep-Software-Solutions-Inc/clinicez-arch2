@@ -1,10 +1,44 @@
-import React from 'react';
-import { createRoute } from '@tanstack/react-router';
+import React, { useEffect } from 'react';
+import { createRoute, useLocation } from '@tanstack/react-router';
 import { Route as rootRoute } from './__root';
 import { SignUp } from '@clerk/clerk-react';
 import { ClinicEzLogo } from '@/components/ClinicEzLogo';
+import {
+  buildAuthHrefWithRedirect,
+  clearPendingAuthRedirect,
+  readPendingAuthRedirect,
+  sanitizeAdminRedirectPath,
+  savePendingAuthRedirect,
+} from '@/lib/authRedirect';
 
-function SignUpPage() {
+interface SignUpSearch {
+  redirect_url?: string;
+}
+
+export interface SignUpViewProps {
+  SignUpComponent?: React.ComponentType<React.ComponentProps<typeof SignUp>>;
+}
+
+export function SignUpView({ SignUpComponent = SignUp }: SignUpViewProps) {
+  const searchStr = useLocation({ select: (loc) => loc.searchStr });
+  const pathname = useLocation({ select: (loc) => loc.pathname });
+  const searchParams = new URLSearchParams(
+    searchStr ?? (typeof window !== 'undefined' ? window.location.search : '')
+  );
+  const urlRedirect = sanitizeAdminRedirectPath(searchParams.get('redirect_url'));
+  const normalizedPath = (pathname || '/sign-up').replace(/\/+$/, '');
+  const isSubRoute = normalizedPath !== '/sign-up';
+  const resolvedRedirect = urlRedirect ?? (isSubRoute ? readPendingAuthRedirect() : null);
+  const effectiveRedirect = resolvedRedirect ?? '/sync-auth';
+
+  useEffect(() => {
+    if (urlRedirect) {
+      savePendingAuthRedirect(urlRedirect);
+    } else if (!isSubRoute) {
+      clearPendingAuthRedirect();
+    }
+  }, [urlRedirect, isSubRoute]);
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-text">
       <div className="max-w-md w-full space-y-6">
@@ -26,11 +60,14 @@ function SignUpPage() {
         </div>
 
         <div className="flex justify-center">
-          <SignUp
+          <SignUpComponent
             path="/sign-up"
             routing="path"
-            signInUrl="/sign-in"
-            forceRedirectUrl="/sync-auth"
+            signInUrl={buildAuthHrefWithRedirect('/sign-in', resolvedRedirect)}
+            forceRedirectUrl={effectiveRedirect}
+            fallbackRedirectUrl={effectiveRedirect}
+            signInForceRedirectUrl={effectiveRedirect}
+            signInFallbackRedirectUrl={effectiveRedirect}
           />
         </div>
       </div>
@@ -38,9 +75,16 @@ function SignUpPage() {
   );
 }
 
+function SignUpPage() {
+  return <SignUpView />;
+}
+
 const signUpBaseRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'sign-up',
+  validateSearch: (search: Record<string, unknown>): SignUpSearch => ({
+    redirect_url: typeof search.redirect_url === 'string' ? search.redirect_url : undefined,
+  }),
   component: SignUpPage,
 });
 

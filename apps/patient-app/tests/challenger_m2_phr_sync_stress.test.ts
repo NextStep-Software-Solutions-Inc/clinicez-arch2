@@ -1109,7 +1109,7 @@ describe('Challenger M2: Empirical Stress Test Suite for PHR Sync & Hydration', 
       expect(payload.caffeineUse).toBe('4 cups coffee');
     });
 
-    test('2.3 [FAILURE MODE] singleton delete by patientId fails pre-capture because interceptor assumes eq(t.id, entityId)', async () => {
+    test('2.3 singleton delete by patientId pre-captures row snapshot and serverId accurately', async () => {
       const { rawDb } = buildFullTestDb();
       const interceptedDb = createDbWithInterceptor(rawDb);
       const now = new Date();
@@ -1135,16 +1135,13 @@ describe('Challenger M2: Empirical Stress Test Suite for PHR Sync & Hydration', 
       const remaining = await rawDb.select().from(schema.patientSocialHistory).where(eq(schema.patientSocialHistory.patientId, 'patient-single-del-2'));
       expect(remaining.length).toBe(0);
 
-      // Inspect syncQueue: because interceptor queried findFirst({ where: eq(t.id, entityId) }) where entityId was 'patient-single-del-2',
-      // it matched nothing before deletion. After deletion, the row was gone.
+      // Inspect syncQueue: pre-capture used the actual condition (eq(patientId, ...)), capturing serverId & snapshot
       const queueItems = await rawDb.select().from(schema.syncQueue).all();
       expect(queueItems.length).toBe(1);
+      expect(queueItems[0].entityId).toBe('server-soc-hist-guid-888');
       const payload = JSON.parse(queueItems[0].payloadJson);
-      
-      // Vulnerability confirmation: serverId is null instead of 'server-soc-hist-guid-888'
-      // This empirically proves the flaw in createQueryProxy line 650.
-      const isVulnerable = payload.serverId === null;
-      expect(isVulnerable).toBe(true);
+      expect(payload.serverId).toBe('server-soc-hist-guid-888');
+      expect(payload.tobaccoStatus).toBe('Current');
     });
   });
 

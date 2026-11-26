@@ -2597,4 +2597,122 @@ describe('Issues 217 & 218 — clinic-app Pending Verification Sync & DOH LTO Ex
       clinicApiClient.getBlob = origGetBlob;
     }
   });
+
+  test('16. Issue 276 — Controlled staged LTO proof survives unmount/remount and submits via Save LTO & Resubmit, and pending sync retry banner recovers failed sync', async () => {
+    resetFeedbackState();
+    const origGetBlob = clinicApiClient.getBlob;
+    clinicApiClient.getBlob = (async () => [new Blob(['pdf'], { type: 'application/pdf' }), null]) as any;
+
+    try {
+      let stagedKey: string | null = null;
+      let stagedFile: any = null;
+      const saveCalls: Array<{
+        dohLto: string;
+        dohLtoExpiryDate?: string | null;
+        ltoEvidenceObjectKey?: string | null;
+      }> = [];
+
+      const buildControlledProps = (overrides: Record<string, any> = {}): any => ({
+        license: {
+          status: 'Active',
+          planTier: 'Growth',
+          isTampered: false,
+          limits: { maxStaff: 10 },
+        },
+        clinicName: 'St. Jude Clinic',
+        letterheadAddress: '123 Rizal Ave, Manila',
+        letterheadContact: '0917-000-0000',
+        accreditationNumber: 'PHIC-001',
+        operatingHours: 'Mon-Fri 8am-5pm',
+        letterheadDohLto: 'DOH-LTO-04A-2026-0089',
+        dohLtoExpiryDate: '2028-06-30',
+        ltoEvidenceObjectKey: 'tenants/t-1/clinics/c-1/verification/lto/873eb60fedb24d539d2cbd7486dadbd4.jpg',
+        staff: [
+          { id: 'd1', role: 'Doctor', isActive: true, prcLicenseNumber: '0123456' },
+          { id: 'r1', role: 'Receptionist', isActive: true },
+        ],
+        services: [{ id: 's1', isActive: true, name: 'Consult', category: 'Consultation', standardPrice: 500 }],
+        roles: [],
+        platformVerificationStatus: 'Verified',
+        isDirectoryPublished: true,
+        isWorkspaceEligible: true,
+        stagedLtoObjectKey: stagedKey,
+        stagedLtoFile: stagedFile,
+        onStagedLtoProofChange: (nextKey: string | null, nextFile: any) => {
+          stagedKey = nextKey;
+          stagedFile = nextFile;
+        },
+        onUploadLtoProof: async () => 'tenants/t-1/clinics/c-1/verification/lto/pr-2026-gspd-003.pdf',
+        onSaveDohLto: async (dohLto: string, dohLtoExpiryDate?: string | null, ltoEvidenceObjectKey?: string | null) => {
+          saveCalls.push({ dohLto, dohLtoExpiryDate: dohLtoExpiryDate ?? null, ltoEvidenceObjectKey: ltoEvidenceObjectKey ?? null });
+          return true;
+        },
+        onNavigateTab: () => {},
+        onOpenAddStaff: () => {},
+        onOpenAddService: () => {},
+        onOpenLicenseModal: () => {},
+        ...overrides,
+      });
+
+      const firstMount = createLocalHookHarness((props: any) => FacilityReadinessTab(props), buildControlledProps());
+      mockPickedDocumentResult = {
+        canceled: false,
+        assets: [
+          {
+            name: 'PR_PR-2026-GSPD-003.pdf',
+            size: 4096,
+            mimeType: 'application/pdf',
+            uri: 'file:///PR_PR-2026-GSPD-003.pdf',
+          },
+        ],
+      };
+
+      await findNodeByTestId(firstMount.result.current, 'btn-upload-lto-proof').props.onPress();
+      expect(stagedKey).toBe('tenants/t-1/clinics/c-1/verification/lto/pr-2026-gspd-003.pdf');
+      expect(stagedFile?.name).toBe('PR_PR-2026-GSPD-003.pdf');
+      firstMount.unmount();
+
+      // Remount (simulating switching away to another settings tab and returning)
+      const secondMount = createLocalHookHarness((props: any) => FacilityReadinessTab(props), buildControlledProps());
+      const resubmitBtn = findNodeByTestId(secondMount.result.current, 'btn-save-doh-lto');
+      expect(resubmitBtn.props.title).toBe(RESUBMIT_LTO_BUTTON_LABEL);
+      expect(resubmitBtn.props.disabled).toBe(false);
+
+      await resubmitBtn.props.onPress();
+      expect(saveCalls).toEqual([
+        {
+          dohLto: 'DOH-LTO-04A-2026-0089',
+          dohLtoExpiryDate: '2028-06-30',
+          ltoEvidenceObjectKey: 'tenants/t-1/clinics/c-1/verification/lto/pr-2026-gspd-003.pdf',
+        },
+      ]);
+      expect(stagedKey).toBeNull();
+      expect(stagedFile).toBeNull();
+      secondMount.unmount();
+
+      // Pending sync retry banner renders when PendingReview sync fails and invokes retry callback
+      let retryCalls = 0;
+      const retryHarness = createLocalHookHarness(
+        (props: any) => FacilityReadinessTab(props),
+        buildControlledProps({
+          platformVerificationStatus: 'PendingReview',
+          stagedLtoObjectKey: null,
+          stagedLtoFile: null,
+          hasPendingLtoSyncError: true,
+          onRetryPendingVerificationSync: async () => {
+            retryCalls += 1;
+            return true;
+          },
+        }),
+      );
+      expect(findNodeByTestId(retryHarness.result.current, 'readiness-pending-sync-error-banner')).not.toBeNull();
+      await findNodeByTestId(retryHarness.result.current, 'btn-retry-pending-lto-sync').props.onPress();
+      expect(retryCalls).toBe(1);
+      retryHarness.unmount();
+    } finally {
+      mockPickedDocumentResult = { canceled: true, assets: null };
+      resetFeedbackState();
+      clinicApiClient.getBlob = origGetBlob;
+    }
+  });
 });

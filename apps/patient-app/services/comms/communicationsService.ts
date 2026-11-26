@@ -134,6 +134,32 @@ export interface PatientEligibilityGrantDto {
   windowEndUtc?: string | null;
 }
 
+/**
+ * Collapses multiple active clinical grants (e.g. Confirmed Appointment + Checked-In Queue Visit)
+ * for the same destination facility into a single option, preferring the grant with the latest expiry.
+ */
+export function deduplicateEligibilityGrants(
+  grants: PatientEligibilityGrantDto[],
+): PatientEligibilityGrantDto[] {
+  const byFacility = new Map<string, PatientEligibilityGrantDto>();
+
+  const scoreWindowEnd = (windowEndUtc?: string | null): number => {
+    if (!windowEndUtc) return Number.POSITIVE_INFINITY;
+    const parsed = Date.parse(windowEndUtc);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  for (const grant of grants) {
+    const key = `${grant.tenantId.toLowerCase()}|${grant.facilityId.toLowerCase()}|${grant.facilityType.toLowerCase()}`;
+    const existing = byFacility.get(key);
+    if (!existing || scoreWindowEnd(grant.windowEndUtc) >= scoreWindowEnd(existing.windowEndUtc)) {
+      byFacility.set(key, grant);
+    }
+  }
+
+  return Array.from(byFacility.values());
+}
+
 export interface SubmitPatientInquiryRequest {
   patientId?: string;
   tenantId: string;
@@ -144,6 +170,7 @@ export interface SubmitPatientInquiryRequest {
   contentText: string;
   isEmergencyConfirmed: boolean;
   attachments?: CommsAttachmentReference[];
+  subject?: string;
 }
 
 export interface SubmitPatientInquiryResponse {
@@ -389,5 +416,54 @@ export const communicationsService = {
       '/patient/communications/attachments',
       formData,
     );
+  },
+
+  /**
+   * Download and open a decrypted communication attachment.
+   */
+  async downloadAttachment(
+    getToken: () => Promise<string | null>,
+    attachmentId: string,
+    fileName: string,
+    contentType?: string,
+  ): Promise<void> {
+    const rawBlob = await api.getBlob(
+      getToken,
+      `/patient/communications/attachments/${attachmentId}/download`,
+    );
+    const mimeType = contentType || rawBlob.type || 'application/octet-stream';
+    const typedBlob = rawBlob.type === mimeType ? rawBlob : new Blob([rawBlob], { type: mimeType });
+
+    if (
+      Platform.OS === 'web' &&
+      typeof window !== 'undefined' &&
+      typeof URL !== 'undefined' &&
+      typeof URL.createObjectURL === 'function'
+    ) {
+      const objectUrl = URL.createObjectURL(typedBlob);
+      const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      if (!opened && typeof document !== 'undefined') {
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = fileName || 'attachment';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+      }
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60_000);
+      return;
+    }
+
+    const [{ File, Paths }, Sharing] = await Promise.all([
+      import('expo-file-system'),
+      import('expo-sharing'),
+    ]);
+    const safeName = (fileName || 'attachment').replace(/[^\w.\-_]/g, '_');
+    const targetFile = new File(Paths.cache, safeName);
+    const bytes = new Uint8Array(await typedBlob.arrayBuffer());
+    targetFile.write(bytes);
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(targetFile.uri, { mimeType });
+    }
   },
 };

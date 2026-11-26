@@ -24,19 +24,22 @@ public sealed class GetAvailableSlotsQueryHandler : IRequestHandler<GetAvailable
     private readonly IClinicRepository? _clinicRepository;
     private readonly IClinicMembershipRepository? _membershipRepository;
     private readonly IOrganizationMembershipRepository? _orgMembershipRepository;
+    private readonly TimeProvider _timeProvider;
 
     public GetAvailableSlotsQueryHandler(
         IProviderAvailabilityRepository providerAvailabilityRepository,
         IAppointmentRepository appointmentRepository,
         IClinicRepository? clinicRepository = null,
         IClinicMembershipRepository? membershipRepository = null,
-        IOrganizationMembershipRepository? orgMembershipRepository = null)
+        IOrganizationMembershipRepository? orgMembershipRepository = null,
+        TimeProvider? timeProvider = null)
     {
         _providerAvailabilityRepository = providerAvailabilityRepository;
         _appointmentRepository = appointmentRepository;
         _clinicRepository = clinicRepository;
         _membershipRepository = membershipRepository;
         _orgMembershipRepository = orgMembershipRepository;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<List<AvailableSlotDto>> Handle(GetAvailableSlotsQuery request, CancellationToken cancellationToken)
@@ -115,7 +118,12 @@ public sealed class GetAvailableSlotsQueryHandler : IRequestHandler<GetAvailable
                 var displayTime = DateTime.Today.Add(currentTime).ToString("h:mm tt", CultureInfo.InvariantCulture);
                 var period = currentTime.Hours < 12 ? "morning" : currentTime.Hours < 17 ? "afternoon" : "evening";
 
-                var isAvailable = !existingAppointments.Any(a => 
+                var isPast = BookingScheduleValidation.IsSlotInPast(
+                    request.Date,
+                    TimeOnly.FromTimeSpan(currentTime),
+                    _timeProvider);
+
+                var isAvailable = !isPast && !existingAppointments.Any(a => 
                 {
                     var apptTime = a.ScheduledAt.TimeOfDay;
                     var apptEndTime = apptTime.Add(TimeSpan.FromMinutes(a.DurationMinutes));

@@ -798,8 +798,8 @@ describe('Challenger 2 Empirical Verification: Comms Active Thread, Modals & Dra
       const states = [
         { status: 'connected', expectedText: 'Connected' },
         { status: 'reconnecting', expectedText: 'Reconnecting...' },
-        { status: 'connecting', expectedText: 'Reconnecting...' },
-        { status: 'acquiring_ticket', expectedText: 'Reconnecting...' },
+        { status: 'connecting', expectedText: 'Connecting...' },
+        { status: 'acquiring_ticket', expectedText: 'Connecting...' },
         { status: 'disconnected', expectedText: 'Offline' },
         { status: 'failed', expectedText: 'Offline' },
       ];

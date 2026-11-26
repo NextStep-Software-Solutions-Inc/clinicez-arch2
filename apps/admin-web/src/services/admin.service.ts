@@ -139,6 +139,17 @@ export interface AdminInvitationDetailsDto {
   isSuspended?: boolean;
 }
 
+export interface PendingSelfInvitationDto {
+  invitationType: 'Workspace' | 'Admin' | string;
+  token: string;
+  tenantSlug?: string | null;
+  workspaceName?: string | null;
+  role: string;
+  email: string;
+  expiresAt?: string | null;
+  redirectUrl: string;
+}
+
 export interface AdminSystemSettingDto {
   key: string;
   value: string;
@@ -500,6 +511,19 @@ export const adminService = {
   acceptInvitation: async (token: string): Promise<AdminUserDto> => {
     const res = await apiClient.post<AdminUserDto>(`/admin/invitations/${token}/accept`);
     return res.data;
+  },
+
+  getPendingSelfInvitation: async (): Promise<PendingSelfInvitationDto | null> => {
+    try {
+      const res = await apiClient.get<PendingSelfInvitationDto>('/staff/invitations/pending-self');
+      return res.data ?? null;
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 404) {
+        return null;
+      }
+      throw err;
+    }
   },
 
   updateUser: async (id: string, user: Partial<AdminUserDto>): Promise<AdminUserDto> => {

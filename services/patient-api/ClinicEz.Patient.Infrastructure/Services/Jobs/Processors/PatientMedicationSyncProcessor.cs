@@ -28,9 +28,8 @@ internal sealed class PatientMedicationSyncProcessor
     public PatientMedicationSyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
     public override string EntityType => SyncableEntityTypes.PatientMedication;
 
-    protected override async Task<PatientMedication?> FindExistingAsync(MedicationPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientMedications.FindAsync([id.Value], ct)
-            : await Context.PatientMedications.FirstOrDefaultAsync(e => e.ClientId == p.ClientId, ct);
+    protected override Task<PatientMedication?> FindExistingAsync(MedicationPayload p, Guid? id, CancellationToken ct)
+        => FindByIdOrAsync(id, p.ClientId != Guid.Empty ? e => e.PatientId == p.PatientId && e.ClientId == p.ClientId : null, ct);
 
     protected override PatientMedication CreateFromPayload(MedicationPayload p) => new()
     {

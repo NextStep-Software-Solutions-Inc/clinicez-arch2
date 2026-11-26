@@ -1,16 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { createRoute, Link } from '@tanstack/react-router';
+import { createRoute } from '@tanstack/react-router';
 import { Route as rootRoute } from './__root';
 import { useAuth, useClerk } from '@clerk/clerk-react';
 import { adminService } from '@/services/admin.service';
 import { setupAxiosInterceptors } from '@/lib/api';
-import { IconShieldX, IconLogout } from '@tabler/icons-react';
-import { ClinicEzLogo, ClinicEzMark } from '@/components/ClinicEzLogo';
-import { Button } from '@/components/ui';
+import { ClinicEzMark } from '@/components/ClinicEzLogo';
+import { AdminAccessStateCard } from '@/components/AdminAccessStateCard';
+import {
+  isForbiddenError,
+  isUnauthorizedError,
+  performCleanAdminSignOut,
+  resolvePendingAdminInvitationPath,
+} from '@/lib/adminAuthRecovery';
+import { clearAllPendingAdminAuthState } from '@/lib/authRedirect';
 
 function SyncAuthPage() {
   const [status, setStatus] = useState<'syncing' | 'unauthorized' | 'error'>('syncing');
   const [errorMessage, setErrorMessage] = useState('');
+  const [retryNonce, setRetryNonce] = useState(0);
 
   let getToken: any = null;
   let isLoaded = true;
@@ -32,6 +39,8 @@ function SyncAuthPage() {
   }
 
   useEffect(() => {
+    let cancelled = false;
+
     async function sync() {
       if (!isLoaded) {
         return;
@@ -41,16 +50,47 @@ function SyncAuthPage() {
         return;
       }
 
+      setStatus('syncing');
+      setErrorMessage('');
       setupAxiosInterceptors(getToken);
 
       try {
         const me = await adminService.getMe();
+        if (cancelled) return;
+
         if (me.isAdmin) {
+          clearAllPendingAdminAuthState();
           window.location.href = '/';
-        } else {
-          setStatus('unauthorized');
+          return;
         }
+
+        const pendingInvitePath = await resolvePendingAdminInvitationPath();
+        if (cancelled) return;
+        if (pendingInvitePath) {
+          window.location.href = pendingInvitePath;
+          return;
+        }
+
+        setStatus('unauthorized');
       } catch (err: any) {
+        if (cancelled) return;
+
+        if (isUnauthorizedError(err)) {
+          await performCleanAdminSignOut(signOut, '/sign-in');
+          return;
+        }
+
+        if (isForbiddenError(err)) {
+          const pendingInvitePath = await resolvePendingAdminInvitationPath();
+          if (cancelled) return;
+          if (pendingInvitePath) {
+            window.location.href = pendingInvitePath;
+            return;
+          }
+          setStatus('unauthorized');
+          return;
+        }
+
         console.error('Failed to synchronize admin profile', err);
         setStatus('error');
         setErrorMessage(err?.message || 'Failed to verify administrative authorization.');
@@ -58,7 +98,10 @@ function SyncAuthPage() {
     }
 
     sync();
-  }, [isLoaded, getToken, isSignedIn]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, getToken, isSignedIn, retryNonce]);
 
   if (status === 'syncing') {
     return (
@@ -76,66 +119,20 @@ function SyncAuthPage() {
 
   if (status === 'unauthorized') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-6 text-text">
-        <div className="max-w-md w-full bg-surface border border-border rounded-3xl p-8 shadow-xl text-center space-y-5">
-          <div className="flex justify-center pb-1">
-            <ClinicEzLogo
-              markClassName="h-8 w-9 shrink-0"
-              textClassName="text-lg font-bold tracking-tight text-text"
-              subtitle="Governance"
-            />
-          </div>
-          <div className="inline-flex p-3 rounded-2xl bg-red-500/10 text-red-600 dark:text-red-400">
-            <IconShieldX className="h-8 w-8" />
-          </div>
-          <h2 className="text-lg font-bold text-text">Access Restricted</h2>
-          <p className="text-xs text-text-secondary leading-relaxed">
-            Your authenticated account is not registered as a Platform Administrator in Clinic EZ Central. Please contact your organization owner to request access.
-          </p>
-          <div className="pt-2">
-            <Button
-              variant="danger"
-              size="lg"
-              onClick={async () => {
-                await signOut();
-                window.location.href = '/sign-in';
-              }}
-              leadingIcon={<IconLogout className="h-4 w-4" />}
-              className="px-5 text-xs"
-            >
-              Sign Out
-            </Button>
-          </div>
-        </div>
-      </div>
+      <AdminAccessStateCard
+        variant="unauthorized"
+        onSignOut={() => performCleanAdminSignOut(signOut, '/sign-in')}
+      />
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-6 text-text">
-      <div className="max-w-md w-full bg-surface border border-border rounded-3xl p-8 shadow-xl text-center space-y-5">
-        <div className="flex justify-center pb-1">
-          <ClinicEzLogo
-            markClassName="h-8 w-9 shrink-0"
-            textClassName="text-lg font-bold tracking-tight text-text"
-            subtitle="Governance"
-          />
-        </div>
-        <div className="inline-flex p-3 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
-          <IconShieldX className="h-8 w-8" />
-        </div>
-        <h2 className="text-lg font-bold text-text">Synchronization Error</h2>
-        <p className="text-xs text-text-secondary">{errorMessage}</p>
-        <div className="pt-2">
-          <Link
-            to="/sign-in"
-            className="inline-flex items-center justify-center px-5 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors"
-          >
-            Return to Sign In
-          </Link>
-        </div>
-      </div>
-    </div>
+    <AdminAccessStateCard
+      variant="error"
+      message={errorMessage}
+      onRetry={() => setRetryNonce((n) => n + 1)}
+      onSignOut={() => performCleanAdminSignOut(signOut, '/sign-in')}
+    />
   );
 }
 

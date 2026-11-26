@@ -2318,7 +2318,7 @@ export function VerificationDetailWorkspace({
 
             {activeProofTab ? (
               <ProofEvidenceCard
-                key={`${detail.id}:${activeProofTab.id}`}
+                key={`${detail.id}:${activeProofTab.id}:${activeProofTab.objectKey ?? ""}`}
                 label={activeProofTab.cardLabel}
                 objectKey={activeProofTab.objectKey}
                 fetchEvidence={activeProofTab.fetchEvidence}

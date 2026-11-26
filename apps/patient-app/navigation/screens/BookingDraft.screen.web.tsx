@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, StyleSheet, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
-import { format, startOfToday } from 'date-fns';
+import { format } from 'date-fns';
 import { useAuth as useClerkAuth, useUser } from '@clerk/expo';
 import { safeAwait } from '@shared/safe';
 import { SkeletonCard } from '../../components/ui/Skeleton';
@@ -20,6 +20,15 @@ import {
 } from '../../services/discovery/discoveryService';
 import type { ShareableFieldKey } from '../../services/discovery/types';
 import { fetchAvailableSlots } from '../../services/appointments/appointmentsService';
+import {
+  filterOpenFutureSlots,
+  formatSlotSummary,
+  getManilaTodayDate,
+  isPastManilaSlot,
+  resolveExplicitSelectedService,
+  selectRecommendedSlot,
+} from '../../services/appointments/slotUtils';
+import { ApiError } from '../../services/api/apiClient';
 import {
   applyDoctorAffiliation,
   isDirectoryBookingPaused,
@@ -66,17 +75,6 @@ type Props = StaticScreenProps<BookingRouteParams>;
 
 const NO_OP = () => {};
 
-function formatSlotSummary(
-  slot: AvailableSlot | null,
-  date: Date,
-  doctorName?: string,
-): string | null {
-  if (!slot) return null;
-  const dateStr = format(date, 'EEE, MMM d');
-  const timeStr = slot.displayTime || slot.time;
-  return doctorName ? `${dateStr} at ${timeStr} • ${doctorName}` : `${dateStr} at ${timeStr}`;
-}
-
 export default function BookingDraftScreenWeb(props: Props) {
   const { colors, spacing } = useClinicalEmpathyTheme();
   const navigation = useNavigation<any>();
@@ -116,10 +114,11 @@ export default function BookingDraftScreenWeb(props: Props) {
   const [selectedClinicId, setSelectedClinicId] = useState<string | undefined>(
     initialClinicId,
   );
-  const [selectedDate, setSelectedDate] = useState<Date>(startOfToday());
+  const [selectedDate, setSelectedDate] = useState<Date>(() => getManilaTodayDate());
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState<boolean>(false);
+  const [slotRefreshTick, setSlotRefreshTick] = useState<number>(0);
   const [consultationMode, setConsultationMode] =
     useState<ConsultationMode>('in_person');
   const [reasonForVisit, setReasonForVisit] = useState<string>(initialReason ?? '');
@@ -287,16 +286,10 @@ export default function BookingDraftScreenWeb(props: Props) {
     [selectedClinic, selectedDoctor],
   );
 
-  const selectedService = useMemo(() => {
-    if (!selectedDoctor) return null;
-    if (initialServiceId) {
-      const exactMatch = services.find(
-        (s) => s.id === initialServiceId && s.clinicId === selectedDoctor.clinicId,
-      );
-      if (exactMatch) return exactMatch;
-    }
-    return services.find((s) => s.clinicId === selectedDoctor.clinicId) ?? null;
-  }, [initialServiceId, selectedDoctor, services]);
+  const selectedService = useMemo(
+    () => resolveExplicitSelectedService(services, selectedDoctor?.clinicId, initialServiceId),
+    [initialServiceId, selectedDoctor?.clinicId, services],
+  );
 
   useEffect(() => {
     if (hasEditedReason) return;
@@ -304,8 +297,10 @@ export default function BookingDraftScreenWeb(props: Props) {
       setReasonForVisit(selectedService.name);
     } else if (selectedDoctor?.specialty) {
       setReasonForVisit(`${selectedDoctor.specialty} Consultation`);
+    } else if (selectedDoctor) {
+      setReasonForVisit('Medical Consultation');
     }
-  }, [hasEditedReason, selectedDoctor?.specialty, selectedService?.name]);
+  }, [hasEditedReason, selectedDoctor, selectedService?.name]);
 
   useEffect(() => {
     scrollY.setValue(0);
@@ -339,15 +334,9 @@ export default function BookingDraftScreenWeb(props: Props) {
         );
         if (!active) return;
 
-        const openSlots = (res.slots || []).filter((s) => s.available !== false);
+        const openSlots = filterOpenFutureSlots(res.slots || [], selectedDateKey);
         setAvailableSlots(openSlots);
-        if (openSlots.length > 0) {
-          const preferred =
-            openSlots.find((s) => s.time.startsWith('10:')) ?? openSlots[0];
-          setSelectedSlot(preferred ?? null);
-        } else {
-          setSelectedSlot(null);
-        }
+        setSelectedSlot(selectRecommendedSlot(openSlots));
       } catch {
         if (active) {
           setAvailableSlots([]);
@@ -361,7 +350,7 @@ export default function BookingDraftScreenWeb(props: Props) {
     return () => {
       active = false;
     };
-  }, [isBookingPaused, isReviewOrEarlier, patientId, selectedDateKey, slotClinicId, slotDoctorId]);
+  }, [isBookingPaused, isReviewOrEarlier, patientId, selectedDateKey, slotClinicId, slotDoctorId, slotRefreshTick]);
 
   const navigateBackToTabs = useCallback(
     (tabScreen: 'AppointmentsScreen' | 'HomeScreen') => {
@@ -405,9 +394,22 @@ export default function BookingDraftScreenWeb(props: Props) {
       return;
     }
 
-    setIsSubmitting(true);
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
     const timeStr = selectedSlot.time || '10:30';
+    if (isPastManilaSlot(dateStr, timeStr)) {
+      const remaining = filterOpenFutureSlots(availableSlots, dateStr);
+      setAvailableSlots(remaining);
+      setSelectedSlot(selectRecommendedSlot(remaining));
+      setSlotRefreshTick((prev) => prev + 1);
+      setCurrentStep(2);
+      dialog.alert(
+        'Time Slot Unavailable',
+        'This time slot has already passed. Please select an upcoming time slot.',
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
     const effectiveReason =
       reasonForVisit.trim() ||
       selectedService?.name ||
@@ -452,6 +454,10 @@ export default function BookingDraftScreenWeb(props: Props) {
       );
 
       if (onlineErr || !serverDraftId) {
+        if (onlineErr instanceof ApiError && onlineErr.status === 400) {
+          setSlotRefreshTick((prev) => prev + 1);
+          setCurrentStep(2);
+        }
         dialog.alert(
           'Booking Failed',
           onlineErr?.message || 'Unable to create booking request on server. Please try again.',
@@ -464,6 +470,10 @@ export default function BookingDraftScreenWeb(props: Props) {
       );
 
       if (submitErr) {
+        if (submitErr instanceof ApiError && submitErr.status === 400) {
+          setSlotRefreshTick((prev) => prev + 1);
+          setCurrentStep(2);
+        }
         dialog.alert(
           'Booking Failed',
           submitErr?.message || 'Unable to submit booking request to the clinic. Please try again.',
@@ -498,6 +508,7 @@ export default function BookingDraftScreenWeb(props: Props) {
       setIsSubmitting(false);
     }
   }, [
+    availableSlots,
     consultationMode,
     isBookingPaused,
     isOnline,
@@ -632,6 +643,7 @@ export default function BookingDraftScreenWeb(props: Props) {
               bookingReference={bookingReference}
               patientEmail={user?.primaryEmailAddress?.emailAddress}
               doctorName={selectedDoctor.name}
+              consultationMode={consultationMode}
               onViewAppointments={() => navigateBackToTabs('AppointmentsScreen')}
               onBackToHome={() => navigateBackToTabs('HomeScreen')}
             />
@@ -646,6 +658,7 @@ export default function BookingDraftScreenWeb(props: Props) {
           isBookingPaused={isBookingPaused}
           selectedSlotSummary={selectedSlotSummary}
           formattedCopay={formattedCopay}
+          consultationMode={consultationMode}
           isSubmitting={isSubmitting}
           maxContentWidth={maxContentWidth}
           horizontalPadding={horizontalPadding}
@@ -653,7 +666,19 @@ export default function BookingDraftScreenWeb(props: Props) {
             if (selectedDoctor && !isBookingPaused) setCurrentStep(2);
           }}
           onProceedStep2={() => {
-            if (selectedSlot && !isBookingPaused) setCurrentStep(3);
+            if (!selectedSlot || isBookingPaused) return;
+            if (isPastManilaSlot(selectedDateKey, selectedSlot.time)) {
+              const remaining = filterOpenFutureSlots(availableSlots, selectedDateKey);
+              setAvailableSlots(remaining);
+              setSelectedSlot(selectRecommendedSlot(remaining));
+              setSlotRefreshTick((prev) => prev + 1);
+              dialog.alert(
+                'Time Slot Unavailable',
+                'This time slot has already passed. Please select an upcoming time slot.',
+              );
+              return;
+            }
+            setCurrentStep(3);
           }}
           onConfirmAndBook={handleConfirmAndBook}
         />

@@ -1,11 +1,16 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { randomUUID } from 'expo-crypto';
+import * as DocumentPicker from 'expo-document-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { MessageThread } from '@clinicez/comms-sdk/native-ui';
 import type { ThreadAttachment, ThreadMessage } from '@clinicez/comms-sdk/native-ui';
+import {
+  formatMessageCategory,
+  isRedundantCategorySubject,
+} from '@clinicez/comms-sdk/core';
 import Screen from '../../../components/layout/Screen';
 import IconButton from '../../../components/ui/IconButton';
 import ThemedText from '../../../components/ui/ThemedText';
@@ -15,54 +20,25 @@ import { usePrivacy } from '../../../contexts/PrivacyContext';
 import {
   communicationsService,
   type PatientConversationDetailDto,
-  type PatientMessageDto,
 } from '../../../services/comms/communicationsService';
+import {
+  mapPatientMessageToThreadMessage,
+  resolvePatientThreadSenderName,
+  sortThreadMessages,
+} from '../../../services/comms/threadHelpers';
 import { dialog } from '../../../utils/dialog';
+
+export {
+  mapPatientMessageToThreadMessage,
+  resolvePatientThreadSenderName,
+  sortThreadMessages,
+};
 
 type Props = StaticScreenProps<{
   conversationId: string;
   title?: string;
   scope?: string;
 }>;
-
-function mapPatientMessageToThreadMessage(msg: PatientMessageDto): ThreadMessage {
-  // Wire deliveryState: 'Sending' | 'Waiting' | 'Received' | 'NotReceived'
-  const state: 'Sending' | 'Waiting' | 'Received' | 'NotReceived' =
-    msg.deliveryState === 'Sending'
-      ? 'Sending'
-      : msg.deliveryState === 'Waiting'
-        ? 'Waiting'
-        : msg.deliveryState === 'Received'
-          ? 'Received'
-          : 'NotReceived';
-
-  const attachments: ThreadAttachment[] = (msg.attachments ?? []).map((att) => ({
-    fileKey: att.storageKey,
-    fileName: att.fileName,
-    contentType: att.contentType,
-    sizeBytes: att.fileSizeBytes,
-    isClean: att.scanStatus === 'Clean',
-  }));
-
-  return {
-    id: msg.id,
-    seq: msg.seq,
-    conversationId: msg.conversationId,
-    senderType: msg.senderType,
-    senderId: msg.senderId ?? undefined,
-    senderDisplayName: msg.senderName,
-    contentText: msg.contentText,
-    visibility: 'Public', // Patients never see or send internal messages
-    state,
-    clientSentAtUtc: msg.createdAtUtc,
-    serverReceivedAtUtc: msg.receivedAtUtc,
-    requiresAcknowledgement: msg.requiresAcknowledgement,
-    isAcknowledged: msg.isAcknowledged,
-    acknowledgedByName: msg.acknowledgedByName,
-    acknowledgedAtUtc: msg.acknowledgedAtUtc,
-    attachments,
-  };
-}
 
 export default function ConversationThreadScreen({ route }: Props) {
   const { colors, spacing } = useAppTheme();
@@ -81,24 +57,126 @@ export default function ConversationThreadScreen({ route }: Props) {
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const title = conversation?.facilityName ?? initialTitle ?? 'Conversation';
+  const scope = conversation?.homeFacilityType ?? initialScope ?? 'Facility';
+
+  const knownPatientNames = useMemo(() => {
+    const names: string[] = [];
+    for (const m of messages) {
+      if ((m.senderType === 'Patient' || (m.senderType as string) === 'Guardian') && m.senderDisplayName) {
+        names.push(m.senderDisplayName);
+      }
+    }
+    return names;
+  }, [messages]);
 
   const loadThread = useCallback(async () => {
     try {
       const detail = await communicationsService.getConversationDetail(getToken, conversationId);
+      if (!mountedRef.current) return;
       setConversation(detail);
-      setMessages((detail.messages ?? []).map(mapPatientMessageToThreadMessage));
+      const patientSideNames = (detail.messages ?? [])
+        .filter((m) => m.senderType === 'Patient' || (m.senderType as string) === 'Guardian')
+        .map((m) => m.senderName);
+      const mapped = (detail.messages ?? []).map((m) =>
+        mapPatientMessageToThreadMessage(m, detail.facilityName, patientSideNames),
+      );
+      setMessages(sortThreadMessages(mapped));
       setError(null);
     } catch (err: any) {
       console.warn('[ConversationThread] Failed to load messages:', err);
+      if (!mountedRef.current) return;
       setError(err?.message ?? 'Failed to load conversation thread.');
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [conversationId, getToken]);
 
   useEffect(() => {
     loadThread();
   }, [loadThread]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadThread();
+      const timer = setInterval(() => {
+        if (typeof document !== 'undefined' && document.hidden) return;
+        loadThread();
+      }, 10_000);
+      return () => clearInterval(timer);
+    }, [loadThread]),
+  );
+
+  const handlePickAttachment = useCallback(async (): Promise<ThreadAttachment | null> => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return null;
+      }
+
+      const file = result.assets[0];
+      const fileSize = file.size ?? file.file?.size;
+      if (fileSize && fileSize > 15 * 1024 * 1024) {
+        dialog.alert('File Too Large', 'Maximum file size is 15 MB.');
+        return null;
+      }
+
+      const uploaded = await communicationsService.uploadAttachment(getToken, {
+        uri: file.uri,
+        name: file.name,
+        type: file.mimeType || file.file?.type || 'application/octet-stream',
+        size: fileSize,
+        file: file.file,
+      });
+
+      return {
+        attachmentId: uploaded.attachmentId,
+        fileKey: uploaded.fileKey,
+        fileName: uploaded.fileName,
+        contentType: uploaded.contentType,
+        sizeBytes: uploaded.sizeBytes,
+        isClean: true,
+      };
+    } catch (err: any) {
+      dialog.alert('Upload Failed', err?.message ?? 'Could not upload attachment.');
+      return null;
+    }
+  }, [getToken]);
+
+  const handleOpenAttachment = useCallback(
+    async (att: ThreadAttachment) => {
+      try {
+        if (!att.attachmentId) {
+          dialog.alert('Attachment Pending', 'This attachment is still syncing. Please try again shortly.');
+          return;
+        }
+        await communicationsService.downloadAttachment(
+          getToken,
+          att.attachmentId,
+          att.fileName,
+          att.contentType,
+        );
+      } catch (err: any) {
+        dialog.alert('Download Failed', err?.message ?? 'Could not open attachment.');
+      }
+    },
+    [getToken],
+  );
 
   const handleSendMessage = useCallback(
     async (text: string, isInternal: boolean, attachments?: ThreadAttachment[]) => {
@@ -113,6 +191,7 @@ export default function ConversationThreadScreen({ route }: Props) {
         seq: Date.now(),
         conversationId,
         senderType: 'Patient',
+        senderId: internalPatientId ?? userId ?? undefined,
         senderDisplayName: 'Me',
         contentText: text,
         visibility: 'Public',
@@ -121,7 +200,7 @@ export default function ConversationThreadScreen({ route }: Props) {
         attachments: attachments ?? [],
       };
 
-      setMessages((prev) => [...prev, optimisticMsg]);
+      setMessages((prev) => sortThreadMessages([...prev, optimisticMsg]));
 
       try {
         const sent = await communicationsService.sendMessage(
@@ -130,6 +209,7 @@ export default function ConversationThreadScreen({ route }: Props) {
           text,
           clientMessageId,
           attachments?.map((a) => ({
+            attachmentId: a.attachmentId,
             fileKey: a.fileKey,
             fileName: a.fileName,
             contentType: a.contentType,
@@ -138,7 +218,13 @@ export default function ConversationThreadScreen({ route }: Props) {
         );
 
         setMessages((prev) =>
-          prev.map((m) => (m.id === clientMessageId ? mapPatientMessageToThreadMessage(sent) : m)),
+          sortThreadMessages(
+            prev.map((m) =>
+              m.id === clientMessageId
+                ? mapPatientMessageToThreadMessage(sent, conversation?.facilityName ?? initialTitle, knownPatientNames)
+                : m,
+            ),
+          ),
         );
       } catch (err: any) {
         setMessages((prev) =>
@@ -149,7 +235,7 @@ export default function ConversationThreadScreen({ route }: Props) {
         throw err;
       }
     },
-    [conversationId, getToken],
+    [conversation?.facilityName, conversationId, getToken, initialTitle, internalPatientId, knownPatientNames, userId],
   );
 
   const handleResendMessage = useCallback(
@@ -164,7 +250,13 @@ export default function ConversationThreadScreen({ route }: Props) {
           messageId,
         );
         setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? mapPatientMessageToThreadMessage(resent) : m)),
+          sortThreadMessages(
+            prev.map((m) =>
+              m.id === messageId
+                ? mapPatientMessageToThreadMessage(resent, conversation?.facilityName ?? initialTitle, knownPatientNames)
+                : m,
+            ),
+          ),
         );
       } catch (err) {
         setMessages((prev) =>
@@ -173,7 +265,7 @@ export default function ConversationThreadScreen({ route }: Props) {
         dialog.alert('Resend Failed', 'Could not deliver message to facility. Please tap to try again.');
       }
     },
-    [conversationId, getToken],
+    [conversation?.facilityName, conversationId, getToken, initialTitle, knownPatientNames],
   );
 
   const handleAcknowledge = useCallback(
@@ -219,9 +311,19 @@ export default function ConversationThreadScreen({ route }: Props) {
     }
   }, [conversationId, getToken, hideConversation, navigation]);
 
-  const title = conversation?.facilityName ?? initialTitle ?? 'Conversation';
-  const scope = conversation?.homeFacilityType ?? initialScope ?? 'Facility';
-
+  const formattedCategory = conversation?.category
+    ? formatMessageCategory(conversation.category, 'patient')
+    : null;
+  const distinctSubject =
+    conversation?.subject &&
+    !isRedundantCategorySubject(conversation.subject, conversation.category)
+      ? conversation.subject.trim()
+      : null;
+  const headerSubtitle = formattedCategory
+    ? distinctSubject
+      ? `${formattedCategory} • ${distinctSubject}`
+      : formattedCategory
+    : distinctSubject || scope;
   return (
     <Screen width="full" contentContainerStyle={styles.screenContainer}>
       {/* Thread Header Bar */}
@@ -249,7 +351,7 @@ export default function ConversationThreadScreen({ route }: Props) {
             {title}
           </ThemedText>
           <ThemedText variant="caption" color="textMuted">
-            {conversation?.subject ? `${conversation.category} • ${conversation.subject}` : scope}
+            {headerSubtitle}
           </ThemedText>
         </View>
 
@@ -281,9 +383,12 @@ export default function ConversationThreadScreen({ route }: Props) {
           conversationScope={scope}
           messages={messages}
           currentUserId={internalPatientId ?? userId ?? 'me'}
+          viewerType="Patient"
           onSendMessage={handleSendMessage}
           onResendMessage={handleResendMessage}
           onAcknowledgeMessage={handleAcknowledge}
+          onPickAttachment={handlePickAttachment}
+          onOpenAttachment={handleOpenAttachment}
           privacyBlurEnabled={privacyBlurEnabled}
           onTogglePrivacyBlur={togglePrivacyBlur}
           canWriteInternalNotes={false}

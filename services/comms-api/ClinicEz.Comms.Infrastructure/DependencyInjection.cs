@@ -67,6 +67,11 @@ public static class DependencyInjection
         services.AddInterop<CommsDbContext>(configuration, handlers => handlers
             .Handle<CommsEligibilityGrantedPayload, CommsEligibilityGrantedHandler>(InteropTypes.CommsEligibilityGranted)
             .Handle<CommsEligibilityRevokedPayload, CommsEligibilityRevokedHandler>(InteropTypes.CommsEligibilityRevoked)
+            .Handle<CommsRequestSubmitPayload, CommsRequestSubmitHandler>(InteropTypes.CommsRequestSubmit)
+            .Handle<CommsMessageSubmitPayload, CommsMessageSubmitHandler>(InteropTypes.CommsMessageSubmit)
+            .Handle<CommsMessageReceivedPayload, CommsMessageReceivedHandler>(InteropTypes.CommsMessageReceived)
+            .Handle<CommsMessageAcknowledgedPayload, CommsMessageAcknowledgedHandler>(InteropTypes.CommsMessageAcknowledged)
+            .Handle<CommsAttachmentChunkPayload, CommsAttachmentChunkHandler>(InteropTypes.CommsAttachmentChunk)
             .Handle<GuestCallJoinRequestedPayload, GuestCallJoinRequestedHandler>(InteropTypes.GuestCallJoinRequested)
             .HandleReply(InteropTypes.MediaRoomResponded));
 

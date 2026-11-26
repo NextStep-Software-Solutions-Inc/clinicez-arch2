@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Patient.Application.Common.Interfaces;
 using ClinicEz.Patient.Application.Features.Communications.DTOs;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Interfaces;
@@ -24,7 +25,8 @@ public sealed record SubmitPatientInquiryCommand(
     MessageCategory Category,
     string ContentText,
     bool? IsEmergencyConfirmed,
-    IReadOnlyList<CommsAttachmentReference>? Attachments = null) : IRequest<SubmitPatientInquiryResponse>;
+    IReadOnlyList<CommsAttachmentReference>? Attachments = null,
+    string? Subject = null) : IRequest<SubmitPatientInquiryResponse>;
 
 public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitPatientInquiryCommand, SubmitPatientInquiryResponse>
 {
@@ -32,17 +34,23 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
     private readonly IPatientCommunicationsRepository _commsRepo;
     private readonly IUnitOfWork _uow;
     private readonly IInteropPublisher _publisher;
+    private readonly IStorageService? _storageService;
+    private readonly IPatientEncryptionService? _encryptionService;
 
     public SubmitPatientInquiryCommandHandler(
         IPatientRepository patientRepo,
         IPatientCommunicationsRepository commsRepo,
         IUnitOfWork uow,
-        IInteropPublisher publisher)
+        IInteropPublisher publisher,
+        IStorageService? storageService = null,
+        IPatientEncryptionService? encryptionService = null)
     {
         _patientRepo = patientRepo;
         _commsRepo = commsRepo;
         _uow = uow;
         _publisher = publisher;
+        _storageService = storageService;
+        _encryptionService = encryptionService;
     }
 
     public async Task<SubmitPatientInquiryResponse> Handle(
@@ -73,6 +81,7 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
         var targetPatientId = request.PatientId ?? callerPatient.Id;
         var isDependent = targetPatientId != callerPatient.Id;
         string? relationshipToPatient = isDependent ? null : "Self";
+        Domain.Entities.Patient? dependent = null;
 
         if (isDependent)
         {
@@ -82,8 +91,25 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
                 throw new ForbiddenException("You do not have permission to submit an inquiry for this patient.");
             }
 
-            var dependent = callerPatient.ManagedDependents?.FirstOrDefault(d => d.Id == targetPatientId);
+            dependent = callerPatient.ManagedDependents?.FirstOrDefault(d => d.Id == targetPatientId);
             relationshipToPatient = dependent?.RelationshipToManager ?? "Guardian";
+        }
+
+        var callerDisplayName = $"{callerPatient.FirstName} {callerPatient.LastName}".Trim();
+        var dependentDisplayName = dependent != null
+            ? $"{dependent.FirstName} {dependent.LastName}".Trim()
+            : string.Empty;
+        var resolvedPatientName = !string.IsNullOrWhiteSpace(dependentDisplayName)
+            ? dependentDisplayName
+            : callerDisplayName;
+        var patientDisplayName = !string.IsNullOrWhiteSpace(resolvedPatientName) ? resolvedPatientName : null;
+
+        var normalizedSubject = string.IsNullOrWhiteSpace(request.Subject)
+            ? string.Empty
+            : request.Subject.Trim();
+        if (normalizedSubject.Length > 256)
+        {
+            normalizedSubject = normalizedSubject[..256];
         }
 
         // 2b. Validate Message Content
@@ -116,10 +142,10 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
             HomeFacilityType = resolvedFacilityType,
             FacilityName = resolvedFacilityName,
             Category = request.Category,
-            Subject = request.Category.ToString(),
+            Subject = normalizedSubject,
             Status = RequestStatus.Submitted,
             SubmittingAccountId = callerPatient.Id,
-            SubmittingAccountName = $"{callerPatient.FirstName} {callerPatient.LastName}".Trim(),
+            SubmittingAccountName = callerDisplayName,
             RelationshipToPatient = relationshipToPatient,
             OpenedAtUtc = now,
             LastMessageAtUtc = now,
@@ -136,31 +162,28 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
             ClientMessageId = clientMessageId,
             SenderType = "Patient",
             SenderId = callerPatient.Id,
-            SenderName = $"{callerPatient.FirstName} {callerPatient.LastName}".Trim(),
+            SenderName = string.IsNullOrWhiteSpace(callerDisplayName) ? "Patient" : callerDisplayName,
             ContentText = request.ContentText,
             DeliveryState = DeliveryState.Waiting,
             CreatedAtUtc = now,
             RetentionDeadlineUtc = retentionDeadline
         };
 
-        if (request.Attachments != null && request.Attachments.Count > 0)
-        {
-            foreach (var att in request.Attachments)
-            {
-                message.Attachments.Add(new PatientMessageAttachment
-                {
-                    Id = Guid.NewGuid(),
-                    MessageId = message.Id,
-                    StorageKey = att.FileKey,
-                    FileName = att.FileName,
-                    ContentType = att.ContentType,
-                    FileSizeBytes = att.SizeBytes,
-                    HashSha256 = att.HashSha256,
-                    IsClean = true,
-                    ScanStatus = "Clean"
-                });
-            }
-        }
+        var outboundAttachments = await CommunicationCommandRules.AttachAndEnqueueChunksAsync(
+            _commsRepo,
+            _publisher,
+            _storageService,
+            _encryptionService,
+            message,
+            request.Attachments,
+            targetPatientId,
+            callerPatient.Id,
+            resolvedTenantId,
+            request.FacilityId,
+            targetFacilityType,
+            resolvedFacilityType,
+            conversationId,
+            ct);
 
         await _commsRepo.AddConversationAsync(conversation, ct);
         await _commsRepo.AddMessageAsync(message, ct);
@@ -177,8 +200,9 @@ public sealed class SubmitPatientInquiryCommandHandler : IRequestHandler<SubmitP
             Category: request.Category,
             ContentText: request.ContentText,
             IsEmergencyConfirmed: false,
-            Attachments: request.Attachments,
-            SubmittedAtUtc: now
+            Attachments: outboundAttachments,
+            SubmittedAtUtc: now,
+            PatientDisplayName: patientDisplayName
         );
 
         _publisher.Enqueue(
@@ -222,5 +246,136 @@ internal static class CommunicationCommandRules
         return Enum.TryParse<FacilityType>(facilityType, ignoreCase: true, out var parsedType)
             ? parsedType
             : FacilityType.Clinic;
+    }
+
+    /// <summary>
+    /// Links pre-uploaded staged <see cref="PatientMessageAttachment"/> rows to <paramref name="message"/>
+    /// (falling back to creating synthetic rows for tests) and enqueues chunked interop byte transfers.
+    /// </summary>
+    public static async Task<IReadOnlyList<CommsAttachmentReference>?> AttachAndEnqueueChunksAsync(
+        IPatientCommunicationsRepository commsRepo,
+        IInteropPublisher publisher,
+        IStorageService? storageService,
+        IPatientEncryptionService? encryptionService,
+        PatientMessage message,
+        IReadOnlyList<CommsAttachmentReference>? requestedAttachments,
+        Guid targetPatientId,
+        Guid callerPatientId,
+        string tenantId,
+        string facilityId,
+        FacilityType targetFacilityType,
+        string facilityTypeString,
+        Guid conversationId,
+        CancellationToken ct)
+    {
+        if (requestedAttachments == null || requestedAttachments.Count == 0)
+        {
+            return requestedAttachments;
+        }
+
+        var stagedRows = await commsRepo.GetAttachmentsByStorageKeysAsync(
+            requestedAttachments.Select(a => a.FileKey),
+            ct);
+
+        var outboundRefs = new List<CommsAttachmentReference>(requestedAttachments.Count);
+
+        foreach (var att in requestedAttachments)
+        {
+            var staged = stagedRows.FirstOrDefault(s =>
+                string.Equals(s.StorageKey, att.FileKey, StringComparison.Ordinal) &&
+                s.MessageId == null &&
+                (s.PatientId == null || s.PatientId == targetPatientId || s.PatientId == callerPatientId));
+
+            if (staged != null)
+            {
+                var cryptoOwnerPatientId = staged.PatientId ?? callerPatientId;
+                staged.MessageId = message.Id;
+                staged.PatientId ??= cryptoOwnerPatientId;
+                message.Attachments.Add(staged);
+
+                outboundRefs.Add(att with { AttachmentId = staged.Id });
+
+                await EnqueueDecryptedChunksIfPresentAsync(
+                    publisher,
+                    storageService,
+                    encryptionService,
+                    staged,
+                    cryptoOwnerPatientId,
+                    targetPatientId,
+                    tenantId,
+                    facilityId,
+                    targetFacilityType,
+                    facilityTypeString,
+                    conversationId,
+                    message.Id,
+                    ct);
+            }
+            else
+            {
+                var created = new PatientMessageAttachment
+                {
+                    Id = att.AttachmentId ?? Guid.NewGuid(),
+                    MessageId = message.Id,
+                    PatientId = targetPatientId,
+                    StorageKey = att.FileKey,
+                    FileName = att.FileName,
+                    ContentType = att.ContentType,
+                    FileSizeBytes = att.SizeBytes,
+                    HashSha256 = att.HashSha256,
+                    IsClean = true,
+                    ScanStatus = "Clean"
+                };
+                message.Attachments.Add(created);
+                outboundRefs.Add(att with { AttachmentId = created.Id });
+            }
+        }
+
+        return outboundRefs;
+    }
+
+    public static async Task EnqueueDecryptedChunksIfPresentAsync(
+        IInteropPublisher publisher,
+        IStorageService? storageService,
+        IPatientEncryptionService? encryptionService,
+        PatientMessageAttachment attachment,
+        Guid cryptoOwnerPatientId,
+        Guid targetPatientId,
+        string tenantId,
+        string facilityId,
+        FacilityType targetFacilityType,
+        string facilityTypeString,
+        Guid conversationId,
+        Guid? messageId,
+        CancellationToken ct)
+    {
+        if (storageService == null ||
+            encryptionService == null ||
+            string.IsNullOrWhiteSpace(attachment.EncryptionIvBase64) ||
+            string.IsNullOrWhiteSpace(attachment.EncryptionTagBase64) ||
+            string.IsNullOrWhiteSpace(attachment.WrappedKeyJson))
+        {
+            return;
+        }
+
+        var ciphertext = await storageService.DownloadAsync(attachment.StorageKey, ct);
+        var plaintext = await encryptionService.DecryptAsync(
+            cryptoOwnerPatientId,
+            ciphertext,
+            attachment.EncryptionIvBase64,
+            attachment.EncryptionTagBase64,
+            attachment.WrappedKeyJson,
+            ct);
+
+        CommsAttachmentHelpers.EnqueueAttachmentChunks(
+            publisher,
+            targetPatientId,
+            tenantId,
+            facilityId,
+            targetFacilityType,
+            facilityTypeString,
+            conversationId,
+            messageId,
+            attachment,
+            plaintext);
     }
 }

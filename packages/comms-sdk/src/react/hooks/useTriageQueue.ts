@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { TERMINAL_CONVERSATION_STATUSES } from '../../core/conversationFilters';
+import { resolvePatientFacilityDisplayTitle } from '../../core/messageCategory';
 import { ConversationDto, TriageDisposition } from '../../core/types';
 import { useCommsContext } from '../CommsContext';
 import {
@@ -62,13 +64,30 @@ export function useTriageQueue(
     refresh().catch(() => {});
 
     const unsubThread = client.events.on('threadStateChanged', ({ conversationId, newStatus, disposition }) => {
+      const isTerminal = TERMINAL_CONVERSATION_STATUSES.has(newStatus);
       setRawItems((prev) =>
         prev.map((item) =>
           item.id === conversationId
-            ? { ...item, status: newStatus, triageDisposition: disposition }
+            ? {
+                ...item,
+                status: newStatus,
+                triageDisposition: disposition,
+                closedAtUtc: isTerminal ? (item.closedAtUtc ?? new Date().toISOString()) : null,
+              }
             : item
         )
       );
+    });
+
+    const unsubUpdated = client.events.on('conversationUpdated', (conv) => {
+      if (conv.scope !== 'PatientFacility') return;
+      setRawItems((prev) => {
+        const exists = prev.some((item) => item.id === conv.id);
+        if (exists) {
+          return prev.map((item) => (item.id === conv.id ? { ...item, ...conv } : item));
+        }
+        return [conv, ...prev];
+      });
     });
 
     const unsubCreated = client.events.on('conversationCreated', (conv) => {
@@ -85,6 +104,7 @@ export function useTriageQueue(
 
     return () => {
       unsubThread();
+      unsubUpdated();
       unsubCreated();
       unsubState();
     };
@@ -152,6 +172,7 @@ export function useTriageQueue(
             participants: []
           }),
           status: input.disposition === 'Routed' ? 'Routed' : 'Closed',
+          closedAtUtc: input.disposition === 'Routed' ? null : new Date().toISOString(),
           triageDisposition: input.disposition,
           declineReasonCode: input.declineReasonCode,
           assignedStaffId: input.assignedStaffId ?? staffId,
@@ -310,21 +331,23 @@ export function useTriageQueue(
         const slaRemaining = Math.max(0, Math.floor((dueTime - now) / 1000));
         const isSlaBreached = dueTime < now || (item.slaBreached ?? false);
 
-        const maskedName = item.title
-          ? item.title.split(' ').length > 1
-            ? `${item.title.split(' ')[0]} ${item.title.split(' ')[1][0]}***`
-            : `${item.title.slice(0, 3)}***`
+        const resolvedFullName = resolvePatientFacilityDisplayTitle(item, 'Patient Inquiry');
+        const nameParts = resolvedFullName.split(/\s+/).filter(Boolean);
+        const maskedName = resolvedFullName !== 'Patient Inquiry'
+          ? nameParts.length > 1
+            ? `${nameParts[0]} ${nameParts[1][0]}***`
+            : `${resolvedFullName.slice(0, 3)}***`
           : 'Patient Inquiry';
 
         return {
           ...item,
           conversationId: item.id,
           requestId: item.id,
-          patientId: item.id,
+          patientId: item.patientId || item.contextId || item.id,
           patientNameMasked: maskedName,
           slaTimeRemainingSeconds: slaRemaining,
           isSlaBreached,
-          patientFullName: item.title || 'Patient Inquiry',
+          patientFullName: resolvedFullName,
           patientAge: 'Adult',
           patientSex: 'Unknown',
           patientContact: ''

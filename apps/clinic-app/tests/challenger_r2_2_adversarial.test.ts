@@ -517,7 +517,7 @@ describe('Challenger R2.2 Empirical Stress & Adversarial Suite', () => {
       // 3. Connecting
       mockCommsStatus = 'connecting';
       html = renderToStaticMarkup(React.createElement(ClinicChatDrawerHost));
-      expect(html).toContain('Reconnecting...');
+      expect(html).toContain('Connecting...');
 
       // 4. Offline
       mockCommsStatus = 'disconnected';

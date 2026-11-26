@@ -43,7 +43,8 @@ public class TriageController : ControllerBase
             request.Category,
             request.ContentText,
             request.IsEmergencyConfirmed,
-            request.Attachments);
+            request.Attachments,
+            PatientDisplayName: request.PatientDisplayName);
 
         var result = await _mediator.Send(command, ct);
         return Ok(result);
@@ -89,13 +90,21 @@ public class TriageController : ControllerBase
         CancellationToken ct)
     {
         var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var staffId = request.IsStaffReopen
+            ? (User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? "staff")
+            : null;
+        var staffName = request.IsStaffReopen
+            ? (User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue("name") ?? "Staff Member")
+            : null;
 
         var command = new ReopenConversationCommand(
             id,
             tenantId,
             request.PatientId,
             request.IsEmergencyConfirmed,
-            request.Reason);
+            request.Reason,
+            staffId,
+            staffName);
 
         var result = await _mediator.Send(command, ct);
         return Ok(result);
@@ -112,7 +121,8 @@ public sealed record SubmitPatientRequestApiRequest(
     MessageCategory Category,
     string ContentText,
     bool? IsEmergencyConfirmed,
-    IReadOnlyList<CommsAttachmentReference>? Attachments = null);
+    IReadOnlyList<CommsAttachmentReference>? Attachments = null,
+    string? PatientDisplayName = null);
 
 public sealed record RecordDispositionApiRequest(
     TriageDisposition Disposition,
@@ -126,4 +136,5 @@ public sealed record RecordDispositionApiRequest(
 public sealed record ReopenConversationApiRequest(
     Guid PatientId,
     bool? IsEmergencyConfirmed,
-    string Reason);
+    string Reason,
+    bool IsStaffReopen = false);

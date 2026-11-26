@@ -124,7 +124,11 @@ function BookingReviewStepComponent({
   const formattedPrice = `₱${unitPrice.toFixed(2)}`;
   const costDescription =
     service?.priceBadgeLabel ||
-    (unitPrice === 0 ? 'No upfront booking charge' : 'Payable at clinic reception');
+    (unitPrice === 0
+      ? 'No upfront booking charge'
+      : consultationMode === 'telehealth'
+        ? 'Payable before or during teleconsultation'
+        : 'Payable at clinic reception');
 
   return (
     <View style={styles.container}>
@@ -482,7 +486,11 @@ function BookingReviewStepComponent({
               <Text
                 style={[typography.bodySm, { color: colors.mutedText, marginTop: spacing.xxs }]}
               >
-                Due at clinic check-in on {format(selectedDate, 'MMM d')}
+                {consultationMode === 'telehealth'
+                  ? unitPrice === 0
+                    ? `No upfront charge for ${format(selectedDate, 'MMM d')}`
+                    : `Due before teleconsultation on ${format(selectedDate, 'MMM d')}`
+                  : `Due at clinic check-in on ${format(selectedDate, 'MMM d')}`}
               </Text>
             </View>
 

@@ -6,7 +6,12 @@ import {
   useConversations,
   useTriageQueue,
 } from '@clinicez/comms-sdk/react';
-import { resolveConversationDisplayTitle } from '@clinicez/comms-sdk/core';
+import {
+  formatMessageCategory,
+  isConversationClosed,
+  resolveConversationDisplayTitle,
+  resolvePatientFacilityDisplayTitle,
+} from '@clinicez/comms-sdk/core';
 import {
   ChatDrawer,
   TriageQueueView,
@@ -103,7 +108,7 @@ export default function ClinicChatDrawerHost() {
     }
     return conversations.reduce((sum, c) => {
       if (removedConversationIds.has(c.id)) return sum;
-      if (locallyArchivedIds.has(c.id) || c.status === 'Closed') return sum;
+      if (locallyArchivedIds.has(c.id) || isConversationClosed(c)) return sum;
       if (c.scope === 'StaffContext' && c.contextType === 'TeleconsultCall') return sum;
       return sum + (c.unreadCount ?? 0);
     }, 0);
@@ -265,7 +270,7 @@ export default function ClinicChatDrawerHost() {
       .filter((c) => {
         if (removedConversationIds.has(c.id)) return false;
         if (c.scope === 'StaffContext' && c.contextType === 'TeleconsultCall') return false;
-        const isArchived = c.status === 'Closed' || locallyArchivedIds.has(c.id);
+        const isArchived = isConversationClosed(c) || locallyArchivedIds.has(c.id);
         if (selectedScope === 'Archived') {
           if (!isArchived) return false;
         } else {
@@ -284,8 +289,13 @@ export default function ClinicChatDrawerHost() {
               return match ? formatStaffName(match) : null;
             },
           ).toLowerCase();
+          const categoryLabel =
+            c.scope === 'PatientFacility' && c.category
+              ? formatMessageCategory(c.category, 'clinical').toLowerCase()
+              : '';
           return (
             displayTitle.includes(q) ||
+            Boolean(categoryLabel && categoryLabel.includes(q)) ||
             Boolean(c.title && c.title.toLowerCase().includes(q)) ||
             Boolean(c.lastMessageSnippet && c.lastMessageSnippet.toLowerCase().includes(q))
           );
@@ -293,7 +303,7 @@ export default function ClinicChatDrawerHost() {
         return true;
       })
       .map((c) => {
-        const isArchived = c.status === 'Closed' || locallyArchivedIds.has(c.id);
+        const isArchived = isConversationClosed(c) || locallyArchivedIds.has(c.id);
         return {
           id: c.id,
           scope: c.scope as ChatDrawerItem['scope'],
@@ -307,6 +317,10 @@ export default function ClinicChatDrawerHost() {
               return match ? formatStaffName(match) : null;
             },
           ),
+          subtitle:
+            c.scope === 'PatientFacility' && c.category
+              ? formatMessageCategory(c.category, 'clinical')
+              : undefined,
           lastMessageSnippet: c.lastMessageSnippet ?? undefined,
           lastMessageAtUtc: c.lastMessageAtUtc ?? undefined,
           unreadCount: c.unreadCount ?? 0,
@@ -334,10 +348,11 @@ export default function ClinicChatDrawerHost() {
       conversationId: i.id,
       requestId: i.id,
       patientId: i.contextId || i.id,
-      patientNameMasked: i.patientFullName || i.title || 'Patient Inquiry',
+      patientNameMasked:
+        i.patientFullName || resolvePatientFacilityDisplayTitle(i, 'Patient Inquiry'),
       patientDobMasked: '',
       patientAgeGender: `${i.patientAge || 'Adult'} • ${i.patientSex || 'Patient'}`,
-      category: i.category || 'General',
+      category: formatMessageCategory(i.category || 'General', 'clinical'),
       contentText: i.lastMessageSnippet || 'Patient inquiry pending triage review.',
       priority: (i.priority as 'Emergency' | 'Urgent' | 'Routine') || 'Routine',
       status: (i.status as 'Submitted' | 'WithTriage' | 'Routed') || 'Submitted',
@@ -559,7 +574,9 @@ export default function ClinicChatDrawerHost() {
               >
                 {status === 'connected'
                   ? 'Connected'
-                  : status === 'reconnecting' || isReconnecting || isManualReconnecting || status === 'connecting' || status === 'acquiring_ticket'
+                  : status === 'connecting' || status === 'acquiring_ticket'
+                  ? 'Connecting...'
+                  : status === 'reconnecting' || isReconnecting || isManualReconnecting
                   ? 'Reconnecting...'
                   : 'Offline'}
               </ThemedText>
@@ -677,11 +694,24 @@ export default function ClinicChatDrawerHost() {
             conversationId={activeConversationId}
             initialConversation={(() => {
               const found = conversations.find((c) => c.id === activeConversationId);
-              if (found && locallyArchivedIds.has(found.id) && found.status !== 'Closed') {
-                return { ...found, status: 'Closed' as const };
+              if (found && locallyArchivedIds.has(found.id) && !isConversationClosed(found)) {
+                return {
+                  ...found,
+                  status: 'Closed' as const,
+                  closedAtUtc: found.closedAtUtc ?? new Date().toISOString(),
+                };
               }
               return found;
             })()}
+            onReopenConversation={async (reopened) => {
+              setLocallyArchivedIds((prev) => {
+                if (!prev.has(reopened.id)) return prev;
+                const next = new Set(prev);
+                next.delete(reopened.id);
+                return next;
+              });
+              await Promise.allSettled([refreshConversations?.(), refreshTriage?.()]);
+            }}
             isMuted={mutedConversationIds.has(activeConversationId)}
             onToggleMute={async (nextMuted) => {
               if (nextMuted) {

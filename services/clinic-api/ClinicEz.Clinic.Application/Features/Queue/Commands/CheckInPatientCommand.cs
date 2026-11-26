@@ -11,6 +11,7 @@ using ClinicEz.Clinic.Application.Features.Queue.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Workspace;
 using FluentValidation;
 using MediatR;
@@ -66,6 +67,8 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
     private readonly IRepository<FacilitySettings>? _settingsRepository;
     private readonly IRepository<Patient>? _patientRepository;
+    private readonly ICommsEligibilityPublisher? _eligibilityPublisher;
+    private readonly IInteropPublisher? _publisher;
 
     public CheckInPatientCommandHandler(
         IRepository<QueueItem> queueRepository,
@@ -78,7 +81,9 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         IRepository<StaffMember>? staffRepository = null,
         IWorkspaceProfileProvider? workspaceProfiles = null,
         IRepository<FacilitySettings>? settingsRepository = null,
-        IRepository<Patient>? patientRepository = null)
+        IRepository<Patient>? patientRepository = null,
+        ICommsEligibilityPublisher? eligibilityPublisher = null,
+        IInteropPublisher? publisher = null)
     {
         _queueRepository = queueRepository;
         _appointmentRepository = appointmentRepository;
@@ -91,6 +96,8 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         _workspaceProfiles = workspaceProfiles;
         _settingsRepository = settingsRepository;
         _patientRepository = patientRepository;
+        _eligibilityPublisher = eligibilityPublisher;
+        _publisher = publisher;
     }
 
     public async Task<QueueItemDto> Handle(CheckInPatientCommand request, CancellationToken cancellationToken)
@@ -306,6 +313,70 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             );
 
             await _appointmentPublisher.PublishAppointmentUpdatedAsync(pushPayload, cancellationToken);
+        }
+
+        var grantNow = DateTime.UtcNow;
+        var grantTenantId = !string.IsNullOrWhiteSpace(clinic?.TenantId) ? clinic.TenantId : _clinicContext.TenantId;
+        if (_eligibilityPublisher != null)
+        {
+            await _eligibilityPublisher.EnqueueGrantAsync(
+                grantTenantId,
+                _clinicContext.ClinicId,
+                queueItem.PatientId,
+                "QueueVisit",
+                queueItem.Id.ToString(),
+                grantNow,
+                grantNow.AddDays(7),
+                CommsEligibilityVersions.Initial,
+                ct: cancellationToken);
+
+            if (appointment != null)
+            {
+                var apptGrantEnd = (appointment.ScheduledAt > grantNow ? appointment.ScheduledAt : grantNow).AddDays(7);
+                await _eligibilityPublisher.EnqueueGrantAsync(
+                    grantTenantId,
+                    _clinicContext.ClinicId,
+                    appointment.PatientId,
+                    "Appointment",
+                    appointment.Id.ToString(),
+                    grantNow,
+                    apptGrantEnd,
+                    CommsEligibilityVersions.ForUpdate(grantNow),
+                    ct: cancellationToken);
+            }
+        }
+        else if (_publisher != null && !string.IsNullOrWhiteSpace(grantTenantId))
+        {
+            var cloudPatientId = await CommsEligibilityOutboxHelper.ResolveCloudPatientIdAsync(
+                _patientRepository, _clinicContext.ClinicId, queueItem.PatientId, cancellationToken);
+            if (cloudPatientId.HasValue)
+            {
+                CommsEligibilityOutboxHelper.EnqueueGrant(
+                    _publisher,
+                    grantTenantId,
+                    _clinicContext.ClinicId,
+                    cloudPatientId.Value,
+                    "QueueVisit",
+                    queueItem.Id.ToString(),
+                    grantNow,
+                    grantNow.AddDays(7),
+                    CommsEligibilityVersions.Initial);
+
+                if (appointment != null)
+                {
+                    var apptGrantEnd = (appointment.ScheduledAt > grantNow ? appointment.ScheduledAt : grantNow).AddDays(7);
+                    CommsEligibilityOutboxHelper.EnqueueGrant(
+                        _publisher,
+                        grantTenantId,
+                        _clinicContext.ClinicId,
+                        cloudPatientId.Value,
+                        "Appointment",
+                        appointment.Id.ToString(),
+                        grantNow,
+                        apptGrantEnd,
+                        CommsEligibilityVersions.ForUpdate(grantNow));
+                }
+            }
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

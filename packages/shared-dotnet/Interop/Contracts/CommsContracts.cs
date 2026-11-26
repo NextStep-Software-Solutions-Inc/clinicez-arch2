@@ -134,7 +134,32 @@ public sealed record CommsAttachmentReference(
     string FileName,
     string ContentType,
     long SizeBytes,
-    string? HashSha256);
+    string? HashSha256,
+    Guid? AttachmentId = null);
+
+/// <summary>Limits and payload for chunked attachment transfer across Interop Hub.</summary>
+public static class CommsAttachmentTransferLimits
+{
+    /// <summary>4 MiB raw chunk keeps Base64 envelopes (~5.33 MiB) strictly below the 8 MiB Hub ceiling.</summary>
+    public const int MaxChunkRawBytes = 4 * 1024 * 1024;
+}
+
+/// <summary>Payload for <c>comms.attachment.chunk</c>.</summary>
+public sealed record CommsAttachmentChunkPayload(
+    string AttachmentKey,
+    Guid ConversationId,
+    Guid? MessageId,
+    string TenantId,
+    string FacilityId,
+    string FacilityType,
+    Guid PatientId,
+    string FileName,
+    string ContentType,
+    long TotalSizeBytes,
+    string? HashSha256,
+    int ChunkIndex,
+    int TotalChunks,
+    string ContentBase64);
 
 /// <summary>Payload for <c>comms.eligibility.granted</c>.</summary>
 public sealed record CommsEligibilityGrantedPayload(
@@ -185,7 +210,8 @@ public sealed record CommsRequestSubmitPayload(
     string ContentText,
     bool IsEmergencyConfirmed,
     IReadOnlyList<CommsAttachmentReference>? Attachments,
-    DateTime SubmittedAtUtc);
+    DateTime SubmittedAtUtc,
+    string? PatientDisplayName = null);
 
 /// <summary>Payload for <c>comms.message.submit</c>.</summary>
 public sealed record CommsMessageSubmitPayload(
@@ -226,7 +252,8 @@ public sealed record CommsMessageReceivedPayload(
     Guid MessageId,
     Guid ConversationId,
     string RecipientPartyAddress,
-    DateTime ReceivedAtUtc);
+    DateTime ReceivedAtUtc,
+    long? AssignedSeq = null);
 
 /// <summary>Payload for <c>comms.message.acknowledged</c>.</summary>
 public sealed record CommsMessageAcknowledgedPayload(
